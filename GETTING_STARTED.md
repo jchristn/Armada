@@ -2,6 +2,8 @@
 
 Go from zero to three AI agents working in parallel in under five minutes.
 
+> **⚠️ Security Note:** Armada runs AI agent captains with permission-bypassing flags enabled by default (e.g. `--dangerously-skip-permissions` for Claude Code, `--approval-mode full-auto` for Codex, `--sandbox none` for Gemini). Agents can read, write, and execute code without user confirmation. Be aware of this before proceeding.
+
 ## Install
 
 ```bash

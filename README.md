@@ -31,6 +31,8 @@ armada go "Add input validation to the signup form"
 
 That's it. Armada auto-initializes, detects your installed agent runtime (Claude Code, Codex, Gemini, Cursor), infers the repo from your current directory, provisions a worker agent, and dispatches your task.
 
+> **⚠️ Security Note:** Armada runs AI agents with auto-approve flags enabled by default — Claude Code uses `--dangerously-skip-permissions`, Codex uses `--approval-mode full-auto`, and Gemini uses `--sandbox none`. This means agents can read, write, and execute code in their worktrees without user confirmation. Review the [configuration](#configuration) options and understand the implications before running Armada in sensitive environments.
+
 ## Features
 
 - **Zero-config startup** -- sensible defaults, auto-detection of runtimes and repositories
