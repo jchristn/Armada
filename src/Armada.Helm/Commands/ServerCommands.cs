@@ -172,30 +172,42 @@ namespace Armada.Helm.Commands
                 }
             }
 
-            AnsiConsole.MarkupLine("[dim]Building server...[/]");
+            AnsiConsole.MarkupLine($"[dim]Building server from {Markup.Escape(projectDir)}...[/]");
 
-            ProcessStartInfo buildInfo = new ProcessStartInfo
+            // Build the server project. Retry once without -q if the first attempt fails
+            // (incremental build can fail with "Question build" on first run after code changes).
+            for (int buildAttempt = 0; buildAttempt < 2; buildAttempt++)
             {
-                FileName = "dotnet",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-            buildInfo.ArgumentList.Add("build");
-            buildInfo.ArgumentList.Add(projectDir);
-            buildInfo.ArgumentList.Add("--framework");
-            buildInfo.ArgumentList.Add("net10.0");
-            buildInfo.ArgumentList.Add("-q");
+                ProcessStartInfo buildInfo = new ProcessStartInfo
+                {
+                    FileName = "dotnet",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                };
+                buildInfo.ArgumentList.Add("build");
+                buildInfo.ArgumentList.Add(projectDir);
+                buildInfo.ArgumentList.Add("--framework");
+                buildInfo.ArgumentList.Add("net10.0");
+                if (buildAttempt == 0)
+                    buildInfo.ArgumentList.Add("-q");
 
-            Process buildProcess = new Process { StartInfo = buildInfo };
-            buildProcess.Start();
-            buildProcess.StandardOutput.ReadToEnd();
-            string buildStderr = buildProcess.StandardError.ReadToEnd();
-            buildProcess.WaitForExit();
+                Process buildProcess = new Process { StartInfo = buildInfo };
+                buildProcess.Start();
+                buildProcess.StandardOutput.ReadToEnd();
+                string buildStderr = buildProcess.StandardError.ReadToEnd();
+                buildProcess.WaitForExit();
 
-            if (buildProcess.ExitCode != 0)
-            {
+                if (buildProcess.ExitCode == 0)
+                    break;
+
+                if (buildAttempt == 0)
+                {
+                    AnsiConsole.MarkupLine("[dim]Retrying build...[/]");
+                    continue;
+                }
+
                 AnsiConsole.MarkupLine("[red]Server build failed.[/]");
                 if (!string.IsNullOrEmpty(buildStderr))
                     AnsiConsole.MarkupLine($"[dim]{Markup.Escape(buildStderr.Trim())}[/]");
@@ -206,11 +218,14 @@ namespace Armada.Helm.Commands
         }
 
         /// <summary>
-        /// Find the Armada.Server source project directory relative to CWD.
+        /// Find the Armada.Server source project directory.
+        /// Searches relative to CWD, walks up the directory tree, and checks
+        /// next to the CLI assembly to handle global-tool and dev scenarios.
         /// </summary>
         private string? FindServerProject()
         {
-            string[] candidates = new[]
+            // 1. Relative candidates from CWD (covers common dev layouts)
+            string[] relativeCandidates = new[]
             {
                 "src/Armada.Server",
                 "Armada.Server",
@@ -218,11 +233,48 @@ namespace Armada.Helm.Commands
                 Path.Combine("..", "src", "Armada.Server")
             };
 
-            foreach (string candidate in candidates)
+            foreach (string candidate in relativeCandidates)
             {
                 string csproj = Path.Combine(candidate, "Armada.Server.csproj");
-                if (File.Exists(csproj)) return candidate;
+                if (File.Exists(csproj)) return Path.GetFullPath(candidate);
             }
+
+            // 2. Walk up from CWD looking for Armada.Server.csproj
+            try
+            {
+                DirectoryInfo? dir = new DirectoryInfo(Directory.GetCurrentDirectory());
+                while (dir != null)
+                {
+                    string serverDir = Path.Combine(dir.FullName, "src", "Armada.Server");
+                    if (File.Exists(Path.Combine(serverDir, "Armada.Server.csproj")))
+                        return serverDir;
+
+                    serverDir = Path.Combine(dir.FullName, "Armada.Server");
+                    if (File.Exists(Path.Combine(serverDir, "Armada.Server.csproj")))
+                        return serverDir;
+
+                    dir = dir.Parent;
+                }
+            }
+            catch { }
+
+            // 3. Check relative to the CLI assembly location (global tool scenario)
+            try
+            {
+                string? asmDir = Path.GetDirectoryName(typeof(ServerStartCommand).Assembly.Location);
+                if (!string.IsNullOrEmpty(asmDir))
+                {
+                    DirectoryInfo? dir = new DirectoryInfo(asmDir);
+                    while (dir != null)
+                    {
+                        string serverDir = Path.Combine(dir.FullName, "src", "Armada.Server");
+                        if (File.Exists(Path.Combine(serverDir, "Armada.Server.csproj")))
+                            return serverDir;
+                        dir = dir.Parent;
+                    }
+                }
+            }
+            catch { }
 
             return null;
         }

@@ -218,13 +218,18 @@ namespace Armada.Core.Services
 
             _Logging.Info(_Header + "merging branch " + branchName + " from " + sourceRepoPath + " into " + targetWorkDir);
 
+            // Ensure we are on the main branch before merging.
+            // Without this, a previous fetch/merge could leave HEAD on a different branch,
+            // causing subsequent merges to target the wrong branch.
+            await RunGitAsync(targetWorkDir, "checkout", "main").ConfigureAwait(false);
+
             // Fetch the specific branch from the bare repo using explicit refspec
             // Branch names with slashes (e.g. armada/claude-code-1/msn_xxx) require
             // the full refs/heads/ prefix to resolve correctly from bare repos.
             string refspec = "refs/heads/" + branchName;
             await RunGitAsync(targetWorkDir, "fetch", sourceRepoPath, refspec).ConfigureAwait(false);
 
-            // Merge FETCH_HEAD into the current branch
+            // Merge FETCH_HEAD into the current branch (main)
             string message = commitMessage ?? ("Merge armada mission: " + branchName);
             await RunGitAsync(targetWorkDir, "merge", "FETCH_HEAD", "--no-edit", "-m", message).ConfigureAwait(false);
 
