@@ -925,6 +925,7 @@ namespace Armada.Server
                 mission.CaptainId = null;
                 mission.BranchName = null;
                 mission.PrUrl = null;
+                mission.CommitHash = null;
                 mission.StartedUtc = null;
                 mission.CompletedUtc = null;
                 mission.LastUpdateUtc = DateTime.UtcNow;
@@ -1690,6 +1691,22 @@ namespace Armada.Server
             catch (Exception diffEx)
             {
                 _Logging.Debug(_Header + "could not capture diff for mission " + mission.Id + ": " + diffEx.Message);
+            }
+
+            // Capture the HEAD commit hash before any merge/reclaim
+            try
+            {
+                string? commitHash = await _Git.GetHeadCommitHashAsync(dock.WorktreePath).ConfigureAwait(false);
+                if (!String.IsNullOrEmpty(commitHash))
+                {
+                    mission.CommitHash = commitHash;
+                    await _Database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                    _Logging.Info(_Header + "captured commit hash " + commitHash + " for mission " + mission.Id);
+                }
+            }
+            catch (Exception commitEx)
+            {
+                _Logging.Debug(_Header + "could not capture commit hash for mission " + mission.Id + ": " + commitEx.Message);
             }
 
             // Look up the vessel and voyage for settings resolution

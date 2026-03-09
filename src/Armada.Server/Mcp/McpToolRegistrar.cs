@@ -817,6 +817,7 @@ namespace Armada.Server.Mcp
                     mission.CaptainId = null;
                     mission.BranchName = null;
                     mission.PrUrl = null;
+                    mission.CommitHash = null;
                     mission.StartedUtc = null;
                     mission.CompletedUtc = null;
                     mission.LastUpdateUtc = DateTime.UtcNow;

@@ -92,6 +92,11 @@ namespace Armada.Core.Models
         public string? PrUrl { get; set; } = null;
 
         /// <summary>
+        /// Git commit hash (HEAD) captured when the mission completed.
+        /// </summary>
+        public string? CommitHash { get; set; } = null;
+
+        /// <summary>
         /// Creation timestamp in UTC.
         /// </summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;

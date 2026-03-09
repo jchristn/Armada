@@ -629,6 +629,7 @@
                         <div class="detail-field" x-show="detail.voyageId"><span class="detail-label">Voyage</span><span class="id-display"><a class="mono" href="#" @click.prevent="navigate('voyages', 'voyage-detail', detail.voyageId)" x-text="detail.voyageId"></a><button class="copy-btn" @click.stop="copyId(detail.voyageId, $event)" title="Copy ID"></button></span></div>
                         <div class="detail-field"><span class="detail-label">Branch</span><span class="mono" x-text="detail.branchName || '-'"></span></div>
                         <div class="detail-field" x-show="detail.prUrl"><span class="detail-label">PR</span><span class="mono" x-text="detail.prUrl"></span></div>
+                        <div class="detail-field" x-show="detail.commitHash"><span class="detail-label">Commit</span><span class="mono" x-text="detail.commitHash ? detail.commitHash.substring(0, 12) : ''" :title="detail.commitHash"></span></div>
                         <div class="detail-field"><span class="detail-label">Created</span><span x-text="formatTimeAbsolute(detail.createdUtc)"></span></div>
                         <div class="detail-field" x-show="detail.startedUtc"><span class="detail-label">Started</span><span x-text="formatTimeAbsolute(detail.startedUtc)"></span></div>
                         <div class="detail-field" x-show="detail.completedUtc"><span class="detail-label">Completed</span><span x-text="formatTimeAbsolute(detail.completedUtc)"></span></div>

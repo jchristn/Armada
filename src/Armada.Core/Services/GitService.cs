@@ -283,6 +283,24 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Get the HEAD commit hash of a worktree.
+        /// </summary>
+        public async Task<string?> GetHeadCommitHashAsync(string worktreePath, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(worktreePath)) return null;
+
+            try
+            {
+                string result = await RunGitAsync(worktreePath, "rev-parse", "HEAD").ConfigureAwait(false);
+                return result.Trim();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
         /// Delete a local branch from a repository.
         /// </summary>
         public async Task DeleteLocalBranchAsync(string repoPath, string branchName, CancellationToken token = default)

@@ -547,5 +547,10 @@ namespace Armada.Desktop.ViewModels
 
         /// <summary>Voyage title.</summary>
         public string VoyageTitle { get; set; } = "";
+
+        /// <summary>Shortened commit hash for display.</summary>
+        public string CommitHashShort => !string.IsNullOrEmpty(Mission.CommitHash) && Mission.CommitHash.Length >= 12
+            ? Mission.CommitHash.Substring(0, 12)
+            : Mission.CommitHash ?? "";
     }
 }

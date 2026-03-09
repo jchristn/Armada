@@ -121,6 +121,14 @@ namespace Armada.Core.Services.Interfaces
         Task<string> DiffAsync(string worktreePath, string baseBranch = "main", CancellationToken token = default);
 
         /// <summary>
+        /// Get the HEAD commit hash of a worktree.
+        /// </summary>
+        /// <param name="worktreePath">Path to the worktree.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The full SHA-1 commit hash, or null if it cannot be determined.</returns>
+        Task<string?> GetHeadCommitHashAsync(string worktreePath, CancellationToken token = default);
+
+        /// <summary>
         /// Check if a pull request has been merged using the gh CLI.
         /// </summary>
         /// <param name="workingDirectory">Path to a repo for gh context.</param>

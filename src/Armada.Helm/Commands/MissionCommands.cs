@@ -271,6 +271,7 @@ namespace Armada.Helm.Commands
                     new Markup($"[dodgerblue1]Captain:[/]     {Markup.Escape(mission.CaptainId ?? "-")}"),
                     new Markup($"[dodgerblue1]Branch:[/]      {Markup.Escape(mission.BranchName ?? "-")}"),
                     new Markup($"[dodgerblue1]PR:[/]          {Markup.Escape(mission.PrUrl ?? "-")}"),
+                    new Markup($"[dodgerblue1]Commit:[/]      {Markup.Escape(mission.CommitHash ?? "-")}"),
                     new Markup($"[dodgerblue1]Created:[/]     {mission.CreatedUtc:yyyy-MM-dd HH:mm}"),
                     new Markup($"[dodgerblue1]Started:[/]     {(mission.StartedUtc.HasValue ? mission.StartedUtc.Value.ToString("yyyy-MM-dd HH:mm") : "-")}"),
                     new Markup($"[dodgerblue1]Completed:[/]   {(mission.CompletedUtc.HasValue ? mission.CompletedUtc.Value.ToString("yyyy-MM-dd HH:mm") : "-")}")));

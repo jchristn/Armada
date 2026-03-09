@@ -190,6 +190,12 @@
                                 <Run Text="PR: " />
                                 <Run Text="{Binding SelectedMission.PrUrl}" TextDecorations="Underline" />
                             </TextBlock>
+                            <TextBlock FontSize="11" Foreground="{DynamicResource TextDimBrush}" Margin="0,0,16,0"
+                                       FontFamily="Consolas,Courier New,monospace"
+                                       IsVisible="{Binding SelectedMission.CommitHash, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <Run Text="Commit: " />
+                                <Run Text="{Binding SelectedDisplayItem.CommitHashShort}" />
+                            </TextBlock>
                         </WrapPanel>
                         <WrapPanel Orientation="Horizontal" Margin="0,2,0,0">
                             <TextBlock FontSize="11" Foreground="{DynamicResource TextDimBrush}" Margin="0,0,16,0">
