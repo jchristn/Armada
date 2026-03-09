@@ -508,7 +508,14 @@ namespace Armada.Server.WebSocket
                         case "create_mission":
                             Mission newMission = JsonSerializer.Deserialize<WebSocketDataCommand<Mission>>(body, _JsonOptions)?.Data!;
                             newMission = await _Admiral.DispatchMissionAsync(newMission).ConfigureAwait(false);
-                            result = new { type = "command.result", action = "create_mission", data = (object)newMission };
+                            if (newMission.Status == MissionStatusEnum.Pending)
+                            {
+                                result = new { type = "command.result", action = "create_mission", data = (object)newMission, warning = "Mission created but could not be assigned to any captain. It will be retried on the next health check cycle." };
+                            }
+                            else
+                            {
+                                result = new { type = "command.result", action = "create_mission", data = (object)newMission };
+                            }
                             break;
 
                         case "update_mission":

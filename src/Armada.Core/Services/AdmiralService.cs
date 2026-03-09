@@ -159,7 +159,22 @@ namespace Armada.Core.Services
                 Vessel? vessel = await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
                 if (vessel != null)
                 {
-                    await _Missions.TryAssignAsync(mission, vessel, token).ConfigureAwait(false);
+                    bool assigned = await _Missions.TryAssignAsync(mission, vessel, token).ConfigureAwait(false);
+
+                    // Re-read mission from database to get updated status
+                    Mission? refreshed = await _Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);
+                    if (refreshed != null)
+                        mission = refreshed;
+
+                    if (!assigned || mission.Status == MissionStatusEnum.Pending)
+                    {
+                        _Logging.Warn(_Header + "mission " + mission.Id + " created but could not be assigned to any captain");
+                        _RetryDispatchNeeded = true;
+                    }
+                }
+                else
+                {
+                    _Logging.Warn(_Header + "mission " + mission.Id + " created but vessel " + mission.VesselId + " not found for assignment");
                 }
             }
 
