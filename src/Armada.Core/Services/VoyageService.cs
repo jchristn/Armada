@@ -40,6 +40,8 @@ namespace Armada.Core.Services
         public async Task CheckCompletionsAsync(CancellationToken token = default)
         {
             List<Voyage> activeVoyages = await _Database.Voyages.EnumerateByStatusAsync(VoyageStatusEnum.InProgress, token).ConfigureAwait(false);
+            List<Voyage> openVoyages = await _Database.Voyages.EnumerateByStatusAsync(VoyageStatusEnum.Open, token).ConfigureAwait(false);
+            activeVoyages.AddRange(openVoyages);
 
             foreach (Voyage voyage in activeVoyages)
             {

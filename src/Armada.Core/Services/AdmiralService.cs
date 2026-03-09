@@ -121,8 +121,17 @@ namespace Armada.Core.Services
                 await _Missions.TryAssignAsync(mission, vessel, token).ConfigureAwait(false);
             }
 
-            // Update voyage status
-            voyage.Status = VoyageStatusEnum.InProgress;
+            // Update voyage status — only transition to InProgress if at least one mission was assigned
+            List<Mission> voyageMissions = await _Database.Missions.EnumerateByVoyageAsync(voyage.Id, token).ConfigureAwait(false);
+            bool anyAssigned = voyageMissions.Any(m =>
+                m.Status == MissionStatusEnum.Assigned ||
+                m.Status == MissionStatusEnum.InProgress);
+
+            if (anyAssigned)
+            {
+                voyage.Status = VoyageStatusEnum.InProgress;
+            }
+
             voyage.LastUpdateUtc = DateTime.UtcNow;
             await _Database.Voyages.UpdateAsync(voyage, token).ConfigureAwait(false);
 
@@ -246,6 +255,23 @@ namespace Armada.Core.Services
                 // use the captain-level process check (legacy single-mission behavior)
                 if (activeMissions.Count == 0 && captain.ProcessId != null)
                 {
+                    // First check if the captain's current mission is already in a terminal state.
+                    // This handles the case where a mission completed but the captain wasn't released
+                    // (e.g. server restart between mission completion and captain release).
+                    if (!String.IsNullOrEmpty(captain.CurrentMissionId))
+                    {
+                        Mission? currentMission = await _Database.Missions.ReadAsync(captain.CurrentMissionId, token).ConfigureAwait(false);
+                        if (currentMission != null &&
+                            (currentMission.Status == MissionStatusEnum.Complete ||
+                             currentMission.Status == MissionStatusEnum.Failed ||
+                             currentMission.Status == MissionStatusEnum.Cancelled))
+                        {
+                            _Logging.Warn(_Header + "captain " + captain.Id + " has stale ProcessId with terminal mission " + captain.CurrentMissionId + " (status: " + currentMission.Status + ") — releasing to Idle");
+                            await _Captains.ReleaseAsync(captain, token).ConfigureAwait(false);
+                            continue;
+                        }
+                    }
+
                     // Synthesize a check using captain.CurrentMissionId
                     Mission syntheticMission = new Mission("legacy-check");
                     syntheticMission.ProcessId = captain.ProcessId;

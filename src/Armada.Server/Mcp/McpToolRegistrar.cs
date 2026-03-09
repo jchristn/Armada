@@ -519,6 +519,27 @@ namespace Armada.Server.Mcp
                     {
                         if (m.Status == MissionStatusEnum.Pending || m.Status == MissionStatusEnum.Assigned)
                         {
+                            // Release the captain if this mission was assigned to one
+                            if (!String.IsNullOrEmpty(m.CaptainId))
+                            {
+                                Captain? captain = await database.Captains.ReadAsync(m.CaptainId).ConfigureAwait(false);
+                                if (captain != null && captain.CurrentMissionId == m.Id)
+                                {
+                                    List<Mission> otherMissions = (await database.Missions.EnumerateByCaptainAsync(captain.Id).ConfigureAwait(false))
+                                        .Where(om => om.Id != m.Id && (om.Status == MissionStatusEnum.InProgress || om.Status == MissionStatusEnum.Assigned)).ToList();
+                                    if (otherMissions.Count == 0)
+                                    {
+                                        captain.State = CaptainStateEnum.Idle;
+                                        captain.CurrentMissionId = null;
+                                        captain.CurrentDockId = null;
+                                        captain.ProcessId = null;
+                                        captain.RecoveryAttempts = 0;
+                                        captain.LastUpdateUtc = DateTime.UtcNow;
+                                        await database.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                                    }
+                                }
+                            }
+
                             m.Status = MissionStatusEnum.Cancelled;
                             m.CompletedUtc = DateTime.UtcNow;
                             m.LastUpdateUtc = DateTime.UtcNow;
@@ -703,6 +724,28 @@ namespace Armada.Server.Mcp
                     string missionId = request.MissionId;
                     Mission? mission = await database.Missions.ReadAsync(missionId).ConfigureAwait(false);
                     if (mission == null) return (object)new { Error = "Mission not found" };
+
+                    // Release the captain if this mission was assigned to one
+                    if (!String.IsNullOrEmpty(mission.CaptainId))
+                    {
+                        Captain? captain = await database.Captains.ReadAsync(mission.CaptainId).ConfigureAwait(false);
+                        if (captain != null && captain.CurrentMissionId == mission.Id)
+                        {
+                            List<Mission> otherMissions = (await database.Missions.EnumerateByCaptainAsync(captain.Id).ConfigureAwait(false))
+                                .Where(m => m.Id != mission.Id && (m.Status == MissionStatusEnum.InProgress || m.Status == MissionStatusEnum.Assigned)).ToList();
+                            if (otherMissions.Count == 0)
+                            {
+                                captain.State = CaptainStateEnum.Idle;
+                                captain.CurrentMissionId = null;
+                                captain.CurrentDockId = null;
+                                captain.ProcessId = null;
+                                captain.RecoveryAttempts = 0;
+                                captain.LastUpdateUtc = DateTime.UtcNow;
+                                await database.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                            }
+                        }
+                    }
+
                     mission.Status = MissionStatusEnum.Cancelled;
                     mission.CompletedUtc = DateTime.UtcNow;
                     mission.LastUpdateUtc = DateTime.UtcNow;

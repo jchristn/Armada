@@ -639,6 +639,27 @@ namespace Armada.Server
                 {
                     if (m.Status == MissionStatusEnum.Pending || m.Status == MissionStatusEnum.Assigned)
                     {
+                        // Release the captain if this mission was assigned to one
+                        if (!String.IsNullOrEmpty(m.CaptainId))
+                        {
+                            Captain? captain = await _Database.Captains.ReadAsync(m.CaptainId).ConfigureAwait(false);
+                            if (captain != null && captain.CurrentMissionId == m.Id)
+                            {
+                                List<Mission> otherMissions = (await _Database.Missions.EnumerateByCaptainAsync(captain.Id).ConfigureAwait(false))
+                                    .Where(om => om.Id != m.Id && (om.Status == MissionStatusEnum.InProgress || om.Status == MissionStatusEnum.Assigned)).ToList();
+                                if (otherMissions.Count == 0)
+                                {
+                                    captain.State = CaptainStateEnum.Idle;
+                                    captain.CurrentMissionId = null;
+                                    captain.CurrentDockId = null;
+                                    captain.ProcessId = null;
+                                    captain.RecoveryAttempts = 0;
+                                    captain.LastUpdateUtc = DateTime.UtcNow;
+                                    await _Database.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                                }
+                            }
+                        }
+
                         m.Status = MissionStatusEnum.Cancelled;
                         m.CompletedUtc = DateTime.UtcNow;
                         m.LastUpdateUtc = DateTime.UtcNow;
@@ -1856,7 +1877,7 @@ namespace Armada.Server
             try
             {
                 await _Admiral.HealthCheckAsync(token).ConfigureAwait(false);
-                _Logging.Info(_Header + "startup health check completed — pending missions dispatched");
+                _Logging.Info(_Header + "startup health check completed");
             }
             catch (Exception ex)
             {

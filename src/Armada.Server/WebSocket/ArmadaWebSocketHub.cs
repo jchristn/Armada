@@ -415,6 +415,26 @@ namespace Armada.Server.WebSocket
                                 {
                                     if (m.Status == MissionStatusEnum.Pending || m.Status == MissionStatusEnum.Assigned)
                                     {
+                                        if (!String.IsNullOrEmpty(m.CaptainId))
+                                        {
+                                            Captain? captain = await _Database.Captains.ReadAsync(m.CaptainId).ConfigureAwait(false);
+                                            if (captain != null && captain.CurrentMissionId == m.Id)
+                                            {
+                                                List<Mission> otherMissions = (await _Database.Missions.EnumerateByCaptainAsync(captain.Id).ConfigureAwait(false))
+                                                    .Where(om => om.Id != m.Id && (om.Status == MissionStatusEnum.InProgress || om.Status == MissionStatusEnum.Assigned)).ToList();
+                                                if (otherMissions.Count == 0)
+                                                {
+                                                    captain.State = CaptainStateEnum.Idle;
+                                                    captain.CurrentMissionId = null;
+                                                    captain.CurrentDockId = null;
+                                                    captain.ProcessId = null;
+                                                    captain.RecoveryAttempts = 0;
+                                                    captain.LastUpdateUtc = DateTime.UtcNow;
+                                                    await _Database.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                                                }
+                                            }
+                                        }
+
                                         m.Status = MissionStatusEnum.Cancelled;
                                         m.CompletedUtc = DateTime.UtcNow;
                                         m.LastUpdateUtc = DateTime.UtcNow;
@@ -517,6 +537,26 @@ namespace Armada.Server.WebSocket
                                 result = new { type = "command.error", action = "cancel_mission", error = "Mission not found" };
                             else
                             {
+                                if (!String.IsNullOrEmpty(cmMission.CaptainId))
+                                {
+                                    Captain? cmCaptain = await _Database.Captains.ReadAsync(cmMission.CaptainId).ConfigureAwait(false);
+                                    if (cmCaptain != null && cmCaptain.CurrentMissionId == cmMission.Id)
+                                    {
+                                        List<Mission> cmOther = (await _Database.Missions.EnumerateByCaptainAsync(cmCaptain.Id).ConfigureAwait(false))
+                                            .Where(om => om.Id != cmMission.Id && (om.Status == MissionStatusEnum.InProgress || om.Status == MissionStatusEnum.Assigned)).ToList();
+                                        if (cmOther.Count == 0)
+                                        {
+                                            cmCaptain.State = CaptainStateEnum.Idle;
+                                            cmCaptain.CurrentMissionId = null;
+                                            cmCaptain.CurrentDockId = null;
+                                            cmCaptain.ProcessId = null;
+                                            cmCaptain.RecoveryAttempts = 0;
+                                            cmCaptain.LastUpdateUtc = DateTime.UtcNow;
+                                            await _Database.Captains.UpdateAsync(cmCaptain).ConfigureAwait(false);
+                                        }
+                                    }
+                                }
+
                                 cmMission.Status = MissionStatusEnum.Cancelled;
                                 cmMission.CompletedUtc = DateTime.UtcNow;
                                 cmMission.LastUpdateUtc = DateTime.UtcNow;
