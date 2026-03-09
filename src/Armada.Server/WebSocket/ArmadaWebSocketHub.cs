@@ -451,13 +451,21 @@ namespace Armada.Server.WebSocket
                             Voyage? pvVoyage = await _Database.Voyages.ReadAsync(pvId).ConfigureAwait(false);
                             if (pvVoyage == null)
                                 result = new { type = "command.error", action = "purge_voyage", error = "Voyage not found" };
+                            else if (pvVoyage.Status == VoyageStatusEnum.Open || pvVoyage.Status == VoyageStatusEnum.InProgress)
+                                result = new { type = "command.error", action = "purge_voyage", error = "Cannot delete voyage while status is " + pvVoyage.Status + ". Cancel the voyage first." };
                             else
                             {
                                 List<Mission> pvMissions = await _Database.Missions.EnumerateByVoyageAsync(pvId).ConfigureAwait(false);
-                                foreach (Mission m in pvMissions)
-                                    await _Database.Missions.DeleteAsync(m.Id).ConfigureAwait(false);
-                                await _Database.Voyages.DeleteAsync(pvId).ConfigureAwait(false);
-                                result = new { type = "command.result", action = "purge_voyage", data = (object)new { status = "deleted", voyageId = pvId, missionsDeleted = pvMissions.Count } };
+                                int pvActiveCount = pvMissions.Count(m => m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress);
+                                if (pvActiveCount > 0)
+                                    result = new { type = "command.error", action = "purge_voyage", error = "Cannot delete voyage with " + pvActiveCount + " active mission(s) in Assigned or InProgress status. Cancel or complete them first." };
+                                else
+                                {
+                                    foreach (Mission m in pvMissions)
+                                        await _Database.Missions.DeleteAsync(m.Id).ConfigureAwait(false);
+                                    await _Database.Voyages.DeleteAsync(pvId).ConfigureAwait(false);
+                                    result = new { type = "command.result", action = "purge_voyage", data = (object)new { status = "deleted", voyageId = pvId, missionsDeleted = pvMissions.Count } };
+                                }
                             }
                             break;
 
@@ -735,12 +743,19 @@ namespace Armada.Server.WebSocket
                             Captain? delCpt = await _Database.Captains.ReadAsync(delCptId).ConfigureAwait(false);
                             if (delCpt == null)
                                 result = new { type = "command.error", action = "delete_captain", error = "Captain not found" };
+                            else if (delCpt.State == CaptainStateEnum.Working)
+                                result = new { type = "command.error", action = "delete_captain", error = "Cannot delete captain while state is Working. Stop the captain first." };
                             else
                             {
-                                if (delCpt.State == CaptainStateEnum.Working)
-                                    await _Admiral.RecallCaptainAsync(delCptId).ConfigureAwait(false);
-                                await _Database.Captains.DeleteAsync(delCptId).ConfigureAwait(false);
-                                result = new { type = "command.result", action = "delete_captain", data = (object)new { status = "deleted" } };
+                                List<Mission> delCptMissions = await _Database.Missions.EnumerateByCaptainAsync(delCptId).ConfigureAwait(false);
+                                int delCptActiveCount = delCptMissions.Count(m => m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress);
+                                if (delCptActiveCount > 0)
+                                    result = new { type = "command.error", action = "delete_captain", error = "Cannot delete captain with " + delCptActiveCount + " active mission(s) in Assigned or InProgress status. Cancel or complete them first." };
+                                else
+                                {
+                                    await _Database.Captains.DeleteAsync(delCptId).ConfigureAwait(false);
+                                    result = new { type = "command.result", action = "delete_captain", data = (object)new { status = "deleted" } };
+                                }
                             }
                             break;
 

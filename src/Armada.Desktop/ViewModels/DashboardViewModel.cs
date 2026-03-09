@@ -183,7 +183,8 @@ namespace Armada.Desktop.ViewModels
                     TotalMissions = vp.TotalMissions,
                     FailedMissions = vp.FailedMissions,
                     InProgressMissions = vp.InProgressMissions,
-                    Progress = vp.TotalMissions > 0 ? (double)vp.CompletedMissions / vp.TotalMissions * 100 : 0
+                    Progress = vp.TotalMissions > 0 ? (double)vp.CompletedMissions / vp.TotalMissions * 100 : 0,
+                    CanDelete = vp.Voyage?.Status != VoyageStatusEnum.Open && vp.Voyage?.Status != VoyageStatusEnum.InProgress
                 });
             }
 
@@ -386,6 +387,9 @@ namespace Armada.Desktop.ViewModels
 
         /// <summary>Failed text.</summary>
         public string? FailedText => FailedMissions > 0 ? $"({FailedMissions} failed)" : null;
+
+        /// <summary>Whether this voyage can be deleted (not Open or InProgress).</summary>
+        public bool CanDelete { get; set; }
     }
 
     /// <summary>

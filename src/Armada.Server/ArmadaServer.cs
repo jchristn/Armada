@@ -1,6 +1,7 @@
 namespace Armada.Server
 {
     using System.Diagnostics;
+    using System.Linq;
     using System.Net;
     using System.Text.Json;
     using SyslogLogging;
@@ -683,8 +684,24 @@ namespace Armada.Server
                 Voyage? voyage = await _Database.Voyages.ReadAsync(id).ConfigureAwait(false);
                 if (voyage == null) return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Voyage not found" };
 
-                // Cascade delete all missions in this voyage
+                // Block deletion of active voyages
+                if (voyage.Status == VoyageStatusEnum.Open || voyage.Status == VoyageStatusEnum.InProgress)
+                {
+                    req.Http.Response.StatusCode = 409;
+                    return (object)new { Error = "Conflict", Message = "Cannot delete voyage while status is " + voyage.Status + ". Cancel the voyage first." };
+                }
+
                 List<Mission> missions = await _Database.Missions.EnumerateByVoyageAsync(id).ConfigureAwait(false);
+
+                // Block deletion if any missions are actively assigned or in progress
+                List<Mission> activeMissions = missions.Where(m => m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress).ToList();
+                if (activeMissions.Count > 0)
+                {
+                    req.Http.Response.StatusCode = 409;
+                    return (object)new { Error = "Conflict", Message = "Cannot delete voyage with " + activeMissions.Count + " active mission(s) in Assigned or InProgress status. Cancel or complete them first." };
+                }
+
+                // Cascade delete all missions in this voyage
                 foreach (Mission m in missions)
                 {
                     await _Database.Missions.DeleteAsync(m.Id).ConfigureAwait(false);
@@ -701,10 +718,11 @@ namespace Armada.Server
             api => api
                 .WithTag("Voyages")
                 .WithSummary("Permanently delete a voyage")
-                .WithDescription("Permanently deletes a voyage and all its associated missions from the database. This cannot be undone.")
+                .WithDescription("Permanently deletes a voyage and all its associated missions from the database. This cannot be undone. Blocked if voyage is Open/InProgress or has active missions.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Voyage ID (vyg_ prefix)"))
                 .WithResponse(200, OpenApiResponseMetadata.Json<object>("Deleted voyage and missions"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiResponseMetadata.Json<object>("Voyage cannot be deleted while active"))
                 .WithSecurity("ApiKey"));
 
             // Missions
@@ -1199,10 +1217,23 @@ namespace Armada.Server
                 string id = req.Parameters["id"];
                 Captain? captain = await _Database.Captains.ReadAsync(id).ConfigureAwait(false);
                 if (captain == null) return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Captain not found" };
+
+                // Block deletion of working captains
                 if (captain.State == CaptainStateEnum.Working)
                 {
-                    await _Admiral.RecallCaptainAsync(id).ConfigureAwait(false);
+                    req.Http.Response.StatusCode = 409;
+                    return (object)new { Error = "Conflict", Message = "Cannot delete captain while state is Working. Stop the captain first." };
                 }
+
+                // Block deletion if captain has active missions
+                List<Mission> captainMissions = await _Database.Missions.EnumerateByCaptainAsync(id).ConfigureAwait(false);
+                List<Mission> activeCaptainMissions = captainMissions.Where(m => m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress).ToList();
+                if (activeCaptainMissions.Count > 0)
+                {
+                    req.Http.Response.StatusCode = 409;
+                    return (object)new { Error = "Conflict", Message = "Cannot delete captain with " + activeCaptainMissions.Count + " active mission(s) in Assigned or InProgress status. Cancel or complete them first." };
+                }
+
                 await _Database.Captains.DeleteAsync(id).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 204;
                 return null;
@@ -1210,10 +1241,11 @@ namespace Armada.Server
             api => api
                 .WithTag("Captains")
                 .WithSummary("Delete a captain")
-                .WithDescription("Deletes a captain. If working, the captain is recalled first.")
+                .WithDescription("Deletes a captain. Blocked if captain is Working or has active missions.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Captain ID (cpt_ prefix)"))
                 .WithResponse(204, OpenApiResponseMetadata.NoContent())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiResponseMetadata.Json<object>("Captain cannot be deleted while active"))
                 .WithSecurity("ApiKey"));
 
             // Docks

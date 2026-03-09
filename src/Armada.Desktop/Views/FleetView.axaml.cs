@@ -4,6 +4,7 @@ namespace Armada.Desktop.Views
     using Avalonia.Controls;
     using Avalonia.Interactivity;
     using Avalonia.VisualTree;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Desktop.ViewModels;
 
@@ -103,14 +104,31 @@ namespace Armada.Desktop.Views
         {
             if (sender is Button button && button.Tag is string captainId && DataContext is FleetViewModel vm)
             {
-                Window? owner = this.FindAncestorOfType<Window>();
-                if (owner != null)
+                // Check if captain is active
+                Captain? captain = vm.Captains.FirstOrDefault(c => c.Id == captainId);
+                if (captain != null && captain.State == CaptainStateEnum.Working)
+                {
+                    Window? owner = this.FindAncestorOfType<Window>();
+                    if (owner != null)
+                    {
+                        ConfirmDialog errorDialog = new ConfirmDialog(
+                            "Cannot Remove Captain",
+                            "This captain is currently working. Stop the captain before removing it.",
+                            "OK",
+                            isDanger: false);
+                        await errorDialog.ShowConfirmAsync(owner);
+                    }
+                    return;
+                }
+
+                Window? confirmOwner = this.FindAncestorOfType<Window>();
+                if (confirmOwner != null)
                 {
                     ConfirmDialog dialog = new ConfirmDialog(
                         "Remove Captain",
-                        "This will permanently remove this captain. Any active mission will be interrupted.",
+                        "This will permanently remove this captain.",
                         "Remove");
-                    bool confirmed = await dialog.ShowConfirmAsync(owner);
+                    bool confirmed = await dialog.ShowConfirmAsync(confirmOwner);
                     if (!confirmed) return;
                 }
 

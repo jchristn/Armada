@@ -142,7 +142,8 @@
                                             <span class="text-dim" x-show="vp.failedMissions > 0" x-text="', ' + vp.failedMissions + ' failed'"></span>
                                         </td>
                                         <td @click.stop>
-                                            <button class="btn btn-sm btn-danger" @click="deleteVoyage(vp.voyage?.id)">Delete</button>
+                                            <button class="btn btn-sm btn-danger" @click="deleteVoyage(vp.voyage?.id)"
+                                                x-show="vp.voyage?.status !== 'Open' && vp.voyage?.status !== 'InProgress'">Delete</button>
                                         </td>
                                     </tr>
                                 </template>
@@ -398,7 +399,8 @@
                         </div>
                         <div class="inline-actions" @click.stop>
                             <span class="tag" :class="(voyage.status || '').toLowerCase()" x-text="voyage.status"></span>
-                            <button class="btn btn-sm btn-danger" @click="deleteVoyage(voyage.id)">Delete</button>
+                            <button class="btn btn-sm btn-danger" @click="deleteVoyage(voyage.id)"
+                                x-show="voyage.status !== 'Open' && voyage.status !== 'InProgress'">Delete</button>
                         </div>
                     </div>
                     <template x-if="voyage.description">
@@ -419,7 +421,8 @@
                             <button class="btn btn-sm btn-danger" @click="cancelVoyage(detail.id)"
                                 x-show="detail.status === 'Open' || detail.status === 'InProgress'">Cancel Voyage</button>
                             <button class="btn btn-sm" @click="retryVoyageMissions(detail.id)">Retry Failed</button>
-                            <button class="btn btn-sm btn-danger" @click="deleteVoyage(detail.id)">Delete Voyage</button>
+                            <button class="btn btn-sm btn-danger" @click="deleteVoyage(detail.id)"
+                                x-show="detail.status !== 'Open' && detail.status !== 'InProgress'">Delete Voyage</button>
                         </div>
                     </div>
                     <div class="detail-grid">

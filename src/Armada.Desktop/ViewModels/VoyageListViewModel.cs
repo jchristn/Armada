@@ -51,6 +51,7 @@ namespace Armada.Desktop.ViewModels
                 UpdateSelectedVoyageMissions();
                 this.RaisePropertyChanged(nameof(CanRetryFailed));
                 this.RaisePropertyChanged(nameof(CanCancelVoyage));
+                this.RaisePropertyChanged(nameof(CanDeleteVoyage));
             }
         }
 
@@ -64,6 +65,12 @@ namespace Armada.Desktop.ViewModels
         public bool CanCancelVoyage =>
             _SelectedVoyage != null &&
             (_SelectedVoyage.Status == VoyageStatusEnum.Open || _SelectedVoyage.Status == VoyageStatusEnum.InProgress);
+
+        /// <summary>Whether the Delete Voyage button should be visible.</summary>
+        public bool CanDeleteVoyage =>
+            _SelectedVoyage != null &&
+            _SelectedVoyage.Status != VoyageStatusEnum.Open &&
+            _SelectedVoyage.Status != VoyageStatusEnum.InProgress;
 
         /// <summary>Status filter.</summary>
         public string StatusFilter
@@ -324,6 +331,7 @@ namespace Armada.Desktop.ViewModels
                 _ = LoadPageAsync();
                 this.RaisePropertyChanged(nameof(CanRetryFailed));
                 this.RaisePropertyChanged(nameof(CanCancelVoyage));
+                this.RaisePropertyChanged(nameof(CanDeleteVoyage));
             });
         }
 

@@ -574,7 +574,17 @@ namespace Armada.Server.Mcp
                     Voyage? voyage = await database.Voyages.ReadAsync(voyageId).ConfigureAwait(false);
                     if (voyage == null) return (object)new { Error = "Voyage not found" };
 
+                    // Block deletion of active voyages
+                    if (voyage.Status == VoyageStatusEnum.Open || voyage.Status == VoyageStatusEnum.InProgress)
+                        return (object)new { Error = "Cannot delete voyage while status is " + voyage.Status + ". Cancel the voyage first." };
+
                     List<Mission> missions = await database.Missions.EnumerateByVoyageAsync(voyageId).ConfigureAwait(false);
+
+                    // Block deletion if any missions are actively assigned or in progress
+                    int activeMissionCount = missions.Count(m => m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress);
+                    if (activeMissionCount > 0)
+                        return (object)new { Error = "Cannot delete voyage with " + activeMissionCount + " active mission(s) in Assigned or InProgress status. Cancel or complete them first." };
+
                     foreach (Mission m in missions)
                     {
                         await database.Missions.DeleteAsync(m.Id).ConfigureAwait(false);
@@ -1103,8 +1113,17 @@ namespace Armada.Server.Mcp
                     string captainId = request.CaptainId;
                     Captain? captain = await database.Captains.ReadAsync(captainId).ConfigureAwait(false);
                     if (captain == null) return (object)new { Error = "Captain not found" };
+
+                    // Block deletion of working captains
                     if (captain.State == CaptainStateEnum.Working)
-                        await admiral.RecallCaptainAsync(captainId).ConfigureAwait(false);
+                        return (object)new { Error = "Cannot delete captain while state is Working. Stop the captain first." };
+
+                    // Block deletion if captain has active missions
+                    List<Mission> captainMissions = await database.Missions.EnumerateByCaptainAsync(captainId).ConfigureAwait(false);
+                    int activeMissionCount = captainMissions.Count(m => m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress);
+                    if (activeMissionCount > 0)
+                        return (object)new { Error = "Cannot delete captain with " + activeMissionCount + " active mission(s) in Assigned or InProgress status. Cancel or complete them first." };
+
                     await database.Captains.DeleteAsync(captainId).ConfigureAwait(false);
                     return (object)new { Status = "deleted", CaptainId = captainId };
                 });

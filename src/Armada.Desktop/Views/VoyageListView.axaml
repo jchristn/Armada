@@ -191,7 +191,8 @@
                                     Click="OnCancelVoyageClick" ToolTip.Tip="Cancel all remaining missions in this voyage"
                                     IsVisible="{Binding CanCancelVoyage}" />
                             <Button Content="Delete Voyage" Classes="danger"
-                                    Click="OnDeleteVoyageClick" ToolTip.Tip="Permanently delete this voyage and all its missions" />
+                                    Click="OnDeleteVoyageClick" ToolTip.Tip="Permanently delete this voyage and all its missions"
+                                    IsVisible="{Binding CanDeleteVoyage}" />
                         </StackPanel>
                     </StackPanel>
 

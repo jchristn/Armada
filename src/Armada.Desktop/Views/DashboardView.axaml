@@ -133,7 +133,8 @@
                                         <Button Grid.Column="1" Content="Delete" Classes="danger"
                                                 Click="OnDeleteVoyageClick" Tag="{Binding VoyageId}"
                                                 VerticalAlignment="Center" Margin="8,0,0,0"
-                                                ToolTip.Tip="Permanently delete this voyage" />
+                                                ToolTip.Tip="Permanently delete this voyage"
+                                                IsVisible="{Binding CanDelete}" />
                                     </Grid>
                                 </Border>
                             </DataTemplate>
