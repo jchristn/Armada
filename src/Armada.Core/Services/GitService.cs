@@ -278,12 +278,16 @@ namespace Armada.Core.Services
             // Diff committed changes on the current branch vs the base branch
             try
             {
-                return await RunGitAsync(worktreePath, "diff", baseBranch + "...HEAD").ConfigureAwait(false);
+                return await RunGitAsync(worktreePath, token, "diff", baseBranch + "...HEAD").ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                throw;
             }
             catch
             {
                 // Fallback: diff against working tree (uncommitted changes)
-                return await RunGitAsync(worktreePath, "diff", "HEAD").ConfigureAwait(false);
+                return await RunGitAsync(worktreePath, token, "diff", "HEAD").ConfigureAwait(false);
             }
         }
 
@@ -395,7 +399,17 @@ namespace Armada.Core.Services
             return await RunProcessAsync(workingDirectory, "git", args).ConfigureAwait(false);
         }
 
+        private async Task<string> RunGitAsync(string? workingDirectory, CancellationToken token, params string[] args)
+        {
+            return await RunProcessAsync(workingDirectory, "git", token, args).ConfigureAwait(false);
+        }
+
         private async Task<string> RunProcessAsync(string? workingDirectory, string command, params string[] args)
+        {
+            return await RunProcessAsync(workingDirectory, command, CancellationToken.None, args).ConfigureAwait(false);
+        }
+
+        private async Task<string> RunProcessAsync(string? workingDirectory, string command, CancellationToken token, params string[] args)
         {
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
@@ -414,13 +428,24 @@ namespace Armada.Core.Services
                 startInfo.ArgumentList.Add(arg);
             }
 
+            using CancellationTokenSource timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token, timeoutCts.Token);
+
             using Process process = new Process { StartInfo = startInfo };
             process.Start();
 
-            string stdout = await process.StandardOutput.ReadToEndAsync().ConfigureAwait(false);
-            string stderr = await process.StandardError.ReadToEndAsync().ConfigureAwait(false);
+            string stdout = await process.StandardOutput.ReadToEndAsync(linkedCts.Token).ConfigureAwait(false);
+            string stderr = await process.StandardError.ReadToEndAsync(linkedCts.Token).ConfigureAwait(false);
 
-            await process.WaitForExitAsync().ConfigureAwait(false);
+            try
+            {
+                await process.WaitForExitAsync(linkedCts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+                throw new TimeoutException(command + " timed out after 30 seconds");
+            }
 
             if (process.ExitCode != 0)
             {

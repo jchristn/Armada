@@ -50,6 +50,7 @@ function dashboard() {
         detail: null,
         detailMissions: [],
         detailDiff: null,
+        detailDiffLoading: false,
         detailLog: null,
 
         // Filters
@@ -561,11 +562,34 @@ function dashboard() {
 
         async loadMissionDiff(missionId) {
             this.detailDiff = null;
+            this.detailDiffLoading = true;
             try {
-                let result = await this.api('GET', '/api/v1/missions/' + missionId + '/diff');
-                this.detailDiff = result;
+                let controller = new AbortController();
+                let timeoutId = setTimeout(() => controller.abort(), 30000);
+                let opts = {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' },
+                    signal: controller.signal
+                };
+                if (this.apiKey) opts.headers['X-Api-Key'] = this.apiKey;
+                let resp = await fetch(API + '/api/v1/missions/' + missionId + '/diff', opts);
+                clearTimeout(timeoutId);
+                if (!resp.ok) {
+                    let errText = await resp.text();
+                    let errMsg = 'HTTP ' + resp.status;
+                    try { let e = JSON.parse(errText); errMsg = e.Message || e.message || e.Error || e.error || errMsg; } catch (_) { }
+                    throw new Error(errMsg);
+                }
+                let text = await resp.text();
+                this.detailDiff = text ? this.toCamel(JSON.parse(text)) : null;
             } catch (e) {
-                this.detailDiff = { error: e.message };
+                if (e.name === 'AbortError') {
+                    this.detailDiff = { error: 'Request timed out after 30 seconds' };
+                } else {
+                    this.detailDiff = { error: e.message };
+                }
+            } finally {
+                this.detailDiffLoading = false;
             }
         },
 

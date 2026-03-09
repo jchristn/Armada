@@ -681,7 +681,13 @@
 
                     <!-- Diff viewer -->
                     <div style="margin-top:1rem">
-                        <button class="btn btn-sm" @click="loadMissionDiff(detail.id)" x-show="!detailDiff">Load Diff</button>
+                        <button class="btn btn-sm" @click="loadMissionDiff(detail.id)" x-show="!detailDiff && !detailDiffLoading">Load Diff</button>
+                        <template x-if="detailDiffLoading">
+                            <div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0">
+                                <span class="spinner" style="width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;display:inline-block;animation:spin 0.8s linear infinite"></span>
+                                <span class="text-dim">Loading diff…</span>
+                            </div>
+                        </template>
                         <template x-if="detailDiff && !detailDiff.error">
                             <div>
                                 <h3>Diff <span class="text-dim" x-text="'(' + (detailDiff.branch || '') + ')'"></span></h3>
@@ -689,7 +695,11 @@
                             </div>
                         </template>
                         <template x-if="detailDiff && detailDiff.error">
-                            <p class="text-dim" x-text="'Diff unavailable: ' + detailDiff.error"></p>
+                            <div style="padding:0.75rem;border:1px solid var(--danger, #e74c3c);border-radius:4px;background:rgba(231,76,60,0.1);margin-top:0.5rem">
+                                <strong style="color:var(--danger, #e74c3c)">Diff Error</strong>
+                                <p style="margin:0.25rem 0 0;color:var(--text-dim, #999)" x-text="detailDiff.error"></p>
+                                <button class="btn btn-sm" style="margin-top:0.5rem" @click="detailDiff = null">Retry</button>
+                            </div>
                         </template>
                     </div>
 
