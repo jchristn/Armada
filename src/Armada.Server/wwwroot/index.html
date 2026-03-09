@@ -159,7 +159,32 @@
             <div>
                 <div class="view-header" style="margin-top:1.5rem">
                     <h3>Recent Missions</h3>
-                    <button class="btn btn-sm" @click="navigate('missions'); loadMissions()">View All &rarr;</button>
+                    <div class="view-actions filter-bar">
+                        <select class="filter-select" x-model="recentMissionFilters.status" title="Filter by mission status">
+                            <option value="">All Statuses</option>
+                            <option value="Pending">Pending</option>
+                            <option value="Assigned">Assigned</option>
+                            <option value="InProgress">InProgress</option>
+                            <option value="Testing">Testing</option>
+                            <option value="Review">Review</option>
+                            <option value="Complete">Complete</option>
+                            <option value="Failed">Failed</option>
+                            <option value="Cancelled">Cancelled</option>
+                        </select>
+                        <select class="filter-select" x-model="recentMissionFilters.vesselId" title="Filter by target vessel">
+                            <option value="">All Vessels</option>
+                            <template x-for="v in allVessels" :key="v.id">
+                                <option :value="v.id" x-text="v.name"></option>
+                            </template>
+                        </select>
+                        <select class="filter-select" x-model="recentMissionFilters.captainId" title="Filter by assigned captain">
+                            <option value="">All Captains</option>
+                            <template x-for="c in captains" :key="c.id">
+                                <option :value="c.id" x-text="c.name"></option>
+                            </template>
+                        </select>
+                        <button class="btn btn-sm" @click="navigate('missions'); loadMissions()">View All &rarr;</button>
+                    </div>
                 </div>
                 <template x-if="recentMissions.length > 0">
                     <div class="table-wrap">
@@ -175,7 +200,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                <template x-for="m in recentMissions" :key="m.id">
+                                <template x-for="m in filteredRecentMissions()" :key="m.id">
                                     <tr class="clickable" @click="navigate('missions', 'mission-detail', m.id)">
                                         <td><strong x-text="m.title"></strong><div class="text-dim id-display"><span class="mono" x-text="m.id"></span><button class="copy-btn" @click.stop="copyId(m.id, $event)" title="Copy ID"></button></div></td>
                                         <td><span class="tag" :class="(m.status || '').toLowerCase()" x-text="m.status"></span></td>
@@ -191,7 +216,7 @@
                         </table>
                     </div>
                 </template>
-                <p class="text-dim" x-show="recentMissions.length === 0">No missions found.</p>
+                <p class="text-dim" x-show="filteredRecentMissions().length === 0">No missions found.</p>
             </div>
 
             <template x-if="status.recentSignals && status.recentSignals.length > 0">
@@ -371,6 +396,12 @@
                         <option value="Complete">Complete</option>
                         <option value="Cancelled">Cancelled</option>
                     </select>
+                    <select class="filter-select" x-model="voyageVesselFilter" title="Filter voyages by target vessel">
+                        <option value="">All Vessels</option>
+                        <template x-for="v in allVessels" :key="v.id">
+                            <option :value="v.id" x-text="v.name"></option>
+                        </template>
+                    </select>
                     <input type="text" class="filter-input" x-model="listSearch" placeholder="Search...">
                     <button class="btn btn-primary btn-sm" @click="openCreateVoyage()">+ Voyage</button>
                 </div>
@@ -399,10 +430,10 @@
                     <button class="btn btn-sm" @click="loadVoyages()" title="Refresh">&#x21bb;</button>
                 </div>
             </div>
-            <template x-if="filterRows(voyages).length === 0">
+            <template x-if="filteredVoyages().length === 0">
                 <p class="text-dim">No voyages found.</p>
             </template>
-            <template x-for="voyage in filterRows(voyages)" :key="voyage.id">
+            <template x-for="voyage in filteredVoyages()" :key="voyage.id">
                 <div class="fleet-card clickable" @click="navigate('voyages', 'voyage-detail', voyage.id)">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <div>

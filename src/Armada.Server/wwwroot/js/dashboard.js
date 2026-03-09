@@ -55,7 +55,9 @@ function dashboard() {
 
         // Filters
         missionFilters: { status: '', vesselId: '', captainId: '', voyageId: '' },
+        recentMissionFilters: { status: '', vesselId: '', captainId: '' },
         voyageFilters: { status: '' },
+        voyageVesselFilter: '',
         vesselFilters: { fleetId: '' },
         eventFilters: { type: '', captainId: '', missionId: '', vesselId: '', voyageId: '', limit: 50 },
         listSearch: '',
@@ -1277,6 +1279,30 @@ function dashboard() {
             if (!this.listSearch) return rows;
             let q = this.listSearch.toLowerCase();
             return rows.filter(r => JSON.stringify(r).toLowerCase().includes(q));
+        },
+
+        // Client-side filter for Recent Missions on dashboard home
+        filteredRecentMissions() {
+            let rows = this.recentMissions;
+            let f = this.recentMissionFilters;
+            if (f.status) rows = rows.filter(m => m.status === f.status);
+            if (f.vesselId) rows = rows.filter(m => m.vesselId === f.vesselId);
+            if (f.captainId) rows = rows.filter(m => m.captainId === f.captainId);
+            return rows;
+        },
+
+        // Client-side vessel filter for Voyages view
+        filteredVoyages() {
+            let rows = this.filterRows(this.voyages);
+            if (!this.voyageVesselFilter) return rows;
+            let vesselId = this.voyageVesselFilter;
+            return rows.filter(v => {
+                if (v.vesselId === vesselId) return true;
+                if (v.missions && Array.isArray(v.missions)) {
+                    return v.missions.some(m => m.vesselId === vesselId);
+                }
+                return false;
+            });
         },
 
         // Column sorting
