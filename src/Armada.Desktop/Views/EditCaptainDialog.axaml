@@ -1,0 +1,52 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Armada.Desktop.Views.EditCaptainDialog"
+        Width="420" Height="300"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        SystemDecorations="BorderOnly"
+        Background="{DynamicResource SurfaceDarkBrush}"
+        Title="Edit Captain">
+
+    <Border Padding="24" Background="{DynamicResource SurfaceDarkBrush}"
+            BorderBrush="{DynamicResource SurfaceBorderBrush}" BorderThickness="1"
+            CornerRadius="8">
+        <StackPanel Spacing="16">
+            <TextBlock Text="Edit Captain"
+                       FontSize="16" FontWeight="Bold"
+                       Foreground="{DynamicResource TextPrimaryBrush}" />
+
+            <StackPanel Spacing="12">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Name" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <TextBox x:Name="NameInput" Watermark="Captain Name" />
+                </StackPanel>
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Runtime" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <ComboBox x:Name="RuntimeInput" Width="200" HorizontalAlignment="Left" />
+                </StackPanel>
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Parallelism" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <NumericUpDown x:Name="ParallelismInput" Minimum="1" Maximum="64" Increment="1"
+                                       Width="120" HorizontalAlignment="Left" FormatString="0" />
+                        <TextBlock Text="Minimum 1 (sequential)" FontSize="11"
+                                   Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,8,0,0">
+                <Button Content="Cancel" Click="OnCancelClick"
+                        Background="{DynamicResource SurfaceHoverBrush}"
+                        Foreground="{DynamicResource TextSecondaryBrush}"
+                        CornerRadius="6" Padding="16,8" FontSize="13" />
+                <Button Content="Save" Click="OnSaveClick"
+                        Background="#1E90FF" Foreground="White"
+                        CornerRadius="6" Padding="16,8" FontWeight="SemiBold" FontSize="13" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

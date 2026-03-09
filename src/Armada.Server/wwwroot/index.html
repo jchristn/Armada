@@ -726,6 +726,7 @@
                             <th class="sortable" @click="sortBy('name', captains)">Name<span x-text="sortIcon('name')"></span></th>
                             <th class="sortable" @click="sortBy('state', captains)">State<span x-text="sortIcon('state')"></span></th>
                             <th>Runtime</th>
+                            <th>Parallel</th>
                             <th>Mission</th>
                             <th>PID</th>
                             <th>Heartbeat</th>
@@ -741,6 +742,7 @@
                                 </td>
                                 <td><span class="tag" :class="(cpt.state || '').toLowerCase()" x-text="cpt.state"></span></td>
                                 <td x-text="cpt.runtime || 'ClaudeCode'"></td>
+                                <td x-text="cpt.maxParallelism ?? 1"></td>
                                 <td>
                                     <a href="#" x-show="cpt.currentMissionId" @click.prevent="navigate('missions', 'mission-detail', cpt.currentMissionId)" x-text="cpt.currentMissionId"></a>
                                     <span x-show="!cpt.currentMissionId">-</span>
@@ -781,6 +783,7 @@
                         <div class="detail-field"><span class="detail-label">ID</span><span class="mono" x-text="detail.id"></span></div>
                         <div class="detail-field"><span class="detail-label">State</span><span class="tag" :class="(detail.state || '').toLowerCase()" x-text="detail.state"></span></div>
                         <div class="detail-field"><span class="detail-label">Runtime</span><span x-text="detail.runtime || 'ClaudeCode'"></span></div>
+                        <div class="detail-field"><span class="detail-label">Max Parallelism</span><span x-text="detail.maxParallelism ?? 1"></span></div>
                         <div class="detail-field"><span class="detail-label">Process ID</span><span x-text="detail.processId || '-'"></span></div>
                         <div class="detail-field"><span class="detail-label">Current Mission</span>
                             <a href="#" x-show="detail.currentMissionId" @click.prevent="navigate('missions', 'mission-detail', detail.currentMissionId)" x-text="detail.currentMissionId"></a>
@@ -1252,6 +1255,12 @@
                         <option value="Cursor">Cursor</option>
                         <option value="Custom">Custom</option>
                     </select>
+                </div>
+                <div class="form-group">
+                    <label>Max Parallelism</label>
+                    <input type="number" x-model.number="modalData.maxParallelism" min="1" max="64" step="1"
+                           style="width: 80px;" title="Maximum concurrent missions (minimum 1).">
+                    <small style="color: var(--text-dim); margin-top: 2px; display: block;">Minimum 1 (sequential)</small>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn btn-sm" @click="modal = null">Cancel</button>

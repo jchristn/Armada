@@ -236,6 +236,14 @@ namespace Armada.Core.Client
         }
 
         /// <summary>
+        /// Update a captain.
+        /// </summary>
+        public async Task<Captain?> UpdateCaptainAsync(string id, Captain captain, CancellationToken token = default)
+        {
+            return await PutAsync<Captain, Captain>("/api/v1/captains/" + id, captain, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
         /// Stop a captain.
         /// </summary>
         public async Task StopCaptainAsync(string id, CancellationToken token = default)

@@ -312,6 +312,29 @@ namespace Armada.Desktop.ViewModels
         }
 
         /// <summary>
+        /// Update a captain's properties.
+        /// </summary>
+        public async Task UpdateCaptainAsync(Captain captain)
+        {
+            Dispatcher.UIThread.Post(() => IsLoading = true);
+            try
+            {
+                await _Connection.GetApiClient().UpdateCaptainAsync(captain.Id, captain).ConfigureAwait(false);
+                await _Connection.RefreshAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                string msg = ex.Message;
+                if (msg.Contains("UNIQUE")) msg = "A captain with that name already exists.";
+                Dispatcher.UIThread.Post(() => ErrorMessage = msg);
+            }
+            finally
+            {
+                Dispatcher.UIThread.Post(() => IsLoading = false);
+            }
+        }
+
+        /// <summary>
         /// Remove a captain permanently.
         /// </summary>
         public async Task RemoveCaptainAsync(string captainId)

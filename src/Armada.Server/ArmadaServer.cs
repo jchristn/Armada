@@ -1063,7 +1063,7 @@ namespace Armada.Server
             api => api
                 .WithTag("Captains")
                 .WithSummary("Update a captain")
-                .WithDescription("Updates a captain's name or runtime. Operational fields (state, process, mission) are preserved.")
+                .WithDescription("Updates a captain's name, runtime, or max parallelism. Operational fields (state, process, mission) are preserved.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Captain ID (cpt_ prefix)"))
                 .WithRequestBody(OpenApiRequestBodyMetadata.Json<Captain>("Updated captain data", true))
                 .WithResponse(200, OpenApiResponseMetadata.Json<Captain>("Updated captain"))

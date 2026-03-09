@@ -73,6 +73,30 @@ namespace Armada.Desktop.Views
         }
 
         /// <summary>
+        /// Edit a captain's settings.
+        /// </summary>
+        private async void OnEditCaptainClick(object? sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.Tag is string captainId && DataContext is FleetViewModel vm)
+            {
+                Captain? captain = vm.Captains.FirstOrDefault(c => c.Id == captainId);
+                if (captain == null) return;
+
+                Window? owner = this.FindAncestorOfType<Window>();
+                if (owner == null) return;
+
+                EditCaptainDialog dialog = new EditCaptainDialog(captain);
+                bool saved = await dialog.ShowEditAsync(owner);
+                if (!saved) return;
+
+                captain.Name = dialog.EditedName;
+                captain.Runtime = dialog.EditedRuntime;
+                captain.MaxParallelism = dialog.EditedParallelism;
+                await vm.UpdateCaptainAsync(captain);
+            }
+        }
+
+        /// <summary>
         /// Remove a captain with confirmation.
         /// </summary>
         private async void OnRemoveCaptainClick(object? sender, RoutedEventArgs e)
