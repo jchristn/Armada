@@ -265,16 +265,23 @@
                     </div>
                     <template x-if="fleet.vessels && fleet.vessels.length > 0">
                         <div class="table-wrap">
-                            <table>
-                                <thead><tr><th>Vessel</th><th>Repo URL</th><th>Branch</th><th></th><th>Actions</th></tr></thead>
+                            <table class="vessel-table">
+                                <colgroup>
+                                    <col class="vessel-col-name">
+                                    <col class="vessel-col-repo">
+                                    <col class="vessel-col-branch">
+                                    <col class="vessel-col-badges">
+                                    <col class="vessel-col-actions">
+                                </colgroup>
+                                <thead><tr><th>Vessel</th><th>Repo URL</th><th>Branch</th><th></th><th class="text-right">Actions</th></tr></thead>
                                 <tbody>
                                     <template x-for="v in fleet.vessels" :key="v.id">
                                         <tr>
                                             <td class="clickable" @click="navigate('fleets', 'vessel-detail', v.id)"><strong x-text="v.name"></strong><div class="text-dim id-display"><span class="mono" x-text="v.id"></span><button class="copy-btn" @click.stop="copyId(v.id, $event)" title="Copy ID"></button></div></td>
-                                            <td class="text-dim" x-text="v.repoUrl"></td>
+                                            <td class="text-dim vessel-repo-cell" x-text="v.repoUrl"></td>
                                             <td x-text="v.defaultBranch || 'main'"></td>
                                             <td><span class="vessel-badge" x-show="v.projectContext" title="Has Project Context">CTX</span><span class="vessel-badge" x-show="v.styleGuide" title="Has Style Guide">STY</span></td>
-                                            <td>
+                                            <td class="text-right">
                                                 <button class="btn btn-sm" @click.stop="openEditVessel(v)">Edit</button>
                                                 <button class="btn btn-sm btn-danger" @click.stop="deleteVessel(v.id)">Delete</button>
                                             </td>
@@ -310,13 +317,18 @@
                         <div>
                             <h3>Vessels</h3>
                             <div class="table-wrap">
-                                <table>
+                                <table class="vessel-table vessel-table-detail">
+                                    <colgroup>
+                                        <col class="vessel-col-name">
+                                        <col class="vessel-col-repo">
+                                        <col class="vessel-col-branch">
+                                    </colgroup>
                                     <thead><tr><th>Name</th><th>Repo URL</th><th>Branch</th></tr></thead>
                                     <tbody>
                                         <template x-for="v in detail.vessels" :key="v.id">
                                             <tr class="clickable" @click="navigate('fleets', 'vessel-detail', v.id)">
                                                 <td><strong x-text="v.name"></strong><div class="text-dim id-display"><span class="mono" x-text="v.id"></span><button class="copy-btn" @click.stop="copyId(v.id, $event)" title="Copy ID"></button></div></td>
-                                                <td class="text-dim" x-text="v.repoUrl"></td>
+                                                <td class="text-dim vessel-repo-cell" x-text="v.repoUrl"></td>
                                                 <td x-text="v.defaultBranch || 'main'"></td>
                                             </tr>
                                         </template>

@@ -796,6 +796,33 @@ a:hover { text-decoration: underline; }
     margin-left: 0.5rem;
 }
 
+/* Vessel table - consistent column alignment across fleet cards */
+.vessel-table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.vessel-col-name { width: 25%; }
+.vessel-col-repo { width: 35%; }
+.vessel-col-branch { width: 15%; }
+.vessel-col-badges { width: 8%; }
+.vessel-col-actions { width: 17%; }
+
+.vessel-repo-cell {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 0;
+}
+
+.vessel-table-detail .vessel-col-name { width: 30%; }
+.vessel-table-detail .vessel-col-repo { width: 50%; }
+.vessel-table-detail .vessel-col-branch { width: 20%; }
+
+.text-right {
+    text-align: right;
+}
+
 /* Vessel context badges */
 .vessel-badge {
     display: inline-block;
