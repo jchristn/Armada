@@ -302,9 +302,10 @@ tr.clickable { cursor: pointer; }
 
 /* ID display with copy button */
 .id-display {
-    display: inline-flex;
+    display: flex;
     align-items: center;
     gap: 0.25rem;
+    margin-top: 0.2rem;
 }
 
 .copy-btn {
