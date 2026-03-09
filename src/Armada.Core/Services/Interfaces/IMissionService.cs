@@ -18,7 +18,7 @@ namespace Armada.Core.Services.Interfaces
         /// <param name="mission">Mission to assign.</param>
         /// <param name="vessel">Target vessel.</param>
         /// <param name="token">Cancellation token.</param>
-        Task TryAssignAsync(Mission mission, Vessel vessel, CancellationToken token = default);
+        Task<bool> TryAssignAsync(Mission mission, Vessel vessel, CancellationToken token = default);
 
         /// <summary>
         /// Handle mission completion for a captain whose agent process exited successfully.

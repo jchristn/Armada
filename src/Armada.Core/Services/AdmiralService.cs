@@ -48,6 +48,7 @@ namespace Armada.Core.Services
         private IMissionService _Missions;
         private IVoyageService _Voyages;
         private IEscalationService? _Escalation;
+        private bool _RetryDispatchNeeded = false;
 
         #endregion
 
@@ -251,7 +252,11 @@ namespace Armada.Core.Services
             // Check for completed voyages
             await _Voyages.CheckCompletionsAsync(token).ConfigureAwait(false);
 
-            // Dispatch pending missions to idle captains
+            // Dispatch pending missions to idle captains (prioritize if previous cycle had failures)
+            if (_RetryDispatchNeeded)
+            {
+                _Logging.Info(_Header + "retrying dispatch for previously failed mission assignments");
+            }
             await DispatchPendingMissionsAsync(token).ConfigureAwait(false);
 
             // Captain pool management: auto-spawn if below minimum idle count
@@ -523,6 +528,8 @@ namespace Armada.Core.Services
             List<Mission> pendingMissions = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending, token).ConfigureAwait(false);
             if (pendingMissions.Count == 0) return;
 
+            bool anyFailed = false;
+
             foreach (Mission mission in pendingMissions)
             {
                 hasCapacity = await HasAvailableCapacityAsync(token).ConfigureAwait(false);
@@ -533,8 +540,15 @@ namespace Armada.Core.Services
                 Vessel? vessel = await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
                 if (vessel == null) continue;
 
-                await _Missions.TryAssignAsync(mission, vessel, token).ConfigureAwait(false);
+                bool assigned = await _Missions.TryAssignAsync(mission, vessel, token).ConfigureAwait(false);
+                if (!assigned)
+                {
+                    _Logging.Warn(_Header + "failed to assign mission " + mission.Id + " — will retry on next health check cycle");
+                    anyFailed = true;
+                }
             }
+
+            _RetryDispatchNeeded = anyFailed;
         }
 
         private async Task<bool> HasAvailableCapacityAsync(CancellationToken token)

@@ -64,7 +64,7 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <inheritdoc />
-        public async Task TryAssignAsync(Mission mission, Vessel vessel, CancellationToken token = default)
+        public async Task<bool> TryAssignAsync(Mission mission, Vessel vessel, CancellationToken token = default)
         {
             if (mission == null) throw new ArgumentNullException(nameof(mission));
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
@@ -78,7 +78,7 @@ namespace Armada.Core.Services
             if (broadMissions.Count > 0)
             {
                 _Logging.Warn(_Header + "vessel " + vessel.Id + " has a broad-scope mission in progress — deferring assignment of " + mission.Id);
-                return;
+                return false;
             }
 
             // Check if this mission is broad-scope and vessel already has active work
@@ -89,7 +89,7 @@ namespace Armada.Core.Services
             if (IsBroadScope(mission) && concurrentCount > 0)
             {
                 _Logging.Warn(_Header + "broad-scope mission " + mission.Id + " deferred — vessel " + vessel.Id + " has " + concurrentCount + " active mission(s)");
-                return;
+                return false;
             }
 
             // Warn about concurrent missions on same vessel
@@ -102,8 +102,8 @@ namespace Armada.Core.Services
             Captain? captain = await FindAvailableCaptainAsync(token).ConfigureAwait(false);
             if (captain == null)
             {
-                _Logging.Info(_Header + "no captains with available capacity for mission " + mission.Id);
-                return;
+                _Logging.Warn(_Header + "no captains with available capacity for mission " + mission.Id);
+                return false;
             }
 
             // Generate branch name
@@ -120,14 +120,14 @@ namespace Armada.Core.Services
             if (dock == null)
             {
                 // Provisioning failed — revert mission assignment
-                _Logging.Warn(_Header + "dock provisioning failed for mission " + mission.Id + " — reverting to Pending");
+                _Logging.Warn(_Header + "dock provisioning failed for captain " + captain.Id + " vessel " + vessel.Id + " mission " + mission.Id + " — reverting to Pending");
                 mission.Status = MissionStatusEnum.Pending;
                 mission.CaptainId = null;
                 mission.BranchName = null;
                 mission.DockId = null;
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
-                return;
+                return false;
             }
 
             // Track dock on the mission for per-mission dock tracking
@@ -188,7 +188,7 @@ namespace Armada.Core.Services
                     errorSignal.FromCaptainId = captain.Id;
                     await _Database.Signals.CreateAsync(errorSignal, token).ConfigureAwait(false);
 
-                    return;
+                    return false;
                 }
             }
             else
@@ -206,10 +206,11 @@ namespace Armada.Core.Services
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
 
-                return;
+                return false;
             }
 
             _Logging.Info(_Header + "assigned mission " + mission.Id + " to captain " + captain.Id + " at " + dock.WorktreePath);
+            return true;
         }
 
         /// <inheritdoc />
