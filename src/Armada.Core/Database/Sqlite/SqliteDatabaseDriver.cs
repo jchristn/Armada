@@ -334,6 +334,10 @@ namespace Armada.Core.Database.Sqlite
                 ),
                 new SchemaMigration(5, "Add commit_hash to missions for tracking completed work",
                     @"ALTER TABLE missions ADD COLUMN commit_hash TEXT;"
+                ),
+                new SchemaMigration(6, "Add project_context and style_guide to vessels",
+                    @"ALTER TABLE vessels ADD COLUMN project_context TEXT;",
+                    @"ALTER TABLE vessels ADD COLUMN style_guide TEXT;"
                 )
             };
         }
@@ -404,6 +408,8 @@ namespace Armada.Core.Database.Sqlite
             vessel.RepoUrl = NullableString(reader["repo_url"]);
             vessel.LocalPath = NullableString(reader["local_path"]);
             vessel.WorkingDirectory = NullableString(reader["working_directory"]);
+            vessel.ProjectContext = NullableString(reader["project_context"]);
+            vessel.StyleGuide = NullableString(reader["style_guide"]);
             vessel.DefaultBranch = reader["default_branch"].ToString()!;
             vessel.Active = Convert.ToInt64(reader["active"]) == 1;
             vessel.CreatedUtc = FromIso8601(reader["created_utc"].ToString()!);
@@ -750,14 +756,16 @@ namespace Armada.Core.Database.Sqlite
                     await conn.OpenAsync(token).ConfigureAwait(false);
                     using (SqliteCommand cmd = conn.CreateCommand())
                     {
-                        cmd.CommandText = @"INSERT INTO vessels (id, fleet_id, name, repo_url, local_path, working_directory, default_branch, active, created_utc, last_update_utc)
-                            VALUES (@id, @fleet_id, @name, @repo_url, @local_path, @working_directory, @default_branch, @active, @created_utc, @last_update_utc);";
+                        cmd.CommandText = @"INSERT INTO vessels (id, fleet_id, name, repo_url, local_path, working_directory, project_context, style_guide, default_branch, active, created_utc, last_update_utc)
+                            VALUES (@id, @fleet_id, @name, @repo_url, @local_path, @working_directory, @project_context, @style_guide, @default_branch, @active, @created_utc, @last_update_utc);";
                         cmd.Parameters.AddWithValue("@id", vessel.Id);
                         cmd.Parameters.AddWithValue("@fleet_id", (object?)vessel.FleetId ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@name", vessel.Name);
                         cmd.Parameters.AddWithValue("@repo_url", (object?)vessel.RepoUrl ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@local_path", (object?)vessel.LocalPath ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@working_directory", (object?)vessel.WorkingDirectory ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@project_context", (object?)vessel.ProjectContext ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@style_guide", (object?)vessel.StyleGuide ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@default_branch", vessel.DefaultBranch);
                         cmd.Parameters.AddWithValue("@active", vessel.Active ? 1 : 0);
                         cmd.Parameters.AddWithValue("@created_utc", ToIso8601(vessel.CreatedUtc));
@@ -829,6 +837,8 @@ namespace Armada.Core.Database.Sqlite
                             repo_url = @repo_url,
                             local_path = @local_path,
                             working_directory = @working_directory,
+                            project_context = @project_context,
+                            style_guide = @style_guide,
                             default_branch = @default_branch,
                             active = @active,
                             last_update_utc = @last_update_utc
@@ -839,6 +849,8 @@ namespace Armada.Core.Database.Sqlite
                         cmd.Parameters.AddWithValue("@repo_url", (object?)vessel.RepoUrl ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@local_path", (object?)vessel.LocalPath ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@working_directory", (object?)vessel.WorkingDirectory ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@project_context", (object?)vessel.ProjectContext ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@style_guide", (object?)vessel.StyleGuide ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@default_branch", vessel.DefaultBranch);
                         cmd.Parameters.AddWithValue("@active", vessel.Active ? 1 : 0);
                         cmd.Parameters.AddWithValue("@last_update_utc", ToIso8601(vessel.LastUpdateUtc));

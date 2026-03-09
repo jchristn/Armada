@@ -65,6 +65,16 @@ namespace Armada.Core.Models
         public string DefaultBranch { get; set; } = "main";
 
         /// <summary>
+        /// Project context describing what the project is, its architecture, key files, and dependencies.
+        /// </summary>
+        public string? ProjectContext { get; set; } = null;
+
+        /// <summary>
+        /// Style guide describing naming conventions, patterns, language restrictions, and library preferences.
+        /// </summary>
+        public string? StyleGuide { get; set; } = null;
+
+        /// <summary>
         /// Whether the vessel is active.
         /// </summary>
         public bool Active { get; set; } = true;

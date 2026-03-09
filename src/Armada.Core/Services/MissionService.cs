@@ -360,7 +360,25 @@ namespace Armada.Core.Services
 
             string claudeMdPath = Path.Combine(worktreePath, "CLAUDE.md");
 
-            string content =
+            string content = "";
+
+            if (!String.IsNullOrEmpty(vessel.ProjectContext))
+            {
+                content +=
+                    "## Project Context\n" +
+                    vessel.ProjectContext + "\n" +
+                    "\n";
+            }
+
+            if (!String.IsNullOrEmpty(vessel.StyleGuide))
+            {
+                content +=
+                    "## Code Style\n" +
+                    vessel.StyleGuide + "\n" +
+                    "\n";
+            }
+
+            content +=
                 "# Mission Instructions\n" +
                 "\n" +
                 "You are an Armada captain executing a mission. Follow these instructions carefully.\n" +
