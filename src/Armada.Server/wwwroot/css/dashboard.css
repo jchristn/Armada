@@ -588,7 +588,7 @@ tr.clickable { cursor: pointer; }
     overflow-y: auto;
 }
 
-.modal-wide { max-width: 640px; }
+.modal-wide { max-width: 1280px; min-height: 66vh; }
 
 .modal-box h3 { margin-top: 0; margin-bottom: 1rem; }
 

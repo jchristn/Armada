@@ -1271,7 +1271,7 @@
             <h3>Create Voyage</h3>
             <form @submit.prevent="createVoyage()">
                 <div class="form-group"><label>Title</label><input type="text" x-model="voyageForm.title" required autofocus></div>
-                <div class="form-group"><label>Description</label><textarea x-model="voyageForm.description" rows="2"></textarea></div>
+                <div class="form-group"><label>Description</label><textarea x-model="voyageForm.description" rows="4"></textarea></div>
                 <div class="form-group">
                     <label>Vessel</label>
                     <select x-model="voyageForm.vesselId" required>
