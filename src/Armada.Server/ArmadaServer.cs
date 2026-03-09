@@ -796,6 +796,14 @@ namespace Armada.Server
                 Mission mission = req.GetData<Mission>();
                 mission = await _Admiral.DispatchMissionAsync(mission).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 201;
+                if (mission.Status == MissionStatusEnum.Pending)
+                {
+                    return (object)new
+                    {
+                        Mission = mission,
+                        Warning = "Mission created but could not be assigned to any captain. It will be retried on the next health check cycle."
+                    };
+                }
                 return mission;
             },
             api => api

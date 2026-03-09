@@ -704,6 +704,14 @@ namespace Armada.Server.Mcp
                     if (request.VoyageId != null)
                         mission.VoyageId = request.VoyageId;
                     mission = await admiral.DispatchMissionAsync(mission).ConfigureAwait(false);
+                    if (mission.Status == Armada.Core.Enums.MissionStatusEnum.Pending)
+                    {
+                        return (object)new
+                        {
+                            Mission = mission,
+                            Warning = "Mission created but could not be assigned to any captain. It will be retried on the next health check cycle."
+                        };
+                    }
                     return (object)mission;
                 });
 
