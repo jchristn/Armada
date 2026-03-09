@@ -73,7 +73,7 @@ namespace Armada.Helm.Commands
 
             // Register all Armada tools
             IGitService gitService = git;
-            IMergeQueueService mergeQueueService = new MergeQueueService(logging, armadaSettings, git);
+            IMergeQueueService mergeQueueService = new MergeQueueService(logging, database, armadaSettings, git);
             McpToolRegistrar.RegisterAll(mcpServer.RegisterTool, database, admiral, armadaSettings, gitService, mergeQueueService);
 
             // Run until stdin closes or process is killed

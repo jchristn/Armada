@@ -117,7 +117,7 @@ namespace Armada.Server
             IVoyageService voyageService = new VoyageService(_Logging, _Database);
             IEscalationService escalationService = new EscalationService(_Logging, _Database, _Settings);
             _Admiral = new AdmiralService(_Logging, _Database, _Settings, captainService, missionService, voyageService, escalationService);
-            _MergeQueue = new MergeQueueService(_Logging, _Settings, _Git);
+            _MergeQueue = new MergeQueueService(_Logging, _Database, _Settings, _Git);
             _TemplateService = new MessageTemplateService(_Logging);
             _RuntimeFactory = new AgentRuntimeFactory(_Logging);
 

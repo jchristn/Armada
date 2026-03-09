@@ -3,6 +3,7 @@ namespace Armada.Core.Services
     using System.Collections.Concurrent;
     using System.Diagnostics;
     using SyslogLogging;
+    using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Settings;
@@ -18,6 +19,7 @@ namespace Armada.Core.Services
 
         private string _Header = "[MergeQueue] ";
         private LoggingModule _Logging;
+        private DatabaseDriver _Database;
         private ArmadaSettings _Settings;
         private IGitService _Git;
 
@@ -33,11 +35,13 @@ namespace Armada.Core.Services
         /// Instantiate.
         /// </summary>
         /// <param name="logging">Logging module.</param>
+        /// <param name="database">Database driver.</param>
         /// <param name="settings">Application settings.</param>
         /// <param name="git">Git service.</param>
-        public MergeQueueService(LoggingModule logging, ArmadaSettings settings, IGitService git)
+        public MergeQueueService(LoggingModule logging, DatabaseDriver database, ArmadaSettings settings, IGitService git)
         {
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
+            _Database = database ?? throw new ArgumentNullException(nameof(database));
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _Git = git ?? throw new ArgumentNullException(nameof(git));
         }
@@ -138,7 +142,20 @@ namespace Armada.Core.Services
 
             string batchId = "batch_" + DateTime.UtcNow.ToString("yyyyMMddHHmmss");
             MergeEntry first = batch[0];
-            string repoPath = GetRepoPath(first);
+            string? repoPath = await GetRepoPathAsync(first, token).ConfigureAwait(false);
+
+            if (repoPath == null)
+            {
+                _Logging.Warn(_Header + "skipping batch " + batchId + ": unable to resolve repo path for vessel " + first.VesselId);
+                foreach (MergeEntry entry in batch)
+                {
+                    entry.Status = MergeStatusEnum.Failed;
+                    entry.TestOutput = "Unable to resolve repository path for vessel " + first.VesselId;
+                    entry.CompletedUtc = DateTime.UtcNow;
+                    entry.LastUpdateUtc = DateTime.UtcNow;
+                }
+                return;
+            }
 
             _Logging.Info(_Header + "processing batch " + batchId + " with " + batch.Count + " entries for " + first.TargetBranch);
 
@@ -411,11 +428,17 @@ namespace Armada.Core.Services
             }
         }
 
-        private string GetRepoPath(MergeEntry entry)
+        private async Task<string?> GetRepoPathAsync(MergeEntry entry, CancellationToken token)
         {
             if (!String.IsNullOrEmpty(entry.VesselId))
             {
-                return Path.Combine(_Settings.ReposDirectory, entry.VesselId + ".git");
+                Vessel? vessel = await _Database.Vessels.ReadAsync(entry.VesselId, token).ConfigureAwait(false);
+                if (vessel == null || String.IsNullOrEmpty(vessel.LocalPath))
+                {
+                    _Logging.Warn(_Header + "vessel not found or LocalPath is empty for vessel ID " + entry.VesselId);
+                    return null;
+                }
+                return vessel.LocalPath;
             }
             return _Settings.ReposDirectory;
         }
