@@ -87,6 +87,9 @@
                     <h2>System Status</h2>
                     <p class="text-dim view-subtitle">Overview of fleet health, active missions, and recent activity.</p>
                 </div>
+                <div class="view-actions">
+                    <button class="btn btn-sm" @click="refresh()" title="Refresh">&#x21bb;</button>
+                </div>
             </div>
             <div class="cards">
                 <div class="card clickable" @click="navigate('captains')">
@@ -203,6 +206,7 @@
                 <div class="view-actions">
                     <button class="btn btn-primary btn-sm" @click="openCreateFleet()">+ Fleet</button>
                     <button class="btn btn-primary btn-sm" @click="openCreateVessel()">+ Vessel</button>
+                    <button class="btn btn-sm" @click="loadFleets()" title="Refresh">&#x21bb;</button>
                 </div>
             </div>
             <template x-if="fleets.length === 0">
@@ -1101,6 +1105,9 @@
                 <div>
                     <h2>Server Management</h2>
                     <p class="text-dim view-subtitle">Admiral server health, configuration, and operational controls.</p>
+                </div>
+                <div class="view-actions">
+                    <button class="btn btn-sm" @click="refresh()" title="Refresh">&#x21bb;</button>
                 </div>
             </div>
             <div class="cards">
