@@ -1143,6 +1143,43 @@ function dashboard() {
         },
 
         // ============================================================
+        // Copy to clipboard
+        // ============================================================
+        copyId(text, event) {
+            if (!text) return;
+            let btn = event.currentTarget;
+            let copyPromise;
+            if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
+                copyPromise = navigator.clipboard.writeText(text);
+            } else {
+                copyPromise = new Promise((resolve, reject) => {
+                    let textarea = document.createElement('textarea');
+                    textarea.value = text;
+                    textarea.style.position = 'fixed';
+                    textarea.style.opacity = '0';
+                    textarea.style.left = '-9999px';
+                    document.body.appendChild(textarea);
+                    textarea.focus();
+                    textarea.select();
+                    try {
+                        document.execCommand('copy') ? resolve() : reject();
+                    } catch (err) {
+                        reject(err);
+                    } finally {
+                        document.body.removeChild(textarea);
+                    }
+                });
+            }
+            copyPromise.then(() => {
+                btn.classList.add('copied');
+                setTimeout(() => { btn.classList.remove('copied'); }, 1500);
+            }).catch(() => {
+                btn.classList.add('copy-failed');
+                setTimeout(() => { btn.classList.remove('copy-failed'); }, 1500);
+            });
+        },
+
+        // ============================================================
         // Helpers
         // ============================================================
         totalMissions() {
