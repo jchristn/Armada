@@ -251,6 +251,32 @@ namespace Armada.Server
 
         #region Private-Methods
 
+        /// <summary>
+        /// Reads all text from a file using FileShare.ReadWrite to avoid locking conflicts with writer processes.
+        /// </summary>
+        private async Task<string> ReadFileSharedAsync(string path)
+        {
+            using FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using StreamReader reader = new StreamReader(fs);
+            return await reader.ReadToEndAsync().ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Reads all lines from a file using FileShare.ReadWrite to avoid locking conflicts with writer processes.
+        /// </summary>
+        private async Task<string[]> ReadLinesSharedAsync(string path)
+        {
+            List<string> lines = new List<string>();
+            using FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using StreamReader reader = new StreamReader(fs);
+            string? line;
+            while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) != null)
+            {
+                lines.Add(line);
+            }
+            return lines.ToArray();
+        }
+
         private void RegisterRoutes()
         {
             // Status
@@ -822,7 +848,7 @@ namespace Armada.Server
                 string savedDiffPath = Path.Combine(_Settings.LogDirectory, "diffs", id + ".diff");
                 if (File.Exists(savedDiffPath))
                 {
-                    string savedDiff = await File.ReadAllTextAsync(savedDiffPath).ConfigureAwait(false);
+                    string savedDiff = await ReadFileSharedAsync(savedDiffPath).ConfigureAwait(false);
                     return (object)new { MissionId = id, Branch = mission.BranchName ?? "", Diff = savedDiff };
                 }
 
@@ -874,7 +900,7 @@ namespace Armada.Server
                 if (!File.Exists(logPath))
                     return (object)new { MissionId = id, Log = "", Lines = 0, TotalLines = 0 };
 
-                string[] allLines = await File.ReadAllLinesAsync(logPath).ConfigureAwait(false);
+                string[] allLines = await ReadLinesSharedAsync(logPath).ConfigureAwait(false);
                 int totalLines = allLines.Length;
 
                 int offset = 0;
@@ -1039,7 +1065,7 @@ namespace Armada.Server
 
                 if (File.Exists(pointerPath))
                 {
-                    string target = (await File.ReadAllTextAsync(pointerPath).ConfigureAwait(false)).Trim();
+                    string target = (await ReadFileSharedAsync(pointerPath).ConfigureAwait(false)).Trim();
                     if (File.Exists(target))
                         logPath = target;
                 }
@@ -1047,7 +1073,7 @@ namespace Armada.Server
                 if (logPath == null)
                     return (object)new { CaptainId = id, Log = "", Lines = 0, TotalLines = 0 };
 
-                string[] allLines = await File.ReadAllLinesAsync(logPath).ConfigureAwait(false);
+                string[] allLines = await ReadLinesSharedAsync(logPath).ConfigureAwait(false);
                 int totalLines = allLines.Length;
 
                 int offset = 0;

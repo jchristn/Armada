@@ -169,6 +169,32 @@ namespace Armada.Server.WebSocket
 
         #region Private-Methods
 
+        /// <summary>
+        /// Reads all text from a file using FileShare.ReadWrite to avoid locking conflicts with writer processes.
+        /// </summary>
+        private async Task<string> ReadFileSharedAsync(string path)
+        {
+            using System.IO.FileStream fs = new System.IO.FileStream(path, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.ReadWrite);
+            using System.IO.StreamReader reader = new System.IO.StreamReader(fs);
+            return await reader.ReadToEndAsync().ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Reads all lines from a file using FileShare.ReadWrite to avoid locking conflicts with writer processes.
+        /// </summary>
+        private async Task<string[]> ReadLinesSharedAsync(string path)
+        {
+            List<string> lines = new List<string>();
+            using System.IO.FileStream fs = new System.IO.FileStream(path, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.ReadWrite);
+            using System.IO.StreamReader reader = new System.IO.StreamReader(fs);
+            string? line;
+            while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) != null)
+            {
+                lines.Add(line);
+            }
+            return lines.ToArray();
+        }
+
         private void RegisterRoutes()
         {
             // Subscribe route — clients connect here to receive broadcasts.
@@ -511,7 +537,7 @@ namespace Armada.Server.WebSocket
                                 string savedDiffPath = System.IO.Path.Combine(_Settings.LogDirectory, "diffs", mdId + ".diff");
                                 if (System.IO.File.Exists(savedDiffPath))
                                 {
-                                    string savedDiff = await System.IO.File.ReadAllTextAsync(savedDiffPath).ConfigureAwait(false);
+                                    string savedDiff = await ReadFileSharedAsync(savedDiffPath).ConfigureAwait(false);
                                     result = new { type = "command.result", action = "get_mission_diff", data = (object)new { MissionId = mdId, Branch = mdMission.BranchName ?? "", Diff = savedDiff } };
                                 }
                                 else
@@ -561,7 +587,7 @@ namespace Armada.Server.WebSocket
                                     result = new { type = "command.result", action = "get_mission_log", data = (object)new { MissionId = mlId, Log = "", Lines = 0, TotalLines = 0 } };
                                 else
                                 {
-                                    string[] mlAllLines = await System.IO.File.ReadAllLinesAsync(mlLogPath).ConfigureAwait(false);
+                                    string[] mlAllLines = await ReadLinesSharedAsync(mlLogPath).ConfigureAwait(false);
                                     int mlTotalLines = mlAllLines.Length;
                                     int mlOffset = command.Offset ?? 0;
                                     int mlLineCount = command.Lines ?? 100;
@@ -646,7 +672,7 @@ namespace Armada.Server.WebSocket
                                 string? clLogPath = null;
                                 if (System.IO.File.Exists(clPointerPath))
                                 {
-                                    string clTarget = (await System.IO.File.ReadAllTextAsync(clPointerPath).ConfigureAwait(false)).Trim();
+                                    string clTarget = (await ReadFileSharedAsync(clPointerPath).ConfigureAwait(false)).Trim();
                                     if (System.IO.File.Exists(clTarget))
                                         clLogPath = clTarget;
                                 }
@@ -654,7 +680,7 @@ namespace Armada.Server.WebSocket
                                     result = new { type = "command.result", action = "get_captain_log", data = (object)new { CaptainId = clId, Log = "", Lines = 0, TotalLines = 0 } };
                                 else
                                 {
-                                    string[] clAllLines = await System.IO.File.ReadAllLinesAsync(clLogPath).ConfigureAwait(false);
+                                    string[] clAllLines = await ReadLinesSharedAsync(clLogPath).ConfigureAwait(false);
                                     int clTotalLines = clAllLines.Length;
                                     int clOffset = command.Offset ?? 0;
                                     int clLineCount = command.Lines ?? 100;
