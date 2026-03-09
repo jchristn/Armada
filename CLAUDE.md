@@ -3,32 +3,39 @@
 You are an Armada captain executing a mission. Follow these instructions carefully.
 
 ## Mission
-- **Title:** Fix shell scripts for Linux/Mac compatibility (CRLF line endings)
-- **ID:** msn_mmjh22y1_B2WXcAFLu0y
+- **Title:** Fix mission completion detection for parallel captains
+- **ID:** msn_mmjhcaqw_1AQywwoIOUm
 
 ## Description
-The .sh shell scripts in the repository have Windows-style CRLF line endings, causing "bad interpreter: /bin/bash^M: no such file or directory" errors on Linux and Mac (including Apple Silicon).
+When multiple captains complete missions around the same time, the server sometimes fails to detect one or more completions. The health check loop processes captain completions sequentially, and if the auto-merge/push for one captain takes time, subsequent captain completions in the same cycle can be missed.
 
-Requirements:
+Observed behavior:
+- Captain 1 (claude-code-1) agent exited at 17:46:34, server detected and completed the mission at 17:46:50 ✅
+- Captain 2 (claude-code-2) agent exited at 17:46:44 (10 seconds later), server NEVER detected the exit ❌
+- The mission stayed InProgress with no mission.completed event, despite the agent process having exited with code 0
+- Both captains reported [ARMADA:PROGRESS] 100 in their logs
 
-1) Find ALL .sh files in the repository (recursively) and convert them from CRLF to LF line endings. The ^M (carriage return) characters must be removed.
+Root cause analysis areas to investigate:
+1. HealthCheckAsync in AdmiralService.cs — does it process all captains in a single pass? If one captain's completion handling (auto-merge, push, diff capture) throws an exception or takes too long, does it skip remaining captains?
+2. HandleMissionCompleteAsync in ArmadaServer.cs — is this called synchronously within the health check loop? If it fails (e.g. git merge conflict), does it prevent other completions from being processed?
+3. Process exit detection — is it purely poll-based (health check every 30s) or does it use Process.Exited events? Poll-based detection with sequential processing is fragile for parallel captains.
 
-2) Ensure all .sh files have proper Unix line endings (LF only, no CR).
+Required fixes:
+1. Ensure ALL captain process exits are detected reliably, even when multiple captains complete simultaneously
+2. Consider using async Process.Exited event handlers (or Process.WaitForExitAsync) per captain instead of relying solely on the health check poll loop
+3. If keeping the poll-based approach, ensure exception handling in one captain's completion flow does NOT prevent processing of other captains — use try/catch around each captain's completion handling
+4. Add a mission.completed (or mission.failed) event to the event log for every mission that finishes, so there's an audit trail
+5. Add a captain.completed event when a captain's process exits
+6. Ensure the health check loop does NOT skip captains if one captain's completion takes a long time — process completions concurrently or queue them
 
-3) Ensure all .sh files have correct shebang lines (#!/bin/bash or #!/usr/bin/env bash) — prefer #!/usr/bin/env bash for maximum portability across Linux and Mac.
-
-4) Ensure all .sh files are executable (chmod +x). Note: git tracks the executable bit, so use 'git update-index --chmod=+x' for each .sh file.
-
-5) Add a .gitattributes file (or update the existing one) at the repo root to ensure .sh files always use LF line endings, even on Windows checkouts:
-   *.sh text eol=lf
-
-6) Verify the scripts are syntactically valid bash after the fix.
-
-The source code is at c:\code\armada\armada.
+The source code is at c:\code\armada\armada. Key files:
+- src/Armada.Core/Services/AdmiralService.cs (HealthCheckAsync, DispatchPendingMissionsAsync)
+- src/Armada.Server/ArmadaServer.cs (HandleMissionCompleteAsync, health check loop)
+- src/Armada.Core/Services/CaptainService.cs (ReleaseAsync)
 
 ## Repository
 - **Name:** Armada
-- **Branch:** armada/claude-code-2/msn_mmjh22y1_B2WXcAFLu0y
+- **Branch:** armada/claude-code-4/msn_mmjhcaqw_1AQywwoIOUm
 - **Default Branch:** main
 
 ## Rules

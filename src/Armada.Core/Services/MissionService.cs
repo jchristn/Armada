@@ -233,6 +233,23 @@ namespace Armada.Core.Services
             await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
             _Logging.Info(_Header + "mission " + mission.Id + " completed by captain " + captain.Id);
 
+            // Emit mission.completed event for audit trail
+            try
+            {
+                ArmadaEvent completedEvent = new ArmadaEvent("mission.completed", "Mission completed: " + mission.Title);
+                completedEvent.EntityType = "mission";
+                completedEvent.EntityId = mission.Id;
+                completedEvent.CaptainId = captain.Id;
+                completedEvent.MissionId = mission.Id;
+                completedEvent.VesselId = mission.VesselId;
+                completedEvent.VoyageId = mission.VoyageId;
+                await _Database.Events.CreateAsync(completedEvent, token).ConfigureAwait(false);
+            }
+            catch (Exception evtEx)
+            {
+                _Logging.Warn(_Header + "error emitting mission.completed event for " + mission.Id + ": " + evtEx.Message);
+            }
+
             // Get dock for push/PR (prefer mission-level DockId, fall back to captain-level)
             Dock? dock = null;
             string? dockId = mission.DockId ?? captain.CurrentDockId;

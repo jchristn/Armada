@@ -1814,9 +1814,21 @@ namespace Armada.Server
                 _Logging.Info(_Header + "mission " + mission.Id + " completed — branch " + dock.BranchName + " available in bare repo (no auto-PR or local merge configured)");
             }
 
-            await EmitEventAsync("mission.completed", "Mission completed: " + mission.Title,
-                entityType: "mission", entityId: mission.Id,
-                captainId: mission.CaptainId, missionId: mission.Id, vesselId: mission.VesselId, voyageId: mission.VoyageId).ConfigureAwait(false);
+            // Note: mission.completed event is emitted by MissionService.HandleCompletionAsync
+            // to guarantee the audit trail even if this callback fails or is not invoked.
+            // Broadcast via WebSocket for real-time UI updates.
+            if (_WebSocketHub != null)
+            {
+                _WebSocketHub.BroadcastEvent("mission.completed", "Mission completed: " + mission.Title, new
+                {
+                    entityType = "mission",
+                    entityId = mission.Id,
+                    captainId = mission.CaptainId,
+                    missionId = mission.Id,
+                    vesselId = mission.VesselId,
+                    voyageId = mission.VoyageId
+                });
+            }
 
             // Reclaim dock (remove worktree)
             try
