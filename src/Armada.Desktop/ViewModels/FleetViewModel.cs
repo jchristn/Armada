@@ -269,6 +269,29 @@ namespace Armada.Desktop.ViewModels
         }
 
         /// <summary>
+        /// Update a vessel's properties.
+        /// </summary>
+        public async Task UpdateVesselAsync(Vessel vessel)
+        {
+            Dispatcher.UIThread.Post(() => IsLoading = true);
+            try
+            {
+                await _Connection.GetApiClient().UpdateVesselAsync(vessel.Id, vessel).ConfigureAwait(false);
+                await _Connection.RefreshAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                string msg = ex.Message;
+                if (msg.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase)) msg = "A vessel with that name already exists.";
+                Dispatcher.UIThread.Post(() => ErrorMessage = msg);
+            }
+            finally
+            {
+                Dispatcher.UIThread.Post(() => IsLoading = false);
+            }
+        }
+
+        /// <summary>
         /// Delete a vessel.
         /// </summary>
         public async Task DeleteVesselAsync(string vesselId)

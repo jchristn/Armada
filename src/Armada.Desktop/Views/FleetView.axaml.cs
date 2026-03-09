@@ -197,6 +197,33 @@ namespace Armada.Desktop.Views
         }
 
         /// <summary>
+        /// Edit a vessel's settings.
+        /// </summary>
+        private async void OnEditVesselClick(object? sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.Tag is string vesselId && DataContext is FleetViewModel vm)
+            {
+                Vessel? vessel = vm.Vessels.FirstOrDefault(v => v.Id == vesselId);
+                if (vessel == null) return;
+
+                Window? owner = this.FindAncestorOfType<Window>();
+                if (owner == null) return;
+
+                EditVesselDialog dialog = new EditVesselDialog(vessel);
+                bool saved = await dialog.ShowEditAsync(owner);
+
+                if (!saved) return;
+
+                vessel.Name = dialog.EditedName;
+                vessel.RepoUrl = dialog.EditedRepoUrl;
+                vessel.DefaultBranch = dialog.EditedBranch;
+                vessel.ProjectContext = dialog.EditedProjectContext;
+                vessel.StyleGuide = dialog.EditedStyleGuide;
+                await vm.UpdateVesselAsync(vessel);
+            }
+        }
+
+        /// <summary>
         /// Remove a vessel with confirmation.
         /// </summary>
         private async void OnRemoveVesselClick(object? sender, RoutedEventArgs e)

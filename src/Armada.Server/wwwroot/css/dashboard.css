@@ -644,6 +644,7 @@ tr.clickable { cursor: pointer; }
 }
 
 .modal-wide { max-width: 1280px; min-height: 66vh; }
+.modal-box-wide { max-width: 600px; }
 .modal-large { max-width: 730px; min-height: 400px; padding: 2rem; }
 .modal-large textarea { min-height: 180px; }
 
@@ -793,6 +794,63 @@ a:hover { text-decoration: underline; }
     font-size: 0.75rem;
     cursor: pointer;
     margin-left: 0.5rem;
+}
+
+/* Vessel context badges */
+.vessel-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+    background: var(--accent);
+    color: #fff;
+    margin-right: 0.25rem;
+    opacity: 0.75;
+    letter-spacing: 0.02em;
+}
+
+/* Form helper text */
+.form-help {
+    display: block;
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    margin-bottom: 0.3rem;
+}
+
+/* Character count */
+.char-count {
+    display: block;
+    text-align: right;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    margin-top: 0.2rem;
+    opacity: 0.7;
+}
+
+/* Detail context sections */
+.detail-context-section {
+    margin-top: 1rem;
+}
+
+.detail-context-section h4 {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    margin-bottom: 0.4rem;
+}
+
+.detail-context-block {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+    font-size: 0.85rem;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    color: var(--text);
+    max-height: 300px;
+    overflow-y: auto;
+    margin: 0;
 }
 
 /* Responsive */

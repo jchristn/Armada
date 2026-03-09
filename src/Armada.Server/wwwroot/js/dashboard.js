@@ -946,7 +946,9 @@ function dashboard() {
                     name: this.modalData.name,
                     repoUrl: this.modalData.repoUrl,
                     defaultBranch: this.modalData.defaultBranch || 'main',
-                    fleetId: this.modalData.fleetId || null
+                    fleetId: this.modalData.fleetId || null,
+                    projectContext: this.modalData.projectContext || null,
+                    styleGuide: this.modalData.styleGuide || null
                 });
                 this.toast('Vessel created: ' + vessel.name);
                 this.modal = null;
@@ -963,7 +965,9 @@ function dashboard() {
                     name: this.modalData.name,
                     repoUrl: this.modalData.repoUrl,
                     defaultBranch: this.modalData.defaultBranch || 'main',
-                    fleetId: this.modalData.fleetId || null
+                    fleetId: this.modalData.fleetId || null,
+                    projectContext: this.modalData.projectContext || null,
+                    styleGuide: this.modalData.styleGuide || null
                 });
                 this.toast('Vessel updated');
                 this.modal = null;
@@ -1285,8 +1289,8 @@ function dashboard() {
         // Modal openers
         openCreateFleet() { this.modal = 'create-fleet'; this.modalData = { name: '', description: '' }; },
         openEditFleet(f) { this.modal = 'edit-fleet'; this.modalData = { id: f.id, name: f.name, description: f.description || '' }; },
-        openCreateVessel(fleetId) { this.modal = 'create-vessel'; this.modalData = { name: '', repoUrl: '', defaultBranch: 'main', fleetId: fleetId || '' }; },
-        openEditVessel(v) { this.modal = 'edit-vessel'; this.modalData = { id: v.id, name: v.name, repoUrl: v.repoUrl || '', defaultBranch: v.defaultBranch || 'main', fleetId: v.fleetId || '' }; },
+        openCreateVessel(fleetId) { this.modal = 'create-vessel'; this.modalData = { name: '', repoUrl: '', defaultBranch: 'main', fleetId: fleetId || '', projectContext: '', styleGuide: '' }; },
+        openEditVessel(v) { this.modal = 'edit-vessel'; this.modalData = { id: v.id, name: v.name, repoUrl: v.repoUrl || '', defaultBranch: v.defaultBranch || 'main', fleetId: v.fleetId || '', projectContext: v.projectContext || '', styleGuide: v.styleGuide || '' }; },
         openAddCaptain() { this.modal = 'add-captain'; this.modalData = { name: '', runtime: 'ClaudeCode', maxParallelism: 1 }; },
         openEditCaptain(c) { this.modal = 'edit-captain'; this.modalData = { id: c.id, name: c.name, runtime: c.runtime || 'ClaudeCode', maxParallelism: c.maxParallelism ?? 1 }; },
         openEditMission(m) { this.modal = 'edit-mission'; this.modalData = { id: m.id, title: m.title, description: m.description || '', priority: m.priority || 100, vesselId: m.vesselId || '', voyageId: m.voyageId || '' }; },

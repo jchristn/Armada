@@ -1,0 +1,65 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Armada.Desktop.Views.EditVesselDialog"
+        Width="620" Height="680"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        SystemDecorations="BorderOnly"
+        Background="{DynamicResource SurfaceDarkBrush}"
+        Title="Edit Vessel">
+
+    <Border Padding="24" Background="{DynamicResource SurfaceDarkBrush}"
+            BorderBrush="{DynamicResource SurfaceBorderBrush}" BorderThickness="1"
+            CornerRadius="8">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="16">
+                <TextBlock Text="Edit Vessel"
+                           FontSize="16" FontWeight="Bold"
+                           Foreground="{DynamicResource TextPrimaryBrush}" />
+
+                <StackPanel Spacing="12">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Name" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                        <TextBox x:Name="NameInput" Watermark="Vessel Name" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Repo URL" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                        <TextBox x:Name="RepoUrlInput" Watermark="https://github.com/..." />
+                    </StackPanel>
+
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Default Branch" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                        <TextBox x:Name="BranchInput" Watermark="main" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Project Context" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                        <TextBlock Text="Describe the project, its architecture, key files, and dependencies. This is prepended to every mission prompt."
+                                   FontSize="11" Foreground="{DynamicResource TextDimBrush}" TextWrapping="Wrap" />
+                        <TextBox x:Name="ProjectContextInput" AcceptsReturn="True" TextWrapping="Wrap"
+                                 Height="100" Watermark="e.g. This is a Node.js REST API using Express and PostgreSQL..." />
+                    </StackPanel>
+
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Style Guide" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                        <TextBlock Text="Define naming conventions, patterns, language restrictions. Agents will follow these when writing code."
+                                   FontSize="11" Foreground="{DynamicResource TextDimBrush}" TextWrapping="Wrap" />
+                        <TextBox x:Name="StyleGuideInput" AcceptsReturn="True" TextWrapping="Wrap"
+                                 Height="100" Watermark="e.g. Use camelCase for variables, PascalCase for classes..." />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,8,0,0">
+                    <Button Content="Cancel" Click="OnCancelClick"
+                            Background="{DynamicResource SurfaceHoverBrush}"
+                            Foreground="{DynamicResource TextSecondaryBrush}"
+                            CornerRadius="6" Padding="16,8" FontSize="13" />
+                    <Button Content="Save" Click="OnSaveClick"
+                            Background="#1E90FF" Foreground="White"
+                            CornerRadius="6" Padding="16,8" FontWeight="SemiBold" FontSize="13" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Border>
+</Window>

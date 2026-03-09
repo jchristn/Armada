@@ -241,13 +241,14 @@
                     <template x-if="fleet.vessels && fleet.vessels.length > 0">
                         <div class="table-wrap">
                             <table>
-                                <thead><tr><th>Vessel</th><th>Repo URL</th><th>Branch</th><th>Actions</th></tr></thead>
+                                <thead><tr><th>Vessel</th><th>Repo URL</th><th>Branch</th><th></th><th>Actions</th></tr></thead>
                                 <tbody>
                                     <template x-for="v in fleet.vessels" :key="v.id">
                                         <tr>
                                             <td class="clickable" @click="navigate('fleets', 'vessel-detail', v.id)"><strong x-text="v.name"></strong><div class="text-dim id-display"><span class="mono" x-text="v.id"></span><button class="copy-btn" @click.stop="copyId(v.id, $event)" title="Copy ID"></button></div></td>
                                             <td class="text-dim" x-text="v.repoUrl"></td>
                                             <td x-text="v.defaultBranch || 'main'"></td>
+                                            <td><span class="vessel-badge" x-show="v.projectContext" title="Has Project Context">CTX</span><span class="vessel-badge" x-show="v.styleGuide" title="Has Style Guide">STY</span></td>
                                             <td>
                                                 <button class="btn btn-sm" @click.stop="openEditVessel(v)">Edit</button>
                                                 <button class="btn btn-sm btn-danger" @click.stop="deleteVessel(v.id)">Delete</button>
@@ -322,6 +323,14 @@
                         <div class="detail-field"><span class="detail-label">Default Branch</span><span x-text="detail.defaultBranch || 'main'"></span></div>
                         <div class="detail-field"><span class="detail-label">Active</span><span x-text="detail.active !== false ? 'Yes' : 'No'"></span></div>
                         <div class="detail-field"><span class="detail-label">Created</span><span x-text="formatTimeAbsolute(detail.createdUtc)"></span></div>
+                    </div>
+                    <div class="detail-context-section" x-show="detail.projectContext">
+                        <h4>Project Context</h4>
+                        <pre class="detail-context-block" x-text="detail.projectContext"></pre>
+                    </div>
+                    <div class="detail-context-section" x-show="detail.styleGuide">
+                        <h4>Style Guide</h4>
+                        <pre class="detail-context-block" x-text="detail.styleGuide"></pre>
                     </div>
                     <template x-if="detailMissions.length > 0">
                         <div>
@@ -1208,7 +1217,7 @@
         </div>
 
         <!-- Create Vessel -->
-        <div class="modal-box" x-show="modal === 'create-vessel'">
+        <div class="modal-box modal-box-wide" x-show="modal === 'create-vessel'">
             <h3>Create Vessel</h3>
             <form @submit.prevent="createVessel()">
                 <div class="form-group"><label>Name</label><input type="text" x-model="modalData.name" required autofocus></div>
@@ -1221,6 +1230,18 @@
                         <template x-for="f in fleets" :key="f.id"><option :value="f.id" x-text="f.name"></option></template>
                     </select>
                 </div>
+                <div class="form-group">
+                    <label>Project Context</label>
+                    <small class="form-help">Describe the project, its architecture, key files, and dependencies. This is prepended to every mission prompt.</small>
+                    <textarea x-model="modalData.projectContext" rows="4" placeholder="e.g. This is a Node.js REST API using Express and PostgreSQL..."></textarea>
+                    <span class="char-count" x-text="(modalData.projectContext || '').length + ' chars'"></span>
+                </div>
+                <div class="form-group">
+                    <label>Style Guide</label>
+                    <small class="form-help">Define naming conventions, patterns, language restrictions. Agents will follow these when writing code.</small>
+                    <textarea x-model="modalData.styleGuide" rows="4" placeholder="e.g. Use camelCase for variables, PascalCase for classes..."></textarea>
+                    <span class="char-count" x-text="(modalData.styleGuide || '').length + ' chars'"></span>
+                </div>
                 <div class="modal-actions">
                     <button type="button" class="btn btn-sm" @click="modal = null">Cancel</button>
                     <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading">Create</button>
@@ -1229,7 +1250,7 @@
         </div>
 
         <!-- Edit Vessel -->
-        <div class="modal-box" x-show="modal === 'edit-vessel'">
+        <div class="modal-box modal-box-wide" x-show="modal === 'edit-vessel'">
             <h3>Edit Vessel</h3>
             <form @submit.prevent="saveVesselEdit()">
                 <div class="form-group"><label>Name</label><input type="text" x-model="modalData.name" required></div>
@@ -1241,6 +1262,18 @@
                         <option value="">No fleet</option>
                         <template x-for="f in fleets" :key="f.id"><option :value="f.id" x-text="f.name"></option></template>
                     </select>
+                </div>
+                <div class="form-group">
+                    <label>Project Context</label>
+                    <small class="form-help">Describe the project, its architecture, key files, and dependencies. This is prepended to every mission prompt.</small>
+                    <textarea x-model="modalData.projectContext" rows="4" placeholder="e.g. This is a Node.js REST API using Express and PostgreSQL..."></textarea>
+                    <span class="char-count" x-text="(modalData.projectContext || '').length + ' chars'"></span>
+                </div>
+                <div class="form-group">
+                    <label>Style Guide</label>
+                    <small class="form-help">Define naming conventions, patterns, language restrictions. Agents will follow these when writing code.</small>
+                    <textarea x-model="modalData.styleGuide" rows="4" placeholder="e.g. Use camelCase for variables, PascalCase for classes..."></textarea>
+                    <span class="char-count" x-text="(modalData.styleGuide || '').length + ' chars'"></span>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn btn-sm" @click="modal = null">Cancel</button>
