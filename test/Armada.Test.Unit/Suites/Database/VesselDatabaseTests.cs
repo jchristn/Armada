@@ -119,6 +119,114 @@ namespace Armada.Test.Unit.Suites.Database
                     AssertFalse(await db.Vessels.ExistsAsync("vsl_nonexistent"));
                 }
             });
+
+            await RunTest("CreateAsync with ProjectContext and StyleGuide persists both fields", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    SqliteDatabaseDriver db = testDb.Driver;
+                    Vessel vessel = new Vessel("ContextVessel", "https://github.com/test/repo");
+                    vessel.ProjectContext = "This is a .NET 8 web API with PostgreSQL backend.";
+                    vessel.StyleGuide = "Use PascalCase for public members, camelCase for private.";
+                    await db.Vessels.CreateAsync(vessel);
+
+                    Vessel? result = await db.Vessels.ReadAsync(vessel.Id);
+                    AssertNotNull(result);
+                    AssertEqual("This is a .NET 8 web API with PostgreSQL backend.", result!.ProjectContext);
+                    AssertEqual("Use PascalCase for public members, camelCase for private.", result.StyleGuide);
+                }
+            });
+
+            await RunTest("CreateAsync with null ProjectContext and StyleGuide persists nulls", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    SqliteDatabaseDriver db = testDb.Driver;
+                    Vessel vessel = new Vessel("NullContextVessel", "https://github.com/test/repo");
+                    await db.Vessels.CreateAsync(vessel);
+
+                    Vessel? result = await db.Vessels.ReadAsync(vessel.Id);
+                    AssertNotNull(result);
+                    AssertNull(result!.ProjectContext);
+                    AssertNull(result.StyleGuide);
+                }
+            });
+
+            await RunTest("UpdateAsync modifies ProjectContext and StyleGuide", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    SqliteDatabaseDriver db = testDb.Driver;
+                    Vessel vessel = new Vessel("UpdateContextVessel", "https://github.com/test/repo");
+                    await db.Vessels.CreateAsync(vessel);
+
+                    vessel.ProjectContext = "Updated project context";
+                    vessel.StyleGuide = "Updated style guide";
+                    await db.Vessels.UpdateAsync(vessel);
+
+                    Vessel? result = await db.Vessels.ReadAsync(vessel.Id);
+                    AssertEqual("Updated project context", result!.ProjectContext);
+                    AssertEqual("Updated style guide", result.StyleGuide);
+                }
+            });
+
+            await RunTest("UpdateAsync can set ProjectContext and StyleGuide to null", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    SqliteDatabaseDriver db = testDb.Driver;
+                    Vessel vessel = new Vessel("ClearContextVessel", "https://github.com/test/repo");
+                    vessel.ProjectContext = "Initial context";
+                    vessel.StyleGuide = "Initial style";
+                    await db.Vessels.CreateAsync(vessel);
+
+                    vessel.ProjectContext = null;
+                    vessel.StyleGuide = null;
+                    await db.Vessels.UpdateAsync(vessel);
+
+                    Vessel? result = await db.Vessels.ReadAsync(vessel.Id);
+                    AssertNull(result!.ProjectContext);
+                    AssertNull(result.StyleGuide);
+                }
+            });
+
+            await RunTest("ReadByNameAsync returns ProjectContext and StyleGuide", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    SqliteDatabaseDriver db = testDb.Driver;
+                    Vessel vessel = new Vessel("NameLookupContext", "https://github.com/test/repo");
+                    vessel.ProjectContext = "Context via name lookup";
+                    vessel.StyleGuide = "Style via name lookup";
+                    await db.Vessels.CreateAsync(vessel);
+
+                    Vessel? result = await db.Vessels.ReadByNameAsync("NameLookupContext");
+                    AssertNotNull(result);
+                    AssertEqual("Context via name lookup", result!.ProjectContext);
+                    AssertEqual("Style via name lookup", result.StyleGuide);
+                }
+            });
+
+            await RunTest("EnumerateByFleetAsync returns ProjectContext and StyleGuide", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    SqliteDatabaseDriver db = testDb.Driver;
+                    Fleet fleet = new Fleet("ContextFleet");
+                    await db.Fleets.CreateAsync(fleet);
+
+                    Vessel vessel = new Vessel("FleetContextVessel", "https://github.com/test/repo");
+                    vessel.FleetId = fleet.Id;
+                    vessel.ProjectContext = "Fleet vessel context";
+                    vessel.StyleGuide = "Fleet vessel style";
+                    await db.Vessels.CreateAsync(vessel);
+
+                    List<Vessel> results = await db.Vessels.EnumerateByFleetAsync(fleet.Id);
+                    AssertEqual(1, results.Count);
+                    AssertEqual("Fleet vessel context", results[0].ProjectContext);
+                    AssertEqual("Fleet vessel style", results[0].StyleGuide);
+                }
+            });
         }
     }
 }

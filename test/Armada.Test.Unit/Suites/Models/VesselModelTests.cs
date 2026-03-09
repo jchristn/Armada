@@ -71,6 +71,87 @@ namespace Armada.Test.Unit.Suites.Models
                 Vessel v2 = new Vessel();
                 AssertNotEqual(v1.Id, v2.Id);
             });
+
+            await RunTest("Vessel ProjectContext DefaultsToNull", () =>
+            {
+                Vessel vessel = new Vessel();
+                AssertNull(vessel.ProjectContext);
+            });
+
+            await RunTest("Vessel StyleGuide DefaultsToNull", () =>
+            {
+                Vessel vessel = new Vessel();
+                AssertNull(vessel.StyleGuide);
+            });
+
+            await RunTest("Vessel ProjectContext SetAndGet", () =>
+            {
+                Vessel vessel = new Vessel();
+                vessel.ProjectContext = "A .NET 8 microservice with Redis caching.";
+                AssertEqual("A .NET 8 microservice with Redis caching.", vessel.ProjectContext);
+            });
+
+            await RunTest("Vessel StyleGuide SetAndGet", () =>
+            {
+                Vessel vessel = new Vessel();
+                vessel.StyleGuide = "Use async/await everywhere. No blocking calls.";
+                AssertEqual("Use async/await everywhere. No blocking calls.", vessel.StyleGuide);
+            });
+
+            await RunTest("Vessel ProjectContext Nullable", () =>
+            {
+                Vessel vessel = new Vessel();
+                vessel.ProjectContext = "Some context";
+                vessel.ProjectContext = null;
+                AssertNull(vessel.ProjectContext);
+            });
+
+            await RunTest("Vessel StyleGuide Nullable", () =>
+            {
+                Vessel vessel = new Vessel();
+                vessel.StyleGuide = "Some style";
+                vessel.StyleGuide = null;
+                AssertNull(vessel.StyleGuide);
+            });
+
+            await RunTest("Vessel Serialization RoundTrip WithProjectContextAndStyleGuide", () =>
+            {
+                Vessel vessel = new Vessel("ContextVessel", "https://github.com/test/repo");
+                vessel.ProjectContext = "Multi-line\nproject context\nwith details.";
+                vessel.StyleGuide = "Follow C# coding conventions.\nUse var when type is obvious.";
+
+                string json = JsonSerializer.Serialize(vessel);
+                Vessel deserialized = JsonSerializer.Deserialize<Vessel>(json)!;
+
+                AssertEqual(vessel.Id, deserialized.Id);
+                AssertEqual(vessel.Name, deserialized.Name);
+                AssertEqual(vessel.ProjectContext, deserialized.ProjectContext);
+                AssertEqual(vessel.StyleGuide, deserialized.StyleGuide);
+            });
+
+            await RunTest("Vessel Serialization RoundTrip WithNullProjectContextAndStyleGuide", () =>
+            {
+                Vessel vessel = new Vessel("NullContextVessel", "https://github.com/test/repo");
+
+                string json = JsonSerializer.Serialize(vessel);
+                Vessel deserialized = JsonSerializer.Deserialize<Vessel>(json)!;
+
+                AssertNull(deserialized.ProjectContext);
+                AssertNull(deserialized.StyleGuide);
+            });
+
+            await RunTest("Vessel Serialization JsonContainsProjectContextAndStyleGuide", () =>
+            {
+                Vessel vessel = new Vessel("JsonFieldVessel", "https://github.com/test/repo");
+                vessel.ProjectContext = "test context";
+                vessel.StyleGuide = "test style";
+
+                string json = JsonSerializer.Serialize(vessel);
+                AssertContains("ProjectContext", json);
+                AssertContains("test context", json);
+                AssertContains("StyleGuide", json);
+                AssertContains("test style", json);
+            });
         }
     }
 }

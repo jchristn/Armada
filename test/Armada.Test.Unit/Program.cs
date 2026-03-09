@@ -52,6 +52,7 @@ namespace Armada.Test.Unit
             runner.AddSuite(new DataExpiryServiceTests());
             runner.AddSuite(new NotificationServiceTests());
             runner.AddSuite(new RuntimeDetectionServiceTests());
+            runner.AddSuite(new MissionPromptTests());
 
             int exitCode = await runner.RunAllAsync().ConfigureAwait(false);
             return exitCode;

@@ -987,6 +987,141 @@ namespace Armada.Test.Automated.Suites
 
             #endregion
 
+            #region CRUD - ProjectContext and StyleGuide
+
+            await RunTest("Create Vessel With ProjectContext And StyleGuide Returns Both Fields", async () =>
+            {
+                string fleetId = await CreateFleetAsync("ContextFleet");
+
+                StringContent content = new StringContent(
+                    JsonSerializer.Serialize(new
+                    {
+                        Name = "ContextVessel",
+                        FleetId = fleetId,
+                        RepoUrl = "https://github.com/test/context",
+                        ProjectContext = "A .NET 8 web API with PostgreSQL.",
+                        StyleGuide = "Use PascalCase for public members."
+                    }),
+                    Encoding.UTF8, "application/json");
+
+                HttpResponseMessage response = await _Client.PostAsync("/api/v1/vessels", content);
+                AssertEqual(HttpStatusCode.Created, response.StatusCode);
+
+                string body = await response.Content.ReadAsStringAsync();
+                using JsonDocument doc = JsonDocument.Parse(body);
+                JsonElement root = doc.RootElement;
+
+                string id = root.GetProperty("Id").GetString()!;
+                _CreatedVesselIds.Add(id);
+
+                AssertEqual("A .NET 8 web API with PostgreSQL.", root.GetProperty("ProjectContext").GetString()!);
+                AssertEqual("Use PascalCase for public members.", root.GetProperty("StyleGuide").GetString()!);
+            });
+
+            await RunTest("Create Vessel Without ProjectContext And StyleGuide Returns Nulls", async () =>
+            {
+                string fleetId = await CreateFleetAsync("NullContextFleet");
+                (string id, JsonDocument doc) = await CreateVesselAsync("NullContextVessel", fleetId: fleetId);
+                _CreatedVesselIds.Add(id);
+
+                JsonElement root = doc.RootElement;
+                AssertTrue(root.TryGetProperty("ProjectContext", out JsonElement pcElem), "ProjectContext property should exist");
+                AssertTrue(pcElem.ValueKind == JsonValueKind.Null, "ProjectContext should be null");
+                AssertTrue(root.TryGetProperty("StyleGuide", out JsonElement sgElem), "StyleGuide property should exist");
+                AssertTrue(sgElem.ValueKind == JsonValueKind.Null, "StyleGuide should be null");
+                doc.Dispose();
+            });
+
+            await RunTest("Update Vessel ProjectContext And StyleGuide Returns Updated Values", async () =>
+            {
+                string fleetId = await CreateFleetAsync("UpdateContextFleet");
+                string vesselId = await CreateVesselAndReturnIdAsync("UpdateContextVessel", fleetId: fleetId);
+
+                StringContent updateContent = new StringContent(
+                    JsonSerializer.Serialize(new
+                    {
+                        Name = "UpdateContextVessel",
+                        FleetId = fleetId,
+                        RepoUrl = "https://github.com/test/updatecontextvessel",
+                        ProjectContext = "Updated project context",
+                        StyleGuide = "Updated style guide"
+                    }),
+                    Encoding.UTF8, "application/json");
+                HttpResponseMessage response = await _Client.PutAsync("/api/v1/vessels/" + vesselId, updateContent);
+                string body = await response.Content.ReadAsStringAsync();
+                using JsonDocument doc = JsonDocument.Parse(body);
+
+                AssertEqual("Updated project context", doc.RootElement.GetProperty("ProjectContext").GetString()!);
+                AssertEqual("Updated style guide", doc.RootElement.GetProperty("StyleGuide").GetString()!);
+            });
+
+            await RunTest("Update Vessel ProjectContext And StyleGuide Verify Via Get", async () =>
+            {
+                string fleetId = await CreateFleetAsync("GetContextFleet");
+                string vesselId = await CreateVesselAndReturnIdAsync("GetContextVessel", fleetId: fleetId);
+
+                StringContent updateContent = new StringContent(
+                    JsonSerializer.Serialize(new
+                    {
+                        Name = "GetContextVessel",
+                        FleetId = fleetId,
+                        RepoUrl = "https://github.com/test/getcontextvessel",
+                        ProjectContext = "Persisted context",
+                        StyleGuide = "Persisted style"
+                    }),
+                    Encoding.UTF8, "application/json");
+                await _Client.PutAsync("/api/v1/vessels/" + vesselId, updateContent);
+
+                HttpResponseMessage getResp = await _Client.GetAsync("/api/v1/vessels/" + vesselId);
+                string getBody = await getResp.Content.ReadAsStringAsync();
+                using JsonDocument getDoc = JsonDocument.Parse(getBody);
+
+                AssertEqual("Persisted context", getDoc.RootElement.GetProperty("ProjectContext").GetString()!);
+                AssertEqual("Persisted style", getDoc.RootElement.GetProperty("StyleGuide").GetString()!);
+            });
+
+            await RunTest("Update Vessel Clear ProjectContext And StyleGuide To Null", async () =>
+            {
+                string fleetId = await CreateFleetAsync("ClearContextFleet");
+
+                StringContent createContent = new StringContent(
+                    JsonSerializer.Serialize(new
+                    {
+                        Name = "ClearContextVessel-" + Guid.NewGuid().ToString("N").Substring(0, 8),
+                        FleetId = fleetId,
+                        RepoUrl = "https://github.com/test/clearcontext",
+                        ProjectContext = "To be cleared",
+                        StyleGuide = "To be cleared"
+                    }),
+                    Encoding.UTF8, "application/json");
+                HttpResponseMessage createResp = await _Client.PostAsync("/api/v1/vessels", createContent);
+                string createBody = await createResp.Content.ReadAsStringAsync();
+                using JsonDocument createDoc = JsonDocument.Parse(createBody);
+                string vesselId = createDoc.RootElement.GetProperty("Id").GetString()!;
+                _CreatedVesselIds.Add(vesselId);
+
+                StringContent clearContent = new StringContent(
+                    JsonSerializer.Serialize(new
+                    {
+                        Name = "ClearContextVessel-cleared",
+                        FleetId = fleetId,
+                        RepoUrl = "https://github.com/test/clearcontext"
+                    }),
+                    Encoding.UTF8, "application/json");
+                await _Client.PutAsync("/api/v1/vessels/" + vesselId, clearContent);
+
+                HttpResponseMessage getResp = await _Client.GetAsync("/api/v1/vessels/" + vesselId);
+                string getBody = await getResp.Content.ReadAsStringAsync();
+                using JsonDocument getDoc = JsonDocument.Parse(getBody);
+
+                JsonElement pcElem = getDoc.RootElement.GetProperty("ProjectContext");
+                JsonElement sgElem = getDoc.RootElement.GetProperty("StyleGuide");
+                AssertTrue(pcElem.ValueKind == JsonValueKind.Null, "ProjectContext should be null after clearing");
+                AssertTrue(sgElem.ValueKind == JsonValueKind.Null, "StyleGuide should be null after clearing");
+            });
+
+            #endregion
+
             #region Enumerate - Edge Cases
 
             await RunTest("Enumerate Empty Database Returns Empty Result", async () =>
