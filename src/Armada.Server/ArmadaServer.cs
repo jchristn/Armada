@@ -522,6 +522,29 @@ namespace Armada.Server
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
+            _App.Rest.Patch<Vessel>("/api/v1/vessels/{id}/context", async (AppRequest req) =>
+            {
+                string id = req.Parameters["id"];
+                Vessel? existing = await _Database.Vessels.ReadAsync(id).ConfigureAwait(false);
+                if (existing == null) return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" };
+                Vessel patch = req.GetData<Vessel>();
+                if (patch.ProjectContext != null)
+                    existing.ProjectContext = patch.ProjectContext;
+                if (patch.StyleGuide != null)
+                    existing.StyleGuide = patch.StyleGuide;
+                existing = await _Database.Vessels.UpdateAsync(existing).ConfigureAwait(false);
+                return (object)existing;
+            },
+            api => api
+                .WithTag("Vessels")
+                .WithSummary("Update vessel context")
+                .WithDescription("Updates only the ProjectContext and StyleGuide fields of a vessel.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
+                .WithRequestBody(OpenApiRequestBodyMetadata.Json<Vessel>("Vessel context data (projectContext, styleGuide)", true))
+                .WithResponse(200, OpenApiResponseMetadata.Json<Vessel>("Updated vessel"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
             _App.Rest.Delete("/api/v1/vessels/{id}", async (AppRequest req) =>
             {
                 string id = req.Parameters["id"];

@@ -337,7 +337,9 @@ namespace Armada.Server.Mcp
                         name = new { type = "string", description = "Display name for the vessel" },
                         repoUrl = new { type = "string", description = "Git repository URL (HTTPS or SSH)" },
                         fleetId = new { type = "string", description = "Fleet ID to add the vessel to" },
-                        defaultBranch = new { type = "string", description = "Default branch name (defaults to main)" }
+                        defaultBranch = new { type = "string", description = "Default branch name (defaults to main)" },
+                        projectContext = new { type = "string", description = "Project context describing architecture, key files, and dependencies" },
+                        styleGuide = new { type = "string", description = "Style guide describing naming conventions, patterns, and library preferences" }
                     },
                     required = new[] { "name", "repoUrl", "fleetId" }
                 },
@@ -349,6 +351,8 @@ namespace Armada.Server.Mcp
                     vessel.RepoUrl = request.RepoUrl;
                     vessel.FleetId = request.FleetId;
                     vessel.DefaultBranch = request.DefaultBranch ?? "main";
+                    vessel.ProjectContext = request.ProjectContext;
+                    vessel.StyleGuide = request.StyleGuide;
                     vessel = await database.Vessels.CreateAsync(vessel).ConfigureAwait(false);
                     return (object)vessel;
                 });
@@ -364,7 +368,9 @@ namespace Armada.Server.Mcp
                         vesselId = new { type = "string", description = "Vessel ID (vsl_ prefix)" },
                         name = new { type = "string", description = "New display name" },
                         repoUrl = new { type = "string", description = "New repository URL" },
-                        defaultBranch = new { type = "string", description = "New default branch" }
+                        defaultBranch = new { type = "string", description = "New default branch" },
+                        projectContext = new { type = "string", description = "New project context" },
+                        styleGuide = new { type = "string", description = "New style guide" }
                     },
                     required = new[] { "vesselId" }
                 },
@@ -380,6 +386,10 @@ namespace Armada.Server.Mcp
                         vessel.RepoUrl = request.RepoUrl;
                     if (request.DefaultBranch != null)
                         vessel.DefaultBranch = request.DefaultBranch;
+                    if (request.ProjectContext != null)
+                        vessel.ProjectContext = request.ProjectContext;
+                    if (request.StyleGuide != null)
+                        vessel.StyleGuide = request.StyleGuide;
                     vessel = await database.Vessels.UpdateAsync(vessel).ConfigureAwait(false);
                     return (object)vessel;
                 });
@@ -404,6 +414,34 @@ namespace Armada.Server.Mcp
                     if (!exists) return (object)new { Error = "Vessel not found" };
                     await database.Vessels.DeleteAsync(vesselId).ConfigureAwait(false);
                     return (object)new { Status = "deleted", VesselId = vesselId };
+                });
+
+            register(
+                "armada_update_vessel_context",
+                "Update a vessel's project context and style guide without modifying other properties",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        vesselId = new { type = "string", description = "Vessel ID (vsl_ prefix)" },
+                        projectContext = new { type = "string", description = "Project context describing architecture, key files, and dependencies" },
+                        styleGuide = new { type = "string", description = "Style guide describing naming conventions, patterns, and library preferences" }
+                    },
+                    required = new[] { "vesselId" }
+                },
+                async (args) =>
+                {
+                    VesselContextArgs request = JsonSerializer.Deserialize<VesselContextArgs>(args!.Value, _JsonOptions)!;
+                    string vesselId = request.VesselId;
+                    Vessel? vessel = await database.Vessels.ReadAsync(vesselId).ConfigureAwait(false);
+                    if (vessel == null) return (object)new { Error = "Vessel not found" };
+                    if (request.ProjectContext != null)
+                        vessel.ProjectContext = request.ProjectContext;
+                    if (request.StyleGuide != null)
+                        vessel.StyleGuide = request.StyleGuide;
+                    vessel = await database.Vessels.UpdateAsync(vessel).ConfigureAwait(false);
+                    return (object)vessel;
                 });
         }
 

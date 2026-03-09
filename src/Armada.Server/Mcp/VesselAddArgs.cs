@@ -24,5 +24,15 @@ namespace Armada.Server.Mcp
         /// Default branch name (defaults to main).
         /// </summary>
         public string? DefaultBranch { get; set; }
+
+        /// <summary>
+        /// Project context describing architecture, key files, and dependencies.
+        /// </summary>
+        public string? ProjectContext { get; set; }
+
+        /// <summary>
+        /// Style guide describing naming conventions, patterns, and library preferences.
+        /// </summary>
+        public string? StyleGuide { get; set; }
     }
 }

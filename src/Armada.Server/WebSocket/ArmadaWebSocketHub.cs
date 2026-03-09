@@ -350,6 +350,23 @@ namespace Armada.Server.WebSocket
                             }
                             break;
 
+                        case "update_vessel_context":
+                            string ctxVesselId = command.Id ?? "";
+                            Vessel? ctxVessel = await _Database.Vessels.ReadAsync(ctxVesselId).ConfigureAwait(false);
+                            if (ctxVessel == null)
+                                result = new { type = "command.error", action = "update_vessel_context", error = "Vessel not found" };
+                            else
+                            {
+                                Vessel ctxPatch = JsonSerializer.Deserialize<WebSocketDataCommand<Vessel>>(body, _JsonOptions)?.Data!;
+                                if (ctxPatch.ProjectContext != null)
+                                    ctxVessel.ProjectContext = ctxPatch.ProjectContext;
+                                if (ctxPatch.StyleGuide != null)
+                                    ctxVessel.StyleGuide = ctxPatch.StyleGuide;
+                                ctxVessel = await _Database.Vessels.UpdateAsync(ctxVessel).ConfigureAwait(false);
+                                result = new { type = "command.result", action = "update_vessel_context", data = (object)ctxVessel };
+                            }
+                            break;
+
                         case "delete_vessel":
                             string delVesselId = command.Id ?? "";
                             await _Database.Vessels.DeleteAsync(delVesselId).ConfigureAwait(false);
