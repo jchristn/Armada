@@ -226,16 +226,26 @@ namespace Armada.Core.Services
         {
             List<Captain> workingCaptains = await _Database.Captains.EnumerateByStateAsync(CaptainStateEnum.Working, token).ConfigureAwait(false);
 
-            foreach (Captain captain in workingCaptains)
+            if (workingCaptains.Count > 0)
             {
-                try
-                {
-                    await HealthCheckCaptainAsync(captain, token).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    _Logging.Warn(_Header + "error processing health check for captain " + captain.Id + ": " + ex.Message);
-                }
+                _Logging.Info(_Header + "starting parallel health checks for " + workingCaptains.Count + " working captain(s)");
+
+                List<Task> healthCheckTasks = workingCaptains.Select(captain =>
+                    Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await HealthCheckCaptainAsync(captain, token).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            _Logging.Warn(_Header + "error processing health check for captain " + captain.Id + ": " + ex.Message);
+                        }
+                    }, token)).ToList();
+
+                await Task.WhenAll(healthCheckTasks).ConfigureAwait(false);
+
+                _Logging.Info(_Header + "completed parallel health checks for " + workingCaptains.Count + " working captain(s)");
             }
 
             // Check for completed voyages
