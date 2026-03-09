@@ -1270,11 +1270,11 @@
         </div>
 
         <!-- Edit Mission -->
-        <div class="modal-box" x-show="modal === 'edit-mission'">
+        <div class="modal-box modal-large" x-show="modal === 'edit-mission'">
             <h3>Edit Mission</h3>
             <form @submit.prevent="saveMissionEdit()">
                 <div class="form-group"><label>Title</label><input type="text" x-model="modalData.title" required></div>
-                <div class="form-group"><label>Description</label><textarea x-model="modalData.description" rows="3"></textarea></div>
+                <div class="form-group"><label>Description</label><textarea x-model="modalData.description" rows="6"></textarea></div>
                 <div class="form-group"><label>Priority</label><input type="number" x-model="modalData.priority" min="0"></div>
                 <div class="modal-actions">
                     <button type="button" class="btn btn-sm" @click="modal = null">Cancel</button>

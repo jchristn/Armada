@@ -589,6 +589,8 @@ tr.clickable { cursor: pointer; }
 }
 
 .modal-wide { max-width: 1280px; min-height: 66vh; }
+.modal-large { max-width: 730px; min-height: 400px; padding: 2rem; }
+.modal-large textarea { min-height: 180px; }
 
 .modal-box h3 { margin-top: 0; margin-bottom: 1rem; }
 
