@@ -300,6 +300,26 @@ tr.clickable { cursor: pointer; }
 .text-dim { color: var(--text-dim); font-size: 0.8rem; }
 .mono { font-family: var(--mono); font-size: 0.8rem; }
 
+/* Copy to clipboard button */
+.copy-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 0 0.15rem;
+    opacity: 0.35;
+    transition: opacity 0.15s, color 0.15s;
+    vertical-align: middle;
+    flex-shrink: 0;
+    font-size: 0.7rem;
+    line-height: 1;
+}
+.copy-btn:hover { opacity: 1; color: var(--accent); }
+.copy-btn.copied { color: var(--green); opacity: 1; }
+
 /* Progress bar */
 .progress-bar {
     width: 100%;

@@ -591,6 +591,40 @@ function dashboard() {
             }
         },
 
+        // ============================================================
+        // Copy to clipboard (works on both HTTP and HTTPS)
+        // ============================================================
+        copyId(text, event) {
+            if (!text) return;
+            let btn = event?.currentTarget;
+            let onSuccess = () => {
+                if (!btn) return;
+                let orig = btn.textContent;
+                btn.textContent = '\u2713';
+                btn.classList.add('copied');
+                setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1500);
+            };
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(onSuccess).catch(() => {
+                    if (this.fallbackCopy(text)) onSuccess();
+                });
+            } else {
+                if (this.fallbackCopy(text)) onSuccess();
+            }
+        },
+
+        fallbackCopy(text) {
+            let ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.cssText = 'position:fixed;opacity:0;left:-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            let ok = false;
+            try { ok = document.execCommand('copy'); } catch (e) { }
+            document.body.removeChild(ta);
+            return ok;
+        },
+
         updateBreadcrumbs() {
             this.breadcrumbs = [];
             let viewLabels = {

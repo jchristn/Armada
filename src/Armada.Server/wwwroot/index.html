@@ -130,7 +130,7 @@
                                     <tr class="clickable" @click="navigate('voyages', 'voyage-detail', vp.voyage?.id)">
                                         <td>
                                             <strong x-text="vp.voyage?.title || vp.voyage?.id"></strong>
-                                            <div class="text-dim" x-text="vp.voyage?.id"></div>
+                                            <div class="mono text-dim" x-text="vp.voyage?.id"></div><button class="copy-btn" @click.stop="copyId(vp.voyage?.id, $event)" title="Copy to clipboard">&#x29C9;</button>
                                         </td>
                                         <td><span class="tag" :class="(vp.voyage?.status || '').toLowerCase()" x-text="vp.voyage?.status"></span></td>
                                         <td>
@@ -173,7 +173,7 @@
                             <tbody>
                                 <template x-for="m in recentMissions" :key="m.id">
                                     <tr class="clickable" @click="navigate('missions', 'mission-detail', m.id)">
-                                        <td><strong x-text="m.title"></strong><div class="text-dim" x-text="m.id"></div></td>
+                                        <td><strong x-text="m.title"></strong><div class="mono text-dim" x-text="m.id"></div><button class="copy-btn" @click.stop="copyId(m.id, $event)" title="Copy to clipboard">&#x29C9;</button></td>
                                         <td><span class="tag" :class="(m.status || '').toLowerCase()" x-text="m.status"></span></td>
                                         <td x-text="vesselName(m.vesselId)"></td>
                                         <td x-text="captainName(m.captainId)"></td>
@@ -227,7 +227,7 @@
                     <div class="fleet-card-header">
                         <div class="clickable" @click="navigate('fleets', 'fleet-detail', fleet.id)">
                             <h3 x-text="fleet.name"></h3>
-                            <div class="text-dim" x-text="fleet.id"></div>
+                            <div class="mono text-dim" x-text="fleet.id"></div><button class="copy-btn" @click.stop="copyId(fleet.id, $event)" title="Copy to clipboard">&#x29C9;</button>
                         </div>
                         <div class="inline-actions">
                             <button class="btn btn-sm" @click.stop="openEditFleet(fleet)">Edit</button>
@@ -241,7 +241,7 @@
                                 <tbody>
                                     <template x-for="v in fleet.vessels" :key="v.id">
                                         <tr>
-                                            <td class="clickable" @click="navigate('fleets', 'vessel-detail', v.id)"><strong x-text="v.name"></strong><div class="text-dim" x-text="v.id"></div></td>
+                                            <td class="clickable" @click="navigate('fleets', 'vessel-detail', v.id)"><strong x-text="v.name"></strong><div class="mono text-dim" x-text="v.id"></div><button class="copy-btn" @click.stop="copyId(v.id, $event)" title="Copy to clipboard">&#x29C9;</button></td>
                                             <td class="text-dim" x-text="v.repoUrl"></td>
                                             <td x-text="v.defaultBranch || 'main'"></td>
                                             <td>
@@ -271,7 +271,7 @@
                         </div>
                     </div>
                     <div class="detail-grid">
-                        <div class="detail-field"><span class="detail-label">ID</span><span class="mono" x-text="detail.id"></span></div>
+                        <div class="detail-field"><span class="detail-label">ID</span><span class="mono" x-text="detail.id"></span><button class="copy-btn" @click.stop="copyId(detail.id, $event)" title="Copy to clipboard">&#x29C9;</button></div>
                         <div class="detail-field"><span class="detail-label">Description</span><span x-text="detail.description || '-'"></span></div>
                         <div class="detail-field"><span class="detail-label">Active</span><span x-text="detail.active !== false ? 'Yes' : 'No'"></span></div>
                         <div class="detail-field"><span class="detail-label">Created</span><span x-text="formatTimeAbsolute(detail.createdUtc)" :title="detail.createdUtc"></span></div>
@@ -285,7 +285,7 @@
                                     <tbody>
                                         <template x-for="v in detail.vessels" :key="v.id">
                                             <tr class="clickable" @click="navigate('fleets', 'vessel-detail', v.id)">
-                                                <td><strong x-text="v.name"></strong><div class="text-dim" x-text="v.id"></div></td>
+                                                <td><strong x-text="v.name"></strong><div class="mono text-dim" x-text="v.id"></div><button class="copy-btn" @click.stop="copyId(v.id, $event)" title="Copy to clipboard">&#x29C9;</button></td>
                                                 <td class="text-dim" x-text="v.repoUrl"></td>
                                                 <td x-text="v.defaultBranch || 'main'"></td>
                                             </tr>
@@ -312,7 +312,7 @@
                         </div>
                     </div>
                     <div class="detail-grid">
-                        <div class="detail-field"><span class="detail-label">ID</span><span class="mono" x-text="detail.id"></span></div>
+                        <div class="detail-field"><span class="detail-label">ID</span><span class="mono" x-text="detail.id"></span><button class="copy-btn" @click.stop="copyId(detail.id, $event)" title="Copy to clipboard">&#x29C9;</button></div>
                         <div class="detail-field"><span class="detail-label">Fleet</span><a href="#" @click.prevent="navigate('fleets', 'fleet-detail', detail.fleetId)" x-text="fleetName(detail.fleetId)"></a></div>
                         <div class="detail-field"><span class="detail-label">Repo URL</span><span class="mono" x-text="detail.repoUrl || '-'"></span></div>
                         <div class="detail-field"><span class="detail-label">Default Branch</span><span x-text="detail.defaultBranch || 'main'"></span></div>
@@ -328,7 +328,7 @@
                                     <tbody>
                                         <template x-for="m in detailMissions" :key="m.id">
                                             <tr class="clickable" @click="navigate(view, 'mission-detail', m.id)">
-                                                <td><strong x-text="m.title"></strong><div class="text-dim" x-text="m.id"></div></td>
+                                                <td><strong x-text="m.title"></strong><div class="mono text-dim" x-text="m.id"></div><button class="copy-btn" @click.stop="copyId(m.id, $event)" title="Copy to clipboard">&#x29C9;</button></td>
                                                 <td><span class="tag" :class="(m.status || '').toLowerCase()" x-text="m.status"></span></td>
                                                 <td x-text="captainName(m.captainId)"></td>
                                                 <td class="text-dim" x-text="m.branchName || '-'"></td>
@@ -394,7 +394,7 @@
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <div>
                             <h3 x-text="voyage.title || voyage.id"></h3>
-                            <div class="text-dim" x-text="voyage.id"></div>
+                            <div class="mono text-dim" x-text="voyage.id"></div><button class="copy-btn" @click.stop="copyId(voyage.id, $event)" title="Copy to clipboard">&#x29C9;</button>
                         </div>
                         <div class="inline-actions" @click.stop>
                             <span class="tag" :class="(voyage.status || '').toLowerCase()" x-text="voyage.status"></span>
@@ -423,7 +423,7 @@
                         </div>
                     </div>
                     <div class="detail-grid">
-                        <div class="detail-field"><span class="detail-label">ID</span><span class="mono" x-text="detail.id"></span></div>
+                        <div class="detail-field"><span class="detail-label">ID</span><span class="mono" x-text="detail.id"></span><button class="copy-btn" @click.stop="copyId(detail.id, $event)" title="Copy to clipboard">&#x29C9;</button></div>
                         <div class="detail-field"><span class="detail-label">Status</span><span class="tag" :class="(detail.status || '').toLowerCase()" x-text="detail.status"></span></div>
                         <div class="detail-field"><span class="detail-label">Description</span><span x-text="detail.description || '-'"></span></div>
                         <div class="detail-field"><span class="detail-label">Created</span><span x-text="formatTimeAbsolute(detail.createdUtc)"></span></div>
@@ -446,7 +446,7 @@
                             <tbody>
                                 <template x-for="m in detailMissions" :key="m.id">
                                     <tr class="clickable" @click="navigate('voyages', 'mission-detail', m.id)">
-                                        <td><strong x-text="m.title"></strong><div class="text-dim" x-text="m.id"></div></td>
+                                        <td><strong x-text="m.title"></strong><div class="mono text-dim" x-text="m.id"></div><button class="copy-btn" @click.stop="copyId(m.id, $event)" title="Copy to clipboard">&#x29C9;</button></td>
                                         <td><span class="tag" :class="(m.status || '').toLowerCase()" x-text="m.status"></span></td>
                                         <td><a href="#" @click.stop.prevent="navigate('captains', 'captain-detail', m.captainId)" x-text="captainName(m.captainId)"></a></td>
                                         <td class="text-dim" x-text="m.branchName || '-'"></td>
@@ -582,7 +582,7 @@
                     <tbody>
                         <template x-for="m in sortedRows(filterRows(allMissions))" :key="m.id">
                             <tr class="clickable" @click="navigate('missions', 'mission-detail', m.id)">
-                                <td><strong x-text="m.title"></strong><div class="text-dim" x-text="m.id"></div></td>
+                                <td><strong x-text="m.title"></strong><div class="mono text-dim" x-text="m.id"></div><button class="copy-btn" @click.stop="copyId(m.id, $event)" title="Copy to clipboard">&#x29C9;</button></td>
                                 <td><span class="tag" :class="(m.status || '').toLowerCase()" x-text="m.status"></span></td>
                                 <td x-text="vesselName(m.vesselId)"></td>
                                 <td x-text="captainName(m.captainId)"></td>
@@ -617,13 +617,13 @@
                         </div>
                     </div>
                     <div class="detail-grid">
-                        <div class="detail-field"><span class="detail-label">ID</span><span class="mono" x-text="detail.id"></span></div>
+                        <div class="detail-field"><span class="detail-label">ID</span><span class="mono" x-text="detail.id"></span><button class="copy-btn" @click.stop="copyId(detail.id, $event)" title="Copy to clipboard">&#x29C9;</button></div>
                         <div class="detail-field"><span class="detail-label">Status</span><span class="tag" :class="(detail.status || '').toLowerCase()" x-text="detail.status"></span></div>
                         <div class="detail-field"><span class="detail-label">Priority</span><span x-text="detail.priority"></span></div>
                         <div class="detail-field"><span class="detail-label">Description</span><span x-text="detail.description || '-'" style="white-space:pre-wrap"></span></div>
                         <div class="detail-field"><span class="detail-label">Vessel</span><a href="#" @click.prevent="navigate(view, 'vessel-detail', detail.vesselId)" x-text="vesselName(detail.vesselId)"></a></div>
                         <div class="detail-field"><span class="detail-label">Captain</span><a href="#" @click.prevent="navigate('captains', 'captain-detail', detail.captainId)" x-text="captainName(detail.captainId)"></a></div>
-                        <div class="detail-field" x-show="detail.voyageId"><span class="detail-label">Voyage</span><a href="#" @click.prevent="navigate('voyages', 'voyage-detail', detail.voyageId)" x-text="detail.voyageId"></a></div>
+                        <div class="detail-field" x-show="detail.voyageId"><span class="detail-label">Voyage</span><a class="mono" href="#" @click.prevent="navigate('voyages', 'voyage-detail', detail.voyageId)" x-text="detail.voyageId"></a><button class="copy-btn" @click.stop="copyId(detail.voyageId, $event)" title="Copy to clipboard">&#x29C9;</button></div>
                         <div class="detail-field"><span class="detail-label">Branch</span><span class="mono" x-text="detail.branchName || '-'"></span></div>
                         <div class="detail-field" x-show="detail.prUrl"><span class="detail-label">PR</span><span class="mono" x-text="detail.prUrl"></span></div>
                         <div class="detail-field"><span class="detail-label">Created</span><span x-text="formatTimeAbsolute(detail.createdUtc)"></span></div>
@@ -756,13 +756,13 @@
                             <tr>
                                 <td class="clickable" @click="navigate('captains', 'captain-detail', cpt.id)">
                                     <strong x-text="cpt.name"></strong>
-                                    <div class="text-dim" x-text="cpt.id"></div>
+                                    <div class="mono text-dim" x-text="cpt.id"></div><button class="copy-btn" @click.stop="copyId(cpt.id, $event)" title="Copy to clipboard">&#x29C9;</button>
                                 </td>
                                 <td><span class="tag" :class="(cpt.state || '').toLowerCase()" x-text="cpt.state"></span></td>
                                 <td x-text="cpt.runtime || 'ClaudeCode'"></td>
                                 <td x-text="cpt.maxParallelism ?? 1"></td>
                                 <td>
-                                    <a href="#" x-show="cpt.currentMissionId" @click.prevent="navigate('missions', 'mission-detail', cpt.currentMissionId)" x-text="cpt.currentMissionId"></a>
+                                    <a class="mono" href="#" x-show="cpt.currentMissionId" @click.prevent="navigate('missions', 'mission-detail', cpt.currentMissionId)" x-text="cpt.currentMissionId"></a><button class="copy-btn" x-show="cpt.currentMissionId" @click.stop="copyId(cpt.currentMissionId, $event)" title="Copy to clipboard">&#x29C9;</button>
                                     <span x-show="!cpt.currentMissionId">-</span>
                                 </td>
                                 <td x-text="cpt.processId || '-'"></td>
@@ -798,13 +798,13 @@
                         </div>
                     </div>
                     <div class="detail-grid">
-                        <div class="detail-field"><span class="detail-label">ID</span><span class="mono" x-text="detail.id"></span></div>
+                        <div class="detail-field"><span class="detail-label">ID</span><span class="mono" x-text="detail.id"></span><button class="copy-btn" @click.stop="copyId(detail.id, $event)" title="Copy to clipboard">&#x29C9;</button></div>
                         <div class="detail-field"><span class="detail-label">State</span><span class="tag" :class="(detail.state || '').toLowerCase()" x-text="detail.state"></span></div>
                         <div class="detail-field"><span class="detail-label">Runtime</span><span x-text="detail.runtime || 'ClaudeCode'"></span></div>
                         <div class="detail-field"><span class="detail-label">Max Parallelism</span><span x-text="detail.maxParallelism ?? 1"></span></div>
                         <div class="detail-field"><span class="detail-label">Process ID</span><span x-text="detail.processId || '-'"></span></div>
                         <div class="detail-field"><span class="detail-label">Current Mission</span>
-                            <a href="#" x-show="detail.currentMissionId" @click.prevent="navigate('missions', 'mission-detail', detail.currentMissionId)" x-text="detail.currentMissionId"></a>
+                            <a class="mono" href="#" x-show="detail.currentMissionId" @click.prevent="navigate('missions', 'mission-detail', detail.currentMissionId)" x-text="detail.currentMissionId"></a><button class="copy-btn" x-show="detail.currentMissionId" @click.stop="copyId(detail.currentMissionId, $event)" title="Copy to clipboard">&#x29C9;</button>
                             <span x-show="!detail.currentMissionId">-</span>
                         </div>
                         <div class="detail-field"><span class="detail-label">Last Heartbeat</span><span x-text="formatTimeAbsolute(detail.lastHeartbeatUtc) || '-'"></span></div>
@@ -832,7 +832,7 @@
                                     <tbody>
                                         <template x-for="m in detailMissions" :key="m.id">
                                             <tr class="clickable" @click="navigate('missions', 'mission-detail', m.id)">
-                                                <td><strong x-text="m.title"></strong><div class="text-dim" x-text="m.id"></div></td>
+                                                <td><strong x-text="m.title"></strong><div class="mono text-dim" x-text="m.id"></div><button class="copy-btn" @click.stop="copyId(m.id, $event)" title="Copy to clipboard">&#x29C9;</button></td>
                                                 <td><span class="tag" :class="(m.status || '').toLowerCase()" x-text="m.status"></span></td>
                                                 <td class="text-dim" x-text="m.branchName || '-'"></td>
                                                 <td class="text-dim" x-text="formatTime(m.createdUtc)"></td>
@@ -889,10 +889,10 @@
                     <tbody>
                         <template x-for="sig in filterRows(signals)" :key="sig.id">
                             <tr>
-                                <td class="mono text-dim" x-text="sig.id"></td>
+                                <td class="mono text-dim"><span x-text="sig.id"></span><button class="copy-btn" @click.stop="copyId(sig.id, $event)" title="Copy to clipboard">&#x29C9;</button></td>
                                 <td><span class="tag" :class="(sig.type || '').toLowerCase()" x-text="sig.type"></span></td>
-                                <td x-text="sig.fromCaptainId || 'Admiral'"></td>
-                                <td x-text="sig.toCaptainId || 'Admiral'"></td>
+                                <td :class="{'mono': sig.fromCaptainId}"><span x-text="sig.fromCaptainId || 'Admiral'"></span><button class="copy-btn" x-show="sig.fromCaptainId" @click.stop="copyId(sig.fromCaptainId, $event)" title="Copy to clipboard">&#x29C9;</button></td>
+                                <td :class="{'mono': sig.toCaptainId}"><span x-text="sig.toCaptainId || 'Admiral'"></span><button class="copy-btn" x-show="sig.toCaptainId" @click.stop="copyId(sig.toCaptainId, $event)" title="Copy to clipboard">&#x29C9;</button></td>
                                 <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="sig.payload || '-'"></td>
                                 <td class="text-dim" x-text="formatTime(sig.createdUtc)" :title="formatTimeAbsolute(sig.createdUtc)"></td>
                                 <td><button class="btn btn-sm" @click="navigate('signals', 'signal-detail', sig.id)">Show Details</button></td>
@@ -913,7 +913,7 @@
                         <h2>Signal Details</h2>
                     </div>
                     <div class="detail-grid">
-                        <div class="detail-field"><span class="detail-label">ID</span><span class="mono" x-text="detail.id"></span></div>
+                        <div class="detail-field"><span class="detail-label">ID</span><span class="mono" x-text="detail.id"></span><button class="copy-btn" @click.stop="copyId(detail.id, $event)" title="Copy to clipboard">&#x29C9;</button></div>
                         <div class="detail-field"><span class="detail-label">Type</span><span class="tag" :class="(detail.type || '').toLowerCase()" x-text="detail.type"></span></div>
                         <div class="detail-field"><span class="detail-label">Read</span><span x-text="detail.read ? 'Yes' : 'No'"></span></div>
                         <div class="detail-field">
@@ -936,7 +936,7 @@
                         </div>
                         <div class="detail-field" x-show="detail.missionId">
                             <span class="detail-label">Mission</span>
-                            <a href="#" @click.prevent="navigate('missions', 'mission-detail', detail.missionId)" x-text="detail.missionId"></a>
+                            <a class="mono" href="#" @click.prevent="navigate('missions', 'mission-detail', detail.missionId)" x-text="detail.missionId"></a><button class="copy-btn" @click.stop="copyId(detail.missionId, $event)" title="Copy to clipboard">&#x29C9;</button>
                         </div>
                         <div class="detail-field"><span class="detail-label">Created</span><span x-text="formatTimeAbsolute(detail.createdUtc)"></span></div>
                     </div>
@@ -1000,9 +1000,9 @@
                                 <td class="text-dim" x-text="formatTime(evt.createdUtc)" :title="formatTimeAbsolute(evt.createdUtc)"></td>
                                 <td><span class="tag" x-text="evt.eventType"></span></td>
                                 <td x-text="evt.message"></td>
-                                <td class="mono text-dim" x-text="evt.entityId || '-'"></td>
-                                <td class="text-dim" x-text="evt.captainId || '-'"></td>
-                                <td class="text-dim" x-text="evt.missionId || '-'"></td>
+                                <td class="mono text-dim"><span x-text="evt.entityId || '-'"></span><button class="copy-btn" x-show="evt.entityId" @click.stop="copyId(evt.entityId, $event)" title="Copy to clipboard">&#x29C9;</button></td>
+                                <td class="mono text-dim"><span x-text="evt.captainId || '-'"></span><button class="copy-btn" x-show="evt.captainId" @click.stop="copyId(evt.captainId, $event)" title="Copy to clipboard">&#x29C9;</button></td>
+                                <td class="mono text-dim"><span x-text="evt.missionId || '-'"></span><button class="copy-btn" x-show="evt.missionId" @click.stop="copyId(evt.missionId, $event)" title="Copy to clipboard">&#x29C9;</button></td>
                                 <td><button class="btn btn-sm" @click="navigate('events', 'event-detail', evt.id)">Show Details</button></td>
                             </tr>
                         </template>
@@ -1021,14 +1021,14 @@
                         <h2>Event Details</h2>
                     </div>
                     <div class="detail-grid">
-                        <div class="detail-field"><span class="detail-label">ID</span><span class="mono" x-text="detail.id"></span></div>
+                        <div class="detail-field"><span class="detail-label">ID</span><span class="mono" x-text="detail.id"></span><button class="copy-btn" @click.stop="copyId(detail.id, $event)" title="Copy to clipboard">&#x29C9;</button></div>
                         <div class="detail-field"><span class="detail-label">Event Type</span><span class="tag" x-text="detail.eventType"></span></div>
                         <div class="detail-field"><span class="detail-label">Message</span><span x-text="detail.message || '-'" style="white-space:pre-wrap"></span></div>
                         <div class="detail-field" x-show="detail.entityType">
                             <span class="detail-label">Entity Type</span><span x-text="detail.entityType"></span>
                         </div>
                         <div class="detail-field" x-show="detail.entityId">
-                            <span class="detail-label">Entity ID</span><span class="mono" x-text="detail.entityId"></span>
+                            <span class="detail-label">Entity ID</span><span class="mono" x-text="detail.entityId"></span><button class="copy-btn" @click.stop="copyId(detail.entityId, $event)" title="Copy to clipboard">&#x29C9;</button>
                         </div>
                         <div class="detail-field" x-show="detail.captainId">
                             <span class="detail-label">Captain</span>
@@ -1036,7 +1036,7 @@
                         </div>
                         <div class="detail-field" x-show="detail.missionId">
                             <span class="detail-label">Mission</span>
-                            <a href="#" @click.prevent="navigate('missions', 'mission-detail', detail.missionId)" x-text="detail.missionId"></a>
+                            <a class="mono" href="#" @click.prevent="navigate('missions', 'mission-detail', detail.missionId)" x-text="detail.missionId"></a><button class="copy-btn" @click.stop="copyId(detail.missionId, $event)" title="Copy to clipboard">&#x29C9;</button>
                         </div>
                         <div class="detail-field" x-show="detail.vesselId">
                             <span class="detail-label">Vessel</span>
@@ -1044,7 +1044,7 @@
                         </div>
                         <div class="detail-field" x-show="detail.voyageId">
                             <span class="detail-label">Voyage</span>
-                            <a href="#" @click.prevent="navigate('voyages', 'voyage-detail', detail.voyageId)" x-text="detail.voyageId"></a>
+                            <a class="mono" href="#" @click.prevent="navigate('voyages', 'voyage-detail', detail.voyageId)" x-text="detail.voyageId"></a><button class="copy-btn" @click.stop="copyId(detail.voyageId, $event)" title="Copy to clipboard">&#x29C9;</button>
                         </div>
                         <div class="detail-field"><span class="detail-label">Created</span><span x-text="formatTimeAbsolute(detail.createdUtc)"></span></div>
                     </div>
@@ -1099,12 +1099,12 @@
                     <tbody>
                         <template x-for="entry in filterRows(mergeQueue)" :key="entry.id">
                             <tr>
-                                <td class="mono text-dim" x-text="entry.id"></td>
+                                <td class="mono text-dim"><span x-text="entry.id"></span><button class="copy-btn" @click.stop="copyId(entry.id, $event)" title="Copy to clipboard">&#x29C9;</button></td>
                                 <td class="mono" x-text="entry.branchName"></td>
                                 <td x-text="entry.targetBranch"></td>
                                 <td><span class="tag" :class="(entry.status || '').toLowerCase()" x-text="entry.status"></span></td>
                                 <td class="text-dim">
-                                    <a href="#" x-show="entry.missionId" @click.prevent="navigate('missions', 'mission-detail', entry.missionId)" x-text="entry.missionId"></a>
+                                    <a class="mono" href="#" x-show="entry.missionId" @click.prevent="navigate('missions', 'mission-detail', entry.missionId)" x-text="entry.missionId"></a><button class="copy-btn" x-show="entry.missionId" @click.stop="copyId(entry.missionId, $event)" title="Copy to clipboard">&#x29C9;</button>
                                     <span x-show="!entry.missionId">-</span>
                                 </td>
                                 <td x-text="entry.priority"></td>
