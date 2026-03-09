@@ -28,6 +28,14 @@ namespace Armada.Core.Services.Interfaces
         Task HandleCompletionAsync(Captain captain, CancellationToken token = default);
 
         /// <summary>
+        /// Handle completion for a specific mission when the captain supports parallelism.
+        /// </summary>
+        /// <param name="captain">Captain that completed the mission.</param>
+        /// <param name="missionId">Identifier of the completed mission.</param>
+        /// <param name="token">Cancellation token.</param>
+        Task HandleCompletionAsync(Captain captain, string missionId, CancellationToken token = default);
+
+        /// <summary>
         /// Detect if a mission is broad-scope (likely to touch many files).
         /// </summary>
         /// <param name="mission">Mission to check.</param>

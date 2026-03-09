@@ -77,6 +77,16 @@ namespace Armada.Core.Models
         public string? BranchName { get; set; } = null;
 
         /// <summary>
+        /// Assigned dock identifier for this mission's worktree.
+        /// </summary>
+        public string? DockId { get; set; } = null;
+
+        /// <summary>
+        /// Operating system process identifier for the agent working this mission.
+        /// </summary>
+        public int? ProcessId { get; set; } = null;
+
+        /// <summary>
         /// Pull request URL if created.
         /// </summary>
         public string? PrUrl { get; set; } = null;

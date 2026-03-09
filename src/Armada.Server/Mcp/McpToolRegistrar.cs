@@ -937,7 +937,8 @@ namespace Armada.Server.Mcp
                     properties = new
                     {
                         name = new { type = "string", description = "Captain display name" },
-                        runtime = new { type = "string", description = "Agent runtime: ClaudeCode, Codex" }
+                        runtime = new { type = "string", description = "Agent runtime: ClaudeCode, Codex" },
+                        maxParallelism = new { type = "integer", description = "Maximum concurrent missions (default 1, minimum 1)" }
                     },
                     required = new[] { "name" }
                 },
@@ -948,13 +949,15 @@ namespace Armada.Server.Mcp
                     captain.Name = request.Name;
                     if (!String.IsNullOrEmpty(request.Runtime) && Enum.TryParse<AgentRuntimeEnum>(request.Runtime, true, out AgentRuntimeEnum rt))
                         captain.Runtime = rt;
+                    if (request.MaxParallelism.HasValue)
+                        captain.MaxParallelism = request.MaxParallelism.Value;
                     captain = await database.Captains.CreateAsync(captain).ConfigureAwait(false);
                     return (object)captain;
                 });
 
             register(
                 "armada_update_captain",
-                "Update a captain's name or runtime. Operational fields (state, process, mission) are preserved.",
+                "Update a captain's name, runtime, or parallelism. Operational fields (state, process, mission) are preserved.",
                 new
                 {
                     type = "object",
@@ -962,7 +965,8 @@ namespace Armada.Server.Mcp
                     {
                         captainId = new { type = "string", description = "Captain ID (cpt_ prefix)" },
                         name = new { type = "string", description = "New display name" },
-                        runtime = new { type = "string", description = "New agent runtime: ClaudeCode, Codex" }
+                        runtime = new { type = "string", description = "New agent runtime: ClaudeCode, Codex" },
+                        maxParallelism = new { type = "integer", description = "Maximum concurrent missions (minimum 1)" }
                     },
                     required = new[] { "captainId" }
                 },
@@ -976,6 +980,8 @@ namespace Armada.Server.Mcp
                         captain.Name = request.Name;
                     if (!String.IsNullOrEmpty(request.Runtime) && Enum.TryParse<AgentRuntimeEnum>(request.Runtime, true, out AgentRuntimeEnum rt))
                         captain.Runtime = rt;
+                    if (request.MaxParallelism.HasValue)
+                        captain.MaxParallelism = request.MaxParallelism.Value;
                     captain.LastUpdateUtc = DateTime.UtcNow;
                     captain = await database.Captains.UpdateAsync(captain).ConfigureAwait(false);
                     return (object)captain;

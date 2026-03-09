@@ -326,6 +326,11 @@ namespace Armada.Core.Database.Sqlite
                     @"ALTER TABLE voyages ADD COLUMN auto_push INTEGER;",
                     @"ALTER TABLE voyages ADD COLUMN auto_create_pull_requests INTEGER;",
                     @"ALTER TABLE voyages ADD COLUMN auto_merge_pull_requests INTEGER;"
+                ),
+                new SchemaMigration(4, "Add captain MaxParallelism and per-mission process/dock tracking",
+                    @"ALTER TABLE captains ADD COLUMN max_parallelism INTEGER NOT NULL DEFAULT 1;",
+                    @"ALTER TABLE missions ADD COLUMN dock_id TEXT;",
+                    @"ALTER TABLE missions ADD COLUMN process_id INTEGER;"
                 )
             };
         }
@@ -409,6 +414,7 @@ namespace Armada.Core.Database.Sqlite
             captain.Id = reader["id"].ToString()!;
             captain.Name = reader["name"].ToString()!;
             captain.Runtime = Enum.Parse<AgentRuntimeEnum>(reader["runtime"].ToString()!);
+            captain.MaxParallelism = Convert.ToInt32(reader["max_parallelism"]);
             captain.State = Enum.Parse<CaptainStateEnum>(reader["state"].ToString()!);
             captain.CurrentMissionId = NullableString(reader["current_mission_id"]);
             captain.CurrentDockId = NullableString(reader["current_dock_id"]);
@@ -433,6 +439,8 @@ namespace Armada.Core.Database.Sqlite
             mission.Priority = Convert.ToInt32(reader["priority"]);
             mission.ParentMissionId = NullableString(reader["parent_mission_id"]);
             mission.BranchName = NullableString(reader["branch_name"]);
+            mission.DockId = NullableString(reader["dock_id"]);
+            mission.ProcessId = NullableInt(reader["process_id"]);
             mission.PrUrl = NullableString(reader["pr_url"]);
             mission.CreatedUtc = FromIso8601(reader["created_utc"].ToString()!);
             mission.StartedUtc = FromIso8601Nullable(reader["started_utc"]);
@@ -992,11 +1000,12 @@ namespace Armada.Core.Database.Sqlite
                     await conn.OpenAsync(token).ConfigureAwait(false);
                     using (SqliteCommand cmd = conn.CreateCommand())
                     {
-                        cmd.CommandText = @"INSERT INTO captains (id, name, runtime, state, current_mission_id, current_dock_id, process_id, recovery_attempts, last_heartbeat_utc, created_utc, last_update_utc)
-                            VALUES (@id, @name, @runtime, @state, @current_mission_id, @current_dock_id, @process_id, @recovery_attempts, @last_heartbeat_utc, @created_utc, @last_update_utc);";
+                        cmd.CommandText = @"INSERT INTO captains (id, name, runtime, max_parallelism, state, current_mission_id, current_dock_id, process_id, recovery_attempts, last_heartbeat_utc, created_utc, last_update_utc)
+                            VALUES (@id, @name, @runtime, @max_parallelism, @state, @current_mission_id, @current_dock_id, @process_id, @recovery_attempts, @last_heartbeat_utc, @created_utc, @last_update_utc);";
                         cmd.Parameters.AddWithValue("@id", captain.Id);
                         cmd.Parameters.AddWithValue("@name", captain.Name);
                         cmd.Parameters.AddWithValue("@runtime", captain.Runtime.ToString());
+                        cmd.Parameters.AddWithValue("@max_parallelism", captain.MaxParallelism);
                         cmd.Parameters.AddWithValue("@state", captain.State.ToString());
                         cmd.Parameters.AddWithValue("@current_mission_id", (object?)captain.CurrentMissionId ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@current_dock_id", (object?)captain.CurrentDockId ?? DBNull.Value);
@@ -1069,6 +1078,7 @@ namespace Armada.Core.Database.Sqlite
                         cmd.CommandText = @"UPDATE captains SET
                             name = @name,
                             runtime = @runtime,
+                            max_parallelism = @max_parallelism,
                             state = @state,
                             current_mission_id = @current_mission_id,
                             current_dock_id = @current_dock_id,
@@ -1080,6 +1090,7 @@ namespace Armada.Core.Database.Sqlite
                         cmd.Parameters.AddWithValue("@id", captain.Id);
                         cmd.Parameters.AddWithValue("@name", captain.Name);
                         cmd.Parameters.AddWithValue("@runtime", captain.Runtime.ToString());
+                        cmd.Parameters.AddWithValue("@max_parallelism", captain.MaxParallelism);
                         cmd.Parameters.AddWithValue("@state", captain.State.ToString());
                         cmd.Parameters.AddWithValue("@current_mission_id", (object?)captain.CurrentMissionId ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@current_dock_id", (object?)captain.CurrentDockId ?? DBNull.Value);
@@ -1286,8 +1297,8 @@ namespace Armada.Core.Database.Sqlite
                     await conn.OpenAsync(token).ConfigureAwait(false);
                     using (SqliteCommand cmd = conn.CreateCommand())
                     {
-                        cmd.CommandText = @"INSERT INTO missions (id, voyage_id, vessel_id, captain_id, title, description, status, priority, parent_mission_id, branch_name, pr_url, created_utc, started_utc, completed_utc, last_update_utc)
-                            VALUES (@id, @voyage_id, @vessel_id, @captain_id, @title, @description, @status, @priority, @parent_mission_id, @branch_name, @pr_url, @created_utc, @started_utc, @completed_utc, @last_update_utc);";
+                        cmd.CommandText = @"INSERT INTO missions (id, voyage_id, vessel_id, captain_id, title, description, status, priority, parent_mission_id, branch_name, dock_id, process_id, pr_url, created_utc, started_utc, completed_utc, last_update_utc)
+                            VALUES (@id, @voyage_id, @vessel_id, @captain_id, @title, @description, @status, @priority, @parent_mission_id, @branch_name, @dock_id, @process_id, @pr_url, @created_utc, @started_utc, @completed_utc, @last_update_utc);";
                         cmd.Parameters.AddWithValue("@id", mission.Id);
                         cmd.Parameters.AddWithValue("@voyage_id", (object?)mission.VoyageId ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@vessel_id", (object?)mission.VesselId ?? DBNull.Value);
@@ -1298,6 +1309,8 @@ namespace Armada.Core.Database.Sqlite
                         cmd.Parameters.AddWithValue("@priority", mission.Priority);
                         cmd.Parameters.AddWithValue("@parent_mission_id", (object?)mission.ParentMissionId ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@branch_name", (object?)mission.BranchName ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@dock_id", (object?)mission.DockId ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@process_id", mission.ProcessId.HasValue ? (object)mission.ProcessId.Value : DBNull.Value);
                         cmd.Parameters.AddWithValue("@pr_url", (object?)mission.PrUrl ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@created_utc", ToIso8601(mission.CreatedUtc));
                         cmd.Parameters.AddWithValue("@started_utc", mission.StartedUtc.HasValue ? (object)ToIso8601(mission.StartedUtc.Value) : DBNull.Value);
@@ -1352,6 +1365,8 @@ namespace Armada.Core.Database.Sqlite
                             priority = @priority,
                             parent_mission_id = @parent_mission_id,
                             branch_name = @branch_name,
+                            dock_id = @dock_id,
+                            process_id = @process_id,
                             pr_url = @pr_url,
                             started_utc = @started_utc,
                             completed_utc = @completed_utc,
@@ -1367,6 +1382,8 @@ namespace Armada.Core.Database.Sqlite
                         cmd.Parameters.AddWithValue("@priority", mission.Priority);
                         cmd.Parameters.AddWithValue("@parent_mission_id", (object?)mission.ParentMissionId ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@branch_name", (object?)mission.BranchName ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@dock_id", (object?)mission.DockId ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@process_id", mission.ProcessId.HasValue ? (object)mission.ProcessId.Value : DBNull.Value);
                         cmd.Parameters.AddWithValue("@pr_url", (object?)mission.PrUrl ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@started_utc", mission.StartedUtc.HasValue ? (object)ToIso8601(mission.StartedUtc.Value) : DBNull.Value);
                         cmd.Parameters.AddWithValue("@completed_utc", mission.CompletedUtc.HasValue ? (object)ToIso8601(mission.CompletedUtc.Value) : DBNull.Value);

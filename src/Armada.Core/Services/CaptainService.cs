@@ -67,33 +67,69 @@ namespace Armada.Core.Services
 
             _Logging.Info(_Header + "recalling captain " + captainId);
 
-            // Stop the agent process
-            if (OnStopAgent != null && captain.ProcessId.HasValue)
+            // Find all active missions for this captain (supports parallelism)
+            List<Mission> activeMissions = await _Database.Missions.EnumerateByCaptainAsync(captainId, token).ConfigureAwait(false);
+
+            // Fallback: include captain.CurrentMissionId if not already found via captain_id query
+            if (!String.IsNullOrEmpty(captain.CurrentMissionId) && !activeMissions.Any(m => m.Id == captain.CurrentMissionId))
             {
-                try
+                Mission? currentMission = await _Database.Missions.ReadAsync(captain.CurrentMissionId, token).ConfigureAwait(false);
+                if (currentMission != null) activeMissions.Add(currentMission);
+            }
+
+            List<Mission> inFlightMissions = activeMissions.Where(m =>
+                m.Status == MissionStatusEnum.InProgress ||
+                m.Status == MissionStatusEnum.Assigned).ToList();
+
+            // Stop agent processes for all active missions
+            if (OnStopAgent != null)
+            {
+                // Stop using captain-level ProcessId (legacy / primary process)
+                if (captain.ProcessId.HasValue)
                 {
-                    await OnStopAgent.Invoke(captain).ConfigureAwait(false);
+                    try
+                    {
+                        await OnStopAgent.Invoke(captain).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _Logging.Warn(_Header + "error stopping agent for captain " + captainId + ": " + ex.Message);
+                    }
                 }
-                catch (Exception ex)
+
+                // Stop any additional mission-level processes not covered by the captain-level stop
+                foreach (Mission m in inFlightMissions)
                 {
-                    _Logging.Warn(_Header + "error stopping agent for captain " + captainId + ": " + ex.Message);
+                    if (m.ProcessId.HasValue && m.ProcessId != captain.ProcessId)
+                    {
+                        try
+                        {
+                            Captain tempCaptain = new Captain();
+                            tempCaptain.Id = captain.Id;
+                            tempCaptain.Name = captain.Name;
+                            tempCaptain.Runtime = captain.Runtime;
+                            tempCaptain.ProcessId = m.ProcessId;
+                            await OnStopAgent.Invoke(tempCaptain).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            _Logging.Warn(_Header + "error stopping process " + m.ProcessId + " for mission " + m.Id + ": " + ex.Message);
+                        }
+                    }
                 }
             }
 
             // Update state
             await _Database.Captains.UpdateStateAsync(captainId, CaptainStateEnum.Stopping, token).ConfigureAwait(false);
 
-            // If there's an active mission, mark it as failed
-            if (!String.IsNullOrEmpty(captain.CurrentMissionId))
+            // Mark all active missions as failed
+            foreach (Mission m in inFlightMissions)
             {
-                Mission? mission = await _Database.Missions.ReadAsync(captain.CurrentMissionId, token).ConfigureAwait(false);
-                if (mission != null && mission.Status != MissionStatusEnum.Complete)
-                {
-                    mission.Status = MissionStatusEnum.Failed;
-                    mission.CompletedUtc = DateTime.UtcNow;
-                    mission.LastUpdateUtc = DateTime.UtcNow;
-                    await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
-                }
+                m.Status = MissionStatusEnum.Failed;
+                m.ProcessId = null;
+                m.CompletedUtc = DateTime.UtcNow;
+                m.LastUpdateUtc = DateTime.UtcNow;
+                await _Database.Missions.UpdateAsync(m, token).ConfigureAwait(false);
             }
 
             // Clear captain assignment
@@ -158,6 +194,10 @@ namespace Armada.Core.Services
                     int processId = await OnLaunchAgent.Invoke(captain, mission, dock).ConfigureAwait(false);
                     captain.ProcessId = processId;
                     await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
+
+                    mission.ProcessId = processId;
+                    mission.LastUpdateUtc = DateTime.UtcNow;
+                    await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
 
                     Signal signal = new Signal(SignalTypeEnum.Assignment, "Auto-recovery attempt " + captain.RecoveryAttempts + " for mission: " + mission.Title);
                     signal.ToCaptainId = captain.Id;

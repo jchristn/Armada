@@ -42,6 +42,16 @@ namespace Armada.Core.Models
         public AgentRuntimeEnum Runtime { get; set; } = AgentRuntimeEnum.ClaudeCode;
 
         /// <summary>
+        /// Maximum number of concurrent missions this captain can work on.
+        /// Default is 1. Clamped to a minimum of 1.
+        /// </summary>
+        public int MaxParallelism
+        {
+            get => _MaxParallelism;
+            set => _MaxParallelism = value < 1 ? 1 : value;
+        }
+
+        /// <summary>
         /// Current state of the captain.
         /// </summary>
         public CaptainStateEnum State { get; set; } = CaptainStateEnum.Idle;
@@ -87,6 +97,7 @@ namespace Armada.Core.Models
 
         private string _Id = Constants.IdGenerator.GenerateKSortable(Constants.CaptainIdPrefix, 24);
         private string _Name = "Captain";
+        private int _MaxParallelism = 1;
 
         #endregion
 

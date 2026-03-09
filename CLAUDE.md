@@ -1,3 +1,36 @@
+# Mission Instructions
+
+You are an Armada captain executing a mission. Follow these instructions carefully.
+
+## Mission
+- **Title:** Parallelism
+- **ID:** msn_mmitgf5m_GShq9bWq5Ey
+- **Voyage:** vyg_mmitgf5f_3yiBR0jgkKL
+
+## Description
+Currently it seems if I want multiple instances of an AI agent (e.g. Claude Code) to run in parallel I need to create one captain per instance.  I'd rather the captain have a "MaxParallelism" attribute that dictates the number of concurrent, outstanding tasks on which that captain could work.  Whatever change is made should be able to be applied dynamically on the next server restart.  Default value should be 1, value for MaxParallelism should be clamped to >= 1.
+
+## Repository
+- **Name:** Armada
+- **Branch:** armada/claude-code/msn_mmitgf5m_GShq9bWq5Ey
+- **Default Branch:** main
+
+## Rules
+- Work only within this worktree directory
+- Commit all changes to the current branch
+- Commit and push your changes — the Admiral will also push if needed
+- If you encounter a blocking issue, commit what you have and exit
+- Exit with code 0 on success
+
+## Progress Signals (Optional)
+You can report progress to the Admiral by printing these lines to stdout:
+- `[ARMADA:PROGRESS] 50` — report completion percentage (0-100)
+- `[ARMADA:STATUS] Testing` — transition mission to Testing status
+- `[ARMADA:STATUS] Review` — transition mission to Review status
+- `[ARMADA:MESSAGE] your message here` — send a progress message
+
+## Existing Project Instructions
+
 # Armada - Claude Code Instructions
 
 ## Project

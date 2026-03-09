@@ -93,15 +93,13 @@ namespace Armada.Core.Services
                 _Logging.Warn(_Header + "vessel " + vessel.Id + " already has " + concurrentCount + " active mission(s) — potential for conflicts");
             }
 
-            // Find an idle captain
-            List<Captain> idleCaptains = await _Database.Captains.EnumerateByStateAsync(CaptainStateEnum.Idle, token).ConfigureAwait(false);
-            if (idleCaptains.Count == 0)
+            // Find a captain with available capacity (idle or working with room for more)
+            Captain? captain = await FindAvailableCaptainAsync(token).ConfigureAwait(false);
+            if (captain == null)
             {
-                _Logging.Info(_Header + "no idle captains available for mission " + mission.Id);
+                _Logging.Info(_Header + "no captains with available capacity for mission " + mission.Id);
                 return;
             }
-
-            Captain captain = idleCaptains[0];
 
             // Generate branch name
             string branchName = Constants.BranchPrefix + captain.Name.ToLowerInvariant() + "/" + mission.Id;
@@ -119,9 +117,14 @@ namespace Armada.Core.Services
                 mission.Status = MissionStatusEnum.Pending;
                 mission.CaptainId = null;
                 mission.BranchName = null;
+                mission.DockId = null;
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
                 return;
             }
+
+            // Track dock on the mission for per-mission dock tracking
+            mission.DockId = dock.Id;
+            await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
 
             // Update captain
             captain.State = CaptainStateEnum.Working;
@@ -148,6 +151,7 @@ namespace Armada.Core.Services
                     captain.ProcessId = processId;
                     await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
 
+                    mission.ProcessId = processId;
                     mission.Status = MissionStatusEnum.InProgress;
                     mission.StartedUtc = DateTime.UtcNow;
                     mission.LastUpdateUtc = DateTime.UtcNow;
@@ -174,21 +178,32 @@ namespace Armada.Core.Services
             if (captain == null) throw new ArgumentNullException(nameof(captain));
             if (String.IsNullOrEmpty(captain.CurrentMissionId)) return;
 
-            Mission? mission = await _Database.Missions.ReadAsync(captain.CurrentMissionId, token).ConfigureAwait(false);
+            await HandleCompletionAsync(captain, captain.CurrentMissionId, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task HandleCompletionAsync(Captain captain, string missionId, CancellationToken token = default)
+        {
+            if (captain == null) throw new ArgumentNullException(nameof(captain));
+            if (String.IsNullOrEmpty(missionId)) return;
+
+            Mission? mission = await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
             if (mission == null) return;
 
             // Mark mission complete
             mission.Status = MissionStatusEnum.Complete;
+            mission.ProcessId = null;
             mission.CompletedUtc = DateTime.UtcNow;
             mission.LastUpdateUtc = DateTime.UtcNow;
             await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
             _Logging.Info(_Header + "mission " + mission.Id + " completed by captain " + captain.Id);
 
-            // Get dock for push/PR
+            // Get dock for push/PR (prefer mission-level DockId, fall back to captain-level)
             Dock? dock = null;
-            if (!String.IsNullOrEmpty(captain.CurrentDockId))
+            string? dockId = mission.DockId ?? captain.CurrentDockId;
+            if (!String.IsNullOrEmpty(dockId))
             {
-                dock = await _Database.Docks.ReadAsync(captain.CurrentDockId, token).ConfigureAwait(false);
+                dock = await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
             }
 
             // Invoke OnMissionComplete for push/PR handling
@@ -209,8 +224,33 @@ namespace Armada.Core.Services
             signal.FromCaptainId = captain.Id;
             await _Database.Signals.CreateAsync(signal, token).ConfigureAwait(false);
 
-            // Release the captain
-            await _Captains.ReleaseAsync(captain, token).ConfigureAwait(false);
+            // Check if captain has remaining active missions
+            List<Mission> activeMissions = await _Database.Missions.EnumerateByCaptainAsync(captain.Id, token).ConfigureAwait(false);
+            int remainingActive = activeMissions.Count(m =>
+                m.Status == MissionStatusEnum.InProgress ||
+                m.Status == MissionStatusEnum.Assigned);
+
+            if (remainingActive == 0)
+            {
+                // No more active missions — release the captain to idle
+                await _Captains.ReleaseAsync(captain, token).ConfigureAwait(false);
+            }
+            else
+            {
+                // Captain still has active missions — update CurrentMissionId/CurrentDockId to another active one
+                Mission? nextActive = activeMissions.FirstOrDefault(m =>
+                    m.Status == MissionStatusEnum.InProgress || m.Status == MissionStatusEnum.Assigned);
+                if (nextActive != null)
+                {
+                    captain.CurrentMissionId = nextActive.Id;
+                    captain.CurrentDockId = nextActive.DockId;
+                    captain.ProcessId = nextActive.ProcessId;
+                    captain.LastUpdateUtc = DateTime.UtcNow;
+                    await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
+                }
+
+                _Logging.Info(_Header + "captain " + captain.Id + " still has " + remainingActive + " active mission(s)");
+            }
 
             // Try to pick up next pending mission
             List<Mission> pendingMissions = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending, token).ConfigureAwait(false);
@@ -311,6 +351,38 @@ namespace Armada.Core.Services
             await File.WriteAllTextAsync(claudeMdPath, content).ConfigureAwait(false);
 
             _Logging.Info(_Header + "generated mission CLAUDE.md at " + claudeMdPath);
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private async Task<Captain?> FindAvailableCaptainAsync(CancellationToken token)
+        {
+            // First check idle captains (always have capacity)
+            List<Captain> idleCaptains = await _Database.Captains.EnumerateByStateAsync(CaptainStateEnum.Idle, token).ConfigureAwait(false);
+            if (idleCaptains.Count > 0)
+                return idleCaptains[0];
+
+            // Then check working captains that have capacity (MaxParallelism > 1)
+            List<Captain> workingCaptains = await _Database.Captains.EnumerateByStateAsync(CaptainStateEnum.Working, token).ConfigureAwait(false);
+            foreach (Captain captain in workingCaptains)
+            {
+                if (captain.MaxParallelism <= 1) continue;
+
+                List<Mission> captainMissions = await _Database.Missions.EnumerateByCaptainAsync(captain.Id, token).ConfigureAwait(false);
+                int activeCount = captainMissions.Count(m =>
+                    m.Status == MissionStatusEnum.InProgress ||
+                    m.Status == MissionStatusEnum.Assigned);
+
+                if (activeCount < captain.MaxParallelism)
+                {
+                    _Logging.Info(_Header + "captain " + captain.Id + " has capacity (" + activeCount + "/" + captain.MaxParallelism + ")");
+                    return captain;
+                }
+            }
+
+            return null;
         }
 
         #endregion

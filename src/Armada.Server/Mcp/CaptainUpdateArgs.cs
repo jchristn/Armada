@@ -19,5 +19,10 @@ namespace Armada.Server.Mcp
         /// New agent runtime: ClaudeCode, Codex.
         /// </summary>
         public string? Runtime { get; set; }
+
+        /// <summary>
+        /// Maximum number of concurrent missions (minimum 1).
+        /// </summary>
+        public int? MaxParallelism { get; set; }
     }
 }

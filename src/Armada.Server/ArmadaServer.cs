@@ -66,6 +66,11 @@ namespace Armada.Server
         /// </summary>
         private Dictionary<int, string> _ProcessToCaptain = new Dictionary<int, string>();
 
+        /// <summary>
+        /// Maps process IDs to mission IDs for per-mission progress tracking.
+        /// </summary>
+        private Dictionary<int, string> _ProcessToMission = new Dictionary<int, string>();
+
         #endregion
 
         #region Constructors-and-Factories
@@ -1489,10 +1494,11 @@ namespace Armada.Server
                 prompt,
                 logFilePath: logFilePath).ConfigureAwait(false);
 
-            // Track process-to-captain mapping
+            // Track process-to-captain and process-to-mission mappings
             lock (_ProcessToCaptain)
             {
                 _ProcessToCaptain[processId] = captain.Id;
+                _ProcessToMission[processId] = mission.Id;
             }
 
             _Logging.Info(_Header + "agent process " + processId + " started for captain " + captain.Id + " (log: " + logFilePath + ")");
@@ -1510,9 +1516,11 @@ namespace Armada.Server
             if (signal == null) return;
 
             string? captainId = null;
+            string? missionId = null;
             lock (_ProcessToCaptain)
             {
                 _ProcessToCaptain.TryGetValue(processId, out captainId);
+                _ProcessToMission.TryGetValue(processId, out missionId);
             }
 
             if (String.IsNullOrEmpty(captainId)) return;
@@ -1520,16 +1528,25 @@ namespace Armada.Server
             _Logging.Info(_Header + "progress signal from captain " + captainId + ": [" + signal.Type + "] " + signal.Value);
 
             // Fire and forget — update mission status in background
+            string capturedCaptainId = captainId;
+            string? capturedMissionId = missionId;
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    Captain? captain = await _Database.Captains.ReadAsync(captainId).ConfigureAwait(false);
-                    if (captain == null || String.IsNullOrEmpty(captain.CurrentMissionId)) return;
+                    // Use mission ID from process mapping (supports parallelism), fall back to captain's current mission
+                    string? targetMissionId = capturedMissionId;
+                    if (String.IsNullOrEmpty(targetMissionId))
+                    {
+                        Captain? captain = await _Database.Captains.ReadAsync(capturedCaptainId).ConfigureAwait(false);
+                        targetMissionId = captain?.CurrentMissionId;
+                    }
+
+                    if (String.IsNullOrEmpty(targetMissionId)) return;
 
                     if (signal.Type == "status" && signal.MissionStatus.HasValue)
                     {
-                        Mission? mission = await _Database.Missions.ReadAsync(captain.CurrentMissionId).ConfigureAwait(false);
+                        Mission? mission = await _Database.Missions.ReadAsync(targetMissionId).ConfigureAwait(false);
                         if (mission != null && IsValidTransition(mission.Status, signal.MissionStatus.Value))
                         {
                             mission.Status = signal.MissionStatus.Value;
@@ -1541,7 +1558,7 @@ namespace Armada.Server
 
                     // Log all progress signals
                     Signal dbSignal = new Signal(SignalTypeEnum.Progress, "[" + signal.Type + "] " + signal.Value);
-                    dbSignal.FromCaptainId = captainId;
+                    dbSignal.FromCaptainId = capturedCaptainId;
                     await _Database.Signals.CreateAsync(dbSignal).ConfigureAwait(false);
                 }
                 catch (Exception ex)
@@ -1561,6 +1578,7 @@ namespace Armada.Server
             lock (_ProcessToCaptain)
             {
                 _ProcessToCaptain.Remove(captain.ProcessId.Value);
+                _ProcessToMission.Remove(captain.ProcessId.Value);
             }
 
             Armada.Runtimes.Interfaces.IAgentRuntime runtime = _RuntimeFactory.Create(captain.Runtime);
