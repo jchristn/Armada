@@ -1236,6 +1236,12 @@
                         <option value="Custom">Custom</option>
                     </select>
                 </div>
+                <div class="form-group">
+                    <label>Max Parallelism</label>
+                    <input type="number" x-model.number="modalData.maxParallelism" min="1" max="64" step="1"
+                           style="width: 80px;" title="Maximum concurrent missions (minimum 1).">
+                    <small style="color: var(--text-dim); margin-top: 2px; display: block;">Minimum 1 (sequential)</small>
+                </div>
                 <div class="modal-actions">
                     <button type="button" class="btn btn-sm" @click="modal = null">Cancel</button>
                     <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading">Add</button>

@@ -35,6 +35,7 @@ namespace Armada.Desktop.ViewModels
 
         private string _NewCaptainName = "";
         private AgentRuntimeEnum _NewCaptainRuntime = AgentRuntimeEnum.ClaudeCode;
+        private int _NewCaptainMaxParallelism = 1;
         private bool _ShowAddCaptain;
         private string _ErrorMessage = "";
 
@@ -133,6 +134,13 @@ namespace Armada.Desktop.ViewModels
         {
             get => _NewCaptainRuntime;
             set => this.RaiseAndSetIfChanged(ref _NewCaptainRuntime, value);
+        }
+
+        /// <summary>New captain max parallelism.</summary>
+        public int NewCaptainMaxParallelism
+        {
+            get => _NewCaptainMaxParallelism;
+            set => this.RaiseAndSetIfChanged(ref _NewCaptainMaxParallelism, value < 1 ? 1 : value);
         }
 
         /// <summary>Whether to show the add captain form.</summary>
@@ -235,6 +243,7 @@ namespace Armada.Desktop.ViewModels
             try
             {
                 Captain captain = new Captain(NewCaptainName.Trim(), NewCaptainRuntime);
+                captain.MaxParallelism = NewCaptainMaxParallelism;
                 await _Connection.GetApiClient().CreateCaptainAsync(captain).ConfigureAwait(false);
                 await _Connection.RefreshAsync().ConfigureAwait(false);
 
@@ -242,6 +251,7 @@ namespace Armada.Desktop.ViewModels
                 {
                     NewCaptainName = "";
                     NewCaptainRuntime = AgentRuntimeEnum.ClaudeCode;
+                    NewCaptainMaxParallelism = 1;
                     ShowAddCaptain = false;
                     ErrorMessage = "";
                 });

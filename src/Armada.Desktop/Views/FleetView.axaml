@@ -225,6 +225,9 @@
                                 <TextBox Watermark="Captain Name" Text="{Binding NewCaptainName}" Width="200" />
                                 <ComboBox ItemsSource="{Binding RuntimeOptions}"
                                           SelectedItem="{Binding NewCaptainRuntime}" Width="160" />
+                                <NumericUpDown Value="{Binding NewCaptainMaxParallelism}" Minimum="1" Maximum="64"
+                                               Increment="1" Width="120" Watermark="Parallelism"
+                                               ToolTip.Tip="Maximum concurrent missions (minimum 1)" />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <Button Content="Create" Classes="action" Click="OnAddCaptainClick" />

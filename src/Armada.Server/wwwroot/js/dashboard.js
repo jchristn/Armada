@@ -912,7 +912,8 @@ function dashboard() {
             try {
                 let captain = await this.api('POST', '/api/v1/captains', {
                     name: this.modalData.name,
-                    runtime: this.modalData.runtime || 'ClaudeCode'
+                    runtime: this.modalData.runtime || 'ClaudeCode',
+                    maxParallelism: parseInt(this.modalData.maxParallelism, 10) || 1
                 });
                 this.toast('Captain added: ' + captain.name);
                 this.modal = null;
@@ -1151,7 +1152,7 @@ function dashboard() {
         openEditFleet(f) { this.modal = 'edit-fleet'; this.modalData = { id: f.id, name: f.name, description: f.description || '' }; },
         openCreateVessel(fleetId) { this.modal = 'create-vessel'; this.modalData = { name: '', repoUrl: '', defaultBranch: 'main', fleetId: fleetId || '' }; },
         openEditVessel(v) { this.modal = 'edit-vessel'; this.modalData = { id: v.id, name: v.name, repoUrl: v.repoUrl || '', defaultBranch: v.defaultBranch || 'main', fleetId: v.fleetId || '' }; },
-        openAddCaptain() { this.modal = 'add-captain'; this.modalData = { name: '', runtime: 'ClaudeCode' }; },
+        openAddCaptain() { this.modal = 'add-captain'; this.modalData = { name: '', runtime: 'ClaudeCode', maxParallelism: 1 }; },
         openEditCaptain(c) { this.modal = 'edit-captain'; this.modalData = { id: c.id, name: c.name, runtime: c.runtime || 'ClaudeCode', maxParallelism: c.maxParallelism ?? 1 }; },
         openEditMission(m) { this.modal = 'edit-mission'; this.modalData = { id: m.id, title: m.title, description: m.description || '', priority: m.priority || 100, vesselId: m.vesselId || '', voyageId: m.voyageId || '' }; },
         openCreateVoyage() { this.modal = 'create-voyage'; this.voyageForm = { title: '', description: '', vesselId: '', missions: [{ title: '', description: '' }] }; },
