@@ -525,6 +525,18 @@ namespace Armada.Server.WebSocket
                             }
                             break;
 
+                        case "purge_mission":
+                            string pmId = command.Id ?? "";
+                            Mission? pmMission = await _Database.Missions.ReadAsync(pmId).ConfigureAwait(false);
+                            if (pmMission == null)
+                                result = new { type = "command.error", action = "purge_mission", error = "Mission not found" };
+                            else
+                            {
+                                await _Database.Missions.DeleteAsync(pmId).ConfigureAwait(false);
+                                result = new { type = "command.result", action = "purge_mission", data = (object)new { status = "deleted", missionId = pmId } };
+                            }
+                            break;
+
                         case "restart_mission":
                             string rmId = command.Id ?? "";
                             Mission? rmMission = await _Database.Missions.ReadAsync(rmId).ConfigureAwait(false);

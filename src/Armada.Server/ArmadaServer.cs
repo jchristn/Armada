@@ -843,6 +843,28 @@ namespace Armada.Server
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
+            _App.Rest.Delete("/api/v1/missions/{id}/purge", async (AppRequest req) =>
+            {
+                string id = req.Parameters["id"];
+                Mission? mission = await _Database.Missions.ReadAsync(id).ConfigureAwait(false);
+                if (mission == null) return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Mission not found" };
+
+                await _Database.Missions.DeleteAsync(id).ConfigureAwait(false);
+
+                await EmitEventAsync("mission.deleted", "Mission " + id + " permanently deleted",
+                    entityType: "mission", entityId: id).ConfigureAwait(false);
+
+                return (object)new { Status = "deleted", MissionId = id };
+            },
+            api => api
+                .WithTag("Missions")
+                .WithSummary("Permanently delete a mission")
+                .WithDescription("Permanently deletes a mission from the database. This cannot be undone.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
+                .WithResponse(200, OpenApiResponseMetadata.Json<object>("Deleted mission"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
             _App.Rest.Post<MissionRestartRequest>("/api/v1/missions/{id}/restart", async (AppRequest req) =>
             {
                 string id = req.Parameters["id"];

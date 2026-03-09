@@ -258,6 +258,25 @@ namespace Armada.Desktop.ViewModels
         }
 
         /// <summary>
+        /// Permanently delete a mission from the database.
+        /// </summary>
+        public async Task DeleteMissionAsync(string missionId)
+        {
+            Dispatcher.UIThread.Post(() => IsLoading = true);
+            try
+            {
+                await _Connection.GetApiClient().PurgeMissionAsync(missionId).ConfigureAwait(false);
+                await _Connection.RefreshAsync().ConfigureAwait(false);
+                Dispatcher.UIThread.Post(() => SelectedMission = null);
+            }
+            catch { }
+            finally
+            {
+                Dispatcher.UIThread.Post(() => IsLoading = false);
+            }
+        }
+
+        /// <summary>
         /// Restart a failed or cancelled mission with optional instruction edits.
         /// </summary>
         public async Task RestartMissionAsync(string missionId, string? title = null, string? description = null)

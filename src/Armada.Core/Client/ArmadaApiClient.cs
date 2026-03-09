@@ -406,6 +406,14 @@ namespace Armada.Core.Client
         }
 
         /// <summary>
+        /// Permanently delete a mission from the database.
+        /// </summary>
+        public async Task PurgeMissionAsync(string id, CancellationToken token = default)
+        {
+            await DeleteAsync("/api/v1/missions/" + id + "/purge", token).ConfigureAwait(false);
+        }
+
+        /// <summary>
         /// Permanently delete a voyage and all its associated missions.
         /// </summary>
         public async Task PurgeVoyageAsync(string id, CancellationToken token = default)

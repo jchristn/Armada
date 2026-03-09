@@ -698,6 +698,16 @@ function dashboard() {
             } catch (e) { this.toast('Failed: ' + e.message, 'error'); }
         },
 
+        async deleteMission(missionId) {
+            if (!confirm('Permanently delete mission ' + missionId + '? This cannot be undone.')) return;
+            try {
+                await this.api('DELETE', '/api/v1/missions/' + missionId + '/purge');
+                this.toast('Mission deleted');
+                if (this.detailView === 'mission-detail' && this.detailId === missionId) this.goBack();
+                await this.refresh();
+            } catch (e) { this.toast('Failed: ' + e.message, 'error'); }
+        },
+
         restartMissionPrompt(mission) {
             this.restartTarget = mission;
             this.restartTitle = mission.title || '';
@@ -789,6 +799,16 @@ function dashboard() {
                 this.toast('Voyage cancelled');
                 await this.refresh();
                 if (this.detailView === 'voyage-detail') this.loadDetail('voyage-detail', voyageId);
+            } catch (e) { this.toast('Failed: ' + e.message, 'error'); }
+        },
+
+        async deleteVoyage(voyageId) {
+            if (!confirm('Permanently delete voyage ' + voyageId + ' and all its missions? This cannot be undone.')) return;
+            try {
+                await this.api('DELETE', '/api/v1/voyages/' + voyageId + '/purge');
+                this.toast('Voyage deleted');
+                if (this.detailView === 'voyage-detail' && this.detailId === voyageId) this.goBack();
+                await this.refresh();
             } catch (e) { this.toast('Failed: ' + e.message, 'error'); }
         },
 

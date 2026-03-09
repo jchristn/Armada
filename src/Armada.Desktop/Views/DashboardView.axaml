@@ -130,6 +130,10 @@
                                                        Foreground="{StaticResource StatusRedBrush}"
                                                        IsVisible="{Binding FailedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                                         </StackPanel>
+                                        <Button Grid.Column="1" Content="Delete" Classes="danger"
+                                                Click="OnDeleteVoyageClick" Tag="{Binding VoyageId}"
+                                                VerticalAlignment="Center" Margin="8,0,0,0"
+                                                ToolTip.Tip="Permanently delete this voyage" />
                                     </Grid>
                                 </Border>
                             </DataTemplate>
@@ -190,19 +194,26 @@
                                     <Border Padding="8,6" Margin="0,2"
                                             Background="{DynamicResource SurfaceHoverBrush}"
                                             CornerRadius="4">
-                                        <StackPanel Spacing="2">
-                                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                                <Border Classes="badge" Padding="6,2">
-                                                    <TextBlock Text="{Binding Severity}" FontSize="10" FontWeight="Bold"
-                                                               Foreground="White" />
-                                                </Border>
-                                                <TextBlock Text="{Binding Title}" FontSize="12"
-                                                           Foreground="{DynamicResource TextPrimaryBrush}"
-                                                           TextTrimming="CharacterEllipsis" />
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <StackPanel Spacing="2">
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <Border Classes="badge" Padding="6,2">
+                                                        <TextBlock Text="{Binding Severity}" FontSize="10" FontWeight="Bold"
+                                                                   Foreground="White" />
+                                                    </Border>
+                                                    <TextBlock Text="{Binding Title}" FontSize="12"
+                                                               Foreground="{DynamicResource TextPrimaryBrush}"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding Detail}" FontSize="10"
+                                                           Foreground="{DynamicResource TextDimBrush}" Margin="4,0,0,0" />
                                             </StackPanel>
-                                            <TextBlock Text="{Binding Detail}" FontSize="10"
-                                                       Foreground="{DynamicResource TextDimBrush}" Margin="4,0,0,0" />
-                                        </StackPanel>
+                                            <Button Grid.Column="1" Content="Delete" Classes="danger"
+                                                    Click="OnDeleteMissionFromActionClick" Tag="{Binding MissionId}"
+                                                    VerticalAlignment="Center" Margin="4,0,0,0"
+                                                    IsVisible="{Binding MissionId, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                    ToolTip.Tip="Permanently delete this mission" />
+                                        </Grid>
                                     </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>

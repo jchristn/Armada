@@ -4,8 +4,10 @@ namespace Armada.Desktop.ViewModels
     using System.Collections.Generic;
     using System.Collections.ObjectModel;
     using System.Linq;
+    using System.Threading.Tasks;
     using ReactiveUI;
     using Avalonia.Threading;
+    using Armada.Core.Client;
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Desktop.Services;
@@ -100,6 +102,41 @@ namespace Armada.Desktop.ViewModels
 
         #endregion
 
+        #region Public-Methods
+
+        /// <summary>
+        /// Get the connection service.
+        /// </summary>
+        public ArmadaConnectionService GetConnection() => _Connection;
+
+        /// <summary>
+        /// Permanently delete a voyage and all its missions.
+        /// </summary>
+        public async Task DeleteVoyageAsync(string voyageId)
+        {
+            try
+            {
+                await _Connection.GetApiClient().PurgeVoyageAsync(voyageId).ConfigureAwait(false);
+                await _Connection.RefreshAsync().ConfigureAwait(false);
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Permanently delete a mission.
+        /// </summary>
+        public async Task DeleteMissionAsync(string missionId)
+        {
+            try
+            {
+                await _Connection.GetApiClient().PurgeMissionAsync(missionId).ConfigureAwait(false);
+                await _Connection.RefreshAsync().ConfigureAwait(false);
+            }
+            catch { }
+        }
+
+        #endregion
+
         #region Private-Methods
 
         private void OnDataRefreshed(object? sender, EventArgs e)
@@ -140,6 +177,7 @@ namespace Armada.Desktop.ViewModels
             {
                 VoyageProgressItems.Add(new VoyageProgressItem
                 {
+                    VoyageId = vp.Voyage?.Id ?? "",
                     Title = vp.Voyage?.Title ?? "Unknown",
                     CompletedMissions = vp.CompletedMissions,
                     TotalMissions = vp.TotalMissions,
@@ -322,6 +360,9 @@ namespace Armada.Desktop.ViewModels
     /// </summary>
     public class VoyageProgressItem
     {
+        /// <summary>Voyage ID.</summary>
+        public string VoyageId { get; set; } = "";
+
         /// <summary>Voyage title.</summary>
         public string Title { get; set; } = "";
 

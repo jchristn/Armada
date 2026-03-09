@@ -233,6 +233,7 @@
                             <Button Content="Restart" Classes="action" Click="OnRetryClick" ToolTip.Tip="Restart mission with optional instruction edits" />
                             <Button Content="Cancel" Classes="danger" Click="OnCancelClick" ToolTip.Tip="Cancel this mission" />
                         </StackPanel>
+                        <Button Content="Delete" Classes="danger" Click="OnDeleteMissionClick" ToolTip.Tip="Permanently delete this mission" />
                     </StackPanel>
                 </Grid>
             </ScrollViewer>

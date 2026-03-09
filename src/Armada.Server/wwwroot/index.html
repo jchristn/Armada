@@ -124,7 +124,7 @@
                     <h3>Voyage Progress</h3>
                     <div class="table-wrap">
                         <table>
-                            <thead><tr><th>Voyage</th><th>Status</th><th>Progress</th><th>Missions</th></tr></thead>
+                            <thead><tr><th>Voyage</th><th>Status</th><th>Progress</th><th>Missions</th><th></th></tr></thead>
                             <tbody>
                                 <template x-for="vp in status.voyages" :key="vp.voyage?.id">
                                     <tr class="clickable" @click="navigate('voyages', 'voyage-detail', vp.voyage?.id)">
@@ -140,6 +140,9 @@
                                         <td>
                                             <span x-text="vp.completedMissions + '/' + vp.totalMissions + ' done'"></span>
                                             <span class="text-dim" x-show="vp.failedMissions > 0" x-text="', ' + vp.failedMissions + ' failed'"></span>
+                                        </td>
+                                        <td @click.stop>
+                                            <button class="btn btn-sm btn-danger" @click="deleteVoyage(vp.voyage?.id)">Delete</button>
                                         </td>
                                     </tr>
                                 </template>
@@ -164,6 +167,7 @@
                                     <th>Vessel</th>
                                     <th>Captain</th>
                                     <th>Created</th>
+                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -174,6 +178,9 @@
                                         <td x-text="vesselName(m.vesselId)"></td>
                                         <td x-text="captainName(m.captainId)"></td>
                                         <td class="text-dim" x-text="formatTime(m.createdUtc)" :title="formatTimeAbsolute(m.createdUtc)"></td>
+                                        <td @click.stop>
+                                            <button class="btn btn-sm btn-danger" @click="deleteMission(m.id)">Delete</button>
+                                        </td>
                                     </tr>
                                 </template>
                             </tbody>
@@ -389,7 +396,10 @@
                             <h3 x-text="voyage.title || voyage.id"></h3>
                             <div class="text-dim" x-text="voyage.id"></div>
                         </div>
-                        <span class="tag" :class="(voyage.status || '').toLowerCase()" x-text="voyage.status"></span>
+                        <div class="inline-actions" @click.stop>
+                            <span class="tag" :class="(voyage.status || '').toLowerCase()" x-text="voyage.status"></span>
+                            <button class="btn btn-sm btn-danger" @click="deleteVoyage(voyage.id)">Delete</button>
+                        </div>
                     </div>
                     <template x-if="voyage.description">
                         <p class="text-dim" x-text="voyage.description" style="margin-top:0.25rem"></p>
@@ -409,6 +419,7 @@
                             <button class="btn btn-sm btn-danger" @click="cancelVoyage(detail.id)"
                                 x-show="detail.status === 'Open' || detail.status === 'InProgress'">Cancel Voyage</button>
                             <button class="btn btn-sm" @click="retryVoyageMissions(detail.id)">Retry Failed</button>
+                            <button class="btn btn-sm btn-danger" @click="deleteVoyage(detail.id)">Delete Voyage</button>
                         </div>
                     </div>
                     <div class="detail-grid">
@@ -565,6 +576,7 @@
                             <th class="sortable" @click="sortBy('priority', allMissions)">Priority<span x-text="sortIcon('priority')"></span></th>
                             <th>Branch</th>
                             <th class="sortable" @click="sortBy('createdUtc', allMissions)">Created<span x-text="sortIcon('createdUtc')"></span></th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -577,6 +589,9 @@
                                 <td x-text="m.priority"></td>
                                 <td class="text-dim" x-text="m.branchName || '-'"></td>
                                 <td class="text-dim" x-text="formatTime(m.createdUtc)" :title="formatTimeAbsolute(m.createdUtc)"></td>
+                                <td @click.stop>
+                                    <button class="btn btn-sm btn-danger" @click="deleteMission(m.id)">Delete</button>
+                                </td>
                             </tr>
                         </template>
                     </tbody>
@@ -598,6 +613,7 @@
                                 x-show="detail.status !== 'Complete' && detail.status !== 'Cancelled'">Cancel</button>
                             <button class="btn btn-sm" @click="restartMissionPrompt(detail)"
                                 x-show="detail.status === 'Failed' || detail.status === 'Cancelled'">Restart</button>
+                            <button class="btn btn-sm btn-danger" @click="deleteMission(detail.id)">Delete</button>
                         </div>
                     </div>
                     <div class="detail-grid">

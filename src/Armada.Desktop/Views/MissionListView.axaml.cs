@@ -59,6 +59,25 @@ namespace Armada.Desktop.Views
             }
         }
 
+        private async void OnDeleteMissionClick(object? sender, RoutedEventArgs e)
+        {
+            if (DataContext is MissionListViewModel vm && vm.SelectedMission != null)
+            {
+                Window? owner = this.FindAncestorOfType<Window>();
+                if (owner != null)
+                {
+                    ConfirmDialog dialog = new ConfirmDialog(
+                        "Delete Mission",
+                        $"Permanently delete \"{vm.SelectedMission.Title}\"? This cannot be undone.",
+                        "Delete");
+                    bool confirmed = await dialog.ShowConfirmAsync(owner);
+                    if (!confirmed) return;
+                }
+
+                await vm.DeleteMissionAsync(vm.SelectedMission.Id);
+            }
+        }
+
         private void OnToggleCreateMissionClick(object? sender, RoutedEventArgs e)
         {
             if (DataContext is MissionListViewModel vm) vm.ShowCreateMission = !vm.ShowCreateMission;

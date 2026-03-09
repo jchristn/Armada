@@ -711,6 +711,29 @@ namespace Armada.Server.Mcp
                 });
 
             register(
+                "armada_purge_mission",
+                "Permanently delete a mission from the database. This cannot be undone.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        missionId = new { type = "string", description = "Mission ID (msn_ prefix)" }
+                    },
+                    required = new[] { "missionId" }
+                },
+                async (args) =>
+                {
+                    MissionIdArgs request = JsonSerializer.Deserialize<MissionIdArgs>(args!.Value, _JsonOptions)!;
+                    string missionId = request.MissionId;
+                    Mission? mission = await database.Missions.ReadAsync(missionId).ConfigureAwait(false);
+                    if (mission == null) return (object)new { Error = "Mission not found" };
+
+                    await database.Missions.DeleteAsync(missionId).ConfigureAwait(false);
+                    return (object)new { Status = "deleted", MissionId = missionId };
+                });
+
+            register(
                 "armada_restart_mission",
                 "Restart a failed or cancelled mission, resetting it to Pending for re-dispatch. Optionally update title and description (instructions) before restarting.",
                 new
