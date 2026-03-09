@@ -83,6 +83,10 @@ function dashboard() {
         modalData: {},
         modalLoading: false,
 
+        // Confirm dialog
+        confirmMessage: '',
+        confirmResolve: null,
+
         // Mission restart
         restartTarget: null,
         restartTitle: '',
@@ -616,6 +620,31 @@ function dashboard() {
         },
 
         // ============================================================
+        // Confirm dialog (replaces native browser confirm())
+        // ============================================================
+        showConfirm(message) {
+            this.confirmMessage = message;
+            this.modal = 'confirm-dialog';
+            return new Promise((resolve) => {
+                this.confirmResolve = resolve;
+            });
+        },
+
+        confirmYes() {
+            if (this.confirmResolve) this.confirmResolve(true);
+            this.confirmResolve = null;
+            this.modal = null;
+            this.confirmMessage = '';
+        },
+
+        confirmNo() {
+            if (this.confirmResolve) this.confirmResolve(false);
+            this.confirmResolve = null;
+            this.modal = null;
+            this.confirmMessage = '';
+        },
+
+        // ============================================================
         // Toast notifications
         // ============================================================
         toast(message, type) {
@@ -631,7 +660,7 @@ function dashboard() {
         // Captain actions
         // ============================================================
         async recallCaptain(captainId) {
-            if (!confirm('Recall captain ' + captainId + '? This will stop their current mission.')) return;
+            if (!await this.showConfirm('Recall captain ' + captainId + '? This will stop their current mission.')) return;
             try {
                 await this.api('POST', '/api/v1/captains/' + captainId + '/stop');
                 this.toast('Captain recalled');
@@ -640,7 +669,7 @@ function dashboard() {
         },
 
         async stopAllCaptains() {
-            if (!confirm('Stop ALL working captains? This will halt all active missions.')) return;
+            if (!await this.showConfirm('Stop ALL working captains? This will halt all active missions.')) return;
             try {
                 let working = this.captains.filter(c => c.state === 'Working' || c.state === 'Stalled');
                 for (let cpt of working) {
@@ -652,7 +681,7 @@ function dashboard() {
         },
 
         async removeCaptain(captainId) {
-            if (!confirm('Remove captain ' + captainId + '? This cannot be undone.')) return;
+            if (!await this.showConfirm('Remove captain ' + captainId + '? This cannot be undone.')) return;
             try {
                 await this.api('DELETE', '/api/v1/captains/' + captainId);
                 this.toast('Captain removed');
@@ -689,7 +718,7 @@ function dashboard() {
         },
 
         async cancelMission(missionId) {
-            if (!confirm('Cancel mission ' + missionId + '?')) return;
+            if (!await this.showConfirm('Cancel mission ' + missionId + '?')) return;
             try {
                 await this.api('DELETE', '/api/v1/missions/' + missionId);
                 this.toast('Mission cancelled');
@@ -783,7 +812,7 @@ function dashboard() {
         },
 
         async cancelVoyage(voyageId) {
-            if (!confirm('Cancel voyage ' + voyageId + '? All pending missions will be cancelled.')) return;
+            if (!await this.showConfirm('Cancel voyage ' + voyageId + '? All pending missions will be cancelled.')) return;
             try {
                 await this.api('DELETE', '/api/v1/voyages/' + voyageId);
                 this.toast('Voyage cancelled');
@@ -793,7 +822,7 @@ function dashboard() {
         },
 
         async retryVoyageMissions(voyageId) {
-            if (!confirm('Retry all failed missions in this voyage?')) return;
+            if (!await this.showConfirm('Retry all failed missions in this voyage?')) return;
             try {
                 let result = await this.api('GET', '/api/v1/voyages/' + voyageId);
                 let missions = result.missions || [];
@@ -846,7 +875,7 @@ function dashboard() {
         },
 
         async deleteFleet(fleetId) {
-            if (!confirm('Delete fleet ' + fleetId + '? This cannot be undone.')) return;
+            if (!await this.showConfirm('Delete fleet ' + fleetId + '? This cannot be undone.')) return;
             try {
                 await this.api('DELETE', '/api/v1/fleets/' + fleetId);
                 this.toast('Fleet deleted');
@@ -894,7 +923,7 @@ function dashboard() {
         },
 
         async deleteVessel(vesselId) {
-            if (!confirm('Delete vessel ' + vesselId + '? This cannot be undone.')) return;
+            if (!await this.showConfirm('Delete vessel ' + vesselId + '? This cannot be undone.')) return;
             try {
                 await this.api('DELETE', '/api/v1/vessels/' + vesselId);
                 this.toast('Vessel deleted');
@@ -976,7 +1005,7 @@ function dashboard() {
         },
 
         async cancelMergeEntry(entryId) {
-            if (!confirm('Cancel merge entry ' + entryId + '?')) return;
+            if (!await this.showConfirm('Cancel merge entry ' + entryId + '?')) return;
             try {
                 await this.api('DELETE', '/api/v1/merge-queue/' + entryId);
                 this.toast('Merge entry cancelled');
@@ -985,7 +1014,7 @@ function dashboard() {
         },
 
         async processMergeQueue() {
-            if (!confirm('Process the merge queue now?')) return;
+            if (!await this.showConfirm('Process the merge queue now?')) return;
             try {
                 await this.api('POST', '/api/v1/merge-queue/process');
                 this.toast('Merge queue processing triggered');
@@ -997,7 +1026,7 @@ function dashboard() {
         // Server
         // ============================================================
         async stopServer() {
-            if (!confirm('Stop the Admiral server? This will shut down everything.')) return;
+            if (!await this.showConfirm('Stop the Admiral server? This will shut down everything.')) return;
             try {
                 await this.api('POST', '/api/v1/server/stop');
                 this.toast('Server shutting down...');

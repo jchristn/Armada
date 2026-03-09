@@ -1151,7 +1151,7 @@
     </main>
 
     <!-- ========== Modals ========== -->
-    <div class="modal-overlay" x-show="modal" @click.self="modal = null" x-cloak>
+    <div class="modal-overlay" x-show="modal" @click.self="modal === 'confirm-dialog' ? confirmNo() : (modal = null)" x-cloak>
 
         <!-- Create Fleet -->
         <div class="modal-box" x-show="modal === 'create-fleet'">
@@ -1373,6 +1373,16 @@
                     <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading">Enqueue</button>
                 </div>
             </form>
+        </div>
+
+        <!-- Confirm Dialog (replaces native browser confirm()) -->
+        <div class="modal-box" x-show="modal === 'confirm-dialog'">
+            <h3>Confirm</h3>
+            <p x-text="confirmMessage" style="margin:1rem 0;white-space:pre-wrap"></p>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-sm" @click="confirmNo()">Cancel</button>
+                <button type="button" class="btn btn-danger btn-sm" @click="confirmYes()">OK</button>
+            </div>
         </div>
     </div>
 
