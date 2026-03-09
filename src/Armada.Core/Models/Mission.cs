@@ -97,6 +97,11 @@ namespace Armada.Core.Models
         public string? CommitHash { get; set; } = null;
 
         /// <summary>
+        /// Saved git diff snapshot captured at mission completion, before worktree reclamation.
+        /// </summary>
+        public string? DiffSnapshot { get; set; } = null;
+
+        /// <summary>
         /// Creation timestamp in UTC.
         /// </summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;

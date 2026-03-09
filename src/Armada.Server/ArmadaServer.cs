@@ -128,6 +128,7 @@ namespace Armada.Server
             // Wire up agent lifecycle events
             _Admiral.OnLaunchAgent = HandleLaunchAgentAsync;
             _Admiral.OnStopAgent = HandleStopAgentAsync;
+            _Admiral.OnCaptureDiff = HandleCaptureDiffAsync;
             _Admiral.OnMissionComplete = HandleMissionCompleteAsync;
 
             // Initialize REST API
@@ -993,9 +994,20 @@ namespace Armada.Server
                     return (object)new { MissionId = id, Branch = mission.BranchName ?? "", Diff = savedDiff };
                 }
 
+                // Check for database-persisted diff snapshot
+                if (!String.IsNullOrEmpty(mission.DiffSnapshot))
+                {
+                    return (object)new { MissionId = id, Branch = mission.BranchName ?? "", Diff = mission.DiffSnapshot };
+                }
+
                 // Fall back to live worktree diff
                 Dock? dock = null;
-                if (!String.IsNullOrEmpty(mission.CaptainId))
+                if (!String.IsNullOrEmpty(mission.DockId))
+                {
+                    dock = await _Database.Docks.ReadAsync(mission.DockId).ConfigureAwait(false);
+                }
+
+                if (dock == null && !String.IsNullOrEmpty(mission.CaptainId))
                 {
                     Captain? captain = await _Database.Captains.ReadAsync(mission.CaptainId).ConfigureAwait(false);
                     if (captain != null && !String.IsNullOrEmpty(captain.CurrentDockId))
@@ -1689,14 +1701,14 @@ namespace Armada.Server
             await runtime.StopAsync(captain.ProcessId.Value).ConfigureAwait(false);
         }
 
-        private async Task HandleMissionCompleteAsync(Mission mission, Dock dock)
+        private async Task HandleCaptureDiffAsync(Mission mission, Dock dock)
         {
             if (String.IsNullOrEmpty(dock.WorktreePath) || String.IsNullOrEmpty(dock.BranchName))
                 return;
 
-            _Logging.Info(_Header + "handling mission completion for " + mission.Id);
+            _Logging.Info(_Header + "capturing diff for mission " + mission.Id + " before worktree reclamation");
 
-            // Capture diff before any merge/reclaim destroys the worktree
+            // Capture diff and persist to database + file
             string baseBranch = "main";
             try
             {
@@ -1709,11 +1721,16 @@ namespace Armada.Server
                 string diff = await _Git.DiffAsync(dock.WorktreePath, baseBranch).ConfigureAwait(false);
                 if (!String.IsNullOrEmpty(diff))
                 {
+                    // Persist to database so it survives worktree reclamation
+                    mission.DiffSnapshot = diff;
+                    await _Database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                    _Logging.Info(_Header + "persisted diff snapshot to database for mission " + mission.Id + " (" + diff.Length + " chars)");
+
+                    // Also save to file for backwards compatibility
                     string diffDir = Path.Combine(_Settings.LogDirectory, "diffs");
                     Directory.CreateDirectory(diffDir);
                     string diffPath = Path.Combine(diffDir, mission.Id + ".diff");
                     await File.WriteAllTextAsync(diffPath, diff).ConfigureAwait(false);
-                    _Logging.Info(_Header + "saved diff for mission " + mission.Id + " (" + diff.Length + " chars)");
                 }
             }
             catch (Exception diffEx)
@@ -1736,6 +1753,14 @@ namespace Armada.Server
             {
                 _Logging.Debug(_Header + "could not capture commit hash for mission " + mission.Id + ": " + commitEx.Message);
             }
+        }
+
+        private async Task HandleMissionCompleteAsync(Mission mission, Dock dock)
+        {
+            if (String.IsNullOrEmpty(dock.WorktreePath) || String.IsNullOrEmpty(dock.BranchName))
+                return;
+
+            _Logging.Info(_Header + "handling mission completion for " + mission.Id);
 
             // Look up the vessel and voyage for settings resolution
             Vessel? vessel = null;

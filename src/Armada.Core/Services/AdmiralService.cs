@@ -30,6 +30,13 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
+        public Func<Mission, Dock, Task>? OnCaptureDiff
+        {
+            get => _Missions.OnCaptureDiff;
+            set => _Missions.OnCaptureDiff = value;
+        }
+
+        /// <inheritdoc />
         public Func<Mission, Dock, Task>? OnMissionComplete
         {
             get => _Missions.OnMissionComplete;

@@ -940,12 +940,23 @@ namespace Armada.Server.Mcp
                             return (object)new { MissionId = missionId, Branch = mission.BranchName ?? "", Diff = savedDiff };
                         }
 
+                        // Check for database-persisted diff snapshot
+                        if (!String.IsNullOrEmpty(mission.DiffSnapshot))
+                        {
+                            return (object)new { MissionId = missionId, Branch = mission.BranchName ?? "", Diff = mission.DiffSnapshot };
+                        }
+
                         // Fall back to live worktree diff
                         if (git == null)
                             return (object)new { Error = "No saved diff available and git service not configured" };
 
                         Dock? dock = null;
-                        if (!String.IsNullOrEmpty(mission.CaptainId))
+                        if (!String.IsNullOrEmpty(mission.DockId))
+                        {
+                            dock = await database.Docks.ReadAsync(mission.DockId).ConfigureAwait(false);
+                        }
+
+                        if (dock == null && !String.IsNullOrEmpty(mission.CaptainId))
                         {
                             Captain? captain = await database.Captains.ReadAsync(mission.CaptainId).ConfigureAwait(false);
                             if (captain != null && !String.IsNullOrEmpty(captain.CurrentDockId))

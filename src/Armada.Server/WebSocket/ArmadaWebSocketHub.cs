@@ -650,10 +650,18 @@ namespace Armada.Server.WebSocket
                                     string savedDiff = await ReadFileSharedAsync(savedDiffPath).ConfigureAwait(false);
                                     result = new { type = "command.result", action = "get_mission_diff", data = (object)new { MissionId = mdId, Branch = mdMission.BranchName ?? "", Diff = savedDiff } };
                                 }
+                                else if (!String.IsNullOrEmpty(mdMission.DiffSnapshot))
+                                {
+                                    result = new { type = "command.result", action = "get_mission_diff", data = (object)new { MissionId = mdId, Branch = mdMission.BranchName ?? "", Diff = mdMission.DiffSnapshot } };
+                                }
                                 else
                                 {
                                     Dock? mdDock = null;
-                                    if (!String.IsNullOrEmpty(mdMission.CaptainId))
+                                    if (!String.IsNullOrEmpty(mdMission.DockId))
+                                    {
+                                        mdDock = await _Database.Docks.ReadAsync(mdMission.DockId).ConfigureAwait(false);
+                                    }
+                                    if (mdDock == null && !String.IsNullOrEmpty(mdMission.CaptainId))
                                     {
                                         Captain? mdCaptain = await _Database.Captains.ReadAsync(mdMission.CaptainId).ConfigureAwait(false);
                                         if (mdCaptain != null && !String.IsNullOrEmpty(mdCaptain.CurrentDockId))

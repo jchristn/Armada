@@ -8,6 +8,11 @@ namespace Armada.Core.Services.Interfaces
     public interface IMissionService
     {
         /// <summary>
+        /// Delegate invoked synchronously at completion to capture the diff before the worktree can be reclaimed.
+        /// </summary>
+        Func<Mission, Dock, Task>? OnCaptureDiff { get; set; }
+
+        /// <summary>
         /// Delegate invoked when a mission completes and branch should be pushed/PR created.
         /// </summary>
         Func<Mission, Dock, Task>? OnMissionComplete { get; set; }

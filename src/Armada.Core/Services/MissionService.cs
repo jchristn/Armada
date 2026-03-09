@@ -15,6 +15,9 @@ namespace Armada.Core.Services
         #region Public-Members
 
         /// <inheritdoc />
+        public Func<Mission, Dock, Task>? OnCaptureDiff { get; set; }
+
+        /// <inheritdoc />
         public Func<Mission, Dock, Task>? OnMissionComplete { get; set; }
 
         #endregion
@@ -261,6 +264,19 @@ namespace Armada.Core.Services
             if (!String.IsNullOrEmpty(dockId))
             {
                 dock = await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
+            }
+
+            // Capture diff synchronously before releasing the captain, to ensure the worktree is still available
+            if (dock != null && OnCaptureDiff != null)
+            {
+                try
+                {
+                    await OnCaptureDiff.Invoke(mission, dock).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _Logging.Warn(_Header + "error capturing diff for mission " + mission.Id + ": " + ex.Message);
+                }
             }
 
             // Invoke OnMissionComplete for push/PR handling (fire-and-forget to avoid blocking health check loop)

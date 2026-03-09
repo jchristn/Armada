@@ -338,6 +338,9 @@ namespace Armada.Core.Database.Sqlite
                 new SchemaMigration(6, "Add project_context and style_guide to vessels",
                     @"ALTER TABLE vessels ADD COLUMN project_context TEXT;",
                     @"ALTER TABLE vessels ADD COLUMN style_guide TEXT;"
+                ),
+                new SchemaMigration(7, "Add diff_snapshot to missions for persisting diffs before worktree reclamation",
+                    @"ALTER TABLE missions ADD COLUMN diff_snapshot TEXT;"
                 )
             };
         }
@@ -452,6 +455,7 @@ namespace Armada.Core.Database.Sqlite
             mission.ProcessId = NullableInt(reader["process_id"]);
             mission.PrUrl = NullableString(reader["pr_url"]);
             mission.CommitHash = NullableString(reader["commit_hash"]);
+            mission.DiffSnapshot = NullableString(reader["diff_snapshot"]);
             mission.CreatedUtc = FromIso8601(reader["created_utc"].ToString()!);
             mission.StartedUtc = FromIso8601Nullable(reader["started_utc"]);
             mission.CompletedUtc = FromIso8601Nullable(reader["completed_utc"]);
@@ -1313,8 +1317,8 @@ namespace Armada.Core.Database.Sqlite
                     await conn.OpenAsync(token).ConfigureAwait(false);
                     using (SqliteCommand cmd = conn.CreateCommand())
                     {
-                        cmd.CommandText = @"INSERT INTO missions (id, voyage_id, vessel_id, captain_id, title, description, status, priority, parent_mission_id, branch_name, dock_id, process_id, pr_url, commit_hash, created_utc, started_utc, completed_utc, last_update_utc)
-                            VALUES (@id, @voyage_id, @vessel_id, @captain_id, @title, @description, @status, @priority, @parent_mission_id, @branch_name, @dock_id, @process_id, @pr_url, @commit_hash, @created_utc, @started_utc, @completed_utc, @last_update_utc);";
+                        cmd.CommandText = @"INSERT INTO missions (id, voyage_id, vessel_id, captain_id, title, description, status, priority, parent_mission_id, branch_name, dock_id, process_id, pr_url, commit_hash, diff_snapshot, created_utc, started_utc, completed_utc, last_update_utc)
+                            VALUES (@id, @voyage_id, @vessel_id, @captain_id, @title, @description, @status, @priority, @parent_mission_id, @branch_name, @dock_id, @process_id, @pr_url, @commit_hash, @diff_snapshot, @created_utc, @started_utc, @completed_utc, @last_update_utc);";
                         cmd.Parameters.AddWithValue("@id", mission.Id);
                         cmd.Parameters.AddWithValue("@voyage_id", (object?)mission.VoyageId ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@vessel_id", (object?)mission.VesselId ?? DBNull.Value);
@@ -1329,6 +1333,7 @@ namespace Armada.Core.Database.Sqlite
                         cmd.Parameters.AddWithValue("@process_id", mission.ProcessId.HasValue ? (object)mission.ProcessId.Value : DBNull.Value);
                         cmd.Parameters.AddWithValue("@pr_url", (object?)mission.PrUrl ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@commit_hash", (object?)mission.CommitHash ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@diff_snapshot", (object?)mission.DiffSnapshot ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@created_utc", ToIso8601(mission.CreatedUtc));
                         cmd.Parameters.AddWithValue("@started_utc", mission.StartedUtc.HasValue ? (object)ToIso8601(mission.StartedUtc.Value) : DBNull.Value);
                         cmd.Parameters.AddWithValue("@completed_utc", mission.CompletedUtc.HasValue ? (object)ToIso8601(mission.CompletedUtc.Value) : DBNull.Value);
@@ -1386,6 +1391,7 @@ namespace Armada.Core.Database.Sqlite
                             process_id = @process_id,
                             pr_url = @pr_url,
                             commit_hash = @commit_hash,
+                            diff_snapshot = @diff_snapshot,
                             started_utc = @started_utc,
                             completed_utc = @completed_utc,
                             last_update_utc = @last_update_utc
@@ -1404,6 +1410,7 @@ namespace Armada.Core.Database.Sqlite
                         cmd.Parameters.AddWithValue("@process_id", mission.ProcessId.HasValue ? (object)mission.ProcessId.Value : DBNull.Value);
                         cmd.Parameters.AddWithValue("@pr_url", (object?)mission.PrUrl ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@commit_hash", (object?)mission.CommitHash ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@diff_snapshot", (object?)mission.DiffSnapshot ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@started_utc", mission.StartedUtc.HasValue ? (object)ToIso8601(mission.StartedUtc.Value) : DBNull.Value);
                         cmd.Parameters.AddWithValue("@completed_utc", mission.CompletedUtc.HasValue ? (object)ToIso8601(mission.CompletedUtc.Value) : DBNull.Value);
                         cmd.Parameters.AddWithValue("@last_update_utc", ToIso8601(mission.LastUpdateUtc));
