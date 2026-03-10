@@ -1446,6 +1446,27 @@ namespace Armada.Server.Mcp
                 });
 
             register(
+                "armada_process_merge_entry",
+                "Process a single merge queue entry by ID: creates integration branch, runs tests, and lands if passing",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        entryId = new { type = "string", description = "Merge entry ID (mrg_ prefix)" }
+                    },
+                    required = new[] { "entryId" }
+                },
+                async (args) =>
+                {
+                    MergeEntryIdArgs request = JsonSerializer.Deserialize<MergeEntryIdArgs>(args!.Value, _JsonOptions)!;
+                    string entryId = request.EntryId;
+                    MergeEntry? entry = await mergeQueue.ProcessSingleAsync(entryId).ConfigureAwait(false);
+                    if (entry == null) return (object)new { Error = "Merge entry not found or not in Queued status" };
+                    return (object)entry;
+                });
+
+            register(
                 "armada_process_merge_queue",
                 "Process the merge queue: creates integration branches, runs tests, and lands passing batches",
                 new { type = "object", properties = new { } },

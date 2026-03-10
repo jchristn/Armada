@@ -36,6 +36,11 @@ namespace Armada.Core.Services.Interfaces
         Task<List<MergeEntry>> ListAsync(CancellationToken token = default);
 
         /// <summary>
+        /// Process a single merge queue entry by ID.
+        /// </summary>
+        Task<MergeEntry?> ProcessSingleAsync(string entryId, CancellationToken token = default);
+
+        /// <summary>
         /// Get a specific merge entry.
         /// </summary>
         /// <param name="entryId">Merge entry identifier.</param>

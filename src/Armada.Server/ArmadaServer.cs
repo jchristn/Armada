@@ -1507,6 +1507,22 @@ namespace Armada.Server
                 .WithResponse(204, OpenApiResponseMetadata.NoContent())
                 .WithSecurity("ApiKey"));
 
+            _App.Rest.Post("/api/v1/merge-queue/{id}/process", async (AppRequest req) =>
+            {
+                string id = req.Parameters["id"];
+                MergeEntry? entry = await _MergeQueue.ProcessSingleAsync(id).ConfigureAwait(false);
+                if (entry == null) return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Merge entry not found or not in Queued status" };
+                return (object)entry;
+            },
+            api => api
+                .WithTag("MergeQueue")
+                .WithSummary("Process a single merge queue entry")
+                .WithDescription("Processes a single merge queue entry by ID: creates integration branch, runs tests, and lands if passing.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Merge entry ID (mrg_ prefix)"))
+                .WithResponse(200, OpenApiResponseMetadata.Json<MergeEntry>("Processed merge entry"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
             _App.Rest.Post("/api/v1/merge-queue/process", async (AppRequest req) =>
             {
                 await _MergeQueue.ProcessQueueAsync().ConfigureAwait(false);

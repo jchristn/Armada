@@ -1187,6 +1187,8 @@
                                 <td x-text="entry.priority"></td>
                                 <td class="text-dim" x-text="formatTime(entry.createdUtc)" :title="formatTimeAbsolute(entry.createdUtc)"></td>
                                 <td>
+                                    <button class="btn btn-sm btn-primary" @click.stop="mergeSingleEntry(entry.id)"
+                                        x-show="entry.status === 'Queued'" title="Merge this entry now">Merge</button>
                                     <button class="btn btn-sm btn-danger" @click.stop="cancelMergeEntry(entry.id)"
                                         x-show="entry.status === 'Queued' || entry.status === 'Testing'" title="Cancel this merge queue entry">Cancel</button>
                                 </td>

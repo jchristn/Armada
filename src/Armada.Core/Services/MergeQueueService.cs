@@ -126,6 +126,22 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
+        public async Task<MergeEntry?> ProcessSingleAsync(string entryId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(entryId)) throw new ArgumentNullException(nameof(entryId));
+
+            if (!_Entries.TryGetValue(entryId, out MergeEntry? entry))
+                return null;
+
+            if (entry.Status != MergeStatusEnum.Queued)
+                return null;
+
+            _Logging.Info(_Header + "processing single entry " + entryId);
+            await ProcessBatchAsync(new List<MergeEntry> { entry }, token).ConfigureAwait(false);
+            return entry;
+        }
+
+        /// <inheritdoc />
         public Task<MergeEntry?> GetAsync(string entryId, CancellationToken token = default)
         {
             _Entries.TryGetValue(entryId, out MergeEntry? entry);

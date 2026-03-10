@@ -1101,6 +1101,15 @@ function dashboard() {
             } catch (e) { this.toast('Failed: ' + e.message, 'error'); }
         },
 
+        async mergeSingleEntry(entryId) {
+            if (!await this.showConfirm('Merge this entry now?')) return;
+            try {
+                await this.api('POST', '/api/v1/merge-queue/' + entryId + '/process');
+                this.toast('Merge entry processed');
+                await this.loadMergeQueue();
+            } catch (e) { this.toast('Failed: ' + e.message, 'error'); }
+        },
+
         async processMergeQueue() {
             if (!await this.showConfirm('Process the merge queue now?')) return;
             try {
