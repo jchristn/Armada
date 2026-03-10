@@ -416,6 +416,33 @@ Delete a vessel.
 
 ---
 
+#### PATCH /api/v1/vessels/{id}/context
+
+Update only the `ProjectContext` and `StyleGuide` fields of a vessel.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Vessel ID (`vsl_` prefix) |
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `ProjectContext` | string | no | Project context describing architecture, key files, and dependencies |
+| `StyleGuide` | string | no | Style guide describing naming conventions, patterns, and library preferences |
+
+```bash
+curl -X PATCH http://localhost:7890/api/v1/vessels/vsl_abc123/context \
+  -H "Content-Type: application/json" \
+  -d '{"ProjectContext": "C# .NET 8 project with SQLite", "StyleGuide": "Use PascalCase for public members"}'
+```
+
+**Response:** `200 OK` - [Vessel](#vessel)
+**Error:** `404` - Vessel not found
+
+---
+
 ### Voyages
 
 A voyage is a batch of related missions tracked together.
@@ -979,7 +1006,7 @@ curl http://localhost:8080/api/v1/captains/cpt_abc123/log?lines=200 \
 
 #### DELETE /api/v1/captains/{id}
 
-Delete a captain. If the captain is working, it is recalled first.
+Delete a captain. Blocked if the captain is currently working or has active missions.
 
 **Path Parameters:**
 | Parameter | Description |
@@ -988,6 +1015,8 @@ Delete a captain. If the captain is working, it is recalled first.
 
 **Response:** `204 No Content`
 **Error:** `404` - Captain not found
+**Error:** `409 Conflict` - Cannot delete captain while state is Working. Stop the captain first.
+**Error:** `409 Conflict` - Cannot delete captain with active missions in Assigned or InProgress status. Cancel or complete them first.
 
 ---
 
@@ -1273,6 +1302,8 @@ A git repository registered with Armada.
   "LocalPath": "/home/user/.armada/repos/MyRepo",
   "WorkingDirectory": null,
   "DefaultBranch": "main",
+  "ProjectContext": null,
+  "StyleGuide": null,
   "Active": true,
   "CreatedUtc": "2026-03-07T12:00:00Z",
   "LastUpdateUtc": "2026-03-07T12:00:00Z"
@@ -1288,6 +1319,8 @@ A git repository registered with Armada.
 | `LocalPath` | string? | null | Local path to bare repository clone |
 | `WorkingDirectory` | string? | null | Local working directory for merge on completion |
 | `DefaultBranch` | string | `"main"` | Default branch name |
+| `ProjectContext` | string? | null | Project context describing architecture, key files, and dependencies |
+| `StyleGuide` | string? | null | Style guide describing naming conventions, patterns, and library preferences |
 | `Active` | bool | true | Whether vessel is active |
 | `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
 | `LastUpdateUtc` | datetime | now | Last update timestamp (UTC) |
@@ -1344,7 +1377,11 @@ An atomic unit of work assigned to a captain.
   "Priority": 100,
   "ParentMissionId": null,
   "BranchName": "armada/msn_abc123",
+  "DockId": null,
+  "ProcessId": null,
   "PrUrl": null,
+  "CommitHash": null,
+  "DiffSnapshot": null,
   "CreatedUtc": "2026-03-07T12:00:00Z",
   "StartedUtc": "2026-03-07T12:05:00Z",
   "CompletedUtc": null,
@@ -1364,7 +1401,11 @@ An atomic unit of work assigned to a captain.
 | `Priority` | int | 100 | Priority (lower number = higher priority) |
 | `ParentMissionId` | string? | null | Parent mission ID for sub-tasks |
 | `BranchName` | string? | null | Git branch name |
+| `DockId` | string? | null | Dock identifier for the mission's worktree |
+| `ProcessId` | int? | null | OS process ID of the agent working on the mission |
 | `PrUrl` | string? | null | Pull request URL if created |
+| `CommitHash` | string? | null | Git commit hash captured on completion |
+| `DiffSnapshot` | string? | null | Git diff snapshot captured on completion |
 | `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
 | `StartedUtc` | datetime? | null | Work start timestamp (UTC) |
 | `CompletedUtc` | datetime? | null | Completion timestamp (UTC) |
@@ -1381,6 +1422,7 @@ A worker AI agent instance executing missions.
   "Id": "cpt_abc123",
   "Name": "captain-1",
   "Runtime": "ClaudeCode",
+  "MaxParallelism": 1,
   "State": "Idle",
   "CurrentMissionId": null,
   "CurrentDockId": null,
@@ -1397,6 +1439,7 @@ A worker AI agent instance executing missions.
 | `Id` | string | auto-generated | Unique ID with `cpt_` prefix |
 | `Name` | string | `"Captain"` | Captain name |
 | `Runtime` | [AgentRuntimeEnum](#agentruntimeenum) | `ClaudeCode` | Agent runtime type |
+| `MaxParallelism` | int | 1 | Maximum concurrent missions (minimum 1) |
 | `State` | [CaptainStateEnum](#captainstateenum) | `Idle` | Current state |
 | `CurrentMissionId` | string? | null | Currently assigned mission ID |
 | `CurrentDockId` | string? | null | Currently assigned dock (worktree) ID |
