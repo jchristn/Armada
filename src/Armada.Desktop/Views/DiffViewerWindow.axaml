@@ -19,6 +19,7 @@
                     <Run Text="{Binding MissionTitle}" Foreground="{StaticResource ArmadaBlueBrush}" />
                 </TextBlock>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                    <Button Content="Copy" Classes="action" Click="OnCopyAllClick" ToolTip.Tip="Copy diff content to clipboard" />
                     <Button Content="Refresh All" Classes="action" Click="OnRefreshClick" ToolTip.Tip="Reload diff from server" />
                 </StackPanel>
             </DockPanel>
