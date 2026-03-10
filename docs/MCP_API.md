@@ -33,6 +33,7 @@
     - [armada_get_vessel](#armada_get_vessel)
     - [armada_add_vessel](#armada_add_vessel)
     - [armada_update_vessel](#armada_update_vessel)
+    - [armada_update_vessel_context](#armada_update_vessel_context)
     - [armada_delete_vessel](#armada_delete_vessel)
   - **Voyages**
     - [armada_dispatch](#armada_dispatch)
@@ -47,6 +48,7 @@
     - [armada_update_mission](#armada_update_mission)
     - [armada_cancel_mission](#armada_cancel_mission)
     - [armada_restart_mission](#armada_restart_mission)
+    - [armada_purge_mission](#armada_purge_mission)
     - [armada_transition_mission_status](#armada_transition_mission_status)
     - [armada_get_mission_diff](#armada_get_mission_diff)
     - [armada_get_mission_log](#armada_get_mission_log)
@@ -1128,6 +1130,34 @@ Update an existing vessel's properties.
 
 ---
 
+### armada_update_vessel_context
+
+Update a vessel's project context and style guide without modifying other properties.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "vesselId": { "type": "string", "description": "Vessel ID (vsl_ prefix)" },
+    "projectContext": { "type": "string", "description": "Project context describing architecture, key files, and dependencies" },
+    "styleGuide": { "type": "string", "description": "Style guide describing naming conventions, patterns, and library preferences" }
+  },
+  "required": ["vesselId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `vesselId` | string | Yes | Vessel ID (prefix `vsl_`) |
+| `projectContext` | string | No | Project context describing architecture, key files, and dependencies |
+| `styleGuide` | string | No | Style guide describing naming conventions, patterns, and library preferences |
+
+**Response:** Updated [Vessel](#vessel) object, or `{ "Error": "Vessel not found" }`.
+
+---
+
 ### armada_delete_vessel
 
 Delete a vessel by ID.
@@ -1212,6 +1242,36 @@ Update an existing mission's metadata fields. Operational fields (status, timest
 | `parentMissionId` | No | Parent mission ID for sub-tasks |
 
 **Response:** Updated [Mission](#mission) object, or `{ "Error": "Mission not found" }`.
+
+---
+
+### armada_purge_mission
+
+Permanently delete a mission from the database. This cannot be undone.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "missionId": { "type": "string", "description": "Mission ID (msn_ prefix)" }
+  },
+  "required": ["missionId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `missionId` | string | Yes | Mission ID to delete (prefix `msn_`) |
+
+**Response:**
+
+```json
+{ "Status": "deleted", "MissionId": "msn_..." }
+```
+
+Returns `{ "Error": "Mission not found" }` if the ID does not exist.
 
 ---
 
@@ -1316,11 +1376,18 @@ Register a new captain (AI agent).
   "type": "object",
   "properties": {
     "name": { "type": "string", "description": "Captain display name" },
-    "runtime": { "type": "string", "description": "Agent runtime: ClaudeCode, Codex" }
+    "runtime": { "type": "string", "description": "Agent runtime: ClaudeCode, Codex" },
+    "maxParallelism": { "type": "integer", "description": "Maximum concurrent missions (default 1, minimum 1)" }
   },
   "required": ["name"]
 }
 ```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Captain display name |
+| `runtime` | string | No | Agent runtime: `ClaudeCode`, `Codex` |
+| `maxParallelism` | integer | No | Maximum concurrent missions (default 1, minimum 1) |
 
 **Response:** [Captain](#captain) object.
 
@@ -1358,11 +1425,19 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
   "properties": {
     "captainId": { "type": "string", "description": "Captain ID (cpt_ prefix)" },
     "name": { "type": "string", "description": "New display name" },
-    "runtime": { "type": "string", "description": "New agent runtime: ClaudeCode, Codex" }
+    "runtime": { "type": "string", "description": "New agent runtime: ClaudeCode, Codex" },
+    "maxParallelism": { "type": "integer", "description": "Maximum concurrent missions (minimum 1)" }
   },
   "required": ["captainId"]
 }
 ```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `captainId` | string | Yes | Captain ID (prefix `cpt_`) |
+| `name` | string | No | New display name |
+| `runtime` | string | No | New agent runtime: `ClaudeCode`, `Codex` |
+| `maxParallelism` | integer | No | Maximum concurrent missions (minimum 1) |
 
 **Response:** Updated [Captain](#captain) object, or `{ "Error": "Captain not found" }`.
 
@@ -1626,6 +1701,8 @@ Paginated result wrapper returned by `armada_enumerate`.
 | `localPath` | string \| null | Bare repository clone path |
 | `workingDirectory` | string \| null | User checkout path for merge operations |
 | `defaultBranch` | string | Default branch name (default: `"main"`) |
+| `projectContext` | string \| null | Project context describing architecture, key files, and dependencies |
+| `styleGuide` | string \| null | Style guide describing naming conventions, patterns, and library preferences |
 | `active` | bool | Whether the vessel is active |
 | `createdUtc` | string | ISO 8601 creation timestamp |
 | `lastUpdateUtc` | string | ISO 8601 last update timestamp |
@@ -1659,7 +1736,11 @@ Paginated result wrapper returned by `armada_enumerate`.
 | `priority` | int | Priority (lower = higher priority, default 100) |
 | `parentMissionId` | string \| null | Parent mission ID for sub-tasks |
 | `branchName` | string \| null | Git branch name created for this mission |
+| `dockId` | string \| null | Assigned dock (worktree) ID |
+| `processId` | int \| null | OS process ID of the agent working this mission |
 | `prUrl` | string \| null | Pull request URL |
+| `commitHash` | string \| null | Git commit hash (HEAD) captured at mission completion |
+| `diffSnapshot` | string \| null | Saved git diff snapshot captured at mission completion |
 | `createdUtc` | string | ISO 8601 creation timestamp |
 | `startedUtc` | string \| null | ISO 8601 start timestamp |
 | `completedUtc` | string \| null | ISO 8601 completion timestamp |
@@ -1672,6 +1753,7 @@ Paginated result wrapper returned by `armada_enumerate`.
 | `id` | string | Captain ID (prefix `cpt_`) |
 | `name` | string | Display name |
 | `runtime` | string | [AgentRuntimeEnum](#agentruntimeenum) value |
+| `maxParallelism` | int | Maximum concurrent missions (default 1, minimum 1) |
 | `state` | string | [CaptainStateEnum](#captainstateenum) value |
 | `currentMissionId` | string \| null | Currently assigned mission ID |
 | `currentDockId` | string \| null | Currently assigned dock (worktree) ID |
