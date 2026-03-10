@@ -565,6 +565,18 @@ Register a new vessel (git repository) in a fleet.
     "defaultBranch": {
       "type": "string",
       "description": "Default branch name (defaults to main)"
+    },
+    "projectContext": {
+      "type": "string",
+      "description": "Project context describing architecture, key files, and dependencies"
+    },
+    "styleGuide": {
+      "type": "string",
+      "description": "Style guide describing naming conventions, patterns, and library preferences"
+    },
+    "workingDirectory": {
+      "type": "string",
+      "description": "Optional local directory where completed mission changes will be pulled after merge"
     }
   },
   "required": ["name", "repoUrl", "fleetId"]
@@ -577,6 +589,9 @@ Register a new vessel (git repository) in a fleet.
 | `repoUrl` | string | Yes | Git repository URL (HTTPS or SSH) |
 | `fleetId` | string | Yes | Fleet ID to add the vessel to (prefix `flt_`) |
 | `defaultBranch` | string | No | Default branch name (defaults to `"main"`) |
+| `projectContext` | string | No | Project context describing architecture, key files, and dependencies |
+| `styleGuide` | string | No | Style guide describing naming conventions, patterns, and library preferences |
+| `workingDirectory` | string | No | Optional local directory where completed mission changes will be pulled after merge |
 
 **Example Input:**
 
@@ -1100,7 +1115,10 @@ Update an existing vessel's properties.
     "vesselId": { "type": "string", "description": "Vessel ID (vsl_ prefix)" },
     "name": { "type": "string", "description": "New display name" },
     "repoUrl": { "type": "string", "description": "New repository URL" },
-    "defaultBranch": { "type": "string", "description": "New default branch" }
+    "defaultBranch": { "type": "string", "description": "New default branch" },
+    "projectContext": { "type": "string", "description": "New project context" },
+    "styleGuide": { "type": "string", "description": "New style guide" },
+    "workingDirectory": { "type": "string", "description": "New local directory where completed mission changes will be pulled after merge" }
   },
   "required": ["vesselId"]
 }
