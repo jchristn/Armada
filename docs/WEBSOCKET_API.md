@@ -291,6 +291,7 @@ Commands are sent via the `command` route. Each command returns a `command.resul
 | | `get_vessel` | Get vessel by ID | `id` |
 | | `create_vessel` | Create vessel | `data` |
 | | `update_vessel` | Update vessel | `id`, `data` |
+| | `update_vessel_context` | Update vessel project context and style guide | `id`, `data` |
 | | `delete_vessel` | Delete vessel | `id` |
 | **Voyage** | `list_voyages` | List/enumerate voyages | optional `query` |
 | | `get_voyage` | Get voyage by ID | `id` |
@@ -303,6 +304,7 @@ Commands are sent via the `command` route. Each command returns a `command.resul
 | | `update_mission` | Update mission | `id`, `data` |
 | | `transition_mission_status` | Transition mission status | `id`, `status` |
 | | `cancel_mission` | Cancel mission | `id` |
+| | `purge_mission` | Permanently delete mission | `id` |
 | | `restart_mission` | Restart failed/cancelled mission | `id`, optional `data.title`, `data.description` |
 | **Captain** | `list_captains` | List/enumerate captains | optional `query` |
 | | `get_captain` | Get captain by ID | `id` |
@@ -757,6 +759,51 @@ Update an existing vessel.
 
 ---
 
+#### update_vessel_context
+
+Partial update of a vessel's project context and style guide fields only. Unlike `update_vessel`, this only modifies the `projectContext` and `styleGuide` fields.
+
+**Request:**
+
+```json
+{
+  "Route": "command",
+  "action": "update_vessel_context",
+  "id": "vsl_abc123",
+  "data": {
+    "ProjectContext": "C#/.NET multi-agent orchestration system...",
+    "StyleGuide": "Use explicit types, no var keyword..."
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `action` | string | Yes | `"update_vessel_context"` |
+| `id` | string | Yes | Vessel ID (prefix `vsl_`) |
+| `data.ProjectContext` | string | No | Project context describing architecture, key files, and dependencies |
+| `data.StyleGuide` | string | No | Style guide describing naming conventions, patterns, and library preferences |
+
+**Response:**
+
+```json
+{
+  "type": "command.result",
+  "action": "update_vessel_context",
+  "data": {
+    "id": "vsl_abc123",
+    "name": "my-repo",
+    "projectContext": "C#/.NET multi-agent orchestration system...",
+    "styleGuide": "Use explicit types, no var keyword...",
+    "...": "..."
+  }
+}
+```
+
+**Errors:** `command.error` if vessel not found.
+
+---
+
 #### delete_vessel
 
 Delete a vessel.
@@ -1083,6 +1130,42 @@ Cancel a mission.
 |---|---|---|---|
 | `action` | string | Yes | `"cancel_mission"` |
 | `id` | string | Yes | Mission ID (prefix `msn_`) |
+
+---
+
+#### purge_mission
+
+Permanently delete a mission from the database. This action is irreversible.
+
+**Request:**
+
+```json
+{
+  "Route": "command",
+  "action": "purge_mission",
+  "id": "msn_abc123"
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `action` | string | Yes | `"purge_mission"` |
+| `id` | string | Yes | Mission ID (prefix `msn_`) |
+
+**Response:**
+
+```json
+{
+  "type": "command.result",
+  "action": "purge_mission",
+  "data": {
+    "status": "deleted",
+    "missionId": "msn_abc123"
+  }
+}
+```
+
+**Errors:** `command.error` if mission not found.
 
 ---
 
@@ -1831,6 +1914,23 @@ If a message is sent without a route:
 | `autoCreatePullRequests` | bool \| null | Override global auto-create PR setting |
 | `autoMergePullRequests` | bool \| null | Override global auto-merge PR setting |
 
+#### Vessel
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Vessel ID (prefix `vsl_`) |
+| `fleetId` | string \| null | Parent fleet ID |
+| `name` | string | Vessel name |
+| `repoUrl` | string \| null | Remote repository URL |
+| `localPath` | string \| null | Local path to the bare repository clone |
+| `workingDirectory` | string \| null | Local working directory for merge on completion |
+| `defaultBranch` | string | Default branch name (default `"main"`) |
+| `projectContext` | string \| null | Project context describing architecture, key files, and dependencies |
+| `styleGuide` | string \| null | Style guide describing naming conventions, patterns, and library preferences |
+| `active` | bool | Whether the vessel is active |
+| `createdUtc` | string | ISO 8601 creation timestamp |
+| `lastUpdateUtc` | string | ISO 8601 last update timestamp |
+
 #### Mission
 
 | Field | Type | Description |
@@ -1845,7 +1945,11 @@ If a message is sent without a route:
 | `priority` | int | Priority (lower = higher priority, default 100) |
 | `parentMissionId` | string \| null | Parent mission ID for sub-tasks |
 | `branchName` | string \| null | Git branch created for this mission |
+| `dockId` | string \| null | Assigned dock ID for this mission's worktree |
+| `processId` | int \| null | OS process ID for the agent working this mission |
 | `prUrl` | string \| null | Pull request URL |
+| `commitHash` | string \| null | Git commit hash (HEAD) captured at mission completion |
+| `diffSnapshot` | string \| null | Saved git diff snapshot captured at mission completion |
 | `createdUtc` | string | ISO 8601 creation timestamp |
 | `startedUtc` | string \| null | ISO 8601 start timestamp |
 | `completedUtc` | string \| null | ISO 8601 completion timestamp |
@@ -1858,6 +1962,7 @@ If a message is sent without a route:
 | `id` | string | Captain ID (prefix `cpt_`) |
 | `name` | string | Display name |
 | `runtime` | string | [AgentRuntimeEnum](#agentruntimeenum) value |
+| `maxParallelism` | int | Maximum concurrent missions (default 1, minimum 1) |
 | `state` | string | [CaptainStateEnum](#captainstateenum) value |
 | `currentMissionId` | string \| null | Currently assigned mission |
 | `currentDockId` | string \| null | Currently assigned dock (worktree) |
@@ -1896,8 +2001,9 @@ If a message is sent without a route:
 | `id` | string | Dock ID (prefix `dck_`) |
 | `vesselId` | string | Parent vessel ID |
 | `captainId` | string \| null | Assigned captain ID |
-| `path` | string | Filesystem path to the worktree |
+| `worktreePath` | string \| null | Filesystem path to the worktree |
 | `branchName` | string \| null | Current branch name |
+| `active` | bool | Whether the dock is active and usable |
 | `createdUtc` | string | ISO 8601 creation timestamp |
 | `lastUpdateUtc` | string | ISO 8601 last update timestamp |
 
