@@ -87,6 +87,11 @@ function dashboard() {
         modalData: {},
         modalLoading: false,
 
+        // Viewer modal
+        viewerTitle: '',
+        viewerContent: '',
+        viewerLoading: false,
+
         // Confirm dialog
         confirmMessage: '',
         confirmResolve: null,
@@ -624,12 +629,28 @@ function dashboard() {
         },
 
         async loadCaptainLog(captainId) {
-            this.detailLog = null;
+            let captainName = this.detail ? this.detail.name : captainId;
+            this.viewerTitle = 'Log: ' + captainName;
+            this.viewerContent = '';
+            this.viewerLoading = true;
+            this.modal = 'viewer';
             try {
                 let result = await this.api('GET', '/api/v1/captains/' + captainId + '/log?lines=500');
-                this.detailLog = result;
+                this.viewerContent = result.log || 'No log output';
             } catch (e) {
-                this.detailLog = { error: e.message };
+                this.viewerContent = 'Log unavailable: ' + e.message;
+            } finally {
+                this.viewerLoading = false;
+            }
+        },
+
+        copyViewerContent() {
+            let text = this.viewerContent;
+            if (!text) return;
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).catch(() => this.fallbackCopy(text));
+            } else {
+                this.fallbackCopy(text);
             }
         },
 

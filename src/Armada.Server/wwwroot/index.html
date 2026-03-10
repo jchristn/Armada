@@ -882,16 +882,7 @@
                     </div>
                     <!-- Captain Log -->
                     <div style="margin-top:1rem">
-                        <button class="btn btn-sm" @click="loadCaptainLog(detail.id)" x-show="!detailLog" title="Load the captain's current execution log">View Current Log</button>
-                        <template x-if="detailLog && !detailLog.error">
-                            <div>
-                                <h3>Current Log <span class="text-dim" x-text="'(' + (detailLog.lines || 0) + ' of ' + (detailLog.totalLines || 0) + ' lines)'"></span></h3>
-                                <pre class="diff-viewer" x-text="detailLog.log || 'No log output'"></pre>
-                            </div>
-                        </template>
-                        <template x-if="detailLog && detailLog.error">
-                            <p class="text-dim" x-text="'Log unavailable: ' + detailLog.error"></p>
-                        </template>
+                        <button class="btn btn-sm" @click="loadCaptainLog(detail.id)" title="Load the captain's current execution log">View Log</button>
                     </div>
                     <div style="margin-top:1rem">
                         <h3>Recent Missions</h3>
@@ -1502,6 +1493,26 @@
                     <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading" title="Add this branch to the merge queue">Enqueue</button>
                 </div>
             </form>
+        </div>
+
+        <!-- Viewer Modal (reusable read-only content viewer) -->
+        <div class="modal-box modal-large" x-show="modal === 'viewer'">
+            <h3 x-text="viewerTitle"></h3>
+            <div style="margin:0.75rem 0">
+                <template x-if="viewerLoading">
+                    <div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0">
+                        <span class="spinner" style="width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;display:inline-block;animation:spin 0.8s linear infinite"></span>
+                        <span class="text-dim">Loading…</span>
+                    </div>
+                </template>
+                <template x-if="!viewerLoading">
+                    <pre class="diff-viewer" x-text="viewerContent"></pre>
+                </template>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-sm" @click="copyViewerContent()" title="Copy full content to clipboard">Copy</button>
+                <button type="button" class="btn btn-sm" @click="modal = null" title="Close viewer">Close</button>
+            </div>
         </div>
 
         <!-- Confirm Dialog (replaces native browser confirm()) -->
