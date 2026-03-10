@@ -246,6 +246,8 @@ Valid status transitions:
 
 ## Decision-Making Guidance
 
+**When to use `armada_list_*` vs `armada_enumerate`?** Use `armada_list_*` for quick, unfiltered lookups when you expect a small number of results (e.g., listing all fleets, listing all captains). Use `armada_enumerate` when you need to filter by related entity (e.g., missions for a specific vessel or voyage), filter by status or date range, paginate through large result sets, or sort results. When in doubt, prefer `armada_enumerate` — it supports all the same entity types and will never return more data than you ask for.
+
 **How many missions per voyage?** 2-6 is typical. More than 8 parallel missions on the same repo risks merge conflicts even with non-overlapping files (shared imports, lock files, etc.).
 
 **When to use a voyage vs standalone mission?** Use a voyage when work is related and you want to track it as a unit. Use standalone missions for one-off fixes or tasks unrelated to a larger effort.
