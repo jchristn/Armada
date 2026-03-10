@@ -361,7 +361,7 @@ namespace Armada.Core.Services
         {
             try
             {
-                await RunGitAsync(worktreePath, "merge --no-ff origin/" + branchName, token).ConfigureAwait(false);
+                await RunGitAsync(worktreePath, "merge --no-ff " + branchName, token).ConfigureAwait(false);
                 return true;
             }
             catch
