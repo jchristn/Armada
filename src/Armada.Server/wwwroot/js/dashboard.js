@@ -90,11 +90,13 @@ function dashboard() {
         modalData: {},
         modalLoading: false,
 
-        // Viewer modal
+        // Viewer modal (reusable for logs, diffs, etc.)
+        viewerModal: false,
         viewerTitle: '',
         viewerContent: '',
         viewerRawContent: '',
         viewerIsHtml: false,
+        viewerRawText: '',
         viewerLoading: false,
 
         // Confirm dialog
@@ -644,12 +646,18 @@ function dashboard() {
         },
 
         async loadMissionLog(missionId) {
-            this.detailLog = null;
+            let title = this.detail ? this.detail.title : missionId;
+            this.openViewer('Log: ' + title, 'Loading…');
             try {
                 let result = await this.api('GET', '/api/v1/missions/' + missionId + '/log?lines=500');
-                this.detailLog = result;
+                let logText = result.log || 'No log output';
+                let lineInfo = '(' + (result.lines || 0) + ' of ' + (result.totalLines || 0) + ' lines)';
+                this.viewerTitle = 'Log: ' + title + ' ' + lineInfo;
+                this.viewerContent = logText;
+                this.viewerRawText = logText;
             } catch (e) {
-                this.detailLog = { error: e.message };
+                this.viewerContent = 'Log unavailable: ' + e.message;
+                this.viewerRawText = '';
             }
         },
 

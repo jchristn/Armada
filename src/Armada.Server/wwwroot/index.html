@@ -727,18 +727,6 @@
                         </template>
                     </div>
 
-                    <!-- Log viewer -->
-                    <div style="margin-top:1rem">
-                        <template x-if="detailLog && !detailLog.error">
-                            <div>
-                                <h3>Log <span class="text-dim" x-text="'(' + (detailLog.lines || 0) + ' of ' + (detailLog.totalLines || 0) + ' lines)'"></span></h3>
-                                <pre class="diff-viewer" x-text="detailLog.log || 'No log output'"></pre>
-                            </div>
-                        </template>
-                        <template x-if="detailLog && detailLog.error">
-                            <p class="text-dim" x-text="'Log unavailable: ' + detailLog.error"></p>
-                        </template>
-                    </div>
                 </div>
             </template>
         </div>
