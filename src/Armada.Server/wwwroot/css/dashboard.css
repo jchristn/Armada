@@ -880,7 +880,7 @@ a:hover { text-decoration: underline; }
     margin: 0;
 }
 
-/* Viewer modal */
+/* Viewer modal (inline, used inside .modal-overlay) */
 .viewer-modal-box {
     max-width: 90vw;
     width: 1200px;
@@ -890,6 +890,30 @@ a:hover { text-decoration: underline; }
     padding: 0;
 }
 
+/* Viewer modal (full-screen text viewer for diffs, logs, etc.) */
+.viewer-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--modal-overlay);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 600;
+    padding: 1.5rem;
+}
+
+.viewer-modal {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    width: 100%;
+    max-width: 95vw;
+    height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
 .viewer-header {
     display: flex;
     justify-content: space-between;
@@ -897,21 +921,22 @@ a:hover { text-decoration: underline; }
     padding: 0.75rem 1.25rem;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
+    gap: 1rem;
 }
 
 .viewer-title {
-    margin: 0;
     font-size: 1rem;
     font-weight: 600;
+    margin: 0;
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
     min-width: 0;
 }
 
 .viewer-actions {
     display: flex;
-    gap: 0.4rem;
+    gap: 0.5rem;
     flex-shrink: 0;
 }
 
@@ -927,6 +952,23 @@ a:hover { text-decoration: underline; }
     border: none;
     border-radius: 0;
     margin: 0;
+}
+
+.viewer-copied {
+    background: var(--green) !important;
+}
+
+.viewer-body {
+    flex: 1;
+    overflow: auto;
+    padding: 1rem 1.25rem;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    line-height: 1.6;
+    white-space: pre;
+    color: var(--text);
+    margin: 0;
+    background: var(--diff-bg);
 }
 
 /* Diff syntax highlighting */
@@ -963,4 +1005,7 @@ a:hover { text-decoration: underline; }
     .view-header { flex-direction: column; align-items: flex-start; }
     .pagination-bar { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
     .pagination-controls { flex-wrap: wrap; }
+    .viewer-overlay { padding: 0.5rem; }
+    .viewer-modal { max-width: 100vw; height: 95vh; }
+    .viewer-header { flex-wrap: wrap; }
 }

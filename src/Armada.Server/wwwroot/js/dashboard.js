@@ -53,6 +53,9 @@ function dashboard() {
         detailDiffLoading: false,
         detailLog: null,
 
+        // Viewer modal
+        viewer: { open: false, title: '', content: '', copied: false },
+
         // Filters
         missionFilters: { status: '', vesselId: '', captainId: '', voyageId: '' },
         recentMissionFilters: { status: '', vesselId: '', captainId: '' },
@@ -1479,6 +1482,75 @@ function dashboard() {
         openSendSignal() { this.modal = 'send-signal'; this.modalData = { type: 'Nudge', payload: '', fromCaptainId: '', toCaptainId: '' }; },
         openEnqueueMerge() { this.modal = 'enqueue-merge'; this.modalData = { missionId: '', vesselId: '', branchName: '', targetBranch: 'main' }; },
 
+        // Viewer modal
+        openViewer(title, content) {
+            this.viewer = { open: true, title: title, content: content || '', copied: false };
+        },
+        closeViewer() {
+            this.viewer = { open: false, title: '', content: '', copied: false };
+        },
+        async copyViewerContent() {
+            try {
+                await navigator.clipboard.writeText(this.viewer.content);
+                this.viewer.copied = true;
+                setTimeout(() => { this.viewer.copied = false; }, 2000);
+            } catch (e) {
+                this.toast('Failed to copy to clipboard', 'error');
+            }
+        },
+        async viewMissionDiff(missionId) {
+            this.openViewer('Loading diff...', '');
+            try {
+                let response = await this.api('GET', '/api/v1/missions/' + missionId + '/diff', null, 30000);
+                let diff = response ? this.toCamel(response) : null;
+                if (diff && !diff.error) {
+                    let title = 'Mission Diff' + (diff.branch ? ' (' + diff.branch + ')' : '');
+                    this.viewer.title = title;
+                    this.viewer.content = diff.diff || 'No changes';
+                } else {
+                    this.viewer.title = 'Diff Error';
+                    this.viewer.content = (diff && diff.error) || 'Failed to load diff';
+                }
+            } catch (e) {
+                this.viewer.title = 'Diff Error';
+                this.viewer.content = e.message || 'Request failed';
+            }
+        },
+        async viewMissionLog(missionId) {
+            this.openViewer('Loading log...', '');
+            try {
+                let result = await this.api('GET', '/api/v1/missions/' + missionId + '/log?lines=500');
+                if (result && !result.error) {
+                    let title = 'Mission Log (' + (result.lines || 0) + ' of ' + (result.totalLines || 0) + ' lines)';
+                    this.viewer.title = title;
+                    this.viewer.content = result.log || 'No log output';
+                } else {
+                    this.viewer.title = 'Log Error';
+                    this.viewer.content = (result && result.error) || 'Failed to load log';
+                }
+            } catch (e) {
+                this.viewer.title = 'Log Error';
+                this.viewer.content = e.message || 'Request failed';
+            }
+        },
+        async viewCaptainLog(captainId) {
+            this.openViewer('Loading captain log...', '');
+            try {
+                let result = await this.api('GET', '/api/v1/captains/' + captainId + '/log?lines=500');
+                if (result && !result.error) {
+                    let title = 'Captain Log (' + (result.lines || 0) + ' of ' + (result.totalLines || 0) + ' lines)';
+                    this.viewer.title = title;
+                    this.viewer.content = result.log || 'No log output';
+                } else {
+                    this.viewer.title = 'Log Error';
+                    this.viewer.content = (result && result.error) || 'Failed to load log';
+                }
+            } catch (e) {
+                this.viewer.title = 'Log Error';
+                this.viewer.content = e.message || 'Request failed';
+            }
+        },
+
         // Pagination helpers
         goToPage(pagingObj, page, loadFn) {
             if (page < 1 || page > pagingObj.totalPages) return;
@@ -1503,6 +1575,7 @@ function dashboard() {
         // Keyboard shortcuts
         handleKeyboard(e) {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+            if (this.viewer.open && e.key === 'Escape') { this.closeViewer(); return; }
             if (this.modal) {
                 if (e.key === 'Escape') this.modal = null;
                 return;
