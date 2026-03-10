@@ -87,11 +87,13 @@ function dashboard() {
         modalData: {},
         modalLoading: false,
 
-        // Viewer modal
+        // Viewer modal (reusable for logs, diffs, etc.)
+        viewerModal: false,
         viewerTitle: '',
         viewerContent: '',
         viewerRawContent: '',
         viewerIsHtml: false,
+        viewerRawText: '',
         viewerLoading: false,
 
         // Confirm dialog
@@ -641,12 +643,18 @@ function dashboard() {
         },
 
         async loadMissionLog(missionId) {
-            this.detailLog = null;
+            let title = this.detail ? this.detail.title : missionId;
+            this.openViewer('Log: ' + title, 'Loading…');
             try {
                 let result = await this.api('GET', '/api/v1/missions/' + missionId + '/log?lines=500');
-                this.detailLog = result;
+                let logText = result.log || 'No log output';
+                let lineInfo = '(' + (result.lines || 0) + ' of ' + (result.totalLines || 0) + ' lines)';
+                this.viewerTitle = 'Log: ' + title + ' ' + lineInfo;
+                this.viewerContent = logText;
+                this.viewerRawText = logText;
             } catch (e) {
-                this.detailLog = { error: e.message };
+                this.viewerContent = 'Log unavailable: ' + e.message;
+                this.viewerRawText = '';
             }
         },
 
@@ -1479,6 +1487,37 @@ function dashboard() {
         openSendSignal() { this.modal = 'send-signal'; this.modalData = { type: 'Nudge', payload: '', fromCaptainId: '', toCaptainId: '' }; },
         openEnqueueMerge() { this.modal = 'enqueue-merge'; this.modalData = { missionId: '', vesselId: '', branchName: '', targetBranch: 'main' }; },
 
+        // Viewer modal helpers
+        openViewer(title, content) {
+            this.viewerTitle = title;
+            this.viewerContent = content || '';
+            this.viewerRawText = content || '';
+            this.viewerModal = true;
+        },
+        closeViewer() {
+            this.viewerModal = false;
+            this.viewerTitle = '';
+            this.viewerContent = '';
+            this.viewerRawText = '';
+        },
+        copyViewerContent(event) {
+            if (!this.viewerRawText) return;
+            let btn = event?.currentTarget;
+            let onSuccess = () => {
+                if (!btn) return;
+                let orig = btn.textContent;
+                btn.textContent = '\u2713 Copied';
+                setTimeout(() => { btn.textContent = orig; }, 1500);
+            };
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(this.viewerRawText).then(onSuccess).catch(() => {
+                    if (this.fallbackCopy(this.viewerRawText)) onSuccess();
+                });
+            } else {
+                if (this.fallbackCopy(this.viewerRawText)) onSuccess();
+            }
+        },
+
         // Pagination helpers
         goToPage(pagingObj, page, loadFn) {
             if (page < 1 || page > pagingObj.totalPages) return;
@@ -1503,6 +1542,10 @@ function dashboard() {
         // Keyboard shortcuts
         handleKeyboard(e) {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+            if (this.viewerModal) {
+                if (e.key === 'Escape') this.closeViewer();
+                return;
+            }
             if (this.modal) {
                 if (e.key === 'Escape') this.modal = null;
                 return;

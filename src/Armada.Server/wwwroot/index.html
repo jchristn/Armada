@@ -674,7 +674,7 @@
                                 x-show="detail.status === 'Failed' || detail.status === 'Cancelled'" title="Restart this mission with optional changes to the instructions">Restart</button>
                             <button class="btn btn-sm btn-danger" @click="deleteMission(detail.id)" title="Permanently delete this mission">Delete</button>
                             <button class="btn btn-sm" @click="loadMissionDiff(detail.id)" x-show="!detailDiffLoading" title="View the git diff showing changes made by this mission">Diff</button>
-                            <button class="btn btn-sm" @click="loadMissionLog(detail.id)" x-show="!detailLog" title="Load the captain's execution log for this mission">Log</button>
+                            <button class="btn btn-sm" @click="loadMissionLog(detail.id)" title="Load the captain's execution log for this mission">Log</button>
                         </div>
                     </div>
                     <div class="detail-grid">
@@ -727,18 +727,6 @@
                         </template>
                     </div>
 
-                    <!-- Log viewer -->
-                    <div style="margin-top:1rem">
-                        <template x-if="detailLog && !detailLog.error">
-                            <div>
-                                <h3>Log <span class="text-dim" x-text="'(' + (detailLog.lines || 0) + ' of ' + (detailLog.totalLines || 0) + ' lines)'"></span></h3>
-                                <pre class="diff-viewer" x-text="detailLog.log || 'No log output'"></pre>
-                            </div>
-                        </template>
-                        <template x-if="detailLog && detailLog.error">
-                            <p class="text-dim" x-text="'Log unavailable: ' + detailLog.error"></p>
-                        </template>
-                    </div>
                 </div>
             </template>
         </div>
@@ -1505,6 +1493,20 @@
                 <button type="button" class="btn btn-sm" @click="confirmNo()">Cancel</button>
                 <button type="button" class="btn btn-danger btn-sm" @click="confirmYes()">OK</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Viewer Modal (reusable for logs, diffs, etc.) -->
+    <div class="modal-overlay" x-show="viewerModal" @click.self="closeViewer()" x-cloak style="z-index:1100">
+        <div class="modal-box modal-wide" x-show="viewerModal" style="display:flex;flex-direction:column;max-height:90vh">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
+                <h3 style="margin:0" x-text="viewerTitle"></h3>
+                <div style="display:flex;gap:0.5rem">
+                    <button class="btn btn-sm" @click="copyViewerContent($event)" x-show="viewerRawText" title="Copy full log text to clipboard">Copy</button>
+                    <button class="btn btn-sm" @click="closeViewer()" title="Close viewer">&times;</button>
+                </div>
+            </div>
+            <pre class="diff-viewer" style="flex:1;overflow:auto;margin:0" x-text="viewerContent"></pre>
         </div>
     </div>
 
