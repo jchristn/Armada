@@ -672,6 +672,8 @@
                             <button class="btn btn-sm" @click="restartMissionPrompt(detail)"
                                 x-show="detail.status === 'Failed' || detail.status === 'Cancelled'" title="Restart this mission with optional changes to the instructions">Restart</button>
                             <button class="btn btn-sm btn-danger" @click="deleteMission(detail.id)" title="Permanently delete this mission">Delete</button>
+                            <button class="btn btn-sm" @click="loadMissionDiff(detail.id)" x-show="!detailDiff && !detailDiffLoading" title="Load the git diff showing changes made by this mission">Diff</button>
+                            <button class="btn btn-sm" @click="loadMissionLog(detail.id)" x-show="!detailLog" title="Load the captain's execution log for this mission">Log</button>
                         </div>
                     </div>
                     <div class="detail-grid">
@@ -726,7 +728,6 @@
 
                     <!-- Diff viewer -->
                     <div style="margin-top:1rem">
-                        <button class="btn btn-sm" @click="loadMissionDiff(detail.id)" x-show="!detailDiff && !detailDiffLoading" title="Load the git diff showing changes made by this mission">Load Diff</button>
                         <template x-if="detailDiffLoading">
                             <div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0">
                                 <span class="spinner" style="width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;display:inline-block;animation:spin 0.8s linear infinite"></span>
@@ -750,7 +751,6 @@
 
                     <!-- Log viewer -->
                     <div style="margin-top:1rem">
-                        <button class="btn btn-sm" @click="loadMissionLog(detail.id)" x-show="!detailLog" title="Load the captain's execution log for this mission">Load Log</button>
                         <template x-if="detailLog && !detailLog.error">
                             <div>
                                 <h3>Log <span class="text-dim" x-text="'(' + (detailLog.lines || 0) + ' of ' + (detailLog.totalLines || 0) + ' lines)'"></span></h3>
