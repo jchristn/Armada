@@ -3,12 +3,15 @@ namespace Armada.Server.Mcp
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.IO.Compression;
     using System.Linq;
     using System.Text.Json;
     using System.Threading.Tasks;
+    using Microsoft.Data.Sqlite;
     using Armada.Core;
     using ArmadaConstants = Armada.Core.Constants;
     using Armada.Core.Database;
+    using Armada.Core.Database.Sqlite;
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services.Interfaces;
@@ -67,6 +70,7 @@ namespace Armada.Server.Mcp
             RegisterEventTools(register, database);
             RegisterDockTools(register, database);
             if (mergeQueue != null) RegisterMergeQueueTools(register, mergeQueue);
+            if (settings != null) RegisterBackupTools(register, database, settings);
         }
 
         #region Private-Methods
@@ -1499,6 +1503,292 @@ namespace Armada.Server.Mcp
                 (MissionStatusEnum.Review, MissionStatusEnum.Failed) => true,
                 _ => false
             };
+        }
+
+        private static void RegisterBackupTools(RegisterToolDelegate register, DatabaseDriver database, ArmadaSettings settings)
+        {
+            register(
+                "armada_backup",
+                "Create a ZIP backup of the Armada database and settings for disaster recovery. " +
+                "Uses SQLite online backup API for a consistent snapshot.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        outputPath = new { type = "string", description = "Output path for the ZIP file. Default: ~/.armada/backups/armada-backup-{timestamp}.zip" }
+                    }
+                },
+                async (args) =>
+                {
+                    BackupArgs backupArgs = args != null
+                        ? JsonSerializer.Deserialize<BackupArgs>(args.Value, _JsonOptions) ?? new BackupArgs()
+                        : new BackupArgs();
+
+                    object result = await PerformBackupAsync(database, settings, backupArgs.OutputPath).ConfigureAwait(false);
+                    return result;
+                });
+
+            register(
+                "armada_restore",
+                "Restore the Armada database and settings from a ZIP backup file. " +
+                "Creates a safety backup of the current state before overwriting. Server restart recommended after restore.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        filePath = new { type = "string", description = "Path to the ZIP backup file to restore from" }
+                    },
+                    required = new[] { "filePath" }
+                },
+                async (args) =>
+                {
+                    RestoreArgs restoreArgs = args != null
+                        ? JsonSerializer.Deserialize<RestoreArgs>(args.Value, _JsonOptions) ?? new RestoreArgs()
+                        : new RestoreArgs();
+
+                    if (String.IsNullOrEmpty(restoreArgs.FilePath))
+                        throw new ArgumentException("filePath is required");
+
+                    object result = await PerformRestoreAsync(database, settings, restoreArgs.FilePath).ConfigureAwait(false);
+                    return result;
+                });
+        }
+
+        /// <summary>
+        /// Perform a backup of the database and settings into a ZIP file.
+        /// </summary>
+        internal static async Task<object> PerformBackupAsync(DatabaseDriver database, ArmadaSettings settings, string? outputPath)
+        {
+            string backupsDir = Path.Combine(ArmadaConstants.DefaultDataDirectory, "backups");
+            Directory.CreateDirectory(backupsDir);
+
+            string timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd-HHmmss");
+            string zipPath = outputPath ?? Path.Combine(backupsDir, "armada-backup-" + timestamp + ".zip");
+
+            // Ensure parent directory exists
+            string? zipDir = Path.GetDirectoryName(zipPath);
+            if (!String.IsNullOrEmpty(zipDir)) Directory.CreateDirectory(zipDir);
+
+            string tempDbPath = Path.Combine(Path.GetTempPath(), "armada-backup-" + Guid.NewGuid().ToString("N") + ".db");
+
+            try
+            {
+                // Use SQLite online backup API for a consistent snapshot
+                string sourceConnStr = "Data Source=" + settings.DatabasePath;
+                string destConnStr = "Data Source=" + tempDbPath;
+
+                using (SqliteConnection sourceConn = new SqliteConnection(sourceConnStr))
+                using (SqliteConnection destConn = new SqliteConnection(destConnStr))
+                {
+                    await sourceConn.OpenAsync().ConfigureAwait(false);
+                    await destConn.OpenAsync().ConfigureAwait(false);
+                    sourceConn.BackupDatabase(destConn);
+                }
+
+                // Get schema version
+                int schemaVersion = 0;
+                if (database is SqliteDatabaseDriver sqliteDriver)
+                {
+                    schemaVersion = await sqliteDriver.GetSchemaVersionAsync().ConfigureAwait(false);
+                }
+
+                // Get record counts
+                Dictionary<string, long> recordCounts = await GetRecordCountsAsync(settings.DatabasePath).ConfigureAwait(false);
+
+                // Build manifest
+                object manifest = new
+                {
+                    backupTimestampUtc = DateTime.UtcNow.ToString("o"),
+                    schemaVersion = schemaVersion,
+                    armadaVersion = ArmadaConstants.ProductVersion,
+                    recordCounts = recordCounts
+                };
+
+                string manifestJson = JsonSerializer.Serialize(manifest, new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    WriteIndented = true
+                });
+
+                // Create ZIP
+                if (File.Exists(zipPath)) File.Delete(zipPath);
+
+                using (ZipArchive zip = ZipFile.Open(zipPath, ZipArchiveMode.Create))
+                {
+                    zip.CreateEntryFromFile(tempDbPath, "armada.db");
+
+                    string settingsPath = ArmadaSettings.DefaultSettingsPath;
+                    if (File.Exists(settingsPath))
+                    {
+                        zip.CreateEntryFromFile(settingsPath, "settings.json");
+                    }
+
+                    ZipArchiveEntry manifestEntry = zip.CreateEntry("manifest.json");
+                    using (StreamWriter writer = new StreamWriter(manifestEntry.Open()))
+                    {
+                        await writer.WriteAsync(manifestJson).ConfigureAwait(false);
+                    }
+                }
+
+                long sizeBytes = new FileInfo(zipPath).Length;
+
+                return new
+                {
+                    Path = zipPath,
+                    TimestampUtc = DateTime.UtcNow.ToString("o"),
+                    SchemaVersion = schemaVersion,
+                    SizeBytes = sizeBytes,
+                    RecordCounts = recordCounts
+                };
+            }
+            finally
+            {
+                if (File.Exists(tempDbPath)) File.Delete(tempDbPath);
+            }
+        }
+
+        /// <summary>
+        /// Restore the database and settings from a ZIP backup file.
+        /// </summary>
+        internal static async Task<object> PerformRestoreAsync(DatabaseDriver database, ArmadaSettings settings, string filePath)
+        {
+            if (!File.Exists(filePath))
+                throw new FileNotFoundException("Backup file not found: " + filePath);
+
+            // Validate ZIP contents
+            using (ZipArchive zip = ZipFile.OpenRead(filePath))
+            {
+                ZipArchiveEntry? dbEntry = zip.GetEntry("armada.db");
+                if (dbEntry == null)
+                    throw new InvalidOperationException("ZIP does not contain armada.db entry");
+            }
+
+            string tempDir = Path.Combine(Path.GetTempPath(), "armada-restore-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDir);
+
+            try
+            {
+                // Extract ZIP
+                ZipFile.ExtractToDirectory(filePath, tempDir);
+
+                string extractedDbPath = Path.Combine(tempDir, "armada.db");
+                string extractedSettingsPath = Path.Combine(tempDir, "settings.json");
+
+                // Validate extracted database
+                string validateConnStr = "Data Source=" + extractedDbPath;
+                using (SqliteConnection validateConn = new SqliteConnection(validateConnStr))
+                {
+                    await validateConn.OpenAsync().ConfigureAwait(false);
+                    using (SqliteCommand cmd = validateConn.CreateCommand())
+                    {
+                        cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations';";
+                        object? result = await cmd.ExecuteScalarAsync().ConfigureAwait(false);
+                        if (result == null || result == DBNull.Value)
+                            throw new InvalidOperationException("Extracted database does not contain schema_migrations table — not a valid Armada backup");
+                    }
+                }
+
+                // Checkpoint the current live database
+                string liveConnStr = "Data Source=" + settings.DatabasePath;
+                using (SqliteConnection liveConn = new SqliteConnection(liveConnStr))
+                {
+                    await liveConn.OpenAsync().ConfigureAwait(false);
+                    using (SqliteCommand cmd = liveConn.CreateCommand())
+                    {
+                        cmd.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
+                        await cmd.ExecuteNonQueryAsync().ConfigureAwait(false);
+                    }
+                }
+
+                // Create safety backup of current state
+                string timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd-HHmmss");
+                string backupsDir = Path.Combine(ArmadaConstants.DefaultDataDirectory, "backups");
+                Directory.CreateDirectory(backupsDir);
+                string safetyBackupPath = Path.Combine(backupsDir, "pre-restore-" + timestamp + ".zip");
+
+                await PerformBackupAsync(database, settings, safetyBackupPath).ConfigureAwait(false);
+
+                // Replace database file
+                File.Copy(extractedDbPath, settings.DatabasePath, overwrite: true);
+
+                // Replace settings.json if present in backup
+                bool settingsRestored = false;
+                if (File.Exists(extractedSettingsPath))
+                {
+                    File.Copy(extractedSettingsPath, ArmadaSettings.DefaultSettingsPath, overwrite: true);
+                    settingsRestored = true;
+                }
+
+                // Get schema version from restored database
+                int schemaVersion = 0;
+                if (database is SqliteDatabaseDriver sqliteDriver)
+                {
+                    schemaVersion = await sqliteDriver.GetSchemaVersionAsync().ConfigureAwait(false);
+                }
+
+                string message = "Database restored successfully from " + filePath + ". ";
+                if (!settingsRestored)
+                    message += "Warning: settings.json was not found in the backup ZIP. ";
+                message += "Server restart is recommended to reload the restored data.";
+
+                return new
+                {
+                    Status = "restored",
+                    BackupPath = safetyBackupPath,
+                    SchemaVersion = schemaVersion,
+                    Message = message
+                };
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir))
+                {
+                    try { Directory.Delete(tempDir, recursive: true); }
+                    catch { /* best effort cleanup */ }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Get record counts for all Armada tables.
+        /// </summary>
+        private static async Task<Dictionary<string, long>> GetRecordCountsAsync(string databasePath)
+        {
+            Dictionary<string, long> counts = new Dictionary<string, long>();
+            string[] tables = new[] { "fleets", "vessels", "captains", "missions", "voyages", "docks", "signals", "events", "merge_entries" };
+
+            string connStr = "Data Source=" + databasePath;
+            using (SqliteConnection conn = new SqliteConnection(connStr))
+            {
+                await conn.OpenAsync().ConfigureAwait(false);
+
+                foreach (string table in tables)
+                {
+                    using (SqliteCommand cmd = conn.CreateCommand())
+                    {
+                        // Verify table exists before counting
+                        cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name=@table;";
+                        cmd.Parameters.AddWithValue("@table", table);
+                        object? exists = await cmd.ExecuteScalarAsync().ConfigureAwait(false);
+                        if (exists == null || exists == DBNull.Value)
+                        {
+                            counts[table] = 0;
+                            continue;
+                        }
+                    }
+
+                    using (SqliteCommand cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText = "SELECT COUNT(*) FROM " + table + ";";
+                        object? result = await cmd.ExecuteScalarAsync().ConfigureAwait(false);
+                        counts[table] = (result != null && result != DBNull.Value) ? Convert.ToInt64(result) : 0;
+                    }
+                }
+            }
+
+            return counts;
         }
 
         /// <summary>

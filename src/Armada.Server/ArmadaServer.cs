@@ -1573,6 +1573,52 @@ namespace Armada.Server
                 .WithSummary("Process the merge queue")
                 .WithDescription("Triggers processing of all queued entries: creates integration branches, runs tests, and lands passing batches.")
                 .WithSecurity("ApiKey"));
+
+            // Backup & Restore
+            _App.Rest.Get("/api/v1/backup", async (AppRequest req) =>
+            {
+                object backupResult = await McpToolRegistrar.PerformBackupAsync(_Database, _Settings, null).ConfigureAwait(false);
+                string zipPath = (string)backupResult.GetType().GetProperty("Path")!.GetValue(backupResult)!;
+                byte[] fileBytes = await File.ReadAllBytesAsync(zipPath).ConfigureAwait(false);
+                string filename = Path.GetFileName(zipPath);
+                req.Http.Response.ContentType = "application/zip";
+                req.Http.Response.Headers.Add("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+                await req.Http.Response.Send(fileBytes).ConfigureAwait(false);
+                return null;
+            },
+            api => api
+                .WithTag("Backup")
+                .WithSummary("Download backup")
+                .WithDescription("Creates and streams a ZIP backup of the database and settings.")
+                .WithSecurity("ApiKey"));
+
+            _App.Rest.Post("/api/v1/restore", async (AppRequest req) =>
+            {
+                byte[] body = req.Http.Request.DataAsBytes;
+                if (body == null || body.Length == 0)
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Request body must contain the ZIP file" };
+
+                string tempZipPath = Path.Combine(Path.GetTempPath(), "armada-upload-" + Guid.NewGuid().ToString("N") + ".zip");
+                try
+                {
+                    await File.WriteAllBytesAsync(tempZipPath, body).ConfigureAwait(false);
+                    object result = await McpToolRegistrar.PerformRestoreAsync(_Database, _Settings, tempZipPath).ConfigureAwait(false);
+                    return result;
+                }
+                finally
+                {
+                    if (File.Exists(tempZipPath))
+                    {
+                        try { File.Delete(tempZipPath); }
+                        catch { /* best effort */ }
+                    }
+                }
+            },
+            api => api
+                .WithTag("Backup")
+                .WithSummary("Restore from backup")
+                .WithDescription("Accepts a ZIP backup file in the request body and restores the database and settings. Server restart recommended after restore.")
+                .WithSecurity("ApiKey"));
         }
 
         private void RegisterDashboardRoutes()

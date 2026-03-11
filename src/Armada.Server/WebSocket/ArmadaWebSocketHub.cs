@@ -1014,6 +1014,24 @@ namespace Armada.Server.WebSocket
                                 result = new { type = "command.result", action = "enumerate", data = enumData };
                             break;
 
+                        // ── Backup & Restore ─────────────────────────────────────
+
+                        case "backup":
+                            object backupData = await Mcp.McpToolRegistrar.PerformBackupAsync(_Database, _Settings!, command.OutputPath).ConfigureAwait(false);
+                            result = new { type = "command.result", action = "backup", data = backupData };
+                            break;
+
+                        case "restore":
+                            string restoreFilePath = command.FilePath ?? "";
+                            if (String.IsNullOrEmpty(restoreFilePath))
+                            {
+                                result = new { type = "command.error", action = "restore", error = "filePath is required" };
+                                break;
+                            }
+                            object restoreData = await Mcp.McpToolRegistrar.PerformRestoreAsync(_Database, _Settings!, restoreFilePath).ConfigureAwait(false);
+                            result = new { type = "command.result", action = "restore", data = restoreData };
+                            break;
+
                         // ── Default ────────────────────────────────────────────────
 
                         default:

@@ -47,5 +47,15 @@ namespace Armada.Server.WebSocket
         /// Offset for log pagination (used by get_mission_log, get_captain_log).
         /// </summary>
         public int? Offset { get; set; }
+
+        /// <summary>
+        /// File path (used by restore command).
+        /// </summary>
+        public string? FilePath { get; set; }
+
+        /// <summary>
+        /// Output path (used by backup command).
+        /// </summary>
+        public string? OutputPath { get; set; }
     }
 }
