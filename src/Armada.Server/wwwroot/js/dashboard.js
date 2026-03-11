@@ -1442,11 +1442,11 @@ function dashboard() {
                 }
             }
 
-            // Captain state changes that relate to missions
+            // Captain state changes
             if (data.type === 'captain.changed' && data.data) {
                 let c = data.data;
-                if (c.missionId && c.state) {
-                    this._notifyStateChange('Mission', c.missionId, c.missionId, c.state);
+                if (c.id && c.state) {
+                    this._notifyStateChange('Captain', c.id, c.name || c.id, c.state);
                 }
             }
         },

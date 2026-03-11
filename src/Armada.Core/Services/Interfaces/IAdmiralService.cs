@@ -30,6 +30,12 @@ namespace Armada.Core.Services.Interfaces
         Func<Mission, Dock, Task>? OnMissionComplete { get; set; }
 
         /// <summary>
+        /// Delegate invoked when a voyage completes (all missions done).
+        /// The handler receives the completed voyage.
+        /// </summary>
+        Func<Voyage, Task>? OnVoyageComplete { get; set; }
+
+        /// <summary>
         /// Dispatch a voyage with one or more missions.
         /// Creates the voyage, creates missions, and auto-assigns available captains.
         /// </summary>

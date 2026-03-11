@@ -37,8 +37,9 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <inheritdoc />
-        public async Task CheckCompletionsAsync(CancellationToken token = default)
+        public async Task<List<Voyage>> CheckCompletionsAsync(CancellationToken token = default)
         {
+            List<Voyage> completedVoyages = new List<Voyage>();
             List<Voyage> activeVoyages = await _Database.Voyages.EnumerateByStatusAsync(VoyageStatusEnum.InProgress, token).ConfigureAwait(false);
             List<Voyage> openVoyages = await _Database.Voyages.EnumerateByStatusAsync(VoyageStatusEnum.Open, token).ConfigureAwait(false);
             activeVoyages.AddRange(openVoyages);
@@ -60,8 +61,11 @@ namespace Armada.Core.Services
                     voyage.LastUpdateUtc = DateTime.UtcNow;
                     await _Database.Voyages.UpdateAsync(voyage, token).ConfigureAwait(false);
                     _Logging.Info(_Header + "voyage " + voyage.Id + " completed");
+                    completedVoyages.Add(voyage);
                 }
             }
+
+            return completedVoyages;
         }
 
         /// <inheritdoc />

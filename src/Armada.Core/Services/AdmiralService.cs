@@ -43,6 +43,9 @@ namespace Armada.Core.Services
             set => _Missions.OnMissionComplete = value;
         }
 
+        /// <inheritdoc />
+        public Func<Voyage, Task>? OnVoyageComplete { get; set; }
+
         #endregion
 
         #region Private-Members
@@ -272,7 +275,15 @@ namespace Armada.Core.Services
             }
 
             // Check for completed voyages
-            await _Voyages.CheckCompletionsAsync(token).ConfigureAwait(false);
+            List<Voyage> completedVoyages = await _Voyages.CheckCompletionsAsync(token).ConfigureAwait(false);
+            if (OnVoyageComplete != null)
+            {
+                foreach (Voyage completedVoyage in completedVoyages)
+                {
+                    try { await OnVoyageComplete.Invoke(completedVoyage).ConfigureAwait(false); }
+                    catch (Exception ex) { _Logging.Warn(_Header + "error in OnVoyageComplete callback: " + ex.Message); }
+                }
+            }
 
             // Dispatch pending missions to idle captains (prioritize if previous cycle had failures)
             if (_RetryDispatchNeeded)

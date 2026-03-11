@@ -117,9 +117,35 @@ namespace Armada.Server.WebSocket
             object payload = new
             {
                 type = "mission.changed",
-                missionId = missionId,
-                status = status,
-                title = title,
+                data = new
+                {
+                    id = missionId,
+                    title = title,
+                    status = status
+                },
+                timestamp = DateTime.UtcNow
+            };
+
+            BroadcastEvent(payload);
+        }
+
+        /// <summary>
+        /// Broadcast a voyage state change to all connected clients.
+        /// </summary>
+        /// <param name="voyageId">Voyage ID.</param>
+        /// <param name="status">New status.</param>
+        /// <param name="title">Voyage title.</param>
+        public void BroadcastVoyageChange(string voyageId, string status, string? title = null)
+        {
+            object payload = new
+            {
+                type = "voyage.changed",
+                data = new
+                {
+                    id = voyageId,
+                    title = title,
+                    status = status
+                },
                 timestamp = DateTime.UtcNow
             };
 
@@ -137,9 +163,12 @@ namespace Armada.Server.WebSocket
             object payload = new
             {
                 type = "captain.changed",
-                captainId = captainId,
-                state = state,
-                name = name,
+                data = new
+                {
+                    id = captainId,
+                    name = name,
+                    state = state
+                },
                 timestamp = DateTime.UtcNow
             };
 

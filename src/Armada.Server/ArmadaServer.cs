@@ -130,6 +130,7 @@ namespace Armada.Server
             _Admiral.OnStopAgent = HandleStopAgentAsync;
             _Admiral.OnCaptureDiff = HandleCaptureDiffAsync;
             _Admiral.OnMissionComplete = HandleMissionCompleteAsync;
+            _Admiral.OnVoyageComplete = HandleVoyageCompleteAsync;
 
             // Initialize REST API
             _App = new SwiftStackApp(ArmadaConstants.ProductName, _Quiet);
@@ -697,6 +698,19 @@ namespace Armada.Server
                         cancelledCount++;
                     }
                 }
+                // Broadcast voyage and mission cancellations for dashboard toast notifications
+                if (_WebSocketHub != null)
+                {
+                    _WebSocketHub.BroadcastVoyageChange(id, VoyageStatusEnum.Cancelled.ToString(), voyage.Title);
+                    foreach (Mission cm in missions)
+                    {
+                        if (cm.Status == MissionStatusEnum.Cancelled)
+                        {
+                            _WebSocketHub.BroadcastMissionChange(cm.Id, MissionStatusEnum.Cancelled.ToString(), cm.Title);
+                        }
+                    }
+                }
+
                 return (object)new { Voyage = voyage, CancelledMissions = cancelledCount };
             },
             api => api
@@ -886,6 +900,12 @@ namespace Armada.Server
                     entityType: "mission", entityId: id,
                     captainId: mission.CaptainId, missionId: id, vesselId: mission.VesselId, voyageId: mission.VoyageId).ConfigureAwait(false);
 
+                // Broadcast specific mission change for dashboard toast notifications
+                if (_WebSocketHub != null)
+                {
+                    _WebSocketHub.BroadcastMissionChange(id, newStatus.ToString(), mission.Title);
+                }
+
                 return (object)mission;
             },
             api => api
@@ -974,6 +994,12 @@ namespace Armada.Server
                 await EmitEventAsync("mission.restarted", "Mission " + id + " restarted",
                     entityType: "mission", entityId: id,
                     missionId: id, vesselId: mission.VesselId, voyageId: mission.VoyageId).ConfigureAwait(false);
+
+                // Broadcast specific mission change for dashboard toast notifications
+                if (_WebSocketHub != null)
+                {
+                    _WebSocketHub.BroadcastMissionChange(id, MissionStatusEnum.Pending.ToString(), mission.Title);
+                }
 
                 return (object)mission;
             },
@@ -1647,6 +1673,13 @@ namespace Armada.Server
                 entityType: "captain", entityId: captain.Id,
                 captainId: captain.Id, missionId: mission.Id, vesselId: mission.VesselId, voyageId: mission.VoyageId).ConfigureAwait(false);
 
+            // Broadcast captain and mission state changes for dashboard toast notifications
+            if (_WebSocketHub != null)
+            {
+                _WebSocketHub.BroadcastCaptainChange(captain.Id, captain.State.ToString(), captain.Name);
+                _WebSocketHub.BroadcastMissionChange(mission.Id, mission.Status.ToString(), mission.Title);
+            }
+
             return processId;
         }
 
@@ -1922,6 +1955,9 @@ namespace Armada.Server
                     vesselId = mission.VesselId,
                     voyageId = mission.VoyageId
                 });
+
+                // Broadcast specific mission change for dashboard toast notifications
+                _WebSocketHub.BroadcastMissionChange(mission.Id, mission.Status.ToString(), mission.Title);
             }
 
             // Reclaim dock (remove worktree)
@@ -1937,6 +1973,18 @@ namespace Armada.Server
             {
                 _Logging.Warn(_Header + "error reclaiming dock " + dock.Id + ": " + ex.Message);
             }
+        }
+
+        private Task HandleVoyageCompleteAsync(Voyage voyage)
+        {
+            _Logging.Info(_Header + "voyage " + voyage.Id + " completed, broadcasting to dashboard");
+
+            if (_WebSocketHub != null)
+            {
+                _WebSocketHub.BroadcastVoyageChange(voyage.Id, VoyageStatusEnum.Complete.ToString(), voyage.Title);
+            }
+
+            return Task.CompletedTask;
         }
 
         private async Task PollAndPullAfterMergeAsync(string workingDirectory, string worktreePath, string prUrl, string missionId)
