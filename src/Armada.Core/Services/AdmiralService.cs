@@ -132,7 +132,7 @@ namespace Armada.Core.Services
                 await _Missions.TryAssignAsync(mission, vessel, token).ConfigureAwait(false);
             }
 
-            // Update voyage status — only transition to InProgress if at least one mission was assigned
+            // Update voyage status - only transition to InProgress if at least one mission was assigned
             List<Mission> voyageMissions = await _Database.Missions.EnumerateByVoyageAsync(voyage.Id, token).ConfigureAwait(false);
             bool anyAssigned = voyageMissions.Any(m =>
                 m.Status == MissionStatusEnum.Assigned ||
@@ -285,11 +285,6 @@ namespace Armada.Core.Services
                 }
             }
 
-            // Dispatch pending missions to idle captains (prioritize if previous cycle had failures)
-            if (_RetryDispatchNeeded)
-            {
-                _Logging.Info(_Header + "retrying dispatch for previously failed mission assignments");
-            }
             await DispatchPendingMissionsAsync(token).ConfigureAwait(false);
 
             // Captain pool management: auto-spawn if below minimum idle count
@@ -399,9 +394,9 @@ namespace Armada.Core.Services
 
             if (activeMissions.Count == 0 && captain.ProcessId == null)
             {
-                // Orphaned captain — Working state but no missions and no process.
+                // Orphaned captain - Working state but no missions and no process.
                 // Release back to Idle so it can accept new work.
-                _Logging.Warn(_Header + "captain " + captain.Id + " is Working but has no active missions or process — releasing to Idle");
+                _Logging.Warn(_Header + "captain " + captain.Id + " is Working but has no active missions or process - releasing to Idle");
                 await _Captains.ReleaseAsync(captain, token).ConfigureAwait(false);
                 return;
             }
@@ -421,7 +416,7 @@ namespace Armada.Core.Services
                          currentMission.Status == MissionStatusEnum.Failed ||
                          currentMission.Status == MissionStatusEnum.Cancelled))
                     {
-                        _Logging.Warn(_Header + "captain " + captain.Id + " has stale ProcessId with terminal mission " + captain.CurrentMissionId + " (status: " + currentMission.Status + ") — releasing to Idle");
+                        _Logging.Warn(_Header + "captain " + captain.Id + " has stale ProcessId with terminal mission " + captain.CurrentMissionId + " (status: " + currentMission.Status + ") - releasing to Idle");
                         await _Captains.ReleaseAsync(captain, token).ConfigureAwait(false);
                         return;
                     }
@@ -459,7 +454,7 @@ namespace Armada.Core.Services
                 }
                 catch (ArgumentException)
                 {
-                    // Process no longer exists in process table — treat as clean exit
+                    // Process no longer exists in process table - treat as clean exit
                     isAlive = false;
                     exitCode = 0;
                 }
@@ -622,12 +617,21 @@ namespace Armada.Core.Services
 
         private async Task DispatchPendingMissionsAsync(CancellationToken token)
         {
+            List<Mission> pendingMissions = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending, token).ConfigureAwait(false);
+            if (pendingMissions.Count == 0)
+            {
+                _RetryDispatchNeeded = false;
+                return;
+            }
+
+            if (_RetryDispatchNeeded)
+            {
+                _Logging.Info(_Header + "retrying dispatch for pending missions that previously could not be assigned");
+            }
+
             // Check for any captains with available capacity (idle or working with room)
             bool hasCapacity = await HasAvailableCapacityAsync(token).ConfigureAwait(false);
             if (!hasCapacity) return;
-
-            List<Mission> pendingMissions = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending, token).ConfigureAwait(false);
-            if (pendingMissions.Count == 0) return;
 
             bool anyFailed = false;
 
@@ -644,7 +648,7 @@ namespace Armada.Core.Services
                 bool assigned = await _Missions.TryAssignAsync(mission, vessel, token).ConfigureAwait(false);
                 if (!assigned)
                 {
-                    _Logging.Warn(_Header + "failed to assign mission " + mission.Id + " — will retry on next health check cycle");
+                    _Logging.Warn(_Header + "could not assign pending mission " + mission.Id + " - will retry on next health check cycle");
                     anyFailed = true;
                 }
             }

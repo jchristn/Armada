@@ -14,6 +14,24 @@ namespace Armada.Test.Unit.Suites.Services
     {
         public override string Name => "Admiral Service";
 
+        private static bool GetRetryDispatchNeeded(AdmiralService service)
+        {
+            System.Reflection.FieldInfo? field = typeof(AdmiralService).GetField(
+                "_RetryDispatchNeeded",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            if (field == null) throw new InvalidOperationException("Could not find _RetryDispatchNeeded field.");
+            return (bool)field!.GetValue(service)!;
+        }
+
+        private static void SetRetryDispatchNeeded(AdmiralService service, bool value)
+        {
+            System.Reflection.FieldInfo? field = typeof(AdmiralService).GetField(
+                "_RetryDispatchNeeded",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            if (field == null) throw new InvalidOperationException("Could not find _RetryDispatchNeeded field.");
+            field!.SetValue(service, value);
+        }
+
         private LoggingModule CreateLogging()
         {
             LoggingModule logging = new LoggingModule();
@@ -495,6 +513,49 @@ namespace Armada.Test.Unit.Suites.Services
 
                     Voyage? result = await db.Voyages.ReadAsync(voyage.Id);
                     AssertEqual(VoyageStatusEnum.Complete, result!.Status);
+                }
+            });
+
+            await RunTest("HealthCheckAsync ClearsRetryFlagWhenNoPendingMissionsRemain", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    StubGitService git = new StubGitService();
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), testDb.Driver, CreateSettings(), git);
+
+                    SetRetryDispatchNeeded(service, true);
+
+                    await service.HealthCheckAsync();
+
+                    AssertFalse(GetRetryDispatchNeeded(service));
+                }
+            });
+
+            await RunTest("HealthCheckAsync KeepsRetryFlagWhenPendingMissionHasNoCapacity", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    SqliteDatabaseDriver db = testDb.Driver;
+                    StubGitService git = new StubGitService();
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), db, CreateSettings(), git);
+
+                    Fleet fleet = new Fleet("Retry Fleet");
+                    await db.Fleets.CreateAsync(fleet);
+
+                    Vessel vessel = new Vessel("Retry Vessel", "https://github.com/test/repo");
+                    vessel.FleetId = fleet.Id;
+                    await db.Vessels.CreateAsync(vessel);
+
+                    Mission mission = new Mission("Pending Retry");
+                    mission.VesselId = vessel.Id;
+                    mission.Status = MissionStatusEnum.Pending;
+                    await db.Missions.CreateAsync(mission);
+
+                    SetRetryDispatchNeeded(service, true);
+
+                    await service.HealthCheckAsync();
+
+                    AssertTrue(GetRetryDispatchNeeded(service));
                 }
             });
         }
