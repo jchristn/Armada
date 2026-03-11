@@ -1343,6 +1343,21 @@ a:hover { text-decoration: underline; }
     background: rgba(248, 113, 113, 0.08);
 }
 
+/* Doctor badges */
+.doctor-badge {
+    display: inline-block;
+    padding: 0.15rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.doctor-pass { background: var(--tag-complete-bg); color: #22c55e; }
+.doctor-warn { background: var(--tag-review-bg); color: #eab308; }
+.doctor-fail { background: var(--tag-failed-bg); color: #ef4444; }
+
 /* Responsive */
 @media (max-width: 768px) {
     .header { flex-wrap: wrap; gap: 0.5rem; }

@@ -55,6 +55,7 @@
             <button :class="{ active: view === 'notifications' }" @click="navigate('notifications')" title="Notification history for state changes" style="position: relative;">Notifications<span x-show="unreadNotificationCount > 0" class="notif-badge" x-text="unreadNotificationCount"></span></button>
             <button :class="{ active: view === 'merge-queue' }" @click="navigate('merge-queue')" title="Completed mission branches awaiting merge into main">Merge Queue</button>
             <button :class="{ active: view === 'server' }" @click="navigate('server')" title="Admiral server health, configuration, and controls">Server</button>
+            <button :class="{ active: view === 'doctor' }" @click="navigate('doctor')" title="System health diagnostics and checks">Doctor</button>
         </nav>
         <div class="header-status">
             <span class="status-dot" :class="connected ? 'connected' : 'disconnected'" title="Server connection status"></span>
@@ -1324,6 +1325,52 @@
                     <button class="btn btn-danger btn-sm" @click="stopServer()" title="Shut down the admiral server process">Stop Server</button>
                     <button class="btn btn-danger btn-sm" @click="factoryReset()" title="Delete all data and reset to factory defaults">Factory Reset</button>
                 </div>
+            </div>
+        </div>
+
+        <!-- Doctor View -->
+        <div x-show="view === 'doctor' && !detailView" class="view">
+            <div class="view-header">
+                <div>
+                    <h2>Doctor</h2>
+                    <p class="text-dim view-subtitle">System health diagnostics and checks.</p>
+                </div>
+                <div class="view-actions">
+                    <button class="btn btn-primary btn-sm" @click="runDoctorChecks()" :disabled="doctorRunning" title="Run all health checks">
+                        <span x-show="doctorRunning">Running...</span>
+                        <span x-show="!doctorRunning">Run Checks</span>
+                    </button>
+                </div>
+            </div>
+            <div x-show="doctorRunning" style="text-align:center;padding:2rem">
+                <span class="text-dim">Running health checks...</span>
+            </div>
+            <div x-show="!doctorRunning && doctorResults.length > 0" class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Check</th>
+                            <th>Status</th>
+                            <th>Message</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="check in doctorResults" :key="check.name">
+                            <tr>
+                                <td x-text="check.name" style="font-weight:500"></td>
+                                <td>
+                                    <span class="doctor-badge"
+                                          :class="'doctor-' + check.status.toLowerCase()"
+                                          x-text="check.status"></span>
+                                </td>
+                                <td class="text-dim" x-text="check.message"></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+            <div x-show="!doctorRunning && doctorResults.length === 0" class="text-dim" style="padding:2rem;text-align:center">
+                No results yet. Click "Run Checks" to start diagnostics.
             </div>
         </div>
 

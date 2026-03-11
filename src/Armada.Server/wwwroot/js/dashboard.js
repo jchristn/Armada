@@ -48,6 +48,8 @@ function dashboard() {
         mergeQueue: [],
         healthInfo: null,
         serverSettings: null,
+        doctorResults: [],
+        doctorRunning: false,
         recentMissions: [],
         selectedVoyage: null,
         voyageMissions: [],
@@ -519,6 +521,19 @@ function dashboard() {
             try { this.healthInfo = await this.api('GET', '/api/v1/status/health'); } catch (e) { console.warn('Failed to load health:', e); }
         },
 
+        async runDoctorChecks() {
+            this.doctorRunning = true;
+            this.doctorResults = [];
+            try {
+                this.doctorResults = await this.api('GET', '/api/v1/doctor');
+            } catch (e) {
+                console.warn('Failed to run doctor checks:', e);
+                this.doctorResults = [{ name: 'Error', status: 'Fail', message: 'Failed to run health checks: ' + e.message }];
+            } finally {
+                this.doctorRunning = false;
+            }
+        },
+
         // ============================================================
         // Navigation
         // ============================================================
@@ -550,6 +565,7 @@ function dashboard() {
             if (view === 'server') { this.loadHealth(); this.loadSettings(); }
             if (view === 'missions') this.loadMissions();
             if (view === 'voyages') this.loadVoyageMissionMap();
+            if (view === 'doctor') this.runDoctorChecks();
 
             if (detailView) this.loadDetail(detailView, detailId);
         },

@@ -1,8 +1,10 @@
 namespace Armada.Server
 {
     using System.Diagnostics;
+    using System.IO;
     using System.Linq;
     using System.Net;
+    using System.Runtime.InteropServices;
     using System.Text.Json;
     using SyslogLogging;
     using SwiftStack;
@@ -327,6 +329,157 @@ namespace Armada.Server
                 .WithTag("Status")
                 .WithSummary("Health check")
                 .WithDescription("Returns health status. Does not require authentication."));
+
+            _App.Rest.Get("/api/v1/doctor", async (AppRequest req) =>
+            {
+                List<object> results = new List<object>();
+
+                // 1. Settings File
+                try
+                {
+                    string settingsPath = ArmadaSettings.DefaultSettingsPath;
+                    if (File.Exists(settingsPath))
+                        results.Add(new { Name = "Settings", Status = "Pass", Message = "Settings loaded from " + settingsPath });
+                    else
+                        results.Add(new { Name = "Settings", Status = "Fail", Message = "Settings file not found at " + settingsPath });
+                }
+                catch (Exception ex)
+                {
+                    results.Add(new { Name = "Settings", Status = "Fail", Message = "Error checking settings: " + ex.Message });
+                }
+
+                // 2. Git Availability
+                try
+                {
+                    ProcessStartInfo gitPsi = new ProcessStartInfo("git", "--version")
+                    {
+                        RedirectStandardOutput = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    using (Process? gitProc = Process.Start(gitPsi))
+                    {
+                        if (gitProc != null)
+                        {
+                            string gitOutput = gitProc.StandardOutput.ReadToEnd().Trim();
+                            gitProc.WaitForExit(5000);
+                            results.Add(new { Name = "Git", Status = "Pass", Message = gitOutput });
+                        }
+                        else
+                        {
+                            results.Add(new { Name = "Git", Status = "Fail", Message = "Could not start git process" });
+                        }
+                    }
+                }
+                catch
+                {
+                    results.Add(new { Name = "Git", Status = "Fail", Message = "Git not found on PATH" });
+                }
+
+                // 3. Database
+                try
+                {
+                    string dbPath = _Settings.DatabasePath;
+                    if (File.Exists(dbPath))
+                    {
+                        FileInfo fi = new FileInfo(dbPath);
+                        results.Add(new { Name = "Database", Status = "Pass", Message = $"Database exists ({fi.Length / 1024} KB) at {dbPath}" });
+                    }
+                    else
+                    {
+                        results.Add(new { Name = "Database", Status = "Warn", Message = "Database not found at " + dbPath });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    results.Add(new { Name = "Database", Status = "Fail", Message = "Error checking database: " + ex.Message });
+                }
+
+                // 4. Admiral Server (self-check — always passes if we reach here)
+                results.Add(new { Name = "Admiral Server", Status = "Pass", Message = "Server is healthy" });
+
+                // 5. Stalled Captains
+                try
+                {
+                    List<Captain> stalledCaptains = await _Database.Captains.EnumerateByStateAsync(CaptainStateEnum.Stalled).ConfigureAwait(false);
+                    int stalledCount = stalledCaptains.Count;
+                    if (stalledCount == 0)
+                        results.Add(new { Name = "Stalled Captains", Status = "Pass", Message = "No stalled captains" });
+                    else
+                        results.Add(new { Name = "Stalled Captains", Status = "Warn", Message = $"{stalledCount} captain(s) are stalled" });
+                }
+                catch (Exception ex)
+                {
+                    results.Add(new { Name = "Stalled Captains", Status = "Fail", Message = "Error checking captains: " + ex.Message });
+                }
+
+                // 6. Failed Missions
+                try
+                {
+                    List<Mission> failedMissions = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Failed).ConfigureAwait(false);
+                    int failedCount = failedMissions.Count;
+                    if (failedCount == 0)
+                        results.Add(new { Name = "Failed Missions", Status = "Pass", Message = "No failed missions" });
+                    else
+                        results.Add(new { Name = "Failed Missions", Status = "Warn", Message = $"{failedCount} mission(s) have failed" });
+                }
+                catch (Exception ex)
+                {
+                    results.Add(new { Name = "Failed Missions", Status = "Fail", Message = "Error checking missions: " + ex.Message });
+                }
+
+                // 7. Agent Runtimes
+                string[] runtimeCommands = new string[] { "claude", "codex" };
+                string[] runtimeNames = new string[] { "Claude Code", "Codex" };
+                bool isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+                string whichCmd = isWindows ? "where" : "which";
+
+                for (int i = 0; i < runtimeCommands.Length; i++)
+                {
+                    try
+                    {
+                        ProcessStartInfo rtPsi = new ProcessStartInfo(whichCmd, runtimeCommands[i])
+                        {
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true,
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        };
+                        using (Process? rtProc = Process.Start(rtPsi))
+                        {
+                            if (rtProc != null)
+                            {
+                                string rtOutput = rtProc.StandardOutput.ReadToEnd().Trim();
+                                rtProc.WaitForExit(5000);
+                                if (rtProc.ExitCode == 0 && !string.IsNullOrEmpty(rtOutput))
+                                {
+                                    string path = rtOutput.Split('\n')[0].Trim();
+                                    results.Add(new { Name = runtimeNames[i], Status = "Pass", Message = runtimeNames[i] + " found at " + path });
+                                }
+                                else
+                                {
+                                    results.Add(new { Name = runtimeNames[i], Status = "Warn", Message = runtimeNames[i] + " not found on PATH (optional)" });
+                                }
+                            }
+                            else
+                            {
+                                results.Add(new { Name = runtimeNames[i], Status = "Warn", Message = runtimeNames[i] + " not found (optional)" });
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        results.Add(new { Name = runtimeNames[i], Status = "Warn", Message = runtimeNames[i] + " not found (optional)" });
+                    }
+                }
+
+                return results;
+            },
+            api => api
+                .WithTag("Status")
+                .WithSummary("Run system health diagnostics")
+                .WithDescription("Runs 7 system health checks and returns results as a JSON array.")
+                .WithSecurity("ApiKey"));
 
             _App.Rest.Post("/api/v1/server/stop", async (AppRequest req) =>
             {
