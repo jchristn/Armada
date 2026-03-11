@@ -9,7 +9,7 @@ namespace Armada.Desktop.Views
     using Armada.Core.Models;
 
     /// <summary>
-    /// Dialog for editing captain properties including name, runtime, and parallelism.
+    /// Dialog for editing captain properties including name and runtime.
     /// Displays recent missions assigned to the captain.
     /// </summary>
     public partial class EditCaptainDialog : Window
