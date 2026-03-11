@@ -105,7 +105,7 @@ dotnet tool install --global --add-source ./nupkg Armada.Helm
 dotnet tool uninstall --global Armada.Helm
 ```
 
-Helper scripts are in `src` named `install-tool.bat/.sh`, `remove-tool.bat/.sh`, and `reinstall-tool.bat/.sh`.
+Helper scripts are in the project root directory: `install-tool.bat/.sh`, `remove-tool.bat/.sh`, and `reinstall-tool.bat/.sh`.
 
 ### First Mission
 
