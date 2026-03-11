@@ -849,10 +849,24 @@ namespace Armada.Server
                 string id = req.Parameters["id"];
                 Mission? existing = await _Database.Missions.ReadAsync(id).ConfigureAwait(false);
                 if (existing == null) return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Mission not found" };
-                Mission updated = req.GetData<Mission>();
-                updated.Id = id;
-                updated = await _Database.Missions.UpdateAsync(updated).ConfigureAwait(false);
-                return (object)updated;
+                Mission incoming = req.GetData<Mission>();
+
+                // Merge only metadata fields onto the existing record
+                existing.Title = incoming.Title;
+                existing.Description = incoming.Description;
+                existing.Priority = incoming.Priority;
+                existing.VesselId = incoming.VesselId;
+                existing.VoyageId = incoming.VoyageId;
+                existing.BranchName = incoming.BranchName;
+                existing.PrUrl = incoming.PrUrl;
+                existing.ParentMissionId = incoming.ParentMissionId;
+                existing.LastUpdateUtc = DateTime.UtcNow;
+
+                // Preserve operational/timestamp fields: CreatedUtc, StartedUtc, CompletedUtc,
+                // Status, CaptainId, DockId, ProcessId, CommitHash, DiffSnapshot
+
+                existing = await _Database.Missions.UpdateAsync(existing).ConfigureAwait(false);
+                return (object)existing;
             },
             api => api
                 .WithTag("Missions")
