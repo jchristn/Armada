@@ -30,6 +30,7 @@ function dashboard() {
         // Toast notifications
         toasts: [],
         toastCounter: 0,
+        _lastSeenStates: {},
 
         // Data
         status: {},
@@ -921,13 +922,40 @@ function dashboard() {
         // ============================================================
         // Toast notifications
         // ============================================================
-        toast(message, type) {
+        toast(message, type, onClick) {
             type = type || 'success';
             let id = ++this.toastCounter;
-            this.toasts.push({ id, message, type });
+            this.toasts.push({ id, message, type, onClick: onClick || null });
             setTimeout(() => {
-                this.toasts = this.toasts.filter(t => t.id !== id);
-            }, 4000);
+                this.dismissToast(id);
+            }, 5000);
+        },
+
+        dismissToast(id) {
+            this.toasts = this.toasts.filter(t => t.id !== id);
+        },
+
+        _stateToastSeverity(status) {
+            if (!status) return 'info';
+            let s = status.toLowerCase();
+            if (s === 'completed' || s === 'complete' || s === 'landed' || s === 'passed') return 'success';
+            if (s === 'failed' || s === 'error') return 'error';
+            if (s === 'cancelled' || s === 'stalled' || s === 'stopping') return 'warning';
+            return 'info';
+        },
+
+        _notifyStateChange(assetType, id, name, newStatus) {
+            let key = assetType + ':' + id;
+            if (this._lastSeenStates[key] === newStatus) return;
+            this._lastSeenStates[key] = newStatus;
+            let label = name || id;
+            let message = assetType + ' "' + label + '" — ' + newStatus;
+            let severity = this._stateToastSeverity(newStatus);
+            let detailView = assetType === 'Mission' ? 'mission-detail' : 'voyage-detail';
+            let parentView = assetType === 'Mission' ? 'missions' : 'voyages';
+            this.toast(message, severity, () => {
+                this.navigate(parentView, detailView, id);
+            });
         },
 
         // ============================================================
@@ -1396,6 +1424,30 @@ function dashboard() {
                 if (this.view === 'events') this.loadEvents();
                 if (this.view === 'merge-queue') this.loadMergeQueue();
                 if (this.view === 'missions') this.loadMissions();
+            }
+
+            // Toast notifications for mission state changes
+            if (data.type === 'mission.changed' && data.data) {
+                let m = data.data;
+                if (m.status) {
+                    this._notifyStateChange('Mission', m.id, m.title, m.status);
+                }
+            }
+
+            // Toast notifications for voyage state changes
+            if (data.type === 'voyage.changed' && data.data) {
+                let v = data.data;
+                if (v.status) {
+                    this._notifyStateChange('Voyage', v.id, v.title, v.status);
+                }
+            }
+
+            // Captain state changes that relate to missions
+            if (data.type === 'captain.changed' && data.data) {
+                let c = data.data;
+                if (c.missionId && c.state) {
+                    this._notifyStateChange('Mission', c.missionId, c.missionId, c.state);
+                }
             }
         },
 

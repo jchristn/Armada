@@ -14,8 +14,11 @@
     <!-- Toast Notifications -->
     <div class="toast-container">
         <template x-for="t in toasts" :key="t.id">
-            <div class="toast" :class="'toast-' + t.type" x-text="t.message"
-                 x-transition:enter="toast-enter" x-transition:leave="toast-leave"></div>
+            <div class="toast" :class="['toast-' + t.type, t.onClick ? 'toast-clickable' : '']"
+                 x-transition:enter="toast-enter" x-transition:leave="toast-leave">
+                <span class="toast-body" @click="if (t.onClick) { t.onClick(); dismissToast(t.id); }" x-text="t.message"></span>
+                <button class="toast-close" @click.stop="dismissToast(t.id)">&times;</button>
+            </div>
         </template>
     </div>
 
