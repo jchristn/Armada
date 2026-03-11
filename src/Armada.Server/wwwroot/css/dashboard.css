@@ -1251,6 +1251,14 @@ a:hover { text-decoration: underline; }
     line-height: 1.5;
 }
 
+.diff-empty-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    font-size: 0.95rem;
+}
+
 /* Diff file header (diff --git line) */
 .diff-file-header {
     padding: 0.5rem 1rem;

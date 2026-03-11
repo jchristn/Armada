@@ -699,13 +699,20 @@ function dashboard() {
         openDiffViewer(title, rawDiff) {
             this.diffViewerTitle = title;
             this.diffViewerRawDiff = rawDiff;
-            this.diffViewerFiles = this.parseDiffFiles(rawDiff);
             this.diffViewerSelectedFile = null;
             this.diffViewerCopied = false;
             this.diffViewerOpen = true;
+            let isEmpty = !rawDiff || !rawDiff.trim() || rawDiff === 'No changes' || rawDiff === 'No modified files';
+            this.diffViewerFiles = isEmpty ? [] : this.parseDiffFiles(rawDiff);
             this.$nextTick(() => {
                 let el = document.getElementById('diff-content-area');
-                if (el) el.innerHTML = this.renderAllDiffs(rawDiff);
+                if (el) {
+                    if (isEmpty) {
+                        el.innerHTML = '<div class="diff-empty-state"><span class="text-dim">No modified files</span></div>';
+                    } else {
+                        el.innerHTML = this.renderAllDiffs(rawDiff);
+                    }
+                }
             });
         },
 
@@ -778,16 +785,21 @@ function dashboard() {
                 }
                 let text = await resp.text();
                 let result = text ? this.toCamel(JSON.parse(text)) : null;
-                let rawDiff = (result && result.diff) ? result.diff : 'No changes';
+                let rawDiff = (result && result.diff) ? result.diff : '';
                 this.openDiffViewer(title, rawDiff);
             } catch (e) {
                 let errMsg = e.name === 'AbortError' ? 'Request timed out after 30 seconds' : e.message;
-                this.diffViewerRawDiff = 'Error: ' + errMsg;
-                this.diffViewerFiles = [];
-                this.$nextTick(() => {
-                    let el = document.getElementById('diff-content-area');
-                    if (el) el.textContent = 'Error: ' + errMsg;
-                });
+                let isNotFound = errMsg.toLowerCase().includes('not found') || errMsg.includes('404') || errMsg.toLowerCase().includes('no diff available');
+                if (isNotFound) {
+                    this.openDiffViewer(title, '');
+                } else {
+                    this.diffViewerRawDiff = 'Error: ' + errMsg;
+                    this.diffViewerFiles = [];
+                    this.$nextTick(() => {
+                        let el = document.getElementById('diff-content-area');
+                        if (el) el.textContent = 'Error: ' + errMsg;
+                    });
+                }
             } finally {
                 this.detailDiffLoading = false;
                 this.diffViewerLoading = false;
@@ -1829,7 +1841,7 @@ function dashboard() {
                 let diff = response ? this.toCamel(response) : null;
                 if (diff && !diff.error) {
                     let title = 'Mission Diff' + (diff.branch ? ' (' + diff.branch + ')' : '');
-                    let rawDiff = diff.diff || 'No changes';
+                    let rawDiff = diff.diff || '';
                     this.openDiffViewer(title, rawDiff);
                 } else {
                     this.diffViewerTitle = 'Diff Error';
@@ -1839,11 +1851,17 @@ function dashboard() {
                     });
                 }
             } catch (e) {
-                this.diffViewerTitle = 'Diff Error';
-                this.$nextTick(() => {
-                    let el = document.getElementById('diff-content-area');
-                    if (el) el.textContent = e.message || 'Request failed';
-                });
+                let errMsg = e.message || 'Request failed';
+                let isNotFound = errMsg.toLowerCase().includes('not found') || errMsg.includes('404') || errMsg.toLowerCase().includes('no diff available');
+                if (isNotFound) {
+                    this.openDiffViewer('Mission Diff', '');
+                } else {
+                    this.diffViewerTitle = 'Diff Error';
+                    this.$nextTick(() => {
+                        let el = document.getElementById('diff-content-area');
+                        if (el) el.textContent = errMsg;
+                    });
+                }
             } finally {
                 this.diffViewerLoading = false;
             }
