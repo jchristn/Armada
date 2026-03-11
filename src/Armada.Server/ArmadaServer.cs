@@ -1105,7 +1105,7 @@ namespace Armada.Server
                 int totalLines = allLines.Length;
 
                 int offset = 0;
-                int lineCount = 100;
+                int lineCount = 200;
 
                 string? offsetParam = req.Query.GetValueOrDefault("offset");
                 if (!String.IsNullOrEmpty(offsetParam) && Int32.TryParse(offsetParam, out int parsedOffset))
@@ -1123,7 +1123,7 @@ namespace Armada.Server
             api => api
                 .WithTag("Missions")
                 .WithSummary("Get log for a mission")
-                .WithDescription("Returns the session log for a mission. Supports pagination via ?lines=N and ?offset=N query parameters.")
+                .WithDescription("Returns the session log for a mission. Supports pagination via ?lines=N (default 200) and ?offset=N query parameters.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
@@ -1278,7 +1278,7 @@ namespace Armada.Server
                 int totalLines = allLines.Length;
 
                 int offset = 0;
-                int lineCount = 100;
+                int lineCount = 50;
 
                 string? offsetParam = req.Query.GetValueOrDefault("offset");
                 if (!String.IsNullOrEmpty(offsetParam) && Int32.TryParse(offsetParam, out int parsedOffset))
@@ -1296,7 +1296,7 @@ namespace Armada.Server
             api => api
                 .WithTag("Captains")
                 .WithSummary("Get current log for a captain")
-                .WithDescription("Returns the current session log for a captain, resolved via the .current pointer file. Supports pagination via ?lines=N and ?offset=N.")
+                .WithDescription("Returns the current session log for a captain, resolved via the .current pointer file. Supports pagination via ?lines=N (default 50) and ?offset=N.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Captain ID (cpt_ prefix)"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));

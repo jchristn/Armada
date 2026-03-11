@@ -1526,6 +1526,38 @@
         </div>
     </div>
 
+    <!-- ========== Log Viewer Modal (live follow mode) ========== -->
+    <div class="viewer-overlay" x-show="logViewer.open" @click.self="closeLogViewer()" x-cloak
+         x-transition:enter="viewer-enter" x-transition:leave="viewer-leave">
+        <div class="viewer-modal">
+            <div class="viewer-header">
+                <h3 class="viewer-title">
+                    <span x-text="logViewer.title"></span>
+                    <span class="log-live-badge" x-show="logViewer.following">LIVE</span>
+                </h3>
+                <div class="viewer-actions">
+                    <select class="log-line-select" :value="logViewer.lineCount" @change="changeLogLineCount($event.target.value)" title="Number of lines to show">
+                        <option value="50">50 lines</option>
+                        <option value="100">100 lines</option>
+                        <option value="200">200 lines</option>
+                        <option value="500">500 lines</option>
+                        <option value="1000">1000 lines</option>
+                    </select>
+                    <button class="btn btn-sm" :class="logViewer.following ? 'btn-follow-active' : 'btn-follow-inactive'" @click="toggleLogFollow()" :title="logViewer.following ? 'Stop following' : 'Start following (auto-refresh)'">
+                        <span class="follow-dot" :class="{ 'follow-dot-active': logViewer.following }"></span>
+                        <span x-text="logViewer.following ? 'Following' : 'Follow'"></span>
+                    </button>
+                    <button class="btn btn-sm btn-primary" @click="copyLogContent()"
+                            x-text="logViewer.copied ? 'Copied!' : 'Copy'"
+                            :class="{ 'viewer-copied': logViewer.copied }"
+                            title="Copy log content to clipboard"></button>
+                    <button class="btn btn-sm" @click="closeLogViewer()" title="Close log viewer (Esc)">Close</button>
+                </div>
+            </div>
+            <pre class="viewer-body" :class="{ 'log-paused': !logViewer.following }" id="log-viewer-content" x-text="logViewer.content"></pre>
+        </div>
+    </div>
+
     <!-- ========== Diff Viewer Modal (GitHub-style two-pane diff) ========== -->
     <div class="diff-modal-overlay" x-show="diffViewerOpen" @click.self="closeDiffViewer()" x-cloak
          x-transition:enter="viewer-enter" x-transition:leave="viewer-leave">

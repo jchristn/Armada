@@ -57,6 +57,9 @@ function dashboard() {
         // Viewer modal
         viewer: { open: false, title: '', content: '', copied: false },
 
+        // Log viewer modal (follow mode)
+        logViewer: { open: false, title: '', content: '', entityType: '', entityId: '', following: false, lineCount: 200, timer: null, copied: false, totalLines: 0 },
+
         // Filters
         missionFilters: { status: '', vesselId: '', captainId: '', voyageId: '' },
         recentMissionFilters: { status: '', vesselId: '', captainId: '' },
@@ -1730,37 +1733,77 @@ function dashboard() {
             }
         },
         async viewMissionLog(missionId) {
-            this.openViewer('Loading log...', '');
-            try {
-                let result = await this.api('GET', '/api/v1/missions/' + missionId + '/log?lines=500');
-                if (result && !result.error) {
-                    let title = 'Mission Log (' + (result.lines || 0) + ' of ' + (result.totalLines || 0) + ' lines)';
-                    this.viewer.title = title;
-                    this.viewer.content = result.log || 'No log output';
-                } else {
-                    this.viewer.title = 'Log Error';
-                    this.viewer.content = (result && result.error) || 'Failed to load log';
-                }
-            } catch (e) {
-                this.viewer.title = 'Log Error';
-                this.viewer.content = e.message || 'Request failed';
-            }
+            this.openLogViewer('Mission Log', 'mission', missionId, 200);
         },
         async viewCaptainLog(captainId) {
-            this.openViewer('Loading captain log...', '');
+            this.openLogViewer('Captain Log', 'captain', captainId, 50);
+        },
+        async openLogViewer(title, entityType, entityId, defaultLines) {
+            this.logViewer = { open: true, title: title, content: '', entityType: entityType, entityId: entityId, following: false, lineCount: defaultLines || 200, timer: null, copied: false, totalLines: 0 };
+            await this.fetchLogContent();
+        },
+        async fetchLogContent() {
+            let lv = this.logViewer;
+            if (!lv.open || !lv.entityId) return;
+            let endpoint = lv.entityType === 'mission'
+                ? '/api/v1/missions/' + lv.entityId + '/log?lines=' + lv.lineCount
+                : '/api/v1/captains/' + lv.entityId + '/log?lines=' + lv.lineCount;
             try {
-                let result = await this.api('GET', '/api/v1/captains/' + captainId + '/log?lines=500');
+                let result = await this.api('GET', endpoint);
+                if (!this.logViewer.open) return;
                 if (result && !result.error) {
-                    let title = 'Captain Log (' + (result.lines || 0) + ' of ' + (result.totalLines || 0) + ' lines)';
-                    this.viewer.title = title;
-                    this.viewer.content = result.log || 'No log output';
+                    this.logViewer.content = result.log || 'No log output';
+                    this.logViewer.totalLines = result.totalLines || 0;
+                    let showing = result.lines || 0;
+                    let total = result.totalLines || 0;
+                    this.logViewer.title = (lv.entityType === 'mission' ? 'Mission' : 'Captain') + ' Log (' + showing + ' of ' + total + ' lines)';
+                    if (this.logViewer.following) {
+                        this.$nextTick(() => {
+                            let el = document.getElementById('log-viewer-content');
+                            if (el) el.scrollTop = el.scrollHeight;
+                        });
+                    }
                 } else {
-                    this.viewer.title = 'Log Error';
-                    this.viewer.content = (result && result.error) || 'Failed to load log';
+                    this.logViewer.title = 'Log Error';
+                    this.logViewer.content = (result && result.error) || 'Failed to load log';
                 }
             } catch (e) {
-                this.viewer.title = 'Log Error';
-                this.viewer.content = e.message || 'Request failed';
+                if (!this.logViewer.open) return;
+                this.logViewer.title = 'Log Error';
+                this.logViewer.content = e.message || 'Request failed';
+            }
+        },
+        toggleLogFollow() {
+            this.logViewer.following = !this.logViewer.following;
+            if (this.logViewer.following) {
+                this.fetchLogContent();
+                this.logViewer.timer = setInterval(() => { this.fetchLogContent(); }, 1000);
+            } else {
+                this.stopLogFollow();
+            }
+        },
+        stopLogFollow() {
+            if (this.logViewer.timer) {
+                clearInterval(this.logViewer.timer);
+                this.logViewer.timer = null;
+            }
+            this.logViewer.following = false;
+        },
+        changeLogLineCount(count) {
+            this.logViewer.lineCount = parseInt(count) || 200;
+            this.fetchLogContent();
+        },
+        closeLogViewer() {
+            this.stopLogFollow();
+            this.logViewer = { open: false, title: '', content: '', entityType: '', entityId: '', following: false, lineCount: 200, timer: null, copied: false, totalLines: 0 };
+        },
+        async copyLogContent() {
+            try {
+                await navigator.clipboard.writeText(this.logViewer.content);
+                this.logViewer.copied = true;
+                setTimeout(() => { this.logViewer.copied = false; }, 2000);
+            } catch (e) {
+                this.toast('Failed to copy to clipboard', 'error');
             }
         },
 
@@ -1789,6 +1832,7 @@ function dashboard() {
         handleKeyboard(e) {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
             if (this.diffViewerOpen && e.key === 'Escape') { this.closeDiffViewer(); return; }
+            if (this.logViewer.open && e.key === 'Escape') { this.closeLogViewer(); return; }
             if (this.viewer.open && e.key === 'Escape') { this.closeViewer(); return; }
             if (this.modal) {
                 if (e.key === 'Escape') this.modal = null;
