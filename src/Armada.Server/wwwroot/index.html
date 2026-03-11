@@ -97,8 +97,8 @@
                     <p class="text-dim view-subtitle">Overview of fleet health, active missions, and recent activity.</p>
                 </div>
                 <div class="view-actions">
-                    <button class="btn btn-primary btn-sm" @click="openCreateVoyage()" title="Create a new voyage with multiple missions">+ Voyage</button>
-                    <button class="btn btn-primary btn-sm" @click="showDispatchForm = true; navigate('missions'); loadMissions()" title="Create and dispatch a new mission to a captain">+ Mission</button>
+                    <button class="btn btn-primary btn-sm" @click="showDispatchForm = true; dispatchMode = 'quick'; navigate('missions'); loadMissions()" title="Smart dispatch with NLP task parsing">+ Dispatch</button>
+                    <button class="btn btn-primary btn-sm" @click="openCreateVoyage()" title="Create a new voyage with multiple missions (advanced)">+ Voyage</button>
                     <button class="btn btn-sm refresh-btn" @click="dashboardRefresh($event)" title="Refresh all dashboard data">&#x21bb;</button>
                 </div>
             </div>
@@ -533,7 +533,7 @@
                     <p class="text-dim view-subtitle">Individual work units assigned to AI captains. Create, monitor, and manage mission execution.</p>
                 </div>
                 <div class="view-actions filter-bar">
-                    <button class="btn btn-primary btn-sm" @click="showDispatchForm = !showDispatchForm" title="Create and dispatch a new mission">+ Mission</button>
+                    <button class="btn btn-primary btn-sm" @click="showDispatchForm = !showDispatchForm; quickDispatchResult = null; dispatchResult = null" title="Create and dispatch missions">+ Dispatch</button>
                     <select class="filter-select" x-model="missionFilters.status" @change="missionPaging.pageNumber = 1; loadMissions()" title="Filter missions by lifecycle status">
                         <option value="">All Statuses</option>
                         <option value="Pending">Pending</option>
@@ -560,52 +560,99 @@
                     <input type="text" class="filter-input" x-model="listSearch" placeholder="Search..." title="Search missions by title or ID">
                 </div>
             </div>
-            <!-- Inline Dispatch Form -->
+            <!-- Inline Dispatch Form (two-mode) -->
             <div class="card" x-show="showDispatchForm" x-transition style="margin-bottom:1rem">
-                <form @submit.prevent="dispatchMission().then(() => { if(dispatchResult?.ok) { showDispatchForm = false; loadMissions(); } })" class="dispatch-form">
+                <!-- Mode tabs -->
+                <div class="dispatch-tabs">
+                    <button class="dispatch-tab" :class="dispatchMode === 'quick' ? 'active' : ''" @click="dispatchMode = 'quick'" title="Natural language task input with smart splitting">Quick</button>
+                    <button class="dispatch-tab" :class="dispatchMode === 'advanced' ? 'active' : ''" @click="dispatchMode = 'advanced'" title="Manual mission fields with full control">Advanced</button>
+                </div>
+
+                <!-- Quick Mode -->
+                <div x-show="dispatchMode === 'quick'" class="dispatch-form">
                     <div class="form-group">
-                        <label>Title</label>
-                        <input type="text" x-model="dispatch.title" placeholder="What needs to be done?" required title="Short summary of what the mission should accomplish">
-                    </div>
-                    <div class="form-group">
-                        <label>Description</label>
-                        <textarea x-model="dispatch.description" rows="3" placeholder="Detailed instructions for the AI captain..." title="Detailed instructions and context for the AI captain"></textarea>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group" style="flex:2">
-                            <label>Vessel</label>
-                            <select x-model="dispatch.vesselId" required title="The repository where the mission will be executed">
-                                <option value="">Select a vessel...</option>
-                                <template x-for="v in allVessels" :key="v.id">
-                                    <option :value="v.id" x-text="v.name + ' (' + v.id + ')'"></option>
-                                </template>
-                            </select>
-                        </div>
-                        <div class="form-group" style="flex:1">
-                            <label>Priority</label>
-                            <input type="number" x-model="dispatch.priority" min="0" max="1000" placeholder="100" title="Higher priority missions are assigned first (default 100)">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label>Voyage (optional)</label>
-                        <select x-model="dispatch.voyageId" title="Optionally group this mission into an existing voyage">
-                            <option value="">No voyage</option>
-                            <template x-for="v in voyages.filter(v => v.status === 'Open' || v.status === 'InProgress')" :key="v.id">
-                                <option :value="v.id" x-text="v.title + ' (' + v.id + ')'"></option>
+                        <label>Vessel</label>
+                        <select x-model="quickDispatch.vesselId" required title="The repository where missions will be executed">
+                            <option value="">Select a vessel...</option>
+                            <template x-for="v in allVessels" :key="v.id">
+                                <option :value="v.id" x-text="v.name + ' (' + v.id + ')'"></option>
                             </template>
                         </select>
                     </div>
-                    <div class="form-actions">
-                        <button type="submit" class="btn btn-primary" :disabled="dispatching" title="Create the mission and assign it to an available captain">
-                            <span x-show="!dispatching">Dispatch Mission</span>
-                            <span x-show="dispatching">Dispatching...</span>
-                        </button>
-                        <button type="button" class="btn btn-sm" @click="showDispatchForm = false" title="Close the dispatch form without creating a mission">Cancel</button>
+                    <div class="form-group">
+                        <label>Tasks</label>
+                        <textarea x-model="quickDispatch.prompt" rows="5" placeholder="Describe your tasks in natural language.&#10;&#10;Use numbered lists, semicolons, or just describe a single task:&#10;1. Add user authentication&#10;2. Create dashboard page&#10;3. Write unit tests" @input="previewQuickTasks()" title="Enter tasks as a numbered list, semicolon-separated, or as a single task"></textarea>
                     </div>
-                    <template x-if="dispatchResult">
-                        <div class="alert" :class="dispatchResult.ok ? 'alert-success' : 'alert-error'" x-text="dispatchResult.message"></div>
+                    <!-- Task preview -->
+                    <div x-show="quickParsedTasks.length > 0" class="dispatch-preview">
+                        <div class="dispatch-preview-header">
+                            <span x-text="quickParsedTasks.length + ' task' + (quickParsedTasks.length !== 1 ? 's' : '') + ' detected'"></span>
+                        </div>
+                        <ol class="dispatch-preview-list">
+                            <template x-for="(task, i) in quickParsedTasks" :key="i">
+                                <li x-text="task"></li>
+                            </template>
+                        </ol>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-primary" :disabled="quickDispatching || !quickDispatch.vesselId || !quickDispatch.prompt.trim()" @click="quickDispatchVoyage()" title="Create a voyage with the parsed tasks">
+                            <span x-show="!quickDispatching">Dispatch</span>
+                            <span x-show="quickDispatching">Dispatching...</span>
+                        </button>
+                        <button type="button" class="btn btn-sm" @click="showDispatchForm = false" title="Close">Cancel</button>
+                    </div>
+                    <template x-if="quickDispatchResult">
+                        <div class="alert" :class="quickDispatchResult.ok ? 'alert-success' : 'alert-error'" x-text="quickDispatchResult.message"></div>
                     </template>
-                </form>
+                </div>
+
+                <!-- Advanced Mode (existing single-mission dispatch) -->
+                <div x-show="dispatchMode === 'advanced'">
+                    <form @submit.prevent="dispatchMission().then(() => { if(dispatchResult?.ok) { showDispatchForm = false; loadMissions(); } })" class="dispatch-form">
+                        <div class="form-group">
+                            <label>Title</label>
+                            <input type="text" x-model="dispatch.title" placeholder="What needs to be done?" required title="Short summary of what the mission should accomplish">
+                        </div>
+                        <div class="form-group">
+                            <label>Description</label>
+                            <textarea x-model="dispatch.description" rows="3" placeholder="Detailed instructions for the AI captain..." title="Detailed instructions and context for the AI captain"></textarea>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group" style="flex:2">
+                                <label>Vessel</label>
+                                <select x-model="dispatch.vesselId" required title="The repository where the mission will be executed">
+                                    <option value="">Select a vessel...</option>
+                                    <template x-for="v in allVessels" :key="v.id">
+                                        <option :value="v.id" x-text="v.name + ' (' + v.id + ')'"></option>
+                                    </template>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex:1">
+                                <label>Priority</label>
+                                <input type="number" x-model="dispatch.priority" min="0" max="1000" placeholder="100" title="Higher priority missions are assigned first (default 100)">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Voyage (optional)</label>
+                            <select x-model="dispatch.voyageId" title="Optionally group this mission into an existing voyage">
+                                <option value="">No voyage</option>
+                                <template x-for="v in voyages.filter(v => v.status === 'Open' || v.status === 'InProgress')" :key="v.id">
+                                    <option :value="v.id" x-text="v.title + ' (' + v.id + ')'"></option>
+                                </template>
+                            </select>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary" :disabled="dispatching" title="Create the mission and assign it to an available captain">
+                                <span x-show="!dispatching">Dispatch Mission</span>
+                                <span x-show="dispatching">Dispatching...</span>
+                            </button>
+                            <button type="button" class="btn btn-sm" @click="showDispatchForm = false" title="Close the dispatch form without creating a mission">Cancel</button>
+                        </div>
+                        <template x-if="dispatchResult">
+                            <div class="alert" :class="dispatchResult.ok ? 'alert-success' : 'alert-error'" x-text="dispatchResult.message"></div>
+                        </template>
+                    </form>
+                </div>
             </div>
             <!-- Missions Pagination -->
             <div class="pagination-bar" x-show="missionPaging.totalPages > 0">

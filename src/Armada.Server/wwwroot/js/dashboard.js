@@ -95,6 +95,13 @@ function dashboard() {
         dispatching: false,
         dispatchResult: null,
         showDispatchForm: false,
+        dispatchMode: 'quick',
+
+        // Quick dispatch (NLP task parsing)
+        quickDispatch: { prompt: '', vesselId: '' },
+        quickParsedTasks: [],
+        quickDispatching: false,
+        quickDispatchResult: null,
 
         // CRUD modals
         modal: null,       // 'create-fleet', 'edit-fleet', 'create-vessel', etc.
@@ -548,6 +555,8 @@ function dashboard() {
             this.listSearch = '';
             this.showDispatchForm = false;
             this.dispatchResult = null;
+            this.quickDispatchResult = null;
+            this.quickParsedTasks = [];
             this.updateBreadcrumbs();
 
             // Reset pagination to page 1 when navigating to a view
@@ -1105,6 +1114,59 @@ function dashboard() {
                 this.toast('Dispatch failed: ' + e.message, 'error');
             } finally {
                 this.dispatching = false;
+            }
+        },
+
+        parseTasks(prompt) {
+            if (!prompt || !prompt.trim()) return [];
+            // 1. Try numbered list regex
+            let numbered = [];
+            let re = /(?:^|\n)\s*(\d+)\.\s+(.+?)(?=\n\s*\d+\.\s|$)/gs;
+            let m;
+            while ((m = re.exec(prompt)) !== null) {
+                let text = m[2].trim();
+                if (text) numbered.push(text);
+            }
+            if (numbered.length >= 2) return numbered;
+            // 2. Try semicolon split
+            let parts = prompt.split(';').map(s => s.trim()).filter(s => s.length > 0);
+            if (parts.length >= 2) return parts;
+            // 3. Fallback: entire prompt is one task
+            return [prompt.trim()];
+        },
+
+        previewQuickTasks() {
+            this.quickParsedTasks = this.parseTasks(this.quickDispatch.prompt);
+        },
+
+        async quickDispatchVoyage() {
+            let tasks = this.quickParsedTasks;
+            if (!tasks.length) {
+                tasks = this.parseTasks(this.quickDispatch.prompt);
+                this.quickParsedTasks = tasks;
+            }
+            if (!tasks.length) return;
+            let vesselId = this.quickDispatch.vesselId;
+            if (!vesselId) { this.toast('Please select a vessel', 'error'); return; }
+
+            this.quickDispatching = true;
+            this.quickDispatchResult = null;
+            try {
+                let title = tasks.length > 1 ? 'Multi-task voyage' : tasks[0].substring(0, 80);
+                let missions = tasks.map(t => ({ title: t, description: t }));
+                let body = { title: title, vesselId: vesselId, missions: missions };
+                let voyage = await this.api('POST', '/api/v1/voyages', body);
+                let missionCount = missions.length;
+                this.quickDispatchResult = { ok: true, message: 'Dispatched 1 voyage with ' + missionCount + ' mission' + (missionCount !== 1 ? 's' : '') };
+                this.toast('Voyage dispatched: ' + voyage.id);
+                this.quickDispatch = { prompt: '', vesselId: vesselId };
+                this.quickParsedTasks = [];
+                await this.refresh();
+            } catch (e) {
+                this.quickDispatchResult = { ok: false, message: 'Failed: ' + e.message };
+                this.toast('Dispatch failed: ' + e.message, 'error');
+            } finally {
+                this.quickDispatching = false;
             }
         },
 

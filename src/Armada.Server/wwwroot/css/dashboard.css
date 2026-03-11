@@ -1358,6 +1358,55 @@ a:hover { text-decoration: underline; }
 .doctor-warn { background: var(--tag-review-bg); color: #eab308; }
 .doctor-fail { background: var(--tag-failed-bg); color: #ef4444; }
 
+/* Dispatch tabs and task preview */
+.dispatch-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.dispatch-tab {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-dim);
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+    font-family: var(--font);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.dispatch-tab:hover { color: var(--text); }
+.dispatch-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.dispatch-preview {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+}
+
+.dispatch-preview-header {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-dim);
+    margin-bottom: 0.4rem;
+}
+
+.dispatch-preview-list {
+    margin: 0;
+    padding-left: 1.5rem;
+    font-size: 0.85rem;
+    color: var(--text);
+}
+
+.dispatch-preview-list li {
+    padding: 0.15rem 0;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .header { flex-wrap: wrap; gap: 0.5rem; }
