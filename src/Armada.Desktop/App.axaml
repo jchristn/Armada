@@ -1,0 +1,28 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:Armada.Desktop"
+             x:Class="Armada.Desktop.App"
+             x:DataType="local:App"
+             RequestedThemeVariant="Dark">
+    <!-- Default to Dark; user can change to System or Light in Settings -->
+    <Application.Styles>
+        <FluentTheme />
+        <StyleInclude Source="avares://Armada.Desktop/Assets/Theme.axaml" />
+    </Application.Styles>
+
+    <TrayIcon.Icons>
+        <TrayIcons>
+            <TrayIcon Icon="avares://Armada.Desktop/Assets/logo.png"
+                      ToolTipText="Armada"
+                      Command="{Binding ShowWindowCommand}">
+                <TrayIcon.Menu>
+                    <NativeMenu>
+                        <NativeMenuItem Header="Show Armada" Command="{Binding ShowWindowCommand}" />
+                        <NativeMenuItemSeparator />
+                        <NativeMenuItem Header="Exit" Command="{Binding ExitCommand}" />
+                    </NativeMenu>
+                </TrayIcon.Menu>
+            </TrayIcon>
+        </TrayIcons>
+    </TrayIcon.Icons>
+</Application>

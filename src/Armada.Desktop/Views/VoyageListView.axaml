@@ -1,0 +1,225 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Armada.Desktop.ViewModels"
+             xmlns:models="using:Armada.Core.Models"
+             x:Class="Armada.Desktop.Views.VoyageListView"
+             x:DataType="vm:VoyageListViewModel">
+
+    <Grid RowDefinitions="Auto,Auto,*">
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Spacing="0" Margin="0,0,0,16">
+            <DockPanel>
+                <TextBlock Text="Voyages" Classes="page-title" DockPanel.Dock="Left" />
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Top">
+                    <TextBlock Text="Status:" FontSize="12" Foreground="{DynamicResource TextDimBrush}"
+                               VerticalAlignment="Center" />
+                    <ComboBox ItemsSource="{Binding StatusFilters}"
+                              SelectedItem="{Binding StatusFilter}"
+                              MinWidth="120" FontSize="12"
+                              ToolTip.Tip="Filter voyages by status" />
+                    <TextBlock Text="Vessel:" FontSize="12" Foreground="{DynamicResource TextDimBrush}"
+                               VerticalAlignment="Center" />
+                    <ComboBox ItemsSource="{Binding VesselFilters}"
+                              SelectedItem="{Binding VesselFilter}"
+                              MinWidth="140" FontSize="12"
+                              ToolTip.Tip="Filter voyages by vessel (shows voyages with missions targeting this vessel)" />
+                    <Button Content="New Voyage" Classes="action"
+                            Click="OnToggleCreateVoyageClick" ToolTip.Tip="Create a new voyage batch" />
+                </StackPanel>
+            </DockPanel>
+            <TextBlock Text="Track batches of related missions dispatched together." Classes="page-subtitle" />
+            <ProgressBar IsIndeterminate="True" Height="2" IsVisible="{Binding IsLoading}"
+                         Foreground="{StaticResource ArmadaBlueBrush}" Margin="0,4,0,0" />
+
+            <!-- Create Voyage form -->
+            <Border IsVisible="{Binding ShowCreateVoyage}" Background="{DynamicResource SurfaceHoverBrush}"
+                    CornerRadius="6" Padding="12">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="NEW VOYAGE" FontSize="11" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextDimBrush}" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBox Watermark="Title" Text="{Binding NewVoyageTitle}" Width="300"
+                                 ToolTip.Tip="Name for this voyage batch" />
+                    </StackPanel>
+                    <TextBox Watermark="Description (optional)" Text="{Binding NewVoyageDescription}"
+                             AcceptsReturn="True" TextWrapping="Wrap" Height="60"
+                             ToolTip.Tip="Optional description of the voyage's purpose" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Create" Classes="action" Click="OnCreateVoyageClick"
+                                ToolTip.Tip="Create the new voyage" />
+                        <Button Content="Cancel" Click="OnCancelCreateVoyageClick"
+                                ToolTip.Tip="Cancel voyage creation" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+
+        <!-- Pagination Bar -->
+        <Border Grid.Row="1" Background="{DynamicResource SurfaceHoverBrush}"
+                CornerRadius="4" Padding="8" Margin="0,0,0,8">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding TotalRecords, StringFormat='{}{0} records'}"
+                               FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <TextBlock Text="Show:" FontSize="12" Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center" Margin="12,0,0,0" />
+                    <ComboBox ItemsSource="{Binding PageSizeOptions}" SelectedItem="{Binding PageSize}" MinWidth="70" FontSize="12"
+                              ToolTip.Tip="Number of records per page" />
+                </StackPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="16,0,0,0">
+                    <Button Content="Prev" Click="OnPreviousPageClick"
+                            IsEnabled="{Binding CanGoPrevious}" Padding="8,4" FontSize="12"
+                            ToolTip.Tip="Go to previous page" />
+                    <TextBlock Text="{Binding PaginationText}" VerticalAlignment="Center" Margin="8,0"
+                               FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <Button Content="Next" Click="OnNextPageClick"
+                            IsEnabled="{Binding CanGoNext}" Padding="8,4" FontSize="12"
+                            ToolTip.Tip="Go to next page" />
+                    <Button Content="Refresh" Click="OnRefreshPageClick" Padding="8,4" FontSize="12"
+                            ToolTip.Tip="Refresh current page" Margin="8,0,0,0" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Content: List + Detail -->
+        <Grid Grid.Row="2" ColumnDefinitions="*,*">
+
+            <!-- Voyage list -->
+            <Border Grid.Column="0" Classes="card" Margin="0,0,8,0">
+                <StackPanel Spacing="4">
+                    <ItemsControl ItemsSource="{Binding Voyages}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:VoyageDisplayItem">
+                                <Button Classes="nav-item" HorizontalContentAlignment="Stretch"
+                                        Tag="{Binding Voyage.Id}" Click="OnVoyageClick">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="{Binding Voyage.Title}" FontWeight="SemiBold"
+                                                       FontSize="13" Foreground="{DynamicResource TextPrimaryBrush}" />
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock Text="{Binding Voyage.Status}" FontSize="10"
+                                                           Foreground="{DynamicResource TextDimBrush}" />
+                                                <TextBlock Text="{Binding Voyage.CreatedUtc, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}"
+                                                           FontSize="10" Foreground="{DynamicResource TextDimBrush}" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                            <TextBlock Text="{Binding ProgressText}" FontSize="14" FontWeight="Bold"
+                                                       Foreground="{StaticResource ArmadaBlueBrush}"
+                                                       HorizontalAlignment="Right" />
+                                            <ProgressBar Value="{Binding Progress}" Minimum="0" Maximum="100"
+                                                         Width="60" Height="3"
+                                                         Foreground="{StaticResource ArmadaBlueBrush}"
+                                                         Background="{DynamicResource SurfaceBorderBrush}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="No voyages found"
+                               FontSize="12" Foreground="{DynamicResource TextDimBrush}"
+                               IsVisible="{Binding !Voyages.Count}"
+                               HorizontalAlignment="Center" Margin="0,24" />
+                </StackPanel>
+            </Border>
+
+            <!-- Voyage detail -->
+            <Border Grid.Column="1" Classes="card" Margin="8,0,0,0">
+                <Panel>
+                    <StackPanel Spacing="12" IsVisible="{Binding SelectedVoyage, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <TextBlock Text="{Binding SelectedVoyage.Title}" FontSize="18" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <WrapPanel Orientation="Horizontal">
+                            <TextBlock FontSize="11" Foreground="{DynamicResource TextDimBrush}" Margin="0,0,16,0">
+                                <Run Text="ID: " />
+                                <Run Text="{Binding SelectedVoyage.Id}" />
+                            </TextBlock>
+                            <TextBlock FontSize="11" Foreground="{DynamicResource TextDimBrush}" Margin="0,0,16,0">
+                                <Run Text="Status: " />
+                                <Run Text="{Binding SelectedVoyage.Status}" />
+                            </TextBlock>
+                            <TextBlock FontSize="11" Foreground="{DynamicResource TextDimBrush}" Margin="0,0,16,0">
+                                <Run Text="Created: " />
+                                <Run Text="{Binding SelectedVoyage.CreatedUtc, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}" />
+                            </TextBlock>
+                            <TextBlock FontSize="11" Foreground="{DynamicResource TextDimBrush}" Margin="0,0,16,0"
+                                       IsVisible="{Binding SelectedVoyage.CompletedUtc, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                <Run Text="Completed: " />
+                                <Run Text="{Binding SelectedVoyage.CompletedUtc, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}" />
+                            </TextBlock>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding SelectedVoyage.Description}" FontSize="12"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"
+                                   IsVisible="{Binding SelectedVoyage.Description, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+                        <TextBlock Text="MISSIONS" Classes="section-header" Margin="0" />
+
+                        <!-- Mission headers -->
+                        <Grid ColumnDefinitions="*,90,140,160" Margin="0,0,0,4">
+                            <TextBlock Grid.Column="0" Text="Title" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Left"
+                                       ToolTip.Tip="Mission name or description" />
+                            <TextBlock Grid.Column="1" Text="Status" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Left"
+                                       ToolTip.Tip="Current mission status: Pending, Assigned, InProgress, Complete, Failed, or Cancelled" />
+                            <TextBlock Grid.Column="2" Text="Captain" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Left"
+                                       ToolTip.Tip="Captain assigned to this mission" />
+                            <TextBlock Grid.Column="3" Text="Branch" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Left"
+                                       ToolTip.Tip="Git branch created for this mission" />
+                        </Grid>
+                        <ScrollViewer MaxHeight="400" VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding SelectedVoyageMissions}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:Mission">
+                                        <Border Padding="4,4" Margin="0,1"
+                                                Background="{DynamicResource SurfaceHoverBrush}"
+                                                CornerRadius="2">
+                                            <Grid ColumnDefinitions="*,90,140,160">
+                                                <TextBlock Grid.Column="0" Text="{Binding Title}" FontSize="12"
+                                                           Foreground="{DynamicResource TextPrimaryBrush}"
+                                                           TextTrimming="CharacterEllipsis" TextAlignment="Left"
+                                                           VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Status}" FontSize="12"
+                                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                                           HorizontalAlignment="Left" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="2" Text="{Binding CaptainId}" FontSize="11"
+                                                           Foreground="{DynamicResource TextDimBrush}"
+                                                           TextTrimming="CharacterEllipsis" TextAlignment="Left"
+                                                           VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="3" Text="{Binding BranchName}" FontSize="11"
+                                                           Foreground="{DynamicResource TextDimBrush}"
+                                                           TextTrimming="CharacterEllipsis" TextAlignment="Left"
+                                                           VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+                            <Button Content="Retry Failed" Classes="action"
+                                    Click="OnRetryFailedClick" ToolTip.Tip="Re-dispatch all failed missions in this voyage"
+                                    IsVisible="{Binding CanRetryFailed}" />
+                            <Button Content="Cancel Voyage" Classes="danger"
+                                    Click="OnCancelVoyageClick" ToolTip.Tip="Cancel all remaining missions in this voyage"
+                                    IsVisible="{Binding CanCancelVoyage}" />
+                            <Button Content="Delete Voyage" Classes="danger"
+                                    Click="OnDeleteVoyageClick" ToolTip.Tip="Permanently delete this voyage and all its missions"
+                                    IsVisible="{Binding CanDeleteVoyage}" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <TextBlock Text="Select a voyage to view details"
+                               FontSize="12" Foreground="{DynamicResource TextDimBrush}"
+                               IsVisible="{Binding SelectedVoyage, Converter={x:Static ObjectConverters.IsNull}}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Panel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

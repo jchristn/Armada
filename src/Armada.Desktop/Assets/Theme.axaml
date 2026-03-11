@@ -1,0 +1,213 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Armada brand and status colors (shared across themes) -->
+    <Style>
+        <Style.Resources>
+            <ResourceDictionary>
+                <!-- Primary palette (theme-invariant) -->
+                <Color x:Key="ArmadaBlue">#1E90FF</Color>
+                <Color x:Key="ArmadaDarkBlue">#1565C0</Color>
+                <Color x:Key="ArmadaAccent">#64B5F6</Color>
+
+                <!-- Status colors (theme-invariant) -->
+                <Color x:Key="StatusGreen">#4CAF50</Color>
+                <Color x:Key="StatusGold">#FFB300</Color>
+                <Color x:Key="StatusRed">#EF5350</Color>
+                <Color x:Key="StatusGrey">#9E9E9E</Color>
+                <Color x:Key="StatusPurple">#AB47BC</Color>
+                <Color x:Key="StatusOrange">#FF7043</Color>
+                <Color x:Key="StatusCyan">#26C6DA</Color>
+
+                <SolidColorBrush x:Key="ArmadaBlueBrush" Color="{StaticResource ArmadaBlue}" />
+                <SolidColorBrush x:Key="ArmadaDarkBlueBrush" Color="{StaticResource ArmadaDarkBlue}" />
+                <SolidColorBrush x:Key="ArmadaAccentBrush" Color="{StaticResource ArmadaAccent}" />
+                <SolidColorBrush x:Key="StatusGreenBrush" Color="{StaticResource StatusGreen}" />
+                <SolidColorBrush x:Key="StatusGoldBrush" Color="{StaticResource StatusGold}" />
+                <SolidColorBrush x:Key="StatusRedBrush" Color="{StaticResource StatusRed}" />
+                <SolidColorBrush x:Key="StatusGreyBrush" Color="{StaticResource StatusGrey}" />
+                <SolidColorBrush x:Key="StatusPurpleBrush" Color="{StaticResource StatusPurple}" />
+                <SolidColorBrush x:Key="StatusOrangeBrush" Color="{StaticResource StatusOrange}" />
+
+                <!-- Theme-variant resources -->
+                <ResourceDictionary.ThemeDictionaries>
+                    <!-- Dark theme (deep slate palette) -->
+                    <ResourceDictionary x:Key="Dark">
+                        <SolidColorBrush x:Key="SurfaceDarkBrush" Color="#080d1a" />
+                        <SolidColorBrush x:Key="SurfaceMidBrush" Color="#060a14" />
+                        <SolidColorBrush x:Key="SurfaceCardBrush" Color="#111827" />
+                        <SolidColorBrush x:Key="SurfaceHoverBrush" Color="#1e293b" />
+                        <SolidColorBrush x:Key="SurfaceBorderBrush" Color="#1e293b" />
+                        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#f1f5f9" />
+                        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#94a3b8" />
+                        <SolidColorBrush x:Key="TextDimBrush" Color="#64748b" />
+                        <SolidColorBrush x:Key="ToastBackgroundBrush" Color="#E0111827" />
+                        <!-- Sidebar (dark in both themes) -->
+                        <SolidColorBrush x:Key="SidebarTextBrush" Color="#cbd5e1" />
+                        <SolidColorBrush x:Key="SidebarTextActiveBrush" Color="#f1f5f9" />
+                        <SolidColorBrush x:Key="SidebarTextDimBrush" Color="#64748b" />
+                        <SolidColorBrush x:Key="SidebarHoverBrush" Color="#111827" />
+                        <SolidColorBrush x:Key="SidebarBorderBrush" Color="#1e293b" />
+                    </ResourceDictionary>
+
+                    <!-- Light theme (slate palette from recalldb/conductor) -->
+                    <ResourceDictionary x:Key="Light">
+                        <SolidColorBrush x:Key="SurfaceDarkBrush" Color="#f8fafc" />
+                        <SolidColorBrush x:Key="SurfaceMidBrush" Color="#1e293b" />
+                        <SolidColorBrush x:Key="SurfaceCardBrush" Color="#ffffff" />
+                        <SolidColorBrush x:Key="SurfaceHoverBrush" Color="#f1f5f9" />
+                        <SolidColorBrush x:Key="SurfaceBorderBrush" Color="#e2e8f0" />
+                        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#1e293b" />
+                        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#64748b" />
+                        <SolidColorBrush x:Key="TextDimBrush" Color="#94a3b8" />
+                        <SolidColorBrush x:Key="ToastBackgroundBrush" Color="#F0ffffff" />
+                        <!-- Sidebar (dark in both themes) -->
+                        <SolidColorBrush x:Key="SidebarTextBrush" Color="#cbd5e1" />
+                        <SolidColorBrush x:Key="SidebarTextActiveBrush" Color="#ffffff" />
+                        <SolidColorBrush x:Key="SidebarTextDimBrush" Color="#94a3b8" />
+                        <SolidColorBrush x:Key="SidebarHoverBrush" Color="#334155" />
+                        <SolidColorBrush x:Key="SidebarBorderBrush" Color="#334155" />
+                    </ResourceDictionary>
+                </ResourceDictionary.ThemeDictionaries>
+            </ResourceDictionary>
+        </Style.Resources>
+    </Style>
+
+    <!-- Card style -->
+    <Style Selector="Border.card">
+        <Setter Property="Background" Value="{DynamicResource SurfaceCardBrush}" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="16" />
+        <Setter Property="Margin" Value="4" />
+    </Style>
+
+    <!-- Status badge style -->
+    <Style Selector="Border.badge">
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Padding" Value="6,2" />
+        <Setter Property="Margin" Value="2" />
+    </Style>
+
+    <!-- Stat card -->
+    <Style Selector="Border.stat-card">
+        <Setter Property="Background" Value="{DynamicResource SurfaceCardBrush}" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="16,12" />
+        <Setter Property="Margin" Value="4" />
+        <Setter Property="MinWidth" Value="140" />
+    </Style>
+
+    <!-- Sidebar nav item -->
+    <Style Selector="Button.nav-item">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource SidebarTextBrush}" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="Padding" Value="16,10" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Margin" Value="4,1" />
+        <Setter Property="FontSize" Value="13" />
+    </Style>
+    <Style Selector="Button.nav-item:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SidebarHoverBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource SidebarTextActiveBrush}" />
+    </Style>
+    <Style Selector="Button.nav-item.active">
+        <Setter Property="Background" Value="{DynamicResource SidebarHoverBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource SidebarTextActiveBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource ArmadaBlueBrush}" />
+        <Setter Property="BorderThickness" Value="3,0,0,0" />
+    </Style>
+    <Style Selector="Button.nav-item.active /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SidebarHoverBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource SidebarTextActiveBrush}" />
+    </Style>
+
+    <!-- Action button -->
+    <Style Selector="Button.action">
+        <Setter Property="Background" Value="{StaticResource ArmadaBlueBrush}" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Padding" Value="16,8" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontSize" Value="13" />
+    </Style>
+    <Style Selector="Button.action:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource ArmadaBlueBrush}" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <!-- Danger button -->
+    <Style Selector="Button.danger">
+        <Setter Property="Background" Value="{StaticResource StatusRedBrush}" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Padding" Value="12,6" />
+        <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="Button.danger:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource StatusRedBrush}" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <!-- Section header -->
+    <Style Selector="TextBlock.section-header">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+        <Setter Property="Margin" Value="0,12,0,8" />
+    </Style>
+
+    <!-- Page title -->
+    <Style Selector="TextBlock.page-title">
+        <Setter Property="FontSize" Value="22" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        <Setter Property="Margin" Value="0,0,0,16" />
+    </Style>
+
+    <!-- Page subtitle -->
+    <Style Selector="TextBlock.page-subtitle">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+        <Setter Property="Margin" Value="0,-12,0,8" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <!-- DataGrid styles for theme compatibility -->
+    <Style Selector="DataGrid">
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="RowBackground" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="DataGridRow">
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+    <Style Selector="DataGridRow:pointerover /template/ Rectangle#BackgroundRectangle">
+        <Setter Property="Fill" Value="{DynamicResource SurfaceHoverBrush}" />
+    </Style>
+    <Style Selector="DataGridRow:selected /template/ Rectangle#BackgroundRectangle">
+        <Setter Property="Fill" Value="{DynamicResource SurfaceHoverBrush}" />
+    </Style>
+    <Style Selector="DataGridColumnHeader">
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+    </Style>
+    <Style Selector="DataGridCell">
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+    </Style>
+
+    <!-- Ensure left-justified text in card tables and nav-item rows -->
+    <Style Selector="Border.card TextBlock">
+        <Setter Property="TextAlignment" Value="Left" />
+    </Style>
+    <Style Selector="Button.nav-item TextBlock">
+        <Setter Property="TextAlignment" Value="Left" />
+    </Style>
+
+</Styles>

@@ -1,0 +1,44 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:svc="using:Armada.Desktop.Services"
+             x:Class="Armada.Desktop.Views.ToastOverlay"
+             IsHitTestVisible="True">
+
+    <ItemsControl x:Name="ToastList" VerticalAlignment="Top" HorizontalAlignment="Right"
+                  Margin="0,8,16,0" MaxWidth="360">
+        <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="svc:ToastNotification">
+                <Border Margin="0,4" Padding="12,10" CornerRadius="8"
+                        Background="{DynamicResource ToastBackgroundBrush}"
+                        BorderThickness="1" BorderBrush="{DynamicResource SurfaceBorderBrush}"
+                        BoxShadow="0 4 12 0 #40000000">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <!-- Severity indicator -->
+                        <Border Grid.Column="0" Width="4" CornerRadius="2" Margin="0,0,10,0"
+                                VerticalAlignment="Stretch" x:Name="SeverityBar" />
+
+                        <!-- Clickable content area -->
+                        <Border Grid.Column="1" Background="Transparent" Cursor="Hand"
+                                PointerPressed="OnToastBodyClick">
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextPrimaryBrush}" />
+                                <TextBlock Text="{Binding Message}" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{Binding TimestampText}" FontSize="9"
+                                           Foreground="{DynamicResource TextDimBrush}" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Dismiss button -->
+                        <Button Grid.Column="2" Content="X" FontSize="10"
+                                Background="Transparent" Foreground="{DynamicResource TextDimBrush}"
+                                Padding="4,2" VerticalAlignment="Top"
+                                Click="OnDismissClick"
+                                ToolTip.Tip="Dismiss this notification" />
+                    </Grid>
+                </Border>
+            </DataTemplate>
+        </ItemsControl.ItemTemplate>
+    </ItemsControl>
+</UserControl>

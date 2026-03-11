@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <Description>CLI interface for Armada multi-agent orchestration</Description>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>armada</ToolCommandName>
+    <PackageId>Armada.Helm</PackageId>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Spectre.Console" Version="0.53.1" />
+    <PackageReference Include="Spectre.Console.Cli" Version="0.53.1" />
+    <PackageReference Include="SyslogLogging" Version="2.0.13" />
+    <PackageReference Include="Voltaic" Version="0.1.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Armada.Core\Armada.Core.csproj" />
+    <ProjectReference Include="..\Armada.Server\Armada.Server.csproj" />
+  </ItemGroup>
+
+</Project>

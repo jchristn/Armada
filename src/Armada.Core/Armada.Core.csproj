@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Core models, database, and services for Armada multi-agent orchestration</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.3" />
+    <PackageReference Include="PrettyId" Version="2.0.0" />
+    <PackageReference Include="SyslogLogging" Version="2.0.13" />
+  </ItemGroup>
+
+</Project>

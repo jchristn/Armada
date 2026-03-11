@@ -1,0 +1,49 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Armada.Desktop.ViewModels"
+        x:Class="Armada.Desktop.Views.LogViewerWindow"
+        x:DataType="vm:LogViewerViewModel"
+        Width="900" Height="600"
+        MinWidth="500" MinHeight="300"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource SurfaceDarkBrush}"
+        Icon="avares://Armada.Desktop/Assets/logo.png">
+
+    <Grid RowDefinitions="Auto,*">
+        <!-- Toolbar -->
+        <Border Grid.Row="0" Background="{DynamicResource SurfaceMidBrush}" Padding="12,8">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Left" FontSize="14" FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center">
+                    <Run Text="Captain Log: " />
+                    <Run Text="{Binding CaptainName}" Foreground="{StaticResource ArmadaBlueBrush}" />
+                </TextBlock>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="Lines:" FontSize="12" Foreground="{DynamicResource TextDimBrush}"
+                                   VerticalAlignment="Center" />
+                        <NumericUpDown Value="{Binding LineCount}" Minimum="10" Maximum="1000"
+                                       Increment="50" Width="100" FontSize="12"
+                                       ToolTip.Tip="Number of log lines to display" />
+                    </StackPanel>
+                    <CheckBox Content="Follow" IsChecked="{Binding IsFollowing}" FontSize="12"
+                              Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"
+                              ToolTip.Tip="Automatically scroll to the latest log entries" />
+                    <Button Content="Copy" Classes="action" Click="OnCopyClick" ToolTip.Tip="Copy log to clipboard" />
+                    <Button Content="Refresh" Classes="action" Click="OnRefreshClick"
+                            ToolTip.Tip="Reload log from server" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Log content -->
+        <Border Grid.Row="1" Margin="8" Background="{DynamicResource SurfaceMidBrush}" CornerRadius="4" Padding="8">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                          x:Name="LogScroller">
+                <TextBlock Text="{Binding LogContent}" FontFamily="Consolas,Courier New,monospace"
+                           FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"
+                           TextWrapping="Wrap" />
+            </ScrollViewer>
+        </Border>
+    </Grid>
+</Window>

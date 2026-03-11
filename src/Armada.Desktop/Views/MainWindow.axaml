@@ -1,0 +1,150 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Armada.Desktop.ViewModels"
+        xmlns:views="using:Armada.Desktop.Views"
+        xmlns:conv="using:Armada.Desktop.Converters"
+        x:Class="Armada.Desktop.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="Armada Desktop" Width="1280" Height="800"
+        MinWidth="900" MinHeight="600"
+        Icon="avares://Armada.Desktop/Assets/logo.png"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource SurfaceDarkBrush}"
+        RenderOptions.BitmapInterpolationMode="HighQuality">
+
+    <Window.Resources>
+        <conv:ConnectionColorConverter x:Key="ConnectionColorConverter" />
+        <conv:ConnectionStatusConverter x:Key="ConnectionStatusConverter" />
+    </Window.Resources>
+
+    <Panel>
+    <Grid ColumnDefinitions="220,*">
+
+        <!-- Sidebar -->
+        <Border Grid.Column="0" Background="{DynamicResource SurfaceMidBrush}"
+                BorderBrush="{DynamicResource SidebarBorderBrush}" BorderThickness="0,0,1,0">
+            <DockPanel>
+                <!-- Logo area -->
+                <StackPanel DockPanel.Dock="Top" Margin="16,20,16,24" Spacing="8">
+                    <Image x:Name="SidebarLogo" Source="avares://Armada.Desktop/Assets/logo-dark.png"
+                           Width="36" Height="36"
+                           HorizontalAlignment="Left"
+                           RenderOptions.BitmapInterpolationMode="HighQuality" />
+                    <TextBlock Text="ARMADA" FontSize="18" FontWeight="Bold"
+                               Foreground="{StaticResource ArmadaAccentBrush}"
+                               LetterSpacing="4" />
+                    <TextBlock Text="v0.1.0" FontSize="10"
+                               Foreground="{DynamicResource SidebarTextDimBrush}" />
+                </StackPanel>
+
+                <!-- Connection status at bottom -->
+                <StackPanel DockPanel.Dock="Bottom" Margin="16,8,16,16" Spacing="4">
+                    <Separator Background="{DynamicResource SidebarBorderBrush}" Margin="0,0,0,8" />
+                    <StackPanel Orientation="Horizontal" Spacing="8"
+                                ToolTip.Tip="Connection status to the Admiral server">
+                        <Ellipse Width="8" Height="8"
+                                 Fill="{Binding IsConnected, Converter={StaticResource ConnectionColorConverter}}" />
+                        <TextBlock Text="{Binding IsConnected, Converter={StaticResource ConnectionStatusConverter}}"
+                                   FontSize="11" Foreground="{DynamicResource SidebarTextDimBrush}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Navigation -->
+                <StackPanel Margin="8,0" Spacing="2">
+                    <TextBlock Text="MONITOR" FontSize="11" FontWeight="SemiBold"
+                               Foreground="{DynamicResource SidebarTextDimBrush}"
+                               Margin="8,0,0,4" />
+
+                    <Button Classes="nav-item" Content="Dashboard"
+                            Tag="Dashboard"
+                            Click="OnNavClick" ToolTip.Tip="System overview and status" />
+
+                    <Button Classes="nav-item" Content="Voyages"
+                            Tag="Voyages"
+                            Click="OnNavClick" ToolTip.Tip="Mission batch tracking" />
+
+                    <Button Classes="nav-item" Content="Missions"
+                            Tag="Missions"
+                            Click="OnNavClick" ToolTip.Tip="Individual mission management" />
+
+                    <TextBlock Text="MANAGE" FontSize="11" FontWeight="SemiBold"
+                               Foreground="{DynamicResource SidebarTextDimBrush}"
+                               Margin="8,12,0,4" />
+
+                    <Button Classes="nav-item" Content="Fleet"
+                            Tag="Fleet"
+                            Click="OnNavClick" ToolTip.Tip="Vessels, captains, and fleet management" />
+
+                    <Button Classes="nav-item" Content="Dispatch"
+                            Tag="Dispatch"
+                            Click="OnNavClick" ToolTip.Tip="Send tasks to captains" />
+
+                    <TextBlock Text="SYSTEM" FontSize="11" FontWeight="SemiBold"
+                               Foreground="{DynamicResource SidebarTextDimBrush}"
+                               Margin="8,12,0,4" />
+
+                    <!-- Notifications with unread badge -->
+                    <Button Classes="nav-item" Tag="Notifications" Click="OnNavClick" ToolTip.Tip="System notifications">
+                        <DockPanel>
+                            <Border DockPanel.Dock="Right" CornerRadius="8"
+                                    Background="{StaticResource StatusRedBrush}"
+                                    Padding="6,1" MinWidth="20"
+                                    HorizontalAlignment="Right" VerticalAlignment="Center"
+                                    IsVisible="{Binding HasUnreadNotifications}">
+                                <TextBlock Text="{Binding UnreadNotifications}" FontSize="10"
+                                           FontWeight="Bold" Foreground="White"
+                                           HorizontalAlignment="Center" />
+                            </Border>
+                            <TextBlock Text="Notifications" VerticalAlignment="Center" />
+                        </DockPanel>
+                    </Button>
+
+                    <Button Classes="nav-item" Content="Doctor"
+                            Tag="Doctor"
+                            Click="OnNavClick" ToolTip.Tip="System health diagnostics" />
+
+                    <Button Classes="nav-item" Content="Settings"
+                            Tag="Settings"
+                            Click="OnNavClick" ToolTip.Tip="Application configuration" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Content area -->
+        <Border Grid.Column="1" Padding="24,20">
+            <ContentControl Content="{Binding CurrentPage}">
+                <ContentControl.DataTemplates>
+                    <DataTemplate DataType="{x:Type vm:DashboardViewModel}">
+                        <views:DashboardView />
+                    </DataTemplate>
+                    <DataTemplate DataType="{x:Type vm:FleetViewModel}">
+                        <views:FleetView />
+                    </DataTemplate>
+                    <DataTemplate DataType="{x:Type vm:VoyageListViewModel}">
+                        <views:VoyageListView />
+                    </DataTemplate>
+                    <DataTemplate DataType="{x:Type vm:MissionListViewModel}">
+                        <views:MissionListView />
+                    </DataTemplate>
+                    <DataTemplate DataType="{x:Type vm:DispatchViewModel}">
+                        <views:DispatchView />
+                    </DataTemplate>
+                    <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
+                        <views:SettingsView />
+                    </DataTemplate>
+                    <DataTemplate DataType="{x:Type vm:NotificationHistoryViewModel}">
+                        <views:NotificationHistoryView />
+                    </DataTemplate>
+                    <DataTemplate DataType="{x:Type vm:DoctorViewModel}">
+                        <views:DoctorView />
+                    </DataTemplate>
+                </ContentControl.DataTemplates>
+            </ContentControl>
+        </Border>
+    </Grid>
+
+    <!-- Toast notification overlay -->
+    <views:ToastOverlay x:Name="ToastOverlay" VerticalAlignment="Top" HorizontalAlignment="Right"
+                        IsHitTestVisible="True" />
+    </Panel>
+</Window>

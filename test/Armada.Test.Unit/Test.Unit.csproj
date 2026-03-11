@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <Description>Unit tests for Armada.Core database operations, model serialization, and service logic</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <NoWarn>1701;1702;CS1998;CS8600;CS8602;CS8603;CS8604;CS8618;CS8625;CS0108;CS8601;CS0618</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <NoWarn>1701;1702;CS1998;CS8600;CS8602;CS8603;CS8604;CS8618;CS8625;CS0108;CS8601;CS0618</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Armada.Core\Armada.Core.csproj" />
+    <ProjectReference Include="..\Armada.Test.Common\Armada.Test.Common.csproj" />
+  </ItemGroup>
+
+</Project>

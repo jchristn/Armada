@@ -1,0 +1,277 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Armada.Desktop.ViewModels"
+             x:Class="Armada.Desktop.Views.MissionListView"
+             x:DataType="vm:MissionListViewModel">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+        <!-- Header and filters -->
+        <StackPanel Grid.Row="0" Spacing="12" Margin="0,0,0,16">
+            <DockPanel>
+                <TextBlock Text="Missions" Classes="page-title" DockPanel.Dock="Left" />
+                <Button Content="New Mission" Classes="action" HorizontalAlignment="Right"
+                        Click="OnToggleCreateMissionClick" ToolTip.Tip="Create a standalone mission" />
+            </DockPanel>
+            <TextBlock Text="View, filter, and manage individual work units assigned to captains." Classes="page-subtitle" />
+            <ProgressBar IsIndeterminate="True" Height="2" IsVisible="{Binding IsLoading}"
+                         Foreground="{StaticResource ArmadaBlueBrush}" />
+
+            <!-- Create Mission form -->
+            <Border IsVisible="{Binding ShowCreateMission}" Background="{DynamicResource SurfaceHoverBrush}"
+                    CornerRadius="6" Padding="12">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="NEW MISSION" FontSize="11" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextDimBrush}" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBox Watermark="Title" Text="{Binding NewMissionTitle}" Width="250"
+                                 ToolTip.Tip="Short title describing the work" />
+                        <ComboBox PlaceholderText="Vessel"
+                                  ItemsSource="{Binding AvailableVessels}" SelectedValue="{Binding NewMissionVesselId}"
+                                  SelectedValueBinding="{Binding Id}" DisplayMemberBinding="{Binding Name}" Width="180"
+                                  ToolTip.Tip="Target repository for this mission" />
+                        <NumericUpDown Watermark="Priority" Value="{Binding NewMissionPriority}"
+                                       Minimum="1" Maximum="1000" Width="100"
+                                       ToolTip.Tip="Higher priority missions are assigned first (default: 100)" />
+                    </StackPanel>
+                    <TextBox Watermark="Description (optional)" Text="{Binding NewMissionDescription}"
+                             AcceptsReturn="True" TextWrapping="Wrap" Height="60"
+                             ToolTip.Tip="Detailed instructions for the AI agent" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <ComboBox PlaceholderText="Attach to Voyage (optional)"
+                                  ItemsSource="{Binding AvailableVoyages}" SelectedValue="{Binding NewMissionVoyageId}"
+                                  SelectedValueBinding="{Binding Id}" DisplayMemberBinding="{Binding Title}" Width="250"
+                                  ToolTip.Tip="Attach this mission to an existing voyage" />
+                        <TextBlock Text="or" FontSize="12" Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center" />
+                        <TextBox Watermark="New Voyage Title" Text="{Binding NewMissionNewVoyageTitle}" Width="200"
+                                 ToolTip.Tip="Create a new voyage and attach this mission to it" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Create" Classes="action" Click="OnCreateMissionClick"
+                                ToolTip.Tip="Create the new mission" />
+                        <Button Content="Cancel" Click="OnCancelCreateMissionClick"
+                                ToolTip.Tip="Cancel mission creation" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="Status:" FontSize="12" Foreground="{DynamicResource TextDimBrush}"
+                               VerticalAlignment="Center" />
+                    <ComboBox ItemsSource="{Binding StatusFilters}"
+                              SelectedItem="{Binding StatusFilter}"
+                              MinWidth="120" FontSize="12"
+                              ToolTip.Tip="Filter missions by status" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="Vessel:" FontSize="12" Foreground="{DynamicResource TextDimBrush}"
+                               VerticalAlignment="Center" />
+                    <ComboBox ItemsSource="{Binding VesselFilters}"
+                              SelectedItem="{Binding VesselFilter}"
+                              MinWidth="140" FontSize="12"
+                              ToolTip.Tip="Filter missions by target vessel" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="Captain:" FontSize="12" Foreground="{DynamicResource TextDimBrush}"
+                               VerticalAlignment="Center" />
+                    <ComboBox ItemsSource="{Binding CaptainFilters}"
+                              SelectedItem="{Binding CaptainFilter}"
+                              MinWidth="140" FontSize="12"
+                              ToolTip.Tip="Filter missions by assigned captain" />
+                </StackPanel>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Pagination Bar -->
+        <Border Grid.Row="1" Background="{DynamicResource SurfaceHoverBrush}"
+                CornerRadius="4" Padding="8" Margin="0,0,0,8">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding TotalRecords, StringFormat='{}{0} records'}"
+                               FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <TextBlock Text="Show:" FontSize="12" Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center" Margin="12,0,0,0" />
+                    <ComboBox ItemsSource="{Binding PageSizeOptions}" SelectedItem="{Binding PageSize}" MinWidth="70" FontSize="12"
+                              ToolTip.Tip="Number of records per page" />
+                </StackPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="16,0,0,0">
+                    <Button Content="Prev" Click="OnPreviousPageClick"
+                            IsEnabled="{Binding CanGoPrevious}" Padding="8,4" FontSize="12"
+                            ToolTip.Tip="Go to previous page" />
+                    <TextBlock Text="{Binding PaginationText}" VerticalAlignment="Center" Margin="8,0"
+                               FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <Button Content="Next" Click="OnNextPageClick"
+                            IsEnabled="{Binding CanGoNext}" Padding="8,4" FontSize="12"
+                            ToolTip.Tip="Go to next page" />
+                    <Button Content="Refresh" Click="OnRefreshPageClick" Padding="8,4" FontSize="12"
+                            ToolTip.Tip="Refresh current page" Margin="8,0,0,0" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Mission table -->
+        <Border Grid.Row="2" Classes="card">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="0">
+                    <!-- Column headers -->
+                    <Grid ColumnDefinitions="*,90,120,120,140,160,60,100" Margin="8,0,8,4">
+                        <TextBlock Grid.Column="0" Text="Title" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Mission name or description" />
+                        <TextBlock Grid.Column="1" Text="Status" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Current status: Pending, Assigned, InProgress, Complete, Failed, or Cancelled" />
+                        <TextBlock Grid.Column="2" Text="Captain" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Captain assigned to work on this mission" />
+                        <TextBlock Grid.Column="3" Text="Vessel" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Target git repository" />
+                        <TextBlock Grid.Column="4" Text="Voyage" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Parent voyage batch (if any)" />
+                        <TextBlock Grid.Column="5" Text="Branch" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Git branch created for this mission's changes" />
+                        <TextBlock Grid.Column="6" Text="Pri" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Priority level — higher values are assigned first" />
+                        <TextBlock Grid.Column="7" Text="Created" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Date and time the mission was created" />
+                    </Grid>
+
+                    <ItemsControl ItemsSource="{Binding Missions}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:MissionDisplayItem">
+                                <Button Classes="nav-item" HorizontalContentAlignment="Stretch"
+                                        Click="OnMissionRowClick" Tag="{Binding Mission.Id}"
+                                        Padding="8,6" Margin="0,1">
+                                    <Grid ColumnDefinitions="*,90,120,120,140,160,60,100">
+                                        <TextBlock Grid.Column="0" Text="{Binding Mission.Title}" FontSize="12"
+                                                   Foreground="{DynamicResource TextPrimaryBrush}"
+                                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                                   TextAlignment="Left" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Mission.Status}" FontSize="12"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"
+                                                   HorizontalAlignment="Left" />
+                                        <TextBlock Grid.Column="2" Text="{Binding CaptainName}" FontSize="12"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"
+                                                   HorizontalAlignment="Left" />
+                                        <TextBlock Grid.Column="3" Text="{Binding VesselName}" FontSize="12"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"
+                                                   HorizontalAlignment="Left" />
+                                        <TextBlock Grid.Column="4" Text="{Binding VoyageTitle}" FontSize="12"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis" TextAlignment="Left" />
+                                        <TextBlock Grid.Column="5" Text="{Binding Mission.BranchName}" FontSize="11"
+                                                   Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis" TextAlignment="Left" />
+                                        <TextBlock Grid.Column="6" Text="{Binding Mission.Priority}" FontSize="12"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"
+                                                   HorizontalAlignment="Left" />
+                                        <TextBlock Grid.Column="7" Text="{Binding Mission.CreatedUtc, StringFormat='{}{0:MM-dd HH:mm}'}"
+                                                   FontSize="11" Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center"
+                                                   HorizontalAlignment="Left" />
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Text="No missions found"
+                               FontSize="12" Foreground="{DynamicResource TextDimBrush}"
+                               IsVisible="{Binding !Missions.Count}"
+                               HorizontalAlignment="Center" Margin="0,24" />
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Detail panel for selected mission -->
+        <Border Grid.Row="3" Classes="card" Margin="0,8,0,0"
+                IsVisible="{Binding SelectedMission, Converter={x:Static ObjectConverters.IsNotNull}}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="{Binding SelectedMission.Title}" FontSize="14" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <WrapPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <TextBlock FontSize="11" Foreground="{DynamicResource TextDimBrush}" Margin="0,0,16,0">
+                                <Run Text="ID: " />
+                                <Run Text="{Binding SelectedMission.Id}" />
+                            </TextBlock>
+                            <TextBlock FontSize="11" Foreground="{DynamicResource TextDimBrush}" Margin="0,0,16,0">
+                                <Run Text="Status: " />
+                                <Run Text="{Binding SelectedMission.Status}" />
+                            </TextBlock>
+                            <TextBlock FontSize="11" Foreground="{DynamicResource TextDimBrush}" Margin="0,0,16,0">
+                                <Run Text="Priority: " />
+                                <Run Text="{Binding SelectedMission.Priority}" />
+                            </TextBlock>
+                            <TextBlock FontSize="11" Foreground="{DynamicResource TextDimBrush}" Margin="0,0,16,0"
+                                       IsVisible="{Binding SelectedMission.BranchName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <Run Text="Branch: " />
+                                <Run Text="{Binding SelectedMission.BranchName}" />
+                            </TextBlock>
+                            <TextBlock FontSize="11" Foreground="{StaticResource ArmadaBlueBrush}" Margin="0,0,16,0"
+                                       IsVisible="{Binding SelectedMission.PrUrl, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <Run Text="PR: " />
+                                <Run Text="{Binding SelectedMission.PrUrl}" TextDecorations="Underline" />
+                            </TextBlock>
+                            <TextBlock FontSize="11" Foreground="{DynamicResource TextDimBrush}" Margin="0,0,16,0"
+                                       FontFamily="Consolas,Courier New,monospace"
+                                       IsVisible="{Binding SelectedMission.CommitHash, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <Run Text="Commit: " />
+                                <Run Text="{Binding SelectedDisplayItem.CommitHashShort}" />
+                            </TextBlock>
+                        </WrapPanel>
+                        <WrapPanel Orientation="Horizontal" Margin="0,2,0,0">
+                            <TextBlock FontSize="11" Foreground="{DynamicResource TextDimBrush}" Margin="0,0,16,0">
+                                <Run Text="Created: " />
+                                <Run Text="{Binding SelectedMission.CreatedUtc, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss}'}" />
+                            </TextBlock>
+                            <TextBlock FontSize="11" Foreground="{DynamicResource TextDimBrush}" Margin="0,0,16,0"
+                                       IsVisible="{Binding SelectedMission.StartedUtc, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                <Run Text="Started: " />
+                                <Run Text="{Binding SelectedMission.StartedUtc, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss}'}" />
+                            </TextBlock>
+                            <TextBlock FontSize="11" Foreground="{DynamicResource TextDimBrush}" Margin="0,0,16,0"
+                                       IsVisible="{Binding SelectedMission.CompletedUtc, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                <Run Text="Completed: " />
+                                <Run Text="{Binding SelectedMission.CompletedUtc, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss}'}" />
+                            </TextBlock>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding SelectedMission.Description}" FontSize="11"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"
+                                   MaxHeight="40" Margin="0,4,0,0"
+                                   IsVisible="{Binding SelectedMission.Description, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+                        <!-- Captain Log -->
+                        <TextBlock Text="CAPTAIN LOG" FontSize="10" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextDimBrush}" Margin="0,8,0,2"
+                                   IsVisible="{Binding CaptainLog, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                        <Border Background="{DynamicResource SurfaceDarkBrush}" CornerRadius="4" Padding="8"
+                                MaxHeight="200"
+                                IsVisible="{Binding CaptainLog, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <TextBlock Text="{Binding CaptainLog}" FontFamily="Consolas,Courier New,monospace"
+                                           FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"
+                                           TextWrapping="NoWrap" />
+                            </ScrollViewer>
+                        </Border>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Vertical" Spacing="8" VerticalAlignment="Top">
+                        <Button Content="View Diff" Classes="action" Click="OnViewDiffClick" ToolTip.Tip="View code changes made by the captain" />
+                        <Button Content="View Log" Classes="action" Click="OnViewLogClick" ToolTip.Tip="View captain log for this mission" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Content="Restart" Classes="action" Click="OnRetryClick" ToolTip.Tip="Restart mission with optional instruction edits" />
+                            <Button Content="Cancel" Classes="danger" Click="OnCancelClick" ToolTip.Tip="Cancel this mission" />
+                        </StackPanel>
+                        <Button Content="Delete" Classes="danger" Click="OnDeleteMissionClick" ToolTip.Tip="Permanently delete this mission" />
+                    </StackPanel>
+                </Grid>
+            </ScrollViewer>
+        </Border>
+    </Grid>
+</UserControl>

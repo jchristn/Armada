@@ -1,0 +1,1507 @@
+{
+	"info": {
+		"_postman_id": "armada-api-collection",
+		"name": "Armada API",
+		"description": "Complete API collection for the Armada multi-agent orchestration system.\n\nVersion: 0.1.0\n\n## Setup\n1. Set the `baseUrl` variable to your Admiral server (default: `http://localhost:7890`)\n2. If API key authentication is enabled, set the `apiKey` variable\n3. Use the Status > Health Check request to verify connectivity",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "apikey",
+		"apikey": [
+			{
+				"key": "key",
+				"value": "X-Api-Key",
+				"type": "string"
+			},
+			{
+				"key": "value",
+				"value": "{{apiKey}}",
+				"type": "string"
+			},
+			{
+				"key": "in",
+				"value": "header",
+				"type": "string"
+			}
+		]
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:7890",
+			"type": "string"
+		},
+		{
+			"key": "apiKey",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "fleetId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "vesselId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "voyageId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "missionId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "captainId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "signalId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "mergeEntryId",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Status",
+			"description": "Health check and system status endpoints.",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/status/health",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "status", "health"]
+						},
+						"description": "Returns health status, uptime, version, and port configuration. Does not require authentication."
+					},
+					"response": [
+						{
+							"name": "Healthy",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Status\": \"healthy\",\n  \"Timestamp\": \"2026-03-07T12:00:00Z\",\n  \"StartUtc\": \"2026-03-07T08:00:00Z\",\n  \"Uptime\": \"0.04:00:00\",\n  \"Version\": \"0.1.0\",\n  \"Ports\": {\n    \"Admiral\": 7890,\n    \"Mcp\": 7891,\n    \"WebSocket\": 7892\n  }\n}"
+						}
+					]
+				},
+				{
+					"name": "Get System Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/status",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "status"]
+						},
+						"description": "Returns aggregate status including captain counts, mission breakdown by status, active voyages with progress, and recent signals."
+					},
+					"response": [
+						{
+							"name": "System Status",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"TotalCaptains\": 3,\n  \"IdleCaptains\": 1,\n  \"WorkingCaptains\": 2,\n  \"StalledCaptains\": 0,\n  \"ActiveVoyages\": 1,\n  \"MissionsByStatus\": {\n    \"Pending\": 2,\n    \"InProgress\": 2,\n    \"Complete\": 5\n  },\n  \"Voyages\": [],\n  \"RecentSignals\": [],\n  \"TimestampUtc\": \"2026-03-07T12:00:00Z\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Stop Server",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/server/stop",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "server", "stop"]
+						},
+						"description": "Initiates a graceful shutdown of the Admiral server. The server will stop after a brief delay."
+					},
+					"response": [
+						{
+							"name": "Shutting Down",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Status\": \"shutting_down\"\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Fleets",
+			"description": "Fleet (repository collection) management. A fleet groups related vessels (repositories) together.",
+			"item": [
+				{
+					"name": "List Fleets",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/fleets?pageNumber=1&pageSize=100",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "fleets"],
+							"query": [
+								{"key": "pageNumber", "value": "1", "description": "Page number (1-based)"},
+								{"key": "pageSize", "value": "100", "description": "Results per page (1-1000)"},
+								{"key": "order", "value": "CreatedDescending", "description": "CreatedAscending or CreatedDescending", "disabled": true},
+								{"key": "createdAfter", "value": "", "description": "ISO 8601 datetime filter", "disabled": true},
+								{"key": "createdBefore", "value": "", "description": "ISO 8601 datetime filter", "disabled": true}
+							]
+						},
+						"description": "Returns all registered fleets with pagination."
+					},
+					"response": [
+						{
+							"name": "Paginated Fleet List",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Success\": true,\n  \"PageNumber\": 1,\n  \"PageSize\": 100,\n  \"TotalPages\": 1,\n  \"TotalRecords\": 1,\n  \"Objects\": [\n    {\n      \"Id\": \"flt_abc123\",\n      \"Name\": \"default\",\n      \"Description\": null,\n      \"Active\": true,\n      \"CreatedUtc\": \"2026-03-07T12:00:00Z\",\n      \"LastUpdateUtc\": \"2026-03-07T12:00:00Z\"\n    }\n  ],\n  \"TotalMs\": 1.23\n}"
+						}
+					]
+				},
+				{
+					"name": "Enumerate Fleets",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 100,\n  \"Order\": \"CreatedDescending\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/fleets/enumerate",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "fleets", "enumerate"]
+						},
+						"description": "Paginated enumeration of fleets with optional filtering and sorting via JSON body. Query string parameters override body values."
+					}
+				},
+				{
+					"name": "Create Fleet",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var json = pm.response.json();",
+									"    pm.collectionVariables.set('fleetId', json.Id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Name\": \"Production Fleet\",\n  \"Description\": \"Production repositories\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/fleets",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "fleets"]
+						},
+						"description": "Creates a new fleet and returns it with an assigned ID (flt_ prefix). Auto-saves the ID to the fleetId collection variable."
+					},
+					"response": [
+						{
+							"name": "Created",
+							"status": "Created",
+							"code": 201,
+							"body": "{\n  \"Id\": \"flt_abc123\",\n  \"Name\": \"Production Fleet\",\n  \"Description\": \"Production repositories\",\n  \"Active\": true,\n  \"CreatedUtc\": \"2026-03-07T12:00:00Z\",\n  \"LastUpdateUtc\": \"2026-03-07T12:00:00Z\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Fleet",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/fleets/{{fleetId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "fleets", "{{fleetId}}"]
+						},
+						"description": "Returns a single fleet by ID."
+					}
+				},
+				{
+					"name": "Update Fleet",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Name\": \"Renamed Fleet\",\n  \"Description\": \"Updated description\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/fleets/{{fleetId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "fleets", "{{fleetId}}"]
+						},
+						"description": "Updates an existing fleet. The request body is merged with the existing fleet."
+					}
+				},
+				{
+					"name": "Delete Fleet",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/fleets/{{fleetId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "fleets", "{{fleetId}}"]
+						},
+						"description": "Deletes a fleet. Vessels in the fleet are not deleted; their FleetId is set to null."
+					}
+				}
+			]
+		},
+		{
+			"name": "Vessels",
+			"description": "Vessel (git repository) management. A vessel represents a single git repository registered with Armada.",
+			"item": [
+				{
+					"name": "List Vessels",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/vessels?pageNumber=1&pageSize=100",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "vessels"],
+							"query": [
+								{"key": "pageNumber", "value": "1", "description": "Page number (1-based)"},
+								{"key": "pageSize", "value": "100", "description": "Results per page (1-1000)"},
+								{"key": "order", "value": "CreatedDescending", "description": "CreatedAscending or CreatedDescending", "disabled": true},
+								{"key": "fleetId", "value": "", "description": "Filter by fleet ID", "disabled": true},
+								{"key": "createdAfter", "value": "", "description": "ISO 8601 datetime filter", "disabled": true},
+								{"key": "createdBefore", "value": "", "description": "ISO 8601 datetime filter", "disabled": true}
+							]
+						},
+						"description": "Returns all registered vessels with pagination. Optionally filter by fleetId."
+					}
+				},
+				{
+					"name": "Enumerate Vessels",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 100,\n  \"FleetId\": null\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/vessels/enumerate",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "vessels", "enumerate"]
+						},
+						"description": "Paginated enumeration of vessels with optional filtering and sorting via JSON body."
+					}
+				},
+				{
+					"name": "Create Vessel",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var json = pm.response.json();",
+									"    pm.collectionVariables.set('vesselId', json.Id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Name\": \"MyRepo\",\n  \"RepoUrl\": \"https://github.com/org/repo.git\",\n  \"FleetId\": \"{{fleetId}}\",\n  \"DefaultBranch\": \"main\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/vessels",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "vessels"]
+						},
+						"description": "Registers a new vessel (git repository). Auto-saves the ID to the vesselId collection variable."
+					},
+					"response": [
+						{
+							"name": "Created",
+							"status": "Created",
+							"code": 201,
+							"body": "{\n  \"Id\": \"vsl_abc123\",\n  \"FleetId\": \"flt_abc123\",\n  \"Name\": \"MyRepo\",\n  \"RepoUrl\": \"https://github.com/org/repo.git\",\n  \"LocalPath\": null,\n  \"WorkingDirectory\": null,\n  \"DefaultBranch\": \"main\",\n  \"Active\": true,\n  \"CreatedUtc\": \"2026-03-07T12:00:00Z\",\n  \"LastUpdateUtc\": \"2026-03-07T12:00:00Z\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Vessel",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/vessels/{{vesselId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "vessels", "{{vesselId}}"]
+						},
+						"description": "Returns a single vessel by ID."
+					}
+				},
+				{
+					"name": "Update Vessel",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Name\": \"Renamed Repo\",\n  \"DefaultBranch\": \"main\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/vessels/{{vesselId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "vessels", "{{vesselId}}"]
+						},
+						"description": "Updates an existing vessel."
+					}
+				},
+				{
+					"name": "Delete Vessel",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/vessels/{{vesselId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "vessels", "{{vesselId}}"]
+						},
+						"description": "Deletes a vessel."
+					}
+				}
+			]
+		},
+		{
+			"name": "Voyages",
+			"description": "Voyage (mission batch) management. A voyage groups related missions and tracks their collective progress.",
+			"item": [
+				{
+					"name": "List Voyages",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/voyages?pageNumber=1&pageSize=100",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "voyages"],
+							"query": [
+								{"key": "pageNumber", "value": "1", "description": "Page number (1-based)"},
+								{"key": "pageSize", "value": "100", "description": "Results per page (1-1000)"},
+								{"key": "order", "value": "CreatedDescending", "description": "CreatedAscending or CreatedDescending", "disabled": true},
+								{"key": "status", "value": "", "description": "Filter: Open, InProgress, Complete, Cancelled", "disabled": true},
+								{"key": "createdAfter", "value": "", "description": "ISO 8601 datetime filter", "disabled": true},
+								{"key": "createdBefore", "value": "", "description": "ISO 8601 datetime filter", "disabled": true}
+							]
+						},
+						"description": "Returns all voyages with pagination. Optionally filter by status."
+					}
+				},
+				{
+					"name": "Enumerate Voyages",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 100,\n  \"Status\": null\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/voyages/enumerate",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "voyages", "enumerate"]
+						},
+						"description": "Paginated enumeration of voyages with optional filtering and sorting via JSON body."
+					}
+				},
+				{
+					"name": "Create Voyage",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var json = pm.response.json();",
+									"    pm.collectionVariables.set('voyageId', json.Id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Title\": \"API Hardening\",\n  \"Description\": \"Security improvements across the API\",\n  \"VesselId\": \"{{vesselId}}\",\n  \"Missions\": [\n    {\n      \"Title\": \"Add rate limiting\",\n      \"Description\": \"Add rate limiting middleware to all endpoints\"\n    },\n    {\n      \"Title\": \"Add input validation\",\n      \"Description\": \"Validate all POST endpoint request bodies\"\n    },\n    {\n      \"Title\": \"Add request logging\",\n      \"Description\": \"Log all requests with correlation IDs\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/voyages",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "voyages"]
+						},
+						"description": "Creates a new voyage with optional missions. Missions are automatically dispatched to the target vessel. Auto-saves the ID to the voyageId collection variable."
+					},
+					"response": [
+						{
+							"name": "Created",
+							"status": "Created",
+							"code": 201,
+							"body": "{\n  \"Id\": \"vyg_abc123\",\n  \"Title\": \"API Hardening\",\n  \"Description\": \"Security improvements across the API\",\n  \"Status\": \"InProgress\",\n  \"CreatedUtc\": \"2026-03-07T12:00:00Z\",\n  \"CompletedUtc\": null,\n  \"LastUpdateUtc\": \"2026-03-07T12:00:00Z\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Voyage (with Missions)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/voyages/{{voyageId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "voyages", "{{voyageId}}"]
+						},
+						"description": "Returns a voyage and all its associated missions."
+					},
+					"response": [
+						{
+							"name": "Voyage with Missions",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Voyage\": {\n    \"Id\": \"vyg_abc123\",\n    \"Title\": \"API Hardening\",\n    \"Status\": \"InProgress\"\n  },\n  \"Missions\": [\n    {\n      \"Id\": \"msn_abc123\",\n      \"Title\": \"Add rate limiting\",\n      \"Status\": \"Pending\",\n      \"VoyageId\": \"vyg_abc123\"\n    }\n  ]\n}"
+						}
+					]
+				},
+				{
+					"name": "Cancel Voyage",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/voyages/{{voyageId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "voyages", "{{voyageId}}"]
+						},
+						"description": "Cancels a voyage and all its Pending/Assigned missions. In-progress missions are not affected."
+					},
+					"response": [
+						{
+							"name": "Cancelled",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Status\": \"cancelled\",\n  \"VoyageId\": \"vyg_abc123\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Purge Voyage (Permanent Delete)",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/voyages/{{voyageId}}/purge",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "voyages", "{{voyageId}}", "purge"]
+						},
+						"description": "Permanently deletes a voyage and all its associated missions from the database. This cannot be undone."
+					},
+					"response": [
+						{
+							"name": "Deleted",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Status\": \"deleted\",\n  \"VoyageId\": \"vyg_abc123\",\n  \"MissionsDeleted\": 3\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Missions",
+			"description": "Mission (atomic work unit) management. A mission is a single task assigned to an AI captain agent.",
+			"item": [
+				{
+					"name": "List Missions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/missions?pageNumber=1&pageSize=100",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "missions"],
+							"query": [
+								{"key": "pageNumber", "value": "1", "description": "Page number (1-based)"},
+								{"key": "pageSize", "value": "100", "description": "Results per page (1-1000)"},
+								{"key": "order", "value": "CreatedDescending", "description": "CreatedAscending or CreatedDescending", "disabled": true},
+								{"key": "status", "value": "", "description": "Filter: Pending, Assigned, InProgress, Testing, Review, Complete, Failed, Cancelled", "disabled": true},
+								{"key": "vesselId", "value": "", "description": "Filter by vessel ID", "disabled": true},
+								{"key": "captainId", "value": "", "description": "Filter by captain ID", "disabled": true},
+								{"key": "voyageId", "value": "", "description": "Filter by voyage ID", "disabled": true},
+								{"key": "createdAfter", "value": "", "description": "ISO 8601 datetime filter", "disabled": true},
+								{"key": "createdBefore", "value": "", "description": "ISO 8601 datetime filter", "disabled": true}
+							]
+						},
+						"description": "Returns all missions with pagination. Supports filtering by status, vesselId, captainId, and voyageId."
+					}
+				},
+				{
+					"name": "Enumerate Missions",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25,\n  \"Order\": \"CreatedDescending\",\n  \"Status\": \"InProgress\",\n  \"VesselId\": null,\n  \"CaptainId\": null,\n  \"VoyageId\": null\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/missions/enumerate",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "missions", "enumerate"]
+						},
+						"description": "Paginated enumeration of missions with full filtering support via JSON body."
+					}
+				},
+				{
+					"name": "Create Mission",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var json = pm.response.json();",
+									"    pm.collectionVariables.set('missionId', json.Id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Title\": \"Fix login bug\",\n  \"Description\": \"The login form does not validate email addresses. Add proper email validation with error messages.\",\n  \"VesselId\": \"{{vesselId}}\",\n  \"Priority\": 100\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/missions",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "missions"]
+						},
+						"description": "Creates and dispatches a new mission. If a VesselId is provided, the Admiral will assign a captain and set up a worktree. Auto-saves the ID to the missionId collection variable."
+					},
+					"response": [
+						{
+							"name": "Created",
+							"status": "Created",
+							"code": 201,
+							"body": "{\n  \"Id\": \"msn_abc123\",\n  \"VoyageId\": null,\n  \"VesselId\": \"vsl_abc123\",\n  \"CaptainId\": null,\n  \"Title\": \"Fix login bug\",\n  \"Description\": \"The login form does not validate email addresses.\",\n  \"Status\": \"Pending\",\n  \"Priority\": 100,\n  \"BranchName\": null,\n  \"PrUrl\": null,\n  \"CreatedUtc\": \"2026-03-07T12:00:00Z\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Mission",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/missions/{{missionId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "missions", "{{missionId}}"]
+						},
+						"description": "Returns a single mission by ID."
+					}
+				},
+				{
+					"name": "Update Mission",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Title\": \"Fix login bug (updated)\",\n  \"Description\": \"Updated description with more details\",\n  \"Priority\": 50\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/missions/{{missionId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "missions", "{{missionId}}"]
+						},
+						"description": "Updates mission fields (title, description, priority). Does not change status -- use the status transition endpoint for that."
+					}
+				},
+				{
+					"name": "Transition Mission Status (Pending -> Assigned)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Status\": \"Assigned\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/missions/{{missionId}}/status",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "missions", "{{missionId}}", "status"]
+						},
+						"description": "Transitions a mission to a new status.\n\nValid transitions:\n- Pending -> Assigned, Cancelled\n- Assigned -> InProgress, Cancelled\n- InProgress -> Testing, Review, Complete, Failed, Cancelled\n- Testing -> Review, InProgress, Complete, Failed\n- Review -> Complete, InProgress, Failed\n- Complete, Failed, Cancelled are terminal states"
+					}
+				},
+				{
+					"name": "Transition Mission Status (Assigned -> InProgress)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Status\": \"InProgress\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/missions/{{missionId}}/status",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "missions", "{{missionId}}", "status"]
+						},
+						"description": "Transition from Assigned to InProgress."
+					}
+				},
+				{
+					"name": "Transition Mission Status (InProgress -> Complete)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Status\": \"Complete\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/missions/{{missionId}}/status",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "missions", "{{missionId}}", "status"]
+						},
+						"description": "Transition from InProgress to Complete."
+					}
+				},
+				{
+					"name": "Cancel Mission",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/missions/{{missionId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "missions", "{{missionId}}"]
+						},
+						"description": "Cancels a mission by setting its status to Cancelled."
+					},
+					"response": [
+						{
+							"name": "Cancelled",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Status\": \"cancelled\",\n  \"MissionId\": \"msn_abc123\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Restart Mission",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Title\": \"Updated mission title\",\n  \"Description\": \"Updated instructions for the captain\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/missions/{{missionId}}/restart",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "missions", "{{missionId}}", "restart"]
+						},
+						"description": "Restarts a failed or cancelled mission by resetting it to Pending. Optionally update title and description before restarting. Body is optional."
+					},
+					"response": [
+						{
+							"name": "Restarted",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Id\": \"msn_abc123\",\n  \"Status\": \"Pending\",\n  \"Title\": \"Updated mission title\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Mission Diff",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/missions/{{missionId}}/diff",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "missions", "{{missionId}}", "diff"]
+						},
+						"description": "Returns the git diff of changes made by a captain in the mission's worktree. Checks for a saved diff first, then falls back to a live worktree diff."
+					},
+					"response": [
+						{
+							"name": "Diff Available",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"MissionId\": \"msn_abc123\",\n  \"Branch\": \"armada/msn_abc123\",\n  \"Diff\": \"diff --git a/src/auth.ts b/src/auth.ts\\n...\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Mission Log",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/missions/{{missionId}}/log?lines=100&offset=0",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "missions", "{{missionId}}", "log"],
+							"query": [
+								{"key": "lines", "value": "100", "description": "Number of lines to return (default: 100)"},
+								{"key": "offset", "value": "0", "description": "Line offset to start from (default: 0)"}
+							]
+						},
+						"description": "Returns the session log for a mission. Supports pagination via ?lines=N and ?offset=N query parameters."
+					},
+					"response": [
+						{
+							"name": "Log Available",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"MissionId\": \"msn_abc123\",\n  \"Log\": \"[2026-03-07 10:00:00] Starting mission...\\n[2026-03-07 10:00:01] Cloning repository...\",\n  \"Lines\": 2,\n  \"TotalLines\": 150\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Captains",
+			"description": "Captain (AI agent) management. A captain is an AI agent instance that executes missions.",
+			"item": [
+				{
+					"name": "List Captains",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/captains?pageNumber=1&pageSize=100",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "captains"],
+							"query": [
+								{"key": "pageNumber", "value": "1", "description": "Page number (1-based)"},
+								{"key": "pageSize", "value": "100", "description": "Results per page (1-1000)"},
+								{"key": "order", "value": "CreatedDescending", "description": "CreatedAscending or CreatedDescending", "disabled": true},
+								{"key": "status", "value": "", "description": "Filter by state: Idle, Working, Stalled, Stopping", "disabled": true},
+								{"key": "createdAfter", "value": "", "description": "ISO 8601 datetime filter", "disabled": true},
+								{"key": "createdBefore", "value": "", "description": "ISO 8601 datetime filter", "disabled": true}
+							]
+						},
+						"description": "Returns all captains with pagination. The 'status' filter maps to the captain's State field."
+					}
+				},
+				{
+					"name": "Enumerate Captains",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 100,\n  \"Status\": null\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/captains/enumerate",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "captains", "enumerate"]
+						},
+						"description": "Paginated enumeration of captains with optional filtering and sorting via JSON body."
+					}
+				},
+				{
+					"name": "Create Captain",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var json = pm.response.json();",
+									"    pm.collectionVariables.set('captainId', json.Id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Name\": \"captain-1\",\n  \"Runtime\": \"ClaudeCode\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/captains",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "captains"]
+						},
+						"description": "Registers a new captain (AI agent). Runtime options: ClaudeCode, Codex, Gemini, Cursor, Custom. Auto-saves the ID to the captainId collection variable."
+					},
+					"response": [
+						{
+							"name": "Created",
+							"status": "Created",
+							"code": 201,
+							"body": "{\n  \"Id\": \"cpt_abc123\",\n  \"Name\": \"captain-1\",\n  \"Runtime\": \"ClaudeCode\",\n  \"State\": \"Idle\",\n  \"CurrentMissionId\": null,\n  \"CurrentDockId\": null,\n  \"ProcessId\": null,\n  \"RecoveryAttempts\": 0,\n  \"LastHeartbeatUtc\": null,\n  \"CreatedUtc\": \"2026-03-07T12:00:00Z\",\n  \"LastUpdateUtc\": \"2026-03-07T12:00:00Z\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Captain",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/captains/{{captainId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "captains", "{{captainId}}"]
+						},
+						"description": "Returns a single captain by ID."
+					}
+				},
+				{
+					"name": "Update Captain",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Name\": \"Updated Captain Name\",\n  \"Runtime\": \"ClaudeCode\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/captains/{{captainId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "captains", "{{captainId}}"]
+						},
+						"description": "Updates a captain's name or runtime. Operational fields (state, process, mission) are preserved."
+					},
+					"response": [
+						{
+							"name": "Updated",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Id\": \"cpt_abc123\",\n  \"Name\": \"Updated Captain Name\",\n  \"Runtime\": \"ClaudeCode\",\n  \"State\": \"Idle\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Stop Captain",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/captains/{{captainId}}/stop",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "captains", "{{captainId}}", "stop"]
+						},
+						"description": "Stops a running captain agent. Kills its OS process and recalls it to idle state."
+					},
+					"response": [
+						{
+							"name": "Stopped",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Status\": \"stopped\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Captain Log",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/captains/{{captainId}}/log?lines=100&offset=0",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "captains", "{{captainId}}", "log"],
+							"query": [
+								{"key": "lines", "value": "100", "description": "Number of lines to return (default: 100)"},
+								{"key": "offset", "value": "0", "description": "Line offset to start from (default: 0)"}
+							]
+						},
+						"description": "Returns the current session log for a captain, resolved via the .current pointer file. Supports pagination via ?lines=N and ?offset=N."
+					},
+					"response": [
+						{
+							"name": "Log Available",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"CaptainId\": \"cpt_abc123\",\n  \"Log\": \"[2026-03-07 10:00:00] Captain started...\\n[2026-03-07 10:00:01] Assigned to mission msn_xyz...\",\n  \"Lines\": 2,\n  \"TotalLines\": 200\n}"
+						}
+					]
+				},
+				{
+					"name": "Delete Captain",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/captains/{{captainId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "captains", "{{captainId}}"]
+						},
+						"description": "Deletes a captain. If the captain is currently working, it is recalled first."
+					}
+				}
+			]
+		},
+		{
+			"name": "Signals",
+			"description": "Signal (inter-agent messaging) management. Signals are messages between the admiral and captains.",
+			"item": [
+				{
+					"name": "List Signals",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/signals?pageNumber=1&pageSize=100",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "signals"],
+							"query": [
+								{"key": "pageNumber", "value": "1", "description": "Page number (1-based)"},
+								{"key": "pageSize", "value": "100", "description": "Results per page (1-1000)"},
+								{"key": "order", "value": "CreatedDescending", "description": "CreatedAscending or CreatedDescending", "disabled": true},
+								{"key": "signalType", "value": "", "description": "Filter: Assignment, Progress, Completion, Error, Heartbeat, Nudge, Mail", "disabled": true},
+								{"key": "toCaptainId", "value": "", "description": "Filter by recipient captain ID", "disabled": true},
+								{"key": "unreadOnly", "value": "true", "description": "Return only unread signals", "disabled": true},
+								{"key": "createdAfter", "value": "", "description": "ISO 8601 datetime filter", "disabled": true},
+								{"key": "createdBefore", "value": "", "description": "ISO 8601 datetime filter", "disabled": true}
+							]
+						},
+						"description": "Returns signals with pagination. Supports filtering by signalType, toCaptainId, and unreadOnly."
+					}
+				},
+				{
+					"name": "Enumerate Signals",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 50,\n  \"SignalType\": null,\n  \"ToCaptainId\": null,\n  \"UnreadOnly\": null\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/signals/enumerate",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "signals", "enumerate"]
+						},
+						"description": "Paginated enumeration of signals with optional filtering and sorting via JSON body."
+					}
+				},
+				{
+					"name": "Send Signal",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var json = pm.response.json();",
+									"    pm.collectionVariables.set('signalId', json.Id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Type\": \"Mail\",\n  \"Payload\": \"Please check the test results and fix any failures.\",\n  \"ToCaptainId\": \"{{captainId}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/signals",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "signals"]
+						},
+						"description": "Sends a new signal (message). Type options: Assignment, Progress, Completion, Error, Heartbeat, Nudge, Mail. Auto-saves the ID to the signalId collection variable."
+					},
+					"response": [
+						{
+							"name": "Created",
+							"status": "Created",
+							"code": 201,
+							"body": "{\n  \"Id\": \"sig_abc123\",\n  \"FromCaptainId\": null,\n  \"ToCaptainId\": \"cpt_abc123\",\n  \"Type\": \"Mail\",\n  \"Payload\": \"Please check the test results and fix any failures.\",\n  \"Read\": false,\n  \"CreatedUtc\": \"2026-03-07T12:00:00Z\"\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Events",
+			"description": "System event log. Events are generated automatically by the server when state changes occur.",
+			"item": [
+				{
+					"name": "List Events",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/events?pageNumber=1&pageSize=50",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "events"],
+							"query": [
+								{"key": "pageNumber", "value": "1", "description": "Page number (1-based)"},
+								{"key": "pageSize", "value": "50", "description": "Results per page (1-1000)"},
+								{"key": "order", "value": "CreatedDescending", "description": "CreatedAscending or CreatedDescending", "disabled": true},
+								{"key": "type", "value": "", "description": "Filter by event type (e.g. mission.status_changed, captain.launched)", "disabled": true},
+								{"key": "captainId", "value": "", "description": "Filter by captain ID", "disabled": true},
+								{"key": "missionId", "value": "", "description": "Filter by mission ID", "disabled": true},
+								{"key": "vesselId", "value": "", "description": "Filter by vessel ID", "disabled": true},
+								{"key": "voyageId", "value": "", "description": "Filter by voyage ID", "disabled": true},
+								{"key": "limit", "value": "", "description": "Alias for pageSize", "disabled": true},
+								{"key": "createdAfter", "value": "", "description": "ISO 8601 datetime filter", "disabled": true},
+								{"key": "createdBefore", "value": "", "description": "ISO 8601 datetime filter", "disabled": true}
+							]
+						},
+						"description": "Returns system events with pagination. Supports filtering by type, captainId, missionId, vesselId, and voyageId. The 'limit' parameter is an alias for pageSize."
+					}
+				},
+				{
+					"name": "Enumerate Events",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 50,\n  \"EventType\": null,\n  \"CaptainId\": null,\n  \"MissionId\": null,\n  \"VesselId\": null,\n  \"VoyageId\": null\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/events/enumerate",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "events", "enumerate"]
+						},
+						"description": "Paginated enumeration of events with optional filtering and sorting via JSON body."
+					}
+				}
+			]
+		},
+		{
+			"name": "Merge Queue",
+			"description": "Bors-style merge queue with batch testing. Branches are queued, tested in batches, and passing batches are landed into the target branch.",
+			"item": [
+				{
+					"name": "List Merge Queue",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/merge-queue?pageNumber=1&pageSize=100",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "merge-queue"],
+							"query": [
+								{"key": "pageNumber", "value": "1", "description": "Page number (1-based)"},
+								{"key": "pageSize", "value": "100", "description": "Results per page (1-1000)"},
+								{"key": "order", "value": "CreatedDescending", "description": "CreatedAscending or CreatedDescending", "disabled": true},
+								{"key": "createdAfter", "value": "", "description": "ISO 8601 datetime filter", "disabled": true},
+								{"key": "createdBefore", "value": "", "description": "ISO 8601 datetime filter", "disabled": true}
+							]
+						},
+						"description": "Returns all entries in the merge queue with pagination."
+					}
+				},
+				{
+					"name": "Enumerate Merge Queue",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 100\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/merge-queue/enumerate",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "merge-queue", "enumerate"]
+						},
+						"description": "Paginated enumeration of merge queue entries with optional filtering and sorting via JSON body."
+					}
+				},
+				{
+					"name": "Enqueue Branch",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var json = pm.response.json();",
+									"    pm.collectionVariables.set('mergeEntryId', json.Id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"BranchName\": \"armada/msn_abc123\",\n  \"TargetBranch\": \"main\",\n  \"MissionId\": \"{{missionId}}\",\n  \"VesselId\": \"{{vesselId}}\",\n  \"Priority\": 0,\n  \"TestCommand\": \"dotnet test\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/merge-queue",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "merge-queue"]
+						},
+						"description": "Adds a branch to the merge queue for testing and merging. Auto-saves the ID to the mergeEntryId collection variable."
+					},
+					"response": [
+						{
+							"name": "Enqueued",
+							"status": "Created",
+							"code": 201,
+							"body": "{\n  \"Id\": \"mrg_abc123\",\n  \"MissionId\": \"msn_abc123\",\n  \"VesselId\": \"vsl_abc123\",\n  \"BranchName\": \"armada/msn_abc123\",\n  \"TargetBranch\": \"main\",\n  \"Status\": \"Queued\",\n  \"Priority\": 0,\n  \"TestCommand\": \"dotnet test\",\n  \"CreatedUtc\": \"2026-03-07T12:00:00Z\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Merge Entry",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/merge-queue/{{mergeEntryId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "merge-queue", "{{mergeEntryId}}"]
+						},
+						"description": "Returns a single merge queue entry by ID."
+					}
+				},
+				{
+					"name": "Cancel Merge Entry",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/merge-queue/{{mergeEntryId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "merge-queue", "{{mergeEntryId}}"]
+						},
+						"description": "Cancels a queued merge entry by ID."
+					}
+				},
+				{
+					"name": "Process Merge Queue",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/merge-queue/process",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "merge-queue", "process"]
+						},
+						"description": "Triggers processing of all queued entries. Creates integration branches, runs tests, and lands passing batches."
+					},
+					"response": [
+						{
+							"name": "Processed",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Status\": \"processed\"\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Workflows",
+			"description": "Pre-built request sequences demonstrating common Armada workflows. Run these in order.",
+			"item": [
+				{
+					"name": "1. Setup Fleet",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var json = pm.response.json();",
+									"    pm.collectionVariables.set('fleetId', json.Id);",
+									"    console.log('Fleet created: ' + json.Id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Name\": \"My Fleet\",\n  \"Description\": \"Demo fleet for workflow testing\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/fleets",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "fleets"]
+						},
+						"description": "Step 1: Create a fleet to group repositories."
+					}
+				},
+				{
+					"name": "2. Register Vessel",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var json = pm.response.json();",
+									"    pm.collectionVariables.set('vesselId', json.Id);",
+									"    console.log('Vessel created: ' + json.Id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Name\": \"demo-repo\",\n  \"RepoUrl\": \"https://github.com/example/demo-repo.git\",\n  \"FleetId\": \"{{fleetId}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/vessels",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "vessels"]
+						},
+						"description": "Step 2: Register a git repository as a vessel in the fleet."
+					}
+				},
+				{
+					"name": "3. Create Captain",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var json = pm.response.json();",
+									"    pm.collectionVariables.set('captainId', json.Id);",
+									"    console.log('Captain created: ' + json.Id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Name\": \"demo-captain\",\n  \"Runtime\": \"ClaudeCode\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/captains",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "captains"]
+						},
+						"description": "Step 3: Register an AI captain agent."
+					}
+				},
+				{
+					"name": "4. Dispatch Voyage",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var json = pm.response.json();",
+									"    pm.collectionVariables.set('voyageId', json.Id);",
+									"    console.log('Voyage created: ' + json.Id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Title\": \"Demo Voyage\",\n  \"Description\": \"A demonstration voyage with multiple missions\",\n  \"VesselId\": \"{{vesselId}}\",\n  \"Missions\": [\n    {\n      \"Title\": \"Add unit tests\",\n      \"Description\": \"Write comprehensive unit tests for the auth module\"\n    },\n    {\n      \"Title\": \"Fix CI pipeline\",\n      \"Description\": \"Update the GitHub Actions workflow to include linting\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/voyages",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "voyages"]
+						},
+						"description": "Step 4: Create a voyage with multiple missions targeting the registered vessel."
+					}
+				},
+				{
+					"name": "5. Check Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/status",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "status"]
+						},
+						"description": "Step 5: Check the system status to see the voyage and missions in progress."
+					}
+				},
+				{
+					"name": "6. View Voyage Progress",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/voyages/{{voyageId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "voyages", "{{voyageId}}"]
+						},
+						"description": "Step 6: View the voyage detail with all its missions and their statuses."
+					}
+				},
+				{
+					"name": "7. List Active Missions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/missions?voyageId={{voyageId}}&pageSize=25",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "missions"],
+							"query": [
+								{"key": "voyageId", "value": "{{voyageId}}"},
+								{"key": "pageSize", "value": "25"}
+							]
+						},
+						"description": "Step 7: List missions for the voyage to see individual progress."
+					}
+				},
+				{
+					"name": "8. Check Events",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/events?voyageId={{voyageId}}&pageSize=50",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "events"],
+							"query": [
+								{"key": "voyageId", "value": "{{voyageId}}"},
+								{"key": "pageSize", "value": "50"}
+							]
+						},
+						"description": "Step 8: View the event audit trail for all activity related to this voyage."
+					}
+				}
+			]
+		}
+	]
+}

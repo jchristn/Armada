@@ -1,0 +1,52 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Armada.Desktop.Views.SplashWindow"
+        Width="480" Height="320"
+        CanResize="False"
+        SystemDecorations="None"
+        Icon="avares://Armada.Desktop/Assets/logo.png"
+        WindowStartupLocation="CenterScreen"
+        Background="#080d1a"
+        TransparencyLevelHint="None"
+        ExtendClientAreaToDecorationsHint="True">
+
+    <Border CornerRadius="12" Background="#080d1a" BorderBrush="#1e293b" BorderThickness="1"
+            ClipToBounds="True">
+        <Grid RowDefinitions="*,Auto">
+            <!-- Center content -->
+            <StackPanel Grid.Row="0" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="16">
+                <!-- Logo -->
+                <Image Source="avares://Armada.Desktop/Assets/logo-dark.png"
+                       Width="80" Height="80"
+                       HorizontalAlignment="Center"
+                       RenderOptions.BitmapInterpolationMode="HighQuality" />
+
+                <!-- Title -->
+                <TextBlock Text="ARMADA"
+                           FontSize="32" FontWeight="Bold"
+                           Foreground="#1E90FF"
+                           HorizontalAlignment="Center"
+                           LetterSpacing="8" />
+
+                <!-- Subtitle -->
+                <TextBlock Text="Multi-Agent Orchestration"
+                           FontSize="13"
+                           Foreground="#9E9E9E"
+                           HorizontalAlignment="Center" />
+            </StackPanel>
+
+            <!-- Bottom status area -->
+            <StackPanel Grid.Row="1" Margin="32,0,32,24" Spacing="8">
+                <ProgressBar IsIndeterminate="True"
+                             Height="2"
+                             Foreground="#1E90FF"
+                             Background="#111827" />
+                <TextBlock x:Name="StatusText"
+                           Text="Initializing..."
+                           FontSize="11"
+                           Foreground="#616161"
+                           HorizontalAlignment="Center" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

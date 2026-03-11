@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <Description>Admiral server for Armada multi-agent orchestration</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="wwwroot\**\*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SwiftStack" Version="0.4.6" />
+    <PackageReference Include="Voltaic" Version="0.1.8" />
+    <PackageReference Include="SyslogLogging" Version="2.0.13" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Armada.Core\Armada.Core.csproj" />
+    <ProjectReference Include="..\Armada.Runtimes\Armada.Runtimes.csproj" />
+  </ItemGroup>
+
+</Project>

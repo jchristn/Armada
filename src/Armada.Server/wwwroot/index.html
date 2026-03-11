@@ -1,0 +1,1627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Armada Dashboard</title>
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <script src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js" defer></script>
+    <link rel="icon" type="image/x-icon" href="/dashboard/img/logo.ico">
+    <link rel="stylesheet" href="/dashboard/css/dashboard.css">
+</head>
+<body x-data="dashboard()" x-init="init()" @keydown.window="handleKeyboard($event)">
+
+    <!-- Toast Notifications -->
+    <div class="toast-container">
+        <template x-for="t in toasts" :key="t.id">
+            <div class="toast" :class="['toast-' + t.type, t.onClick ? 'toast-clickable' : '']"
+                 x-transition:enter="toast-enter" x-transition:leave="toast-leave">
+                <span class="toast-body" @click="if (t.onClick) { t.onClick(); dismissToast(t.id); }" x-text="t.message"></span>
+                <button class="toast-close" @click.stop="dismissToast(t.id)">&times;</button>
+            </div>
+        </template>
+    </div>
+
+    <!-- Login Overlay -->
+    <div class="login-overlay" x-show="authRequired && !authenticated" x-cloak>
+        <div class="login-box">
+            <img :src="darkMode ? '/dashboard/img/logo-light-grey.png' : '/dashboard/img/logo-dark-grey.png'" alt="Armada" class="login-logo">
+            <h2>Armada</h2>
+            <p>Enter your API key to continue.</p>
+            <form @submit.prevent="login()">
+                <input type="password" x-model="apiKeyInput" placeholder="API Key" required autofocus title="Enter your Armada API key to authenticate">
+                <template x-if="authError">
+                    <div class="alert alert-error" x-text="authError"></div>
+                </template>
+                <button type="submit" class="btn btn-primary" style="width:100%" title="Authenticate with the provided API key">Sign In</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="header" x-show="!authRequired || authenticated">
+        <div class="header-brand">
+            <img :src="darkMode ? '/dashboard/img/logo-light-grey.png' : '/dashboard/img/logo-dark-grey.png'" alt="Armada" class="header-logo">
+            <h1>Armada</h1>
+        </div>
+        <nav class="header-nav">
+            <button :class="{ active: view === 'home' }" @click="navigate('home')" title="System overview with voyage progress, recent missions, and signals">Dashboard</button>
+            <button :class="{ active: view === 'captains' }" @click="navigate('captains')" title="AI worker agents that execute missions">Captains</button>
+            <button :class="{ active: view === 'fleets' }" @click="navigate('fleets')" title="Repository groups and their vessels">Fleets</button>
+            <button :class="{ active: view === 'voyages' }" @click="navigate('voyages')" title="Batches of related missions with progress tracking">Voyages</button>
+            <button :class="{ active: view === 'missions' }" @click="navigate('missions'); loadMissions()" title="Individual work units assigned to captains">Missions</button>
+            <button :class="{ active: view === 'signals' }" @click="navigate('signals')" title="Messages exchanged between the admiral and captains">Signals</button>
+            <button :class="{ active: view === 'events' }" @click="navigate('events')" title="System event log of state changes and activity">Events</button>
+            <button :class="{ active: view === 'merge-queue' }" @click="navigate('merge-queue')" title="Completed mission branches awaiting merge into main">Merge Queue</button>
+            <button :class="{ active: view === 'server' }" @click="navigate('server')" title="Admiral server health, configuration, and controls">Server</button>
+        </nav>
+        <div class="header-status">
+            <span class="status-dot" :class="connected ? 'connected' : 'disconnected'" title="Server connection status"></span>
+            <span x-text="wsConnected ? 'Live' : (apiConnected ? 'Online' : 'Offline')" title="Live = WebSocket real-time updates, Online = HTTP polling, Offline = no connection"></span>
+            <button class="theme-toggle" @click="toggleTheme()" x-text="darkMode ? '☀️' : '🌙'" title="Toggle theme"></button>
+            <a href="https://github.com/jchristn/Armada" target="_blank" rel="noopener noreferrer" class="github-link" title="View on GitHub">
+                <svg height="20" width="20" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+            </a>
+            <button class="btn btn-sm" x-show="authenticated" @click="logout()" style="margin-left:0.5rem" title="Sign out and clear API key">Logout</button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main" x-show="!authRequired || authenticated">
+
+        <!-- Breadcrumbs -->
+        <div class="breadcrumbs" x-show="breadcrumbs.length > 1">
+            <template x-for="(bc, i) in breadcrumbs" :key="i">
+                <span>
+                    <template x-if="i > 0"> <span class="bc-sep">/</span> </template>
+                    <template x-if="bc.view && i < breadcrumbs.length - 1">
+                        <a href="#" @click.prevent="goBack()" x-text="bc.label"></a>
+                    </template>
+                    <template x-if="!bc.view || i === breadcrumbs.length - 1">
+                        <span x-text="bc.label"></span>
+                    </template>
+                    <template x-if="bc.id">
+                        <button class="copy-btn bc-copy-btn" @click.stop="copyId(bc.id, $event)" title="Copy ID"></button>
+                    </template>
+                </span>
+            </template>
+        </div>
+
+        <!-- ========== Dashboard Home ========== -->
+        <div x-show="view === 'home' && !detailView" class="view">
+            <div class="view-header">
+                <div>
+                    <h2>System Status</h2>
+                    <p class="text-dim view-subtitle">Overview of fleet health, active missions, and recent activity.</p>
+                </div>
+                <div class="view-actions">
+                    <button class="btn btn-primary btn-sm" @click="showDispatchForm = true; dispatchMode = 'quick'; navigate('missions'); loadMissions()" title="Smart dispatch with NLP task parsing">+ Dispatch</button>
+                    <button class="btn btn-primary btn-sm" @click="openCreateVoyage()" title="Create a new voyage with multiple missions (advanced)">+ Voyage</button>
+                    <button class="btn btn-sm refresh-btn" @click="dashboardRefresh($event)" title="Refresh all dashboard data">&#x21bb;</button>
+                </div>
+            </div>
+            <div class="cards">
+                <div class="card clickable" @click="navigate('captains')" title="Click to view all captains">
+                    <div class="card-label">Captains</div>
+                    <div class="card-value" x-text="status.totalCaptains || 0"></div>
+                    <div class="card-detail">
+                        <span class="tag idle" x-text="(status.idleCaptains || 0) + ' idle'" title="Idle — available to accept new missions"></span>
+                        <span class="tag working" x-text="(status.workingCaptains || 0) + ' working'" title="Working — actively executing a mission"></span>
+                        <span class="tag stalled" x-show="status.stalledCaptains > 0" x-text="(status.stalledCaptains || 0) + ' stalled'" title="Stalled — captain process is unresponsive"></span>
+                    </div>
+                </div>
+                <div class="card clickable" @click="navigate('voyages')" title="Click to view all voyages">
+                    <div class="card-label">Active Voyages</div>
+                    <div class="card-value" x-text="status.activeVoyages || 0"></div>
+                </div>
+                <div class="card clickable" @click="navigate('missions'); loadMissions()" title="Click to view all missions">
+                    <div class="card-label">Missions</div>
+                    <div class="card-value" x-text="totalMissions()"></div>
+                    <div class="card-detail">
+                        <template x-for="[key, val] in Object.entries(status.missionsByStatus || {})" :key="key">
+                            <span class="tag" :class="key.toLowerCase()" x-text="val + ' ' + key"></span>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
+            <template x-if="status.voyages && status.voyages.length > 0">
+                <div>
+                    <h3>Voyage Progress</h3>
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th title="Voyage name and unique identifier">Voyage</th><th title="Current voyage lifecycle state">Status</th><th title="Percentage of missions completed">Progress</th><th title="Completed vs total missions in this voyage">Missions</th><th></th></tr></thead>
+                            <tbody>
+                                <template x-for="vp in status.voyages" :key="vp.voyage?.id">
+                                    <tr class="clickable" @click="navigate('voyages', 'voyage-detail', vp.voyage?.id)">
+                                        <td>
+                                            <strong x-text="vp.voyage?.title || vp.voyage?.id"></strong>
+                                            <div class="text-dim id-display"><span class="mono" x-text="vp.voyage?.id"></span><button class="copy-btn" @click.stop="copyId(vp.voyage?.id, $event)" title="Copy ID"></button></div>
+                                        </td>
+                                        <td><span class="tag" :class="(vp.voyage?.status || '').toLowerCase()" x-text="vp.voyage?.status" :title="statusTooltip(vp.voyage?.status)"></span></td>
+                                        <td>
+                                            <div class="progress-bar"><div class="progress-fill" :style="'width:' + voyagePercent(vp) + '%'"></div></div>
+                                            <span class="text-dim" x-text="voyagePercent(vp) + '%'"></span>
+                                        </td>
+                                        <td>
+                                            <span x-text="vp.completedMissions + '/' + vp.totalMissions + ' done'"></span>
+                                            <span class="text-dim" x-show="vp.failedMissions > 0" x-text="', ' + vp.failedMissions + ' failed'"></span>
+                                        </td>
+                                        <td @click.stop>
+                                            <button class="btn btn-sm btn-danger" @click="deleteVoyage(vp.voyage?.id)"
+                                                x-show="vp.voyage?.status !== 'Open' && vp.voyage?.status !== 'InProgress'" title="Permanently delete this voyage">Delete</button>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </template>
+
+            <div>
+                <div class="view-header" style="margin-top:1.5rem">
+                    <h3>Recent Missions</h3>
+                    <div class="view-actions filter-bar">
+                        <select class="filter-select" x-model="recentMissionFilters.status" title="Filter by mission status">
+                            <option value="">All Statuses</option>
+                            <option value="Pending">Pending</option>
+                            <option value="Assigned">Assigned</option>
+                            <option value="InProgress">InProgress</option>
+                            <option value="Testing">Testing</option>
+                            <option value="Review">Review</option>
+                            <option value="Complete">Complete</option>
+                            <option value="Failed">Failed</option>
+                            <option value="Cancelled">Cancelled</option>
+                        </select>
+                        <select class="filter-select" x-model="recentMissionFilters.vesselId" title="Filter by target vessel">
+                            <option value="">All Vessels</option>
+                            <template x-for="v in allVessels" :key="v.id">
+                                <option :value="v.id" x-text="v.name"></option>
+                            </template>
+                        </select>
+                        <select class="filter-select" x-model="recentMissionFilters.captainId" title="Filter by assigned captain">
+                            <option value="">All Captains</option>
+                            <template x-for="c in captains" :key="c.id">
+                                <option :value="c.id" x-text="c.name"></option>
+                            </template>
+                        </select>
+                        <button class="btn btn-sm" @click="navigate('missions'); loadMissions()" title="Go to full missions list">View All &rarr;</button>
+                    </div>
+                </div>
+                <template x-if="recentMissions.length > 0">
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th title="Mission name and unique identifier">Mission</th>
+                                    <th title="Current mission lifecycle state">Status</th>
+                                    <th title="Target repository for this mission">Vessel</th>
+                                    <th title="AI captain assigned to execute this mission">Captain</th>
+                                    <th title="When this mission was created">Created</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="m in filteredRecentMissions()" :key="m.id">
+                                    <tr class="clickable" @click="navigate('missions', 'mission-detail', m.id)">
+                                        <td><strong x-text="m.title"></strong><div class="text-dim id-display"><span class="mono" x-text="m.id"></span><button class="copy-btn" @click.stop="copyId(m.id, $event)" title="Copy ID"></button></div></td>
+                                        <td><span class="tag" :class="(m.status || '').toLowerCase()" x-text="m.status" :title="statusTooltip(m.status)"></span></td>
+                                        <td x-text="vesselName(m.vesselId)"></td>
+                                        <td x-text="captainName(m.captainId)"></td>
+                                        <td class="text-dim" x-text="formatTime(m.createdUtc)" :title="formatTimeAbsolute(m.createdUtc)"></td>
+                                        <td @click.stop>
+                                            <button class="btn btn-sm btn-danger" @click="deleteMission(m.id)" title="Permanently delete this mission">Delete</button>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </template>
+                <p class="text-dim" x-show="filteredRecentMissions().length === 0">No missions found.</p>
+            </div>
+
+            <template x-if="status.recentSignals && status.recentSignals.length > 0">
+                <div style="margin-top:1.5rem">
+                    <h3>Recent Signals</h3>
+                    <div class="signal-list">
+                        <template x-for="sig in status.recentSignals" :key="sig.id">
+                            <div class="signal-item">
+                                <span class="tag" :class="(sig.type || '').toLowerCase()" x-text="sig.type"></span>
+                                <span x-text="sig.payload || sig.message"></span>
+                                <span class="text-dim" x-text="formatTime(sig.createdUtc)" :title="formatTimeAbsolute(sig.createdUtc)"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- ========== Fleets View ========== -->
+        <div x-show="view === 'fleets' && !detailView" class="view">
+            <div class="view-header">
+                <div>
+                    <h2>Fleets &amp; Vessels</h2>
+                    <p class="text-dim view-subtitle">Manage repository groups and their vessels. Each fleet organizes related repos for coordinated work.</p>
+                </div>
+                <div class="view-actions">
+                    <input type="text" class="filter-input" x-model="listSearch" placeholder="Search..." title="Search fleets and vessels by name, ID, repo URL, or branch">
+                    <button class="btn btn-primary btn-sm" @click="openCreateFleet()" title="Create a new fleet to group repositories">+ Fleet</button>
+                    <button class="btn btn-primary btn-sm" @click="openCreateVessel()" title="Add a new vessel (repository) to a fleet">+ Vessel</button>
+                    <button class="btn btn-sm" @click="loadFleets()" title="Refresh fleet and vessel data">&#x21bb;</button>
+                </div>
+            </div>
+            <template x-if="fleets.length === 0">
+                <p class="text-dim">No fleets configured.</p>
+            </template>
+            <template x-for="fleet in filteredFleets()" :key="fleet.id">
+                <div class="fleet-card">
+                    <div class="fleet-card-header">
+                        <div class="clickable" @click="navigate('fleets', 'fleet-detail', fleet.id)">
+                            <h3 x-text="fleet.name"></h3>
+                            <div class="text-dim id-display"><span class="mono" x-text="fleet.id"></span><button class="copy-btn" @click.stop="copyId(fleet.id, $event)" title="Copy ID"></button></div>
+                        </div>
+                        <div class="inline-actions">
+                            <button class="btn btn-sm" @click.stop="openEditFleet(fleet)" title="Edit fleet name and description">Edit</button>
+                            <button class="btn btn-sm btn-danger" @click.stop="deleteFleet(fleet.id)" title="Permanently delete this fleet">Delete</button>
+                        </div>
+                    </div>
+                    <template x-if="fleet._filteredVessels && fleet._filteredVessels.length > 0">
+                        <div class="table-wrap">
+                            <table class="vessel-table">
+                                <colgroup>
+                                    <col class="vessel-col-name">
+                                    <col class="vessel-col-repo">
+                                    <col class="vessel-col-branch">
+                                    <col class="vessel-col-badges">
+                                    <col class="vessel-col-actions">
+                                </colgroup>
+                                <thead><tr><th title="Vessel name and unique identifier">Vessel</th><th title="Git repository URL for this vessel">Repo URL</th><th title="Default branch used for merging (e.g. main)">Branch</th><th title="Context and style guide indicators"></th><th class="text-right">Actions</th></tr></thead>
+                                <tbody>
+                                    <template x-for="v in fleet._filteredVessels" :key="v.id">
+                                        <tr>
+                                            <td class="clickable" @click="navigate('fleets', 'vessel-detail', v.id)"><strong x-text="v.name"></strong><div class="text-dim id-display"><span class="mono" x-text="v.id"></span><button class="copy-btn" @click.stop="copyId(v.id, $event)" title="Copy ID"></button></div></td>
+                                            <td class="text-dim vessel-repo-cell" x-text="v.repoUrl"></td>
+                                            <td x-text="v.defaultBranch || 'main'"></td>
+                                            <td><span class="vessel-badge" x-show="v.projectContext" title="Has Project Context">CTX</span><span class="vessel-badge" x-show="v.styleGuide" title="Has Style Guide">STY</span></td>
+                                            <td class="text-right">
+                                                <button class="btn btn-sm" @click.stop="openEditVessel(v)" title="Edit vessel settings, context, and style guide">Edit</button>
+                                                <button class="btn btn-sm btn-danger" @click.stop="deleteVessel(v.id)" title="Permanently delete this vessel">Delete</button>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </template>
+                </div>
+            </template>
+        </div>
+
+        <!-- Fleet Detail -->
+        <div x-show="view === 'fleets' && detailView === 'fleet-detail'" class="view">
+            <button class="btn btn-sm" @click="goBack()" title="Return to fleets list">&larr; Back</button>
+            <template x-if="detail">
+                <div>
+                    <div class="detail-header">
+                        <h2 x-text="detail.name"></h2>
+                        <div class="inline-actions">
+                            <button class="btn btn-sm" @click="openEditFleet(detail)" title="Edit fleet name and description">Edit</button>
+                            <button class="btn btn-sm btn-danger" @click="deleteFleet(detail.id)" title="Permanently delete this fleet">Delete</button>
+                        </div>
+                    </div>
+                    <div class="detail-grid">
+                        <div class="detail-field"><span class="detail-label">ID</span><span class="id-display"><span class="mono" x-text="detail.id"></span><button class="copy-btn" @click.stop="copyId(detail.id, $event)" title="Copy ID"></button></span></div>
+                        <div class="detail-field"><span class="detail-label">Description</span><span x-text="detail.description || '-'"></span></div>
+                        <div class="detail-field"><span class="detail-label">Active</span><span x-text="detail.active !== false ? 'Yes' : 'No'"></span></div>
+                        <div class="detail-field"><span class="detail-label">Created</span><span x-text="formatTimeAbsolute(detail.createdUtc)" :title="detail.createdUtc"></span></div>
+                    </div>
+                    <template x-if="detail.vessels && detail.vessels.length > 0">
+                        <div>
+                            <h3>Vessels</h3>
+                            <div class="table-wrap">
+                                <table class="vessel-table vessel-table-detail">
+                                    <colgroup>
+                                        <col class="vessel-col-name">
+                                        <col class="vessel-col-repo">
+                                        <col class="vessel-col-branch">
+                                    </colgroup>
+                                    <thead><tr><th title="Vessel name and unique identifier">Name</th><th title="Git repository URL">Repo URL</th><th title="Default branch for merging">Branch</th></tr></thead>
+                                    <tbody>
+                                        <template x-for="v in detail.vessels" :key="v.id">
+                                            <tr class="clickable" @click="navigate('fleets', 'vessel-detail', v.id)">
+                                                <td><strong x-text="v.name"></strong><div class="text-dim id-display"><span class="mono" x-text="v.id"></span><button class="copy-btn" @click.stop="copyId(v.id, $event)" title="Copy ID"></button></div></td>
+                                                <td class="text-dim vessel-repo-cell" x-text="v.repoUrl"></td>
+                                                <td x-text="v.defaultBranch || 'main'"></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </template>
+        </div>
+
+        <!-- Vessel Detail -->
+        <div x-show="detailView === 'vessel-detail'" class="view">
+            <button class="btn btn-sm" @click="goBack()" title="Return to previous view">&larr; Back</button>
+            <template x-if="detail">
+                <div>
+                    <div class="detail-header">
+                        <h2 x-text="detail.name"></h2>
+                        <div class="inline-actions">
+                            <button class="btn btn-sm" @click="openEditVessel(detail)" title="Edit vessel settings, context, and style guide">Edit</button>
+                            <button class="btn btn-sm btn-danger" @click="deleteVessel(detail.id)" title="Permanently delete this vessel">Delete</button>
+                        </div>
+                    </div>
+                    <div class="detail-grid">
+                        <div class="detail-field"><span class="detail-label">ID</span><span class="id-display"><span class="mono" x-text="detail.id"></span><button class="copy-btn" @click.stop="copyId(detail.id, $event)" title="Copy ID"></button></span></div>
+                        <div class="detail-field"><span class="detail-label">Fleet</span><a href="#" @click.prevent="navigate('fleets', 'fleet-detail', detail.fleetId)" x-text="fleetName(detail.fleetId)"></a></div>
+                        <div class="detail-field"><span class="detail-label">Repo URL</span><span class="mono" x-text="detail.repoUrl || '-'"></span></div>
+                        <div class="detail-field"><span class="detail-label">Default Branch</span><span x-text="detail.defaultBranch || 'main'"></span></div>
+                        <div class="detail-field"><span class="detail-label">Local Path</span><span class="mono" x-text="detail.localPath || '-'" title="Path to the bare git repository clone used by Armada"></span></div>
+                        <div class="detail-field"><span class="detail-label">Working Directory</span><span class="mono" x-text="detail.workingDirectory || '-'" title="Your local checkout where completed missions are merged"></span></div>
+                        <div class="detail-field"><span class="detail-label">Active</span><span x-text="detail.active !== false ? 'Yes' : 'No'"></span></div>
+                        <div class="detail-field"><span class="detail-label">Created</span><span x-text="formatTimeAbsolute(detail.createdUtc)"></span></div>
+                    </div>
+                    <div class="detail-context-section" x-show="detail.projectContext">
+                        <h4>Project Context</h4>
+                        <pre class="detail-context-block" x-text="detail.projectContext"></pre>
+                    </div>
+                    <div class="detail-context-section" x-show="detail.styleGuide">
+                        <h4>Style Guide</h4>
+                        <pre class="detail-context-block" x-text="detail.styleGuide"></pre>
+                    </div>
+                    <template x-if="detailMissions.length > 0">
+                        <div>
+                            <h3>Missions</h3>
+                            <div class="table-wrap">
+                                <table>
+                                    <thead><tr><th title="Mission name and unique identifier">Mission</th><th title="Current mission lifecycle state">Status</th><th title="AI captain assigned to this mission">Captain</th><th title="Git branch for this mission's work">Branch</th></tr></thead>
+                                    <tbody>
+                                        <template x-for="m in detailMissions" :key="m.id">
+                                            <tr class="clickable" @click="navigate(view, 'mission-detail', m.id)">
+                                                <td><strong x-text="m.title"></strong><div class="text-dim id-display"><span class="mono" x-text="m.id"></span><button class="copy-btn" @click.stop="copyId(m.id, $event)" title="Copy ID"></button></div></td>
+                                                <td><span class="tag" :class="(m.status || '').toLowerCase()" x-text="m.status" :title="statusTooltip(m.status)"></span></td>
+                                                <td x-text="captainName(m.captainId)"></td>
+                                                <td class="text-dim" x-text="m.branchName || '-'"></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </template>
+        </div>
+
+        <!-- ========== Voyages View ========== -->
+        <div x-show="view === 'voyages' && !detailView" class="view">
+            <div class="view-header">
+                <div>
+                    <h2>Voyages</h2>
+                    <p class="text-dim view-subtitle">Track batches of related missions. Voyages group work into coordinated efforts with progress tracking.</p>
+                </div>
+                <div class="view-actions">
+                    <select class="filter-select" x-model="voyageFilters.status" @change="voyagePaging.pageNumber = 1; loadVoyages()" title="Filter voyages by lifecycle status">
+                        <option value="">All Statuses</option>
+                        <option value="Open">Open</option>
+                        <option value="InProgress">InProgress</option>
+                        <option value="Complete">Complete</option>
+                        <option value="Cancelled">Cancelled</option>
+                    </select>
+                    <select class="filter-select" x-model="voyageVesselFilter" title="Filter voyages by target vessel">
+                        <option value="">All Vessels</option>
+                        <template x-for="v in allVessels" :key="v.id">
+                            <option :value="v.id" x-text="v.name"></option>
+                        </template>
+                    </select>
+                    <input type="text" class="filter-input" x-model="listSearch" placeholder="Search..." title="Search voyages by title or ID">
+                    <button class="btn btn-primary btn-sm" @click="openCreateVoyage()" title="Create a new voyage with multiple missions">+ Voyage</button>
+                </div>
+            </div>
+            <!-- Voyages Pagination -->
+            <div class="pagination-bar" x-show="voyagePaging.totalPages > 0">
+                <div class="pagination-info">
+                    <span class="pagination-records" x-text="voyagePaging.totalRecords + ' records'"></span>
+                    <span class="pagination-timing" x-text="voyagePaging.totalMs.toFixed(1) + 'ms'"></span>
+                    <select class="page-size-select" title="Number of records per page" :value="voyagePaging.pageSize" @change="changePageSize(voyagePaging, $event.target.value, loadVoyages)">
+                        <option value="10">10 / page</option>
+                        <option value="25">25 / page</option>
+                        <option value="50">50 / page</option>
+                        <option value="100">100 / page</option>
+                        <option value="250">250 / page</option>
+                    </select>
+                </div>
+                <div class="pagination-controls">
+                    <button class="btn btn-sm" @click="prevPage(voyagePaging, loadVoyages)" :disabled="voyagePaging.pageNumber <= 1">&larr; Prev</button>
+                    <span class="pagination-page">
+                        Page <input type="number" class="page-input" :value="voyagePaging.pageNumber" min="1" :max="voyagePaging.totalPages"
+                            @change="goToPage(voyagePaging, parseInt($event.target.value), loadVoyages)">
+                        of <span x-text="voyagePaging.totalPages"></span>
+                    </span>
+                    <button class="btn btn-sm" @click="nextPage(voyagePaging, loadVoyages)" :disabled="voyagePaging.pageNumber >= voyagePaging.totalPages">Next &rarr;</button>
+                    <button class="btn btn-sm" @click="loadVoyages()" title="Refresh">&#x21bb;</button>
+                </div>
+            </div>
+            <template x-if="filteredVoyages().length === 0">
+                <p class="text-dim">No voyages found.</p>
+            </template>
+            <template x-for="voyage in filteredVoyages()" :key="voyage.id">
+                <div class="fleet-card clickable" @click="navigate('voyages', 'voyage-detail', voyage.id)">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <h3 x-text="voyage.title || voyage.id"></h3>
+                            <div class="text-dim id-display"><span class="mono" x-text="voyage.id"></span><button class="copy-btn" @click.stop="copyId(voyage.id, $event)" title="Copy ID"></button></div>
+                        </div>
+                        <div class="inline-actions" @click.stop>
+                            <span class="tag" :class="(voyage.status || '').toLowerCase()" x-text="voyage.status" :title="statusTooltip(voyage.status)"></span>
+                            <button class="btn btn-sm btn-danger" @click="deleteVoyage(voyage.id)"
+                                x-show="voyage.status !== 'Open' && voyage.status !== 'InProgress'" title="Permanently delete this voyage">Delete</button>
+                        </div>
+                    </div>
+                    <template x-if="voyage.description">
+                        <p class="text-dim" x-text="voyage.description" style="margin-top:0.25rem"></p>
+                    </template>
+                </div>
+            </template>
+        </div>
+
+        <!-- Voyage Detail -->
+        <div x-show="view === 'voyages' && detailView === 'voyage-detail'" class="view">
+            <button class="btn btn-sm" @click="goBack()" title="Return to voyages list">&larr; Back</button>
+            <template x-if="detail">
+                <div>
+                    <div class="detail-header">
+                        <h2 x-text="detail.title || detail.id"></h2>
+                        <div class="inline-actions">
+                            <button class="btn btn-sm btn-danger" @click="cancelVoyage(detail.id)"
+                                x-show="detail.status === 'Open' || detail.status === 'InProgress'" title="Cancel this voyage and all its pending missions">Cancel Voyage</button>
+                            <button class="btn btn-sm" @click="retryVoyageMissions(detail.id)" title="Restart all failed missions in this voyage">Retry Failed</button>
+                            <button class="btn btn-sm btn-danger" @click="deleteVoyage(detail.id)"
+                                x-show="detail.status !== 'Open' && detail.status !== 'InProgress'" title="Permanently delete this voyage">Delete Voyage</button>
+                        </div>
+                    </div>
+                    <div class="detail-grid">
+                        <div class="detail-field"><span class="detail-label">ID</span><span class="id-display"><span class="mono" x-text="detail.id"></span><button class="copy-btn" @click.stop="copyId(detail.id, $event)" title="Copy ID"></button></span></div>
+                        <div class="detail-field"><span class="detail-label">Status</span><span class="tag" :class="(detail.status || '').toLowerCase()" x-text="detail.status" :title="statusTooltip(detail.status)"></span></div>
+                        <div class="detail-field"><span class="detail-label">Description</span><span x-text="detail.description || '-'"></span></div>
+                        <div class="detail-field"><span class="detail-label">Created</span><span x-text="formatTimeAbsolute(detail.createdUtc)"></span></div>
+                        <div class="detail-field" x-show="detail.completedUtc"><span class="detail-label">Completed</span><span x-text="formatTimeAbsolute(detail.completedUtc)"></span></div>
+                    </div>
+                    <!-- Progress bar -->
+                    <template x-if="detailMissions.length > 0">
+                        <div style="margin:1rem 0">
+                            <div class="progress-bar" style="height:10px">
+                                <div class="progress-fill"
+                                     :style="'width:' + Math.round(detailMissions.filter(m => m.status === 'Complete').length / detailMissions.length * 100) + '%'"></div>
+                            </div>
+                            <span class="text-dim" x-text="detailMissions.filter(m => m.status === 'Complete').length + '/' + detailMissions.length + ' complete, ' + detailMissions.filter(m => m.status === 'Failed').length + ' failed'"></span>
+                        </div>
+                    </template>
+                    <h3>Missions</h3>
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th title="Mission name and unique identifier">Mission</th><th title="Current mission lifecycle state">Status</th><th title="AI captain assigned to this mission">Captain</th><th title="Git branch for this mission's work">Branch</th></tr></thead>
+                            <tbody>
+                                <template x-for="m in detailMissions" :key="m.id">
+                                    <tr class="clickable" @click="navigate('voyages', 'mission-detail', m.id)">
+                                        <td><strong x-text="m.title"></strong><div class="text-dim id-display"><span class="mono" x-text="m.id"></span><button class="copy-btn" @click.stop="copyId(m.id, $event)" title="Copy ID"></button></div></td>
+                                        <td><span class="tag" :class="(m.status || '').toLowerCase()" x-text="m.status" :title="statusTooltip(m.status)"></span></td>
+                                        <td><a href="#" @click.stop.prevent="navigate('captains', 'captain-detail', m.captainId)" x-text="captainName(m.captainId)"></a></td>
+                                        <td class="text-dim" x-text="m.branchName || '-'"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- ========== Missions View ========== -->
+        <div x-show="view === 'missions' && !detailView" class="view">
+            <div class="view-header">
+                <div>
+                    <h2>Missions</h2>
+                    <p class="text-dim view-subtitle">Individual work units assigned to AI captains. Create, monitor, and manage mission execution.</p>
+                </div>
+                <div class="view-actions filter-bar">
+                    <button class="btn btn-primary btn-sm" @click="showDispatchForm = !showDispatchForm; quickDispatchResult = null; dispatchResult = null" title="Create and dispatch missions">+ Dispatch</button>
+                    <select class="filter-select" x-model="missionFilters.status" @change="missionPaging.pageNumber = 1; loadMissions()" title="Filter missions by lifecycle status">
+                        <option value="">All Statuses</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Assigned">Assigned</option>
+                        <option value="InProgress">InProgress</option>
+                        <option value="Testing">Testing</option>
+                        <option value="Review">Review</option>
+                        <option value="Complete">Complete</option>
+                        <option value="Failed">Failed</option>
+                        <option value="Cancelled">Cancelled</option>
+                    </select>
+                    <select class="filter-select" x-model="missionFilters.vesselId" @change="missionPaging.pageNumber = 1; loadMissions()" title="Filter missions by target vessel">
+                        <option value="">All Vessels</option>
+                        <template x-for="v in allVessels" :key="v.id">
+                            <option :value="v.id" x-text="v.name"></option>
+                        </template>
+                    </select>
+                    <select class="filter-select" x-model="missionFilters.captainId" @change="missionPaging.pageNumber = 1; loadMissions()" title="Filter missions by assigned captain">
+                        <option value="">All Captains</option>
+                        <template x-for="c in captains" :key="c.id">
+                            <option :value="c.id" x-text="c.name"></option>
+                        </template>
+                    </select>
+                    <input type="text" class="filter-input" x-model="listSearch" placeholder="Search..." title="Search missions by title or ID">
+                </div>
+            </div>
+            <!-- Inline Dispatch Form (two-mode) -->
+            <div class="card" x-show="showDispatchForm" x-transition style="margin-bottom:1rem">
+                <!-- Mode tabs -->
+                <div class="dispatch-tabs">
+                    <button class="dispatch-tab" :class="dispatchMode === 'quick' ? 'active' : ''" @click="dispatchMode = 'quick'" title="Natural language task input with smart splitting">Quick</button>
+                    <button class="dispatch-tab" :class="dispatchMode === 'advanced' ? 'active' : ''" @click="dispatchMode = 'advanced'" title="Manual mission fields with full control">Advanced</button>
+                </div>
+
+                <!-- Quick Mode -->
+                <div x-show="dispatchMode === 'quick'" class="dispatch-form">
+                    <div class="form-group">
+                        <label>Vessel</label>
+                        <select x-model="quickDispatch.vesselId" required title="The repository where missions will be executed">
+                            <option value="">Select a vessel...</option>
+                            <template x-for="v in allVessels" :key="v.id">
+                                <option :value="v.id" x-text="v.name + ' (' + v.id + ')'"></option>
+                            </template>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Tasks</label>
+                        <textarea x-model="quickDispatch.prompt" rows="5" placeholder="Describe your tasks in natural language.&#10;&#10;Use numbered lists, semicolons, or just describe a single task:&#10;1. Add user authentication&#10;2. Create dashboard page&#10;3. Write unit tests" @input="previewQuickTasks()" title="Enter tasks as a numbered list, semicolon-separated, or as a single task"></textarea>
+                    </div>
+                    <!-- Task preview -->
+                    <div x-show="quickParsedTasks.length > 0" class="dispatch-preview">
+                        <div class="dispatch-preview-header">
+                            <span x-text="quickParsedTasks.length + ' task' + (quickParsedTasks.length !== 1 ? 's' : '') + ' detected'"></span>
+                        </div>
+                        <ol class="dispatch-preview-list">
+                            <template x-for="(task, i) in quickParsedTasks" :key="i">
+                                <li x-text="task"></li>
+                            </template>
+                        </ol>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-primary" :disabled="quickDispatching || !quickDispatch.vesselId || !quickDispatch.prompt.trim()" @click="quickDispatchVoyage()" title="Create a voyage with the parsed tasks">
+                            <span x-show="!quickDispatching">Dispatch</span>
+                            <span x-show="quickDispatching">Dispatching...</span>
+                        </button>
+                        <button type="button" class="btn btn-sm" @click="showDispatchForm = false" title="Close">Cancel</button>
+                    </div>
+                    <template x-if="quickDispatchResult">
+                        <div class="alert" :class="quickDispatchResult.ok ? 'alert-success' : 'alert-error'" x-text="quickDispatchResult.message"></div>
+                    </template>
+                </div>
+
+                <!-- Advanced Mode (existing single-mission dispatch) -->
+                <div x-show="dispatchMode === 'advanced'">
+                    <form @submit.prevent="dispatchMission().then(() => { if(dispatchResult?.ok) { showDispatchForm = false; loadMissions(); } })" class="dispatch-form">
+                        <div class="form-group">
+                            <label>Title</label>
+                            <input type="text" x-model="dispatch.title" placeholder="What needs to be done?" required title="Short summary of what the mission should accomplish">
+                        </div>
+                        <div class="form-group">
+                            <label>Description</label>
+                            <textarea x-model="dispatch.description" rows="3" placeholder="Detailed instructions for the AI captain..." title="Detailed instructions and context for the AI captain"></textarea>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group" style="flex:2">
+                                <label>Vessel</label>
+                                <select x-model="dispatch.vesselId" required title="The repository where the mission will be executed">
+                                    <option value="">Select a vessel...</option>
+                                    <template x-for="v in allVessels" :key="v.id">
+                                        <option :value="v.id" x-text="v.name + ' (' + v.id + ')'"></option>
+                                    </template>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex:1">
+                                <label>Priority</label>
+                                <input type="number" x-model="dispatch.priority" min="0" max="1000" placeholder="100" title="Higher priority missions are assigned first (default 100)">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Voyage (optional)</label>
+                            <select x-model="dispatch.voyageId" title="Optionally group this mission into an existing voyage">
+                                <option value="">No voyage</option>
+                                <template x-for="v in voyages.filter(v => v.status === 'Open' || v.status === 'InProgress')" :key="v.id">
+                                    <option :value="v.id" x-text="v.title + ' (' + v.id + ')'"></option>
+                                </template>
+                            </select>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary" :disabled="dispatching" title="Create the mission and assign it to an available captain">
+                                <span x-show="!dispatching">Dispatch Mission</span>
+                                <span x-show="dispatching">Dispatching...</span>
+                            </button>
+                            <button type="button" class="btn btn-sm" @click="showDispatchForm = false" title="Close the dispatch form without creating a mission">Cancel</button>
+                        </div>
+                        <template x-if="dispatchResult">
+                            <div class="alert" :class="dispatchResult.ok ? 'alert-success' : 'alert-error'" x-text="dispatchResult.message"></div>
+                        </template>
+                    </form>
+                </div>
+            </div>
+            <!-- Missions Pagination -->
+            <div class="pagination-bar" x-show="missionPaging.totalPages > 0">
+                <div class="pagination-info">
+                    <span class="pagination-records" x-text="missionPaging.totalRecords + ' records'"></span>
+                    <span class="pagination-timing" x-text="missionPaging.totalMs.toFixed(1) + 'ms'"></span>
+                    <select class="page-size-select" title="Number of records per page" :value="missionPaging.pageSize" @change="changePageSize(missionPaging, $event.target.value, loadMissions)">
+                        <option value="10">10 / page</option>
+                        <option value="25">25 / page</option>
+                        <option value="50">50 / page</option>
+                        <option value="100">100 / page</option>
+                        <option value="250">250 / page</option>
+                    </select>
+                </div>
+                <div class="pagination-controls">
+                    <button class="btn btn-sm" @click="prevPage(missionPaging, loadMissions)" :disabled="missionPaging.pageNumber <= 1">&larr; Prev</button>
+                    <span class="pagination-page">
+                        Page <input type="number" class="page-input" :value="missionPaging.pageNumber" min="1" :max="missionPaging.totalPages"
+                            @change="goToPage(missionPaging, parseInt($event.target.value), loadMissions)">
+                        of <span x-text="missionPaging.totalPages"></span>
+                    </span>
+                    <button class="btn btn-sm" @click="nextPage(missionPaging, loadMissions)" :disabled="missionPaging.pageNumber >= missionPaging.totalPages">Next &rarr;</button>
+                    <button class="btn btn-sm" @click="loadMissions()" title="Refresh">&#x21bb;</button>
+                </div>
+            </div>
+            <div class="table-wrap" x-show="allMissions.length > 0">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable" @click="sortBy('title', allMissions)" title="Mission name and unique identifier — click to sort">Mission<span x-text="sortIcon('title')"></span></th>
+                            <th class="sortable" @click="sortBy('status', allMissions)" title="Current mission lifecycle state — click to sort">Status<span x-text="sortIcon('status')"></span></th>
+                            <th title="Target repository for this mission">Vessel</th>
+                            <th title="AI captain assigned to execute this mission">Captain</th>
+                            <th title="Git branch for this mission's work">Branch</th>
+                            <th class="sortable" @click="sortBy('createdUtc', allMissions)" title="When this mission was created — click to sort">Created<span x-text="sortIcon('createdUtc')"></span></th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="m in sortedRows(filterRows(allMissions))" :key="m.id">
+                            <tr class="clickable" @click="navigate('missions', 'mission-detail', m.id)">
+                                <td><strong x-text="m.title"></strong><div class="text-dim id-display"><span class="mono" x-text="m.id"></span><button class="copy-btn" @click.stop="copyId(m.id, $event)" title="Copy ID"></button></div></td>
+                                <td><span class="tag" :class="(m.status || '').toLowerCase()" x-text="m.status" :title="statusTooltip(m.status)"></span></td>
+                                <td x-text="vesselName(m.vesselId)"></td>
+                                <td x-text="captainName(m.captainId)"></td>
+                                <td class="text-dim" x-text="m.branchName || '-'"></td>
+                                <td class="text-dim" x-text="formatTime(m.createdUtc)" :title="formatTimeAbsolute(m.createdUtc)"></td>
+                                <td @click.stop>
+                                    <button class="btn btn-sm btn-danger" @click="deleteMission(m.id)" title="Permanently delete this mission">Delete</button>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-dim" x-show="allMissions.length === 0">No missions found.</p>
+        </div>
+
+        <!-- Mission Detail -->
+        <div x-show="detailView === 'mission-detail'" class="view">
+            <button class="btn btn-sm" @click="goBack()" title="Return to previous view">&larr; Back</button>
+            <template x-if="detail">
+                <div>
+                    <div class="detail-header">
+                        <h2 x-text="detail.title"></h2>
+                        <div class="inline-actions">
+                            <button class="btn btn-sm" @click="openEditMission(detail)" title="Edit mission title, description, and priority">Edit</button>
+                            <button class="btn btn-sm btn-danger" @click="cancelMission(detail.id)"
+                                x-show="detail.status !== 'Complete' && detail.status !== 'Cancelled'" title="Cancel this mission and stop execution">Cancel</button>
+                            <button class="btn btn-sm" @click="restartMissionPrompt(detail)"
+                                x-show="detail.status === 'Failed' || detail.status === 'Cancelled'" title="Restart this mission with optional changes to the instructions">Restart</button>
+                            <button class="btn btn-sm btn-danger" @click="deleteMission(detail.id)" title="Permanently delete this mission">Delete</button>
+                            <button class="btn btn-sm" @click="viewMissionDiff(detail.id)" title="View the git diff showing changes made by this mission">Diff</button>
+                            <button class="btn btn-sm" @click="viewMissionLog(detail.id)" title="View the captain's execution log for this mission">Log</button>
+                        </div>
+                    </div>
+                    <div class="detail-grid">
+                        <div class="detail-field"><span class="detail-label">ID</span><span class="id-display"><span class="mono" x-text="detail.id"></span><button class="copy-btn" @click.stop="copyId(detail.id, $event)" title="Copy ID"></button></span></div>
+                        <div class="detail-field"><span class="detail-label">Status</span><span class="tag" :class="(detail.status || '').toLowerCase()" x-text="detail.status" :title="statusTooltip(detail.status)"></span></div>
+                        <div class="detail-field"><span class="detail-label">Priority</span><span x-text="detail.priority"></span></div>
+                        <div class="detail-field"><span class="detail-label">Description</span><span x-text="detail.description || '-'" style="white-space:pre-wrap"></span></div>
+                        <div class="detail-field"><span class="detail-label">Vessel</span><a href="#" @click.prevent="navigate(view, 'vessel-detail', detail.vesselId)" x-text="vesselName(detail.vesselId)"></a></div>
+                        <div class="detail-field"><span class="detail-label">Captain</span><a href="#" @click.prevent="navigate('captains', 'captain-detail', detail.captainId)" x-text="captainName(detail.captainId)"></a></div>
+                        <div class="detail-field" x-show="detail.voyageId"><span class="detail-label">Voyage</span><span class="id-display"><a class="mono" href="#" @click.prevent="navigate('voyages', 'voyage-detail', detail.voyageId)" x-text="detail.voyageId"></a><button class="copy-btn" @click.stop="copyId(detail.voyageId, $event)" title="Copy ID"></button></span></div>
+                        <div class="detail-field"><span class="detail-label">Branch</span><span class="mono" x-text="detail.branchName || '-'"></span></div>
+                        <div class="detail-field" x-show="detail.prUrl"><span class="detail-label">PR</span><span class="mono" x-text="detail.prUrl"></span></div>
+                        <div class="detail-field" x-show="detail.commitHash"><span class="detail-label">Commit</span><span class="mono" x-text="detail.commitHash ? detail.commitHash.substring(0, 12) : ''" :title="detail.commitHash"></span></div>
+                        <div class="detail-field"><span class="detail-label">Created</span><span x-text="formatTimeAbsolute(detail.createdUtc)"></span></div>
+                        <div class="detail-field" x-show="detail.startedUtc"><span class="detail-label">Started</span><span x-text="formatTimeAbsolute(detail.startedUtc)"></span></div>
+                        <div class="detail-field" x-show="detail.completedUtc"><span class="detail-label">Completed</span><span x-text="formatTimeAbsolute(detail.completedUtc)"></span></div>
+                    </div>
+
+                    <!-- Status transitions -->
+                    <div class="status-transitions" x-show="detail.status !== 'Complete' && detail.status !== 'Cancelled'" title="Manually transition this mission to a different status">
+                        <span class="detail-label">Transition to:</span>
+                        <template x-if="detail.status === 'Pending'">
+                            <button class="btn btn-sm" @click="transitionMissionStatus(detail.id, 'Assigned')" title="Mark as assigned to a captain">Assigned</button>
+                        </template>
+                        <template x-if="detail.status === 'Assigned'">
+                            <button class="btn btn-sm" @click="transitionMissionStatus(detail.id, 'InProgress')" title="Mark as actively being worked on">InProgress</button>
+                        </template>
+                        <template x-if="detail.status === 'InProgress'">
+                            <span>
+                                <button class="btn btn-sm" @click="transitionMissionStatus(detail.id, 'Testing')" title="Move to testing phase">Testing</button>
+                                <button class="btn btn-sm" @click="transitionMissionStatus(detail.id, 'Review')" title="Move to code review phase">Review</button>
+                                <button class="btn btn-sm" @click="transitionMissionStatus(detail.id, 'Complete')" title="Mark as successfully completed">Complete</button>
+                                <button class="btn btn-sm btn-danger" @click="transitionMissionStatus(detail.id, 'Failed')" title="Mark as failed">Failed</button>
+                            </span>
+                        </template>
+                        <template x-if="detail.status === 'Testing'">
+                            <span>
+                                <button class="btn btn-sm" @click="transitionMissionStatus(detail.id, 'Review')" title="Move to code review phase">Review</button>
+                                <button class="btn btn-sm" @click="transitionMissionStatus(detail.id, 'Complete')" title="Mark as successfully completed">Complete</button>
+                                <button class="btn btn-sm" @click="transitionMissionStatus(detail.id, 'InProgress')" title="Send back to active work">InProgress</button>
+                                <button class="btn btn-sm btn-danger" @click="transitionMissionStatus(detail.id, 'Failed')" title="Mark as failed">Failed</button>
+                            </span>
+                        </template>
+                        <template x-if="detail.status === 'Review'">
+                            <span>
+                                <button class="btn btn-sm" @click="transitionMissionStatus(detail.id, 'Complete')" title="Mark as successfully completed">Complete</button>
+                                <button class="btn btn-sm" @click="transitionMissionStatus(detail.id, 'InProgress')" title="Send back to active work">InProgress</button>
+                                <button class="btn btn-sm btn-danger" @click="transitionMissionStatus(detail.id, 'Failed')" title="Mark as failed">Failed</button>
+                            </span>
+                        </template>
+                    </div>
+
+                </div>
+            </template>
+        </div>
+
+        <!-- ========== Captains View ========== -->
+        <div x-show="view === 'captains' && !detailView" class="view">
+            <div class="view-header">
+                <div>
+                    <h2>Captains</h2>
+                    <p class="text-dim view-subtitle">AI worker agents executing missions. Monitor captain status, assignments, and activity logs.</p>
+                </div>
+                <div class="view-actions">
+                    <input type="text" class="filter-input" x-model="listSearch" placeholder="Search..." title="Search captains by name or ID">
+                    <button class="btn btn-primary btn-sm" @click="openAddCaptain()" title="Register a new AI captain agent">+ Captain</button>
+                    <button class="btn btn-sm btn-danger" @click="stopAllCaptains()"
+                        x-show="captains.some(c => c.state === 'Working' || c.state === 'Stalled')" title="Stop all active captain processes">Stop All</button>
+                </div>
+            </div>
+            <template x-if="captains.length === 0">
+                <p class="text-dim">No captains registered.</p>
+            </template>
+            <!-- Captains Pagination -->
+            <div class="pagination-bar" x-show="captainPaging.totalPages > 0">
+                <div class="pagination-info">
+                    <span class="pagination-records" x-text="captainPaging.totalRecords + ' records'"></span>
+                    <span class="pagination-timing" x-text="captainPaging.totalMs.toFixed(1) + 'ms'"></span>
+                    <select class="page-size-select" title="Number of records per page" :value="captainPaging.pageSize" @change="changePageSize(captainPaging, $event.target.value, loadCaptains)">
+                        <option value="10">10 / page</option>
+                        <option value="25">25 / page</option>
+                        <option value="50">50 / page</option>
+                        <option value="100">100 / page</option>
+                        <option value="250">250 / page</option>
+                    </select>
+                </div>
+                <div class="pagination-controls">
+                    <button class="btn btn-sm" @click="prevPage(captainPaging, loadCaptains)" :disabled="captainPaging.pageNumber <= 1">&larr; Prev</button>
+                    <span class="pagination-page">
+                        Page <input type="number" class="page-input" :value="captainPaging.pageNumber" min="1" :max="captainPaging.totalPages"
+                            @change="goToPage(captainPaging, parseInt($event.target.value), loadCaptains)">
+                        of <span x-text="captainPaging.totalPages"></span>
+                    </span>
+                    <button class="btn btn-sm" @click="nextPage(captainPaging, loadCaptains)" :disabled="captainPaging.pageNumber >= captainPaging.totalPages">Next &rarr;</button>
+                    <button class="btn btn-sm" @click="loadCaptains()" title="Refresh">&#x21bb;</button>
+                </div>
+            </div>
+            <div class="table-wrap" x-show="captains.length > 0">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable" @click="sortBy('name', captains)" title="Captain name and unique identifier — click to sort">Name<span x-text="sortIcon('name')"></span></th>
+                            <th class="sortable" @click="sortBy('state', captains)" title="Idle, Working, or Stalled — click to sort">State<span x-text="sortIcon('state')"></span></th>
+                            <th title="AI agent runtime type (e.g. Claude Code, Codex)">Runtime</th>
+                            <th title="Maximum concurrent missions this captain can handle">Parallel</th>
+                            <th title="Currently assigned mission, if any">Mission</th>
+                            <th title="Operating system process ID of the captain agent">PID</th>
+                            <th title="Last time this captain reported activity">Heartbeat</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="cpt in sortedRows(filterRows(captains))" :key="cpt.id">
+                            <tr>
+                                <td class="clickable" @click="navigate('captains', 'captain-detail', cpt.id)">
+                                    <strong x-text="cpt.name"></strong>
+                                    <div class="text-dim id-display"><span class="mono" x-text="cpt.id"></span><button class="copy-btn" @click.stop="copyId(cpt.id, $event)" title="Copy ID"></button></div>
+                                </td>
+                                <td><span class="tag" :class="(cpt.state || '').toLowerCase()" x-text="cpt.state" :title="statusTooltip(cpt.state)"></span></td>
+                                <td x-text="cpt.runtime || 'ClaudeCode'"></td>
+                                <td x-text="cpt.maxParallelism ?? 1"></td>
+                                <td>
+                                    <span x-show="cpt.currentMissionId" class="id-display"><a class="mono" href="#" @click.prevent="navigate('missions', 'mission-detail', cpt.currentMissionId)" x-text="cpt.currentMissionId"></a><button class="copy-btn" @click.stop="copyId(cpt.currentMissionId, $event)" title="Copy ID"></button></span>
+                                    <span x-show="!cpt.currentMissionId">-</span>
+                                </td>
+                                <td x-text="cpt.processId || '-'"></td>
+                                <td class="text-dim" x-text="formatTime(cpt.lastHeartbeatUtc)" :title="formatTimeAbsolute(cpt.lastHeartbeatUtc)"></td>
+                                <td>
+                                    <button class="btn btn-sm btn-danger"
+                                        x-show="cpt.state === 'Working' || cpt.state === 'Stalled'"
+                                        @click.stop="recallCaptain(cpt.id)" title="Stop this captain's current process">Recall</button>
+                                    <button class="btn btn-sm btn-danger"
+                                        x-show="cpt.state === 'Idle'"
+                                        @click.stop="removeCaptain(cpt.id)" title="Unregister and remove this captain">Remove</button>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Captain Detail -->
+        <div x-show="view === 'captains' && detailView === 'captain-detail'" class="view">
+            <button class="btn btn-sm" @click="goBack()" title="Return to captains list">&larr; Back</button>
+            <template x-if="detail">
+                <div>
+                    <div class="detail-header">
+                        <h2 x-text="detail.name"></h2>
+                        <div class="inline-actions">
+                            <button class="btn btn-sm" @click="openEditCaptain(detail)" title="Edit captain name, runtime, and parallelism">Edit</button>
+                            <button class="btn btn-sm btn-danger" @click="recallCaptain(detail.id)"
+                                x-show="detail.state === 'Working' || detail.state === 'Stalled'" title="Stop this captain's current process">Stop</button>
+                            <button class="btn btn-sm btn-danger" @click="removeCaptain(detail.id)"
+                                x-show="detail.state === 'Idle'" title="Unregister and remove this captain">Remove</button>
+                        </div>
+                    </div>
+                    <div class="detail-grid">
+                        <div class="detail-field"><span class="detail-label">ID</span><span class="id-display"><span class="mono" x-text="detail.id"></span><button class="copy-btn" @click.stop="copyId(detail.id, $event)" title="Copy ID"></button></span></div>
+                        <div class="detail-field"><span class="detail-label">State</span><span class="tag" :class="(detail.state || '').toLowerCase()" x-text="detail.state" :title="statusTooltip(detail.state)"></span></div>
+                        <div class="detail-field"><span class="detail-label">Runtime</span><span x-text="detail.runtime || 'ClaudeCode'"></span></div>
+                        <div class="detail-field"><span class="detail-label">Max Parallelism</span><span x-text="detail.maxParallelism ?? 1"></span></div>
+                        <div class="detail-field"><span class="detail-label">Process ID</span><span x-text="detail.processId || '-'"></span></div>
+                        <div class="detail-field"><span class="detail-label">Current Mission</span>
+                            <span x-show="detail.currentMissionId" class="id-display"><a class="mono" href="#" @click.prevent="navigate('missions', 'mission-detail', detail.currentMissionId)" x-text="detail.currentMissionId"></a><button class="copy-btn" @click.stop="copyId(detail.currentMissionId, $event)" title="Copy ID"></button></span>
+                            <span x-show="!detail.currentMissionId">-</span>
+                        </div>
+                        <div class="detail-field"><span class="detail-label">Last Heartbeat</span><span x-text="formatTimeAbsolute(detail.lastHeartbeatUtc) || '-'"></span></div>
+                        <div class="detail-field"><span class="detail-label">Created</span><span x-text="formatTimeAbsolute(detail.createdUtc)"></span></div>
+                    </div>
+                    <!-- Captain Log -->
+                    <div style="margin-top:1rem">
+                        <button class="btn btn-sm" @click="viewCaptainLog(detail.id)" title="View the captain's current execution log">View Current Log</button>
+                        <template x-if="detailLog && !detailLog.error">
+                            <div>
+                                <h3>Current Log <span class="text-dim" x-text="'(' + (detailLog.lines || 0) + ' of ' + (detailLog.totalLines || 0) + ' lines)'"></span></h3>
+                                <pre class="diff-viewer" x-text="detailLog.log || 'No log output'"></pre>
+                            </div>
+                        </template>
+                        <template x-if="detailLog && detailLog.error">
+                            <p class="text-dim" x-text="'Log unavailable: ' + detailLog.error"></p>
+                        </template>
+                    </div>
+                    <div style="margin-top:1rem">
+                        <h3>Recent Missions</h3>
+                        <template x-if="detailMissions.length > 0">
+                            <div class="table-wrap">
+                                <table>
+                                    <thead><tr><th title="Mission name and unique identifier">Mission</th><th title="Current mission lifecycle state">Status</th><th title="Git branch for this mission's work">Branch</th><th title="When the mission was completed or created">Date</th></tr></thead>
+                                    <tbody>
+                                        <template x-for="m in detailMissions" :key="m.id">
+                                            <tr class="clickable" @click="navigate('missions', 'mission-detail', m.id)">
+                                                <td><strong x-text="m.title"></strong><div class="text-dim id-display"><span class="mono" x-text="m.id"></span><button class="copy-btn" @click.stop="copyId(m.id, $event)" title="Copy ID"></button></div></td>
+                                                <td><span class="tag" :class="(m.status || '').toLowerCase()" x-text="m.status" :title="statusTooltip(m.status)"></span></td>
+                                                <td class="text-dim" x-text="m.branchName || '-'"></td>
+                                                <td class="text-dim" :title="formatTimeAbsolute(m.completedUtc || m.createdUtc)" x-text="formatTime(m.completedUtc || m.createdUtc)"></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </template>
+                        <p x-show="detailMissions.length === 0" class="text-dim" style="margin-top:0.5rem">No missions yet</p>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- ========== Signals View ========== -->
+        <div x-show="view === 'signals' && !detailView" class="view">
+            <div class="view-header">
+                <div>
+                    <h2>Signals</h2>
+                    <p class="text-dim view-subtitle">Messages exchanged between the admiral and captains. View signal payloads and delivery status.</p>
+                </div>
+                <div class="view-actions">
+                    <input type="text" class="filter-input" x-model="listSearch" placeholder="Search..." title="Search signals by type, payload, or ID">
+                    <button class="btn btn-primary btn-sm" @click="openSendSignal()" title="Send a new signal to a captain or the admiral">+ Signal</button>
+                </div>
+            </div>
+            <!-- Signals Pagination -->
+            <div class="pagination-bar" x-show="signalPaging.totalPages > 0">
+                <div class="pagination-info">
+                    <span class="pagination-records" x-text="signalPaging.totalRecords + ' records'"></span>
+                    <span class="pagination-timing" x-text="signalPaging.totalMs.toFixed(1) + 'ms'"></span>
+                    <select class="page-size-select" title="Number of records per page" :value="signalPaging.pageSize" @change="changePageSize(signalPaging, $event.target.value, loadSignals)">
+                        <option value="10">10 / page</option>
+                        <option value="25">25 / page</option>
+                        <option value="50">50 / page</option>
+                        <option value="100">100 / page</option>
+                        <option value="250">250 / page</option>
+                    </select>
+                </div>
+                <div class="pagination-controls">
+                    <button class="btn btn-sm" @click="prevPage(signalPaging, loadSignals)" :disabled="signalPaging.pageNumber <= 1">&larr; Prev</button>
+                    <span class="pagination-page">
+                        Page <input type="number" class="page-input" :value="signalPaging.pageNumber" min="1" :max="signalPaging.totalPages"
+                            @change="goToPage(signalPaging, parseInt($event.target.value), loadSignals)">
+                        of <span x-text="signalPaging.totalPages"></span>
+                    </span>
+                    <button class="btn btn-sm" @click="nextPage(signalPaging, loadSignals)" :disabled="signalPaging.pageNumber >= signalPaging.totalPages">Next &rarr;</button>
+                    <button class="btn btn-sm" @click="loadSignals()" title="Refresh">&#x21bb;</button>
+                </div>
+            </div>
+            <div class="table-wrap" x-show="signals.length > 0">
+                <table>
+                    <thead><tr><th title="Unique signal identifier">ID</th><th title="Signal type (Nudge, Mail, Assignment, Progress, Completion, Error)">Type</th><th title="Sender — captain or Admiral">From</th><th title="Recipient — captain or Admiral">To</th><th title="Signal message content">Payload</th><th title="When the signal was created">Time</th><th>Action</th></tr></thead>
+                    <tbody>
+                        <template x-for="sig in filterRows(signals)" :key="sig.id">
+                            <tr>
+                                <td class="mono text-dim"><span class="id-display"><span x-text="sig.id"></span><button class="copy-btn" @click.stop="copyId(sig.id, $event)" title="Copy ID"></button></span></td>
+                                <td><span class="tag" :class="(sig.type || '').toLowerCase()" x-text="sig.type"></span></td>
+                                <td><span x-show="sig.fromCaptainId" class="id-display"><span class="mono" x-text="sig.fromCaptainId"></span><button class="copy-btn" @click.stop="copyId(sig.fromCaptainId, $event)" title="Copy ID"></button></span><span x-show="!sig.fromCaptainId">Admiral</span></td>
+                                <td><span x-show="sig.toCaptainId" class="id-display"><span class="mono" x-text="sig.toCaptainId"></span><button class="copy-btn" @click.stop="copyId(sig.toCaptainId, $event)" title="Copy ID"></button></span><span x-show="!sig.toCaptainId">Admiral</span></td>
+                                <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="sig.payload || '-'"></td>
+                                <td class="text-dim" x-text="formatTime(sig.createdUtc)" :title="formatTimeAbsolute(sig.createdUtc)"></td>
+                                <td><button class="btn btn-sm" @click="navigate('signals', 'signal-detail', sig.id)" title="View full signal payload and details">Show Details</button></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-dim" x-show="signals.length === 0">No signals found.</p>
+        </div>
+
+        <!-- Signal Detail -->
+        <div x-show="view === 'signals' && detailView === 'signal-detail'" class="view">
+            <button class="btn btn-sm" @click="goBack()" title="Return to signals list">&larr; Back</button>
+            <template x-if="detail">
+                <div>
+                    <div class="detail-header">
+                        <h2>Signal Details</h2>
+                    </div>
+                    <div class="detail-grid">
+                        <div class="detail-field"><span class="detail-label">ID</span><span class="id-display"><span class="mono" x-text="detail.id"></span><button class="copy-btn" @click.stop="copyId(detail.id, $event)" title="Copy ID"></button></span></div>
+                        <div class="detail-field"><span class="detail-label">Type</span><span class="tag" :class="(detail.type || '').toLowerCase()" x-text="detail.type"></span></div>
+                        <div class="detail-field"><span class="detail-label">Read</span><span x-text="detail.read ? 'Yes' : 'No'"></span></div>
+                        <div class="detail-field">
+                            <span class="detail-label">From</span>
+                            <template x-if="detail.fromCaptainId">
+                                <a href="#" @click.prevent="navigate('captains', 'captain-detail', detail.fromCaptainId)" x-text="captainName(detail.fromCaptainId)"></a>
+                            </template>
+                            <template x-if="!detail.fromCaptainId">
+                                <span>Admiral</span>
+                            </template>
+                        </div>
+                        <div class="detail-field">
+                            <span class="detail-label">To</span>
+                            <template x-if="detail.toCaptainId">
+                                <a href="#" @click.prevent="navigate('captains', 'captain-detail', detail.toCaptainId)" x-text="captainName(detail.toCaptainId)"></a>
+                            </template>
+                            <template x-if="!detail.toCaptainId">
+                                <span>Admiral</span>
+                            </template>
+                        </div>
+                        <div class="detail-field" x-show="detail.missionId">
+                            <span class="detail-label">Mission</span>
+                            <span class="id-display"><a class="mono" href="#" @click.prevent="navigate('missions', 'mission-detail', detail.missionId)" x-text="detail.missionId"></a><button class="copy-btn" @click.stop="copyId(detail.missionId, $event)" title="Copy ID"></button></span>
+                        </div>
+                        <div class="detail-field"><span class="detail-label">Created</span><span x-text="formatTimeAbsolute(detail.createdUtc)"></span></div>
+                    </div>
+                    <div style="margin-top:1rem">
+                        <h3>Payload</h3>
+                        <pre class="detail-payload" x-text="detail.payload || '(empty)'"></pre>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- ========== Events View ========== -->
+        <div x-show="view === 'events' && !detailView" class="view">
+            <div class="view-header">
+                <div>
+                    <h2>Events</h2>
+                    <p class="text-dim view-subtitle">System event log capturing state changes, completions, failures, and other notable occurrences.</p>
+                </div>
+                <div class="view-actions filter-bar">
+                    <input type="text" class="filter-input" x-model="eventFilters.type" @change="eventPaging.pageNumber = 1; loadEvents()" placeholder="Event type..." title="Filter by event type (e.g. mission.completed, captain.started)">
+                    <input type="text" class="filter-input" x-model="eventFilters.captainId" @change="eventPaging.pageNumber = 1; loadEvents()" placeholder="Captain ID..." title="Filter events by captain ID (cpt_...)">
+                    <input type="text" class="filter-input" x-model="eventFilters.missionId" @change="eventPaging.pageNumber = 1; loadEvents()" placeholder="Mission ID..." title="Filter events by mission ID (msn_...)">
+                    <select class="filter-select" x-model="eventFilters.limit" @change="eventPaging.pageNumber = 1; loadEvents()" title="Number of events to load per page">
+                        <option value="25">25</option>
+                        <option value="50" selected>50</option>
+                        <option value="100">100</option>
+                        <option value="200">200</option>
+                    </select>
+                </div>
+            </div>
+            <!-- Events Pagination -->
+            <div class="pagination-bar" x-show="eventPaging.totalPages > 0">
+                <div class="pagination-info">
+                    <span class="pagination-records" x-text="eventPaging.totalRecords + ' records'"></span>
+                    <span class="pagination-timing" x-text="eventPaging.totalMs.toFixed(1) + 'ms'"></span>
+                    <select class="page-size-select" title="Number of records per page" :value="eventPaging.pageSize" @change="changePageSize(eventPaging, $event.target.value, loadEvents)">
+                        <option value="10">10 / page</option>
+                        <option value="25">25 / page</option>
+                        <option value="50">50 / page</option>
+                        <option value="100">100 / page</option>
+                        <option value="250">250 / page</option>
+                    </select>
+                </div>
+                <div class="pagination-controls">
+                    <button class="btn btn-sm" @click="prevPage(eventPaging, loadEvents)" :disabled="eventPaging.pageNumber <= 1">&larr; Prev</button>
+                    <span class="pagination-page">
+                        Page <input type="number" class="page-input" :value="eventPaging.pageNumber" min="1" :max="eventPaging.totalPages"
+                            @change="goToPage(eventPaging, parseInt($event.target.value), loadEvents)">
+                        of <span x-text="eventPaging.totalPages"></span>
+                    </span>
+                    <button class="btn btn-sm" @click="nextPage(eventPaging, loadEvents)" :disabled="eventPaging.pageNumber >= eventPaging.totalPages">Next &rarr;</button>
+                    <button class="btn btn-sm" @click="loadEvents()" title="Refresh">&#x21bb;</button>
+                </div>
+            </div>
+            <div class="table-wrap" x-show="events.length > 0">
+                <table>
+                    <thead><tr><th title="When the event occurred">Time</th><th title="Event type category">Type</th><th title="Human-readable event description">Message</th><th title="Related entity ID (fleet, vessel, voyage, etc.)">Entity</th><th title="Captain involved in this event">Captain</th><th title="Mission related to this event">Mission</th><th>Action</th></tr></thead>
+                    <tbody>
+                        <template x-for="evt in events" :key="evt.id">
+                            <tr>
+                                <td class="text-dim" x-text="formatTime(evt.createdUtc)" :title="formatTimeAbsolute(evt.createdUtc)"></td>
+                                <td><span class="tag" x-text="evt.eventType"></span></td>
+                                <td x-text="evt.message"></td>
+                                <td class="mono text-dim"><span x-show="evt.entityId" class="id-display"><span x-text="evt.entityId"></span><button class="copy-btn" @click.stop="copyId(evt.entityId, $event)" title="Copy ID"></button></span><span x-show="!evt.entityId">-</span></td>
+                                <td class="text-dim"><span x-show="evt.captainId" class="id-display"><span class="mono" x-text="evt.captainId"></span><button class="copy-btn" @click.stop="copyId(evt.captainId, $event)" title="Copy ID"></button></span><span x-show="!evt.captainId">-</span></td>
+                                <td class="text-dim"><span x-show="evt.missionId" class="id-display"><span class="mono" x-text="evt.missionId"></span><button class="copy-btn" @click.stop="copyId(evt.missionId, $event)" title="Copy ID"></button></span><span x-show="!evt.missionId">-</span></td>
+                                <td><button class="btn btn-sm" @click="navigate('events', 'event-detail', evt.id)" title="View full event payload and details">Show Details</button></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-dim" x-show="events.length === 0">No events found.</p>
+        </div>
+
+        <!-- Event Detail -->
+        <div x-show="view === 'events' && detailView === 'event-detail'" class="view">
+            <button class="btn btn-sm" @click="goBack()" title="Return to events list">&larr; Back</button>
+            <template x-if="detail">
+                <div>
+                    <div class="detail-header">
+                        <h2>Event Details</h2>
+                    </div>
+                    <div class="detail-grid">
+                        <div class="detail-field"><span class="detail-label">ID</span><span class="id-display"><span class="mono" x-text="detail.id"></span><button class="copy-btn" @click.stop="copyId(detail.id, $event)" title="Copy ID"></button></span></div>
+                        <div class="detail-field"><span class="detail-label">Event Type</span><span class="tag" x-text="detail.eventType"></span></div>
+                        <div class="detail-field"><span class="detail-label">Message</span><span x-text="detail.message || '-'" style="white-space:pre-wrap"></span></div>
+                        <div class="detail-field" x-show="detail.entityType">
+                            <span class="detail-label">Entity Type</span><span x-text="detail.entityType"></span>
+                        </div>
+                        <div class="detail-field" x-show="detail.entityId">
+                            <span class="detail-label">Entity ID</span>
+                            <template x-if="entityNav(detail.entityId)">
+                                <span class="id-display"><a class="mono" href="#" @click.prevent="navigate(entityNav(detail.entityId).view, entityNav(detail.entityId).detail, detail.entityId)" x-text="detail.entityId"></a><button class="copy-btn" @click.stop="copyId(detail.entityId, $event)" title="Copy ID"></button></span>
+                            </template>
+                            <template x-if="!entityNav(detail.entityId)">
+                                <span class="id-display"><span class="mono" x-text="detail.entityId"></span><button class="copy-btn" @click.stop="copyId(detail.entityId, $event)" title="Copy ID"></button></span>
+                            </template>
+                        </div>
+                        <div class="detail-field" x-show="detail.captainId">
+                            <span class="detail-label">Captain</span>
+                            <span class="id-display"><a href="#" @click.prevent="navigate('captains', 'captain-detail', detail.captainId)" x-text="captainName(detail.captainId)"></a><button class="copy-btn" @click.stop="copyId(detail.captainId, $event)" title="Copy ID"></button></span>
+                        </div>
+                        <div class="detail-field" x-show="detail.missionId">
+                            <span class="detail-label">Mission</span>
+                            <span class="id-display"><a class="mono" href="#" @click.prevent="navigate('missions', 'mission-detail', detail.missionId)" x-text="detail.missionId"></a><button class="copy-btn" @click.stop="copyId(detail.missionId, $event)" title="Copy ID"></button></span>
+                        </div>
+                        <div class="detail-field" x-show="detail.vesselId">
+                            <span class="detail-label">Vessel</span>
+                            <span class="id-display"><a href="#" @click.prevent="navigate('vessels', 'vessel-detail', detail.vesselId)" x-text="vesselName(detail.vesselId)"></a><button class="copy-btn" @click.stop="copyId(detail.vesselId, $event)" title="Copy ID"></button></span>
+                        </div>
+                        <div class="detail-field" x-show="detail.voyageId">
+                            <span class="detail-label">Voyage</span>
+                            <span class="id-display"><a class="mono" href="#" @click.prevent="navigate('voyages', 'voyage-detail', detail.voyageId)" x-text="detail.voyageId"></a><button class="copy-btn" @click.stop="copyId(detail.voyageId, $event)" title="Copy ID"></button></span>
+                        </div>
+                        <div class="detail-field"><span class="detail-label">Created</span><span x-text="formatTimeAbsolute(detail.createdUtc)"></span></div>
+                    </div>
+                    <div style="margin-top:1rem" x-show="detail.payload">
+                        <h3>Payload</h3>
+                        <pre class="detail-payload" x-text="typeof detail.payload === 'object' ? JSON.stringify(detail.payload, null, 2) : detail.payload"></pre>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- ========== Merge Queue View ========== -->
+        <div x-show="view === 'merge-queue' && !detailView" class="view">
+            <div class="view-header">
+                <div>
+                    <h2>Merge Queue</h2>
+                    <p class="text-dim view-subtitle">Completed missions awaiting merge. Review diffs, approve or reject changes, and manage the merge pipeline.</p>
+                </div>
+                <div class="view-actions">
+                    <input type="text" class="filter-input" x-model="listSearch" placeholder="Search..." title="Search merge queue entries by branch or ID">
+                    <button class="btn btn-primary btn-sm" @click="openEnqueueMerge()" title="Add a branch to the merge queue">+ Enqueue</button>
+                    <button class="btn btn-sm" @click="processMergeQueue()" title="Process all queued entries and merge branches">Process Queue</button>
+                </div>
+            </div>
+            <!-- Merge Queue Pagination -->
+            <div class="pagination-bar" x-show="mergeQueuePaging.totalPages > 0">
+                <div class="pagination-info">
+                    <span class="pagination-records" x-text="mergeQueuePaging.totalRecords + ' records'"></span>
+                    <span class="pagination-timing" x-text="mergeQueuePaging.totalMs.toFixed(1) + 'ms'"></span>
+                    <select class="page-size-select" title="Number of records per page" :value="mergeQueuePaging.pageSize" @change="changePageSize(mergeQueuePaging, $event.target.value, loadMergeQueue)">
+                        <option value="10">10 / page</option>
+                        <option value="25">25 / page</option>
+                        <option value="50">50 / page</option>
+                        <option value="100">100 / page</option>
+                        <option value="250">250 / page</option>
+                    </select>
+                </div>
+                <div class="pagination-controls">
+                    <button class="btn btn-sm" @click="prevPage(mergeQueuePaging, loadMergeQueue)" :disabled="mergeQueuePaging.pageNumber <= 1">&larr; Prev</button>
+                    <span class="pagination-page">
+                        Page <input type="number" class="page-input" :value="mergeQueuePaging.pageNumber" min="1" :max="mergeQueuePaging.totalPages"
+                            @change="goToPage(mergeQueuePaging, parseInt($event.target.value), loadMergeQueue)">
+                        of <span x-text="mergeQueuePaging.totalPages"></span>
+                    </span>
+                    <button class="btn btn-sm" @click="nextPage(mergeQueuePaging, loadMergeQueue)" :disabled="mergeQueuePaging.pageNumber >= mergeQueuePaging.totalPages">Next &rarr;</button>
+                    <button class="btn btn-sm" @click="loadMergeQueue()" title="Refresh">&#x21bb;</button>
+                </div>
+            </div>
+            <div class="table-wrap" x-show="mergeQueue.length > 0">
+                <table>
+                    <thead><tr><th title="Unique merge queue entry identifier">ID</th><th title="Source branch to be merged">Branch</th><th title="Target branch to merge into (e.g. main)">Target</th><th title="Merge entry status (Queued, Testing, Merged, Failed, Cancelled)">Status</th><th title="Associated mission, if any">Mission</th><th title="Merge priority — higher values are processed first">Priority</th><th title="When this entry was added to the queue">Created</th><th>Actions</th></tr></thead>
+                    <tbody>
+                        <template x-for="entry in filterRows(mergeQueue)" :key="entry.id">
+                            <tr>
+                                <td class="mono text-dim"><span class="id-display"><span x-text="entry.id"></span><button class="copy-btn" @click.stop="copyId(entry.id, $event)" title="Copy ID"></button></span></td>
+                                <td class="mono" x-text="entry.branchName"></td>
+                                <td x-text="entry.targetBranch"></td>
+                                <td><span class="tag" :class="(entry.status || '').toLowerCase()" x-text="entry.status" :title="statusTooltip(entry.status)"></span></td>
+                                <td class="text-dim">
+                                    <span x-show="entry.missionId" class="id-display"><a class="mono" href="#" @click.prevent="navigate('missions', 'mission-detail', entry.missionId)" x-text="entry.missionId"></a><button class="copy-btn" @click.stop="copyId(entry.missionId, $event)" title="Copy ID"></button></span>
+                                    <span x-show="!entry.missionId">-</span>
+                                </td>
+                                <td x-text="entry.priority"></td>
+                                <td class="text-dim" x-text="formatTime(entry.createdUtc)" :title="formatTimeAbsolute(entry.createdUtc)"></td>
+                                <td>
+                                    <button class="btn btn-sm btn-primary" @click.stop="mergeSingleEntry(entry.id)"
+                                        x-show="entry.status === 'Queued'" title="Merge this entry now">Merge</button>
+                                    <button class="btn btn-sm btn-danger" @click.stop="cancelMergeEntry(entry.id)"
+                                        x-show="entry.status === 'Queued' || entry.status === 'Testing'" title="Cancel this merge queue entry">Cancel</button>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-dim" x-show="mergeQueue.length === 0">Merge queue is empty.</p>
+        </div>
+
+        <!-- ========== Server View ========== -->
+        <div x-show="view === 'server' && !detailView" class="view">
+            <div class="view-header">
+                <div>
+                    <h2>Server Management</h2>
+                    <p class="text-dim view-subtitle">Admiral server health, configuration, and operational controls.</p>
+                </div>
+                <div class="view-actions">
+                    <button class="btn btn-sm" @click="refresh()" title="Refresh">&#x21bb;</button>
+                </div>
+            </div>
+            <div class="cards">
+                <div class="card" title="Current health status of the admiral server">
+                    <div class="card-label">Health</div>
+                    <div class="card-value" style="font-size:1.2rem" x-text="healthInfo ? healthInfo.status : 'Loading...'"></div>
+                    <div class="card-detail text-dim" x-show="healthInfo" x-text="'Checked: ' + formatTimeAbsolute(healthInfo?.timestamp)"></div>
+                </div>
+                <div class="card" title="How long the server has been running">
+                    <div class="card-label">Uptime</div>
+                    <div class="card-value" style="font-size:1.2rem" x-text="healthInfo?.uptime || '-'"></div>
+                    <div class="card-detail text-dim" x-show="healthInfo?.startUtc" x-text="'Started: ' + formatTimeAbsolute(healthInfo?.startUtc)"></div>
+                </div>
+                <div class="card" title="Current connection method to the server">
+                    <div class="card-label">Connection</div>
+                    <div class="card-value" style="font-size:1.2rem">
+                        <span class="status-dot" :class="connected ? 'connected' : 'disconnected'" style="display:inline-block;vertical-align:middle;margin-right:0.5rem"></span>
+                        <span x-text="wsConnected ? 'Live (WebSocket)' : (apiConnected ? 'Online (HTTP)' : 'Disconnected')"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="detail-grid" style="margin-top:1rem">
+                <div class="detail-field"><span class="detail-label">Version</span><span class="mono" x-text="healthInfo?.version || '-'"></span></div>
+                <div class="detail-field"><span class="detail-label">API URL</span><span class="mono" x-text="window.location.origin"></span></div>
+                <div class="detail-field"><span class="detail-label">Admiral Port</span><span class="mono" x-text="healthInfo?.ports?.admiral || window.location.port"></span></div>
+                <div class="detail-field"><span class="detail-label">MCP Port</span><span class="mono" x-text="healthInfo?.ports?.mcp || '-'"></span></div>
+                <div class="detail-field"><span class="detail-label">WebSocket Port</span><span class="mono" x-text="healthInfo?.ports?.webSocket || wsPort"></span></div>
+            </div>
+            <div style="margin-top:1.5rem">
+                <button class="btn btn-danger" @click="stopServer()" title="Shut down the admiral server process">Stop Server</button>
+                <button class="btn btn-sm" @click="loadHealth()" style="margin-left:0.5rem" title="Refresh server health information">Refresh Health</button>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- ========== Modals ========== -->
+    <div class="modal-overlay" x-show="modal" @click.self="modal === 'confirm-dialog' ? confirmNo() : (modal = null)" x-cloak>
+
+        <!-- Create Fleet -->
+        <div class="modal-box" x-show="modal === 'create-fleet'">
+            <h3>Create Fleet</h3>
+            <form @submit.prevent="createFleet()">
+                <div class="form-group"><label>Name</label><input type="text" x-model="modalData.name" required autofocus title="A descriptive name for this fleet"></div>
+                <div class="form-group"><label>Description</label><textarea x-model="modalData.description" rows="2" title="Optional description of the fleet's purpose"></textarea></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-sm" @click="modal = null" title="Cancel without creating">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading" title="Create the fleet">Create</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Edit Fleet -->
+        <div class="modal-box" x-show="modal === 'edit-fleet'">
+            <h3>Edit Fleet</h3>
+            <form @submit.prevent="saveFleetEdit()">
+                <div class="form-group"><label>Name</label><input type="text" x-model="modalData.name" required title="Fleet name"></div>
+                <div class="form-group"><label>Description</label><textarea x-model="modalData.description" rows="2" title="Optional description of the fleet's purpose"></textarea></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-sm" @click="modal = null" title="Cancel without saving">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading" title="Save changes">Save</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Create Vessel -->
+        <div class="modal-box modal-box-wide" x-show="modal === 'create-vessel'">
+            <h3>Create Vessel</h3>
+            <form @submit.prevent="createVessel()">
+                <div class="form-group"><label>Name</label><input type="text" x-model="modalData.name" required autofocus title="A descriptive name for this vessel"></div>
+                <div class="form-group"><label>Repo URL</label><input type="text" x-model="modalData.repoUrl" placeholder="https://github.com/..." title="Git repository URL (HTTPS or SSH)"></div>
+                <div class="form-group"><label>Default Branch</label><input type="text" x-model="modalData.defaultBranch" placeholder="main" title="The branch to merge completed work into (e.g. main)"></div>
+                <div class="form-group"><label>Local Path (Bare Repo)</label><input type="text" x-model="modalData.localPath" placeholder="e.g. C:\armada\repos\my-project.git" title="Path to the bare git repository clone used by Armada for worktrees"></div>
+                <div class="form-group"><label>Working Directory</label><input type="text" x-model="modalData.workingDirectory" placeholder="e.g. C:\code\my-project" title="Path to your local checkout — completed missions are merged here automatically"></div>
+                <div class="form-group">
+                    <label>Fleet</label>
+                    <select x-model="modalData.fleetId" title="Optionally assign this vessel to a fleet">
+                        <option value="">No fleet</option>
+                        <template x-for="f in fleets" :key="f.id"><option :value="f.id" x-text="f.name"></option></template>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Project Context</label>
+                    <small class="form-help">Describe the project, its architecture, key files, and dependencies. This is prepended to every mission prompt.</small>
+                    <textarea x-model="modalData.projectContext" rows="4" placeholder="e.g. This is a Node.js REST API using Express and PostgreSQL..."></textarea>
+                    <span class="char-count" x-text="(modalData.projectContext || '').length + ' chars'"></span>
+                </div>
+                <div class="form-group">
+                    <label>Style Guide</label>
+                    <small class="form-help">Define naming conventions, patterns, language restrictions. Agents will follow these when writing code.</small>
+                    <textarea x-model="modalData.styleGuide" rows="4" placeholder="e.g. Use camelCase for variables, PascalCase for classes..."></textarea>
+                    <span class="char-count" x-text="(modalData.styleGuide || '').length + ' chars'"></span>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-sm" @click="modal = null" title="Cancel without creating">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading" title="Create the vessel">Create</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Edit Vessel -->
+        <div class="modal-box modal-box-wide" x-show="modal === 'edit-vessel'">
+            <h3>Edit Vessel</h3>
+            <form @submit.prevent="saveVesselEdit()">
+                <div class="form-group"><label>Name</label><input type="text" x-model="modalData.name" required title="Vessel name"></div>
+                <div class="form-group"><label>Repo URL</label><input type="text" x-model="modalData.repoUrl" title="Git repository URL (HTTPS or SSH)"></div>
+                <div class="form-group"><label>Default Branch</label><input type="text" x-model="modalData.defaultBranch" title="The branch to merge completed work into (e.g. main)"></div>
+                <div class="form-group"><label>Local Path (Bare Repo)</label><input type="text" x-model="modalData.localPath" placeholder="e.g. C:\armada\repos\my-project.git" title="Path to the bare git repository clone used by Armada for worktrees"></div>
+                <div class="form-group"><label>Working Directory</label><input type="text" x-model="modalData.workingDirectory" placeholder="e.g. C:\code\my-project" title="Path to your local checkout — completed missions are merged here automatically"></div>
+                <div class="form-group">
+                    <label>Fleet</label>
+                    <select x-model="modalData.fleetId" title="Assign this vessel to a fleet">
+                        <option value="">No fleet</option>
+                        <template x-for="f in fleets" :key="f.id"><option :value="f.id" x-text="f.name"></option></template>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Project Context</label>
+                    <small class="form-help">Describe the project, its architecture, key files, and dependencies. This is prepended to every mission prompt.</small>
+                    <textarea x-model="modalData.projectContext" rows="4" placeholder="e.g. This is a Node.js REST API using Express and PostgreSQL..."></textarea>
+                    <span class="char-count" x-text="(modalData.projectContext || '').length + ' chars'"></span>
+                </div>
+                <div class="form-group">
+                    <label>Style Guide</label>
+                    <small class="form-help">Define naming conventions, patterns, language restrictions. Agents will follow these when writing code.</small>
+                    <textarea x-model="modalData.styleGuide" rows="4" placeholder="e.g. Use camelCase for variables, PascalCase for classes..."></textarea>
+                    <span class="char-count" x-text="(modalData.styleGuide || '').length + ' chars'"></span>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-sm" @click="modal = null" title="Cancel without saving">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading" title="Save changes">Save</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Add Captain -->
+        <div class="modal-box" x-show="modal === 'add-captain'">
+            <h3>Add Captain</h3>
+            <form @submit.prevent="addCaptain()">
+                <div class="form-group"><label>Name</label><input type="text" x-model="modalData.name" required autofocus title="A unique name for this captain agent"></div>
+                <div class="form-group">
+                    <label>Runtime</label>
+                    <select x-model="modalData.runtime" title="The AI agent runtime this captain will use">
+                        <option value="ClaudeCode">Claude Code</option>
+                        <option value="Codex">Codex</option>
+                        <option value="Gemini">Gemini</option>
+                        <option value="Cursor">Cursor</option>
+                        <option value="Custom">Custom</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Max Parallelism</label>
+                    <input type="number" x-model.number="modalData.maxParallelism" min="1" max="64" step="1"
+                           style="width: 80px;" title="Maximum concurrent missions this captain can handle (minimum 1)">
+                    <small style="color: var(--text-dim); margin-top: 2px; display: block;">Minimum 1 (sequential)</small>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-sm" @click="modal = null" title="Cancel without adding">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading" title="Register the captain">Add</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Edit Captain -->
+        <div class="modal-box" x-show="modal === 'edit-captain'">
+            <h3>Edit Captain</h3>
+            <form @submit.prevent="saveCaptainEdit()">
+                <div class="form-group"><label>Name</label><input type="text" x-model="modalData.name" required autofocus title="Captain name"></div>
+                <div class="form-group">
+                    <label>Runtime</label>
+                    <select x-model="modalData.runtime" title="The AI agent runtime this captain uses">
+                        <option value="ClaudeCode">Claude Code</option>
+                        <option value="Codex">Codex</option>
+                        <option value="Gemini">Gemini</option>
+                        <option value="Cursor">Cursor</option>
+                        <option value="Custom">Custom</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Max Parallelism</label>
+                    <input type="number" x-model.number="modalData.maxParallelism" min="1" max="64" step="1"
+                           style="width: 80px;" title="Maximum concurrent missions this captain can handle (minimum 1)">
+                    <small style="color: var(--text-dim); margin-top: 2px; display: block;">Minimum 1 (sequential)</small>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-sm" @click="modal = null" title="Cancel without saving">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading" title="Save changes">Save</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Edit Mission -->
+        <div class="modal-box modal-large" x-show="modal === 'edit-mission'">
+            <h3>Edit Mission</h3>
+            <form @submit.prevent="saveMissionEdit()">
+                <div class="form-group"><label>Title</label><input type="text" x-model="modalData.title" required title="Short summary of the mission"></div>
+                <div class="form-group"><label>Description</label><textarea x-model="modalData.description" rows="6" title="Detailed instructions for the AI captain"></textarea></div>
+                <div class="form-group"><label>Priority</label><input type="number" x-model="modalData.priority" min="0" title="Higher priority missions are assigned first"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-sm" @click="modal = null" title="Cancel without saving">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading" title="Save changes">Save</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Restart Mission -->
+        <div class="modal-box" x-show="modal === 'restart-mission'">
+            <h3>Restart Mission</h3>
+            <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px;">Modify the instructions before restarting, or leave as-is.</p>
+            <form @submit.prevent="restartMission()">
+                <div class="form-group"><label>Title</label><input type="text" x-model="restartTitle" required title="Mission title — modify if needed before restarting"></div>
+                <div class="form-group"><label>Description</label><textarea x-model="restartDescription" rows="4" title="Mission instructions — update to fix issues from previous attempt"></textarea></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-sm" @click="modal = null" title="Cancel without restarting">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading" title="Create a new mission with these instructions">Restart Mission</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Create Voyage -->
+        <div class="modal-box modal-wide" x-show="modal === 'create-voyage'">
+            <h3>Create Voyage</h3>
+            <form @submit.prevent="createVoyage()">
+                <div class="form-group"><label>Title</label><input type="text" x-model="voyageForm.title" required autofocus title="A descriptive name for this voyage"></div>
+                <div class="form-group"><label>Description</label><textarea x-model="voyageForm.description" rows="4" title="Overall description of what this voyage should accomplish"></textarea></div>
+                <div class="form-group">
+                    <label>Vessel</label>
+                    <select x-model="voyageForm.vesselId" required title="The repository where all missions in this voyage will be executed">
+                        <option value="">Select a vessel...</option>
+                        <template x-for="v in allVessels" :key="v.id"><option :value="v.id" x-text="v.name"></option></template>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Missions</label>
+                    <template x-for="(m, i) in voyageForm.missions" :key="i">
+                        <div class="voyage-mission-row">
+                            <input type="text" x-model="m.title" placeholder="Mission title" style="flex:1" title="Short title for this mission">
+                            <input type="text" x-model="m.description" placeholder="Description" style="flex:2" title="Detailed instructions for this mission">
+                            <button type="button" class="btn btn-sm btn-danger" @click="removeVoyageMission(i)" x-show="voyageForm.missions.length > 1" title="Remove this mission">X</button>
+                        </div>
+                    </template>
+                    <button type="button" class="btn btn-sm" @click="addVoyageMission()" style="margin-top:0.25rem" title="Add another mission to this voyage">+ Mission</button>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-sm" @click="modal = null" title="Cancel without creating">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading" title="Create the voyage and all its missions">Create Voyage</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Send Signal -->
+        <div class="modal-box" x-show="modal === 'send-signal'">
+            <h3>Send Signal</h3>
+            <form @submit.prevent="sendSignal()">
+                <div class="form-group">
+                    <label>Type</label>
+                    <select x-model="modalData.type" title="Signal category — determines how the recipient handles it">
+                        <option value="Nudge">Nudge</option>
+                        <option value="Mail">Mail</option>
+                        <option value="Assignment">Assignment</option>
+                        <option value="Progress">Progress</option>
+                        <option value="Completion">Completion</option>
+                        <option value="Error">Error</option>
+                    </select>
+                </div>
+                <div class="form-group"><label>Payload</label><textarea x-model="modalData.payload" rows="3" placeholder="Message content..." title="The message content to send"></textarea></div>
+                <div class="form-group"><label>To Captain (optional)</label><input type="text" x-model="modalData.toCaptainId" placeholder="cpt_..." title="Target captain ID — leave empty to send to the admiral"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-sm" @click="modal = null" title="Cancel without sending">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading" title="Send the signal">Send</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Enqueue Merge -->
+        <div class="modal-box" x-show="modal === 'enqueue-merge'">
+            <h3>Enqueue Branch</h3>
+            <form @submit.prevent="enqueueMerge()">
+                <div class="form-group"><label>Branch Name</label><input type="text" x-model="modalData.branchName" required autofocus placeholder="feature/my-branch" title="The source branch to be merged"></div>
+                <div class="form-group"><label>Target Branch</label><input type="text" x-model="modalData.targetBranch" placeholder="main" title="The branch to merge into (e.g. main)"></div>
+                <div class="form-group"><label>Mission ID (optional)</label><input type="text" x-model="modalData.missionId" placeholder="msn_..." title="Link this merge to a specific mission"></div>
+                <div class="form-group">
+                    <label>Vessel (optional)</label>
+                    <select x-model="modalData.vesselId" title="The vessel (repository) containing these branches">
+                        <option value="">None</option>
+                        <template x-for="v in allVessels" :key="v.id"><option :value="v.id" x-text="v.name"></option></template>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-sm" @click="modal = null" title="Cancel without enqueueing">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading" title="Add this branch to the merge queue">Enqueue</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Viewer Modal (reusable read-only content viewer) -->
+        <div class="modal-box viewer-modal-box" x-show="modal === 'viewer'">
+            <div class="viewer-header">
+                <h3 x-text="viewerTitle" class="viewer-title"></h3>
+                <div class="viewer-actions">
+                    <button type="button" class="btn btn-sm" @click="copyViewerContent()" title="Copy full content to clipboard">Copy</button>
+                    <button type="button" class="btn btn-sm" @click="modal = null" title="Close viewer">Close</button>
+                </div>
+            </div>
+            <div class="viewer-body-wrap">
+                <template x-if="viewerLoading">
+                    <div style="display:flex;align-items:center;gap:0.5rem;padding:1rem">
+                        <span class="spinner" style="width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;display:inline-block;animation:spin 0.8s linear infinite"></span>
+                        <span class="text-dim">Loading…</span>
+                    </div>
+                </template>
+                <template x-if="!viewerLoading && viewerIsHtml">
+                    <pre class="diff-viewer viewer-pre" x-html="viewerContent"></pre>
+                </template>
+                <template x-if="!viewerLoading && !viewerIsHtml">
+                    <pre class="diff-viewer viewer-pre" x-text="viewerContent"></pre>
+                </template>
+            </div>
+        </div>
+
+        <!-- Confirm Dialog (replaces native browser confirm()) -->
+        <div class="modal-box" x-show="modal === 'confirm-dialog'">
+            <h3>Confirm</h3>
+            <p x-text="confirmMessage" style="margin:1rem 0;white-space:pre-wrap"></p>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-sm" @click="confirmNo()">Cancel</button>
+                <button type="button" class="btn btn-danger btn-sm" @click="confirmYes()">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== Viewer Modal (full-screen, reusable for diff/log/text) ========== -->
+    <div class="viewer-overlay" x-show="viewer.open" @click.self="closeViewer()" x-cloak
+         x-transition:enter="viewer-enter" x-transition:leave="viewer-leave">
+        <div class="viewer-modal">
+            <div class="viewer-header">
+                <h3 class="viewer-title" x-text="viewer.title"></h3>
+                <div class="viewer-actions">
+                    <button class="btn btn-sm btn-primary" @click="copyViewerContent()"
+                            x-text="viewer.copied ? 'Copied!' : 'Copy to Clipboard'"
+                            :class="{ 'viewer-copied': viewer.copied }"
+                            title="Copy full content to clipboard"></button>
+                    <button class="btn btn-sm" @click="closeViewer()" title="Close viewer (Esc)">Close</button>
+                </div>
+            </div>
+            <pre class="viewer-body" x-text="viewer.content"></pre>
+        </div>
+    </div>
+
+    <!-- ========== Diff Viewer Modal (GitHub-style two-pane diff) ========== -->
+    <div class="diff-modal-overlay" x-show="diffViewerOpen" @click.self="closeDiffViewer()" x-cloak
+         x-transition:enter="viewer-enter" x-transition:leave="viewer-leave">
+        <div class="diff-modal">
+            <div class="diff-modal-header">
+                <h3 class="viewer-title" x-text="diffViewerTitle"></h3>
+                <div class="diff-modal-stats" x-show="diffViewerFiles.length > 0">
+                    <span class="diff-stat-files" x-text="diffViewerFiles.length + ' file' + (diffViewerFiles.length !== 1 ? 's' : '') + ' changed'"></span>
+                    <span class="diff-stat-add" x-text="'+' + diffViewerFiles.reduce((s, f) => s + f.additions, 0)"></span>
+                    <span class="diff-stat-del" x-text="'-' + diffViewerFiles.reduce((s, f) => s + f.deletions, 0)"></span>
+                </div>
+                <div class="viewer-actions">
+                    <button class="btn btn-sm" @click="copyDiffRaw()"
+                            x-text="diffViewerCopied ? 'Copied!' : 'Copy Raw'"
+                            :class="{ 'viewer-copied': diffViewerCopied }"
+                            title="Copy raw diff to clipboard"></button>
+                    <button class="btn btn-sm" @click="closeDiffViewer()" title="Close diff viewer (Esc)">Close</button>
+                </div>
+            </div>
+            <div class="diff-modal-body">
+                <!-- File navigator sidebar -->
+                <div class="diff-file-nav" x-show="diffViewerFiles.length > 0">
+                    <div class="diff-file-nav-header">Files</div>
+                    <template x-for="f in diffViewerFiles" :key="f.name">
+                        <div class="diff-file-nav-item" :class="{ active: diffViewerSelectedFile === f.name }"
+                             @click="selectDiffFile(f.name)" :title="f.name">
+                            <span class="diff-file-nav-name" x-text="f.name.split('/').pop()"></span>
+                            <span class="diff-file-nav-path" x-text="f.name.includes('/') ? f.name.substring(0, f.name.lastIndexOf('/') + 1) : ''"></span>
+                            <span class="diff-file-nav-counts">
+                                <span class="diff-file-nav-add" x-show="f.additions > 0" x-text="'+' + f.additions"></span>
+                                <span class="diff-file-nav-del" x-show="f.deletions > 0" x-text="'-' + f.deletions"></span>
+                            </span>
+                        </div>
+                    </template>
+                </div>
+                <!-- Diff content area -->
+                <div class="diff-content-wrap">
+                    <template x-if="diffViewerLoading">
+                        <div style="display:flex;align-items:center;gap:0.5rem;padding:1.5rem">
+                            <span class="spinner" style="width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;display:inline-block;animation:spin 0.8s linear infinite"></span>
+                            <span class="text-dim">Loading diff...</span>
+                        </div>
+                    </template>
+                    <div id="diff-content-area" class="diff-content-area" x-show="!diffViewerLoading"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/dashboard/js/dashboard.js"></script>
+</body>
+</html>

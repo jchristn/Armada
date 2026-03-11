@@ -1,0 +1,74 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Armada.Desktop.ViewModels"
+             xmlns:svc="using:Armada.Desktop.Services"
+             x:Class="Armada.Desktop.Views.NotificationHistoryView"
+             x:DataType="vm:NotificationHistoryViewModel">
+
+    <DockPanel>
+        <!-- Header -->
+        <StackPanel DockPanel.Dock="Top" Spacing="0" Margin="0,0,0,16">
+            <DockPanel>
+                <TextBlock Text="Notifications" Classes="page-title" DockPanel.Dock="Left"
+                           VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right"
+                            VerticalAlignment="Center">
+                    <Button Content="Mark All Read" Classes="action" Padding="12,6" FontSize="11"
+                            Click="OnMarkAllReadClick" ToolTip.Tip="Mark all notifications as read" />
+                    <Button Content="Clear All" Classes="danger" Padding="12,6" FontSize="11"
+                            Click="OnClearClick" ToolTip.Tip="Remove all notification history" />
+                </StackPanel>
+            </DockPanel>
+            <TextBlock Text="Alerts from missions, captains, and system events." Classes="page-subtitle" />
+        </StackPanel>
+
+        <!-- Content area (Grid so empty state can center properly) -->
+        <Grid>
+            <!-- Empty state -->
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
+                        IsVisible="{Binding !HasNotifications}">
+                <TextBlock Text="&#x1F514;" FontSize="36" HorizontalAlignment="Center" Opacity="0.3" />
+                <TextBlock Text="No notifications yet" FontSize="14"
+                           Foreground="{DynamicResource TextDimBrush}"
+                           HorizontalAlignment="Center" />
+                <TextBlock Text="Notifications from missions, captains, and system events will appear here."
+                           FontSize="12" Foreground="{DynamicResource TextDimBrush}"
+                           HorizontalAlignment="Center" Opacity="0.7" TextAlignment="Center" />
+            </StackPanel>
+
+            <!-- History list -->
+            <ScrollViewer VerticalScrollBarVisibility="Auto" IsVisible="{Binding HasNotifications}">
+            <ItemsControl ItemsSource="{Binding History}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="svc:ToastNotification">
+                        <Border Margin="0,0,0,4" Padding="12,10" CornerRadius="6"
+                                Background="{DynamicResource SurfaceCardBrush}">
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <!-- Severity dot -->
+                                <Ellipse Grid.Column="0" Width="8" Height="8"
+                                         VerticalAlignment="Top" Margin="0,4,10,0"
+                                         x:Name="SeverityDot" />
+
+                                <!-- Content -->
+                                <StackPanel Grid.Column="1" Spacing="2">
+                                    <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextPrimaryBrush}" />
+                                    <TextBlock Text="{Binding Message}" FontSize="12"
+                                               Foreground="{DynamicResource TextSecondaryBrush}"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+
+                                <!-- Timestamp -->
+                                <TextBlock Grid.Column="2" Text="{Binding TimestampText}"
+                                           FontSize="11" FontFamily="Cascadia Mono,Consolas,monospace"
+                                           Foreground="{DynamicResource TextDimBrush}"
+                                           VerticalAlignment="Top" Margin="8,0,0,0" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+        </Grid>
+    </DockPanel>
+</UserControl>
