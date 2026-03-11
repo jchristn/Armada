@@ -33,6 +33,7 @@
   - [Event Actions](#event-actions)
   - [Dock Actions](#dock-actions)
   - [Merge Queue Actions](#merge-queue-actions)
+  - [Backup and Restore Actions](#backup-and-restore-actions)
   - [Enumerate](#enumerate)
 - [Pagination](#pagination)
 - [Mission Status Transitions](#mission-status-transitions)
@@ -1664,6 +1665,93 @@ Trigger processing of the merge queue.
   }
 }
 ```
+
+---
+
+### Backup and Restore Actions
+
+#### backup
+
+Create a backup of the Armada database and settings as a ZIP archive.
+
+**Request:**
+
+```json
+{
+  "Route": "command",
+  "action": "backup",
+  "data": {
+    "OutputPath": "~/.armada/backups/my-backup.zip"
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `action` | string | Yes | `"backup"` |
+| `data.OutputPath` | string | No | File path for the backup ZIP. Defaults to `~/.armada/backups/armada-backup-{timestamp}.zip` |
+
+**Response:**
+
+```json
+{
+  "type": "command.result",
+  "action": "backup",
+  "data": {
+    "Path": "~/.armada/backups/armada-backup-20260311T120000Z.zip",
+    "Timestamp": "2026-03-11T12:00:00Z",
+    "SchemaVersion": 9,
+    "SizeBytes": 245760,
+    "RecordCounts": {
+      "Fleets": 2,
+      "Vessels": 5,
+      "Captains": 3,
+      "Missions": 42,
+      "Voyages": 8
+    }
+  }
+}
+```
+
+---
+
+#### restore
+
+Restore Armada from a previously created backup ZIP file.
+
+**Request:**
+
+```json
+{
+  "Route": "command",
+  "action": "restore",
+  "data": {
+    "FilePath": "~/.armada/backups/armada-backup-20260311T120000Z.zip"
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `action` | string | Yes | `"restore"` |
+| `data.FilePath` | string | Yes | Path to the backup ZIP file to restore from |
+
+**Response:**
+
+```json
+{
+  "type": "command.result",
+  "action": "restore",
+  "data": {
+    "Status": "restored",
+    "SafetyBackupPath": "~/.armada/backups/armada-safety-backup-20260311T120000Z.zip",
+    "SchemaVersion": 9,
+    "Message": "Server restart recommended"
+  }
+}
+```
+
+> **Note:** A safety backup is automatically created before overwriting. A server restart is recommended after restoring.
 
 ---
 

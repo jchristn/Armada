@@ -74,6 +74,9 @@
     - [armada_enqueue_merge](#armada_enqueue_merge)
     - [armada_cancel_merge](#armada_cancel_merge)
     - [armada_process_merge_queue](#armada_process_merge_queue)
+  - **Backup and Restore**
+    - [armada_backup](#armada_backup)
+    - [armada_restore](#armada_restore)
 - [Data Types](#data-types)
   - [Models](#models)
   - [Enumerations](#enumerations)
@@ -1630,6 +1633,77 @@ Process the merge queue: creates integration branches, runs tests, and lands pas
 ```json
 { "Status": "processed" }
 ```
+
+---
+
+### armada_backup
+
+Create a backup of the Armada database and settings as a ZIP archive.
+
+**Input Schema:**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `outputPath` | string | No | File path for the backup ZIP. Defaults to `~/.armada/backups/armada-backup-{timestamp}.zip` |
+
+**Response:**
+
+```json
+{
+  "Path": "~/.armada/backups/armada-backup-20260311T120000Z.zip",
+  "Timestamp": "2026-03-11T12:00:00Z",
+  "SchemaVersion": 9,
+  "SizeBytes": 245760,
+  "RecordCounts": {
+    "Fleets": 2,
+    "Vessels": 5,
+    "Captains": 3,
+    "Missions": 42,
+    "Voyages": 8,
+    "Signals": 15,
+    "Events": 120,
+    "Docks": 6,
+    "MergeEntries": 3
+  }
+}
+```
+
+**ZIP Contents:**
+
+| File | Description |
+|---|---|
+| `armada.db` | SQLite database snapshot created via the SQLite online backup API |
+| `settings.json` | Current Armada server configuration |
+| `manifest.json` | Backup metadata: timestamp, schema version, Armada version, record counts per table |
+
+---
+
+### armada_restore
+
+Restore Armada from a previously created backup ZIP file.
+
+**Input Schema:**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `filePath` | string | Yes | Path to the backup ZIP file to restore from |
+
+**Validation:**
+- ZIP must contain `armada.db` with a valid `schema_migrations` table
+- A safety backup is automatically created before overwriting the current database
+
+**Response:**
+
+```json
+{
+  "Status": "restored",
+  "SafetyBackupPath": "~/.armada/backups/armada-safety-backup-20260311T120000Z.zip",
+  "SchemaVersion": 9,
+  "Message": "Server restart recommended"
+}
+```
+
+> **Note:** A server restart is recommended after restoring to ensure all in-memory state is refreshed.
 
 ---
 

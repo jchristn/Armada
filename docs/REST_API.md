@@ -22,6 +22,7 @@
   - [Events](#events)
   - [Docks](#docks)
   - [Merge Queue](#merge-queue)
+  - [Backup and Restore](#backup-and-restore)
 - [Data Types](#data-types)
   - [Models](#models)
   - [Enumerations](#enumerations)
@@ -1256,6 +1257,64 @@ Trigger processing of the merge queue. Creates integration branches, runs tests,
   "Status": "processed"
 }
 ```
+
+---
+
+### Backup and Restore
+
+#### GET /api/v1/backup
+
+Create and download a ZIP backup of the Armada database and settings.
+
+**Response:** `200 OK` — Binary ZIP file stream with `Content-Disposition: attachment; filename="armada-backup-{timestamp}.zip"` header.
+
+**ZIP Contents:**
+
+| File | Description |
+|---|---|
+| `armada.db` | SQLite database snapshot created via the SQLite online backup API |
+| `settings.json` | Current Armada server configuration |
+| `manifest.json` | Backup metadata: timestamp, schema version, Armada version, record counts per table |
+
+**Example:**
+
+```bash
+curl -H "X-Api-Key: your-key" http://localhost:7890/api/v1/backup -o backup.zip
+```
+
+---
+
+#### POST /api/v1/restore
+
+Restore Armada from a previously created backup ZIP file.
+
+**Request:** Binary ZIP file in the request body (`Content-Type: application/octet-stream`).
+
+**Validation:**
+- ZIP must contain `armada.db` with a valid `schema_migrations` table
+- A safety backup is automatically created before overwriting the current database
+
+**Response:** `200 OK`
+
+```json
+{
+  "Status": "restored",
+  "SafetyBackupPath": "~/.armada/backups/armada-safety-backup-20260311T120000Z.zip",
+  "SchemaVersion": 9,
+  "Message": "Server restart recommended"
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST -H "X-Api-Key: your-key" \
+  -H "Content-Type: application/octet-stream" \
+  --data-binary @backup.zip \
+  http://localhost:7890/api/v1/restore
+```
+
+> **Note:** A server restart is recommended after restoring to ensure all in-memory state is refreshed.
 
 ---
 
