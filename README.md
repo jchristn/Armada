@@ -189,6 +189,8 @@ Armada is a C#/.NET solution with four projects:
 | **Dock** | Worktree | A git worktree provisioned for a captain's isolated work. |
 | **Signal** | Message | Communication between the Admiral and captains. |
 
+For details on how the Admiral decides which mission to assign to which captain and in what order, see [Mission Scheduling](docs/SCHEDULING.md).
+
 ### Data Model
 
 ```
