@@ -7,7 +7,7 @@
 <p align="center">
   <strong>Multi-agent orchestration for scaling human developers with AI</strong>
   <br />
-  v0.1.0 | C#/.NET | MIT License
+  v0.2.0 | C#/.NET | MIT License
   <br />
   <strong>⚠️ ALPHA — APIs, schemas, and behavior may change without notice.</strong>
 </p>

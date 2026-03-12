@@ -2,7 +2,7 @@
 
 if [ -z "$1" ]; then
     echo "Usage: ./build-server.sh <version-tag>"
-    echo "Example: ./build-server.sh v0.1.0"
+    echo "Example: ./build-server.sh v0.2.0"
     exit 1
 fi
 

@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "armada-api-collection",
 		"name": "Armada API",
-		"description": "Complete API collection for the Armada multi-agent orchestration system.\n\nVersion: 0.1.0\n\n## Setup\n1. Set the `baseUrl` variable to your Admiral server (default: `http://localhost:7890`)\n2. If API key authentication is enabled, set the `apiKey` variable\n3. Use the Status > Health Check request to verify connectivity",
+		"description": "Complete API collection for the Armada multi-agent orchestration system.\n\nVersion: 0.2.0\n\n## Setup\n1. Set the `baseUrl` variable to your Admiral server (default: `http://localhost:7890`)\n2. If API key authentication is enabled, set the `apiKey` variable\n3. Use the Status > Health Check request to verify connectivity",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
@@ -97,7 +97,7 @@
 							"name": "Healthy",
 							"status": "OK",
 							"code": 200,
-							"body": "{\n  \"Status\": \"healthy\",\n  \"Timestamp\": \"2026-03-07T12:00:00Z\",\n  \"StartUtc\": \"2026-03-07T08:00:00Z\",\n  \"Uptime\": \"0.04:00:00\",\n  \"Version\": \"0.1.0\",\n  \"Ports\": {\n    \"Admiral\": 7890,\n    \"Mcp\": 7891,\n    \"WebSocket\": 7892\n  }\n}"
+							"body": "{\n  \"Status\": \"healthy\",\n  \"Timestamp\": \"2026-03-07T12:00:00Z\",\n  \"StartUtc\": \"2026-03-07T08:00:00Z\",\n  \"Uptime\": \"0.04:00:00\",\n  \"Version\": \"0.2.0\",\n  \"Ports\": {\n    \"Admiral\": 7890,\n    \"Mcp\": 7891,\n    \"WebSocket\": 7892\n  }\n}"
 						}
 					]
 				},

@@ -20,7 +20,7 @@ namespace Armada.Core
         /// <summary>
         /// Product version.
         /// </summary>
-        public static readonly string ProductVersion = "0.1.0";
+        public static readonly string ProductVersion = "0.2.0";
 
         /// <summary>
         /// Default data directory.
