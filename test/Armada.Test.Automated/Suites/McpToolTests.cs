@@ -532,6 +532,20 @@ namespace Armada.Test.Automated.Suites
                     "Expected mission to have a valid status but got: " + text.Substring(0, Math.Min(200, text.Length)));
             }).ConfigureAwait(false);
 
+            await RunTest("ArmadaMissionStatus_DiffSnapshotIsNull", async () =>
+            {
+                string missionId = await RestCreateMissionAsync("DiffSnapshotExclusionTest").ConfigureAwait(false);
+                JsonElement result = await CallToolAsync("armada_mission_status", new
+                {
+                    missionId = missionId
+                }).ConfigureAwait(false);
+                string text = GetToolResultText(result);
+                JsonElement mission = JsonSerializer.Deserialize<JsonElement>(text);
+                AssertTrue(mission.TryGetProperty("DiffSnapshot", out JsonElement diffSnapshot));
+                Assert(diffSnapshot.ValueKind == JsonValueKind.Null,
+                    "DiffSnapshot should be null in mission_status response but was: " + diffSnapshot.ToString());
+            }).ConfigureAwait(false);
+
             // ArmadaVoyageStatus
             await RunTest("ArmadaVoyageStatus_ExistingVoyage_ReturnsDetails", async () =>
             {

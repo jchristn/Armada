@@ -593,6 +593,8 @@ List all missions with pagination.
 
 **Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<[Mission](#mission)\>
 
+> **Note:** The `DiffSnapshot` field is excluded from mission list responses to keep payloads compact. Use `GET /api/v1/missions/{id}/diff` to retrieve the full diff.
+
 ```bash
 curl http://localhost:7890/api/v1/missions?status=InProgress&vesselId=vsl_abc123
 ```
@@ -650,6 +652,8 @@ Get a single mission by ID.
 
 **Response:** `200 OK` - [Mission](#mission)
 **Error:** `404` - Mission not found
+
+> **Note:** The `DiffSnapshot` field is excluded from responses to keep payloads compact. Use `GET /api/v1/missions/{id}/diff` to retrieve the full diff.
 
 ---
 
@@ -1472,7 +1476,7 @@ An atomic unit of work assigned to a captain.
 | `ProcessId` | int? | null | OS process ID of the agent working on the mission |
 | `PrUrl` | string? | null | Pull request URL if created |
 | `CommitHash` | string? | null | Git commit hash captured on completion |
-| `DiffSnapshot` | string? | null | Git diff snapshot captured on completion |
+| `DiffSnapshot` | string? | null | Always `null` in list/status responses to keep payloads compact. Use `GET /api/v1/missions/{id}/diff` to retrieve the full diff. |
 | `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
 | `StartedUtc` | datetime? | null | Work start timestamp (UTC) |
 | `CompletedUtc` | datetime? | null | Completion timestamp (UTC) |

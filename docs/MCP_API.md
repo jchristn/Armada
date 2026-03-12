@@ -284,6 +284,8 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 }
 ```
 
+> **Note:** When enumerating `missions`, the `DiffSnapshot` field is excluded from results to keep payloads compact. Use `armada_get_mission_diff` to retrieve the full diff for a specific mission.
+
 ---
 
 ### armada_dispatch
@@ -439,6 +441,8 @@ Get status of a specific mission.
 | `missionId` | string | Yes | Mission ID (prefix `msn_`) |
 
 **Response:** [Mission](#mission) object, or `{"error": "Mission not found"}` if the ID does not exist.
+
+> **Note:** The `DiffSnapshot` field is excluded from status responses to keep payloads compact. Use `armada_get_mission_diff` to retrieve the full diff.
 
 ---
 
@@ -662,6 +666,8 @@ List all missions, optionally filtered by status.
 | `status` | string | No | Filter by [MissionStatusEnum](#missionstatusenum) value |
 
 **Response:** Array of [Mission](#mission) objects. If `status` is provided and valid, only missions matching that status are returned. Otherwise, all missions are returned.
+
+> **Note:** The `DiffSnapshot` field is excluded from list responses to keep payloads compact. Use `armada_get_mission_diff` to retrieve the full diff.
 
 ---
 
@@ -1810,7 +1816,7 @@ Paginated result wrapper returned by `armada_enumerate`.
 | `processId` | int \| null | OS process ID of the agent working this mission |
 | `prUrl` | string \| null | Pull request URL |
 | `commitHash` | string \| null | Git commit hash (HEAD) captured at mission completion |
-| `diffSnapshot` | string \| null | Saved git diff snapshot captured at mission completion |
+| `diffSnapshot` | string \| null | Always `null` in list/status responses. Use `armada_get_mission_diff` to retrieve the full diff. |
 | `createdUtc` | string | ISO 8601 creation timestamp |
 | `startedUtc` | string \| null | ISO 8601 start timestamp |
 | `completedUtc` | string \| null | ISO 8601 completion timestamp |

@@ -88,6 +88,32 @@ namespace Armada.Test.Unit.Suites.Models
                 Mission m2 = new Mission();
                 AssertNotEqual(m1.Id, m2.Id);
             });
+
+            await RunTest("Mission DiffSnapshot DefaultsToNull", () =>
+            {
+                Mission mission = new Mission();
+                AssertNull(mission.DiffSnapshot);
+            });
+
+            await RunTest("Mission DiffSnapshot CanBeSetAndCleared", () =>
+            {
+                Mission mission = new Mission();
+                mission.DiffSnapshot = "diff --git a/file.cs b/file.cs";
+                AssertEqual("diff --git a/file.cs b/file.cs", mission.DiffSnapshot);
+                mission.DiffSnapshot = null;
+                AssertNull(mission.DiffSnapshot);
+            });
+
+            await RunTest("Mission Serialization DiffSnapshotNullWhenCleared", () =>
+            {
+                Mission mission = new Mission("DiffTest");
+                mission.DiffSnapshot = "some diff content";
+                mission.DiffSnapshot = null;
+
+                string json = JsonSerializer.Serialize(mission);
+                Mission deserialized = JsonSerializer.Deserialize<Mission>(json)!;
+                AssertNull(deserialized.DiffSnapshot);
+            });
         }
     }
 }
