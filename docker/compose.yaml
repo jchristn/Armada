@@ -1,0 +1,11 @@
+services:
+  armada-server:
+    image: jchristn77/armada-server:v0.1.0
+    ports:
+      - "7890:7890"
+      - "7891:7891"
+    volumes:
+      - armada-data:/app/data
+
+volumes:
+  armada-data:
