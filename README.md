@@ -489,6 +489,42 @@ dotnet run --project src/Armada.Helm -- go "your task here"
 dotnet run --project src/Armada.Server
 ```
 
+## Upgrading / Migration
+
+When upgrading between major versions of Armada, your `settings.json` configuration file may need to be updated to match the new format.
+
+### v0.1.0 to v0.2.0
+
+In v0.2.0, the flat `databasePath` string property was replaced with a structured `database` object that supports multiple database types, connection pooling, and additional configuration options.
+
+#### Manual Migration
+
+1. Back up your existing `settings.json`
+2. Remove the `"databasePath"` property
+3. Add a `"database"` object with your SQLite path and default pooling settings (see `settings.json.sample` for the full schema)
+
+#### Automated Migration
+
+For existing v0.1.0 deployments, run the migration script to automatically convert your `settings.json`:
+
+**Windows:**
+```
+migrations\migrate_v0.1.0_to_v0.2.0.bat
+# or with a custom path:
+migrations\migrate_v0.1.0_to_v0.2.0.bat C:\path\to\settings.json
+```
+
+**Linux/macOS:**
+```
+./migrations/migrate_v0.1.0_to_v0.2.0.sh
+# or with a custom path:
+./migrations/migrate_v0.1.0_to_v0.2.0.sh /path/to/settings.json
+```
+
+The script backs up your original file to `settings.json.v0.1.0.bak` before making changes.
+
+**Requires:** jq (Linux/macOS) — install via `apt install jq`, `brew install jq`, etc.
+
 ## Issues and Discussions
 
 - **Bug reports and feature requests**: [Open an issue](https://github.com/jchristn/armada/issues) on GitHub. Please include your OS, .NET version, agent runtime, and steps to reproduce.
