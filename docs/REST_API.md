@@ -1,6 +1,6 @@
 # Armada REST API Reference
 
-**Version:** 0.1.0
+**Version:** 0.2.0
 **Base URL:** `http://localhost:7890`
 **Content-Type:** `application/json`
 
@@ -176,7 +176,7 @@ Health check endpoint. **Does not require authentication.**
   "Timestamp": "2026-03-07T12:00:00Z",
   "StartUtc": "2026-03-07T08:00:00Z",
   "Uptime": "0.04:00:00",
-  "Version": "0.1.0",
+  "Version": "0.2.0",
   "Ports": {
     "Admiral": 7890,
     "Mcp": 7891,

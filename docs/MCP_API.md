@@ -1,6 +1,6 @@
 # Armada MCP API Reference
 
-**Version:** 0.1.0
+**Version:** 0.2.0
 **Default URL:** `http://localhost:7891`
 **Protocol:** [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) over HTTP
 **Server Library:** Voltaic (McpHttpServer)
