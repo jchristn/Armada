@@ -179,7 +179,7 @@ namespace Armada.Core.Services
                     // Delete remote branch
                     try
                     {
-                        await RunGitAsync(repoPath, "push origin --delete " + entry.BranchName, token).ConfigureAwait(false);
+                        await RunGitAsync(repoPath, token, "push", "origin", "--delete", entry.BranchName).ConfigureAwait(false);
                         _Logging.Info(_Header + "deleted remote branch " + entry.BranchName);
                     }
                     catch (Exception ex)
@@ -414,7 +414,7 @@ namespace Armada.Core.Services
         {
             try
             {
-                await RunGitAsync(repoPath, "push origin " + integrationBranch + ":" + entry.TargetBranch, token).ConfigureAwait(false);
+                await RunGitAsync(repoPath, token, "push", "origin", integrationBranch + ":" + entry.TargetBranch).ConfigureAwait(false);
 
                 entry.Status = MergeStatusEnum.Landed;
                 entry.CompletedUtc = DateTime.UtcNow;
@@ -437,13 +437,13 @@ namespace Armada.Core.Services
         {
             try
             {
-                await RunGitAsync(worktreePath, "merge --no-ff " + branchName, token).ConfigureAwait(false);
+                await RunGitAsync(worktreePath, token, "merge", "--no-ff", branchName).ConfigureAwait(false);
                 return true;
             }
             catch
             {
                 // Abort the failed merge
-                try { await RunGitAsync(worktreePath, "merge --abort", token).ConfigureAwait(false); }
+                try { await RunGitAsync(worktreePath, token, "merge", "--abort").ConfigureAwait(false); }
                 catch { }
                 return false;
             }
@@ -481,18 +481,24 @@ namespace Armada.Core.Services
             }
         }
 
-        private async Task RunGitAsync(string workingDir, string args, CancellationToken token)
+        private async Task RunGitAsync(string workingDir, CancellationToken token, params string[] args)
         {
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 FileName = "git",
-                Arguments = args,
                 WorkingDirectory = workingDir,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 CreateNoWindow = true
             };
+
+            foreach (string arg in args)
+            {
+                startInfo.ArgumentList.Add(arg);
+            }
+
+            string argsDisplay = String.Join(" ", args);
 
             using (Process process = new Process { StartInfo = startInfo })
             {
@@ -503,7 +509,7 @@ namespace Armada.Core.Services
 
                 if (process.ExitCode != 0)
                 {
-                    throw new InvalidOperationException("git " + args + " failed: " + stderr);
+                    throw new InvalidOperationException("git " + argsDisplay + " failed: " + stderr);
                 }
             }
         }
