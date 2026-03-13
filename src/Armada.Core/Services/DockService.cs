@@ -103,8 +103,10 @@ namespace Armada.Core.Services
                         // Skip the current captain's directory — handled below
                         if (dirName == captain.Name) continue;
 
-                        // Simple heuristic: if it's a git worktree but not for any active captain, clean it up
-                        if (File.Exists(Path.Combine(existingDir, ".git")))
+                        // Simple heuristic: if it's a git worktree or repo but not for any active captain, clean it up.
+                        // Worktrees have .git as a file; cloned repos have .git as a directory.
+                        string dotGitPath = Path.Combine(existingDir, ".git");
+                        if (File.Exists(dotGitPath) || Directory.Exists(dotGitPath))
                         {
                             // Only attempt git worktree remove if the path is actually registered
                             bool isRegistered = await _Git.IsWorktreeRegisteredAsync(repoPath, existingDir, token).ConfigureAwait(false);
