@@ -53,13 +53,13 @@ namespace Armada.Core.Services
 
         private static void SendMacOs(string title, string message)
         {
-            string script = $"display notification \"{EscapeQuotes(message)}\" with title \"{EscapeQuotes(title)}\"";
-            RunProcess("osascript", $"-e '{script}'");
+            string script = $"display notification \"{EscapeAppleScript(message)}\" with title \"{EscapeAppleScript(title)}\"";
+            RunProcess("osascript", "-e", script);
         }
 
         private static void SendLinux(string title, string message)
         {
-            RunProcess("notify-send", $"\"{EscapeQuotes(title)}\" \"{EscapeQuotes(message)}\"");
+            RunProcess("notify-send", title, message);
         }
 
         private static void SendWindows(string title, string message)
@@ -77,7 +77,7 @@ namespace Armada.Core.Services
                 "$xml = [Windows.Data.Xml.Dom.XmlDocument]::new(); " +
                 $"$xml.LoadXml('{EscapeQuotes(toastXml)}'); " +
                 "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Armada').Show([Windows.UI.Notifications.ToastNotification]::new($xml))";
-            RunProcess("powershell", $"-NoProfile -Command \"{script}\"");
+            RunProcess("powershell", "-NoProfile", "-Command", script);
         }
 
         private static string EscapeXml(string text)
@@ -85,25 +85,30 @@ namespace Armada.Core.Services
             return text.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;").Replace("'", "&apos;");
         }
 
-        private static void RunProcess(string command, string arguments)
+        private static void RunProcess(string command, params string[] arguments)
         {
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 FileName = command,
-                Arguments = arguments,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
 
+            foreach (string arg in arguments)
+                startInfo.ArgumentList.Add(arg);
+
             using Process? process = Process.Start(startInfo);
             process?.WaitForExit(3000);
         }
 
-        private static string EscapeQuotes(string text)
+        /// <summary>
+        /// Escape double quotes for AppleScript string literals.
+        /// </summary>
+        private static string EscapeAppleScript(string text)
         {
-            return text.Replace("\"", "\\\"").Replace("'", "\\'");
+            return text.Replace("\\", "\\\\").Replace("\"", "\\\"");
         }
 
         #endregion
