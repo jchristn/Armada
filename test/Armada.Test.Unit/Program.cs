@@ -16,6 +16,7 @@ namespace Armada.Test.Unit
             // Database tests
             runner.AddSuite(new FleetDatabaseTests());
             runner.AddSuite(new VesselDatabaseTests());
+            runner.AddSuite(new VesselTests());
             runner.AddSuite(new CaptainDatabaseTests());
             runner.AddSuite(new MissionDatabaseTests());
             runner.AddSuite(new VoyageDatabaseTests());
