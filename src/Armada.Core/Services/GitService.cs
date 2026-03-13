@@ -441,7 +441,9 @@ namespace Armada.Core.Services
                 startInfo.ArgumentList.Add(arg);
             }
 
-            using CancellationTokenSource timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            // 120s timeout: clone/push/fetch of large repos over slow connections
+            // can easily exceed 30s, especially in CI or container environments.
+            using CancellationTokenSource timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
             using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token, timeoutCts.Token);
 
             using Process process = new Process { StartInfo = startInfo };
@@ -457,7 +459,7 @@ namespace Armada.Core.Services
             catch (OperationCanceledException)
             {
                 try { process.Kill(entireProcessTree: true); } catch { }
-                throw new TimeoutException(command + " timed out after 30 seconds");
+                throw new TimeoutException(command + " timed out after 120 seconds");
             }
 
             if (process.ExitCode != 0)
