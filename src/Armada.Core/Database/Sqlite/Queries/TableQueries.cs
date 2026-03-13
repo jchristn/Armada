@@ -189,6 +189,10 @@ namespace Armada.Core.Database.Sqlite.Queries
                     @"CREATE INDEX IF NOT EXISTS idx_merge_entries_vessel ON merge_entries(vessel_id);",
                     @"CREATE INDEX IF NOT EXISTS idx_merge_entries_mission ON merge_entries(mission_id);",
                     @"CREATE INDEX IF NOT EXISTS idx_merge_entries_completed ON merge_entries(completed_utc);"
+                ),
+                new SchemaMigration(10, "Add landing_mode to vessels and voyages",
+                    @"ALTER TABLE vessels ADD COLUMN landing_mode TEXT;",
+                    @"ALTER TABLE voyages ADD COLUMN landing_mode TEXT;"
                 )
             };
         }

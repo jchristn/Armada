@@ -76,6 +76,12 @@ namespace Armada.Core.Models
         /// </summary>
         public bool? AutoMergePullRequests { get; set; } = null;
 
+        /// <summary>
+        /// Per-voyage override for landing mode. Null = use vessel or global setting.
+        /// When set, this takes precedence over per-voyage boolean overrides.
+        /// </summary>
+        public LandingModeEnum? LandingMode { get; set; } = null;
+
         #endregion
 
         #region Private-Members

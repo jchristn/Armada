@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System.Text.Json.Serialization;
+    using Armada.Core.Enums;
 
     /// <summary>
     /// A git repository registered with Armada.
@@ -73,6 +74,13 @@ namespace Armada.Core.Models
         /// Style guide describing naming conventions, patterns, language restrictions, and library preferences.
         /// </summary>
         public string? StyleGuide { get; set; } = null;
+
+        /// <summary>
+        /// Landing mode for this vessel. Determines how completed mission work is integrated.
+        /// Null means use the voyage or global setting. When set, this takes precedence over
+        /// the legacy boolean flags (AutoPush, AutoCreatePullRequests, AutoMergePullRequests).
+        /// </summary>
+        public LandingModeEnum? LandingMode { get; set; } = null;
 
         /// <summary>
         /// Whether the vessel is active.

@@ -2,6 +2,7 @@ namespace Armada.Core.Settings
 {
     using System.Text.Json;
     using System.Text.Json.Serialization;
+    using Armada.Core.Enums;
 
     /// <summary>
     /// Top-level application settings.
@@ -141,18 +142,29 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
+        /// Global landing mode for completed missions. Determines how work is integrated.
+        /// When set, takes precedence over the legacy boolean flags (AutoPush, AutoCreatePullRequests, AutoMergePullRequests).
+        /// Can be overridden per-vessel or per-voyage.
+        /// Resolution order: voyage.LandingMode > vessel.LandingMode > settings.LandingMode > derive from booleans.
+        /// </summary>
+        public LandingModeEnum? LandingMode { get; set; } = null;
+
+        /// <summary>
         /// Whether to automatically push changes to the remote on mission completion.
+        /// Legacy setting — prefer LandingMode when possible.
         /// </summary>
         public bool AutoPush { get; set; } = true;
 
         /// <summary>
         /// Whether to automatically create pull requests on mission completion.
+        /// Legacy setting — prefer LandingMode when possible.
         /// Requires AutoPush to be effective.
         /// </summary>
         public bool AutoCreatePullRequests { get; set; } = false;
 
         /// <summary>
         /// Whether to automatically merge pull requests after creation.
+        /// Legacy setting — prefer LandingMode when possible.
         /// Requires AutoCreatePullRequests to be effective.
         /// </summary>
         public bool AutoMergePullRequests { get; set; } = false;

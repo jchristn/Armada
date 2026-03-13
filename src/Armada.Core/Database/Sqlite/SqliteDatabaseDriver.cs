@@ -339,6 +339,9 @@ namespace Armada.Core.Database.Sqlite
             vessel.WorkingDirectory = NullableString(reader["working_directory"]);
             vessel.ProjectContext = NullableString(reader["project_context"]);
             vessel.StyleGuide = NullableString(reader["style_guide"]);
+            string? landingModeStr = NullableString(reader["landing_mode"]);
+            if (!String.IsNullOrEmpty(landingModeStr) && Enum.TryParse<LandingModeEnum>(landingModeStr, out LandingModeEnum lm))
+                vessel.LandingMode = lm;
             vessel.DefaultBranch = reader["default_branch"].ToString()!;
             vessel.Active = Convert.ToInt64(reader["active"]) == 1;
             vessel.CreatedUtc = FromIso8601(reader["created_utc"].ToString()!);
@@ -416,6 +419,9 @@ namespace Armada.Core.Database.Sqlite
             voyage.AutoPush = NullableBool(reader, "auto_push");
             voyage.AutoCreatePullRequests = NullableBool(reader, "auto_create_pull_requests");
             voyage.AutoMergePullRequests = NullableBool(reader, "auto_merge_pull_requests");
+            string? voyageLandingModeStr = NullableString(reader["landing_mode"]);
+            if (!String.IsNullOrEmpty(voyageLandingModeStr) && Enum.TryParse<LandingModeEnum>(voyageLandingModeStr, out LandingModeEnum vlm))
+                voyage.LandingMode = vlm;
             return voyage;
         }
 

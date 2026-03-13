@@ -43,6 +43,7 @@ namespace Armada.Core.Database.Mysql.Queries
             working_directory LONGTEXT,
             project_context LONGTEXT,
             style_guide LONGTEXT,
+            landing_mode TEXT,
             active TINYINT(1) NOT NULL DEFAULT 1,
             created_utc DATETIME(6) NOT NULL,
             last_update_utc DATETIME(6) NOT NULL,
@@ -77,6 +78,7 @@ namespace Armada.Core.Database.Mysql.Queries
             auto_push TINYINT(1),
             auto_create_pull_requests TINYINT(1),
             auto_merge_pull_requests TINYINT(1),
+            landing_mode TEXT,
             created_utc DATETIME(6) NOT NULL,
             completed_utc DATETIME(6),
             last_update_utc DATETIME(6) NOT NULL

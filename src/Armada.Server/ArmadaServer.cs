@@ -2336,10 +2336,31 @@ namespace Armada.Server
                 voyage = await _Database.Voyages.ReadAsync(mission.VoyageId).ConfigureAwait(false);
             }
 
-            // Resolve effective settings: per-voyage override > global setting
-            bool effectivePush = voyage?.AutoPush ?? _Settings.AutoPush;
-            bool effectivePr = voyage?.AutoCreatePullRequests ?? _Settings.AutoCreatePullRequests;
-            bool effectiveMerge = voyage?.AutoMergePullRequests ?? _Settings.AutoMergePullRequests;
+            // Resolve landing mode: voyage > vessel > global > derive from legacy booleans
+            LandingModeEnum? resolvedLandingMode = voyage?.LandingMode ?? vessel?.LandingMode ?? _Settings.LandingMode;
+
+            // Resolve effective settings from landing mode or legacy booleans
+            bool effectivePush;
+            bool effectivePr;
+            bool effectiveMerge;
+
+            if (resolvedLandingMode.HasValue)
+            {
+                // Explicit landing mode takes precedence over boolean flags
+                effectivePr = resolvedLandingMode.Value == LandingModeEnum.PullRequest;
+                effectivePush = effectivePr || resolvedLandingMode.Value == LandingModeEnum.LocalMerge;
+                effectiveMerge = effectivePr && (voyage?.AutoMergePullRequests ?? _Settings.AutoMergePullRequests);
+            }
+            else
+            {
+                // Legacy boolean resolution: per-voyage override > global setting
+                effectivePush = voyage?.AutoPush ?? _Settings.AutoPush;
+                effectivePr = voyage?.AutoCreatePullRequests ?? _Settings.AutoCreatePullRequests;
+                effectiveMerge = voyage?.AutoMergePullRequests ?? _Settings.AutoMergePullRequests;
+            }
+
+            bool landingModeIsNone = resolvedLandingMode == LandingModeEnum.None;
+            bool landingModeIsMergeQueue = resolvedLandingMode == LandingModeEnum.MergeQueue;
 
             // Acquire per-vessel merge lock to prevent concurrent git operations on the same repo
             string vesselLockKey = mission.VesselId ?? dock.VesselId ?? "unknown";
@@ -2499,10 +2520,15 @@ namespace Armada.Server
                         landingSucceeded = false;
                     }
                 }
+                else if (landingModeIsMergeQueue)
+                {
+                    _Logging.Info(_Header + "mission " + mission.Id + " landing mode is MergeQueue — branch " + dock.BranchName + " should be enqueued via armada_enqueue_merge");
+                    // MergeQueue mode: work stays as WorkProduced, user or automation enqueues for merge
+                }
                 else
                 {
-                    _Logging.Info(_Header + "mission " + mission.Id + " work produced — branch " + dock.BranchName + " available in bare repo (no auto-PR or local merge configured)");
-                    // No landing configured — mission stays as WorkProduced
+                    _Logging.Info(_Header + "mission " + mission.Id + " work produced — branch " + dock.BranchName + " available in bare repo (landing mode: " + (resolvedLandingMode?.ToString() ?? "not configured") + ")");
+                    // No landing configured or LandingMode.None — mission stays as WorkProduced
                 }
             }
             finally
