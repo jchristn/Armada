@@ -550,13 +550,15 @@ namespace Armada.Core.Services
         private string GetShell()
         {
             if (OperatingSystem.IsWindows()) return "cmd.exe";
-            return "/bin/bash";
+            // Use /bin/sh (POSIX-guaranteed) instead of /bin/bash which may
+            // not exist on Alpine, minimal containers, or some Linux distros.
+            return "/bin/sh";
         }
 
         private string GetShellArgs(string command)
         {
             if (OperatingSystem.IsWindows()) return "/c " + command;
-            return "-c \"" + command.Replace("\"", "\\\"") + "\"";
+            return "-c \"" + command.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
         }
 
         private string TruncateOutput(string output)
