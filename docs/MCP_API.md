@@ -68,12 +68,19 @@
     - [armada_list_events](#armada_list_events)
   - **Docks**
     - [armada_list_docks](#armada_list_docks)
+    - [armada_get_dock](#armada_get_dock)
+    - [armada_delete_dock](#armada_delete_dock)
+    - [armada_purge_dock](#armada_purge_dock)
   - **Merge Queue**
     - [armada_list_merge_queue](#armada_list_merge_queue)
     - [armada_get_merge_entry](#armada_get_merge_entry)
     - [armada_enqueue_merge](#armada_enqueue_merge)
     - [armada_cancel_merge](#armada_cancel_merge)
     - [armada_process_merge_queue](#armada_process_merge_queue)
+    - [armada_delete_merge](#armada_delete_merge)
+    - [armada_purge_merge_queue](#armada_purge_merge_queue)
+    - [armada_purge_merge_entry](#armada_purge_merge_entry)
+    - [armada_purge_merge_entries](#armada_purge_merge_entries)
   - **Backup and Restore**
     - [armada_backup](#armada_backup)
     - [armada_restore](#armada_restore)
@@ -1538,6 +1545,91 @@ List all docks (git worktrees) with their status, optionally filtered by vessel.
 
 ---
 
+### armada_get_dock
+
+Get a dock (git worktree) by ID.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "dockId": { "type": "string", "description": "Dock ID (dck_ prefix)" }
+  },
+  "required": ["dockId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `dockId` | string | Yes | Dock ID (prefix `dck_`) |
+
+**Response:** Dock object, or `{ "Error": "Dock not found" }`.
+
+---
+
+### armada_delete_dock
+
+Delete a dock and clean up its git worktree. Blocked if the dock is actively in use by a captain.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "dockId": { "type": "string", "description": "Dock ID (dck_ prefix)" }
+  },
+  "required": ["dockId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `dockId` | string | Yes | Dock ID to delete (prefix `dck_`) |
+
+**Response:**
+
+```json
+{ "Status": "deleted", "DockId": "dck_..." }
+```
+
+Returns `{ "Error": "Dock not found" }` if the ID does not exist.
+Returns `{ "Error": "Cannot delete dock while it is actively in use by a captain" }` if the dock is active.
+
+---
+
+### armada_purge_dock
+
+Force purge a dock and its git worktree, even if a mission references it. **This cannot be undone.**
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "dockId": { "type": "string", "description": "Dock ID (dck_ prefix)" }
+  },
+  "required": ["dockId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `dockId` | string | Yes | Dock ID to purge (prefix `dck_`) |
+
+**Response:**
+
+```json
+{ "Status": "purged", "DockId": "dck_..." }
+```
+
+Returns `{ "Error": "Dock not found" }` if the ID does not exist.
+
+---
+
 ### armada_list_merge_queue
 
 List all entries in the merge queue.
@@ -1704,6 +1796,73 @@ Permanently delete all terminal merge queue entries (Landed, Failed, Cancelled) 
 ```
 
 Returns `{ "Error": "Invalid status. Must be one of: Landed, Failed, Cancelled" }` if an invalid status is provided.
+
+---
+
+### armada_purge_merge_entry
+
+Permanently delete a single terminal merge queue entry from the database by ID. Only entries in Landed, Failed, or Cancelled status can be purged. **This cannot be undone.**
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "entryId": { "type": "string", "description": "Merge entry ID (mrg_ prefix)" }
+  },
+  "required": ["entryId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryId` | string | Yes | Merge entry ID to purge (prefix `mrg_`) |
+
+**Response:**
+
+```json
+{ "Status": "purged", "EntryId": "mrg_..." }
+```
+
+Returns `{ "Error": "Merge entry not found" }` if the ID does not exist.
+Returns `{ "Error": "Cannot purge merge entry in non-terminal status ..." }` if the entry is not in a terminal state.
+
+---
+
+### armada_purge_merge_entries
+
+Permanently delete multiple terminal merge queue entries from the database by ID. Returns a summary of purged and skipped entries. **This cannot be undone.**
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "entryIds": { "type": "array", "items": { "type": "string" }, "description": "List of merge entry IDs to purge (mrg_ prefix)" }
+  },
+  "required": ["entryIds"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `entryIds` | string[] | Yes | List of merge entry IDs to purge (prefix `mrg_`) |
+
+**Response:**
+
+```json
+{
+  "Status": "purged",
+  "EntriesPurged": 2,
+  "Skipped": [
+    { "EntryId": "mrg_xyz789", "Reason": "Not in terminal state (status: Testing)" }
+  ]
+}
+```
+
+Returns `{ "Error": "entryIds is required and must not be empty" }` if no IDs are provided.
 
 ---
 

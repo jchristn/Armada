@@ -1124,7 +1124,7 @@ Paginated enumeration of events with optional filtering and sorting.
 
 ### Docks
 
-Docks are git worktrees provisioned for captains. They are managed internally by the Admiral and cannot be created or deleted directly via the API. These endpoints provide read-only access to dock state.
+Docks are git worktrees provisioned for captains. These endpoints provide access to dock state and management.
 
 #### `GET /api/v1/docks`
 
@@ -1169,7 +1169,63 @@ Paginated enumeration of docks with optional filtering and sorting.
 }
 ```
 
-**Response:** `200 OK` — Same shape as `GET /api/v1/docks`.
+**Response:** `200 OK` -- Same shape as `GET /api/v1/docks`.
+
+---
+
+#### `GET /api/v1/docks/{id}`
+
+Get a single dock by ID.
+
+**Path Parameters:**
+
+| Parameter | Description |
+|---|---|
+| `id` | Dock ID (`dck_` prefix) |
+
+**Response:** `200 OK` - Dock object
+
+**Error:** `404` - Dock not found
+
+---
+
+#### `DELETE /api/v1/docks/{id}`
+
+Delete a dock and clean up its git worktree. Blocked if the dock is actively in use by a captain.
+
+**Path Parameters:**
+
+| Parameter | Description |
+|---|---|
+| `id` | Dock ID (`dck_` prefix) |
+
+**Response:** `204 No Content`
+
+**Error:** `404` - Dock not found
+**Error:** `409` - Dock is actively in use by a captain
+
+---
+
+#### `DELETE /api/v1/docks/{id}/purge`
+
+Force purge a dock and its git worktree, even if a mission references it. **This cannot be undone.**
+
+**Path Parameters:**
+
+| Parameter | Description |
+|---|---|
+| `id` | Dock ID (`dck_` prefix) |
+
+**Response:** `200 OK`
+
+```json
+{
+  "Status": "purged",
+  "DockId": "dck_abc123"
+}
+```
+
+**Error:** `404` - Dock not found
 
 ---
 
@@ -1264,6 +1320,56 @@ Trigger processing of the merge queue. Creates integration branches, runs tests,
   "Status": "processed"
 }
 ```
+
+---
+
+#### `DELETE /api/v1/merge-queue/{id}/purge`
+
+Permanently delete a single terminal merge queue entry from the database. Only entries in Landed, Failed, or Cancelled status can be purged. **This cannot be undone.**
+
+**Path Parameters:**
+
+| Parameter | Description |
+|---|---|
+| `id` | Merge entry ID (`mrg_` prefix) |
+
+**Response:** `200 OK`
+
+```json
+{
+  "Status": "purged",
+  "EntryId": "mrg_abc123"
+}
+```
+
+**Error:** `404` - Merge entry not found
+**Error:** `409` - Entry is not in a terminal state
+
+---
+
+#### `POST /api/v1/merge-queue/purge`
+
+Batch purge multiple terminal merge queue entries from the database by ID. Returns a summary of purged and skipped entries. **This cannot be undone.**
+
+**Request Body:**
+
+```json
+{
+  "EntryIds": ["mrg_abc123", "mrg_def456"]
+}
+```
+
+**Response:** `200 OK`
+
+```json
+{
+  "Status": "purged",
+  "EntriesPurged": 2,
+  "Skipped": []
+}
+```
+
+Skipped entries include the entry ID and the reason (e.g., "Not found" or "Not in terminal state").
 
 ---
 

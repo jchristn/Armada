@@ -206,6 +206,43 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
+        public async Task<MergeQueuePurgeResult> DeleteMultipleAsync(List<string> entryIds, CancellationToken token = default)
+        {
+            if (entryIds == null) throw new ArgumentNullException(nameof(entryIds));
+
+            MergeQueuePurgeResult result = new MergeQueuePurgeResult();
+
+            foreach (string entryId in entryIds)
+            {
+                if (String.IsNullOrEmpty(entryId))
+                {
+                    result.Skipped.Add(new MergeQueuePurgeSkipped(entryId ?? "", "Empty entry ID"));
+                    continue;
+                }
+
+                MergeEntry? entry = await _Database.MergeEntries.ReadAsync(entryId, token).ConfigureAwait(false);
+                if (entry == null)
+                {
+                    result.Skipped.Add(new MergeQueuePurgeSkipped(entryId, "Not found"));
+                    continue;
+                }
+
+                bool deleted = await DeleteAsync(entryId, token).ConfigureAwait(false);
+                if (deleted)
+                {
+                    result.EntriesPurged++;
+                }
+                else
+                {
+                    result.Skipped.Add(new MergeQueuePurgeSkipped(entryId, "Not in terminal state (status: " + entry.Status + ")"));
+                }
+            }
+
+            _Logging.Info(_Header + "batch purge: " + result.EntriesPurged + " purged, " + result.Skipped.Count + " skipped");
+            return result;
+        }
+
+        /// <inheritdoc />
         public async Task<int> PurgeTerminalAsync(string? vesselId = null, MergeStatusEnum? status = null, CancellationToken token = default)
         {
             List<MergeStatusEnum> terminalStatuses = new List<MergeStatusEnum>

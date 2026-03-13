@@ -1298,6 +1298,107 @@
 							"body": "{\n  \"Status\": \"processed\"\n}"
 						}
 					]
+				},
+				{
+					"name": "Purge Merge Entry",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/merge-queue/{{mergeEntryId}}/purge",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "merge-queue", "{{mergeEntryId}}", "purge"]
+						},
+						"description": "Permanently deletes a terminal merge queue entry. Only Landed, Failed, or Cancelled entries can be purged."
+					},
+					"response": [
+						{
+							"name": "Purged",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Status\": \"purged\",\n  \"EntryId\": \"mrg_abc123\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Batch Purge Merge Entries",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"EntryIds\": [\"mrg_abc123\", \"mrg_def456\"]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/merge-queue/purge",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "merge-queue", "purge"]
+						},
+						"description": "Batch purge multiple terminal merge queue entries by ID. Returns a summary of purged and skipped entries."
+					},
+					"response": [
+						{
+							"name": "Batch Purged",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Status\": \"purged\",\n  \"EntriesPurged\": 2,\n  \"Skipped\": []\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Docks",
+			"description": "Git worktree management for captains.",
+			"item": [
+				{
+					"name": "Get Dock",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/docks/{{dockId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "docks", "{{dockId}}"]
+						},
+						"description": "Returns a single dock by ID."
+					}
+				},
+				{
+					"name": "Delete Dock",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/docks/{{dockId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "docks", "{{dockId}}"]
+						},
+						"description": "Deletes a dock and cleans up its git worktree. Blocked if the dock is actively in use."
+					}
+				},
+				{
+					"name": "Purge Dock",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/docks/{{dockId}}/purge",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "docks", "{{dockId}}", "purge"]
+						},
+						"description": "Force purges a dock and its git worktree, even if a mission references it."
+					},
+					"response": [
+						{
+							"name": "Purged",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Status\": \"purged\",\n  \"DockId\": \"dck_abc123\"\n}"
+						}
+					]
 				}
 			]
 		},

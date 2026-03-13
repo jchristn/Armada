@@ -59,6 +59,15 @@ namespace Armada.Core.Services.Interfaces
         Task<bool> DeleteAsync(string entryId, CancellationToken token = default);
 
         /// <summary>
+        /// Permanently delete multiple merge queue entries by ID.
+        /// Only entries in terminal states (Cancelled, Landed, Failed) can be deleted.
+        /// </summary>
+        /// <param name="entryIds">List of merge entry identifiers to delete.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Purge result with counts of purged and skipped entries.</returns>
+        Task<MergeQueuePurgeResult> DeleteMultipleAsync(List<string> entryIds, CancellationToken token = default);
+
+        /// <summary>
         /// Permanently delete all terminal merge queue entries (Landed, Failed, Cancelled).
         /// Optionally filter by vessel ID and/or status.
         /// </summary>

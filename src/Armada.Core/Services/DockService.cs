@@ -258,9 +258,64 @@ namespace Armada.Core.Services
             }
         }
 
+        /// <inheritdoc />
+        public async Task<bool> DeleteAsync(string dockId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(dockId)) throw new ArgumentNullException(nameof(dockId));
+
+            Dock? dock = await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
+            if (dock == null) throw new InvalidOperationException("Dock not found: " + dockId);
+
+            // Block deletion if an active mission is using this dock
+            if (dock.Active && !String.IsNullOrEmpty(dock.CaptainId))
+            {
+                _Logging.Warn(_Header + "cannot delete dock " + dockId + " — it is active with captain " + dock.CaptainId);
+                return false;
+            }
+
+            await CleanupWorktreeAsync(dock, token).ConfigureAwait(false);
+            await _Database.Docks.DeleteAsync(dockId, token).ConfigureAwait(false);
+            _Logging.Info(_Header + "deleted dock " + dockId);
+            return true;
+        }
+
+        /// <inheritdoc />
+        public async Task PurgeAsync(string dockId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(dockId)) throw new ArgumentNullException(nameof(dockId));
+
+            Dock? dock = await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
+            if (dock == null) throw new InvalidOperationException("Dock not found: " + dockId);
+
+            await CleanupWorktreeAsync(dock, token).ConfigureAwait(false);
+            await _Database.Docks.DeleteAsync(dockId, token).ConfigureAwait(false);
+            _Logging.Info(_Header + "purged dock " + dockId + " (force)");
+        }
+
         #endregion
 
         #region Private-Methods
+
+        /// <summary>
+        /// Clean up a dock's worktree by removing the git worktree and directory.
+        /// </summary>
+        private async Task CleanupWorktreeAsync(Dock dock, CancellationToken token)
+        {
+            if (!String.IsNullOrEmpty(dock.WorktreePath))
+            {
+                try
+                {
+                    await _Git.RemoveWorktreeAsync(dock.WorktreePath, token).ConfigureAwait(false);
+                    _Logging.Info(_Header + "removed worktree for dock " + dock.Id + " at " + dock.WorktreePath);
+                }
+                catch (Exception ex)
+                {
+                    _Logging.Warn(_Header + "error removing worktree for dock " + dock.Id + ": " + ex.Message);
+                }
+
+                await ForceRemoveDirectoryAsync(dock.WorktreePath, token).ConfigureAwait(false);
+            }
+        }
 
         /// <summary>
         /// Forcefully remove a directory with retry logic to handle locked files.

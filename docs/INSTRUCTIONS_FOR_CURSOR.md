@@ -244,16 +244,23 @@ Valid status transitions:
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `armada_list_docks` | `vesselId` | List git worktrees (optionally filtered by vessel) |
+| `armada_get_dock` | `dockId` (required) | Get dock details by ID |
+| `armada_delete_dock` | `dockId` (required) | Delete a dock and clean up worktree (blocked if active) |
+| `armada_purge_dock` | `dockId` (required) | Force purge a dock and worktree even if referenced |
 
 ### Merge Queue
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `armada_list_merge_queue` | — | List all merge queue entries |
+| `armada_list_merge_queue` | -- | List all merge queue entries |
 | `armada_get_merge_entry` | `entryId` (required) | Get merge entry details |
 | `armada_enqueue_merge` | `vesselId` (required), `branchName` (required), `missionId`, `targetBranch` (default: "main"), `priority` (default 0, lower = higher), `testCommand` | Add a branch to the merge queue |
 | `armada_cancel_merge` | `entryId` (required) | Cancel a queued merge |
-| `armada_process_merge_queue` | — | Run tests and land passing branches |
+| `armada_process_merge_queue` | -- | Run tests and land passing branches |
+| `armada_delete_merge` | `entryId` (required) | Delete a terminal merge entry |
+| `armada_purge_merge_queue` | `vesselId`, `status` | Purge all terminal merge entries (optionally filtered) |
+| `armada_purge_merge_entry` | `entryId` (required) | Purge a single terminal merge entry by ID |
+| `armada_purge_merge_entries` | `entryIds` (required) | Batch purge multiple terminal merge entries by ID |
 
 **Merge queue lifecycle**: Queued → Testing → Passed/Failed → Landed/Cancelled. Use `armada_enqueue_merge` after a mission completes to queue its branch, then `armada_process_merge_queue` to test and land. Failed entries can be retried by cancelling and re-enqueuing.
 

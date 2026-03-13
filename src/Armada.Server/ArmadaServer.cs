@@ -1727,6 +1727,73 @@ namespace Armada.Server
                 .WithRequestBody(OpenApiRequestBodyMetadata.Json<EnumerationQuery>("Enumeration query", false))
                 .WithSecurity("ApiKey"));
 
+            _App.Rest.Get("/api/v1/docks/{id}", async (AppRequest req) =>
+            {
+                string id = req.Parameters["id"];
+                Dock? dock = await _Database.Docks.ReadAsync(id).ConfigureAwait(false);
+                if (dock == null) return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Dock not found" };
+                return (object)dock;
+            },
+            api => api
+                .WithTag("Docks")
+                .WithSummary("Get a dock")
+                .WithDescription("Returns a single dock by ID.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Dock ID (dck_ prefix)"))
+                .WithResponse(200, OpenApiResponseMetadata.Json<Dock>("Dock details"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            _App.Rest.Delete("/api/v1/docks/{id}", async (AppRequest req) =>
+            {
+                string id = req.Parameters["id"];
+                Dock? dock = await _Database.Docks.ReadAsync(id).ConfigureAwait(false);
+                if (dock == null) return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Dock not found" };
+
+                bool deleted = await _Docks.DeleteAsync(id).ConfigureAwait(false);
+                if (!deleted)
+                {
+                    req.Http.Response.StatusCode = 409;
+                    return (object)new { Error = "Conflict", Message = "Cannot delete dock while it is actively in use by a captain" };
+                }
+
+                await EmitEventAsync("dock.deleted", "Dock " + id + " deleted",
+                    entityType: "dock", entityId: id).ConfigureAwait(false);
+
+                req.Http.Response.StatusCode = 204;
+                return null;
+            },
+            api => api
+                .WithTag("Docks")
+                .WithSummary("Delete a dock")
+                .WithDescription("Deletes a dock and cleans up its git worktree. Blocked if the dock is actively in use by a captain.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Dock ID (dck_ prefix)"))
+                .WithResponse(204, OpenApiResponseMetadata.NoContent())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiResponseMetadata.Json<object>("Dock is actively in use"))
+                .WithSecurity("ApiKey"));
+
+            _App.Rest.Delete("/api/v1/docks/{id}/purge", async (AppRequest req) =>
+            {
+                string id = req.Parameters["id"];
+                Dock? dock = await _Database.Docks.ReadAsync(id).ConfigureAwait(false);
+                if (dock == null) return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Dock not found" };
+
+                await _Docks.PurgeAsync(id).ConfigureAwait(false);
+
+                await EmitEventAsync("dock.purged", "Dock " + id + " force purged",
+                    entityType: "dock", entityId: id).ConfigureAwait(false);
+
+                return (object)new { Status = "purged", DockId = id };
+            },
+            api => api
+                .WithTag("Docks")
+                .WithSummary("Force purge a dock")
+                .WithDescription("Force purges a dock and its git worktree, even if a mission references it. This cannot be undone.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Dock ID (dck_ prefix)"))
+                .WithResponse(200, OpenApiResponseMetadata.Json<object>("Purged dock"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
             // Signals
             _App.Rest.Get("/api/v1/signals", async (AppRequest req) =>
             {
@@ -2021,6 +2088,55 @@ namespace Armada.Server
                 .WithDescription("Triggers processing of all queued entries: creates integration branches, runs tests, and lands passing batches.")
                 .WithSecurity("ApiKey"));
 
+            _App.Rest.Delete("/api/v1/merge-queue/{id}/purge", async (AppRequest req) =>
+            {
+                string id = req.Parameters["id"];
+                MergeEntry? entry = await _MergeQueue.GetAsync(id).ConfigureAwait(false);
+                if (entry == null) return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Merge entry not found" };
+
+                bool deleted = await _MergeQueue.DeleteAsync(id).ConfigureAwait(false);
+                if (!deleted)
+                {
+                    req.Http.Response.StatusCode = 409;
+                    return (object)new { Error = "Conflict", Message = "Cannot purge merge entry in non-terminal status " + entry.Status + ". Only Landed, Failed, or Cancelled entries can be purged." };
+                }
+
+                await EmitEventAsync("merge.purged", "Merge entry " + id + " purged",
+                    entityType: "merge_entry", entityId: id).ConfigureAwait(false);
+
+                return (object)new { Status = "purged", EntryId = id };
+            },
+            api => api
+                .WithTag("MergeQueue")
+                .WithSummary("Purge a single merge queue entry")
+                .WithDescription("Permanently deletes a terminal merge queue entry from the database. Only entries in Landed, Failed, or Cancelled status can be purged. This cannot be undone.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Merge entry ID (mrg_ prefix)"))
+                .WithResponse(200, OpenApiResponseMetadata.Json<object>("Purged merge entry"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiResponseMetadata.Json<object>("Entry is not in a terminal state"))
+                .WithSecurity("ApiKey"));
+
+            _App.Rest.Post<PurgeMergeEntriesRequest>("/api/v1/merge-queue/purge", async (AppRequest req) =>
+            {
+                PurgeMergeEntriesRequest body = req.GetData<PurgeMergeEntriesRequest>();
+                if (body == null || body.EntryIds == null || body.EntryIds.Count == 0)
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "EntryIds is required and must not be empty" };
+
+                MergeQueuePurgeResult result = await _MergeQueue.DeleteMultipleAsync(body.EntryIds).ConfigureAwait(false);
+
+                await EmitEventAsync("merge.batch_purged", "Batch purged " + result.EntriesPurged + " merge entries",
+                    entityType: "merge_entry").ConfigureAwait(false);
+
+                return (object)result;
+            },
+            api => api
+                .WithTag("MergeQueue")
+                .WithSummary("Batch purge merge queue entries")
+                .WithDescription("Permanently deletes multiple terminal merge queue entries from the database by ID. Returns a summary of purged and skipped entries. This cannot be undone.")
+                .WithRequestBody(OpenApiRequestBodyMetadata.Json<PurgeMergeEntriesRequest>("List of merge entry IDs to purge"))
+                .WithResponse(200, OpenApiResponseMetadata.Json<MergeQueuePurgeResult>("Purge result summary"))
+                .WithSecurity("ApiKey"));
+
             // Backup & Restore
             _App.Rest.Get("/api/v1/backup", async (AppRequest req) =>
             {
@@ -2122,6 +2238,7 @@ namespace Armada.Server
                 _Settings,
                 _Git,
                 _MergeQueue,
+                _Docks,
                 () => Stop(),
                 async (captainId) =>
                 {

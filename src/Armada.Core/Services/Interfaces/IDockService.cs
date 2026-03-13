@@ -30,5 +30,21 @@ namespace Armada.Core.Services.Interfaces
         /// <param name="dockId">Dock identifier.</param>
         /// <param name="token">Cancellation token.</param>
         Task RepairAsync(string dockId, CancellationToken token = default);
+
+        /// <summary>
+        /// Delete a dock by ID, cleaning up its worktree.
+        /// Blocked if an active mission is using the dock.
+        /// </summary>
+        /// <param name="dockId">Dock identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True if deleted, false if blocked by an active mission.</returns>
+        Task<bool> DeleteAsync(string dockId, CancellationToken token = default);
+
+        /// <summary>
+        /// Force purge a dock and its worktree, even if a mission references it.
+        /// </summary>
+        /// <param name="dockId">Dock identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        Task PurgeAsync(string dockId, CancellationToken token = default);
     }
 }

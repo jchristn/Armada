@@ -47,6 +47,7 @@ namespace Armada.Server.Mcp
         /// <param name="settings">Application settings for log/diff paths.</param>
         /// <param name="git">Git service for diff operations.</param>
         /// <param name="mergeQueue">Merge queue service.</param>
+        /// <param name="dockService">Dock service for dock management.</param>
         /// <param name="onStop">Callback to stop the server.</param>
         /// <param name="onStopCaptain">Callback to kill a captain's agent process by captain ID. Called before RecallCaptainAsync.</param>
         public static void RegisterAll(
@@ -56,6 +57,7 @@ namespace Armada.Server.Mcp
             ArmadaSettings? settings = null,
             IGitService? git = null,
             IMergeQueueService? mergeQueue = null,
+            IDockService? dockService = null,
             Action? onStop = null,
             Func<string, Task>? onStopCaptain = null)
         {
@@ -68,7 +70,7 @@ namespace Armada.Server.Mcp
             RegisterCaptainTools(register, database, admiral, settings, onStopCaptain);
             RegisterSignalTools(register, database);
             RegisterEventTools(register, database);
-            RegisterDockTools(register, database);
+            RegisterDockTools(register, database, dockService);
             if (mergeQueue != null) RegisterMergeQueueTools(register, mergeQueue);
             if (settings != null) RegisterBackupTools(register, database, settings);
         }
@@ -1331,7 +1333,7 @@ namespace Armada.Server.Mcp
                 });
         }
 
-        private static void RegisterDockTools(RegisterToolDelegate register, DatabaseDriver database)
+        private static void RegisterDockTools(RegisterToolDelegate register, DatabaseDriver database, IDockService? dockService = null)
         {
             register(
                 "armada_list_docks",
@@ -1354,6 +1356,73 @@ namespace Armada.Server.Mcp
                     }
                     List<Dock> docks = await database.Docks.EnumerateAsync().ConfigureAwait(false);
                     return (object)docks;
+                });
+
+            register(
+                "armada_get_dock",
+                "Get a dock (git worktree) by ID.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        dockId = new { type = "string", description = "Dock ID (dck_ prefix)" }
+                    },
+                    required = new[] { "dockId" }
+                },
+                async (args) =>
+                {
+                    DockIdArgs request = JsonSerializer.Deserialize<DockIdArgs>(args!.Value, _JsonOptions)!;
+                    Dock? dock = await database.Docks.ReadAsync(request.DockId).ConfigureAwait(false);
+                    if (dock == null) return (object)new { Error = "Dock not found" };
+                    return (object)dock;
+                });
+
+            register(
+                "armada_delete_dock",
+                "Delete a dock and clean up its git worktree. Blocked if the dock is actively in use by a captain.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        dockId = new { type = "string", description = "Dock ID (dck_ prefix)" }
+                    },
+                    required = new[] { "dockId" }
+                },
+                async (args) =>
+                {
+                    if (dockService == null) return (object)new { Error = "Dock service not available" };
+                    DockIdArgs request = JsonSerializer.Deserialize<DockIdArgs>(args!.Value, _JsonOptions)!;
+                    Dock? dock = await database.Docks.ReadAsync(request.DockId).ConfigureAwait(false);
+                    if (dock == null) return (object)new { Error = "Dock not found" };
+
+                    bool deleted = await dockService.DeleteAsync(request.DockId).ConfigureAwait(false);
+                    if (!deleted) return (object)new { Error = "Cannot delete dock while it is actively in use by a captain" };
+                    return (object)new { Status = "deleted", DockId = request.DockId };
+                });
+
+            register(
+                "armada_purge_dock",
+                "Force purge a dock and its git worktree, even if a mission references it. This cannot be undone.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        dockId = new { type = "string", description = "Dock ID (dck_ prefix)" }
+                    },
+                    required = new[] { "dockId" }
+                },
+                async (args) =>
+                {
+                    if (dockService == null) return (object)new { Error = "Dock service not available" };
+                    DockIdArgs request = JsonSerializer.Deserialize<DockIdArgs>(args!.Value, _JsonOptions)!;
+                    Dock? dock = await database.Docks.ReadAsync(request.DockId).ConfigureAwait(false);
+                    if (dock == null) return (object)new { Error = "Dock not found" };
+
+                    await dockService.PurgeAsync(request.DockId).ConfigureAwait(false);
+                    return (object)new { Status = "purged", DockId = request.DockId };
                 });
         }
 
@@ -1528,6 +1597,53 @@ namespace Armada.Server.Mcp
 
                     int deleted = await mergeQueue.PurgeTerminalAsync(request.VesselId, statusFilter).ConfigureAwait(false);
                     return (object)new { Status = "purged", EntriesDeleted = deleted };
+                });
+
+            register(
+                "armada_purge_merge_entry",
+                "Permanently delete a single terminal merge queue entry from the database by ID. Only entries in Landed, Failed, or Cancelled status can be purged. This cannot be undone.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        entryId = new { type = "string", description = "Merge entry ID (mrg_ prefix)" }
+                    },
+                    required = new[] { "entryId" }
+                },
+                async (args) =>
+                {
+                    MergeEntryIdArgs request = JsonSerializer.Deserialize<MergeEntryIdArgs>(args!.Value, _JsonOptions)!;
+                    string entryId = request.EntryId;
+                    MergeEntry? entry = await mergeQueue.GetAsync(entryId).ConfigureAwait(false);
+                    if (entry == null) return (object)new { Error = "Merge entry not found" };
+
+                    bool deleted = await mergeQueue.DeleteAsync(entryId).ConfigureAwait(false);
+                    if (!deleted) return (object)new { Error = "Cannot purge merge entry in non-terminal status " + entry.Status + ". Only Landed, Failed, or Cancelled entries can be purged." };
+
+                    return (object)new { Status = "purged", EntryId = entryId };
+                });
+
+            register(
+                "armada_purge_merge_entries",
+                "Permanently delete multiple terminal merge queue entries from the database by ID. Only entries in Landed, Failed, or Cancelled status can be purged. Returns a summary of purged and skipped entries. This cannot be undone.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        entryIds = new { type = "array", items = new { type = "string" }, description = "List of merge entry IDs to purge (mrg_ prefix)" }
+                    },
+                    required = new[] { "entryIds" }
+                },
+                async (args) =>
+                {
+                    PurgeMergeEntriesArgs request = JsonSerializer.Deserialize<PurgeMergeEntriesArgs>(args!.Value, _JsonOptions)!;
+                    if (request.EntryIds == null || request.EntryIds.Count == 0)
+                        return (object)new { Error = "entryIds is required and must not be empty" };
+
+                    MergeQueuePurgeResult result = await mergeQueue.DeleteMultipleAsync(request.EntryIds).ConfigureAwait(false);
+                    return (object)result;
                 });
         }
 
