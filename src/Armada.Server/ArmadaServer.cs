@@ -47,6 +47,7 @@ namespace Armada.Server
 
         private DatabaseDriver _Database = null!;
         private IGitService _Git = null!;
+        private IDockService _Docks = null!;
         private IAdmiralService _Admiral = null!;
         private AgentRuntimeFactory _RuntimeFactory = null!;
 
@@ -114,6 +115,7 @@ namespace Armada.Server
             // Initialize services
             _Git = new GitService(_Logging);
             IDockService dockService = new DockService(_Logging, _Database, _Settings, _Git);
+            _Docks = dockService;
             ICaptainService captainService = new CaptainService(_Logging, _Database, _Settings, _Git, dockService);
             IMissionService missionService = new MissionService(_Logging, _Database, _Settings, dockService, captainService);
             IVoyageService voyageService = new VoyageService(_Logging, _Database);
@@ -2393,7 +2395,7 @@ namespace Armada.Server
                                 // Poll for merge completion, then pull into the user's working directory
                                 if (vessel != null && !String.IsNullOrEmpty(vessel.WorkingDirectory))
                                 {
-                                    _ = PollAndPullAfterMergeAsync(vessel.WorkingDirectory, dock.WorktreePath, prUrl, mission.Id);
+                                    _ = PollAndPullAfterMergeAsync(vessel.WorkingDirectory, prUrl, mission.Id);
                                 }
                             }
                             catch (Exception mergeEx)
@@ -2532,14 +2534,10 @@ namespace Armada.Server
                 _WebSocketHub.BroadcastMissionChange(mission.Id, mission.Status.ToString(), mission.Title);
             }
 
-            // Reclaim dock (remove worktree)
+            // Reclaim dock through DockService (single owner for worktree teardown)
             try
             {
-                await _Git.RemoveWorktreeAsync(dock.WorktreePath).ConfigureAwait(false);
-                dock.Active = false;
-                dock.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Docks.UpdateAsync(dock).ConfigureAwait(false);
-                _Logging.Info(_Header + "reclaimed dock " + dock.Id + " at " + dock.WorktreePath);
+                await _Docks.ReclaimAsync(dock.Id).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -2559,16 +2557,18 @@ namespace Armada.Server
             return Task.CompletedTask;
         }
 
-        private async Task PollAndPullAfterMergeAsync(string workingDirectory, string worktreePath, string prUrl, string missionId)
+        private async Task PollAndPullAfterMergeAsync(string workingDirectory, string prUrl, string missionId)
         {
             try
             {
                 // Poll for up to 5 minutes (30 attempts, 10 seconds apart)
+                // Uses the vessel working directory (not the mission dock) for gh CLI context,
+                // since the dock worktree may be reclaimed before the PR merges.
                 for (int i = 0; i < 30; i++)
                 {
                     await Task.Delay(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
 
-                    bool merged = await _Git.IsPrMergedAsync(worktreePath, prUrl).ConfigureAwait(false);
+                    bool merged = await _Git.IsPrMergedAsync(workingDirectory, prUrl).ConfigureAwait(false);
                     if (merged)
                     {
                         _Logging.Info(_Header + "PR " + prUrl + " merged, pulling into " + workingDirectory);
