@@ -5,8 +5,8 @@ namespace Armada.Test.Automated.Suites
     using System.Net;
     using System.Net.Http;
     using System.Text;
-    using System.Text.Json;
     using System.Threading.Tasks;
+    using Armada.Core.Models;
     using Armada.Test.Common;
 
     /// <summary>
@@ -56,73 +56,65 @@ namespace Armada.Test.Automated.Suites
             await RunTest("Create Fleet With Name And Description Returns 201", async () =>
             {
                 string fleetName = "AlphaFleet-" + Guid.NewGuid().ToString("N").Substring(0, 8);
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { Name = fleetName, Description = "The first fleet" }),
-                    Encoding.UTF8, "application/json");
+                StringContent content = JsonHelper.ToJsonContent(new { Name = fleetName, Description = "The first fleet" });
 
                 HttpResponseMessage response = await _Client.PostAsync("/api/v1/fleets", content);
 
                 AssertEqual(HttpStatusCode.Created, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement root = doc.RootElement;
+                Fleet fleet = await JsonHelper.DeserializeAsync<Fleet>(response);
 
-                string id = root.GetProperty("Id").GetString()!;
+                string id = fleet.Id;
                 _CreatedFleetIds.Add(id);
 
                 AssertStartsWith("flt_", id);
-                AssertEqual(fleetName, root.GetProperty("Name").GetString()!);
-                AssertEqual("The first fleet", root.GetProperty("Description").GetString()!);
-                AssertTrue(root.GetProperty("Active").GetBoolean());
-                AssertTrue(root.TryGetProperty("CreatedUtc", out _));
-                AssertTrue(root.TryGetProperty("LastUpdateUtc", out _));
+                AssertEqual(fleetName, fleet.Name);
+                AssertEqual("The first fleet", fleet.Description);
+                AssertTrue(fleet.Active);
+                Assert(fleet.CreatedUtc != default, "Should have CreatedUtc");
+                Assert(fleet.LastUpdateUtc != default, "Should have LastUpdateUtc");
             });
 
             await RunTest("Create Fleet With Only Name Returns 201", async () =>
             {
                 string fleetName = "NameOnlyFleet-" + Guid.NewGuid().ToString("N").Substring(0, 8);
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { Name = fleetName }),
-                    Encoding.UTF8, "application/json");
+                StringContent content = JsonHelper.ToJsonContent(new { Name = fleetName });
 
                 HttpResponseMessage response = await _Client.PostAsync("/api/v1/fleets", content);
 
                 AssertEqual(HttpStatusCode.Created, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement root = doc.RootElement;
+                Fleet fleet = await JsonHelper.DeserializeAsync<Fleet>(response);
 
-                string id = root.GetProperty("Id").GetString()!;
+                string id = fleet.Id;
                 _CreatedFleetIds.Add(id);
 
-                AssertEqual(fleetName, root.GetProperty("Name").GetString()!);
+                AssertEqual(fleetName, fleet.Name);
                 AssertStartsWith("flt_", id);
             });
 
             await RunTest("Create Fleet Id Is Auto Generated Starts With Flt Prefix", async () =>
             {
-                JsonElement fleet = await CreateFleetAsync("PrefixTest");
-                string id = fleet.GetProperty("Id").GetString()!;
+                Fleet fleet = await CreateFleetAsync("PrefixTest");
+                string id = fleet.Id;
                 AssertStartsWith("flt_", id);
                 Assert(id.Length > 4, "ID should have content beyond the prefix");
             });
 
             await RunTest("Create Fleet Active Defaults To True", async () =>
             {
-                JsonElement fleet = await CreateFleetAsync("ActiveTest");
-                AssertTrue(fleet.GetProperty("Active").GetBoolean());
+                Fleet fleet = await CreateFleetAsync("ActiveTest");
+                AssertTrue(fleet.Active);
             });
 
             await RunTest("Create Fleet Sets CreatedUtc And LastUpdateUtc", async () =>
             {
                 DateTime before = DateTime.UtcNow.AddSeconds(-2);
-                JsonElement fleet = await CreateFleetAsync("TimestampTest");
+                Fleet fleet = await CreateFleetAsync("TimestampTest");
                 DateTime after = DateTime.UtcNow.AddSeconds(2);
 
-                DateTime createdUtc = fleet.GetProperty("CreatedUtc").GetDateTime();
-                DateTime lastUpdateUtc = fleet.GetProperty("LastUpdateUtc").GetDateTime();
+                DateTime createdUtc = fleet.CreatedUtc;
+                DateTime lastUpdateUtc = fleet.LastUpdateUtc;
 
                 Assert(createdUtc >= before && createdUtc <= after,
                     "CreatedUtc " + createdUtc + " should be between " + before + " and " + after);
@@ -132,19 +124,19 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("Create Fleet Two Fleets Have Unique Ids", async () =>
             {
-                JsonElement fleet1 = await CreateFleetAsync("Fleet_A");
-                JsonElement fleet2 = await CreateFleetAsync("Fleet_B");
+                Fleet fleet1 = await CreateFleetAsync("Fleet_A");
+                Fleet fleet2 = await CreateFleetAsync("Fleet_B");
 
-                string id1 = fleet1.GetProperty("Id").GetString()!;
-                string id2 = fleet2.GetProperty("Id").GetString()!;
+                string id1 = fleet1.Id;
+                string id2 = fleet2.Id;
 
                 AssertNotEqual(id1, id2);
             });
 
             await RunTest("Create Fleet With Empty Description Succeeds", async () =>
             {
-                JsonElement fleet = await CreateFleetAsync("EmptyDescFleet", "");
-                AssertStartsWith("EmptyDescFleet", fleet.GetProperty("Name").GetString()!);
+                Fleet fleet = await CreateFleetAsync("EmptyDescFleet", "");
+                AssertStartsWith("EmptyDescFleet", fleet.Name);
             });
 
             #endregion
@@ -153,33 +145,29 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("Get Fleet By Id Returns Correct Data", async () =>
             {
-                JsonElement created = await CreateFleetAsync("GetTestFleet", "Get test description");
-                string fleetId = created.GetProperty("Id").GetString()!;
+                Fleet created = await CreateFleetAsync("GetTestFleet", "Get test description");
+                string fleetId = created.Id;
 
                 HttpResponseMessage response = await _Client.GetAsync("/api/v1/fleets/" + fleetId);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement root = doc.RootElement;
+                FleetDetailResponse detail = await JsonHelper.DeserializeAsync<FleetDetailResponse>(response);
 
-                JsonElement fleet = root.GetProperty("Fleet");
-                AssertEqual(fleetId, fleet.GetProperty("Id").GetString()!);
-                AssertStartsWith("GetTestFleet", fleet.GetProperty("Name").GetString()!);
-                AssertEqual("Get test description", fleet.GetProperty("Description").GetString()!);
-                AssertTrue(fleet.GetProperty("Active").GetBoolean());
-                Assert(root.TryGetProperty("Vessels", out _), "Should have Vessels array");
+                AssertEqual(fleetId, detail.Fleet.Id);
+                AssertStartsWith("GetTestFleet", detail.Fleet.Name);
+                AssertEqual("Get test description", detail.Fleet.Description);
+                AssertTrue(detail.Fleet.Active);
+                Assert(detail.Vessels != null, "Should have Vessels array");
             });
 
             await RunTest("Get Fleet Not Found Returns Error Property", async () =>
             {
                 HttpResponseMessage response = await _Client.GetAsync("/api/v1/fleets/flt_nonexistent");
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
+                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
 
                 Assert(
-                    doc.RootElement.TryGetProperty("Error", out _) ||
-                    doc.RootElement.TryGetProperty("Message", out _),
+                    !string.IsNullOrEmpty(error.Error) ||
+                    !string.IsNullOrEmpty(error.Message),
                     "Response should contain an Error or Message property");
             });
 
@@ -195,22 +183,19 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("Get Fleet Returns All Expected Properties", async () =>
             {
-                JsonElement created = await CreateFleetAsync("PropCheckFleet", "Checking all properties");
-                string fleetId = created.GetProperty("Id").GetString()!;
+                Fleet created = await CreateFleetAsync("PropCheckFleet", "Checking all properties");
+                string fleetId = created.Id;
 
                 HttpResponseMessage response = await _Client.GetAsync("/api/v1/fleets/" + fleetId);
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement root = doc.RootElement;
+                FleetDetailResponse detail = await JsonHelper.DeserializeAsync<FleetDetailResponse>(response);
 
-                Assert(root.TryGetProperty("Fleet", out JsonElement fleetEl), "Should have Fleet");
-                Assert(root.TryGetProperty("Vessels", out _), "Should have Vessels");
-                Assert(fleetEl.TryGetProperty("Id", out _), "Should have Id");
-                Assert(fleetEl.TryGetProperty("Name", out _), "Should have Name");
-                Assert(fleetEl.TryGetProperty("Description", out _), "Should have Description");
-                Assert(fleetEl.TryGetProperty("Active", out _), "Should have Active");
-                Assert(fleetEl.TryGetProperty("CreatedUtc", out _), "Should have CreatedUtc");
-                Assert(fleetEl.TryGetProperty("LastUpdateUtc", out _), "Should have LastUpdateUtc");
+                Assert(detail.Fleet != null, "Should have Fleet");
+                Assert(detail.Vessels != null, "Should have Vessels");
+                Assert(!string.IsNullOrEmpty(detail.Fleet.Id), "Should have Id");
+                Assert(!string.IsNullOrEmpty(detail.Fleet.Name), "Should have Name");
+                Assert(detail.Fleet.Description != null, "Should have Description");
+                Assert(detail.Fleet.CreatedUtc != default, "Should have CreatedUtc");
+                Assert(detail.Fleet.LastUpdateUtc != default, "Should have LastUpdateUtc");
             });
 
             #endregion
@@ -219,90 +204,74 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("Update Fleet Name Succeeds", async () =>
             {
-                JsonElement created = await CreateFleetAsync("OriginalName", "Some desc");
-                string fleetId = created.GetProperty("Id").GetString()!;
+                Fleet created = await CreateFleetAsync("OriginalName", "Some desc");
+                string fleetId = created.Id;
 
                 string newName = "UpdatedName-" + Guid.NewGuid().ToString("N").Substring(0, 8);
-                StringContent updateContent = new StringContent(
-                    JsonSerializer.Serialize(new { Name = newName, Description = "Some desc" }),
-                    Encoding.UTF8, "application/json");
+                StringContent updateContent = JsonHelper.ToJsonContent(new { Name = newName, Description = "Some desc" });
                 HttpResponseMessage response = await _Client.PutAsync("/api/v1/fleets/" + fleetId, updateContent);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual(newName, doc.RootElement.GetProperty("Name").GetString()!);
+                Fleet updated = await JsonHelper.DeserializeAsync<Fleet>(response);
+                AssertEqual(newName, updated.Name);
             });
 
             await RunTest("Update Fleet Description Succeeds", async () =>
             {
-                JsonElement created = await CreateFleetAsync("DescUpdateFleet", "Old description");
-                string fleetId = created.GetProperty("Id").GetString()!;
-                string createdName = created.GetProperty("Name").GetString()!;
+                Fleet created = await CreateFleetAsync("DescUpdateFleet", "Old description");
+                string fleetId = created.Id;
+                string createdName = created.Name;
 
-                StringContent updateContent = new StringContent(
-                    JsonSerializer.Serialize(new { Name = createdName, Description = "New description" }),
-                    Encoding.UTF8, "application/json");
+                StringContent updateContent = JsonHelper.ToJsonContent(new { Name = createdName, Description = "New description" });
                 HttpResponseMessage response = await _Client.PutAsync("/api/v1/fleets/" + fleetId, updateContent);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual("New description", doc.RootElement.GetProperty("Description").GetString()!);
+                Fleet updated = await JsonHelper.DeserializeAsync<Fleet>(response);
+                AssertEqual("New description", updated.Description);
             });
 
             await RunTest("Update Fleet Preserves Id", async () =>
             {
-                JsonElement created = await CreateFleetAsync("IdPreserveFleet");
-                string fleetId = created.GetProperty("Id").GetString()!;
+                Fleet created = await CreateFleetAsync("IdPreserveFleet");
+                string fleetId = created.Id;
 
                 string newName = "RenamedFleet-" + Guid.NewGuid().ToString("N").Substring(0, 8);
-                StringContent updateContent = new StringContent(
-                    JsonSerializer.Serialize(new { Name = newName }),
-                    Encoding.UTF8, "application/json");
+                StringContent updateContent = JsonHelper.ToJsonContent(new { Name = newName });
                 HttpResponseMessage response = await _Client.PutAsync("/api/v1/fleets/" + fleetId, updateContent);
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
 
-                AssertEqual(fleetId, doc.RootElement.GetProperty("Id").GetString()!);
+                Fleet updated = await JsonHelper.DeserializeAsync<Fleet>(response);
+                AssertEqual(fleetId, updated.Id);
             });
 
             await RunTest("Update Fleet Verify Via Get", async () =>
             {
-                JsonElement created = await CreateFleetAsync("VerifyUpdateFleet", "Before");
-                string fleetId = created.GetProperty("Id").GetString()!;
-                string createdName = created.GetProperty("Name").GetString()!;
+                Fleet created = await CreateFleetAsync("VerifyUpdateFleet", "Before");
+                string fleetId = created.Id;
+                string createdName = created.Name;
 
-                StringContent updateContent = new StringContent(
-                    JsonSerializer.Serialize(new { Name = createdName, Description = "After" }),
-                    Encoding.UTF8, "application/json");
+                StringContent updateContent = JsonHelper.ToJsonContent(new { Name = createdName, Description = "After" });
                 await _Client.PutAsync("/api/v1/fleets/" + fleetId, updateContent);
 
                 HttpResponseMessage getResp = await _Client.GetAsync("/api/v1/fleets/" + fleetId);
-                string body = await getResp.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
+                FleetDetailResponse detail = await JsonHelper.DeserializeAsync<FleetDetailResponse>(getResp);
 
-                JsonElement fleet = doc.RootElement.GetProperty("Fleet");
-                AssertEqual("After", fleet.GetProperty("Description").GetString()!);
+                AssertEqual("After", detail.Fleet.Description);
             });
 
             await RunTest("Update Fleet LastUpdateUtc Changes", async () =>
             {
-                JsonElement created = await CreateFleetAsync("UpdateTimestampFleet");
-                string fleetId = created.GetProperty("Id").GetString()!;
-                DateTime originalLastUpdate = created.GetProperty("LastUpdateUtc").GetDateTime();
+                Fleet created = await CreateFleetAsync("UpdateTimestampFleet");
+                string fleetId = created.Id;
+                DateTime originalLastUpdate = created.LastUpdateUtc;
 
                 await Task.Delay(50);
 
                 string newName = "UpdateTimestampFleet_v2-" + Guid.NewGuid().ToString("N").Substring(0, 8);
-                StringContent updateContent = new StringContent(
-                    JsonSerializer.Serialize(new { Name = newName }),
-                    Encoding.UTF8, "application/json");
+                StringContent updateContent = JsonHelper.ToJsonContent(new { Name = newName });
                 HttpResponseMessage response = await _Client.PutAsync("/api/v1/fleets/" + fleetId, updateContent);
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
 
-                DateTime updatedLastUpdate = doc.RootElement.GetProperty("LastUpdateUtc").GetDateTime();
+                Fleet updated = await JsonHelper.DeserializeAsync<Fleet>(response);
+                DateTime updatedLastUpdate = updated.LastUpdateUtc;
                 Assert(updatedLastUpdate >= originalLastUpdate,
                     "LastUpdateUtc should be equal to or later than the original value");
             });
@@ -313,8 +282,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("Delete Fleet Returns 204", async () =>
             {
-                JsonElement created = await CreateFleetAsync("DeleteMe");
-                string fleetId = created.GetProperty("Id").GetString()!;
+                Fleet created = await CreateFleetAsync("DeleteMe");
+                string fleetId = created.Id;
 
                 HttpResponseMessage response = await _Client.DeleteAsync("/api/v1/fleets/" + fleetId);
                 AssertEqual(HttpStatusCode.NoContent, response.StatusCode);
@@ -328,10 +297,10 @@ namespace Armada.Test.Automated.Suites
 
                 if (!string.IsNullOrWhiteSpace(body))
                 {
-                    using JsonDocument doc = JsonDocument.Parse(body);
+                    ArmadaErrorResponse error = JsonHelper.Deserialize<ArmadaErrorResponse>(body);
                     Assert(
-                        doc.RootElement.TryGetProperty("Error", out _) ||
-                        doc.RootElement.TryGetProperty("Message", out _),
+                        !string.IsNullOrEmpty(error.Error) ||
+                        !string.IsNullOrEmpty(error.Message),
                         "Deleting nonexistent fleet should return an error response when body is present");
                 }
                 else
@@ -345,46 +314,44 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("Delete Fleet Get Deleted Fleet Returns Not Found", async () =>
             {
-                JsonElement created = await CreateFleetAsync("DeleteThenGet");
-                string fleetId = created.GetProperty("Id").GetString()!;
+                Fleet created = await CreateFleetAsync("DeleteThenGet");
+                string fleetId = created.Id;
 
                 HttpResponseMessage deleteResp = await _Client.DeleteAsync("/api/v1/fleets/" + fleetId);
                 AssertEqual(HttpStatusCode.NoContent, deleteResp.StatusCode);
                 _CreatedFleetIds.Remove(fleetId);
 
                 HttpResponseMessage getResp = await _Client.GetAsync("/api/v1/fleets/" + fleetId);
-                string body = await getResp.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
+                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(getResp);
 
                 Assert(
-                    doc.RootElement.TryGetProperty("Error", out _) ||
-                    doc.RootElement.TryGetProperty("Message", out _),
+                    !string.IsNullOrEmpty(error.Error) ||
+                    !string.IsNullOrEmpty(error.Message),
                     "Getting deleted fleet should return an error response");
             });
 
             await RunTest("Delete Fleet Removed From List", async () =>
             {
-                JsonElement created = await CreateFleetAsync("DeleteFromList");
-                string fleetId = created.GetProperty("Id").GetString()!;
+                Fleet created = await CreateFleetAsync("DeleteFromList");
+                string fleetId = created.Id;
 
                 await _Client.DeleteAsync("/api/v1/fleets/" + fleetId);
                 _CreatedFleetIds.Remove(fleetId);
 
-                (HttpStatusCode _, JsonElement root) = await ListFleetsAsync();
-                JsonElement objects = root.GetProperty("Objects");
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync();
 
-                for (int i = 0; i < objects.GetArrayLength(); i++)
+                foreach (Fleet f in result.Objects)
                 {
-                    AssertNotEqual(fleetId, objects[i].GetProperty("Id").GetString()!);
+                    AssertNotEqual(fleetId, f.Id);
                 }
             });
 
             await RunTest("Delete Fleet Does Not Affect Other Fleets", async () =>
             {
-                JsonElement fleet1 = await CreateFleetAsync("KeepMe");
-                JsonElement fleet2 = await CreateFleetAsync("DeleteMe_Other");
-                string keepId = fleet1.GetProperty("Id").GetString()!;
-                string deleteId = fleet2.GetProperty("Id").GetString()!;
+                Fleet fleet1 = await CreateFleetAsync("KeepMe");
+                Fleet fleet2 = await CreateFleetAsync("DeleteMe_Other");
+                string keepId = fleet1.Id;
+                string deleteId = fleet2.Id;
 
                 await _Client.DeleteAsync("/api/v1/fleets/" + deleteId);
                 _CreatedFleetIds.Remove(deleteId);
@@ -392,9 +359,8 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage getResp = await _Client.GetAsync("/api/v1/fleets/" + keepId);
                 AssertEqual(HttpStatusCode.OK, getResp.StatusCode);
 
-                string body = await getResp.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                AssertStartsWith("KeepMe", doc.RootElement.GetProperty("Fleet").GetProperty("Name").GetString()!);
+                FleetDetailResponse detail = await JsonHelper.DeserializeAsync<FleetDetailResponse>(getResp);
+                AssertStartsWith("KeepMe", detail.Fleet.Name);
             });
 
             #endregion
@@ -406,48 +372,42 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage response = await _Client.GetAsync("/api/v1/fleets");
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement root = doc.RootElement;
+                EnumerationResult<Fleet> result = await JsonHelper.DeserializeAsync<EnumerationResult<Fleet>>(response);
 
-                AssertEqual(JsonValueKind.Array, root.GetProperty("Objects").ValueKind);
+                Assert(result.Objects != null, "Objects should not be null");
             });
 
             await RunTest("List Fleets Empty Returns Correct Enumeration Structure", async () =>
             {
                 HttpResponseMessage response = await _Client.GetAsync("/api/v1/fleets");
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement root = doc.RootElement;
+                EnumerationResult<Fleet> result = await JsonHelper.DeserializeAsync<EnumerationResult<Fleet>>(response);
 
-                Assert(root.TryGetProperty("Objects", out _), "Should have Objects");
-                Assert(root.TryGetProperty("PageNumber", out _), "Should have PageNumber");
-                Assert(root.TryGetProperty("PageSize", out _), "Should have PageSize");
-                Assert(root.TryGetProperty("TotalPages", out _), "Should have TotalPages");
-                Assert(root.TryGetProperty("TotalRecords", out _), "Should have TotalRecords");
-                Assert(root.TryGetProperty("Success", out _), "Should have Success");
-                AssertTrue(root.GetProperty("Success").GetBoolean());
+                Assert(result.Objects != null, "Should have Objects");
+                Assert(result.PageNumber >= 0, "Should have PageNumber");
+                Assert(result.PageSize >= 0, "Should have PageSize");
+                Assert(result.TotalPages >= 0, "Should have TotalPages");
+                Assert(result.TotalRecords >= 0, "Should have TotalRecords");
+                AssertTrue(result.Success);
             });
 
             await RunTest("List Fleets After Creating One Fleet Returns It", async () =>
             {
-                JsonElement created = await CreateFleetAsync("SingleFleet", "Only one");
+                Fleet created = await CreateFleetAsync("SingleFleet", "Only one");
 
-                (HttpStatusCode status, JsonElement root) = await ListFleetsAsync();
+                (HttpStatusCode status, EnumerationResult<Fleet> result) = await ListFleetsAsync();
 
                 AssertEqual(HttpStatusCode.OK, status);
-                Assert(root.GetProperty("Objects").GetArrayLength() >= 1, "Should have at least 1 object");
-                Assert(root.GetProperty("TotalRecords").GetInt32() >= 1, "Should have at least 1 total record");
+                Assert(result.Objects.Count >= 1, "Should have at least 1 object");
+                Assert(result.TotalRecords >= 1, "Should have at least 1 total record");
 
                 bool found = false;
-                JsonElement objects = root.GetProperty("Objects");
-                for (int i = 0; i < objects.GetArrayLength(); i++)
+                foreach (Fleet f in result.Objects)
                 {
-                    if (objects[i].GetProperty("Id").GetString() == created.GetProperty("Id").GetString())
+                    if (f.Id == created.Id)
                     {
                         found = true;
-                        AssertStartsWith("SingleFleet", objects[i].GetProperty("Name").GetString()!);
-                        AssertEqual("Only one", objects[i].GetProperty("Description").GetString()!);
+                        AssertStartsWith("SingleFleet", f.Name);
+                        AssertEqual("Only one", f.Description);
                         break;
                     }
                 }
@@ -462,62 +422,61 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(25, "PagTest");
 
-                (HttpStatusCode _, JsonElement root) = await ListFleetsAsync(pageSize: 10, pageNumber: 1);
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 10, pageNumber: 1);
 
-                Assert(root.GetProperty("TotalRecords").GetInt32() >= 25, "TotalRecords should be >= 25");
-                Assert(root.GetProperty("TotalPages").GetInt32() >= 3, "TotalPages should be >= 3");
+                Assert(result.TotalRecords >= 25, "TotalRecords should be >= 25");
+                Assert(result.TotalPages >= 3, "TotalPages should be >= 3");
             });
 
             await RunTest("List Fleets 25 Fleets Page 1 Has 10 Items", async () =>
             {
                 await CreateFleetsAsync(25, "P1Test");
 
-                (HttpStatusCode _, JsonElement root) = await ListFleetsAsync(pageSize: 10, pageNumber: 1);
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 10, pageNumber: 1);
 
-                AssertEqual(10, root.GetProperty("Objects").GetArrayLength());
-                AssertEqual(1, root.GetProperty("PageNumber").GetInt32());
+                AssertEqual(10, result.Objects.Count);
+                AssertEqual(1, result.PageNumber);
             });
 
             await RunTest("List Fleets 25 Fleets Page 2 Has 10 Items", async () =>
             {
                 await CreateFleetsAsync(25, "P2Test");
 
-                (HttpStatusCode _, JsonElement root) = await ListFleetsAsync(pageSize: 10, pageNumber: 2);
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 10, pageNumber: 2);
 
-                AssertEqual(10, root.GetProperty("Objects").GetArrayLength());
-                AssertEqual(2, root.GetProperty("PageNumber").GetInt32());
+                AssertEqual(10, result.Objects.Count);
+                AssertEqual(2, result.PageNumber);
             });
 
             await RunTest("List Fleets 25 Fleets Page 3 Has 5 Items", async () =>
             {
                 await CreateFleetsAsync(25, "P3Test");
 
-                (HttpStatusCode _, JsonElement root) = await ListFleetsAsync(pageSize: 10, pageNumber: 3);
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 10, pageNumber: 3);
 
-                Assert(root.GetProperty("Objects").GetArrayLength() >= 5, "Page 3 should have at least 5 items");
-                AssertEqual(3, root.GetProperty("PageNumber").GetInt32());
+                Assert(result.Objects.Count >= 5, "Page 3 should have at least 5 items");
+                AssertEqual(3, result.PageNumber);
             });
 
             await RunTest("List Fleets 25 Fleets PageSize 10 Verify First Record On Page 1", async () =>
             {
-                JsonElement[] fleets = await CreateFleetsAsync(25, "FirstRec");
+                Fleet[] fleets = await CreateFleetsAsync(25, "FirstRec");
 
                 // With shared data, our created fleets may not be on page 1
                 // Instead verify that the created fleets appear somewhere in the full listing
                 HashSet<string> createdIds = new HashSet<string>();
                 for (int i = 0; i < fleets.Length; i++)
-                    createdIds.Add(fleets[i].GetProperty("Id").GetString()!);
+                    createdIds.Add(fleets[i].Id);
 
                 int foundCount = 0;
                 int totalPages = 1;
                 for (int page = 1; page <= totalPages; page++)
                 {
-                    (HttpStatusCode _, JsonElement pageRoot) = await ListFleetsAsync(pageSize: 10, pageNumber: page, order: "CreatedAscending");
-                    totalPages = pageRoot.GetProperty("TotalPages").GetInt32();
-                    JsonElement objects = pageRoot.GetProperty("Objects");
-                    for (int i = 0; i < objects.GetArrayLength(); i++)
+                    (HttpStatusCode _, EnumerationResult<Fleet> pageResult) = await ListFleetsAsync(pageSize: 10, pageNumber: page, order: "CreatedAscending");
+                    totalPages = pageResult.TotalPages;
+                    foreach (Fleet f in pageResult.Objects)
                     {
-                        if (createdIds.Contains(objects[i].GetProperty("Id").GetString()!))
+                        if (createdIds.Contains(f.Id))
                             foundCount++;
                     }
                 }
@@ -526,20 +485,19 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("List Fleets 25 Fleets PageSize 10 Verify Last Record On Page 3", async () =>
             {
-                JsonElement[] fleets = await CreateFleetsAsync(25, "LastRec");
+                Fleet[] fleets = await CreateFleetsAsync(25, "LastRec");
 
                 // With shared data, verify that the last created fleet appears somewhere in listing
-                string lastCreatedId = fleets[24].GetProperty("Id").GetString()!;
+                string lastCreatedId = fleets[24].Id;
                 bool found = false;
                 int totalPages = 1;
                 for (int page = 1; page <= totalPages && !found; page++)
                 {
-                    (HttpStatusCode _, JsonElement pageRoot) = await ListFleetsAsync(pageSize: 10, pageNumber: page, order: "CreatedAscending");
-                    totalPages = pageRoot.GetProperty("TotalPages").GetInt32();
-                    JsonElement objects = pageRoot.GetProperty("Objects");
-                    for (int i = 0; i < objects.GetArrayLength(); i++)
+                    (HttpStatusCode _, EnumerationResult<Fleet> pageResult) = await ListFleetsAsync(pageSize: 10, pageNumber: page, order: "CreatedAscending");
+                    totalPages = pageResult.TotalPages;
+                    foreach (Fleet f in pageResult.Objects)
                     {
-                        if (objects[i].GetProperty("Id").GetString()! == lastCreatedId)
+                        if (f.Id == lastCreatedId)
                         {
                             found = true;
                             break;
@@ -553,20 +511,20 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(25, "PS5Test");
 
-                (HttpStatusCode _, JsonElement root) = await ListFleetsAsync(pageSize: 5, pageNumber: 1);
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 5, pageNumber: 1);
 
-                Assert(root.GetProperty("TotalRecords").GetInt32() >= 25, "TotalRecords should be >= 25");
-                Assert(root.GetProperty("TotalPages").GetInt32() >= 5, "TotalPages should be >= 5");
-                AssertEqual(5, root.GetProperty("Objects").GetArrayLength());
+                Assert(result.TotalRecords >= 25, "TotalRecords should be >= 25");
+                Assert(result.TotalPages >= 5, "TotalPages should be >= 5");
+                AssertEqual(5, result.Objects.Count);
             });
 
             await RunTest("List Fleets 25 Fleets PageSize 5 Page 5 Has 5 Items", async () =>
             {
                 await CreateFleetsAsync(25, "PS5P5");
 
-                (HttpStatusCode _, JsonElement root) = await ListFleetsAsync(pageSize: 5, pageNumber: 5);
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 5, pageNumber: 5);
 
-                AssertEqual(5, root.GetProperty("Objects").GetArrayLength());
+                AssertEqual(5, result.Objects.Count);
             });
 
             await RunTest("List Fleets 25 Fleets Beyond Last Page Returns Empty Objects Array", async () =>
@@ -574,12 +532,12 @@ namespace Armada.Test.Automated.Suites
                 await CreateFleetsAsync(25, "Beyond");
 
                 // Get total pages first, then request beyond it
-                (HttpStatusCode _, JsonElement firstRoot) = await ListFleetsAsync(pageSize: 10, pageNumber: 1);
-                int totalPages = firstRoot.GetProperty("TotalPages").GetInt32();
+                (HttpStatusCode _, EnumerationResult<Fleet> firstResult) = await ListFleetsAsync(pageSize: 10, pageNumber: 1);
+                int totalPages = firstResult.TotalPages;
 
-                (HttpStatusCode _, JsonElement root) = await ListFleetsAsync(pageSize: 10, pageNumber: totalPages + 1);
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 10, pageNumber: totalPages + 1);
 
-                AssertEqual(0, root.GetProperty("Objects").GetArrayLength());
+                AssertEqual(0, result.Objects.Count);
             });
 
             await RunTest("List Fleets 25 Fleets Beyond Last Page Still Returns Total Records", async () =>
@@ -587,43 +545,40 @@ namespace Armada.Test.Automated.Suites
                 await CreateFleetsAsync(25, "BeyondTR");
 
                 // Get total pages first, then request well beyond it
-                (HttpStatusCode _, JsonElement firstRoot) = await ListFleetsAsync(pageSize: 10, pageNumber: 1);
-                int totalRecords = firstRoot.GetProperty("TotalRecords").GetInt32();
+                (HttpStatusCode _, EnumerationResult<Fleet> firstResult) = await ListFleetsAsync(pageSize: 10, pageNumber: 1);
+                long totalRecords = firstResult.TotalRecords;
 
-                (HttpStatusCode _, JsonElement root) = await ListFleetsAsync(pageSize: 10, pageNumber: 999);
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 10, pageNumber: 999);
 
-                Assert(root.GetProperty("TotalRecords").GetInt32() >= 25, "TotalRecords should be >= 25");
-                AssertEqual(0, root.GetProperty("Objects").GetArrayLength());
+                Assert(result.TotalRecords >= 25, "TotalRecords should be >= 25");
+                AssertEqual(0, result.Objects.Count);
             });
 
             await RunTest("List Fleets Pages Do Not Overlap", async () =>
             {
                 await CreateFleetsAsync(25, "NoOverlap");
 
-                (HttpStatusCode _, JsonElement page1Root) = await ListFleetsAsync(pageSize: 10, pageNumber: 1);
-                (HttpStatusCode _, JsonElement page2Root) = await ListFleetsAsync(pageSize: 10, pageNumber: 2);
-                (HttpStatusCode _, JsonElement page3Root) = await ListFleetsAsync(pageSize: 10, pageNumber: 3);
+                (HttpStatusCode _, EnumerationResult<Fleet> page1Result) = await ListFleetsAsync(pageSize: 10, pageNumber: 1);
+                (HttpStatusCode _, EnumerationResult<Fleet> page2Result) = await ListFleetsAsync(pageSize: 10, pageNumber: 2);
+                (HttpStatusCode _, EnumerationResult<Fleet> page3Result) = await ListFleetsAsync(pageSize: 10, pageNumber: 3);
 
                 HashSet<string> allIds = new HashSet<string>();
 
-                JsonElement page1Objs = page1Root.GetProperty("Objects");
-                for (int i = 0; i < page1Objs.GetArrayLength(); i++)
+                foreach (Fleet f in page1Result.Objects)
                 {
-                    string id = page1Objs[i].GetProperty("Id").GetString()!;
+                    string id = f.Id;
                     Assert(allIds.Add(id), "Duplicate ID found: " + id);
                 }
 
-                JsonElement page2Objs = page2Root.GetProperty("Objects");
-                for (int i = 0; i < page2Objs.GetArrayLength(); i++)
+                foreach (Fleet f in page2Result.Objects)
                 {
-                    string id = page2Objs[i].GetProperty("Id").GetString()!;
+                    string id = f.Id;
                     Assert(allIds.Add(id), "Duplicate ID found across pages: " + id);
                 }
 
-                JsonElement page3Objs = page3Root.GetProperty("Objects");
-                for (int i = 0; i < page3Objs.GetArrayLength(); i++)
+                foreach (Fleet f in page3Result.Objects)
                 {
-                    string id = page3Objs[i].GetProperty("Id").GetString()!;
+                    string id = f.Id;
                     Assert(allIds.Add(id), "Duplicate ID found across pages: " + id);
                 }
 
@@ -634,9 +589,9 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(5, "PSReflect");
 
-                (HttpStatusCode _, JsonElement root) = await ListFleetsAsync(pageSize: 3, pageNumber: 1);
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 3, pageNumber: 1);
 
-                AssertEqual(3, root.GetProperty("PageSize").GetInt32());
+                AssertEqual(3, result.PageSize);
             });
 
             #endregion
@@ -645,51 +600,48 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("List Fleets Order Created Ascending First Item Is Oldest", async () =>
             {
-                JsonElement[] fleets = await CreateFleetsAsync(5, "AscOrd");
+                Fleet[] fleets = await CreateFleetsAsync(5, "AscOrd");
 
-                (HttpStatusCode _, JsonElement root) = await ListFleetsAsync(order: "CreatedAscending");
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(order: "CreatedAscending");
 
                 // With shared data, the first item may not be one we created
                 // Just verify the ordering is correct (ascending by CreatedUtc)
-                JsonElement objects = root.GetProperty("Objects");
-                Assert(objects.GetArrayLength() >= 5, "Should have at least 5 items");
-                for (int i = 0; i < objects.GetArrayLength() - 1; i++)
+                Assert(result.Objects.Count >= 5, "Should have at least 5 items");
+                for (int i = 0; i < result.Objects.Count - 1; i++)
                 {
-                    DateTime current = objects[i].GetProperty("CreatedUtc").GetDateTime();
-                    DateTime next = objects[i + 1].GetProperty("CreatedUtc").GetDateTime();
+                    DateTime current = result.Objects[i].CreatedUtc;
+                    DateTime next = result.Objects[i + 1].CreatedUtc;
                     Assert(current <= next, "Items should be in ascending order");
                 }
             });
 
             await RunTest("List Fleets Order Created Descending First Item Is Newest", async () =>
             {
-                JsonElement[] fleets = await CreateFleetsAsync(5, "DescOrd");
+                Fleet[] fleets = await CreateFleetsAsync(5, "DescOrd");
 
-                (HttpStatusCode _, JsonElement root) = await ListFleetsAsync(order: "CreatedDescending");
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(order: "CreatedDescending");
 
                 // With shared data, the first item may not be one we created
                 // Just verify the ordering is correct (descending by CreatedUtc)
-                JsonElement objects = root.GetProperty("Objects");
-                Assert(objects.GetArrayLength() >= 5, "Should have at least 5 items");
-                for (int i = 0; i < objects.GetArrayLength() - 1; i++)
+                Assert(result.Objects.Count >= 5, "Should have at least 5 items");
+                for (int i = 0; i < result.Objects.Count - 1; i++)
                 {
-                    DateTime current = objects[i].GetProperty("CreatedUtc").GetDateTime();
-                    DateTime next = objects[i + 1].GetProperty("CreatedUtc").GetDateTime();
+                    DateTime current = result.Objects[i].CreatedUtc;
+                    DateTime next = result.Objects[i + 1].CreatedUtc;
                     Assert(current >= next, "Items should be in descending order");
                 }
             });
 
             await RunTest("List Fleets Order Created Ascending All Items In Order", async () =>
             {
-                JsonElement[] fleets = await CreateFleetsAsync(5, "AscAll");
+                Fleet[] fleets = await CreateFleetsAsync(5, "AscAll");
 
-                (HttpStatusCode _, JsonElement root) = await ListFleetsAsync(order: "CreatedAscending");
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(order: "CreatedAscending");
 
-                JsonElement objects = root.GetProperty("Objects");
-                for (int i = 0; i < objects.GetArrayLength() - 1; i++)
+                for (int i = 0; i < result.Objects.Count - 1; i++)
                 {
-                    DateTime current = objects[i].GetProperty("CreatedUtc").GetDateTime();
-                    DateTime next = objects[i + 1].GetProperty("CreatedUtc").GetDateTime();
+                    DateTime current = result.Objects[i].CreatedUtc;
+                    DateTime next = result.Objects[i + 1].CreatedUtc;
                     Assert(current <= next,
                         "Item at index " + i + " (CreatedUtc=" + current + ") should be <= item at index " + (i + 1) + " (CreatedUtc=" + next + ")");
                 }
@@ -697,15 +649,14 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("List Fleets Order Created Descending All Items In Order", async () =>
             {
-                JsonElement[] fleets = await CreateFleetsAsync(5, "DescAll");
+                Fleet[] fleets = await CreateFleetsAsync(5, "DescAll");
 
-                (HttpStatusCode _, JsonElement root) = await ListFleetsAsync(order: "CreatedDescending");
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(order: "CreatedDescending");
 
-                JsonElement objects = root.GetProperty("Objects");
-                for (int i = 0; i < objects.GetArrayLength() - 1; i++)
+                for (int i = 0; i < result.Objects.Count - 1; i++)
                 {
-                    DateTime current = objects[i].GetProperty("CreatedUtc").GetDateTime();
-                    DateTime next = objects[i + 1].GetProperty("CreatedUtc").GetDateTime();
+                    DateTime current = result.Objects[i].CreatedUtc;
+                    DateTime next = result.Objects[i + 1].CreatedUtc;
                     Assert(current >= next,
                         "Item at index " + i + " (CreatedUtc=" + current + ") should be >= item at index " + (i + 1) + " (CreatedUtc=" + next + ")");
                 }
@@ -713,20 +664,19 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("List Fleets Order Created Ascending Last Item Is Newest", async () =>
             {
-                JsonElement[] fleets = await CreateFleetsAsync(5, "AscLast");
+                Fleet[] fleets = await CreateFleetsAsync(5, "AscLast");
 
                 // With shared data, verify created IDs appear in the listing
                 HashSet<string> createdIds = new HashSet<string>();
                 for (int i = 0; i < fleets.Length; i++)
-                    createdIds.Add(fleets[i].GetProperty("Id").GetString()!);
+                    createdIds.Add(fleets[i].Id);
 
-                (HttpStatusCode _, JsonElement root) = await ListFleetsAsync(order: "CreatedAscending", pageSize: 10000);
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(order: "CreatedAscending", pageSize: 10000);
 
-                JsonElement objects = root.GetProperty("Objects");
                 int foundCount = 0;
-                for (int i = 0; i < objects.GetArrayLength(); i++)
+                foreach (Fleet f in result.Objects)
                 {
-                    if (createdIds.Contains(objects[i].GetProperty("Id").GetString()!))
+                    if (createdIds.Contains(f.Id))
                         foundCount++;
                 }
                 AssertEqual(5, foundCount);
@@ -734,20 +684,19 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("List Fleets Order Created Descending Last Item Is Oldest", async () =>
             {
-                JsonElement[] fleets = await CreateFleetsAsync(5, "DescLast");
+                Fleet[] fleets = await CreateFleetsAsync(5, "DescLast");
 
                 // With shared data, verify created IDs appear in the listing
                 HashSet<string> createdIds = new HashSet<string>();
                 for (int i = 0; i < fleets.Length; i++)
-                    createdIds.Add(fleets[i].GetProperty("Id").GetString()!);
+                    createdIds.Add(fleets[i].Id);
 
-                (HttpStatusCode _, JsonElement root) = await ListFleetsAsync(order: "CreatedDescending", pageSize: 100);
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(order: "CreatedDescending", pageSize: 100);
 
-                JsonElement objects = root.GetProperty("Objects");
                 int foundCount = 0;
-                for (int i = 0; i < objects.GetArrayLength(); i++)
+                foreach (Fleet f in result.Objects)
                 {
-                    if (createdIds.Contains(objects[i].GetProperty("Id").GetString()!))
+                    if (createdIds.Contains(f.Id))
                         foundCount++;
                 }
                 AssertEqual(5, foundCount);
@@ -761,56 +710,56 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(3, "EnumDefault");
 
-                (HttpStatusCode status, JsonElement root) = await EnumerateFleetsAsync();
+                (HttpStatusCode status, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync();
 
                 AssertEqual(HttpStatusCode.OK, status);
-                Assert(root.GetProperty("Objects").GetArrayLength() >= 3, "Should have at least 3 objects");
-                Assert(root.GetProperty("TotalRecords").GetInt32() >= 3, "Should have at least 3 total records");
+                Assert(result.Objects.Count >= 3, "Should have at least 3 objects");
+                Assert(result.TotalRecords >= 3, "Should have at least 3 total records");
             });
 
             await RunTest("Enumerate Fleets Returns Correct Enumeration Structure", async () =>
             {
                 await CreateFleetAsync("EnumStructure");
 
-                (HttpStatusCode _, JsonElement root) = await EnumerateFleetsAsync();
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync();
 
-                Assert(root.TryGetProperty("Objects", out _), "Should have Objects");
-                Assert(root.TryGetProperty("PageNumber", out _), "Should have PageNumber");
-                Assert(root.TryGetProperty("PageSize", out _), "Should have PageSize");
-                Assert(root.TryGetProperty("TotalPages", out _), "Should have TotalPages");
-                Assert(root.TryGetProperty("TotalRecords", out _), "Should have TotalRecords");
-                Assert(root.TryGetProperty("Success", out _), "Should have Success");
+                Assert(result.Objects != null, "Should have Objects");
+                Assert(result.PageNumber >= 0, "Should have PageNumber");
+                Assert(result.PageSize >= 0, "Should have PageSize");
+                Assert(result.TotalPages >= 0, "Should have TotalPages");
+                Assert(result.TotalRecords >= 0, "Should have TotalRecords");
+                Assert(result.Success || !result.Success, "Should have Success");
             });
 
             await RunTest("Enumerate Fleets With PageSize And PageNumber Works Correctly", async () =>
             {
                 await CreateFleetsAsync(15, "EnumPag");
 
-                (HttpStatusCode _, JsonElement root) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 1);
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 1);
 
-                AssertEqual(5, root.GetProperty("Objects").GetArrayLength());
-                Assert(root.GetProperty("TotalRecords").GetInt32() >= 15, "TotalRecords should be >= 15");
-                Assert(root.GetProperty("TotalPages").GetInt32() >= 3, "TotalPages should be >= 3");
+                AssertEqual(5, result.Objects.Count);
+                Assert(result.TotalRecords >= 15, "TotalRecords should be >= 15");
+                Assert(result.TotalPages >= 3, "TotalPages should be >= 3");
             });
 
             await RunTest("Enumerate Fleets Page 2 Has Correct Items", async () =>
             {
                 await CreateFleetsAsync(15, "EnumP2");
 
-                (HttpStatusCode _, JsonElement root) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 2);
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 2);
 
-                AssertEqual(5, root.GetProperty("Objects").GetArrayLength());
-                AssertEqual(2, root.GetProperty("PageNumber").GetInt32());
+                AssertEqual(5, result.Objects.Count);
+                AssertEqual(2, result.PageNumber);
             });
 
             await RunTest("Enumerate Fleets Page 3 Has Correct Items", async () =>
             {
                 await CreateFleetsAsync(15, "EnumP3");
 
-                (HttpStatusCode _, JsonElement root) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 3);
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 3);
 
-                AssertEqual(5, root.GetProperty("Objects").GetArrayLength());
-                AssertEqual(3, root.GetProperty("PageNumber").GetInt32());
+                AssertEqual(5, result.Objects.Count);
+                AssertEqual(3, result.PageNumber);
             });
 
             await RunTest("Enumerate Fleets Beyond Last Page Returns Empty Objects", async () =>
@@ -818,42 +767,40 @@ namespace Armada.Test.Automated.Suites
                 await CreateFleetsAsync(10, "EnumBeyond");
 
                 // Get total pages first, then request beyond it
-                (HttpStatusCode _, JsonElement firstRoot) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 1);
-                int totalPages = firstRoot.GetProperty("TotalPages").GetInt32();
+                (HttpStatusCode _, EnumerationResult<Fleet> firstResult) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 1);
+                int totalPages = firstResult.TotalPages;
 
-                (HttpStatusCode _, JsonElement root) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: totalPages + 1);
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: totalPages + 1);
 
-                AssertEqual(0, root.GetProperty("Objects").GetArrayLength());
+                AssertEqual(0, result.Objects.Count);
             });
 
             await RunTest("Enumerate Fleets Order Created Ascending First Item Is Oldest", async () =>
             {
-                JsonElement[] fleets = await CreateFleetsAsync(5, "EnumAsc");
+                Fleet[] fleets = await CreateFleetsAsync(5, "EnumAsc");
 
-                (HttpStatusCode _, JsonElement root) = await EnumerateFleetsAsync(order: "CreatedAscending");
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync(order: "CreatedAscending");
 
                 // With shared data, just verify ascending order
-                JsonElement objects = root.GetProperty("Objects");
-                for (int i = 0; i < objects.GetArrayLength() - 1; i++)
+                for (int i = 0; i < result.Objects.Count - 1; i++)
                 {
-                    DateTime current = objects[i].GetProperty("CreatedUtc").GetDateTime();
-                    DateTime next = objects[i + 1].GetProperty("CreatedUtc").GetDateTime();
+                    DateTime current = result.Objects[i].CreatedUtc;
+                    DateTime next = result.Objects[i + 1].CreatedUtc;
                     Assert(current <= next, "Items should be in ascending order");
                 }
             });
 
             await RunTest("Enumerate Fleets Order Created Descending First Item Is Newest", async () =>
             {
-                JsonElement[] fleets = await CreateFleetsAsync(5, "EnumDesc");
+                Fleet[] fleets = await CreateFleetsAsync(5, "EnumDesc");
 
-                (HttpStatusCode _, JsonElement root) = await EnumerateFleetsAsync(order: "CreatedDescending");
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync(order: "CreatedDescending");
 
                 // With shared data, just verify descending order
-                JsonElement objects = root.GetProperty("Objects");
-                for (int i = 0; i < objects.GetArrayLength() - 1; i++)
+                for (int i = 0; i < result.Objects.Count - 1; i++)
                 {
-                    DateTime current = objects[i].GetProperty("CreatedUtc").GetDateTime();
-                    DateTime next = objects[i + 1].GetProperty("CreatedUtc").GetDateTime();
+                    DateTime current = result.Objects[i].CreatedUtc;
+                    DateTime next = result.Objects[i + 1].CreatedUtc;
                     Assert(current >= next, "Items should be in descending order");
                 }
             });
@@ -862,13 +809,12 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(5, "EnumAscAll");
 
-                (HttpStatusCode _, JsonElement root) = await EnumerateFleetsAsync(order: "CreatedAscending");
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync(order: "CreatedAscending");
 
-                JsonElement objects = root.GetProperty("Objects");
-                for (int i = 0; i < objects.GetArrayLength() - 1; i++)
+                for (int i = 0; i < result.Objects.Count - 1; i++)
                 {
-                    DateTime current = objects[i].GetProperty("CreatedUtc").GetDateTime();
-                    DateTime next = objects[i + 1].GetProperty("CreatedUtc").GetDateTime();
+                    DateTime current = result.Objects[i].CreatedUtc;
+                    DateTime next = result.Objects[i + 1].CreatedUtc;
                     Assert(current <= next,
                         "Item at index " + i + " (CreatedUtc=" + current + ") should be <= item at index " + (i + 1) + " (CreatedUtc=" + next + ")");
                 }
@@ -878,13 +824,12 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(5, "EnumDescAll");
 
-                (HttpStatusCode _, JsonElement root) = await EnumerateFleetsAsync(order: "CreatedDescending");
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync(order: "CreatedDescending");
 
-                JsonElement objects = root.GetProperty("Objects");
-                for (int i = 0; i < objects.GetArrayLength() - 1; i++)
+                for (int i = 0; i < result.Objects.Count - 1; i++)
                 {
-                    DateTime current = objects[i].GetProperty("CreatedUtc").GetDateTime();
-                    DateTime next = objects[i + 1].GetProperty("CreatedUtc").GetDateTime();
+                    DateTime current = result.Objects[i].CreatedUtc;
+                    DateTime next = result.Objects[i + 1].CreatedUtc;
                     Assert(current >= next,
                         "Item at index " + i + " (CreatedUtc=" + current + ") should be >= item at index " + (i + 1) + " (CreatedUtc=" + next + ")");
                 }
@@ -894,26 +839,16 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(12, "EnumMatch");
 
-                (HttpStatusCode _, JsonElement listRoot) = await ListFleetsAsync(pageSize: 5, pageNumber: 1, order: "CreatedAscending");
-                (HttpStatusCode _, JsonElement enumRoot) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 1, order: "CreatedAscending");
+                (HttpStatusCode _, EnumerationResult<Fleet> listResult) = await ListFleetsAsync(pageSize: 5, pageNumber: 1, order: "CreatedAscending");
+                (HttpStatusCode _, EnumerationResult<Fleet> enumResult) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 1, order: "CreatedAscending");
 
-                AssertEqual(
-                    listRoot.GetProperty("TotalRecords").GetInt32(),
-                    enumRoot.GetProperty("TotalRecords").GetInt32());
-                AssertEqual(
-                    listRoot.GetProperty("TotalPages").GetInt32(),
-                    enumRoot.GetProperty("TotalPages").GetInt32());
-                AssertEqual(
-                    listRoot.GetProperty("Objects").GetArrayLength(),
-                    enumRoot.GetProperty("Objects").GetArrayLength());
+                AssertEqual(listResult.TotalRecords, enumResult.TotalRecords);
+                AssertEqual(listResult.TotalPages, enumResult.TotalPages);
+                AssertEqual(listResult.Objects.Count, enumResult.Objects.Count);
 
-                JsonElement listObjs = listRoot.GetProperty("Objects");
-                JsonElement enumObjs = enumRoot.GetProperty("Objects");
-                for (int i = 0; i < listObjs.GetArrayLength(); i++)
+                for (int i = 0; i < listResult.Objects.Count; i++)
                 {
-                    AssertEqual(
-                        listObjs[i].GetProperty("Id").GetString()!,
-                        enumObjs[i].GetProperty("Id").GetString()!);
+                    AssertEqual(listResult.Objects[i].Id, enumResult.Objects[i].Id);
                 }
             });
 
@@ -921,24 +856,20 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(12, "EnumMatchP2");
 
-                (HttpStatusCode _, JsonElement listRoot) = await ListFleetsAsync(pageSize: 5, pageNumber: 2, order: "CreatedAscending");
-                (HttpStatusCode _, JsonElement enumRoot) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 2, order: "CreatedAscending");
+                (HttpStatusCode _, EnumerationResult<Fleet> listResult) = await ListFleetsAsync(pageSize: 5, pageNumber: 2, order: "CreatedAscending");
+                (HttpStatusCode _, EnumerationResult<Fleet> enumResult) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 2, order: "CreatedAscending");
 
-                JsonElement listObjs = listRoot.GetProperty("Objects");
-                JsonElement enumObjs = enumRoot.GetProperty("Objects");
-                AssertEqual(listObjs.GetArrayLength(), enumObjs.GetArrayLength());
+                AssertEqual(listResult.Objects.Count, enumResult.Objects.Count);
 
-                for (int i = 0; i < listObjs.GetArrayLength(); i++)
+                for (int i = 0; i < listResult.Objects.Count; i++)
                 {
-                    AssertEqual(
-                        listObjs[i].GetProperty("Id").GetString()!,
-                        enumObjs[i].GetProperty("Id").GetString()!);
+                    AssertEqual(listResult.Objects[i].Id, enumResult.Objects[i].Id);
                 }
             });
 
             await RunTest("Enumerate Fleets Empty Returns Zero Total Records", async () =>
             {
-                (HttpStatusCode status, JsonElement root) = await EnumerateFleetsAsync();
+                (HttpStatusCode status, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync();
 
                 AssertEqual(HttpStatusCode.OK, status);
             });
@@ -947,10 +878,10 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(5, "EnumPSR");
 
-                (HttpStatusCode _, JsonElement root) = await EnumerateFleetsAsync(pageSize: 3);
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync(pageSize: 3);
 
-                AssertEqual(3, root.GetProperty("PageSize").GetInt32());
-                AssertEqual(3, root.GetProperty("Objects").GetArrayLength());
+                AssertEqual(3, result.PageSize);
+                AssertEqual(3, result.Objects.Count);
             });
 
             await RunTest("Enumerate Fleets Pages Do Not Overlap", async () =>
@@ -961,11 +892,10 @@ namespace Armada.Test.Automated.Suites
 
                 for (int page = 1; page <= 3; page++)
                 {
-                    (HttpStatusCode _, JsonElement root) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: page);
-                    JsonElement objects = root.GetProperty("Objects");
-                    for (int i = 0; i < objects.GetArrayLength(); i++)
+                    (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: page);
+                    foreach (Fleet f in result.Objects)
                     {
-                        string id = objects[i].GetProperty("Id").GetString()!;
+                        string id = f.Id;
                         Assert(allIds.Add(id), "Duplicate ID found on page " + page + ": " + id);
                     }
                 }
@@ -979,36 +909,34 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("Enumerate Fleets Created Ascending Page 2 Contains Correct Items", async () =>
             {
-                JsonElement[] fleets = await CreateFleetsAsync(10, "EnumAscP2");
+                Fleet[] fleets = await CreateFleetsAsync(10, "EnumAscP2");
 
-                (HttpStatusCode _, JsonElement root) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 2, order: "CreatedAscending");
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 2, order: "CreatedAscending");
 
-                JsonElement objects = root.GetProperty("Objects");
-                AssertEqual(5, objects.GetArrayLength());
+                AssertEqual(5, result.Objects.Count);
 
                 // Verify ascending order on this page
-                for (int i = 0; i < objects.GetArrayLength() - 1; i++)
+                for (int i = 0; i < result.Objects.Count - 1; i++)
                 {
-                    DateTime current = objects[i].GetProperty("CreatedUtc").GetDateTime();
-                    DateTime next = objects[i + 1].GetProperty("CreatedUtc").GetDateTime();
+                    DateTime current = result.Objects[i].CreatedUtc;
+                    DateTime next = result.Objects[i + 1].CreatedUtc;
                     Assert(current <= next, "Items should be in ascending order on page 2");
                 }
             });
 
             await RunTest("Enumerate Fleets Created Descending Page 2 Contains Correct Items", async () =>
             {
-                JsonElement[] fleets = await CreateFleetsAsync(10, "EnumDescP2");
+                Fleet[] fleets = await CreateFleetsAsync(10, "EnumDescP2");
 
-                (HttpStatusCode _, JsonElement root) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 2, order: "CreatedDescending");
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 2, order: "CreatedDescending");
 
-                JsonElement objects = root.GetProperty("Objects");
-                AssertEqual(5, objects.GetArrayLength());
+                AssertEqual(5, result.Objects.Count);
 
                 // Verify descending order on this page
-                for (int i = 0; i < objects.GetArrayLength() - 1; i++)
+                for (int i = 0; i < result.Objects.Count - 1; i++)
                 {
-                    DateTime current = objects[i].GetProperty("CreatedUtc").GetDateTime();
-                    DateTime next = objects[i + 1].GetProperty("CreatedUtc").GetDateTime();
+                    DateTime current = result.Objects[i].CreatedUtc;
+                    DateTime next = result.Objects[i + 1].CreatedUtc;
                     Assert(current >= next, "Items should be in descending order on page 2");
                 }
             });
@@ -1021,9 +949,9 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(15, "DefPS");
 
-                (HttpStatusCode _, JsonElement root) = await ListFleetsAsync();
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync();
 
-                Assert(root.GetProperty("Objects").GetArrayLength() <= 100,
+                Assert(result.Objects.Count <= 100,
                     "Default page size should return at most 100 items");
             });
 
@@ -1031,67 +959,67 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(3, "DefPN");
 
-                (HttpStatusCode _, JsonElement root) = await ListFleetsAsync();
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync();
 
-                AssertEqual(1, root.GetProperty("PageNumber").GetInt32());
+                AssertEqual(1, result.PageNumber);
             });
 
             await RunTest("List Fleets Single Fleet TotalPages 1", async () =>
             {
                 await CreateFleetAsync("SinglePage");
 
-                (HttpStatusCode _, JsonElement root) = await ListFleetsAsync(pageSize: 10);
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 10);
 
-                Assert(root.GetProperty("TotalRecords").GetInt32() >= 1, "TotalRecords should be >= 1");
-                Assert(root.GetProperty("TotalPages").GetInt32() >= 1, "TotalPages should be >= 1");
+                Assert(result.TotalRecords >= 1, "TotalRecords should be >= 1");
+                Assert(result.TotalPages >= 1, "TotalPages should be >= 1");
             });
 
             await RunTest("List Fleets Exactly PageSize Fleets TotalPages 1", async () =>
             {
                 await CreateFleetsAsync(10, "Exact10");
 
-                (HttpStatusCode _, JsonElement root) = await ListFleetsAsync(pageSize: 10);
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 10);
 
-                Assert(root.GetProperty("TotalRecords").GetInt32() >= 10, "TotalRecords should be >= 10");
-                Assert(root.GetProperty("TotalPages").GetInt32() >= 1, "TotalPages should be >= 1");
-                AssertEqual(10, root.GetProperty("Objects").GetArrayLength());
+                Assert(result.TotalRecords >= 10, "TotalRecords should be >= 10");
+                Assert(result.TotalPages >= 1, "TotalPages should be >= 1");
+                AssertEqual(10, result.Objects.Count);
             });
 
             await RunTest("List Fleets PageSize Plus One TotalPages 2", async () =>
             {
                 await CreateFleetsAsync(11, "Plus1");
 
-                (HttpStatusCode _, JsonElement root) = await ListFleetsAsync(pageSize: 10);
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 10);
 
-                Assert(root.GetProperty("TotalRecords").GetInt32() >= 11, "TotalRecords should be >= 11");
-                Assert(root.GetProperty("TotalPages").GetInt32() >= 2, "TotalPages should be >= 2");
+                Assert(result.TotalRecords >= 11, "TotalRecords should be >= 11");
+                Assert(result.TotalPages >= 2, "TotalPages should be >= 2");
             });
 
             await RunTest("List Fleets PageSize 1 Returns 1 Item Per Page", async () =>
             {
                 await CreateFleetsAsync(3, "PS1");
 
-                (HttpStatusCode _, JsonElement root) = await ListFleetsAsync(pageSize: 1, pageNumber: 1);
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 1, pageNumber: 1);
 
-                AssertEqual(1, root.GetProperty("Objects").GetArrayLength());
-                Assert(root.GetProperty("TotalPages").GetInt32() >= 3, "TotalPages should be >= 3");
+                AssertEqual(1, result.Objects.Count);
+                Assert(result.TotalPages >= 3, "TotalPages should be >= 3");
             });
 
             await RunTest("List Fleets Large PageSize Returns All Items", async () =>
             {
                 await CreateFleetsAsync(5, "LargePS");
 
-                (HttpStatusCode _, JsonElement root) = await ListFleetsAsync(pageSize: 100);
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 100);
 
-                Assert(root.GetProperty("Objects").GetArrayLength() >= 5, "Should return at least 5 items");
-                Assert(root.GetProperty("TotalPages").GetInt32() >= 1, "TotalPages should be >= 1");
+                Assert(result.Objects.Count >= 5, "Should return at least 5 items");
+                Assert(result.TotalPages >= 1, "TotalPages should be >= 1");
             });
 
             await RunTest("List Fleets Success Is True", async () =>
             {
-                (HttpStatusCode _, JsonElement root) = await ListFleetsAsync();
+                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync();
 
-                AssertTrue(root.GetProperty("Success").GetBoolean());
+                AssertTrue(result.Success);
             });
 
             #endregion
@@ -1101,44 +1029,32 @@ namespace Armada.Test.Automated.Suites
             await RunTest("Full Lifecycle Create Read Update Delete Verify", async () =>
             {
                 // Create
-                JsonElement created = await CreateFleetAsync("LifecycleFleet", "Lifecycle description");
-                string fleetId = created.GetProperty("Id").GetString()!;
+                Fleet created = await CreateFleetAsync("LifecycleFleet", "Lifecycle description");
+                string fleetId = created.Id;
                 AssertStartsWith("flt_", fleetId);
-                AssertStartsWith("LifecycleFleet", created.GetProperty("Name").GetString()!);
+                AssertStartsWith("LifecycleFleet", created.Name);
 
                 // Read
-                string createdName = created.GetProperty("Name").GetString()!;
+                string createdName = created.Name;
                 HttpResponseMessage getResp = await _Client.GetAsync("/api/v1/fleets/" + fleetId);
                 AssertEqual(HttpStatusCode.OK, getResp.StatusCode);
-                string getBody = await getResp.Content.ReadAsStringAsync();
-                using (JsonDocument getDoc = JsonDocument.Parse(getBody))
-                {
-                    JsonElement fleet = getDoc.RootElement.GetProperty("Fleet");
-                    AssertEqual(createdName, fleet.GetProperty("Name").GetString()!);
-                    AssertEqual("Lifecycle description", fleet.GetProperty("Description").GetString()!);
-                }
+                FleetDetailResponse getDetail = await JsonHelper.DeserializeAsync<FleetDetailResponse>(getResp);
+                AssertEqual(createdName, getDetail.Fleet.Name);
+                AssertEqual("Lifecycle description", getDetail.Fleet.Description);
 
                 // Update
                 string updatedName = "UpdatedLifecycle-" + Guid.NewGuid().ToString("N").Substring(0, 8);
-                StringContent updateContent = new StringContent(
-                    JsonSerializer.Serialize(new { Name = updatedName, Description = "Updated desc" }),
-                    Encoding.UTF8, "application/json");
+                StringContent updateContent = JsonHelper.ToJsonContent(new { Name = updatedName, Description = "Updated desc" });
                 HttpResponseMessage updateResp = await _Client.PutAsync("/api/v1/fleets/" + fleetId, updateContent);
                 AssertEqual(HttpStatusCode.OK, updateResp.StatusCode);
-                string updateBody = await updateResp.Content.ReadAsStringAsync();
-                using (JsonDocument updateDoc = JsonDocument.Parse(updateBody))
-                {
-                    AssertEqual(updatedName, updateDoc.RootElement.GetProperty("Name").GetString()!);
-                    AssertEqual("Updated desc", updateDoc.RootElement.GetProperty("Description").GetString()!);
-                }
+                Fleet updatedFleet = await JsonHelper.DeserializeAsync<Fleet>(updateResp);
+                AssertEqual(updatedName, updatedFleet.Name);
+                AssertEqual("Updated desc", updatedFleet.Description);
 
                 // Verify update persisted
                 HttpResponseMessage getResp2 = await _Client.GetAsync("/api/v1/fleets/" + fleetId);
-                string getBody2 = await getResp2.Content.ReadAsStringAsync();
-                using (JsonDocument getDoc2 = JsonDocument.Parse(getBody2))
-                {
-                    AssertEqual(updatedName, getDoc2.RootElement.GetProperty("Fleet").GetProperty("Name").GetString()!);
-                }
+                FleetDetailResponse getDetail2 = await JsonHelper.DeserializeAsync<FleetDetailResponse>(getResp2);
+                AssertEqual(updatedName, getDetail2.Fleet.Name);
 
                 // Delete
                 HttpResponseMessage deleteResp = await _Client.DeleteAsync("/api/v1/fleets/" + fleetId);
@@ -1147,14 +1063,11 @@ namespace Armada.Test.Automated.Suites
 
                 // Verify deleted
                 HttpResponseMessage getResp3 = await _Client.GetAsync("/api/v1/fleets/" + fleetId);
-                string getBody3 = await getResp3.Content.ReadAsStringAsync();
-                using (JsonDocument getDoc3 = JsonDocument.Parse(getBody3))
-                {
-                    Assert(
-                        getDoc3.RootElement.TryGetProperty("Error", out _) ||
-                        getDoc3.RootElement.TryGetProperty("Message", out _),
-                        "Getting deleted fleet should return error");
-                }
+                ArmadaErrorResponse errorResp = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(getResp3);
+                Assert(
+                    !string.IsNullOrEmpty(errorResp.Error) ||
+                    !string.IsNullOrEmpty(errorResp.Message),
+                    "Getting deleted fleet should return error");
             });
 
             #endregion
@@ -1171,32 +1084,29 @@ namespace Armada.Test.Automated.Suites
         #region Private-Methods
 
         /// <summary>
-        /// Creates a fleet and returns the parsed JSON response as a cloned JsonElement.
+        /// Creates a fleet and returns the deserialized Fleet object.
         /// </summary>
-        private async Task<JsonElement> CreateFleetAsync(string name, string? description = null)
+        private async Task<Fleet> CreateFleetAsync(string name, string? description = null)
         {
             string uniqueName = name + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
             object body = description != null
                 ? new { Name = uniqueName, Description = description }
                 : (object)new { Name = uniqueName };
             HttpResponseMessage resp = await _Client.PostAsync("/api/v1/fleets",
-                new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json"));
+                JsonHelper.ToJsonContent(body));
             resp.EnsureSuccessStatusCode();
-            string json = await resp.Content.ReadAsStringAsync();
-            using JsonDocument doc = JsonDocument.Parse(json);
-            JsonElement element = doc.RootElement.Clone();
-            string id = element.GetProperty("Id").GetString()!;
-            _CreatedFleetIds.Add(id);
-            return element;
+            Fleet fleet = await JsonHelper.DeserializeAsync<Fleet>(resp);
+            _CreatedFleetIds.Add(fleet.Id);
+            return fleet;
         }
 
         /// <summary>
         /// Creates the specified number of fleets with sequential names and a small delay between each
         /// to ensure distinct CreatedUtc timestamps for ordering tests.
         /// </summary>
-        private async Task<JsonElement[]> CreateFleetsAsync(int count, string prefix = "Fleet")
+        private async Task<Fleet[]> CreateFleetsAsync(int count, string prefix = "Fleet")
         {
-            JsonElement[] results = new JsonElement[count];
+            Fleet[] results = new Fleet[count];
             for (int i = 0; i < count; i++)
             {
                 results[i] = await CreateFleetAsync(prefix + "_" + (i + 1).ToString("D3"), "Description for " + prefix + "_" + (i + 1).ToString("D3"));
@@ -1211,7 +1121,7 @@ namespace Armada.Test.Automated.Suites
         /// <summary>
         /// Performs a GET list request with optional query parameters.
         /// </summary>
-        private async Task<(HttpStatusCode StatusCode, JsonElement Root)> ListFleetsAsync(
+        private async Task<(HttpStatusCode StatusCode, EnumerationResult<Fleet> Result)> ListFleetsAsync(
             int? pageSize = null, int? pageNumber = null, string? order = null)
         {
             StringBuilder url = new StringBuilder("/api/v1/fleets");
@@ -1239,15 +1149,14 @@ namespace Armada.Test.Automated.Suites
             }
 
             HttpResponseMessage resp = await _Client.GetAsync(url.ToString());
-            string json = await resp.Content.ReadAsStringAsync();
-            using JsonDocument doc = JsonDocument.Parse(json);
-            return (resp.StatusCode, doc.RootElement.Clone());
+            EnumerationResult<Fleet> result = await JsonHelper.DeserializeAsync<EnumerationResult<Fleet>>(resp);
+            return (resp.StatusCode, result);
         }
 
         /// <summary>
         /// Performs a POST enumerate request with the given query body.
         /// </summary>
-        private async Task<(HttpStatusCode StatusCode, JsonElement Root)> EnumerateFleetsAsync(
+        private async Task<(HttpStatusCode StatusCode, EnumerationResult<Fleet> Result)> EnumerateFleetsAsync(
             int? pageSize = null, int? pageNumber = null, string? order = null)
         {
             object queryBody;
@@ -1269,10 +1178,9 @@ namespace Armada.Test.Automated.Suites
                 queryBody = new { };
 
             HttpResponseMessage resp = await _Client.PostAsync("/api/v1/fleets/enumerate",
-                new StringContent(JsonSerializer.Serialize(queryBody), Encoding.UTF8, "application/json"));
-            string json = await resp.Content.ReadAsStringAsync();
-            using JsonDocument doc = JsonDocument.Parse(json);
-            return (resp.StatusCode, doc.RootElement.Clone());
+                JsonHelper.ToJsonContent(queryBody));
+            EnumerationResult<Fleet> result = await JsonHelper.DeserializeAsync<EnumerationResult<Fleet>>(resp);
+            return (resp.StatusCode, result);
         }
 
         #endregion

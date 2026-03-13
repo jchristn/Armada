@@ -8,6 +8,7 @@ namespace Armada.Test.Automated.Suites
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core.Models;
     using Armada.Test.Common;
 
     /// <summary>
@@ -60,7 +61,7 @@ namespace Armada.Test.Automated.Suites
             {
                 using ClientWebSocket ws = await ConnectAsync().ConfigureAwait(false);
 
-                string msg = JsonSerializer.Serialize(new { Route = "subscribe" });
+                string msg = JsonHelper.Serialize(new { Route = "subscribe" });
                 byte[] bytes = Encoding.UTF8.GetBytes(msg);
                 await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None).ConfigureAwait(false);
 
@@ -82,8 +83,8 @@ namespace Armada.Test.Automated.Suites
                 JsonElement resp = await WsCommandAsync("status").ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
                 AssertEqual("status", resp.GetProperty("action").GetString());
-                Assert(resp.TryGetProperty("data", out JsonElement data), "Should contain data");
-                Assert(data.TryGetProperty("totalCaptains", out _), "Should contain totalCaptains");
+                ArmadaStatus status = DeserializeData<ArmadaStatus>(resp);
+                AssertTrue(status.TotalCaptains >= 0);
             }).ConfigureAwait(false);
 
             await RunTest("StopAll_ReturnsAllStopped", async () =>
@@ -111,8 +112,8 @@ namespace Armada.Test.Automated.Suites
                 JsonElement resp = await WsCommandAsync("list_fleets").ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
                 AssertEqual("list_fleets", resp.GetProperty("action").GetString());
-                JsonElement data = resp.GetProperty("data");
-                Assert(data.TryGetProperty("objects", out _), "Should contain objects");
+                EnumerationResult<Fleet> data = DeserializeData<EnumerationResult<Fleet>>(resp);
+                AssertNotNull(data.Objects);
             }).ConfigureAwait(false);
 
             await RunTest("CreateFleet_ReturnsCreatedFleet", async () =>
@@ -120,8 +121,8 @@ namespace Armada.Test.Automated.Suites
                 JsonElement resp = await WsCommandAsync("create_fleet", new { data = new { Name = "ws-fleet" } }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
                 AssertEqual("create_fleet", resp.GetProperty("action").GetString());
-                JsonElement data = resp.GetProperty("data");
-                AssertStartsWith("flt_", data.GetProperty("id").GetString()!);
+                Fleet data = DeserializeData<Fleet>(resp);
+                AssertStartsWith("flt_", data.Id);
             }).ConfigureAwait(false);
 
             await RunTest("GetFleet_ExistingFleet_ReturnsFleet", async () =>
@@ -129,8 +130,9 @@ namespace Armada.Test.Automated.Suites
                 string fleetId = await CreateFleetViaRestAsync("ws-get-fleet").ConfigureAwait(false);
                 JsonElement resp = await WsCommandAsync("get_fleet", new { id = fleetId }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                AssertEqual(fleetId, resp.GetProperty("data").GetProperty("fleet").GetProperty("id").GetString());
-                Assert(resp.GetProperty("data").TryGetProperty("vessels", out _), "Should have vessels array");
+                FleetDetailResponse data = DeserializeData<FleetDetailResponse>(resp);
+                AssertEqual(fleetId, data.Fleet!.Id);
+                AssertNotNull(data.Vessels);
             }).ConfigureAwait(false);
 
             await RunTest("GetFleet_NonExistent_ReturnsError", async () =>
@@ -145,7 +147,8 @@ namespace Armada.Test.Automated.Suites
                 string fleetId = await CreateFleetViaRestAsync("ws-upd-fleet").ConfigureAwait(false);
                 JsonElement resp = await WsCommandAsync("update_fleet", new { id = fleetId, data = new { Name = "ws-upd-fleet-renamed" } }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                AssertEqual(fleetId, resp.GetProperty("data").GetProperty("id").GetString());
+                Fleet data = DeserializeData<Fleet>(resp);
+                AssertEqual(fleetId, data.Id);
             }).ConfigureAwait(false);
 
             await RunTest("UpdateFleet_NonExistent_ReturnsError", async () =>
@@ -160,15 +163,16 @@ namespace Armada.Test.Automated.Suites
                 string fleetId = await CreateFleetViaRestAsync("ws-del-fleet").ConfigureAwait(false);
                 JsonElement resp = await WsCommandAsync("delete_fleet", new { id = fleetId }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                AssertEqual("deleted", resp.GetProperty("data").GetProperty("status").GetString());
+                DeleteFleetResponse data = DeserializeData<DeleteFleetResponse>(resp);
+                AssertEqual("deleted", data.Status);
             }).ConfigureAwait(false);
 
             await RunTest("ListFleets_AfterCreate_ReturnsFleet", async () =>
             {
                 await WsCommandAsync("create_fleet", new { data = new { Name = "ws-list-fleet" } }).ConfigureAwait(false);
                 JsonElement resp = await WsCommandAsync("list_fleets").ConfigureAwait(false);
-                JsonElement data = resp.GetProperty("data");
-                AssertTrue(data.GetProperty("totalRecords").GetInt64() >= 1);
+                EnumerationResult<Fleet> data = DeserializeData<EnumerationResult<Fleet>>(resp);
+                AssertTrue(data.TotalRecords >= 1);
             }).ConfigureAwait(false);
 
             await RunTest("ListFleets_WithPagination_RespectsPageSize", async () =>
@@ -178,9 +182,9 @@ namespace Armada.Test.Automated.Suites
                 await CreateFleetViaRestAsync("ws-page-3").ConfigureAwait(false);
 
                 JsonElement resp = await WsCommandAsync("list_fleets", new { query = new { pageSize = 2, pageNumber = 1 } }).ConfigureAwait(false);
-                JsonElement data = resp.GetProperty("data");
-                AssertEqual(2, data.GetProperty("pageSize").GetInt32());
-                AssertEqual(2, data.GetProperty("objects").GetArrayLength());
+                EnumerationResult<Fleet> data = DeserializeData<EnumerationResult<Fleet>>(resp);
+                AssertEqual(2, data.PageSize);
+                AssertEqual(2, data.Objects.Count);
             }).ConfigureAwait(false);
 
             // Vessel Tests
@@ -195,8 +199,8 @@ namespace Armada.Test.Automated.Suites
             {
                 JsonElement resp = await WsCommandAsync("create_vessel", new { data = new { Name = "ws-vessel", RepoUrl = TestRepoHelper.GetLocalBareRepoUrl() } }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                JsonElement data = resp.GetProperty("data");
-                AssertStartsWith("vsl_", data.GetProperty("id").GetString()!);
+                Vessel data = DeserializeData<Vessel>(resp);
+                AssertStartsWith("vsl_", data.Id);
             }).ConfigureAwait(false);
 
             await RunTest("GetVessel_ExistingVessel_ReturnsVessel", async () =>
@@ -204,7 +208,8 @@ namespace Armada.Test.Automated.Suites
                 string vesselId = await CreateVesselViaRestAsync("ws-get-vessel").ConfigureAwait(false);
                 JsonElement resp = await WsCommandAsync("get_vessel", new { id = vesselId }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                AssertEqual(vesselId, resp.GetProperty("data").GetProperty("id").GetString());
+                Vessel data = DeserializeData<Vessel>(resp);
+                AssertEqual(vesselId, data.Id);
             }).ConfigureAwait(false);
 
             await RunTest("GetVessel_NonExistent_ReturnsError", async () =>
@@ -219,7 +224,8 @@ namespace Armada.Test.Automated.Suites
                 string vesselId = await CreateVesselViaRestAsync("ws-upd-vessel").ConfigureAwait(false);
                 JsonElement resp = await WsCommandAsync("update_vessel", new { id = vesselId, data = new { Name = "ws-upd-vessel-renamed", RepoUrl = TestRepoHelper.GetLocalBareRepoUrl() } }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                AssertEqual(vesselId, resp.GetProperty("data").GetProperty("id").GetString());
+                Vessel data = DeserializeData<Vessel>(resp);
+                AssertEqual(vesselId, data.Id);
             }).ConfigureAwait(false);
 
             await RunTest("UpdateVessel_NonExistent_ReturnsError", async () =>
@@ -233,7 +239,8 @@ namespace Armada.Test.Automated.Suites
                 string vesselId = await CreateVesselViaRestAsync("ws-del-vessel").ConfigureAwait(false);
                 JsonElement resp = await WsCommandAsync("delete_vessel", new { id = vesselId }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                AssertEqual("deleted", resp.GetProperty("data").GetProperty("status").GetString());
+                DeleteVesselResponse data = DeserializeData<DeleteVesselResponse>(resp);
+                AssertEqual("deleted", data.Status);
             }).ConfigureAwait(false);
 
             // Voyage Tests
@@ -249,8 +256,8 @@ namespace Armada.Test.Automated.Suites
                 JsonElement resp = await WsCommandAsync("create_voyage", new { data = new { title = "ws-voyage", description = "test voyage" } }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
                 AssertEqual("create_voyage", resp.GetProperty("action").GetString());
-                JsonElement data = resp.GetProperty("data");
-                AssertStartsWith("vyg_", data.GetProperty("id").GetString()!);
+                Voyage data = DeserializeData<Voyage>(resp);
+                AssertStartsWith("vyg_", data.Id);
             }).ConfigureAwait(false);
 
             await RunTest("GetVoyage_ExistingVoyage_ReturnsVoyageWithMissions", async () =>
@@ -258,9 +265,9 @@ namespace Armada.Test.Automated.Suites
                 string voyageId = await CreateVoyageViaRestAsync("ws-get-voyage").ConfigureAwait(false);
                 JsonElement resp = await WsCommandAsync("get_voyage", new { id = voyageId }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                JsonElement data = resp.GetProperty("data");
-                Assert(data.TryGetProperty("voyage", out _), "Should contain voyage");
-                Assert(data.TryGetProperty("missions", out _), "Should contain missions");
+                VoyageDetailResponse data = DeserializeData<VoyageDetailResponse>(resp);
+                AssertNotNull(data.Voyage);
+                AssertNotNull(data.Missions);
             }).ConfigureAwait(false);
 
             await RunTest("GetVoyage_NonExistent_ReturnsError", async () =>
@@ -275,8 +282,9 @@ namespace Armada.Test.Automated.Suites
                 string voyageId = await CreateVoyageViaRestAsync("ws-cancel-voyage").ConfigureAwait(false);
                 JsonElement resp = await WsCommandAsync("cancel_voyage", new { id = voyageId }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                AssertEqual("Cancelled", resp.GetProperty("data").GetProperty("voyage").GetProperty("status").GetString());
-                Assert(resp.GetProperty("data").TryGetProperty("cancelledMissions", out _), "Should have cancelledMissions");
+                CancelVoyageResponse data = DeserializeData<CancelVoyageResponse>(resp);
+                AssertEqual("Cancelled", data.Voyage!.Status.ToString());
+                AssertTrue(data.CancelledMissions >= 0);
             }).ConfigureAwait(false);
 
             await RunTest("CancelVoyage_NonExistent_ReturnsError", async () =>
@@ -289,9 +297,14 @@ namespace Armada.Test.Automated.Suites
             await RunTest("PurgeVoyage_ExistingVoyage_ReturnsDeleted", async () =>
             {
                 string voyageId = await CreateVoyageViaRestAsync("ws-purge-voyage").ConfigureAwait(false);
+
+                // Cancel first — purge is blocked on Open/InProgress voyages
+                await WsCommandAsync("cancel_voyage", new { id = voyageId }).ConfigureAwait(false);
+
                 JsonElement resp = await WsCommandAsync("purge_voyage", new { id = voyageId }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                AssertEqual("deleted", resp.GetProperty("data").GetProperty("status").GetString());
+                PurgeVoyageResponse data = DeserializeData<PurgeVoyageResponse>(resp);
+                AssertEqual("deleted", data.Status);
             }).ConfigureAwait(false);
 
             await RunTest("PurgeVoyage_NonExistent_ReturnsError", async () =>
@@ -305,8 +318,8 @@ namespace Armada.Test.Automated.Suites
             {
                 await WsCommandAsync("create_voyage", new { data = new { title = "ws-list-voyage" } }).ConfigureAwait(false);
                 JsonElement resp = await WsCommandAsync("list_voyages").ConfigureAwait(false);
-                JsonElement data = resp.GetProperty("data");
-                AssertTrue(data.GetProperty("totalRecords").GetInt64() >= 1);
+                EnumerationResult<Voyage> data = DeserializeData<EnumerationResult<Voyage>>(resp);
+                AssertTrue(data.TotalRecords >= 1);
             }).ConfigureAwait(false);
 
             // Mission Tests
@@ -321,8 +334,8 @@ namespace Armada.Test.Automated.Suites
             {
                 JsonElement resp = await WsCommandAsync("create_mission", new { data = new { Title = "ws-mission" } }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                JsonElement data = resp.GetProperty("data");
-                AssertStartsWith("msn_", data.GetProperty("id").GetString()!);
+                Mission data = DeserializeData<Mission>(resp);
+                AssertStartsWith("msn_", data.Id);
             }).ConfigureAwait(false);
 
             await RunTest("GetMission_ExistingMission_ReturnsMission", async () =>
@@ -330,7 +343,8 @@ namespace Armada.Test.Automated.Suites
                 string missionId = await CreateMissionViaRestAsync("ws-get-mission").ConfigureAwait(false);
                 JsonElement resp = await WsCommandAsync("get_mission", new { id = missionId }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                AssertEqual(missionId, resp.GetProperty("data").GetProperty("id").GetString());
+                Mission data = DeserializeData<Mission>(resp);
+                AssertEqual(missionId, data.Id);
             }).ConfigureAwait(false);
 
             await RunTest("GetMission_NonExistent_ReturnsError", async () =>
@@ -345,7 +359,8 @@ namespace Armada.Test.Automated.Suites
                 string missionId = await CreateMissionViaRestAsync("ws-upd-mission").ConfigureAwait(false);
                 JsonElement resp = await WsCommandAsync("update_mission", new { id = missionId, data = new { Title = "ws-upd-mission-renamed" } }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                AssertEqual(missionId, resp.GetProperty("data").GetProperty("id").GetString());
+                Mission data = DeserializeData<Mission>(resp);
+                AssertEqual(missionId, data.Id);
             }).ConfigureAwait(false);
 
             await RunTest("UpdateMission_NonExistent_ReturnsError", async () =>
@@ -359,8 +374,9 @@ namespace Armada.Test.Automated.Suites
                 string missionId = await CreateMissionViaRestAsync("ws-cancel-mission").ConfigureAwait(false);
                 JsonElement resp = await WsCommandAsync("cancel_mission", new { id = missionId }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                AssertEqual("Cancelled", resp.GetProperty("data").GetProperty("status").GetString());
-                AssertEqual(missionId, resp.GetProperty("data").GetProperty("id").GetString());
+                Mission data = DeserializeData<Mission>(resp);
+                AssertEqual("Cancelled", data.Status.ToString());
+                AssertEqual(missionId, data.Id);
             }).ConfigureAwait(false);
 
             await RunTest("CancelMission_NonExistent_ReturnsError", async () =>
@@ -376,12 +392,13 @@ namespace Armada.Test.Automated.Suites
 
                 // Pending -> Assigned via REST
                 await _AuthClient.PutAsync("/api/v1/missions/" + missionId + "/status",
-                    new StringContent(JsonSerializer.Serialize(new { Status = "Assigned" }), Encoding.UTF8, "application/json")).ConfigureAwait(false);
+                    JsonHelper.ToJsonContent(new { Status = "Assigned" })).ConfigureAwait(false);
 
                 // Assigned -> InProgress via WebSocket
                 JsonElement resp = await WsCommandAsync("transition_mission_status", new { id = missionId, status = "InProgress" }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                AssertEqual("InProgress", resp.GetProperty("data").GetProperty("status").GetString());
+                Mission data = DeserializeData<Mission>(resp);
+                AssertEqual("InProgress", data.Status.ToString());
             }).ConfigureAwait(false);
 
             await RunTest("TransitionMissionStatus_InvalidTransition_ReturnsError", async () =>
@@ -415,14 +432,14 @@ namespace Armada.Test.Automated.Suites
 
                 // Pending -> Assigned -> InProgress via REST
                 await _AuthClient.PutAsync("/api/v1/missions/" + missionId + "/status",
-                    new StringContent(JsonSerializer.Serialize(new { Status = "Assigned" }), Encoding.UTF8, "application/json")).ConfigureAwait(false);
+                    JsonHelper.ToJsonContent(new { Status = "Assigned" })).ConfigureAwait(false);
                 await _AuthClient.PutAsync("/api/v1/missions/" + missionId + "/status",
-                    new StringContent(JsonSerializer.Serialize(new { Status = "InProgress" }), Encoding.UTF8, "application/json")).ConfigureAwait(false);
+                    JsonHelper.ToJsonContent(new { Status = "InProgress" })).ConfigureAwait(false);
 
                 JsonElement resp = await WsCommandAsync("transition_mission_status", new { id = missionId, status = "Complete" }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                Assert(resp.GetProperty("data").TryGetProperty("completedUtc", out JsonElement completedEl), "Should have completedUtc");
-                AssertNotEqual(JsonValueKind.Null, completedEl.ValueKind);
+                Mission data = DeserializeData<Mission>(resp);
+                AssertNotNull(data.CompletedUtc);
             }).ConfigureAwait(false);
 
             await RunTest("ListMissions_WithPagination_RespectsPageSize", async () =>
@@ -432,8 +449,8 @@ namespace Armada.Test.Automated.Suites
                 await CreateMissionViaRestAsync("ws-page-m3").ConfigureAwait(false);
 
                 JsonElement resp = await WsCommandAsync("list_missions", new { query = new { pageSize = 2 } }).ConfigureAwait(false);
-                JsonElement data = resp.GetProperty("data");
-                AssertEqual(2, data.GetProperty("objects").GetArrayLength());
+                EnumerationResult<Mission> data = DeserializeData<EnumerationResult<Mission>>(resp);
+                AssertEqual(2, data.Objects.Count);
             }).ConfigureAwait(false);
 
             // Captain Tests
@@ -448,8 +465,8 @@ namespace Armada.Test.Automated.Suites
             {
                 JsonElement resp = await WsCommandAsync("create_captain", new { data = new { Name = "ws-captain", Runtime = "ClaudeCode" } }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                JsonElement data = resp.GetProperty("data");
-                AssertStartsWith("cpt_", data.GetProperty("id").GetString()!);
+                Captain data = DeserializeData<Captain>(resp);
+                AssertStartsWith("cpt_", data.Id);
             }).ConfigureAwait(false);
 
             await RunTest("GetCaptain_ExistingCaptain_ReturnsCaptain", async () =>
@@ -457,7 +474,8 @@ namespace Armada.Test.Automated.Suites
                 string captainId = await CreateCaptainViaRestAsync("ws-get-captain").ConfigureAwait(false);
                 JsonElement resp = await WsCommandAsync("get_captain", new { id = captainId }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                AssertEqual(captainId, resp.GetProperty("data").GetProperty("id").GetString());
+                Captain data = DeserializeData<Captain>(resp);
+                AssertEqual(captainId, data.Id);
             }).ConfigureAwait(false);
 
             await RunTest("GetCaptain_NonExistent_ReturnsError", async () =>
@@ -472,7 +490,8 @@ namespace Armada.Test.Automated.Suites
                 string captainId = await CreateCaptainViaRestAsync("ws-upd-captain").ConfigureAwait(false);
                 JsonElement resp = await WsCommandAsync("update_captain", new { id = captainId, data = new { Name = "ws-upd-captain-renamed", Runtime = "ClaudeCode" } }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                AssertEqual(captainId, resp.GetProperty("data").GetProperty("id").GetString());
+                Captain data = DeserializeData<Captain>(resp);
+                AssertEqual(captainId, data.Id);
             }).ConfigureAwait(false);
 
             await RunTest("UpdateCaptain_PreservesOperationalFields", async () =>
@@ -480,8 +499,8 @@ namespace Armada.Test.Automated.Suites
                 string captainId = await CreateCaptainViaRestAsync("ws-preserve-captain").ConfigureAwait(false);
                 JsonElement resp = await WsCommandAsync("update_captain", new { id = captainId, data = new { Name = "ws-preserve-renamed", Runtime = "ClaudeCode" } }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                JsonElement data = resp.GetProperty("data");
-                AssertEqual("Idle", data.GetProperty("state").GetString());
+                Captain data = DeserializeData<Captain>(resp);
+                AssertEqual("Idle", data.State.ToString());
             }).ConfigureAwait(false);
 
             await RunTest("UpdateCaptain_NonExistent_ReturnsError", async () =>
@@ -496,7 +515,8 @@ namespace Armada.Test.Automated.Suites
                 string captainId = await CreateCaptainViaRestAsync("ws-del-captain").ConfigureAwait(false);
                 JsonElement resp = await WsCommandAsync("delete_captain", new { id = captainId }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                AssertEqual("deleted", resp.GetProperty("data").GetProperty("status").GetString());
+                DeleteCaptainResponse data = DeserializeData<DeleteCaptainResponse>(resp);
+                AssertEqual("deleted", data.Status);
             }).ConfigureAwait(false);
 
             await RunTest("DeleteCaptain_NonExistent_ReturnsError", async () =>
@@ -511,7 +531,8 @@ namespace Armada.Test.Automated.Suites
                 string captainId = await CreateCaptainViaRestAsync("ws-stop-captain").ConfigureAwait(false);
                 JsonElement resp = await WsCommandAsync("stop_captain", new { captainId = captainId }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                AssertEqual("stopped", resp.GetProperty("data").GetProperty("status").GetString());
+                StopCaptainResponse data = DeserializeData<StopCaptainResponse>(resp);
+                AssertEqual("stopped", data.Status);
             }).ConfigureAwait(false);
 
             // Signal Tests
@@ -527,16 +548,16 @@ namespace Armada.Test.Automated.Suites
                 JsonElement resp = await WsCommandAsync("send_signal", new { data = new { Type = "Nudge", Payload = "hello" } }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
                 AssertEqual("send_signal", resp.GetProperty("action").GetString());
-                JsonElement data = resp.GetProperty("data");
-                AssertStartsWith("sig_", data.GetProperty("id").GetString()!);
+                Signal data = DeserializeData<Signal>(resp);
+                AssertStartsWith("sig_", data.Id);
             }).ConfigureAwait(false);
 
             await RunTest("ListSignals_AfterSend_ReturnsSignal", async () =>
             {
                 await WsCommandAsync("send_signal", new { data = new { Type = "Mail", Payload = "test-mail" } }).ConfigureAwait(false);
                 JsonElement resp = await WsCommandAsync("list_signals").ConfigureAwait(false);
-                JsonElement data = resp.GetProperty("data");
-                AssertTrue(data.GetProperty("totalRecords").GetInt64() >= 1);
+                EnumerationResult<Signal> data = DeserializeData<EnumerationResult<Signal>>(resp);
+                AssertTrue(data.TotalRecords >= 1);
             }).ConfigureAwait(false);
 
             // Event Tests
@@ -545,7 +566,8 @@ namespace Armada.Test.Automated.Suites
                 JsonElement resp = await WsCommandAsync("list_events").ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
                 AssertEqual("list_events", resp.GetProperty("action").GetString());
-                Assert(resp.GetProperty("data").TryGetProperty("objects", out _), "Should have objects");
+                EnumerationResult<ArmadaEvent> data = DeserializeData<EnumerationResult<ArmadaEvent>>(resp);
+                AssertNotNull(data.Objects);
             }).ConfigureAwait(false);
 
             // Dock Tests
@@ -554,7 +576,8 @@ namespace Armada.Test.Automated.Suites
                 JsonElement resp = await WsCommandAsync("list_docks").ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
                 AssertEqual("list_docks", resp.GetProperty("action").GetString());
-                Assert(resp.GetProperty("data").TryGetProperty("objects", out _), "Should have objects");
+                EnumerationResult<Dock> data = DeserializeData<EnumerationResult<Dock>>(resp);
+                AssertNotNull(data.Objects);
             }).ConfigureAwait(false);
 
             // MergeQueue Tests
@@ -570,18 +593,20 @@ namespace Armada.Test.Automated.Suites
                 JsonElement resp = await WsCommandAsync("enqueue_merge", new { data = new { BranchName = "feature/ws-test", TargetBranch = "main" } }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
                 AssertEqual("enqueue_merge", resp.GetProperty("action").GetString());
-                JsonElement data = resp.GetProperty("data");
-                AssertStartsWith("mrg_", data.GetProperty("id").GetString()!);
+                MergeEntry data = DeserializeData<MergeEntry>(resp);
+                AssertStartsWith("mrg_", data.Id);
             }).ConfigureAwait(false);
 
             await RunTest("GetMergeEntry_ExistingEntry_ReturnsEntry", async () =>
             {
                 JsonElement createResp = await WsCommandAsync("enqueue_merge", new { data = new { BranchName = "feature/ws-get-merge", TargetBranch = "main" } }).ConfigureAwait(false);
-                string mergeId = createResp.GetProperty("data").GetProperty("id").GetString()!;
+                MergeEntry created = DeserializeData<MergeEntry>(createResp);
+                string mergeId = created.Id;
 
                 JsonElement resp = await WsCommandAsync("get_merge_entry", new { id = mergeId }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                AssertEqual(mergeId, resp.GetProperty("data").GetProperty("id").GetString());
+                MergeEntry data = DeserializeData<MergeEntry>(resp);
+                AssertEqual(mergeId, data.Id);
             }).ConfigureAwait(false);
 
             await RunTest("GetMergeEntry_NonExistent_ReturnsError", async () =>
@@ -594,18 +619,21 @@ namespace Armada.Test.Automated.Suites
             await RunTest("CancelMerge_ExistingEntry_ReturnsCancelled", async () =>
             {
                 JsonElement createResp = await WsCommandAsync("enqueue_merge", new { data = new { BranchName = "feature/ws-cancel-merge", TargetBranch = "main" } }).ConfigureAwait(false);
-                string mergeId = createResp.GetProperty("data").GetProperty("id").GetString()!;
+                MergeEntry created = DeserializeData<MergeEntry>(createResp);
+                string mergeId = created.Id;
 
                 JsonElement resp = await WsCommandAsync("cancel_merge", new { id = mergeId }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                AssertEqual("cancelled", resp.GetProperty("data").GetProperty("status").GetString());
+                CancelMergeResponse data = DeserializeData<CancelMergeResponse>(resp);
+                AssertEqual("cancelled", data.Status);
             }).ConfigureAwait(false);
 
             await RunTest("ProcessMergeQueue_ReturnsProcessed", async () =>
             {
                 JsonElement resp = await WsCommandAsync("process_merge_queue").ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
-                AssertEqual("processed", resp.GetProperty("data").GetProperty("status").GetString());
+                ProcessMergeQueueResponse data = DeserializeData<ProcessMergeQueueResponse>(resp);
+                AssertEqual("processed", data.Status);
             }).ConfigureAwait(false);
 
             // ── Mission Diff/Log and Captain Log ────────────────────────
@@ -665,7 +693,8 @@ namespace Armada.Test.Automated.Suites
                 JsonElement resp = await WsCommandAsync("enumerate", new { entityType = "fleets", query = new { pageSize = 10, pageNumber = 1 } }).ConfigureAwait(false);
                 AssertEqual("command.result", resp.GetProperty("type").GetString());
                 AssertEqual("enumerate", resp.GetProperty("action").GetString());
-                Assert(resp.GetProperty("data").TryGetProperty("objects", out _) || resp.GetProperty("data").TryGetProperty("Objects", out _), "Should contain objects array");
+                EnumerationResult<Fleet> data = DeserializeData<EnumerationResult<Fleet>>(resp);
+                AssertNotNull(data.Objects);
             }).ConfigureAwait(false);
 
             await RunTest("Enumerate_Vessels_ReturnsResult", async () =>
@@ -747,7 +776,7 @@ namespace Armada.Test.Automated.Suites
             {
                 using ClientWebSocket ws = await ConnectAsync().ConfigureAwait(false);
 
-                string msg = JsonSerializer.Serialize(new { Route = "bad_route" });
+                string msg = JsonHelper.Serialize(new { Route = "bad_route" });
                 byte[] bytes = Encoding.UTF8.GetBytes(msg);
                 await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None).ConfigureAwait(false);
 
@@ -765,7 +794,7 @@ namespace Armada.Test.Automated.Suites
             {
                 using ClientWebSocket ws = await ConnectAsync().ConfigureAwait(false);
 
-                string msg = JsonSerializer.Serialize(new { hello = "world" });
+                string msg = JsonHelper.Serialize(new { hello = "world" });
                 byte[] bytes = Encoding.UTF8.GetBytes(msg);
                 await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None).ConfigureAwait(false);
 
@@ -785,13 +814,15 @@ namespace Armada.Test.Automated.Suites
                 // Create
                 JsonElement createResp = await WsCommandAsync("create_fleet", new { data = new { Name = "lifecycle-fleet" } }).ConfigureAwait(false);
                 AssertEqual("command.result", createResp.GetProperty("type").GetString());
-                string fleetId = createResp.GetProperty("data").GetProperty("id").GetString()!;
+                Fleet createdFleet = DeserializeData<Fleet>(createResp);
+                string fleetId = createdFleet.Id;
                 AssertStartsWith("flt_", fleetId);
 
                 // Get
                 JsonElement getResp = await WsCommandAsync("get_fleet", new { id = fleetId }).ConfigureAwait(false);
                 AssertEqual("command.result", getResp.GetProperty("type").GetString());
-                AssertEqual(fleetId, getResp.GetProperty("data").GetProperty("fleet").GetProperty("id").GetString());
+                FleetDetailResponse getDetail = DeserializeData<FleetDetailResponse>(getResp);
+                AssertEqual(fleetId, getDetail.Fleet!.Id);
 
                 // Update
                 JsonElement updateResp = await WsCommandAsync("update_fleet", new { id = fleetId, data = new { Name = "lifecycle-fleet-updated" } }).ConfigureAwait(false);
@@ -800,7 +831,8 @@ namespace Armada.Test.Automated.Suites
                 // Delete
                 JsonElement deleteResp = await WsCommandAsync("delete_fleet", new { id = fleetId }).ConfigureAwait(false);
                 AssertEqual("command.result", deleteResp.GetProperty("type").GetString());
-                AssertEqual("deleted", deleteResp.GetProperty("data").GetProperty("status").GetString());
+                DeleteFleetResponse deleted = DeserializeData<DeleteFleetResponse>(deleteResp);
+                AssertEqual("deleted", deleted.Status);
 
                 // Verify deleted
                 JsonElement verifyResp = await WsCommandAsync("get_fleet", new { id = fleetId }).ConfigureAwait(false);
@@ -812,7 +844,8 @@ namespace Armada.Test.Automated.Suites
                 // Create bare voyage
                 JsonElement createResp = await WsCommandAsync("create_voyage", new { data = new { title = "lifecycle-voyage", description = "test" } }).ConfigureAwait(false);
                 AssertEqual("command.result", createResp.GetProperty("type").GetString());
-                string voyageId = createResp.GetProperty("data").GetProperty("id").GetString()!;
+                Voyage createdVoyage = DeserializeData<Voyage>(createResp);
+                string voyageId = createdVoyage.Id;
 
                 // Get
                 JsonElement getResp = await WsCommandAsync("get_voyage", new { id = voyageId }).ConfigureAwait(false);
@@ -820,17 +853,23 @@ namespace Armada.Test.Automated.Suites
 
                 // Create another voyage for purge test
                 JsonElement create2Resp = await WsCommandAsync("create_voyage", new { data = new { title = "purge-voyage" } }).ConfigureAwait(false);
-                string purgeId = create2Resp.GetProperty("data").GetProperty("id").GetString()!;
+                Voyage createdVoyage2 = DeserializeData<Voyage>(create2Resp);
+                string purgeId = createdVoyage2.Id;
 
                 // Cancel first
                 JsonElement cancelResp = await WsCommandAsync("cancel_voyage", new { id = voyageId }).ConfigureAwait(false);
                 AssertEqual("command.result", cancelResp.GetProperty("type").GetString());
-                AssertEqual("Cancelled", cancelResp.GetProperty("data").GetProperty("voyage").GetProperty("status").GetString());
+                CancelVoyageResponse cancelData = DeserializeData<CancelVoyageResponse>(cancelResp);
+                AssertEqual("Cancelled", cancelData.Voyage!.Status.ToString());
+
+                // Cancel second before purge — purge is blocked on Open/InProgress voyages
+                await WsCommandAsync("cancel_voyage", new { id = purgeId }).ConfigureAwait(false);
 
                 // Purge second
                 JsonElement purgeResp = await WsCommandAsync("purge_voyage", new { id = purgeId }).ConfigureAwait(false);
                 AssertEqual("command.result", purgeResp.GetProperty("type").GetString());
-                AssertEqual("deleted", purgeResp.GetProperty("data").GetProperty("status").GetString());
+                PurgeVoyageResponse purgeData = DeserializeData<PurgeVoyageResponse>(purgeResp);
+                AssertEqual("deleted", purgeData.Status);
 
                 // Verify purged
                 JsonElement verifyResp = await WsCommandAsync("get_voyage", new { id = purgeId }).ConfigureAwait(false);
@@ -842,7 +881,8 @@ namespace Armada.Test.Automated.Suites
                 // Create
                 JsonElement createResp = await WsCommandAsync("create_mission", new { data = new { Title = "lifecycle-mission" } }).ConfigureAwait(false);
                 AssertEqual("command.result", createResp.GetProperty("type").GetString());
-                string missionId = createResp.GetProperty("data").GetProperty("id").GetString()!;
+                Mission createdMission = DeserializeData<Mission>(createResp);
+                string missionId = createdMission.Id;
 
                 // Transition: Pending -> Assigned
                 JsonElement t1 = await WsCommandAsync("transition_mission_status", new { id = missionId, status = "Assigned" }).ConfigureAwait(false);
@@ -855,7 +895,8 @@ namespace Armada.Test.Automated.Suites
                 // Cancel
                 JsonElement cancelResp = await WsCommandAsync("cancel_mission", new { id = missionId }).ConfigureAwait(false);
                 AssertEqual("command.result", cancelResp.GetProperty("type").GetString());
-                AssertEqual("Cancelled", cancelResp.GetProperty("data").GetProperty("status").GetString());
+                Mission cancelledMission = DeserializeData<Mission>(cancelResp);
+                AssertEqual("Cancelled", cancelledMission.Status.ToString());
             }).ConfigureAwait(false);
 
             await RunTest("FullCaptainLifecycle_CreateUpdateDelete", async () =>
@@ -863,7 +904,8 @@ namespace Armada.Test.Automated.Suites
                 // Create
                 JsonElement createResp = await WsCommandAsync("create_captain", new { data = new { Name = "lifecycle-captain", Runtime = "ClaudeCode" } }).ConfigureAwait(false);
                 AssertEqual("command.result", createResp.GetProperty("type").GetString());
-                string captainId = createResp.GetProperty("data").GetProperty("id").GetString()!;
+                Captain createdCaptain = DeserializeData<Captain>(createResp);
+                string captainId = createdCaptain.Id;
 
                 // Get
                 JsonElement getResp = await WsCommandAsync("get_captain", new { id = captainId }).ConfigureAwait(false);
@@ -895,6 +937,15 @@ namespace Armada.Test.Automated.Suites
             return ws;
         }
 
+        /// <summary>
+        /// Extract the "data" property from a WsCommandAsync JsonElement result and deserialize it to T.
+        /// </summary>
+        private T DeserializeData<T>(JsonElement resp)
+        {
+            string dataJson = resp.GetProperty("data").GetRawText();
+            return JsonHelper.Deserialize<T>(dataJson);
+        }
+
         private async Task<JsonElement> WsCommandAsync(string action, object? extraFields = null)
         {
             using ClientWebSocket ws = await ConnectAsync().ConfigureAwait(false);
@@ -907,7 +958,7 @@ namespace Armada.Test.Automated.Suites
 
             if (extraFields != null)
             {
-                string extraJson = JsonSerializer.Serialize(extraFields);
+                string extraJson = JsonHelper.Serialize(extraFields);
                 using JsonDocument extraDoc = JsonDocument.Parse(extraJson);
                 foreach (JsonProperty prop in extraDoc.RootElement.EnumerateObject())
                 {
@@ -915,73 +966,85 @@ namespace Armada.Test.Automated.Suites
                 }
             }
 
-            string payload = JsonSerializer.Serialize(msg);
+            string payload = JsonHelper.Serialize(msg);
             byte[] bytes = Encoding.UTF8.GetBytes(payload);
             await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None).ConfigureAwait(false);
 
             byte[] buffer = new byte[1048576];
             using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            WebSocketReceiveResult result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), cts.Token).ConfigureAwait(false);
-            string json = Encoding.UTF8.GetString(buffer, 0, result.Count);
-            using JsonDocument doc = JsonDocument.Parse(json);
-            return doc.RootElement.Clone();
+
+            // Loop past broadcast messages (mission.changed, voyage.changed, etc.)
+            // until we receive the actual command.result or command.error response.
+            while (true)
+            {
+                WebSocketReceiveResult result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), cts.Token).ConfigureAwait(false);
+                string json = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                using JsonDocument doc = JsonDocument.Parse(json);
+                JsonElement root = doc.RootElement.Clone();
+
+                if (root.TryGetProperty("type", out JsonElement typeElem))
+                {
+                    string? type = typeElem.GetString();
+                    if (type == "command.result" || type == "command.error")
+                        return root;
+                }
+
+                // Not a command response — skip and read next message
+            }
         }
 
         private async Task<string> CreateFleetViaRestAsync(string name)
         {
             HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/fleets",
-                new StringContent(JsonSerializer.Serialize(new { Name = name }), Encoding.UTF8, "application/json")).ConfigureAwait(false);
+                JsonHelper.ToJsonContent(new { Name = name })).ConfigureAwait(false);
             resp.EnsureSuccessStatusCode();
-            string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            using JsonDocument doc = JsonDocument.Parse(body);
-            return doc.RootElement.GetProperty("Id").GetString()!;
+            Fleet fleet = await JsonHelper.DeserializeAsync<Fleet>(resp).ConfigureAwait(false);
+            return fleet.Id;
         }
 
         private async Task<string> CreateVesselViaRestAsync(string name)
         {
             HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/vessels",
-                new StringContent(JsonSerializer.Serialize(new { Name = name, RepoUrl = TestRepoHelper.GetLocalBareRepoUrl() }), Encoding.UTF8, "application/json")).ConfigureAwait(false);
+                JsonHelper.ToJsonContent(new { Name = name, RepoUrl = TestRepoHelper.GetLocalBareRepoUrl() })).ConfigureAwait(false);
             resp.EnsureSuccessStatusCode();
-            string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            using JsonDocument doc = JsonDocument.Parse(body);
-            return doc.RootElement.GetProperty("Id").GetString()!;
+            Vessel vessel = await JsonHelper.DeserializeAsync<Vessel>(resp).ConfigureAwait(false);
+            return vessel.Id;
         }
 
         private async Task<string> CreateCaptainViaRestAsync(string name)
         {
             HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/captains",
-                new StringContent(JsonSerializer.Serialize(new { Name = name, Runtime = "ClaudeCode" }), Encoding.UTF8, "application/json")).ConfigureAwait(false);
+                JsonHelper.ToJsonContent(new { Name = name, Runtime = "ClaudeCode" })).ConfigureAwait(false);
             resp.EnsureSuccessStatusCode();
-            string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            using JsonDocument doc = JsonDocument.Parse(body);
-            return doc.RootElement.GetProperty("Id").GetString()!;
+            Captain captain = await JsonHelper.DeserializeAsync<Captain>(resp).ConfigureAwait(false);
+            return captain.Id;
         }
 
         private async Task<string> CreateMissionViaRestAsync(string title)
         {
             HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/missions",
-                new StringContent(JsonSerializer.Serialize(new { Title = title }), Encoding.UTF8, "application/json")).ConfigureAwait(false);
+                JsonHelper.ToJsonContent(new { Title = title })).ConfigureAwait(false);
             resp.EnsureSuccessStatusCode();
-            string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            using JsonDocument doc = JsonDocument.Parse(body);
-            JsonElement root = doc.RootElement;
 
             // When mission stays Pending (no captain available), the API returns
             // { "Mission": {...}, "Warning": "..." } instead of the mission directly.
-            if (root.TryGetProperty("Mission", out JsonElement nested))
-                return nested.GetProperty("Id").GetString()!;
+            string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+            MissionCreateResponse wrapper = JsonHelper.Deserialize<MissionCreateResponse>(body);
+            if (wrapper.Mission != null)
+                return wrapper.Mission.Id;
 
-            return root.GetProperty("Id").GetString()!;
+            // Fallback: response is the mission directly
+            Mission mission = JsonHelper.Deserialize<Mission>(body);
+            return mission.Id;
         }
 
         private async Task<string> CreateVoyageViaRestAsync(string title)
         {
             HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/voyages",
-                new StringContent(JsonSerializer.Serialize(new { Title = title }), Encoding.UTF8, "application/json")).ConfigureAwait(false);
+                JsonHelper.ToJsonContent(new { Title = title })).ConfigureAwait(false);
             resp.EnsureSuccessStatusCode();
-            string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            using JsonDocument doc = JsonDocument.Parse(body);
-            return doc.RootElement.GetProperty("Id").GetString()!;
+            Voyage voyage = await JsonHelper.DeserializeAsync<Voyage>(resp).ConfigureAwait(false);
+            return voyage.Id;
         }
 
         #endregion

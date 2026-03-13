@@ -2,12 +2,10 @@ namespace Armada.Test.Automated.Suites
 {
     using System;
     using System.Collections.Generic;
-    using System.Globalization;
     using System.Net;
     using System.Net.Http;
-    using System.Text;
-    using System.Text.Json;
     using System.Threading.Tasks;
+    using Armada.Core.Models;
     using Armada.Test.Common;
 
     /// <summary>
@@ -59,73 +57,62 @@ namespace Armada.Test.Automated.Suites
             {
                 string fleetId = await CreateFleetAsync("CreateAllFieldsFleet");
 
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new
-                    {
-                        Name = "FullVessel",
-                        FleetId = fleetId,
-                        RepoUrl = "https://github.com/test/full",
-                        LocalPath = "/home/user/repos/full",
-                        WorkingDirectory = "/home/user/repos/full/src",
-                        DefaultBranch = "develop",
-                        Active = true
-                    }),
-                    Encoding.UTF8, "application/json");
+                StringContent content = JsonHelper.ToJsonContent(new
+                {
+                    Name = "FullVessel",
+                    FleetId = fleetId,
+                    RepoUrl = "https://github.com/test/full",
+                    LocalPath = "/home/user/repos/full",
+                    WorkingDirectory = "/home/user/repos/full/src",
+                    DefaultBranch = "develop",
+                    Active = true
+                });
 
                 HttpResponseMessage response = await _Client.PostAsync("/api/v1/vessels", content);
                 AssertEqual(HttpStatusCode.Created, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement root = doc.RootElement;
+                Vessel vessel = await JsonHelper.DeserializeAsync<Vessel>(response);
 
-                string id = root.GetProperty("Id").GetString()!;
-                _CreatedVesselIds.Add(id);
+                _CreatedVesselIds.Add(vessel.Id);
 
-                AssertStartsWith("vsl_", id);
-                AssertStartsWith("FullVessel", root.GetProperty("Name").GetString()!);
-                AssertEqual(fleetId, root.GetProperty("FleetId").GetString()!);
-                AssertEqual("https://github.com/test/full", root.GetProperty("RepoUrl").GetString()!);
-                AssertEqual("/home/user/repos/full", root.GetProperty("LocalPath").GetString()!);
-                AssertEqual("/home/user/repos/full/src", root.GetProperty("WorkingDirectory").GetString()!);
-                AssertEqual("develop", root.GetProperty("DefaultBranch").GetString()!);
-                AssertTrue(root.GetProperty("Active").GetBoolean());
-                AssertTrue(root.TryGetProperty("CreatedUtc", out _));
-                AssertTrue(root.TryGetProperty("LastUpdateUtc", out _));
+                AssertStartsWith("vsl_", vessel.Id);
+                AssertStartsWith("FullVessel", vessel.Name);
+                AssertEqual(fleetId, vessel.FleetId);
+                AssertEqual("https://github.com/test/full", vessel.RepoUrl);
+                AssertEqual("/home/user/repos/full", vessel.LocalPath);
+                AssertEqual("/home/user/repos/full/src", vessel.WorkingDirectory);
+                AssertEqual("develop", vessel.DefaultBranch);
+                AssertTrue(vessel.Active);
+                Assert(vessel.CreatedUtc != default, "CreatedUtc should be set");
+                Assert(vessel.LastUpdateUtc != default, "LastUpdateUtc should be set");
             });
 
             await RunTest("Create Vessel With Minimal Fields Returns 201", async () =>
             {
                 string fleetId = await CreateFleetAsync("MinimalFleet");
 
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { Name = "MinimalVessel", FleetId = fleetId, RepoUrl = "https://github.com/test/minimal" }),
-                    Encoding.UTF8, "application/json");
+                StringContent content = JsonHelper.ToJsonContent(new { Name = "MinimalVessel", FleetId = fleetId, RepoUrl = "https://github.com/test/minimal" });
 
                 HttpResponseMessage response = await _Client.PostAsync("/api/v1/vessels", content);
                 AssertEqual(HttpStatusCode.Created, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement root = doc.RootElement;
+                Vessel vessel = await JsonHelper.DeserializeAsync<Vessel>(response);
 
-                string id = root.GetProperty("Id").GetString()!;
-                _CreatedVesselIds.Add(id);
+                _CreatedVesselIds.Add(vessel.Id);
 
-                AssertStartsWith("vsl_", id);
-                AssertStartsWith("MinimalVessel", root.GetProperty("Name").GetString()!);
-                AssertEqual(fleetId, root.GetProperty("FleetId").GetString()!);
-                AssertEqual("main", root.GetProperty("DefaultBranch").GetString()!);
-                AssertTrue(root.GetProperty("Active").GetBoolean());
+                AssertStartsWith("vsl_", vessel.Id);
+                AssertStartsWith("MinimalVessel", vessel.Name);
+                AssertEqual(fleetId, vessel.FleetId);
+                AssertEqual("main", vessel.DefaultBranch);
+                AssertTrue(vessel.Active);
             });
 
             await RunTest("Create Vessel Id Has Vsl Prefix", async () =>
             {
                 string fleetId = await CreateFleetAsync();
-                (string id, JsonDocument doc) = await CreateVesselAsync("PrefixTest", fleetId: fleetId);
-                doc.Dispose();
+                Vessel vessel = await CreateVesselAsync("PrefixTest", fleetId: fleetId);
 
-                AssertStartsWith("vsl_", id);
+                AssertStartsWith("vsl_", vessel.Id);
             });
 
             await RunTest("Create Vessel Generates Unique Ids", async () =>
@@ -142,53 +129,39 @@ namespace Armada.Test.Automated.Suites
                 string fleetId = await CreateFleetAsync();
                 DateTime beforeCreate = DateTime.UtcNow.AddSeconds(-1);
 
-                (string id, JsonDocument doc) = await CreateVesselAsync("TimestampVessel", fleetId: fleetId);
-                JsonElement root = doc.RootElement;
+                Vessel vessel = await CreateVesselAsync("TimestampVessel", fleetId: fleetId);
 
-                string createdUtcStr = root.GetProperty("CreatedUtc").GetString()!;
-                string lastUpdateUtcStr = root.GetProperty("LastUpdateUtc").GetString()!;
-                DateTime createdUtc = DateTime.Parse(createdUtcStr, null, DateTimeStyles.RoundtripKind);
-                DateTime lastUpdateUtc = DateTime.Parse(lastUpdateUtcStr, null, DateTimeStyles.RoundtripKind);
+                DateTime createdUtc = vessel.CreatedUtc;
+                DateTime lastUpdateUtc = vessel.LastUpdateUtc;
 
                 Assert(createdUtc.ToUniversalTime() >= beforeCreate, "CreatedUtc " + createdUtc + " should be >= " + beforeCreate);
                 Assert(lastUpdateUtc.ToUniversalTime() >= beforeCreate, "LastUpdateUtc " + lastUpdateUtc + " should be >= " + beforeCreate);
-                doc.Dispose();
             });
 
             await RunTest("Create Vessel DefaultBranch Defaults To Main", async () =>
             {
                 string fleetId = await CreateFleetAsync();
 
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { Name = "DefaultBranchVessel", FleetId = fleetId, RepoUrl = "https://github.com/test/default-branch" }),
-                    Encoding.UTF8, "application/json");
+                StringContent content = JsonHelper.ToJsonContent(new { Name = "DefaultBranchVessel", FleetId = fleetId, RepoUrl = "https://github.com/test/default-branch" });
 
                 HttpResponseMessage response = await _Client.PostAsync("/api/v1/vessels", content);
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
+                Vessel vessel = await JsonHelper.DeserializeAsync<Vessel>(response);
+                _CreatedVesselIds.Add(vessel.Id);
 
-                string id = doc.RootElement.GetProperty("Id").GetString()!;
-                _CreatedVesselIds.Add(id);
-
-                AssertEqual("main", doc.RootElement.GetProperty("DefaultBranch").GetString()!);
+                AssertEqual("main", vessel.DefaultBranch);
             });
 
             await RunTest("Create Vessel Active Defaults To True", async () =>
             {
                 string fleetId = await CreateFleetAsync();
 
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { Name = "ActiveDefaultVessel", FleetId = fleetId, RepoUrl = "https://github.com/test/active-default" }),
-                    Encoding.UTF8, "application/json");
+                StringContent content = JsonHelper.ToJsonContent(new { Name = "ActiveDefaultVessel", FleetId = fleetId, RepoUrl = "https://github.com/test/active-default" });
 
                 HttpResponseMessage response = await _Client.PostAsync("/api/v1/vessels", content);
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
+                Vessel vessel = await JsonHelper.DeserializeAsync<Vessel>(response);
+                _CreatedVesselIds.Add(vessel.Id);
 
-                string id = doc.RootElement.GetProperty("Id").GetString()!;
-                _CreatedVesselIds.Add(id);
-
-                AssertTrue(doc.RootElement.GetProperty("Active").GetBoolean());
+                AssertTrue(vessel.Active);
             });
 
             #endregion
@@ -199,58 +172,46 @@ namespace Armada.Test.Automated.Suites
             {
                 string fleetId = await CreateFleetAsync("GetFleet");
 
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new
-                    {
-                        Name = "GetVessel",
-                        FleetId = fleetId,
-                        RepoUrl = "https://github.com/test/get",
-                        DefaultBranch = "develop"
-                    }),
-                    Encoding.UTF8, "application/json");
+                StringContent content = JsonHelper.ToJsonContent(new
+                {
+                    Name = "GetVessel",
+                    FleetId = fleetId,
+                    RepoUrl = "https://github.com/test/get",
+                    DefaultBranch = "develop"
+                });
 
                 HttpResponseMessage createResp = await _Client.PostAsync("/api/v1/vessels", content);
-                string createBody = await createResp.Content.ReadAsStringAsync();
-                string vesselId;
-                using (JsonDocument createDoc = JsonDocument.Parse(createBody))
-                {
-                    vesselId = createDoc.RootElement.GetProperty("Id").GetString()!;
-                    _CreatedVesselIds.Add(vesselId);
-                }
+                Vessel created = await JsonHelper.DeserializeAsync<Vessel>(createResp);
+                string vesselId = created.Id;
+                _CreatedVesselIds.Add(vesselId);
 
                 HttpResponseMessage response = await _Client.GetAsync("/api/v1/vessels/" + vesselId);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement root = doc.RootElement;
+                Vessel vessel = await JsonHelper.DeserializeAsync<Vessel>(response);
 
-                AssertEqual(vesselId, root.GetProperty("Id").GetString()!);
-                AssertStartsWith("GetVessel", root.GetProperty("Name").GetString()!);
-                AssertEqual(fleetId, root.GetProperty("FleetId").GetString()!);
-                AssertEqual("https://github.com/test/get", root.GetProperty("RepoUrl").GetString()!);
-                AssertEqual("develop", root.GetProperty("DefaultBranch").GetString()!);
+                AssertEqual(vesselId, vessel.Id);
+                AssertStartsWith("GetVessel", vessel.Name);
+                AssertEqual(fleetId, vessel.FleetId);
+                AssertEqual("https://github.com/test/get", vessel.RepoUrl);
+                AssertEqual("develop", vessel.DefaultBranch);
             });
 
             await RunTest("Get Vessel Not Found Returns Error", async () =>
             {
                 HttpResponseMessage response = await _Client.GetAsync("/api/v1/vessels/vsl_nonexistent");
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
+                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
                 Assert(
-                    doc.RootElement.TryGetProperty("Error", out _) ||
-                    doc.RootElement.TryGetProperty("Message", out _),
+                    error.Error != null || error.Message != null,
                     "Should have Error or Message property");
             });
 
             await RunTest("Get Vessel Invalid Id Returns Error", async () =>
             {
                 HttpResponseMessage response = await _Client.GetAsync("/api/v1/vessels/invalid_id_format");
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
+                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
                 Assert(
-                    doc.RootElement.TryGetProperty("Error", out _) ||
-                    doc.RootElement.TryGetProperty("Message", out _),
+                    error.Error != null || error.Message != null,
                     "Should have Error or Message property");
             });
 
@@ -263,15 +224,12 @@ namespace Armada.Test.Automated.Suites
                 string fleetId = await CreateFleetAsync();
                 string vesselId = await CreateVesselAndReturnIdAsync("OriginalName", fleetId: fleetId);
 
-                StringContent updateContent = new StringContent(
-                    JsonSerializer.Serialize(new { Name = "UpdatedName", FleetId = fleetId, RepoUrl = "https://github.com/test/originalname" }),
-                    Encoding.UTF8, "application/json");
+                StringContent updateContent = JsonHelper.ToJsonContent(new { Name = "UpdatedName", FleetId = fleetId, RepoUrl = "https://github.com/test/originalname" });
                 HttpResponseMessage response = await _Client.PutAsync("/api/v1/vessels/" + vesselId, updateContent);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual("UpdatedName", doc.RootElement.GetProperty("Name").GetString()!);
+                Vessel vessel = await JsonHelper.DeserializeAsync<Vessel>(response);
+                AssertEqual("UpdatedName", vessel.Name);
             });
 
             await RunTest("Update Vessel RepoUrl Returns Updated RepoUrl", async () =>
@@ -279,15 +237,12 @@ namespace Armada.Test.Automated.Suites
                 string fleetId = await CreateFleetAsync();
                 string vesselId = await CreateVesselAndReturnIdAsync("RepoUrlVessel", fleetId: fleetId, repoUrl: "https://github.com/test/old");
 
-                StringContent updateContent = new StringContent(
-                    JsonSerializer.Serialize(new { Name = "RepoUrlVessel", FleetId = fleetId, RepoUrl = "https://github.com/test/new" }),
-                    Encoding.UTF8, "application/json");
+                StringContent updateContent = JsonHelper.ToJsonContent(new { Name = "RepoUrlVessel", FleetId = fleetId, RepoUrl = "https://github.com/test/new" });
                 HttpResponseMessage response = await _Client.PutAsync("/api/v1/vessels/" + vesselId, updateContent);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual("https://github.com/test/new", doc.RootElement.GetProperty("RepoUrl").GetString()!);
+                Vessel vessel = await JsonHelper.DeserializeAsync<Vessel>(response);
+                AssertEqual("https://github.com/test/new", vessel.RepoUrl);
             });
 
             await RunTest("Update Vessel DefaultBranch Returns Updated Branch", async () =>
@@ -295,15 +250,12 @@ namespace Armada.Test.Automated.Suites
                 string fleetId = await CreateFleetAsync();
                 string vesselId = await CreateVesselAndReturnIdAsync("BranchVessel", fleetId: fleetId);
 
-                StringContent updateContent = new StringContent(
-                    JsonSerializer.Serialize(new { Name = "BranchVessel", FleetId = fleetId, RepoUrl = "https://github.com/test/branchvessel", DefaultBranch = "release" }),
-                    Encoding.UTF8, "application/json");
+                StringContent updateContent = JsonHelper.ToJsonContent(new { Name = "BranchVessel", FleetId = fleetId, RepoUrl = "https://github.com/test/branchvessel", DefaultBranch = "release" });
                 HttpResponseMessage response = await _Client.PutAsync("/api/v1/vessels/" + vesselId, updateContent);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual("release", doc.RootElement.GetProperty("DefaultBranch").GetString()!);
+                Vessel vessel = await JsonHelper.DeserializeAsync<Vessel>(response);
+                AssertEqual("release", vessel.DefaultBranch);
             });
 
             await RunTest("Update Vessel Multiple Fields All Updated", async () =>
@@ -313,25 +265,21 @@ namespace Armada.Test.Automated.Suites
 
                 string renamedName = "RenamedVessel-" + Guid.NewGuid().ToString("N").Substring(0, 8);
                 string renamedUrl = "https://github.com/test/renamed-" + Guid.NewGuid().ToString("N").Substring(0, 8);
-                StringContent updateContent = new StringContent(
-                    JsonSerializer.Serialize(new
-                    {
-                        Name = renamedName,
-                        FleetId = fleetId,
-                        RepoUrl = renamedUrl,
-                        DefaultBranch = "staging"
-                    }),
-                    Encoding.UTF8, "application/json");
+                StringContent updateContent = JsonHelper.ToJsonContent(new
+                {
+                    Name = renamedName,
+                    FleetId = fleetId,
+                    RepoUrl = renamedUrl,
+                    DefaultBranch = "staging"
+                });
                 HttpResponseMessage response = await _Client.PutAsync("/api/v1/vessels/" + vesselId, updateContent);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement root = doc.RootElement;
+                Vessel vessel = await JsonHelper.DeserializeAsync<Vessel>(response);
 
-                AssertEqual(renamedName, root.GetProperty("Name").GetString()!);
-                AssertEqual(renamedUrl, root.GetProperty("RepoUrl").GetString()!);
-                AssertEqual("staging", root.GetProperty("DefaultBranch").GetString()!);
+                AssertEqual(renamedName, vessel.Name);
+                AssertEqual(renamedUrl, vessel.RepoUrl);
+                AssertEqual("staging", vessel.DefaultBranch);
             });
 
             await RunTest("Update Vessel Preserves Id And FleetId", async () =>
@@ -339,15 +287,12 @@ namespace Armada.Test.Automated.Suites
                 string fleetId = await CreateFleetAsync();
                 string vesselId = await CreateVesselAndReturnIdAsync("PreserveIdVessel", fleetId: fleetId);
 
-                StringContent updateContent = new StringContent(
-                    JsonSerializer.Serialize(new { Name = "StillSameId", FleetId = fleetId, RepoUrl = "https://github.com/test/preserveidvessel" }),
-                    Encoding.UTF8, "application/json");
+                StringContent updateContent = JsonHelper.ToJsonContent(new { Name = "StillSameId", FleetId = fleetId, RepoUrl = "https://github.com/test/preserveidvessel" });
                 HttpResponseMessage response = await _Client.PutAsync("/api/v1/vessels/" + vesselId, updateContent);
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
+                Vessel vessel = await JsonHelper.DeserializeAsync<Vessel>(response);
 
-                AssertEqual(vesselId, doc.RootElement.GetProperty("Id").GetString()!);
-                AssertEqual(fleetId, doc.RootElement.GetProperty("FleetId").GetString()!);
+                AssertEqual(vesselId, vessel.Id);
+                AssertEqual(fleetId, vessel.FleetId);
             });
 
             await RunTest("Update Vessel Verify Via Get", async () =>
@@ -355,17 +300,14 @@ namespace Armada.Test.Automated.Suites
                 string fleetId = await CreateFleetAsync();
                 string vesselId = await CreateVesselAndReturnIdAsync("VerifyUpdateVessel", fleetId: fleetId);
 
-                StringContent updateContent = new StringContent(
-                    JsonSerializer.Serialize(new { Name = "VerifiedUpdate", FleetId = fleetId, RepoUrl = "https://github.com/test/verifyupdatevessel", DefaultBranch = "feature" }),
-                    Encoding.UTF8, "application/json");
+                StringContent updateContent = JsonHelper.ToJsonContent(new { Name = "VerifiedUpdate", FleetId = fleetId, RepoUrl = "https://github.com/test/verifyupdatevessel", DefaultBranch = "feature" });
                 await _Client.PutAsync("/api/v1/vessels/" + vesselId, updateContent);
 
                 HttpResponseMessage getResp = await _Client.GetAsync("/api/v1/vessels/" + vesselId);
-                string body = await getResp.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
+                Vessel vessel = await JsonHelper.DeserializeAsync<Vessel>(getResp);
 
-                AssertEqual("VerifiedUpdate", doc.RootElement.GetProperty("Name").GetString()!);
-                AssertEqual("feature", doc.RootElement.GetProperty("DefaultBranch").GetString()!);
+                AssertEqual("VerifiedUpdate", vessel.Name);
+                AssertEqual("feature", vessel.DefaultBranch);
             });
 
             #endregion
@@ -388,10 +330,9 @@ namespace Armada.Test.Automated.Suites
                 string body = await response.Content.ReadAsStringAsync();
                 if (!string.IsNullOrEmpty(body))
                 {
-                    using JsonDocument doc = JsonDocument.Parse(body);
+                    ArmadaErrorResponse error = JsonHelper.Deserialize<ArmadaErrorResponse>(body);
                     Assert(
-                        doc.RootElement.TryGetProperty("Error", out _) ||
-                        doc.RootElement.TryGetProperty("Message", out _),
+                        error.Error != null || error.Message != null,
                         "Should have Error or Message property");
                 }
                 else
@@ -410,11 +351,9 @@ namespace Armada.Test.Automated.Suites
                 _CreatedVesselIds.Remove(vesselId);
 
                 HttpResponseMessage getResp = await _Client.GetAsync("/api/v1/vessels/" + vesselId);
-                string body = await getResp.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
+                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(getResp);
                 Assert(
-                    doc.RootElement.TryGetProperty("Error", out _) ||
-                    doc.RootElement.TryGetProperty("Message", out _),
+                    error.Error != null || error.Message != null,
                     "Should have Error or Message property");
             });
 
@@ -430,9 +369,8 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage getResp = await _Client.GetAsync("/api/v1/vessels/" + vesselId1);
                 AssertEqual(HttpStatusCode.OK, getResp.StatusCode);
 
-                string body = await getResp.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                AssertStartsWith("KeepMe", doc.RootElement.GetProperty("Name").GetString()!);
+                Vessel vessel = await JsonHelper.DeserializeAsync<Vessel>(getResp);
+                AssertStartsWith("KeepMe", vessel.Name);
             });
 
             #endregion
@@ -444,12 +382,10 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage response = await _Client.GetAsync("/api/v1/vessels");
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement root = doc.RootElement;
+                EnumerationResult<Vessel> result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(response);
 
-                AssertEqual(JsonValueKind.Array, root.GetProperty("Objects").ValueKind);
-                AssertTrue(root.GetProperty("Success").GetBoolean());
+                Assert(result.Objects != null, "Objects should not be null");
+                AssertTrue(result.Success);
             });
 
             await RunTest("List Vessels After Create Returns Vessel", async () =>
@@ -460,10 +396,9 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage response = await _Client.GetAsync("/api/v1/vessels");
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                Assert(doc.RootElement.GetProperty("Objects").GetArrayLength() >= 1, "Should have at least 1 object");
-                Assert(doc.RootElement.GetProperty("TotalRecords").GetInt32() >= 1, "Should have at least 1 total record");
+                EnumerationResult<Vessel> result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(response);
+                Assert(result.Objects.Count >= 1, "Should have at least 1 object");
+                Assert(result.TotalRecords >= 1, "Should have at least 1 total record");
             });
 
             #endregion
@@ -479,15 +414,13 @@ namespace Armada.Test.Automated.Suites
                 }
 
                 HttpResponseMessage response = await _Client.GetAsync("/api/v1/vessels?pageSize=10&pageNumber=1&fleetId=" + fleetId);
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement root = doc.RootElement;
+                EnumerationResult<Vessel> result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(response);
 
-                AssertEqual(10, root.GetProperty("Objects").GetArrayLength());
-                AssertEqual(25, root.GetProperty("TotalRecords").GetInt32());
-                AssertEqual(3, root.GetProperty("TotalPages").GetInt32());
-                AssertEqual(1, root.GetProperty("PageNumber").GetInt32());
-                AssertEqual(10, root.GetProperty("PageSize").GetInt32());
+                AssertEqual(10, result.Objects.Count);
+                AssertEqual(25, result.TotalRecords);
+                AssertEqual(3, result.TotalPages);
+                AssertEqual(1, result.PageNumber);
+                AssertEqual(10, result.PageSize);
             });
 
             await RunTest("List Vessels 25 Items PageSize 10 Page 2 Has 10 Items", async () =>
@@ -499,11 +432,10 @@ namespace Armada.Test.Automated.Suites
                 }
 
                 HttpResponseMessage response = await _Client.GetAsync("/api/v1/vessels?pageSize=10&pageNumber=2&fleetId=" + fleetId);
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
+                EnumerationResult<Vessel> result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(response);
 
-                AssertEqual(10, doc.RootElement.GetProperty("Objects").GetArrayLength());
-                AssertEqual(2, doc.RootElement.GetProperty("PageNumber").GetInt32());
+                AssertEqual(10, result.Objects.Count);
+                AssertEqual(2, result.PageNumber);
             });
 
             await RunTest("List Vessels 25 Items PageSize 10 Page 3 Has 5 Items", async () =>
@@ -515,11 +447,10 @@ namespace Armada.Test.Automated.Suites
                 }
 
                 HttpResponseMessage response = await _Client.GetAsync("/api/v1/vessels?pageSize=10&pageNumber=3&fleetId=" + fleetId);
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
+                EnumerationResult<Vessel> result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(response);
 
-                AssertEqual(5, doc.RootElement.GetProperty("Objects").GetArrayLength());
-                AssertEqual(3, doc.RootElement.GetProperty("PageNumber").GetInt32());
+                AssertEqual(5, result.Objects.Count);
+                AssertEqual(3, result.PageNumber);
             });
 
             await RunTest("List Vessels 25 Items Verify First Record Page 1 And Last Record Page 3", async () =>
@@ -532,18 +463,13 @@ namespace Armada.Test.Automated.Suites
 
                 HttpResponseMessage page1Resp = await _Client.GetAsync(
                     "/api/v1/vessels?pageSize=10&pageNumber=1&order=CreatedAscending&fleetId=" + fleetId);
-                string page1Body = await page1Resp.Content.ReadAsStringAsync();
-                using JsonDocument page1Doc = JsonDocument.Parse(page1Body);
-                JsonElement page1Objects = page1Doc.RootElement.GetProperty("Objects");
-                string firstItemName = page1Objects[0].GetProperty("Name").GetString()!;
+                EnumerationResult<Vessel> page1Result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(page1Resp);
+                string firstItemName = page1Result.Objects[0].Name;
 
                 HttpResponseMessage page3Resp = await _Client.GetAsync(
                     "/api/v1/vessels?pageSize=10&pageNumber=3&order=CreatedAscending&fleetId=" + fleetId);
-                string page3Body = await page3Resp.Content.ReadAsStringAsync();
-                using JsonDocument page3Doc = JsonDocument.Parse(page3Body);
-                JsonElement page3Objects = page3Doc.RootElement.GetProperty("Objects");
-                int page3Count = page3Objects.GetArrayLength();
-                string lastItemName = page3Objects[page3Count - 1].GetProperty("Name").GetString()!;
+                EnumerationResult<Vessel> page3Result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(page3Resp);
+                string lastItemName = page3Result.Objects[page3Result.Objects.Count - 1].Name;
 
                 AssertStartsWith("FL_Vessel_00", firstItemName);
                 AssertStartsWith("FL_Vessel_24", lastItemName);
@@ -559,10 +485,9 @@ namespace Armada.Test.Automated.Suites
 
                 HttpResponseMessage response = await _Client.GetAsync(
                     "/api/v1/vessels?pageSize=10&pageNumber=99&fleetId=" + fleetId);
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
+                EnumerationResult<Vessel> result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(response);
 
-                AssertEqual(0, doc.RootElement.GetProperty("Objects").GetArrayLength());
+                AssertEqual(0, result.Objects.Count);
             });
 
             #endregion
@@ -578,13 +503,11 @@ namespace Armada.Test.Automated.Suites
 
                 HttpResponseMessage response = await _Client.GetAsync(
                     "/api/v1/vessels?order=CreatedAscending&fleetId=" + fleetId);
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement objects = doc.RootElement.GetProperty("Objects");
+                EnumerationResult<Vessel> result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(response);
 
-                Assert(objects.GetArrayLength() >= 3, "Should have at least 3 objects");
-                string firstName = objects[0].GetProperty("Name").GetString()!;
-                string lastName = objects[objects.GetArrayLength() - 1].GetProperty("Name").GetString()!;
+                Assert(result.Objects.Count >= 3, "Should have at least 3 objects");
+                string firstName = result.Objects[0].Name;
+                string lastName = result.Objects[result.Objects.Count - 1].Name;
                 AssertStartsWith("AscFirst", firstName);
                 AssertStartsWith("AscThird", lastName);
             });
@@ -598,13 +521,11 @@ namespace Armada.Test.Automated.Suites
 
                 HttpResponseMessage response = await _Client.GetAsync(
                     "/api/v1/vessels?order=CreatedDescending&fleetId=" + fleetId);
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement objects = doc.RootElement.GetProperty("Objects");
+                EnumerationResult<Vessel> result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(response);
 
-                Assert(objects.GetArrayLength() >= 3, "Should have at least 3 objects");
-                string firstName = objects[0].GetProperty("Name").GetString()!;
-                string lastName = objects[objects.GetArrayLength() - 1].GetProperty("Name").GetString()!;
+                Assert(result.Objects.Count >= 3, "Should have at least 3 objects");
+                string firstName = result.Objects[0].Name;
+                string lastName = result.Objects[result.Objects.Count - 1].Name;
                 AssertStartsWith("DescThird", firstName);
                 AssertStartsWith("DescFirst", lastName);
             });
@@ -619,14 +540,12 @@ namespace Armada.Test.Automated.Suites
 
                 HttpResponseMessage response = await _Client.GetAsync(
                     "/api/v1/vessels?order=CreatedAscending&fleetId=" + fleetId);
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement objects = doc.RootElement.GetProperty("Objects");
+                EnumerationResult<Vessel> result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(response);
 
                 DateTime previous = DateTime.MinValue;
-                foreach (JsonElement obj in objects.EnumerateArray())
+                foreach (Vessel v in result.Objects)
                 {
-                    DateTime created = DateTime.Parse(obj.GetProperty("CreatedUtc").GetString()!);
+                    DateTime created = v.CreatedUtc;
                     Assert(created >= previous, "Timestamps should be in ascending order");
                     previous = created;
                 }
@@ -642,14 +561,12 @@ namespace Armada.Test.Automated.Suites
 
                 HttpResponseMessage response = await _Client.GetAsync(
                     "/api/v1/vessels?order=CreatedDescending&fleetId=" + fleetId);
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement objects = doc.RootElement.GetProperty("Objects");
+                EnumerationResult<Vessel> result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(response);
 
                 DateTime previous = DateTime.MaxValue;
-                foreach (JsonElement obj in objects.EnumerateArray())
+                foreach (Vessel v in result.Objects)
                 {
-                    DateTime created = DateTime.Parse(obj.GetProperty("CreatedUtc").GetString()!);
+                    DateTime created = v.CreatedUtc;
                     Assert(created <= previous, "Timestamps should be in descending order");
                     previous = created;
                 }
@@ -668,12 +585,10 @@ namespace Armada.Test.Automated.Suites
                 await CreateVesselAndReturnIdAsync("VesselInB", fleetId: fleetId2);
 
                 HttpResponseMessage response = await _Client.GetAsync("/api/v1/vessels?fleetId=" + fleetId1);
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement objects = doc.RootElement.GetProperty("Objects");
+                EnumerationResult<Vessel> result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(response);
 
-                AssertEqual(1, objects.GetArrayLength());
-                AssertStartsWith("VesselInA", objects[0].GetProperty("Name").GetString()!);
+                AssertEqual(1, result.Objects.Count);
+                AssertStartsWith("VesselInA", result.Objects[0].Name);
             });
 
             await RunTest("List Vessels Filter By FleetId Multiple Fleets Correct Separation", async () =>
@@ -688,16 +603,14 @@ namespace Armada.Test.Automated.Suites
                 await CreateVesselAndReturnIdAsync("Beta2", fleetId: fleetIdBeta);
 
                 HttpResponseMessage alphaResp = await _Client.GetAsync("/api/v1/vessels?fleetId=" + fleetIdAlpha);
-                string alphaBody = await alphaResp.Content.ReadAsStringAsync();
-                using JsonDocument alphaDoc = JsonDocument.Parse(alphaBody);
-                AssertEqual(3, alphaDoc.RootElement.GetProperty("Objects").GetArrayLength());
-                AssertEqual(3, alphaDoc.RootElement.GetProperty("TotalRecords").GetInt32());
+                EnumerationResult<Vessel> alphaResult = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(alphaResp);
+                AssertEqual(3, alphaResult.Objects.Count);
+                AssertEqual(3, alphaResult.TotalRecords);
 
                 HttpResponseMessage betaResp = await _Client.GetAsync("/api/v1/vessels?fleetId=" + fleetIdBeta);
-                string betaBody = await betaResp.Content.ReadAsStringAsync();
-                using JsonDocument betaDoc = JsonDocument.Parse(betaBody);
-                AssertEqual(2, betaDoc.RootElement.GetProperty("Objects").GetArrayLength());
-                AssertEqual(2, betaDoc.RootElement.GetProperty("TotalRecords").GetInt32());
+                EnumerationResult<Vessel> betaResult = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(betaResp);
+                AssertEqual(2, betaResult.Objects.Count);
+                AssertEqual(2, betaResult.TotalRecords);
             });
 
             await RunTest("List Vessels Filter By FleetId All Vessels Have Correct FleetId", async () =>
@@ -709,24 +622,21 @@ namespace Armada.Test.Automated.Suites
                 }
 
                 HttpResponseMessage response = await _Client.GetAsync("/api/v1/vessels?fleetId=" + fleetId);
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement objects = doc.RootElement.GetProperty("Objects");
+                EnumerationResult<Vessel> result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(response);
 
-                foreach (JsonElement vessel in objects.EnumerateArray())
+                foreach (Vessel vessel in result.Objects)
                 {
-                    AssertEqual(fleetId, vessel.GetProperty("FleetId").GetString()!);
+                    AssertEqual(fleetId, vessel.FleetId);
                 }
             });
 
             await RunTest("List Vessels Filter By Nonexistent FleetId Returns Empty", async () =>
             {
                 HttpResponseMessage response = await _Client.GetAsync("/api/v1/vessels?fleetId=flt_doesnotexist");
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
+                EnumerationResult<Vessel> result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(response);
 
-                AssertEqual(0, doc.RootElement.GetProperty("Objects").GetArrayLength());
-                AssertEqual(0, doc.RootElement.GetProperty("TotalRecords").GetInt32());
+                AssertEqual(0, result.Objects.Count);
+                AssertEqual(0, result.TotalRecords);
             });
 
             #endregion
@@ -740,20 +650,16 @@ namespace Armada.Test.Automated.Suites
                 await CreateVesselAndReturnIdAsync("EnumAll2", fleetId: fleetId);
                 await CreateVesselAndReturnIdAsync("EnumAll3", fleetId: fleetId);
 
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { PageNumber = 1, PageSize = 10 }),
-                    Encoding.UTF8, "application/json");
+                StringContent content = JsonHelper.ToJsonContent(new { PageNumber = 1, PageSize = 10 });
 
                 HttpResponseMessage response = await _Client.PostAsync("/api/v1/vessels/enumerate", content);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement root = doc.RootElement;
+                EnumerationResult<Vessel> result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(response);
 
-                Assert(root.GetProperty("Objects").GetArrayLength() >= 3, "Should have at least 3 objects");
-                Assert(root.GetProperty("TotalRecords").GetInt32() >= 3, "Should have at least 3 total records");
-                AssertTrue(root.GetProperty("Success").GetBoolean());
+                Assert(result.Objects.Count >= 3, "Should have at least 3 objects");
+                Assert(result.TotalRecords >= 3, "Should have at least 3 total records");
+                AssertTrue(result.Success);
             });
 
             await RunTest("Enumerate With PageSize And PageNumber", async () =>
@@ -764,37 +670,28 @@ namespace Armada.Test.Automated.Suites
                     await CreateVesselAndReturnIdAsync("EnumPag_" + i.ToString("D2"), fleetId: fleetId);
                 }
 
-                StringContent page1Content = new StringContent(
-                    JsonSerializer.Serialize(new { PageNumber = 1, PageSize = 5, FleetId = fleetId }),
-                    Encoding.UTF8, "application/json");
+                StringContent page1Content = JsonHelper.ToJsonContent(new { PageNumber = 1, PageSize = 5, FleetId = fleetId });
                 HttpResponseMessage page1Resp = await _Client.PostAsync("/api/v1/vessels/enumerate", page1Content);
-                string page1Body = await page1Resp.Content.ReadAsStringAsync();
-                using JsonDocument page1Doc = JsonDocument.Parse(page1Body);
+                EnumerationResult<Vessel> page1Result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(page1Resp);
 
-                AssertEqual(5, page1Doc.RootElement.GetProperty("Objects").GetArrayLength());
-                AssertEqual(15, page1Doc.RootElement.GetProperty("TotalRecords").GetInt32());
-                AssertEqual(3, page1Doc.RootElement.GetProperty("TotalPages").GetInt32());
-                AssertEqual(1, page1Doc.RootElement.GetProperty("PageNumber").GetInt32());
+                AssertEqual(5, page1Result.Objects.Count);
+                AssertEqual(15, page1Result.TotalRecords);
+                AssertEqual(3, page1Result.TotalPages);
+                AssertEqual(1, page1Result.PageNumber);
 
-                StringContent page2Content = new StringContent(
-                    JsonSerializer.Serialize(new { PageNumber = 2, PageSize = 5, FleetId = fleetId }),
-                    Encoding.UTF8, "application/json");
+                StringContent page2Content = JsonHelper.ToJsonContent(new { PageNumber = 2, PageSize = 5, FleetId = fleetId });
                 HttpResponseMessage page2Resp = await _Client.PostAsync("/api/v1/vessels/enumerate", page2Content);
-                string page2Body = await page2Resp.Content.ReadAsStringAsync();
-                using JsonDocument page2Doc = JsonDocument.Parse(page2Body);
+                EnumerationResult<Vessel> page2Result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(page2Resp);
 
-                AssertEqual(5, page2Doc.RootElement.GetProperty("Objects").GetArrayLength());
-                AssertEqual(2, page2Doc.RootElement.GetProperty("PageNumber").GetInt32());
+                AssertEqual(5, page2Result.Objects.Count);
+                AssertEqual(2, page2Result.PageNumber);
 
-                StringContent page3Content = new StringContent(
-                    JsonSerializer.Serialize(new { PageNumber = 3, PageSize = 5, FleetId = fleetId }),
-                    Encoding.UTF8, "application/json");
+                StringContent page3Content = JsonHelper.ToJsonContent(new { PageNumber = 3, PageSize = 5, FleetId = fleetId });
                 HttpResponseMessage page3Resp = await _Client.PostAsync("/api/v1/vessels/enumerate", page3Content);
-                string page3Body = await page3Resp.Content.ReadAsStringAsync();
-                using JsonDocument page3Doc = JsonDocument.Parse(page3Body);
+                EnumerationResult<Vessel> page3Result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(page3Resp);
 
-                AssertEqual(5, page3Doc.RootElement.GetProperty("Objects").GetArrayLength());
-                AssertEqual(3, page3Doc.RootElement.GetProperty("PageNumber").GetInt32());
+                AssertEqual(5, page3Result.Objects.Count);
+                AssertEqual(3, page3Result.PageNumber);
             });
 
             await RunTest("Enumerate With FleetId Filter Returns Only Matching Vessels", async () =>
@@ -806,20 +703,16 @@ namespace Armada.Test.Automated.Suites
                 await CreateVesselAndReturnIdAsync("EnumFilter_A2", fleetId: fleetId1);
                 await CreateVesselAndReturnIdAsync("EnumFilter_B1", fleetId: fleetId2);
 
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { PageNumber = 1, PageSize = 10, FleetId = fleetId1 }),
-                    Encoding.UTF8, "application/json");
+                StringContent content = JsonHelper.ToJsonContent(new { PageNumber = 1, PageSize = 10, FleetId = fleetId1 });
                 HttpResponseMessage response = await _Client.PostAsync("/api/v1/vessels/enumerate", content);
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement objects = doc.RootElement.GetProperty("Objects");
+                EnumerationResult<Vessel> result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(response);
 
-                AssertEqual(2, objects.GetArrayLength());
-                AssertEqual(2, doc.RootElement.GetProperty("TotalRecords").GetInt32());
+                AssertEqual(2, result.Objects.Count);
+                AssertEqual(2, result.TotalRecords);
 
-                foreach (JsonElement vessel in objects.EnumerateArray())
+                foreach (Vessel vessel in result.Objects)
                 {
-                    AssertEqual(fleetId1, vessel.GetProperty("FleetId").GetString()!);
+                    AssertEqual(fleetId1, vessel.FleetId);
                 }
             });
 
@@ -830,16 +723,12 @@ namespace Armada.Test.Automated.Suites
                 await CreateVesselAndReturnIdAsync("EnumOrdAsc_Second", fleetId: fleetId);
                 await CreateVesselAndReturnIdAsync("EnumOrdAsc_Third", fleetId: fleetId);
 
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { PageNumber = 1, PageSize = 10, Order = "CreatedAscending", FleetId = fleetId }),
-                    Encoding.UTF8, "application/json");
+                StringContent content = JsonHelper.ToJsonContent(new { PageNumber = 1, PageSize = 10, Order = "CreatedAscending", FleetId = fleetId });
                 HttpResponseMessage response = await _Client.PostAsync("/api/v1/vessels/enumerate", content);
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement objects = doc.RootElement.GetProperty("Objects");
+                EnumerationResult<Vessel> result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(response);
 
-                AssertStartsWith("EnumOrdAsc_First", objects[0].GetProperty("Name").GetString()!);
-                AssertStartsWith("EnumOrdAsc_Third", objects[objects.GetArrayLength() - 1].GetProperty("Name").GetString()!);
+                AssertStartsWith("EnumOrdAsc_First", result.Objects[0].Name);
+                AssertStartsWith("EnumOrdAsc_Third", result.Objects[result.Objects.Count - 1].Name);
             });
 
             await RunTest("Enumerate Order Created Descending Newest First", async () =>
@@ -849,16 +738,12 @@ namespace Armada.Test.Automated.Suites
                 await CreateVesselAndReturnIdAsync("EnumOrdDesc_Second", fleetId: fleetId);
                 await CreateVesselAndReturnIdAsync("EnumOrdDesc_Third", fleetId: fleetId);
 
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { PageNumber = 1, PageSize = 10, Order = "CreatedDescending", FleetId = fleetId }),
-                    Encoding.UTF8, "application/json");
+                StringContent content = JsonHelper.ToJsonContent(new { PageNumber = 1, PageSize = 10, Order = "CreatedDescending", FleetId = fleetId });
                 HttpResponseMessage response = await _Client.PostAsync("/api/v1/vessels/enumerate", content);
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement objects = doc.RootElement.GetProperty("Objects");
+                EnumerationResult<Vessel> result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(response);
 
-                AssertStartsWith("EnumOrdDesc_Third", objects[0].GetProperty("Name").GetString()!);
-                AssertStartsWith("EnumOrdDesc_First", objects[objects.GetArrayLength() - 1].GetProperty("Name").GetString()!);
+                AssertStartsWith("EnumOrdDesc_Third", result.Objects[0].Name);
+                AssertStartsWith("EnumOrdDesc_First", result.Objects[result.Objects.Count - 1].Name);
             });
 
             await RunTest("Enumerate Order Created Ascending Verify CreatedUtc Order", async () =>
@@ -868,24 +753,20 @@ namespace Armada.Test.Automated.Suites
                 await CreateVesselAndReturnIdAsync("CA_Second", fleetId: fleetId);
                 await CreateVesselAndReturnIdAsync("CA_Third", fleetId: fleetId);
 
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { PageNumber = 1, PageSize = 10, Order = "CreatedAscending", FleetId = fleetId }),
-                    Encoding.UTF8, "application/json");
+                StringContent content = JsonHelper.ToJsonContent(new { PageNumber = 1, PageSize = 10, Order = "CreatedAscending", FleetId = fleetId });
                 HttpResponseMessage response = await _Client.PostAsync("/api/v1/vessels/enumerate", content);
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement objects = doc.RootElement.GetProperty("Objects");
+                EnumerationResult<Vessel> result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(response);
 
-                AssertEqual(3, objects.GetArrayLength());
+                AssertEqual(3, result.Objects.Count);
                 DateTime previous = DateTime.MinValue;
-                foreach (JsonElement obj in objects.EnumerateArray())
+                foreach (Vessel v in result.Objects)
                 {
-                    DateTime created = DateTime.Parse(obj.GetProperty("CreatedUtc").GetString()!, null, DateTimeStyles.RoundtripKind);
+                    DateTime created = v.CreatedUtc;
                     Assert(created >= previous, "CreatedUtc should be in ascending order");
                     previous = created;
                 }
-                AssertStartsWith("CA_First", objects[0].GetProperty("Name").GetString()!);
-                AssertStartsWith("CA_Third", objects[2].GetProperty("Name").GetString()!);
+                AssertStartsWith("CA_First", result.Objects[0].Name);
+                AssertStartsWith("CA_Third", result.Objects[2].Name);
             });
 
             await RunTest("Enumerate Order Created Descending Verify CreatedUtc Order", async () =>
@@ -895,24 +776,20 @@ namespace Armada.Test.Automated.Suites
                 await CreateVesselAndReturnIdAsync("CD_Second", fleetId: fleetId);
                 await CreateVesselAndReturnIdAsync("CD_Third", fleetId: fleetId);
 
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { PageNumber = 1, PageSize = 10, Order = "CreatedDescending", FleetId = fleetId }),
-                    Encoding.UTF8, "application/json");
+                StringContent content = JsonHelper.ToJsonContent(new { PageNumber = 1, PageSize = 10, Order = "CreatedDescending", FleetId = fleetId });
                 HttpResponseMessage response = await _Client.PostAsync("/api/v1/vessels/enumerate", content);
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement objects = doc.RootElement.GetProperty("Objects");
+                EnumerationResult<Vessel> result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(response);
 
-                AssertEqual(3, objects.GetArrayLength());
+                AssertEqual(3, result.Objects.Count);
                 DateTime previous = DateTime.MaxValue;
-                foreach (JsonElement obj in objects.EnumerateArray())
+                foreach (Vessel v in result.Objects)
                 {
-                    DateTime created = DateTime.Parse(obj.GetProperty("CreatedUtc").GetString()!, null, DateTimeStyles.RoundtripKind);
+                    DateTime created = v.CreatedUtc;
                     Assert(created <= previous, "CreatedUtc should be in descending order");
                     previous = created;
                 }
-                AssertStartsWith("CD_Third", objects[0].GetProperty("Name").GetString()!);
-                AssertStartsWith("CD_First", objects[2].GetProperty("Name").GetString()!);
+                AssertStartsWith("CD_Third", result.Objects[0].Name);
+                AssertStartsWith("CD_First", result.Objects[2].Name);
             });
 
             #endregion
@@ -929,28 +806,18 @@ namespace Armada.Test.Automated.Suites
 
                 HttpResponseMessage getResp = await _Client.GetAsync(
                     "/api/v1/vessels?pageSize=5&pageNumber=1&order=CreatedAscending&fleetId=" + fleetId);
-                string getBody = await getResp.Content.ReadAsStringAsync();
-                using JsonDocument getDoc = JsonDocument.Parse(getBody);
-                JsonElement getObjects = getDoc.RootElement.GetProperty("Objects");
-                int getTotalRecords = getDoc.RootElement.GetProperty("TotalRecords").GetInt32();
+                EnumerationResult<Vessel> getResult = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(getResp);
 
-                StringContent enumContent = new StringContent(
-                    JsonSerializer.Serialize(new { PageNumber = 1, PageSize = 5, Order = "CreatedAscending", FleetId = fleetId }),
-                    Encoding.UTF8, "application/json");
+                StringContent enumContent = JsonHelper.ToJsonContent(new { PageNumber = 1, PageSize = 5, Order = "CreatedAscending", FleetId = fleetId });
                 HttpResponseMessage enumResp = await _Client.PostAsync("/api/v1/vessels/enumerate", enumContent);
-                string enumBody = await enumResp.Content.ReadAsStringAsync();
-                using JsonDocument enumDoc = JsonDocument.Parse(enumBody);
-                JsonElement enumObjects = enumDoc.RootElement.GetProperty("Objects");
-                int enumTotalRecords = enumDoc.RootElement.GetProperty("TotalRecords").GetInt32();
+                EnumerationResult<Vessel> enumResult = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(enumResp);
 
-                AssertEqual(getTotalRecords, enumTotalRecords);
-                AssertEqual(getObjects.GetArrayLength(), enumObjects.GetArrayLength());
+                AssertEqual(getResult.TotalRecords, enumResult.TotalRecords);
+                AssertEqual(getResult.Objects.Count, enumResult.Objects.Count);
 
-                for (int i = 0; i < getObjects.GetArrayLength(); i++)
+                for (int i = 0; i < getResult.Objects.Count; i++)
                 {
-                    AssertEqual(
-                        getObjects[i].GetProperty("Id").GetString()!,
-                        enumObjects[i].GetProperty("Id").GetString()!);
+                    AssertEqual(getResult.Objects[i].Id, enumResult.Objects[i].Id);
                 }
             });
 
@@ -964,24 +831,16 @@ namespace Armada.Test.Automated.Suites
 
                 HttpResponseMessage getResp = await _Client.GetAsync(
                     "/api/v1/vessels?pageSize=5&pageNumber=2&order=CreatedAscending&fleetId=" + fleetId);
-                string getBody = await getResp.Content.ReadAsStringAsync();
-                using JsonDocument getDoc = JsonDocument.Parse(getBody);
-                JsonElement getObjects = getDoc.RootElement.GetProperty("Objects");
+                EnumerationResult<Vessel> getResult = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(getResp);
 
-                StringContent enumContent = new StringContent(
-                    JsonSerializer.Serialize(new { PageNumber = 2, PageSize = 5, Order = "CreatedAscending", FleetId = fleetId }),
-                    Encoding.UTF8, "application/json");
+                StringContent enumContent = JsonHelper.ToJsonContent(new { PageNumber = 2, PageSize = 5, Order = "CreatedAscending", FleetId = fleetId });
                 HttpResponseMessage enumResp = await _Client.PostAsync("/api/v1/vessels/enumerate", enumContent);
-                string enumBody = await enumResp.Content.ReadAsStringAsync();
-                using JsonDocument enumDoc = JsonDocument.Parse(enumBody);
-                JsonElement enumObjects = enumDoc.RootElement.GetProperty("Objects");
+                EnumerationResult<Vessel> enumResult = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(enumResp);
 
-                AssertEqual(getObjects.GetArrayLength(), enumObjects.GetArrayLength());
-                for (int i = 0; i < getObjects.GetArrayLength(); i++)
+                AssertEqual(getResult.Objects.Count, enumResult.Objects.Count);
+                for (int i = 0; i < getResult.Objects.Count; i++)
                 {
-                    AssertEqual(
-                        getObjects[i].GetProperty("Id").GetString()!,
-                        enumObjects[i].GetProperty("Id").GetString()!);
+                    AssertEqual(getResult.Objects[i].Id, enumResult.Objects[i].Id);
                 }
             });
 
@@ -993,43 +852,33 @@ namespace Armada.Test.Automated.Suites
             {
                 string fleetId = await CreateFleetAsync("ContextFleet");
 
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new
-                    {
-                        Name = "ContextVessel",
-                        FleetId = fleetId,
-                        RepoUrl = "https://github.com/test/context",
-                        ProjectContext = "A .NET 8 web API with PostgreSQL.",
-                        StyleGuide = "Use PascalCase for public members."
-                    }),
-                    Encoding.UTF8, "application/json");
+                StringContent content = JsonHelper.ToJsonContent(new
+                {
+                    Name = "ContextVessel",
+                    FleetId = fleetId,
+                    RepoUrl = "https://github.com/test/context",
+                    ProjectContext = "A .NET 8 web API with PostgreSQL.",
+                    StyleGuide = "Use PascalCase for public members."
+                });
 
                 HttpResponseMessage response = await _Client.PostAsync("/api/v1/vessels", content);
                 AssertEqual(HttpStatusCode.Created, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                JsonElement root = doc.RootElement;
+                Vessel vessel = await JsonHelper.DeserializeAsync<Vessel>(response);
+                _CreatedVesselIds.Add(vessel.Id);
 
-                string id = root.GetProperty("Id").GetString()!;
-                _CreatedVesselIds.Add(id);
-
-                AssertEqual("A .NET 8 web API with PostgreSQL.", root.GetProperty("ProjectContext").GetString()!);
-                AssertEqual("Use PascalCase for public members.", root.GetProperty("StyleGuide").GetString()!);
+                AssertEqual("A .NET 8 web API with PostgreSQL.", vessel.ProjectContext);
+                AssertEqual("Use PascalCase for public members.", vessel.StyleGuide);
             });
 
             await RunTest("Create Vessel Without ProjectContext And StyleGuide Returns Nulls", async () =>
             {
                 string fleetId = await CreateFleetAsync("NullContextFleet");
-                (string id, JsonDocument doc) = await CreateVesselAsync("NullContextVessel", fleetId: fleetId);
-                _CreatedVesselIds.Add(id);
+                Vessel vessel = await CreateVesselAsync("NullContextVessel", fleetId: fleetId);
+                _CreatedVesselIds.Add(vessel.Id);
 
-                JsonElement root = doc.RootElement;
-                AssertTrue(root.TryGetProperty("ProjectContext", out JsonElement pcElem), "ProjectContext property should exist");
-                AssertTrue(pcElem.ValueKind == JsonValueKind.Null, "ProjectContext should be null");
-                AssertTrue(root.TryGetProperty("StyleGuide", out JsonElement sgElem), "StyleGuide property should exist");
-                AssertTrue(sgElem.ValueKind == JsonValueKind.Null, "StyleGuide should be null");
-                doc.Dispose();
+                AssertTrue(vessel.ProjectContext == null, "ProjectContext should be null or absent");
+                AssertTrue(vessel.StyleGuide == null, "StyleGuide should be null or absent");
             });
 
             await RunTest("Update Vessel ProjectContext And StyleGuide Returns Updated Values", async () =>
@@ -1037,22 +886,19 @@ namespace Armada.Test.Automated.Suites
                 string fleetId = await CreateFleetAsync("UpdateContextFleet");
                 string vesselId = await CreateVesselAndReturnIdAsync("UpdateContextVessel", fleetId: fleetId);
 
-                StringContent updateContent = new StringContent(
-                    JsonSerializer.Serialize(new
-                    {
-                        Name = "UpdateContextVessel",
-                        FleetId = fleetId,
-                        RepoUrl = "https://github.com/test/updatecontextvessel",
-                        ProjectContext = "Updated project context",
-                        StyleGuide = "Updated style guide"
-                    }),
-                    Encoding.UTF8, "application/json");
+                StringContent updateContent = JsonHelper.ToJsonContent(new
+                {
+                    Name = "UpdateContextVessel",
+                    FleetId = fleetId,
+                    RepoUrl = "https://github.com/test/updatecontextvessel",
+                    ProjectContext = "Updated project context",
+                    StyleGuide = "Updated style guide"
+                });
                 HttpResponseMessage response = await _Client.PutAsync("/api/v1/vessels/" + vesselId, updateContent);
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
+                Vessel vessel = await JsonHelper.DeserializeAsync<Vessel>(response);
 
-                AssertEqual("Updated project context", doc.RootElement.GetProperty("ProjectContext").GetString()!);
-                AssertEqual("Updated style guide", doc.RootElement.GetProperty("StyleGuide").GetString()!);
+                AssertEqual("Updated project context", vessel.ProjectContext);
+                AssertEqual("Updated style guide", vessel.StyleGuide);
             });
 
             await RunTest("Update Vessel ProjectContext And StyleGuide Verify Via Get", async () =>
@@ -1060,64 +906,53 @@ namespace Armada.Test.Automated.Suites
                 string fleetId = await CreateFleetAsync("GetContextFleet");
                 string vesselId = await CreateVesselAndReturnIdAsync("GetContextVessel", fleetId: fleetId);
 
-                StringContent updateContent = new StringContent(
-                    JsonSerializer.Serialize(new
-                    {
-                        Name = "GetContextVessel",
-                        FleetId = fleetId,
-                        RepoUrl = "https://github.com/test/getcontextvessel",
-                        ProjectContext = "Persisted context",
-                        StyleGuide = "Persisted style"
-                    }),
-                    Encoding.UTF8, "application/json");
+                StringContent updateContent = JsonHelper.ToJsonContent(new
+                {
+                    Name = "GetContextVessel",
+                    FleetId = fleetId,
+                    RepoUrl = "https://github.com/test/getcontextvessel",
+                    ProjectContext = "Persisted context",
+                    StyleGuide = "Persisted style"
+                });
                 await _Client.PutAsync("/api/v1/vessels/" + vesselId, updateContent);
 
                 HttpResponseMessage getResp = await _Client.GetAsync("/api/v1/vessels/" + vesselId);
-                string getBody = await getResp.Content.ReadAsStringAsync();
-                using JsonDocument getDoc = JsonDocument.Parse(getBody);
+                Vessel vessel = await JsonHelper.DeserializeAsync<Vessel>(getResp);
 
-                AssertEqual("Persisted context", getDoc.RootElement.GetProperty("ProjectContext").GetString()!);
-                AssertEqual("Persisted style", getDoc.RootElement.GetProperty("StyleGuide").GetString()!);
+                AssertEqual("Persisted context", vessel.ProjectContext);
+                AssertEqual("Persisted style", vessel.StyleGuide);
             });
 
             await RunTest("Update Vessel Clear ProjectContext And StyleGuide To Null", async () =>
             {
                 string fleetId = await CreateFleetAsync("ClearContextFleet");
 
-                StringContent createContent = new StringContent(
-                    JsonSerializer.Serialize(new
-                    {
-                        Name = "ClearContextVessel-" + Guid.NewGuid().ToString("N").Substring(0, 8),
-                        FleetId = fleetId,
-                        RepoUrl = "https://github.com/test/clearcontext",
-                        ProjectContext = "To be cleared",
-                        StyleGuide = "To be cleared"
-                    }),
-                    Encoding.UTF8, "application/json");
+                StringContent createContent = JsonHelper.ToJsonContent(new
+                {
+                    Name = "ClearContextVessel-" + Guid.NewGuid().ToString("N").Substring(0, 8),
+                    FleetId = fleetId,
+                    RepoUrl = "https://github.com/test/clearcontext",
+                    ProjectContext = "To be cleared",
+                    StyleGuide = "To be cleared"
+                });
                 HttpResponseMessage createResp = await _Client.PostAsync("/api/v1/vessels", createContent);
-                string createBody = await createResp.Content.ReadAsStringAsync();
-                using JsonDocument createDoc = JsonDocument.Parse(createBody);
-                string vesselId = createDoc.RootElement.GetProperty("Id").GetString()!;
+                Vessel created = await JsonHelper.DeserializeAsync<Vessel>(createResp);
+                string vesselId = created.Id;
                 _CreatedVesselIds.Add(vesselId);
 
-                StringContent clearContent = new StringContent(
-                    JsonSerializer.Serialize(new
-                    {
-                        Name = "ClearContextVessel-cleared",
-                        FleetId = fleetId,
-                        RepoUrl = "https://github.com/test/clearcontext"
-                    }),
-                    Encoding.UTF8, "application/json");
+                StringContent clearContent = JsonHelper.ToJsonContent(new
+                {
+                    Name = "ClearContextVessel-cleared",
+                    FleetId = fleetId,
+                    RepoUrl = "https://github.com/test/clearcontext"
+                });
                 await _Client.PutAsync("/api/v1/vessels/" + vesselId, clearContent);
 
                 HttpResponseMessage getResp = await _Client.GetAsync("/api/v1/vessels/" + vesselId);
-                string getBody = await getResp.Content.ReadAsStringAsync();
-                using JsonDocument getDoc = JsonDocument.Parse(getBody);
+                Vessel vessel = await JsonHelper.DeserializeAsync<Vessel>(getResp);
 
-                JsonElement pcElem = getDoc.RootElement.GetProperty("ProjectContext");
-                JsonElement sgElem = getDoc.RootElement.GetProperty("StyleGuide");
-                AssertTrue(pcElem.ValueKind == JsonValueKind.Null, "ProjectContext should be null after clearing");
-                AssertTrue(sgElem.ValueKind == JsonValueKind.Null, "StyleGuide should be null after clearing");
+                AssertTrue(vessel.ProjectContext == null, "ProjectContext should be null after clearing");
+                AssertTrue(vessel.StyleGuide == null, "StyleGuide should be null after clearing");
             });
 
             #endregion
@@ -1126,16 +961,13 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("Enumerate Empty Database Returns Empty Result", async () =>
             {
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { PageNumber = 1, PageSize = 10 }),
-                    Encoding.UTF8, "application/json");
+                StringContent content = JsonHelper.ToJsonContent(new { PageNumber = 1, PageSize = 10 });
 
                 HttpResponseMessage response = await _Client.PostAsync("/api/v1/vessels/enumerate", content);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
-                AssertTrue(doc.RootElement.GetProperty("Success").GetBoolean());
+                EnumerationResult<Vessel> result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(response);
+                AssertTrue(result.Success);
             });
 
             await RunTest("Enumerate Page Beyond Last Page Returns Empty Objects", async () =>
@@ -1146,27 +978,21 @@ namespace Armada.Test.Automated.Suites
                     await CreateVesselAndReturnIdAsync("EnumBeyond_" + i, fleetId: fleetId);
                 }
 
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { PageNumber = 99, PageSize = 10, FleetId = fleetId }),
-                    Encoding.UTF8, "application/json");
+                StringContent content = JsonHelper.ToJsonContent(new { PageNumber = 99, PageSize = 10, FleetId = fleetId });
                 HttpResponseMessage response = await _Client.PostAsync("/api/v1/vessels/enumerate", content);
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
+                EnumerationResult<Vessel> result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(response);
 
-                AssertEqual(0, doc.RootElement.GetProperty("Objects").GetArrayLength());
+                AssertEqual(0, result.Objects.Count);
             });
 
             await RunTest("Enumerate With Nonexistent FleetId Returns Empty", async () =>
             {
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { PageNumber = 1, PageSize = 10, FleetId = "flt_doesnotexist" }),
-                    Encoding.UTF8, "application/json");
+                StringContent content = JsonHelper.ToJsonContent(new { PageNumber = 1, PageSize = 10, FleetId = "flt_doesnotexist" });
                 HttpResponseMessage response = await _Client.PostAsync("/api/v1/vessels/enumerate", content);
-                string body = await response.Content.ReadAsStringAsync();
-                using JsonDocument doc = JsonDocument.Parse(body);
+                EnumerationResult<Vessel> result = await JsonHelper.DeserializeAsync<EnumerationResult<Vessel>>(response);
 
-                AssertEqual(0, doc.RootElement.GetProperty("Objects").GetArrayLength());
-                AssertEqual(0, doc.RootElement.GetProperty("TotalRecords").GetInt32());
+                AssertEqual(0, result.Objects.Count);
+                AssertEqual(0, result.TotalRecords);
             });
 
             #endregion
@@ -1193,22 +1019,18 @@ namespace Armada.Test.Automated.Suites
         private async Task<string> CreateFleetAsync(string name = "TestFleet")
         {
             string uniqueName = name + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
-            StringContent content = new StringContent(
-                JsonSerializer.Serialize(new { Name = uniqueName }),
-                Encoding.UTF8, "application/json");
+            StringContent content = JsonHelper.ToJsonContent(new { Name = uniqueName });
             HttpResponseMessage resp = await _Client.PostAsync("/api/v1/fleets", content);
             resp.EnsureSuccessStatusCode();
-            string json = await resp.Content.ReadAsStringAsync();
-            using JsonDocument doc = JsonDocument.Parse(json);
-            string id = doc.RootElement.GetProperty("Id").GetString()!;
-            _CreatedFleetIds.Add(id);
-            return id;
+            Fleet fleet = await JsonHelper.DeserializeAsync<Fleet>(resp);
+            _CreatedFleetIds.Add(fleet.Id);
+            return fleet.Id;
         }
 
         /// <summary>
-        /// Creates a vessel and returns its ID and the parsed JSON document.
+        /// Creates a vessel and returns the typed Vessel object.
         /// </summary>
-        private async Task<(string Id, JsonDocument Doc)> CreateVesselAsync(
+        private async Task<Vessel> CreateVesselAsync(
             string name,
             string? fleetId = null,
             string? repoUrl = null,
@@ -1230,16 +1052,12 @@ namespace Armada.Test.Automated.Suites
             else
                 body = new { Name = uniqueName, RepoUrl = effectiveRepoUrl };
 
-            StringContent content = new StringContent(
-                JsonSerializer.Serialize(body),
-                Encoding.UTF8, "application/json");
+            StringContent content = JsonHelper.ToJsonContent(body);
             HttpResponseMessage resp = await _Client.PostAsync("/api/v1/vessels", content);
             resp.EnsureSuccessStatusCode();
-            string json = await resp.Content.ReadAsStringAsync();
-            JsonDocument doc = JsonDocument.Parse(json);
-            string id = doc.RootElement.GetProperty("Id").GetString()!;
-            _CreatedVesselIds.Add(id);
-            return (id, doc);
+            Vessel vessel = await JsonHelper.DeserializeAsync<Vessel>(resp);
+            _CreatedVesselIds.Add(vessel.Id);
+            return vessel;
         }
 
         /// <summary>
@@ -1250,9 +1068,8 @@ namespace Armada.Test.Automated.Suites
             string? fleetId = null,
             string? repoUrl = null)
         {
-            (string id, JsonDocument doc) = await CreateVesselAsync(name, fleetId: fleetId, repoUrl: repoUrl);
-            doc.Dispose();
-            return id;
+            Vessel vessel = await CreateVesselAsync(name, fleetId: fleetId, repoUrl: repoUrl);
+            return vessel.Id;
         }
 
         #endregion

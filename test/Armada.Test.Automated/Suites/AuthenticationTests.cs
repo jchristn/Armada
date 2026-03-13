@@ -4,9 +4,8 @@ namespace Armada.Test.Automated.Suites
     using System.Linq;
     using System.Net;
     using System.Net.Http;
-    using System.Text;
-    using System.Text.Json;
     using System.Threading.Tasks;
+    using Armada.Core.Models;
     using Armada.Test.Common;
 
     /// <summary>
@@ -138,27 +137,21 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("NoApiKey_OnPostFleets_ReturnsResponse", async () =>
             {
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { Name = "UnauthFleet" }),
-                    Encoding.UTF8, "application/json");
+                StringContent content = JsonHelper.ToJsonContent(new { Name = "UnauthFleet" });
                 HttpResponseMessage response = await _UnauthClient.PostAsync("/api/v1/fleets", content).ConfigureAwait(false);
                 AssertNotNull(response);
             }).ConfigureAwait(false);
 
             await RunTest("NoApiKey_OnPostCaptains_ReturnsResponse", async () =>
             {
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { Name = "UnauthCaptain" }),
-                    Encoding.UTF8, "application/json");
+                StringContent content = JsonHelper.ToJsonContent(new { Name = "UnauthCaptain" });
                 HttpResponseMessage response = await _UnauthClient.PostAsync("/api/v1/captains", content).ConfigureAwait(false);
                 AssertNotNull(response);
             }).ConfigureAwait(false);
 
             await RunTest("NoApiKey_OnPostMissions_ReturnsResponse", async () =>
             {
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { Title = "UnauthMission" }),
-                    Encoding.UTF8, "application/json");
+                StringContent content = JsonHelper.ToJsonContent(new { Title = "UnauthMission" });
                 HttpResponseMessage response = await _UnauthClient.PostAsync("/api/v1/missions", content).ConfigureAwait(false);
                 AssertNotNull(response);
             }).ConfigureAwait(false);
@@ -221,9 +214,7 @@ namespace Armada.Test.Automated.Suites
                 wrongKeyClient.BaseAddress = new Uri(_BaseUrl);
                 wrongKeyClient.DefaultRequestHeaders.Add("X-Api-Key", "invalid");
 
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { Name = "WrongKeyFleet" }),
-                    Encoding.UTF8, "application/json");
+                StringContent content = JsonHelper.ToJsonContent(new { Name = "WrongKeyFleet" });
                 HttpResponseMessage response = await wrongKeyClient.PostAsync("/api/v1/fleets", content).ConfigureAwait(false);
                 AssertNotNull(response);
 
@@ -249,9 +240,8 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage response = await wrongKeyClient.GetAsync("/api/v1/status/health").ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual("healthy", doc.RootElement.GetProperty("Status").GetString());
+                HealthResponse health = await JsonHelper.DeserializeAsync<HealthResponse>(response).ConfigureAwait(false);
+                AssertEqual("healthy", health.Status);
 
                 wrongKeyClient.Dispose();
             }).ConfigureAwait(false);
@@ -261,9 +251,8 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/status/health").ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual("healthy", doc.RootElement.GetProperty("Status").GetString());
+                HealthResponse health = await JsonHelper.DeserializeAsync<HealthResponse>(response).ConfigureAwait(false);
+                AssertEqual("healthy", health.Status);
             }).ConfigureAwait(false);
 
             #endregion
@@ -375,29 +364,25 @@ namespace Armada.Test.Automated.Suites
             await RunTest("AuthenticatedClient_CanPerformFullCrudCycle_Fleet", async () =>
             {
                 // Create
-                StringContent createContent = new StringContent(
-                    JsonSerializer.Serialize(new { Name = "CRUD Fleet" }),
-                    Encoding.UTF8, "application/json");
+                StringContent createContent = JsonHelper.ToJsonContent(new { Name = "CRUD Fleet" });
                 HttpResponseMessage createResp = await _AuthClient.PostAsync("/api/v1/fleets", createContent).ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.Created, createResp.StatusCode);
 
-                string createBody = await createResp.Content.ReadAsStringAsync().ConfigureAwait(false);
-                string fleetId = JsonDocument.Parse(createBody).RootElement.GetProperty("Id").GetString()!;
+                Fleet createdFleet = await JsonHelper.DeserializeAsync<Fleet>(createResp).ConfigureAwait(false);
+                string fleetId = createdFleet.Id;
 
                 // Read
                 HttpResponseMessage readResp = await _AuthClient.GetAsync("/api/v1/fleets/" + fleetId).ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, readResp.StatusCode);
-                string readBody = await readResp.Content.ReadAsStringAsync().ConfigureAwait(false);
-                AssertEqual("CRUD Fleet", JsonDocument.Parse(readBody).RootElement.GetProperty("Fleet").GetProperty("Name").GetString());
+                FleetDetailResponse fleetDetail = await JsonHelper.DeserializeAsync<FleetDetailResponse>(readResp).ConfigureAwait(false);
+                AssertEqual("CRUD Fleet", fleetDetail.Fleet?.Name);
 
                 // Update
-                StringContent updateContent = new StringContent(
-                    JsonSerializer.Serialize(new { Name = "Updated CRUD Fleet", Description = "Updated" }),
-                    Encoding.UTF8, "application/json");
+                StringContent updateContent = JsonHelper.ToJsonContent(new { Name = "Updated CRUD Fleet", Description = "Updated" });
                 HttpResponseMessage updateResp = await _AuthClient.PutAsync("/api/v1/fleets/" + fleetId, updateContent).ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, updateResp.StatusCode);
-                string updateBody = await updateResp.Content.ReadAsStringAsync().ConfigureAwait(false);
-                AssertEqual("Updated CRUD Fleet", JsonDocument.Parse(updateBody).RootElement.GetProperty("Name").GetString());
+                Fleet updatedFleet = await JsonHelper.DeserializeAsync<Fleet>(updateResp).ConfigureAwait(false);
+                AssertEqual("Updated CRUD Fleet", updatedFleet.Name);
 
                 // Delete
                 HttpResponseMessage deleteResp = await _AuthClient.DeleteAsync("/api/v1/fleets/" + fleetId).ConfigureAwait(false);
@@ -405,36 +390,30 @@ namespace Armada.Test.Automated.Suites
 
                 // Verify deleted
                 HttpResponseMessage verifyResp = await _AuthClient.GetAsync("/api/v1/fleets/" + fleetId).ConfigureAwait(false);
-                string verifyBody = await verifyResp.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument verifyDoc = JsonDocument.Parse(verifyBody);
+                ArmadaErrorResponse verifyError = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(verifyResp).ConfigureAwait(false);
                 Assert(
-                    verifyDoc.RootElement.TryGetProperty("Error", out _) ||
-                    verifyDoc.RootElement.TryGetProperty("Message", out _),
+                    verifyError.Error != null || verifyError.Message != null,
                     "Deleted fleet should return error on read");
             }).ConfigureAwait(false);
 
             await RunTest("AuthenticatedClient_CanPerformFullCrudCycle_Captain", async () =>
             {
                 // Create
-                StringContent createContent = new StringContent(
-                    JsonSerializer.Serialize(new { Name = "CRUD Captain", Runtime = "ClaudeCode" }),
-                    Encoding.UTF8, "application/json");
+                StringContent createContent = JsonHelper.ToJsonContent(new { Name = "CRUD Captain", Runtime = "ClaudeCode" });
                 HttpResponseMessage createResp = await _AuthClient.PostAsync("/api/v1/captains", createContent).ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.Created, createResp.StatusCode);
 
-                string createBody = await createResp.Content.ReadAsStringAsync().ConfigureAwait(false);
-                string captainId = JsonDocument.Parse(createBody).RootElement.GetProperty("Id").GetString()!;
+                Captain createdCaptain = await JsonHelper.DeserializeAsync<Captain>(createResp).ConfigureAwait(false);
+                string captainId = createdCaptain.Id;
 
                 // Read
                 HttpResponseMessage readResp = await _AuthClient.GetAsync("/api/v1/captains/" + captainId).ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, readResp.StatusCode);
-                string readBody = await readResp.Content.ReadAsStringAsync().ConfigureAwait(false);
-                AssertEqual("CRUD Captain", JsonDocument.Parse(readBody).RootElement.GetProperty("Name").GetString());
+                Captain readCaptain = await JsonHelper.DeserializeAsync<Captain>(readResp).ConfigureAwait(false);
+                AssertEqual("CRUD Captain", readCaptain.Name);
 
                 // Update
-                StringContent updateContent = new StringContent(
-                    JsonSerializer.Serialize(new { Name = "Updated CRUD Captain" }),
-                    Encoding.UTF8, "application/json");
+                StringContent updateContent = JsonHelper.ToJsonContent(new { Name = "Updated CRUD Captain" });
                 HttpResponseMessage updateResp = await _AuthClient.PutAsync("/api/v1/captains/" + captainId, updateContent).ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, updateResp.StatusCode);
 
@@ -444,11 +423,9 @@ namespace Armada.Test.Automated.Suites
 
                 // Verify deleted
                 HttpResponseMessage verifyResp = await _AuthClient.GetAsync("/api/v1/captains/" + captainId).ConfigureAwait(false);
-                string verifyBody = await verifyResp.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument verifyDoc = JsonDocument.Parse(verifyBody);
+                ArmadaErrorResponse verifyError = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(verifyResp).ConfigureAwait(false);
                 Assert(
-                    verifyDoc.RootElement.TryGetProperty("Error", out _) ||
-                    verifyDoc.RootElement.TryGetProperty("Message", out _),
+                    verifyError.Error != null || verifyError.Message != null,
                     "Deleted captain should return error on read");
             }).ConfigureAwait(false);
 
@@ -516,9 +493,7 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("UnauthClient_PostEndpoints_ReturnResponse", async () =>
             {
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { Name = "UnauthTest" }),
-                    Encoding.UTF8, "application/json");
+                StringContent content = JsonHelper.ToJsonContent(new { Name = "UnauthTest" });
 
                 HttpResponseMessage fleetResp = await _UnauthClient.PostAsync("/api/v1/fleets", content).ConfigureAwait(false);
                 AssertNotNull(fleetResp);
@@ -526,12 +501,10 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("UnauthClient_DeleteEndpoints_ReturnResponse", async () =>
             {
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { Name = "DeleteTarget" }),
-                    Encoding.UTF8, "application/json");
+                StringContent content = JsonHelper.ToJsonContent(new { Name = "DeleteTarget" });
                 HttpResponseMessage createResp = await _AuthClient.PostAsync("/api/v1/fleets", content).ConfigureAwait(false);
-                string createBody = await createResp.Content.ReadAsStringAsync().ConfigureAwait(false);
-                string fleetId = JsonDocument.Parse(createBody).RootElement.GetProperty("Id").GetString()!;
+                Fleet createdFleet = await JsonHelper.DeserializeAsync<Fleet>(createResp).ConfigureAwait(false);
+                string fleetId = createdFleet.Id;
 
                 HttpResponseMessage deleteResp = await _UnauthClient.DeleteAsync("/api/v1/fleets/" + fleetId).ConfigureAwait(false);
                 AssertNotNull(deleteResp);
@@ -539,16 +512,12 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("UnauthClient_PutEndpoints_ReturnResponse", async () =>
             {
-                StringContent createContent = new StringContent(
-                    JsonSerializer.Serialize(new { Name = "UpdateTarget" }),
-                    Encoding.UTF8, "application/json");
+                StringContent createContent = JsonHelper.ToJsonContent(new { Name = "UpdateTarget" });
                 HttpResponseMessage createResp = await _AuthClient.PostAsync("/api/v1/fleets", createContent).ConfigureAwait(false);
-                string createBody = await createResp.Content.ReadAsStringAsync().ConfigureAwait(false);
-                string fleetId = JsonDocument.Parse(createBody).RootElement.GetProperty("Id").GetString()!;
+                Fleet createdFleet = await JsonHelper.DeserializeAsync<Fleet>(createResp).ConfigureAwait(false);
+                string fleetId = createdFleet.Id;
 
-                StringContent updateContent = new StringContent(
-                    JsonSerializer.Serialize(new { Name = "UpdatedTarget" }),
-                    Encoding.UTF8, "application/json");
+                StringContent updateContent = JsonHelper.ToJsonContent(new { Name = "UpdatedTarget" });
                 HttpResponseMessage updateResp = await _UnauthClient.PutAsync("/api/v1/fleets/" + fleetId, updateContent).ConfigureAwait(false);
                 AssertNotNull(updateResp);
             }).ConfigureAwait(false);

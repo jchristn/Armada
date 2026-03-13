@@ -4,9 +4,8 @@ namespace Armada.Test.Automated.Suites
     using System.Linq;
     using System.Net;
     using System.Net.Http;
-    using System.Text;
-    using System.Text.Json;
     using System.Threading.Tasks;
+    using Armada.Core.Models;
     using Armada.Test.Common;
 
     /// <summary>
@@ -45,100 +44,83 @@ namespace Armada.Test.Automated.Suites
 
         #region Private-Methods
 
-        private async Task<JsonElement> CreateCaptainAsync(string name)
+        private async Task<Captain> CreateCaptainAsync(string name)
         {
             string uniqueName = name + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
-            StringContent content = new StringContent(
-                JsonSerializer.Serialize(new { Name = uniqueName, Runtime = "ClaudeCode" }),
-                Encoding.UTF8, "application/json");
+            StringContent content = JsonHelper.ToJsonContent(new { Name = uniqueName, Runtime = "ClaudeCode" });
             HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/captains", content).ConfigureAwait(false);
             resp.EnsureSuccessStatusCode();
-            string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            using JsonDocument doc = JsonDocument.Parse(body);
-            return doc.RootElement.Clone();
+            return await JsonHelper.DeserializeAsync<Captain>(resp).ConfigureAwait(false);
         }
 
         private async Task<string> CreateFleetAsync()
         {
-            StringContent content = new StringContent(
-                JsonSerializer.Serialize(new { Name = "StatusTestFleet-" + Guid.NewGuid().ToString("N").Substring(0, 8) }),
-                Encoding.UTF8, "application/json");
+            StringContent content = JsonHelper.ToJsonContent(new { Name = "StatusTestFleet-" + Guid.NewGuid().ToString("N").Substring(0, 8) });
             HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/fleets", content).ConfigureAwait(false);
             resp.EnsureSuccessStatusCode();
-            string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            return JsonDocument.Parse(body).RootElement.GetProperty("Id").GetString()!;
+            Fleet fleet = await JsonHelper.DeserializeAsync<Fleet>(resp).ConfigureAwait(false);
+            return fleet.Id;
         }
 
         private async Task<string> CreateVesselAsync(string fleetId)
         {
-            StringContent content = new StringContent(
-                JsonSerializer.Serialize(new { Name = "StatusTestVessel-" + Guid.NewGuid().ToString("N").Substring(0, 8), RepoUrl = TestRepoHelper.GetLocalBareRepoUrl(), FleetId = fleetId }),
-                Encoding.UTF8, "application/json");
+            StringContent content = JsonHelper.ToJsonContent(new { Name = "StatusTestVessel-" + Guid.NewGuid().ToString("N").Substring(0, 8), RepoUrl = TestRepoHelper.GetLocalBareRepoUrl(), FleetId = fleetId });
             HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/vessels", content).ConfigureAwait(false);
             resp.EnsureSuccessStatusCode();
-            string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            return JsonDocument.Parse(body).RootElement.GetProperty("Id").GetString()!;
+            Vessel vessel = await JsonHelper.DeserializeAsync<Vessel>(resp).ConfigureAwait(false);
+            return vessel.Id;
         }
 
-        private async Task<JsonElement> CreateMissionAsync(string title)
+        private async Task<Mission> CreateMissionAsync(string title)
         {
-            StringContent content = new StringContent(
-                JsonSerializer.Serialize(new { Title = title, Description = "Status test mission" }),
-                Encoding.UTF8, "application/json");
+            StringContent content = JsonHelper.ToJsonContent(new { Title = title, Description = "Status test mission" });
             HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/missions", content).ConfigureAwait(false);
             resp.EnsureSuccessStatusCode();
+
+            // Read body once since stream can only be consumed once.
             string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            using JsonDocument doc = JsonDocument.Parse(body);
-            JsonElement root = doc.RootElement.Clone();
 
             // When mission stays Pending (no captain available), the API returns
             // { "Mission": {...}, "Warning": "..." } instead of the mission directly.
-            if (root.TryGetProperty("Mission", out JsonElement nested))
-                return nested;
+            MissionCreateResponse wrapper = JsonHelper.Deserialize<MissionCreateResponse>(body);
+            if (wrapper.Mission != null)
+                return wrapper.Mission;
 
-            return root;
+            // Response was the mission directly.
+            return JsonHelper.Deserialize<Mission>(body);
         }
 
-        private async Task<JsonElement> CreateVoyageAsync(string vesselId, string title, int missionCount = 2)
+        private async Task<VoyageDetailResponse> CreateVoyageAsync(string vesselId, string title, int missionCount = 2)
         {
             object[] missions = Enumerable.Range(1, missionCount)
                 .Select(i => (object)new { Title = "Voyage Mission " + i, Description = "Desc " + i })
                 .ToArray();
 
-            StringContent content = new StringContent(
-                JsonSerializer.Serialize(new
-                {
-                    Title = title,
-                    Description = "Status test voyage",
-                    VesselId = vesselId,
-                    Missions = missions
-                }),
-                Encoding.UTF8, "application/json");
+            StringContent content = JsonHelper.ToJsonContent(new
+            {
+                Title = title,
+                Description = "Status test voyage",
+                VesselId = vesselId,
+                Missions = missions
+            });
             HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/voyages", content).ConfigureAwait(false);
             resp.EnsureSuccessStatusCode();
-            string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            using JsonDocument doc = JsonDocument.Parse(body);
-            return doc.RootElement.Clone();
+            return await JsonHelper.DeserializeAsync<VoyageDetailResponse>(resp).ConfigureAwait(false);
         }
 
-        private async Task<JsonElement> CreateSignalAsync(string type, string message)
+        private async Task<Signal> CreateSignalAsync(string type, string message)
         {
-            StringContent content = new StringContent(
-                JsonSerializer.Serialize(new { Type = type, Message = message }),
-                Encoding.UTF8, "application/json");
+            StringContent content = JsonHelper.ToJsonContent(new { Type = type, Message = message });
             HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/signals", content).ConfigureAwait(false);
             resp.EnsureSuccessStatusCode();
-            string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            using JsonDocument doc = JsonDocument.Parse(body);
-            return doc.RootElement.Clone();
+            return await JsonHelper.DeserializeAsync<Signal>(resp).ConfigureAwait(false);
         }
 
-        private async Task<JsonDocument> GetStatusAsync()
+        private async Task<ArmadaStatus> GetStatusAsync()
         {
             HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/status").ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
-            string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-            return JsonDocument.Parse(body);
+            return await JsonHelper.DeserializeAsync<ArmadaStatus>(response).ConfigureAwait(false);
         }
 
         #endregion
@@ -165,49 +147,43 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("GetStatus_HasAllExpectedProperties", async () =>
             {
-                using JsonDocument doc = await GetStatusAsync().ConfigureAwait(false);
-                JsonElement root = doc.RootElement;
+                ArmadaStatus status = await GetStatusAsync().ConfigureAwait(false);
 
-                Assert(root.TryGetProperty("TotalCaptains", out _), "Missing TotalCaptains");
-                Assert(root.TryGetProperty("IdleCaptains", out _), "Missing IdleCaptains");
-                Assert(root.TryGetProperty("WorkingCaptains", out _), "Missing WorkingCaptains");
-                Assert(root.TryGetProperty("StalledCaptains", out _), "Missing StalledCaptains");
-                Assert(root.TryGetProperty("ActiveVoyages", out _), "Missing ActiveVoyages");
-                Assert(root.TryGetProperty("MissionsByStatus", out _), "Missing MissionsByStatus");
-                Assert(root.TryGetProperty("Voyages", out _), "Missing Voyages");
-                Assert(root.TryGetProperty("RecentSignals", out _), "Missing RecentSignals");
-                Assert(root.TryGetProperty("TimestampUtc", out _), "Missing TimestampUtc");
+                AssertNotNull(status);
+                Assert(status.MissionsByStatus != null, "Missing MissionsByStatus");
+                Assert(status.Voyages != null, "Missing Voyages");
+                Assert(status.RecentSignals != null, "Missing RecentSignals");
+                Assert(status.TimestampUtc != default, "Missing TimestampUtc");
             }).ConfigureAwait(false);
 
             await RunTest("GetStatus_NoData_ShowsZeros", async () =>
             {
-                using JsonDocument doc = await GetStatusAsync().ConfigureAwait(false);
-                JsonElement root = doc.RootElement;
+                ArmadaStatus status = await GetStatusAsync().ConfigureAwait(false);
 
                 // Note: previous test suites may have created captains, so we just verify the fields exist and are >= 0
-                AssertTrue(root.GetProperty("TotalCaptains").GetInt32() >= 0);
-                AssertTrue(root.GetProperty("IdleCaptains").GetInt32() >= 0);
-                AssertTrue(root.GetProperty("WorkingCaptains").GetInt32() >= 0);
-                AssertTrue(root.GetProperty("StalledCaptains").GetInt32() >= 0);
-                AssertTrue(root.GetProperty("ActiveVoyages").GetInt32() >= 0);
+                AssertTrue(status.TotalCaptains >= 0);
+                AssertTrue(status.IdleCaptains >= 0);
+                AssertTrue(status.WorkingCaptains >= 0);
+                AssertTrue(status.StalledCaptains >= 0);
+                AssertTrue(status.ActiveVoyages >= 0);
             }).ConfigureAwait(false);
 
             await RunTest("GetStatus_NoData_EmptyVoyages", async () =>
             {
-                using JsonDocument doc = await GetStatusAsync().ConfigureAwait(false);
-                AssertTrue(doc.RootElement.GetProperty("Voyages").GetArrayLength() >= 0);
+                ArmadaStatus status = await GetStatusAsync().ConfigureAwait(false);
+                AssertTrue(status.Voyages.Count >= 0);
             }).ConfigureAwait(false);
 
             await RunTest("GetStatus_NoData_EmptyRecentSignals", async () =>
             {
-                using JsonDocument doc = await GetStatusAsync().ConfigureAwait(false);
-                AssertTrue(doc.RootElement.GetProperty("RecentSignals").GetArrayLength() >= 0);
+                ArmadaStatus status = await GetStatusAsync().ConfigureAwait(false);
+                AssertTrue(status.RecentSignals.Count >= 0);
             }).ConfigureAwait(false);
 
             await RunTest("GetStatus_NoData_MissionsByStatusIsObject", async () =>
             {
-                using JsonDocument doc = await GetStatusAsync().ConfigureAwait(false);
-                AssertEqual(JsonValueKind.Object, doc.RootElement.GetProperty("MissionsByStatus").ValueKind);
+                ArmadaStatus status = await GetStatusAsync().ConfigureAwait(false);
+                AssertNotNull(status.MissionsByStatus);
             }).ConfigureAwait(false);
 
             await RunTest("GetStatus_AfterCreatingCaptains_ShowsCorrectCounts", async () =>
@@ -216,11 +192,10 @@ namespace Armada.Test.Automated.Suites
                 await CreateCaptainAsync("status-captain-2").ConfigureAwait(false);
                 await CreateCaptainAsync("status-captain-3").ConfigureAwait(false);
 
-                using JsonDocument doc = await GetStatusAsync().ConfigureAwait(false);
-                JsonElement root = doc.RootElement;
+                ArmadaStatus status = await GetStatusAsync().ConfigureAwait(false);
 
-                AssertTrue(root.GetProperty("TotalCaptains").GetInt32() >= 3);
-                AssertTrue(root.GetProperty("IdleCaptains").GetInt32() >= 3);
+                AssertTrue(status.TotalCaptains >= 3);
+                AssertTrue(status.IdleCaptains >= 3);
             }).ConfigureAwait(false);
 
             await RunTest("GetStatus_AfterCreatingMissions_ShowsMissionsByStatus", async () =>
@@ -228,12 +203,11 @@ namespace Armada.Test.Automated.Suites
                 await CreateMissionAsync("Status Mission 1").ConfigureAwait(false);
                 await CreateMissionAsync("Status Mission 2").ConfigureAwait(false);
 
-                using JsonDocument doc = await GetStatusAsync().ConfigureAwait(false);
-                JsonElement missionsByStatus = doc.RootElement.GetProperty("MissionsByStatus");
+                ArmadaStatus status = await GetStatusAsync().ConfigureAwait(false);
 
-                if (missionsByStatus.TryGetProperty("Pending", out JsonElement pending))
+                if (status.MissionsByStatus.TryGetValue("Pending", out int pending))
                 {
-                    AssertTrue(pending.GetInt32() >= 2);
+                    AssertTrue(pending >= 2);
                 }
             }).ConfigureAwait(false);
 
@@ -243,8 +217,8 @@ namespace Armada.Test.Automated.Suites
                 string vesselId = await CreateVesselAsync(fleetId).ConfigureAwait(false);
                 await CreateVoyageAsync(vesselId, "Status Voyage 1").ConfigureAwait(false);
 
-                using JsonDocument doc = await GetStatusAsync().ConfigureAwait(false);
-                AssertTrue(doc.RootElement.GetProperty("ActiveVoyages").GetInt32() >= 1);
+                ArmadaStatus status = await GetStatusAsync().ConfigureAwait(false);
+                AssertTrue(status.ActiveVoyages >= 1);
             }).ConfigureAwait(false);
 
             await RunTest("GetStatus_AfterCreatingVoyage_VoyagesArrayPopulated", async () =>
@@ -253,8 +227,8 @@ namespace Armada.Test.Automated.Suites
                 string vesselId = await CreateVesselAsync(fleetId).ConfigureAwait(false);
                 await CreateVoyageAsync(vesselId, "Voyage Array Check").ConfigureAwait(false);
 
-                using JsonDocument doc = await GetStatusAsync().ConfigureAwait(false);
-                AssertTrue(doc.RootElement.GetProperty("Voyages").GetArrayLength() >= 1);
+                ArmadaStatus status = await GetStatusAsync().ConfigureAwait(false);
+                AssertTrue(status.Voyages.Count >= 1);
             }).ConfigureAwait(false);
 
             await RunTest("GetStatus_AfterCreatingSignals_ShowsRecentSignals", async () =>
@@ -262,15 +236,14 @@ namespace Armada.Test.Automated.Suites
                 await CreateSignalAsync("Mail", "Test signal 1").ConfigureAwait(false);
                 await CreateSignalAsync("Heartbeat", "Test signal 2").ConfigureAwait(false);
 
-                using JsonDocument doc = await GetStatusAsync().ConfigureAwait(false);
-                AssertTrue(doc.RootElement.GetProperty("RecentSignals").GetArrayLength() >= 2);
+                ArmadaStatus status = await GetStatusAsync().ConfigureAwait(false);
+                AssertTrue(status.RecentSignals.Count >= 2);
             }).ConfigureAwait(false);
 
             await RunTest("GetStatus_TimestampUtc_IsRecent", async () =>
             {
-                using JsonDocument doc = await GetStatusAsync().ConfigureAwait(false);
-                string timestampStr = doc.RootElement.GetProperty("TimestampUtc").GetString()!;
-                DateTime timestamp = DateTime.Parse(timestampStr).ToUniversalTime();
+                ArmadaStatus status = await GetStatusAsync().ConfigureAwait(false);
+                DateTime timestamp = status.TimestampUtc.ToUniversalTime();
                 TimeSpan elapsed = DateTime.UtcNow - timestamp;
 
                 Assert(elapsed.TotalMinutes < 1, "TimestampUtc should be within the last minute but was " + elapsed.TotalMinutes + " minutes ago");
@@ -278,9 +251,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("GetStatus_TimestampUtc_IsValidDateTime", async () =>
             {
-                using JsonDocument doc = await GetStatusAsync().ConfigureAwait(false);
-                string timestampStr = doc.RootElement.GetProperty("TimestampUtc").GetString()!;
-                Assert(DateTime.TryParse(timestampStr, out _), "TimestampUtc should be a valid datetime string");
+                ArmadaStatus status = await GetStatusAsync().ConfigureAwait(false);
+                Assert(status.TimestampUtc != default, "TimestampUtc should be a valid datetime");
             }).ConfigureAwait(false);
 
             await RunTest("GetStatus_WithoutAuth_ReturnsResponse", async () =>
@@ -314,9 +286,8 @@ namespace Armada.Test.Automated.Suites
             await RunTest("GetHealth_ReturnsHealthyStatus", async () =>
             {
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/status/health").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual("healthy", doc.RootElement.GetProperty("Status").GetString());
+                HealthResponse health = await JsonHelper.DeserializeAsync<HealthResponse>(response).ConfigureAwait(false);
+                AssertEqual("healthy", health.Status);
             }).ConfigureAwait(false);
 
             await RunTest("GetHealth_NoAuth_ReturnsOk", async () =>
@@ -328,9 +299,8 @@ namespace Armada.Test.Automated.Suites
             await RunTest("GetHealth_NoAuth_ReturnsHealthyStatus", async () =>
             {
                 HttpResponseMessage response = await _UnauthClient.GetAsync("/api/v1/status/health").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual("healthy", doc.RootElement.GetProperty("Status").GetString());
+                HealthResponse health = await JsonHelper.DeserializeAsync<HealthResponse>(response).ConfigureAwait(false);
+                AssertEqual("healthy", health.Status);
             }).ConfigureAwait(false);
 
             await RunTest("GetHealth_WrongApiKey_StillReturnsOk", async () =>
@@ -342,9 +312,8 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage response = await wrongKeyClient.GetAsync("/api/v1/status/health").ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual("healthy", doc.RootElement.GetProperty("Status").GetString());
+                HealthResponse health = await JsonHelper.DeserializeAsync<HealthResponse>(response).ConfigureAwait(false);
+                AssertEqual("healthy", health.Status);
 
                 wrongKeyClient.Dispose();
             }).ConfigureAwait(false);
@@ -352,36 +321,32 @@ namespace Armada.Test.Automated.Suites
             await RunTest("GetHealth_HasTimestamp", async () =>
             {
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/status/health").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                Assert(doc.RootElement.TryGetProperty("Timestamp", out _), "Health check should include Timestamp");
+                HealthResponse health = await JsonHelper.DeserializeAsync<HealthResponse>(response).ConfigureAwait(false);
+                Assert(health.Timestamp != null, "Health check should include Timestamp");
             }).ConfigureAwait(false);
 
             await RunTest("GetHealth_HasVersion", async () =>
             {
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/status/health").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                Assert(doc.RootElement.TryGetProperty("Version", out _), "Health check should include Version");
+                HealthResponse health = await JsonHelper.DeserializeAsync<HealthResponse>(response).ConfigureAwait(false);
+                Assert(health.Version != null, "Health check should include Version");
             }).ConfigureAwait(false);
 
             await RunTest("GetHealth_HasUptime", async () =>
             {
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/status/health").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                Assert(doc.RootElement.TryGetProperty("Uptime", out _), "Health check should include Uptime");
+                HealthResponse health = await JsonHelper.DeserializeAsync<HealthResponse>(response).ConfigureAwait(false);
+                Assert(health.Uptime != null, "Health check should include Uptime");
             }).ConfigureAwait(false);
 
             await RunTest("GetHealth_HasPorts", async () =>
             {
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/status/health").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                Assert(doc.RootElement.TryGetProperty("Ports", out JsonElement ports), "Health check should include Ports");
-                Assert(ports.TryGetProperty("Admiral", out _), "Ports should include Admiral");
-                Assert(ports.TryGetProperty("Mcp", out _), "Ports should include Mcp");
-                Assert(ports.TryGetProperty("WebSocket", out _), "Ports should include WebSocket");
+                HealthResponse health = await JsonHelper.DeserializeAsync<HealthResponse>(response).ConfigureAwait(false);
+                Assert(health.Ports != null, "Health check should include Ports");
+                Assert(health.Ports!.Admiral >= 0, "Ports should include Admiral");
+                Assert(health.Ports!.Mcp >= 0, "Ports should include Mcp");
+                Assert(health.Ports!.WebSocket >= 0, "Ports should include WebSocket");
             }).ConfigureAwait(false);
 
             await RunTest("GetHealth_ReturnsJson", async () =>
@@ -394,10 +359,9 @@ namespace Armada.Test.Automated.Suites
             await RunTest("GetHealth_StartUtcIsBeforeNow", async () =>
             {
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/status/health").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                string startStr = doc.RootElement.GetProperty("StartUtc").GetString()!;
-                DateTime startUtc = DateTime.Parse(startStr).ToUniversalTime();
+                HealthResponse health = await JsonHelper.DeserializeAsync<HealthResponse>(response).ConfigureAwait(false);
+                Assert(health.StartUtc != null, "Health check should include StartUtc");
+                DateTime startUtc = health.StartUtc!.Value.ToUniversalTime();
                 Assert(startUtc <= DateTime.UtcNow, "StartUtc should be in the past");
             }).ConfigureAwait(false);
 

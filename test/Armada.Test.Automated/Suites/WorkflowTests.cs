@@ -5,9 +5,9 @@ namespace Armada.Test.Automated.Suites
     using System.Linq;
     using System.Net;
     using System.Net.Http;
-    using System.Text;
-    using System.Text.Json;
     using System.Threading.Tasks;
+    using Armada.Core.Enums;
+    using Armada.Core.Models;
     using Armada.Test.Common;
 
     /// <summary>
@@ -55,25 +55,25 @@ namespace Armada.Test.Automated.Suites
             await RunTest("EndToEnd_FleetToMissionLifecycle", async () =>
             {
                 // Step 1: Create a fleet
-                JsonElement fleet = await CreateFleetAsync("Integration Fleet").ConfigureAwait(false);
-                string fleetId = fleet.GetProperty("Id").GetString()!;
+                Fleet fleet = await CreateFleetAsync("Integration Fleet").ConfigureAwait(false);
+                string fleetId = fleet.Id!;
                 AssertStartsWith("flt_", fleetId);
 
                 // Step 2: Register a vessel
-                JsonElement vessel = await CreateVesselAsync("IntegrationRepo", TestRepoHelper.GetLocalBareRepoUrl(), fleetId).ConfigureAwait(false);
-                string vesselId = vessel.GetProperty("Id").GetString()!;
+                Vessel vessel = await CreateVesselAsync("IntegrationRepo", TestRepoHelper.GetLocalBareRepoUrl(), fleetId).ConfigureAwait(false);
+                string vesselId = vessel.Id!;
                 AssertStartsWith("vsl_", vesselId);
 
                 // Step 3: Create a captain
-                JsonElement captain = await CreateCaptainAsync("int-captain-1").ConfigureAwait(false);
-                string captainId = captain.GetProperty("Id").GetString()!;
+                Captain captain = await CreateCaptainAsync("int-captain-1").ConfigureAwait(false);
+                string captainId = captain.Id!;
                 AssertStartsWith("cpt_", captainId);
 
                 // Step 4: Create a mission (without vesselId to avoid git operations)
-                JsonElement mission = await CreateMissionAsync("Fix login bug").ConfigureAwait(false);
-                string missionId = mission.GetProperty("Id").GetString()!;
+                Mission mission = await CreateMissionAsync("Fix login bug").ConfigureAwait(false);
+                string missionId = mission.Id!;
                 AssertStartsWith("msn_", missionId);
-                AssertEqual("Pending", mission.GetProperty("Status").GetString());
+                AssertEqual("Pending", mission.Status.ToString());
 
                 // Step 5: Transition mission through full lifecycle
                 await TransitionMissionStatusAsync(missionId, "Assigned").ConfigureAwait(false);
@@ -84,58 +84,56 @@ namespace Armada.Test.Automated.Suites
                 AssertStatusCode(HttpStatusCode.OK, completeResp);
 
                 // Step 6: Verify mission is complete
-                JsonElement completedMission = await GetAsync("/api/v1/missions/" + missionId).ConfigureAwait(false);
-                AssertEqual("Complete", completedMission.GetProperty("Status").GetString());
+                Mission completedMission = await GetAsync<Mission>("/api/v1/missions/" + missionId).ConfigureAwait(false);
+                AssertEqual("Complete", completedMission.Status.ToString());
 
                 // Step 7: Verify status dashboard shows the captain
-                JsonElement status = await GetAsync("/api/v1/status").ConfigureAwait(false);
-                AssertTrue(status.GetProperty("TotalCaptains").GetInt32() >= 1);
+                ArmadaStatus status = await GetAsync<ArmadaStatus>("/api/v1/status").ConfigureAwait(false);
+                AssertTrue(status.TotalCaptains >= 1);
 
                 // Step 8: Verify events were generated for status transitions
-                JsonElement events = await GetAsync("/api/v1/events").ConfigureAwait(false);
-                AssertTrue(events.GetProperty("Objects").GetArrayLength() >= 1);
+                EnumerationResult<ArmadaEvent> events = await GetAsync<EnumerationResult<ArmadaEvent>>("/api/v1/events").ConfigureAwait(false);
+                AssertTrue(events.Objects.Count >= 1);
             }).ConfigureAwait(false);
 
             await RunTest("VoyageWorkflow_CreateAndCancel", async () =>
             {
                 // Setup: fleet + vessel
-                JsonElement fleet = await CreateFleetAsync("Voyage Fleet").ConfigureAwait(false);
-                string fleetId = fleet.GetProperty("Id").GetString()!;
-                JsonElement vessel = await CreateVesselAsync("VoyageRepo", TestRepoHelper.GetLocalBareRepoUrl(), fleetId).ConfigureAwait(false);
-                string vesselId = vessel.GetProperty("Id").GetString()!;
+                Fleet fleet = await CreateFleetAsync("Voyage Fleet").ConfigureAwait(false);
+                string fleetId = fleet.Id!;
+                Vessel vessel = await CreateVesselAsync("VoyageRepo", TestRepoHelper.GetLocalBareRepoUrl(), fleetId).ConfigureAwait(false);
+                string vesselId = vessel.Id!;
 
                 // Create voyage with multiple missions
-                JsonElement voyage = await CreateVoyageAsync(
+                Voyage voyage = await CreateVoyageAsync(
                     "API Hardening", vesselId,
                     ("Add rate limiting", "Add rate limiting middleware"),
                     ("Add input validation", "Validate all POST endpoints"),
                     ("Add request logging", "Log with correlation IDs")).ConfigureAwait(false);
 
-                string voyageId = voyage.GetProperty("Id").GetString()!;
+                string voyageId = voyage.Id!;
                 AssertStartsWith("vyg_", voyageId);
-                AssertEqual("InProgress", voyage.GetProperty("Status").GetString());
+                AssertEqual("InProgress", voyage.Status.ToString());
 
                 // Verify voyage details show missions
-                JsonElement voyageDetail = await GetAsync("/api/v1/voyages/" + voyageId).ConfigureAwait(false);
-                JsonElement missions = voyageDetail.GetProperty("Missions");
-                AssertEqual(3, missions.GetArrayLength());
+                VoyageDetailResponse voyageDetail = await GetAsync<VoyageDetailResponse>("/api/v1/voyages/" + voyageId).ConfigureAwait(false);
+                AssertEqual(3, voyageDetail.Missions!.Count);
 
                 // Verify missions are linked to the voyage
-                JsonElement missionsByVoyage = await GetAsync("/api/v1/missions?voyageId=" + voyageId).ConfigureAwait(false);
-                AssertEqual(3, missionsByVoyage.GetProperty("Objects").GetArrayLength());
+                EnumerationResult<Mission> missionsByVoyage = await GetAsync<EnumerationResult<Mission>>("/api/v1/missions?voyageId=" + voyageId).ConfigureAwait(false);
+                AssertEqual(3, missionsByVoyage.Objects.Count);
 
                 // Cancel the voyage
                 HttpResponseMessage cancelResp = await _AuthClient.DeleteAsync("/api/v1/voyages/" + voyageId).ConfigureAwait(false);
                 AssertStatusCode(HttpStatusCode.OK, cancelResp);
 
                 // Verify cancel response has voyage data
-                string cancelBody = await cancelResp.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument cancelDoc = JsonDocument.Parse(cancelBody);
-                Assert(cancelDoc.RootElement.TryGetProperty("Voyage", out _), "Cancel response should have Voyage property");
+                CancelVoyageResponse cancelResult = await JsonHelper.DeserializeAsync<CancelVoyageResponse>(cancelResp).ConfigureAwait(false);
+                Assert(cancelResult.Voyage != null, "Cancel response should have Voyage property");
 
                 // Verify via GET that voyage still exists and has a valid status
-                JsonElement cancelledVoyage = await GetAsync("/api/v1/voyages/" + voyageId).ConfigureAwait(false);
-                string voyageStatus = cancelledVoyage.GetProperty("Voyage").GetProperty("Status").GetString()!;
+                VoyageDetailResponse cancelledDetail = await GetAsync<VoyageDetailResponse>("/api/v1/voyages/" + voyageId).ConfigureAwait(false);
+                string voyageStatus = cancelledDetail.Voyage!.Status.ToString();
                 Assert(voyageStatus == "Cancelled" || voyageStatus == "InProgress" || voyageStatus == "Complete",
                     "Expected Cancelled, InProgress, or Complete but got " + voyageStatus);
             }).ConfigureAwait(false);
@@ -143,26 +141,26 @@ namespace Armada.Test.Automated.Suites
             await RunTest("SignalFlow_CreateAndRetrieve", async () =>
             {
                 // Create a captain
-                JsonElement captain = await CreateCaptainAsync("signal-captain").ConfigureAwait(false);
-                string captainId = captain.GetProperty("Id").GetString()!;
+                Captain captain = await CreateCaptainAsync("signal-captain").ConfigureAwait(false);
+                string captainId = captain.Id!;
 
                 // Send a signal to the captain
-                JsonElement signal = await CreateSignalAsync("Mail", "Please check the tests", captainId).ConfigureAwait(false);
-                string signalId = signal.GetProperty("Id").GetString()!;
+                Signal signal = await CreateSignalAsync("Mail", "Please check the tests", captainId).ConfigureAwait(false);
+                string signalId = signal.Id!;
                 AssertStartsWith("sig_", signalId);
 
                 // Retrieve signals and verify it's there
-                JsonElement signals = await GetAsync("/api/v1/signals").ConfigureAwait(false);
-                AssertTrue(signals.GetProperty("Objects").GetArrayLength() >= 1);
+                EnumerationResult<Signal> signals = await GetAsync<EnumerationResult<Signal>>("/api/v1/signals").ConfigureAwait(false);
+                AssertTrue(signals.Objects.Count >= 1);
 
                 // Find our signal
                 bool found = false;
-                foreach (JsonElement s in signals.GetProperty("Objects").EnumerateArray())
+                foreach (Signal s in signals.Objects)
                 {
-                    if (s.GetProperty("Id").GetString() == signalId)
+                    if (s.Id == signalId)
                     {
                         found = true;
-                        AssertEqual("Please check the tests", s.GetProperty("Payload").GetString());
+                        AssertEqual("Please check the tests", s.Payload);
                         break;
                     }
                 }
@@ -172,18 +170,18 @@ namespace Armada.Test.Automated.Suites
             await RunTest("MultiEntity_StatusDashboard", async () =>
             {
                 // Create multiple entities
-                JsonElement fleet = await CreateFleetAsync("Dashboard Fleet").ConfigureAwait(false);
-                string fleetId = fleet.GetProperty("Id").GetString()!;
+                Fleet fleet = await CreateFleetAsync("Dashboard Fleet").ConfigureAwait(false);
+                string fleetId = fleet.Id!;
 
-                JsonElement vessel = await CreateVesselAsync("DashRepo", TestRepoHelper.GetLocalBareRepoUrl(), fleetId).ConfigureAwait(false);
-                string vesselId = vessel.GetProperty("Id").GetString()!;
+                Vessel vessel = await CreateVesselAsync("DashRepo", TestRepoHelper.GetLocalBareRepoUrl(), fleetId).ConfigureAwait(false);
+                string vesselId = vessel.Id!;
 
                 await CreateCaptainAsync("dash-captain-1").ConfigureAwait(false);
                 await CreateCaptainAsync("dash-captain-2").ConfigureAwait(false);
 
                 // Create missions (without vesselId to avoid git operations)
-                JsonElement m1 = await CreateMissionAsync("Mission A").ConfigureAwait(false);
-                string m1Id = m1.GetProperty("Id").GetString()!;
+                Mission m1 = await CreateMissionAsync("Mission A").ConfigureAwait(false);
+                string m1Id = m1.Id!;
                 await CreateMissionAsync("Mission B").ConfigureAwait(false);
 
                 // Transition one mission
@@ -191,51 +189,48 @@ namespace Armada.Test.Automated.Suites
                 await TransitionMissionStatusAsync(m1Id, "InProgress").ConfigureAwait(false);
 
                 // Check status dashboard
-                JsonElement status = await GetAsync("/api/v1/status").ConfigureAwait(false);
-                AssertTrue(status.GetProperty("TotalCaptains").GetInt32() >= 2);
+                ArmadaStatus status = await GetAsync<ArmadaStatus>("/api/v1/status").ConfigureAwait(false);
+                AssertTrue(status.TotalCaptains >= 2);
 
                 // MissionsByStatus should have entries
-                JsonElement missionsByStatus = status.GetProperty("MissionsByStatus");
-                AssertTrue(missionsByStatus.EnumerateObject().Any());
+                AssertTrue(status.MissionsByStatus.Any());
             }).ConfigureAwait(false);
 
             await RunTest("FleetVesselHierarchy_DeleteFleetDoesNotDeleteVessels", async () =>
             {
                 // Create fleet and vessel
-                JsonElement fleet = await CreateFleetAsync("Temp Fleet").ConfigureAwait(false);
-                string fleetId = fleet.GetProperty("Id").GetString()!;
+                Fleet fleet = await CreateFleetAsync("Temp Fleet").ConfigureAwait(false);
+                string fleetId = fleet.Id!;
 
-                JsonElement vessel = await CreateVesselAsync("PermanentRepo", TestRepoHelper.GetLocalBareRepoUrl(), fleetId).ConfigureAwait(false);
-                string vesselId = vessel.GetProperty("Id").GetString()!;
-                string vesselName = vessel.GetProperty("Name").GetString()!;
+                Vessel vessel = await CreateVesselAsync("PermanentRepo", TestRepoHelper.GetLocalBareRepoUrl(), fleetId).ConfigureAwait(false);
+                string vesselId = vessel.Id!;
+                string vesselName = vessel.Name!;
 
                 // Delete fleet
                 HttpResponseMessage deleteResp = await _AuthClient.DeleteAsync("/api/v1/fleets/" + fleetId).ConfigureAwait(false);
                 AssertStatusCode(HttpStatusCode.NoContent, deleteResp);
 
                 // Vessel should still exist (FleetId set to null)
-                JsonElement vesselAfter = await GetAsync("/api/v1/vessels/" + vesselId).ConfigureAwait(false);
-                AssertEqual(vesselName, vesselAfter.GetProperty("Name").GetString());
+                Vessel vesselAfter = await GetAsync<Vessel>("/api/v1/vessels/" + vesselId).ConfigureAwait(false);
+                AssertEqual(vesselName, vesselAfter.Name);
             }).ConfigureAwait(false);
 
             await RunTest("MissionStatusTransition_InvalidTransitions_Rejected", async () =>
             {
                 // Create a pending mission
-                JsonElement mission = await CreateMissionAsync("Transition Test").ConfigureAwait(false);
-                string missionId = mission.GetProperty("Id").GetString()!;
+                Mission mission = await CreateMissionAsync("Transition Test").ConfigureAwait(false);
+                string missionId = mission.Id!;
 
                 // Invalid: Pending -> Complete (skip required steps)
                 HttpResponseMessage resp = await TransitionMissionStatusAsync(missionId, "Complete").ConfigureAwait(false);
-                string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                Assert(doc.RootElement.TryGetProperty("Error", out _) || doc.RootElement.TryGetProperty("Message", out _),
+                ArmadaErrorResponse err = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(resp).ConfigureAwait(false);
+                Assert(err.Error != null || err.Message != null,
                     "Should have Error or Message property for invalid transition");
 
                 // Invalid: Pending -> InProgress (must go through Assigned first)
                 HttpResponseMessage resp2 = await TransitionMissionStatusAsync(missionId, "InProgress").ConfigureAwait(false);
-                string body2 = await resp2.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc2 = JsonDocument.Parse(body2);
-                Assert(doc2.RootElement.TryGetProperty("Error", out _) || doc2.RootElement.TryGetProperty("Message", out _),
+                ArmadaErrorResponse err2 = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(resp2).ConfigureAwait(false);
+                Assert(err2.Error != null || err2.Message != null,
                     "Should have Error or Message property for invalid transition");
 
                 // Valid: Pending -> Assigned
@@ -248,21 +243,20 @@ namespace Armada.Test.Automated.Suites
 
                 // Invalid: InProgress -> Assigned (can't go back to assigned)
                 HttpResponseMessage resp5 = await TransitionMissionStatusAsync(missionId, "Assigned").ConfigureAwait(false);
-                string body5 = await resp5.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc5 = JsonDocument.Parse(body5);
-                Assert(doc5.RootElement.TryGetProperty("Error", out _) || doc5.RootElement.TryGetProperty("Message", out _),
+                ArmadaErrorResponse err5 = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(resp5).ConfigureAwait(false);
+                Assert(err5.Error != null || err5.Message != null,
                     "Should have Error or Message property for invalid transition");
             }).ConfigureAwait(false);
 
             await RunTest("CaptainLifecycle_CreateStopDelete", async () =>
             {
                 // Create captain
-                JsonElement captain = await CreateCaptainAsync("lifecycle-captain").ConfigureAwait(false);
-                string captainId = captain.GetProperty("Id").GetString()!;
+                Captain captain = await CreateCaptainAsync("lifecycle-captain").ConfigureAwait(false);
+                string captainId = captain.Id!;
 
                 // Verify it shows in list
-                JsonElement captains = await GetAsync("/api/v1/captains").ConfigureAwait(false);
-                AssertTrue(captains.GetProperty("Objects").GetArrayLength() >= 1);
+                EnumerationResult<Captain> captains = await GetAsync<EnumerationResult<Captain>>("/api/v1/captains").ConfigureAwait(false);
+                AssertTrue(captains.Objects.Count >= 1);
 
                 // Stop the captain
                 HttpResponseMessage stopResp = await _AuthClient.PostAsync("/api/v1/captains/" + captainId + "/stop", null).ConfigureAwait(false);
@@ -274,29 +268,28 @@ namespace Armada.Test.Automated.Suites
 
                 // Verify it's gone
                 HttpResponseMessage getResp = await _AuthClient.GetAsync("/api/v1/captains/" + captainId).ConfigureAwait(false);
-                string body = await getResp.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                Assert(doc.RootElement.TryGetProperty("Error", out _) || doc.RootElement.TryGetProperty("Message", out _),
+                ArmadaErrorResponse errResp = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(getResp).ConfigureAwait(false);
+                Assert(errResp.Error != null || errResp.Message != null,
                     "Should have Error or Message property for deleted captain");
             }).ConfigureAwait(false);
 
             await RunTest("EventFiltering_ByMissionId", async () =>
             {
                 // Create a mission and transition it to generate events
-                JsonElement mission = await CreateMissionAsync("Event Filter Test").ConfigureAwait(false);
-                string missionId = mission.GetProperty("Id").GetString()!;
+                Mission mission = await CreateMissionAsync("Event Filter Test").ConfigureAwait(false);
+                string missionId = mission.Id!;
 
                 await TransitionMissionStatusAsync(missionId, "Assigned").ConfigureAwait(false);
                 await TransitionMissionStatusAsync(missionId, "InProgress").ConfigureAwait(false);
 
                 // Query events filtered by missionId
-                JsonElement events = await GetAsync("/api/v1/events?missionId=" + missionId).ConfigureAwait(false);
-                AssertTrue(events.GetProperty("Objects").GetArrayLength() >= 1);
+                EnumerationResult<ArmadaEvent> events = await GetAsync<EnumerationResult<ArmadaEvent>>("/api/v1/events?missionId=" + missionId).ConfigureAwait(false);
+                AssertTrue(events.Objects.Count >= 1);
 
                 // All returned events should reference this mission
-                foreach (JsonElement evt in events.GetProperty("Objects").EnumerateArray())
+                foreach (ArmadaEvent evt in events.Objects)
                 {
-                    AssertEqual(missionId, evt.GetProperty("MissionId").GetString());
+                    AssertEqual(missionId, evt.MissionId);
                 }
             }).ConfigureAwait(false);
         }
@@ -305,112 +298,83 @@ namespace Armada.Test.Automated.Suites
 
         #region Private-Methods
 
-        private async Task<JsonElement> CreateFleetAsync(string name)
+        private async Task<Fleet> CreateFleetAsync(string name)
         {
             string uniqueName = name + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
-            StringContent content = new StringContent(
-                JsonSerializer.Serialize(new { Name = uniqueName }),
-                Encoding.UTF8, "application/json");
-            HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/fleets", content).ConfigureAwait(false);
+            HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/fleets", JsonHelper.ToJsonContent(new { Name = uniqueName })).ConfigureAwait(false);
             resp.EnsureSuccessStatusCode();
-            string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            return JsonDocument.Parse(body).RootElement.Clone();
+            return await JsonHelper.DeserializeAsync<Fleet>(resp).ConfigureAwait(false);
         }
 
-        private async Task<JsonElement> CreateVesselAsync(string name, string repoUrl, string? fleetId = null)
+        private async Task<Vessel> CreateVesselAsync(string name, string repoUrl, string? fleetId = null)
         {
             string uniqueName = name + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
             string uniqueRepoUrl = repoUrl.StartsWith("file://") ? repoUrl : repoUrl + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
             object payload = fleetId != null
                 ? (object)new { Name = uniqueName, RepoUrl = uniqueRepoUrl, FleetId = fleetId }
                 : new { Name = uniqueName, RepoUrl = uniqueRepoUrl };
-            StringContent content = new StringContent(
-                JsonSerializer.Serialize(payload),
-                Encoding.UTF8, "application/json");
-            HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/vessels", content).ConfigureAwait(false);
+            HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/vessels", JsonHelper.ToJsonContent(payload)).ConfigureAwait(false);
             resp.EnsureSuccessStatusCode();
-            string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            return JsonDocument.Parse(body).RootElement.Clone();
+            return await JsonHelper.DeserializeAsync<Vessel>(resp).ConfigureAwait(false);
         }
 
-        private async Task<JsonElement> CreateCaptainAsync(string name)
+        private async Task<Captain> CreateCaptainAsync(string name)
         {
             string uniqueName = name + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
-            StringContent content = new StringContent(
-                JsonSerializer.Serialize(new { Name = uniqueName }),
-                Encoding.UTF8, "application/json");
-            HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/captains", content).ConfigureAwait(false);
+            HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/captains", JsonHelper.ToJsonContent(new { Name = uniqueName })).ConfigureAwait(false);
             resp.EnsureSuccessStatusCode();
-            string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            return JsonDocument.Parse(body).RootElement.Clone();
+            return await JsonHelper.DeserializeAsync<Captain>(resp).ConfigureAwait(false);
         }
 
-        private async Task<JsonElement> CreateMissionAsync(string title, string? vesselId = null)
+        private async Task<Mission> CreateMissionAsync(string title, string? vesselId = null)
         {
             object payload = vesselId != null
                 ? (object)new { Title = title, VesselId = vesselId }
                 : new { Title = title };
-            StringContent content = new StringContent(
-                JsonSerializer.Serialize(payload),
-                Encoding.UTF8, "application/json");
-            HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/missions", content).ConfigureAwait(false);
+            HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/missions", JsonHelper.ToJsonContent(payload)).ConfigureAwait(false);
             resp.EnsureSuccessStatusCode();
             string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            JsonElement root = JsonDocument.Parse(body).RootElement.Clone();
-
-            // When mission stays Pending (no captain available), the API returns
-            // { "Mission": {...}, "Warning": "..." } instead of the mission directly.
-            if (root.TryGetProperty("Mission", out JsonElement nested))
-                return nested;
-
-            return root;
+            MissionCreateResponse wrapper = JsonHelper.Deserialize<MissionCreateResponse>(body);
+            Mission mission = wrapper.Mission ?? JsonHelper.Deserialize<Mission>(body);
+            return mission;
         }
 
-        private async Task<JsonElement> CreateVoyageAsync(string title, string vesselId, params (string Title, string Description)[] missions)
+        private async Task<Voyage> CreateVoyageAsync(string title, string vesselId, params (string Title, string Description)[] missions)
         {
             List<object> missionList = new List<object>();
             foreach ((string t, string d) in missions)
             {
                 missionList.Add(new { Title = t, Description = d });
             }
-            StringContent content = new StringContent(
-                JsonSerializer.Serialize(new { Title = title, VesselId = vesselId, Missions = missionList }),
-                Encoding.UTF8, "application/json");
-            HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/voyages", content).ConfigureAwait(false);
+            HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/voyages", JsonHelper.ToJsonContent(new { Title = title, VesselId = vesselId, Missions = missionList })).ConfigureAwait(false);
             resp.EnsureSuccessStatusCode();
-            string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            return JsonDocument.Parse(body).RootElement.Clone();
+            return await JsonHelper.DeserializeAsync<Voyage>(resp).ConfigureAwait(false);
         }
 
-        private async Task<JsonElement> CreateSignalAsync(string type, string payload, string? toCaptainId = null)
+        private async Task<Signal> CreateSignalAsync(string type, string payload, string? toCaptainId = null)
         {
             object body = toCaptainId != null
                 ? (object)new { Type = type, Payload = payload, ToCaptainId = toCaptainId }
                 : new { Type = type, Payload = payload };
-            StringContent content = new StringContent(
-                JsonSerializer.Serialize(body),
-                Encoding.UTF8, "application/json");
-            HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/signals", content).ConfigureAwait(false);
+            HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/signals", JsonHelper.ToJsonContent(body)).ConfigureAwait(false);
             resp.EnsureSuccessStatusCode();
-            string respBody = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            return JsonDocument.Parse(respBody).RootElement.Clone();
+            return await JsonHelper.DeserializeAsync<Signal>(resp).ConfigureAwait(false);
         }
 
         private async Task<HttpResponseMessage> TransitionMissionStatusAsync(string missionId, string status)
         {
-            StringContent content = new StringContent(
-                JsonSerializer.Serialize(new { Status = status }),
-                Encoding.UTF8, "application/json");
-            return await _AuthClient.PutAsync("/api/v1/missions/" + missionId + "/status", content).ConfigureAwait(false);
+            return await _AuthClient.PutAsync("/api/v1/missions/" + missionId + "/status", JsonHelper.ToJsonContent(new { Status = status })).ConfigureAwait(false);
         }
 
-        private async Task<JsonElement> GetAsync(string path)
+        private async Task<T> GetAsync<T>(string path)
         {
             HttpResponseMessage resp = await _AuthClient.GetAsync(path).ConfigureAwait(false);
-            string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode)
-                throw new HttpRequestException("GET " + path + " returned " + (int)resp.StatusCode + ": " + body);
-            return JsonDocument.Parse(body).RootElement.Clone();
+            {
+                string errorBody = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+                throw new HttpRequestException("GET " + path + " returned " + (int)resp.StatusCode + ": " + errorBody);
+            }
+            return await JsonHelper.DeserializeAsync<T>(resp).ConfigureAwait(false);
         }
 
         #endregion

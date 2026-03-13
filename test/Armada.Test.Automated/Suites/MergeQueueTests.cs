@@ -2,13 +2,11 @@ namespace Armada.Test.Automated.Suites
 {
     using System;
     using System.Collections.Generic;
-    using System.Globalization;
     using System.Linq;
     using System.Net;
     using System.Net.Http;
-    using System.Text;
-    using System.Text.Json;
     using System.Threading.Tasks;
+    using Armada.Core.Models;
     using Armada.Test.Common;
 
     /// <summary>
@@ -50,57 +48,43 @@ namespace Armada.Test.Automated.Suites
         private async Task<string> CreateFleetAsync(string name = "MergeTestFleet")
         {
             string uniqueName = name + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
-            StringContent content = new StringContent(
-                JsonSerializer.Serialize(new { Name = uniqueName }),
-                Encoding.UTF8, "application/json");
-            HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/fleets", content).ConfigureAwait(false);
-            string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            return JsonDocument.Parse(body).RootElement.GetProperty("Id").GetString()!;
+            HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/fleets", JsonHelper.ToJsonContent(new { Name = uniqueName })).ConfigureAwait(false);
+            Fleet fleet = await JsonHelper.DeserializeAsync<Fleet>(resp).ConfigureAwait(false);
+            return fleet.Id;
         }
 
         private async Task<string> CreateVesselAsync(string fleetId, string name = "MergeTestVessel")
         {
             string uniqueName = name + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
-            StringContent content = new StringContent(
-                JsonSerializer.Serialize(new { Name = uniqueName, RepoUrl = TestRepoHelper.GetLocalBareRepoUrl(), FleetId = fleetId }),
-                Encoding.UTF8, "application/json");
-            HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/vessels", content).ConfigureAwait(false);
-            string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            return JsonDocument.Parse(body).RootElement.GetProperty("Id").GetString()!;
+            HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/vessels", JsonHelper.ToJsonContent(new { Name = uniqueName, RepoUrl = TestRepoHelper.GetLocalBareRepoUrl(), FleetId = fleetId })).ConfigureAwait(false);
+            Vessel vessel = await JsonHelper.DeserializeAsync<Vessel>(resp).ConfigureAwait(false);
+            return vessel.Id;
         }
 
         private async Task<string> CreateMissionAsync(string title = "MergeTestMission")
         {
-            StringContent content = new StringContent(
-                JsonSerializer.Serialize(new { Title = title, Description = "Mission for merge queue testing" }),
-                Encoding.UTF8, "application/json");
-            HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/missions", content).ConfigureAwait(false);
+            HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/missions", JsonHelper.ToJsonContent(new { Title = title, Description = "Mission for merge queue testing" })).ConfigureAwait(false);
             string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            JsonElement root = JsonDocument.Parse(body).RootElement;
-
-            // When mission stays Pending (no captain available), the API returns
-            // { "Mission": {...}, "Warning": "..." } instead of the mission directly.
-            if (root.TryGetProperty("Mission", out JsonElement nested))
-                return nested.GetProperty("Id").GetString()!;
-
-            return root.GetProperty("Id").GetString()!;
+            MissionCreateResponse wrapper = JsonHelper.Deserialize<MissionCreateResponse>(body);
+            string missionId;
+            if (wrapper.Mission != null)
+                missionId = wrapper.Mission.Id;
+            else
+                missionId = JsonHelper.Deserialize<Mission>(body).Id;
+            return missionId;
         }
 
-        private async Task<JsonElement> EnqueueAsync(string missionId, string vesselId, string branch, string targetBranch = "main")
+        private async Task<MergeEntry> EnqueueAsync(string missionId, string vesselId, string branch, string targetBranch = "main")
         {
-            StringContent content = new StringContent(
-                JsonSerializer.Serialize(new
-                {
-                    MissionId = missionId,
-                    VesselId = vesselId,
-                    BranchName = branch,
-                    TargetBranch = targetBranch
-                }),
-                Encoding.UTF8, "application/json");
-            HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/merge-queue", content).ConfigureAwait(false);
-            string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            JsonDocument doc = JsonDocument.Parse(body);
-            return doc.RootElement.Clone();
+            HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/merge-queue", JsonHelper.ToJsonContent(new
+            {
+                MissionId = missionId,
+                VesselId = vesselId,
+                BranchName = branch,
+                TargetBranch = targetBranch
+            })).ConfigureAwait(false);
+            MergeEntry entry = await JsonHelper.DeserializeAsync<MergeEntry>(resp).ConfigureAwait(false);
+            return entry;
         }
 
         private async Task<(string FleetId, string VesselId, string MissionId)> CreatePrerequisitesAsync(string suffix = "")
@@ -124,23 +108,23 @@ namespace Armada.Test.Automated.Suites
             {
                 (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("Enqueue201").ConfigureAwait(false);
 
-                JsonElement entry = await EnqueueAsync(missionId, vesselId, "feat/enqueue-test").ConfigureAwait(false);
+                MergeEntry entry = await EnqueueAsync(missionId, vesselId, "feat/enqueue-test").ConfigureAwait(false);
 
-                AssertStartsWith("mrg_", entry.GetProperty("Id").GetString()!);
-                AssertEqual(missionId, entry.GetProperty("MissionId").GetString());
-                AssertEqual(vesselId, entry.GetProperty("VesselId").GetString());
-                AssertEqual("feat/enqueue-test", entry.GetProperty("BranchName").GetString());
-                AssertEqual("main", entry.GetProperty("TargetBranch").GetString());
-                AssertEqual("Queued", entry.GetProperty("Status").GetString());
+                AssertStartsWith("mrg_", entry.Id);
+                AssertEqual(missionId, entry.MissionId);
+                AssertEqual(vesselId, entry.VesselId);
+                AssertEqual("feat/enqueue-test", entry.BranchName);
+                AssertEqual("main", entry.TargetBranch);
+                AssertEqual("Queued", entry.Status.ToString());
             }).ConfigureAwait(false);
 
             await RunTest("Enqueue_WithCustomTargetBranch_ReturnsCorrectTarget", async () =>
             {
                 (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("CustomTarget").ConfigureAwait(false);
 
-                JsonElement entry = await EnqueueAsync(missionId, vesselId, "feat/custom-target", "develop").ConfigureAwait(false);
+                MergeEntry entry = await EnqueueAsync(missionId, vesselId, "feat/custom-target", "develop").ConfigureAwait(false);
 
-                AssertEqual("develop", entry.GetProperty("TargetBranch").GetString());
+                AssertEqual("develop", entry.TargetBranch);
             }).ConfigureAwait(false);
 
             await RunTest("Enqueue_SetsTimestamps", async () =>
@@ -148,15 +132,13 @@ namespace Armada.Test.Automated.Suites
                 (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("Timestamps").ConfigureAwait(false);
 
                 DateTime before = DateTime.UtcNow.AddSeconds(-5);
-                JsonElement entry = await EnqueueAsync(missionId, vesselId, "feat/timestamps").ConfigureAwait(false);
+                MergeEntry entry = await EnqueueAsync(missionId, vesselId, "feat/timestamps").ConfigureAwait(false);
                 DateTime after = DateTime.UtcNow.AddSeconds(5);
 
-                string createdStr = entry.GetProperty("CreatedUtc").GetString()!;
-                DateTime created = DateTime.Parse(createdStr, null, DateTimeStyles.RoundtripKind).ToUniversalTime();
+                DateTime created = entry.CreatedUtc.ToUniversalTime();
                 Assert(created >= before && created <= after, "CreatedUtc " + created + " should be between " + before + " and " + after);
 
-                string updatedStr = entry.GetProperty("LastUpdateUtc").GetString()!;
-                DateTime updated = DateTime.Parse(updatedStr, null, DateTimeStyles.RoundtripKind).ToUniversalTime();
+                DateTime updated = entry.LastUpdateUtc.ToUniversalTime();
                 Assert(updated >= before && updated <= after, "LastUpdateUtc " + updated + " should be between " + before + " and " + after);
             }).ConfigureAwait(false);
 
@@ -164,18 +146,18 @@ namespace Armada.Test.Automated.Suites
             {
                 (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("StatusQueued").ConfigureAwait(false);
 
-                JsonElement entry = await EnqueueAsync(missionId, vesselId, "feat/status-check").ConfigureAwait(false);
+                MergeEntry entry = await EnqueueAsync(missionId, vesselId, "feat/status-check").ConfigureAwait(false);
 
-                AssertEqual("Queued", entry.GetProperty("Status").GetString());
+                AssertEqual("Queued", entry.Status.ToString());
             }).ConfigureAwait(false);
 
             await RunTest("Enqueue_IdHasMrgPrefix", async () =>
             {
                 (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("IdPrefix").ConfigureAwait(false);
 
-                JsonElement entry = await EnqueueAsync(missionId, vesselId, "feat/id-prefix").ConfigureAwait(false);
+                MergeEntry entry = await EnqueueAsync(missionId, vesselId, "feat/id-prefix").ConfigureAwait(false);
 
-                string id = entry.GetProperty("Id").GetString()!;
+                string id = entry.Id;
                 AssertStartsWith("mrg_", id);
                 Assert(id.Length > 4, "Id should have content after prefix");
             }).ConfigureAwait(false);
@@ -188,27 +170,25 @@ namespace Armada.Test.Automated.Suites
             {
                 (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("GetById").ConfigureAwait(false);
 
-                JsonElement created = await EnqueueAsync(missionId, vesselId, "feat/get-by-id").ConfigureAwait(false);
-                string entryId = created.GetProperty("Id").GetString()!;
+                MergeEntry created = await EnqueueAsync(missionId, vesselId, "feat/get-by-id").ConfigureAwait(false);
+                string entryId = created.Id;
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/merge-queue/" + entryId).ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual(entryId, doc.RootElement.GetProperty("Id").GetString());
-                AssertEqual("feat/get-by-id", doc.RootElement.GetProperty("BranchName").GetString());
-                AssertEqual(missionId, doc.RootElement.GetProperty("MissionId").GetString());
-                AssertEqual(vesselId, doc.RootElement.GetProperty("VesselId").GetString());
+                MergeEntry fetched = await JsonHelper.DeserializeAsync<MergeEntry>(response).ConfigureAwait(false);
+                AssertEqual(entryId, fetched.Id);
+                AssertEqual("feat/get-by-id", fetched.BranchName);
+                AssertEqual(missionId, fetched.MissionId);
+                AssertEqual(vesselId, fetched.VesselId);
             }).ConfigureAwait(false);
 
             await RunTest("GetById_NotFound_ReturnsError", async () =>
             {
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/merge-queue/mrg_nonexistent").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response).ConfigureAwait(false);
                 Assert(
-                    doc.RootElement.TryGetProperty("Error", out _) || doc.RootElement.TryGetProperty("Message", out _),
+                    error.Error != null || error.Message != null,
                     "Not found should return error");
             }).ConfigureAwait(false);
 
@@ -216,16 +196,15 @@ namespace Armada.Test.Automated.Suites
             {
                 (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("PreserveFields").ConfigureAwait(false);
 
-                JsonElement created = await EnqueueAsync(missionId, vesselId, "feat/preserve-fields", "develop").ConfigureAwait(false);
-                string entryId = created.GetProperty("Id").GetString()!;
+                MergeEntry created = await EnqueueAsync(missionId, vesselId, "feat/preserve-fields", "develop").ConfigureAwait(false);
+                string entryId = created.Id;
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/merge-queue/" + entryId).ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                MergeEntry fetched = await JsonHelper.DeserializeAsync<MergeEntry>(response).ConfigureAwait(false);
 
-                AssertEqual("feat/preserve-fields", doc.RootElement.GetProperty("BranchName").GetString());
-                AssertEqual("develop", doc.RootElement.GetProperty("TargetBranch").GetString());
-                AssertEqual("Queued", doc.RootElement.GetProperty("Status").GetString());
+                AssertEqual("feat/preserve-fields", fetched.BranchName);
+                AssertEqual("develop", fetched.TargetBranch);
+                AssertEqual("Queued", fetched.Status.ToString());
             }).ConfigureAwait(false);
 
             #endregion
@@ -236,8 +215,8 @@ namespace Armada.Test.Automated.Suites
             {
                 (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("Cancel204").ConfigureAwait(false);
 
-                JsonElement created = await EnqueueAsync(missionId, vesselId, "feat/cancel-test").ConfigureAwait(false);
-                string entryId = created.GetProperty("Id").GetString()!;
+                MergeEntry created = await EnqueueAsync(missionId, vesselId, "feat/cancel-test").ConfigureAwait(false);
+                string entryId = created.Id;
 
                 HttpResponseMessage response = await _AuthClient.DeleteAsync("/api/v1/merge-queue/" + entryId).ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.NoContent, response.StatusCode);
@@ -253,50 +232,46 @@ namespace Armada.Test.Automated.Suites
             {
                 (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("CancelThenGet").ConfigureAwait(false);
 
-                JsonElement created = await EnqueueAsync(missionId, vesselId, "feat/cancel-then-get").ConfigureAwait(false);
-                string entryId = created.GetProperty("Id").GetString()!;
+                MergeEntry created = await EnqueueAsync(missionId, vesselId, "feat/cancel-then-get").ConfigureAwait(false);
+                string entryId = created.Id;
 
                 await _AuthClient.DeleteAsync("/api/v1/merge-queue/" + entryId).ConfigureAwait(false);
 
                 HttpResponseMessage getResponse = await _AuthClient.GetAsync("/api/v1/merge-queue/" + entryId).ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, getResponse.StatusCode);
-                string body = await getResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual("Cancelled", doc.RootElement.GetProperty("Status").GetString());
+                MergeEntry fetched = await JsonHelper.DeserializeAsync<MergeEntry>(getResponse).ConfigureAwait(false);
+                AssertEqual("Cancelled", fetched.Status.ToString());
             }).ConfigureAwait(false);
 
             await RunTest("Cancel_SetsCompletedUtc", async () =>
             {
                 (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("CancelCompleted").ConfigureAwait(false);
 
-                JsonElement created = await EnqueueAsync(missionId, vesselId, "feat/cancel-completed").ConfigureAwait(false);
-                string entryId = created.GetProperty("Id").GetString()!;
+                MergeEntry created = await EnqueueAsync(missionId, vesselId, "feat/cancel-completed").ConfigureAwait(false);
+                string entryId = created.Id;
 
                 await _AuthClient.DeleteAsync("/api/v1/merge-queue/" + entryId).ConfigureAwait(false);
 
                 HttpResponseMessage getResponse = await _AuthClient.GetAsync("/api/v1/merge-queue/" + entryId).ConfigureAwait(false);
-                string body = await getResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                MergeEntry fetched = await JsonHelper.DeserializeAsync<MergeEntry>(getResponse).ConfigureAwait(false);
 
-                Assert(doc.RootElement.TryGetProperty("CompletedUtc", out JsonElement completedEl),
+                Assert(fetched.CompletedUtc != null,
                     "Cancelled entry should have CompletedUtc set");
-                AssertNotEqual(JsonValueKind.Null, completedEl.ValueKind);
             }).ConfigureAwait(false);
 
             await RunTest("Cancel_UpdatesLastUpdateUtc", async () =>
             {
                 (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("CancelUpdate").ConfigureAwait(false);
 
-                JsonElement created = await EnqueueAsync(missionId, vesselId, "feat/cancel-update").ConfigureAwait(false);
-                string entryId = created.GetProperty("Id").GetString()!;
+                MergeEntry created = await EnqueueAsync(missionId, vesselId, "feat/cancel-update").ConfigureAwait(false);
+                string entryId = created.Id;
 
                 await _AuthClient.DeleteAsync("/api/v1/merge-queue/" + entryId).ConfigureAwait(false);
 
                 HttpResponseMessage getResponse = await _AuthClient.GetAsync("/api/v1/merge-queue/" + entryId).ConfigureAwait(false);
-                string body = await getResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                MergeEntry fetched = await JsonHelper.DeserializeAsync<MergeEntry>(getResponse).ConfigureAwait(false);
 
-                Assert(doc.RootElement.TryGetProperty("LastUpdateUtc", out _),
+                Assert(fetched.LastUpdateUtc != default,
                     "Cancelled entry should have LastUpdateUtc");
             }).ConfigureAwait(false);
 
@@ -309,25 +284,23 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/merge-queue?pageSize=10000").ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                EnumerationResult<MergeEntry> result = await JsonHelper.DeserializeAsync<EnumerationResult<MergeEntry>>(response).ConfigureAwait(false);
 
-                AssertEqual(JsonValueKind.Array, doc.RootElement.GetProperty("Objects").ValueKind);
-                AssertTrue(doc.RootElement.GetProperty("Success").GetBoolean());
+                AssertNotNull(result.Objects);
+                AssertTrue(result.Success);
             }).ConfigureAwait(false);
 
             await RunTest("List_Empty_HasEnumerationResultShape", async () =>
             {
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/merge-queue?pageSize=10000").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                EnumerationResult<MergeEntry> result = await JsonHelper.DeserializeAsync<EnumerationResult<MergeEntry>>(response).ConfigureAwait(false);
 
-                AssertTrue(doc.RootElement.TryGetProperty("Objects", out _));
-                AssertTrue(doc.RootElement.TryGetProperty("PageNumber", out _));
-                AssertTrue(doc.RootElement.TryGetProperty("PageSize", out _));
-                AssertTrue(doc.RootElement.TryGetProperty("TotalPages", out _));
-                AssertTrue(doc.RootElement.TryGetProperty("TotalRecords", out _));
-                AssertTrue(doc.RootElement.TryGetProperty("Success", out _));
+                AssertNotNull(result.Objects);
+                Assert(result.PageNumber >= 0, "PageNumber should be present");
+                Assert(result.PageSize >= 0, "PageSize should be present");
+                Assert(result.TotalPages >= 0, "TotalPages should be present");
+                Assert(result.TotalRecords >= 0, "TotalRecords should be present");
+                AssertTrue(result.Success);
             }).ConfigureAwait(false);
 
             #endregion
@@ -341,11 +314,10 @@ namespace Armada.Test.Automated.Suites
                 await EnqueueAsync(missionId, vesselId, "feat/list-test").ConfigureAwait(false);
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/merge-queue?pageSize=10000").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                EnumerationResult<MergeEntry> result = await JsonHelper.DeserializeAsync<EnumerationResult<MergeEntry>>(response).ConfigureAwait(false);
 
-                AssertTrue(doc.RootElement.GetProperty("Objects").GetArrayLength() >= 1);
-                AssertTrue(doc.RootElement.GetProperty("TotalRecords").GetInt64() >= 1);
+                AssertTrue(result.Objects.Count >= 1);
+                AssertTrue(result.TotalRecords >= 1);
             }).ConfigureAwait(false);
 
             await RunTest("List_MultipleEntries_ReturnsAll", async () =>
@@ -359,10 +331,9 @@ namespace Armada.Test.Automated.Suites
                 await EnqueueAsync(missionId3, vesselId, "feat/multi-3").ConfigureAwait(false);
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/merge-queue?pageSize=10000").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                EnumerationResult<MergeEntry> result = await JsonHelper.DeserializeAsync<EnumerationResult<MergeEntry>>(response).ConfigureAwait(false);
 
-                AssertTrue(doc.RootElement.GetProperty("Objects").GetArrayLength() >= 3);
+                AssertTrue(result.Objects.Count >= 3);
             }).ConfigureAwait(false);
 
             #endregion
@@ -380,14 +351,13 @@ namespace Armada.Test.Automated.Suites
                 }
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/merge-queue?pageSize=10&pageNumber=1").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                EnumerationResult<MergeEntry> result = await JsonHelper.DeserializeAsync<EnumerationResult<MergeEntry>>(response).ConfigureAwait(false);
 
-                AssertEqual(10, doc.RootElement.GetProperty("Objects").GetArrayLength());
-                AssertTrue(doc.RootElement.GetProperty("TotalRecords").GetInt64() >= 25, "TotalRecords should be >= 25");
-                AssertTrue(doc.RootElement.GetProperty("TotalPages").GetInt32() >= 3, "TotalPages should be >= 3");
-                AssertEqual(1, doc.RootElement.GetProperty("PageNumber").GetInt32());
-                AssertEqual(10, doc.RootElement.GetProperty("PageSize").GetInt32());
+                AssertEqual(10, result.Objects.Count);
+                AssertTrue(result.TotalRecords >= 25, "TotalRecords should be >= 25");
+                AssertTrue(result.TotalPages >= 3, "TotalPages should be >= 3");
+                AssertEqual(1, result.PageNumber);
+                AssertEqual(10, result.PageSize);
             }).ConfigureAwait(false);
 
             await RunTest("List_25Entries_PageSize10_Page2_Returns10", async () =>
@@ -401,11 +371,10 @@ namespace Armada.Test.Automated.Suites
                 }
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/merge-queue?pageSize=10&pageNumber=2").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                EnumerationResult<MergeEntry> result = await JsonHelper.DeserializeAsync<EnumerationResult<MergeEntry>>(response).ConfigureAwait(false);
 
-                AssertEqual(10, doc.RootElement.GetProperty("Objects").GetArrayLength());
-                AssertEqual(2, doc.RootElement.GetProperty("PageNumber").GetInt32());
+                AssertEqual(10, result.Objects.Count);
+                AssertEqual(2, result.PageNumber);
             }).ConfigureAwait(false);
 
             await RunTest("List_25Entries_PageSize10_Page3_Returns5", async () =>
@@ -419,11 +388,10 @@ namespace Armada.Test.Automated.Suites
                 }
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/merge-queue?pageSize=10&pageNumber=3").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                EnumerationResult<MergeEntry> result = await JsonHelper.DeserializeAsync<EnumerationResult<MergeEntry>>(response).ConfigureAwait(false);
 
-                AssertTrue(doc.RootElement.GetProperty("Objects").GetArrayLength() >= 5, "Page 3 should have at least 5 items");
-                AssertEqual(3, doc.RootElement.GetProperty("PageNumber").GetInt32());
+                AssertTrue(result.Objects.Count >= 5, "Page 3 should have at least 5 items");
+                AssertEqual(3, result.PageNumber);
             }).ConfigureAwait(false);
 
             await RunTest("List_25Entries_PageSize10_Page4_BeyondLastPage_ReturnsEmpty", async () =>
@@ -437,11 +405,10 @@ namespace Armada.Test.Automated.Suites
                 }
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/merge-queue?pageSize=10&pageNumber=999").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                EnumerationResult<MergeEntry> result = await JsonHelper.DeserializeAsync<EnumerationResult<MergeEntry>>(response).ConfigureAwait(false);
 
-                AssertEqual(0, doc.RootElement.GetProperty("Objects").GetArrayLength());
-                AssertTrue(doc.RootElement.GetProperty("TotalRecords").GetInt64() >= 25, "TotalRecords should be >= 25");
+                AssertEqual(0, result.Objects.Count);
+                AssertTrue(result.TotalRecords >= 25, "TotalRecords should be >= 25");
             }).ConfigureAwait(false);
 
             await RunTest("List_PageBoundaries_FirstAndLastRecords", async () =>
@@ -452,31 +419,20 @@ namespace Armada.Test.Automated.Suites
                 for (int i = 0; i < 5; i++)
                 {
                     string msn = await CreateMissionAsync("BoundMission" + i).ConfigureAwait(false);
-                    JsonElement entry = await EnqueueAsync(msn, vesselId, "feat/bound-" + i.ToString("D2")).ConfigureAwait(false);
-                    createdIds.Add(entry.GetProperty("Id").GetString()!);
+                    MergeEntry entry = await EnqueueAsync(msn, vesselId, "feat/bound-" + i.ToString("D2")).ConfigureAwait(false);
+                    createdIds.Add(entry.Id);
                 }
 
                 HttpResponseMessage page1Response = await _AuthClient.GetAsync("/api/v1/merge-queue?pageSize=3&pageNumber=1").ConfigureAwait(false);
-                string page1Body = await page1Response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument page1Doc = JsonDocument.Parse(page1Body);
-                AssertEqual(3, page1Doc.RootElement.GetProperty("Objects").GetArrayLength());
+                EnumerationResult<MergeEntry> page1Result = await JsonHelper.DeserializeAsync<EnumerationResult<MergeEntry>>(page1Response).ConfigureAwait(false);
+                AssertEqual(3, page1Result.Objects.Count);
 
                 HttpResponseMessage page2Response = await _AuthClient.GetAsync("/api/v1/merge-queue?pageSize=3&pageNumber=2").ConfigureAwait(false);
-                string page2Body = await page2Response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument page2Doc = JsonDocument.Parse(page2Body);
-                AssertTrue(page2Doc.RootElement.GetProperty("Objects").GetArrayLength() >= 2, "Page 2 should have at least 2 items");
+                EnumerationResult<MergeEntry> page2Result = await JsonHelper.DeserializeAsync<EnumerationResult<MergeEntry>>(page2Response).ConfigureAwait(false);
+                AssertTrue(page2Result.Objects.Count >= 2, "Page 2 should have at least 2 items");
 
-                List<string> page1Ids = new List<string>();
-                foreach (JsonElement obj in page1Doc.RootElement.GetProperty("Objects").EnumerateArray())
-                {
-                    page1Ids.Add(obj.GetProperty("Id").GetString()!);
-                }
-
-                List<string> page2Ids = new List<string>();
-                foreach (JsonElement obj in page2Doc.RootElement.GetProperty("Objects").EnumerateArray())
-                {
-                    page2Ids.Add(obj.GetProperty("Id").GetString()!);
-                }
+                List<string> page1Ids = page1Result.Objects.Select(obj => obj.Id).ToList();
+                List<string> page2Ids = page2Result.Objects.Select(obj => obj.Id).ToList();
 
                 AssertEqual(0, page1Ids.Intersect(page2Ids).Count());
             }).ConfigureAwait(false);
@@ -489,19 +445,14 @@ namespace Armada.Test.Automated.Suites
                 for (int i = 0; i < 5; i++)
                 {
                     string msn = await CreateMissionAsync("OrderMission" + i).ConfigureAwait(false);
-                    JsonElement entry = await EnqueueAsync(msn, vesselId, "feat/order-" + i).ConfigureAwait(false);
-                    createdIds.Add(entry.GetProperty("Id").GetString()!);
+                    MergeEntry entry = await EnqueueAsync(msn, vesselId, "feat/order-" + i).ConfigureAwait(false);
+                    createdIds.Add(entry.Id);
                 }
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/merge-queue?pageSize=10000").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                EnumerationResult<MergeEntry> result = await JsonHelper.DeserializeAsync<EnumerationResult<MergeEntry>>(response).ConfigureAwait(false);
 
-                List<string> returnedIds = new List<string>();
-                foreach (JsonElement obj in doc.RootElement.GetProperty("Objects").EnumerateArray())
-                {
-                    returnedIds.Add(obj.GetProperty("Id").GetString()!);
-                }
+                List<string> returnedIds = result.Objects.Select(obj => obj.Id).ToList();
 
                 foreach (string id in createdIds)
                 {
@@ -515,21 +466,17 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("Enumerate_Default_ReturnsEnumerationResult", async () =>
             {
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { }),
-                    Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await _AuthClient.PostAsync("/api/v1/merge-queue/enumerate", content).ConfigureAwait(false);
+                HttpResponseMessage response = await _AuthClient.PostAsync("/api/v1/merge-queue/enumerate", JsonHelper.ToJsonContent(new { })).ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                EnumerationResult<MergeEntry> result = await JsonHelper.DeserializeAsync<EnumerationResult<MergeEntry>>(response).ConfigureAwait(false);
 
-                AssertTrue(doc.RootElement.TryGetProperty("Objects", out _));
-                AssertTrue(doc.RootElement.TryGetProperty("PageNumber", out _));
-                AssertTrue(doc.RootElement.TryGetProperty("PageSize", out _));
-                AssertTrue(doc.RootElement.TryGetProperty("TotalPages", out _));
-                AssertTrue(doc.RootElement.TryGetProperty("TotalRecords", out _));
-                AssertTrue(doc.RootElement.TryGetProperty("Success", out _));
+                AssertNotNull(result.Objects);
+                Assert(result.PageNumber >= 0, "PageNumber should be present");
+                Assert(result.PageSize >= 0, "PageSize should be present");
+                Assert(result.TotalPages >= 0, "TotalPages should be present");
+                Assert(result.TotalRecords >= 0, "TotalRecords should be present");
+                AssertTrue(result.Success);
             }).ConfigureAwait(false);
 
             await RunTest("Enumerate_WithPageSizeAndPageNumber_ReturnsCorrectPage", async () =>
@@ -542,31 +489,23 @@ namespace Armada.Test.Automated.Suites
                     await EnqueueAsync(msn, vesselId, "feat/enum-" + i.ToString("D2")).ConfigureAwait(false);
                 }
 
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { PageSize = 5, PageNumber = 2 }),
-                    Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await _AuthClient.PostAsync("/api/v1/merge-queue/enumerate", content).ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                HttpResponseMessage response = await _AuthClient.PostAsync("/api/v1/merge-queue/enumerate", JsonHelper.ToJsonContent(new { PageSize = 5, PageNumber = 2 })).ConfigureAwait(false);
+                EnumerationResult<MergeEntry> result = await JsonHelper.DeserializeAsync<EnumerationResult<MergeEntry>>(response).ConfigureAwait(false);
 
-                AssertEqual(5, doc.RootElement.GetProperty("Objects").GetArrayLength());
-                AssertEqual(2, doc.RootElement.GetProperty("PageNumber").GetInt32());
-                AssertEqual(5, doc.RootElement.GetProperty("PageSize").GetInt32());
-                AssertTrue(doc.RootElement.GetProperty("TotalRecords").GetInt64() >= 15, "TotalRecords should be >= 15");
-                AssertTrue(doc.RootElement.GetProperty("TotalPages").GetInt32() >= 3, "TotalPages should be >= 3");
+                AssertEqual(5, result.Objects.Count);
+                AssertEqual(2, result.PageNumber);
+                AssertEqual(5, result.PageSize);
+                AssertTrue(result.TotalRecords >= 15, "TotalRecords should be >= 15");
+                AssertTrue(result.TotalPages >= 3, "TotalPages should be >= 3");
             }).ConfigureAwait(false);
 
             await RunTest("Enumerate_Empty_ReturnsZeroRecords", async () =>
             {
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { }),
-                    Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await _AuthClient.PostAsync("/api/v1/merge-queue/enumerate", content).ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                HttpResponseMessage response = await _AuthClient.PostAsync("/api/v1/merge-queue/enumerate", JsonHelper.ToJsonContent(new { })).ConfigureAwait(false);
+                EnumerationResult<MergeEntry> result = await JsonHelper.DeserializeAsync<EnumerationResult<MergeEntry>>(response).ConfigureAwait(false);
 
                 // Note: may not be empty due to previous tests in this shared server
-                AssertTrue(doc.RootElement.GetProperty("TotalRecords").GetInt64() >= 0);
+                AssertTrue(result.TotalRecords >= 0);
             }).ConfigureAwait(false);
 
             await RunTest("Enumerate_AfterEnqueue_ContainsEntry", async () =>
@@ -575,14 +514,10 @@ namespace Armada.Test.Automated.Suites
 
                 await EnqueueAsync(missionId, vesselId, "feat/enum-after").ConfigureAwait(false);
 
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { }),
-                    Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await _AuthClient.PostAsync("/api/v1/merge-queue/enumerate", content).ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                HttpResponseMessage response = await _AuthClient.PostAsync("/api/v1/merge-queue/enumerate", JsonHelper.ToJsonContent(new { })).ConfigureAwait(false);
+                EnumerationResult<MergeEntry> result = await JsonHelper.DeserializeAsync<EnumerationResult<MergeEntry>>(response).ConfigureAwait(false);
 
-                AssertTrue(doc.RootElement.GetProperty("Objects").GetArrayLength() >= 1);
+                AssertTrue(result.Objects.Count >= 1);
             }).ConfigureAwait(false);
 
             await RunTest("Enumerate_QuerystringOverrides_Work", async () =>
@@ -595,15 +530,11 @@ namespace Armada.Test.Automated.Suites
                     await EnqueueAsync(msn, vesselId, "feat/enumqs-" + i).ConfigureAwait(false);
                 }
 
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(new { }),
-                    Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await _AuthClient.PostAsync("/api/v1/merge-queue/enumerate?pageSize=3", content).ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                HttpResponseMessage response = await _AuthClient.PostAsync("/api/v1/merge-queue/enumerate?pageSize=3", JsonHelper.ToJsonContent(new { })).ConfigureAwait(false);
+                EnumerationResult<MergeEntry> result = await JsonHelper.DeserializeAsync<EnumerationResult<MergeEntry>>(response).ConfigureAwait(false);
 
-                AssertEqual(3, doc.RootElement.GetProperty("Objects").GetArrayLength());
-                AssertEqual(3, doc.RootElement.GetProperty("PageSize").GetInt32());
+                AssertEqual(3, result.Objects.Count);
+                AssertEqual(3, result.PageSize);
             }).ConfigureAwait(false);
 
             #endregion
@@ -615,9 +546,8 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage response = await _AuthClient.PostAsync("/api/v1/merge-queue/process", null).ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual("processed", doc.RootElement.GetProperty("Status").GetString());
+                ProcessMergeQueueResponse result = await JsonHelper.DeserializeAsync<ProcessMergeQueueResponse>(response).ConfigureAwait(false);
+                AssertEqual("processed", result.Status);
             }).ConfigureAwait(false);
 
             await RunTest("Process_ReturnsProcessedStatus", async () =>
@@ -629,9 +559,8 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage response = await _AuthClient.PostAsync("/api/v1/merge-queue/process", null).ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual("processed", doc.RootElement.GetProperty("Status").GetString());
+                ProcessMergeQueueResponse result = await JsonHelper.DeserializeAsync<ProcessMergeQueueResponse>(response).ConfigureAwait(false);
+                AssertEqual("processed", result.Status);
             }).ConfigureAwait(false);
 
             #endregion
@@ -642,21 +571,20 @@ namespace Armada.Test.Automated.Suites
             {
                 (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("ListCancelled").ConfigureAwait(false);
 
-                JsonElement entry = await EnqueueAsync(missionId, vesselId, "feat/list-cancelled").ConfigureAwait(false);
-                string entryId = entry.GetProperty("Id").GetString()!;
+                MergeEntry entry = await EnqueueAsync(missionId, vesselId, "feat/list-cancelled").ConfigureAwait(false);
+                string entryId = entry.Id;
 
                 await _AuthClient.DeleteAsync("/api/v1/merge-queue/" + entryId).ConfigureAwait(false);
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/merge-queue?pageSize=10000").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                EnumerationResult<MergeEntry> result = await JsonHelper.DeserializeAsync<EnumerationResult<MergeEntry>>(response).ConfigureAwait(false);
 
                 bool foundCancelled = false;
-                foreach (JsonElement obj in doc.RootElement.GetProperty("Objects").EnumerateArray())
+                foreach (MergeEntry obj in result.Objects)
                 {
-                    if (obj.GetProperty("Id").GetString() == entryId)
+                    if (obj.Id == entryId)
                     {
-                        AssertEqual("Cancelled", obj.GetProperty("Status").GetString());
+                        AssertEqual("Cancelled", obj.Status.ToString());
                         foundCancelled = true;
                     }
                 }
@@ -675,8 +603,8 @@ namespace Armada.Test.Automated.Suites
                 for (int i = 0; i < 10; i++)
                 {
                     string msn = await CreateMissionAsync("UniqueMission" + i).ConfigureAwait(false);
-                    JsonElement entry = await EnqueueAsync(msn, vesselId, "feat/unique-" + i).ConfigureAwait(false);
-                    string id = entry.GetProperty("Id").GetString()!;
+                    MergeEntry entry = await EnqueueAsync(msn, vesselId, "feat/unique-" + i).ConfigureAwait(false);
+                    string id = entry.Id;
                     Assert(ids.Add(id), "Each merge entry should have a unique ID");
                 }
             }).ConfigureAwait(false);
@@ -688,18 +616,15 @@ namespace Armada.Test.Automated.Suites
             await RunTest("List_SuccessField_IsTrue", async () =>
             {
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/merge-queue?pageSize=10000").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertTrue(doc.RootElement.GetProperty("Success").GetBoolean());
+                EnumerationResult<MergeEntry> result = await JsonHelper.DeserializeAsync<EnumerationResult<MergeEntry>>(response).ConfigureAwait(false);
+                AssertTrue(result.Success);
             }).ConfigureAwait(false);
 
             await RunTest("List_TotalMs_IsPresent", async () =>
             {
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/merge-queue?pageSize=10000").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertTrue(doc.RootElement.TryGetProperty("TotalMs", out JsonElement totalMs));
-                AssertTrue(totalMs.GetDouble() >= 0);
+                EnumerationResult<MergeEntry> result = await JsonHelper.DeserializeAsync<EnumerationResult<MergeEntry>>(response).ConfigureAwait(false);
+                AssertTrue(result.TotalMs >= 0);
             }).ConfigureAwait(false);
 
             #endregion

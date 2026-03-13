@@ -5,9 +5,8 @@ namespace Armada.Test.Automated.Suites
     using System.Linq;
     using System.Net;
     using System.Net.Http;
-    using System.Text;
-    using System.Text.Json;
     using System.Threading.Tasks;
+    using Armada.Core.Models;
     using Armada.Test.Common;
 
     /// <summary>
@@ -50,31 +49,27 @@ namespace Armada.Test.Automated.Suites
 
         private async Task<string> CreateMissionAsync(string title = "Test Mission")
         {
-            StringContent content = new StringContent(
-                JsonSerializer.Serialize(new { Title = title, Description = "Test description" }),
-                Encoding.UTF8, "application/json");
+            StringContent content = JsonHelper.ToJsonContent(new { Title = title, Description = "Test description" });
             HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/missions", content).ConfigureAwait(false);
             resp.EnsureSuccessStatusCode();
             string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            JsonElement root = JsonDocument.Parse(body).RootElement;
+            MissionCreateResponse wrapper = JsonHelper.Deserialize<MissionCreateResponse>(body);
+            Mission mission;
+            if (wrapper.Mission != null)
+                mission = wrapper.Mission;
+            else
+                mission = JsonHelper.Deserialize<Mission>(body);
 
-            // When mission stays Pending (no captain available), the API returns
-            // { "Mission": {...}, "Warning": "..." } instead of the mission directly.
-            if (root.TryGetProperty("Mission", out JsonElement nested))
-                return nested.GetProperty("Id").GetString()!;
-
-            return root.GetProperty("Id").GetString()!;
+            return mission.Id!;
         }
 
         private async Task<string> CreateCaptainAsync(string name = "test-captain")
         {
-            StringContent content = new StringContent(
-                JsonSerializer.Serialize(new { Name = name, Runtime = "ClaudeCode" }),
-                Encoding.UTF8, "application/json");
+            StringContent content = JsonHelper.ToJsonContent(new { Name = name, Runtime = "ClaudeCode" });
             HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/captains", content).ConfigureAwait(false);
             resp.EnsureSuccessStatusCode();
-            string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            return JsonDocument.Parse(body).RootElement.GetProperty("Id").GetString()!;
+            Captain captain = await JsonHelper.DeserializeAsync<Captain>(resp).ConfigureAwait(false);
+            return captain.Id!;
         }
 
         private string EnsureMissionLogDir()
@@ -122,23 +117,21 @@ namespace Armada.Test.Automated.Suites
             await RunTest("MissionLog_NotFound_ReturnsError", async () =>
             {
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/missions/msn_nonexistent/log").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                ArmadaErrorResponse errorResp = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response).ConfigureAwait(false);
                 Assert(
-                    doc.RootElement.TryGetProperty("Error", out _) ||
-                    doc.RootElement.TryGetProperty("Message", out _),
+                    errorResp.Error != null ||
+                    errorResp.Message != null,
                     "Not found should return error or message");
             }).ConfigureAwait(false);
 
             await RunTest("MissionLog_NotFound_ReturnsNotFoundStatus", async () =>
             {
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/missions/msn_doesnotexist/log").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                ArmadaErrorResponse errorResp = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response).ConfigureAwait(false);
 
-                if (doc.RootElement.TryGetProperty("Message", out JsonElement msg))
+                if (errorResp.Message != null)
                 {
-                    string msgStr = msg.GetString()!;
+                    string msgStr = errorResp.Message;
                     Assert(msgStr.Contains("not found", StringComparison.OrdinalIgnoreCase),
                         "Expected message to contain 'not found'");
                 }
@@ -151,11 +144,10 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/missions/" + missionId + "/log").ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual("", doc.RootElement.GetProperty("Log").GetString());
-                AssertEqual(0, doc.RootElement.GetProperty("Lines").GetInt32());
-                AssertEqual(0, doc.RootElement.GetProperty("TotalLines").GetInt32());
+                MissionLogResponse logResp = await JsonHelper.DeserializeAsync<MissionLogResponse>(response).ConfigureAwait(false);
+                AssertEqual("", logResp.Log);
+                AssertEqual(0, logResp.Lines);
+                AssertEqual(0, logResp.TotalLines);
             }).ConfigureAwait(false);
 
             await RunTest("MissionLog_NoFile_ReturnsMissionId", async () =>
@@ -165,9 +157,8 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/missions/" + missionId + "/log").ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual(missionId, doc.RootElement.GetProperty("MissionId").GetString());
+                MissionLogResponse logResp = await JsonHelper.DeserializeAsync<MissionLogResponse>(response).ConfigureAwait(false);
+                AssertEqual(missionId, logResp.MissionId);
             }).ConfigureAwait(false);
 
             await RunTest("MissionLog_WithFile_ReturnsContent", async () =>
@@ -178,13 +169,12 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/missions/" + missionId + "/log").ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual(3, doc.RootElement.GetProperty("TotalLines").GetInt32());
-                AssertEqual(3, doc.RootElement.GetProperty("Lines").GetInt32());
-                AssertContains("line one", doc.RootElement.GetProperty("Log").GetString()!);
-                AssertContains("line two", doc.RootElement.GetProperty("Log").GetString()!);
-                AssertContains("line three", doc.RootElement.GetProperty("Log").GetString()!);
+                MissionLogResponse logResp = await JsonHelper.DeserializeAsync<MissionLogResponse>(response).ConfigureAwait(false);
+                AssertEqual(3, logResp.TotalLines);
+                AssertEqual(3, logResp.Lines);
+                AssertContains("line one", logResp.Log!);
+                AssertContains("line two", logResp.Log!);
+                AssertContains("line three", logResp.Log!);
             }).ConfigureAwait(false);
 
             await RunTest("MissionLog_WithFile_ReturnsMissionId", async () =>
@@ -193,9 +183,8 @@ namespace Armada.Test.Automated.Suites
                 WriteMissionLog(missionId, "some log output");
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/missions/" + missionId + "/log").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual(missionId, doc.RootElement.GetProperty("MissionId").GetString());
+                MissionLogResponse logResp = await JsonHelper.DeserializeAsync<MissionLogResponse>(response).ConfigureAwait(false);
+                AssertEqual(missionId, logResp.MissionId);
             }).ConfigureAwait(false);
 
             await RunTest("MissionLog_LinesParam_LimitsOutput", async () =>
@@ -206,10 +195,9 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/missions/" + missionId + "/log?lines=10").ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual(10, doc.RootElement.GetProperty("Lines").GetInt32());
-                AssertEqual(50, doc.RootElement.GetProperty("TotalLines").GetInt32());
+                MissionLogResponse logResp = await JsonHelper.DeserializeAsync<MissionLogResponse>(response).ConfigureAwait(false);
+                AssertEqual(10, logResp.Lines);
+                AssertEqual(50, logResp.TotalLines);
             }).ConfigureAwait(false);
 
             await RunTest("MissionLog_LinesParam_ReturnsCorrectContent", async () =>
@@ -218,9 +206,8 @@ namespace Armada.Test.Automated.Suites
                 WriteMissionLogLines(missionId, 50);
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/missions/" + missionId + "/log?lines=10").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                string log = doc.RootElement.GetProperty("Log").GetString()!;
+                MissionLogResponse logResp = await JsonHelper.DeserializeAsync<MissionLogResponse>(response).ConfigureAwait(false);
+                string log = logResp.Log!;
 
                 AssertContains("log line 1", log);
                 AssertContains("log line 10", log);
@@ -235,9 +222,8 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/missions/" + missionId + "/log?offset=40").ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                string log = doc.RootElement.GetProperty("Log").GetString()!;
+                MissionLogResponse logResp = await JsonHelper.DeserializeAsync<MissionLogResponse>(response).ConfigureAwait(false);
+                string log = logResp.Log!;
 
                 AssertContains("log line 41", log);
                 AssertContains("log line 50", log);
@@ -251,10 +237,9 @@ namespace Armada.Test.Automated.Suites
                 WriteMissionLogLines(missionId, 50);
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/missions/" + missionId + "/log?offset=40").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual(50, doc.RootElement.GetProperty("TotalLines").GetInt32());
-                AssertEqual(10, doc.RootElement.GetProperty("Lines").GetInt32());
+                MissionLogResponse logResp = await JsonHelper.DeserializeAsync<MissionLogResponse>(response).ConfigureAwait(false);
+                AssertEqual(50, logResp.TotalLines);
+                AssertEqual(10, logResp.Lines);
             }).ConfigureAwait(false);
 
             await RunTest("MissionLog_LinesAndOffset_Combined", async () =>
@@ -265,45 +250,42 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/missions/" + missionId + "/log?offset=10&lines=5").ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual(5, doc.RootElement.GetProperty("Lines").GetInt32());
-                AssertEqual(50, doc.RootElement.GetProperty("TotalLines").GetInt32());
+                MissionLogResponse logResp = await JsonHelper.DeserializeAsync<MissionLogResponse>(response).ConfigureAwait(false);
+                AssertEqual(5, logResp.Lines);
+                AssertEqual(50, logResp.TotalLines);
 
-                string log = doc.RootElement.GetProperty("Log").GetString()!;
+                string log = logResp.Log!;
                 AssertContains("log line 11", log);
                 AssertContains("log line 15", log);
                 AssertFalse(log.Contains("log line 10\n"), "Should not contain log line 10");
                 AssertFalse(log.Contains("log line 16"), "Should not contain log line 16");
             }).ConfigureAwait(false);
 
-            await RunTest("MissionLog_DefaultLines_Returns100", async () =>
+            await RunTest("MissionLog_DefaultLines_Returns200", async () =>
             {
                 string missionId = await CreateMissionAsync("DefaultLines").ConfigureAwait(false);
-                WriteMissionLogLines(missionId, 200);
+                WriteMissionLogLines(missionId, 300);
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/missions/" + missionId + "/log").ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual(100, doc.RootElement.GetProperty("Lines").GetInt32());
-                AssertEqual(200, doc.RootElement.GetProperty("TotalLines").GetInt32());
+                MissionLogResponse logResp = await JsonHelper.DeserializeAsync<MissionLogResponse>(response).ConfigureAwait(false);
+                AssertEqual(200, logResp.Lines);
+                AssertEqual(300, logResp.TotalLines);
             }).ConfigureAwait(false);
 
-            await RunTest("MissionLog_DefaultLines_ReturnsFirst100Lines", async () =>
+            await RunTest("MissionLog_DefaultLines_ReturnsFirst200Lines", async () =>
             {
                 string missionId = await CreateMissionAsync("DefaultContent").ConfigureAwait(false);
-                WriteMissionLogLines(missionId, 200);
+                WriteMissionLogLines(missionId, 300);
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/missions/" + missionId + "/log").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                string log = doc.RootElement.GetProperty("Log").GetString()!;
+                MissionLogResponse logResp = await JsonHelper.DeserializeAsync<MissionLogResponse>(response).ConfigureAwait(false);
+                string log = logResp.Log!;
 
                 AssertContains("log line 1", log);
-                AssertContains("log line 100", log);
-                AssertFalse(log.Contains("log line 101"), "Should not contain log line 101");
+                AssertContains("log line 200", log);
+                AssertFalse(log.Contains("log line 201"), "Should not contain log line 201");
             }).ConfigureAwait(false);
 
             await RunTest("MissionLog_VeryLargeOffset_ReturnsEmpty", async () =>
@@ -314,11 +296,10 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/missions/" + missionId + "/log?offset=9999").ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual("", doc.RootElement.GetProperty("Log").GetString());
-                AssertEqual(0, doc.RootElement.GetProperty("Lines").GetInt32());
-                AssertEqual(10, doc.RootElement.GetProperty("TotalLines").GetInt32());
+                MissionLogResponse logResp = await JsonHelper.DeserializeAsync<MissionLogResponse>(response).ConfigureAwait(false);
+                AssertEqual("", logResp.Log);
+                AssertEqual(0, logResp.Lines);
+                AssertEqual(10, logResp.TotalLines);
             }).ConfigureAwait(false);
 
             await RunTest("MissionLog_ContentPreserved_ExactLineContent", async () =>
@@ -328,9 +309,8 @@ namespace Armada.Test.Automated.Suites
                 WriteMissionLog(missionId, logContent);
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/missions/" + missionId + "/log").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                string log = doc.RootElement.GetProperty("Log").GetString()!;
+                MissionLogResponse logResp = await JsonHelper.DeserializeAsync<MissionLogResponse>(response).ConfigureAwait(false);
+                string log = logResp.Log!;
 
                 AssertContains("first line with special chars: <>&\"", log);
                 AssertContains("second line with tabs:", log);
@@ -343,11 +323,10 @@ namespace Armada.Test.Automated.Suites
                 WriteMissionLogLines(missionId, 75);
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/missions/" + missionId + "/log?lines=5").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                MissionLogResponse logResp = await JsonHelper.DeserializeAsync<MissionLogResponse>(response).ConfigureAwait(false);
 
-                AssertEqual(5, doc.RootElement.GetProperty("Lines").GetInt32());
-                AssertEqual(75, doc.RootElement.GetProperty("TotalLines").GetInt32());
+                AssertEqual(5, logResp.Lines);
+                AssertEqual(75, logResp.TotalLines);
             }).ConfigureAwait(false);
 
             await RunTest("MissionLog_LinesExceedsFile_ReturnsAllAvailable", async () =>
@@ -356,11 +335,10 @@ namespace Armada.Test.Automated.Suites
                 WriteMissionLogLines(missionId, 5);
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/missions/" + missionId + "/log?lines=100").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                MissionLogResponse logResp = await JsonHelper.DeserializeAsync<MissionLogResponse>(response).ConfigureAwait(false);
 
-                AssertEqual(5, doc.RootElement.GetProperty("Lines").GetInt32());
-                AssertEqual(5, doc.RootElement.GetProperty("TotalLines").GetInt32());
+                AssertEqual(5, logResp.Lines);
+                AssertEqual(5, logResp.TotalLines);
             }).ConfigureAwait(false);
 
             await RunTest("MissionLog_SingleLine_Works", async () =>
@@ -369,12 +347,11 @@ namespace Armada.Test.Automated.Suites
                 WriteMissionLog(missionId, "only one line");
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/missions/" + missionId + "/log").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                MissionLogResponse logResp = await JsonHelper.DeserializeAsync<MissionLogResponse>(response).ConfigureAwait(false);
 
-                AssertEqual(1, doc.RootElement.GetProperty("TotalLines").GetInt32());
-                AssertEqual(1, doc.RootElement.GetProperty("Lines").GetInt32());
-                AssertEqual("only one line", doc.RootElement.GetProperty("Log").GetString());
+                AssertEqual(1, logResp.TotalLines);
+                AssertEqual(1, logResp.Lines);
+                AssertEqual("only one line", logResp.Log);
             }).ConfigureAwait(false);
 
             await RunTest("MissionLog_OffsetAtExactEnd_ReturnsEmpty", async () =>
@@ -383,12 +360,11 @@ namespace Armada.Test.Automated.Suites
                 WriteMissionLogLines(missionId, 10);
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/missions/" + missionId + "/log?offset=10").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                MissionLogResponse logResp = await JsonHelper.DeserializeAsync<MissionLogResponse>(response).ConfigureAwait(false);
 
-                AssertEqual("", doc.RootElement.GetProperty("Log").GetString());
-                AssertEqual(0, doc.RootElement.GetProperty("Lines").GetInt32());
-                AssertEqual(10, doc.RootElement.GetProperty("TotalLines").GetInt32());
+                AssertEqual("", logResp.Log);
+                AssertEqual(0, logResp.Lines);
+                AssertEqual(10, logResp.TotalLines);
             }).ConfigureAwait(false);
 
             await RunTest("MissionLog_OffsetAndLinesAtBoundary", async () =>
@@ -397,12 +373,11 @@ namespace Armada.Test.Automated.Suites
                 WriteMissionLogLines(missionId, 10);
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/missions/" + missionId + "/log?offset=8&lines=5").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                MissionLogResponse logResp = await JsonHelper.DeserializeAsync<MissionLogResponse>(response).ConfigureAwait(false);
 
-                AssertEqual(2, doc.RootElement.GetProperty("Lines").GetInt32());
-                AssertEqual(10, doc.RootElement.GetProperty("TotalLines").GetInt32());
-                string log = doc.RootElement.GetProperty("Log").GetString()!;
+                AssertEqual(2, logResp.Lines);
+                AssertEqual(10, logResp.TotalLines);
+                string log = logResp.Log!;
                 AssertContains("log line 9", log);
                 AssertContains("log line 10", log);
             }).ConfigureAwait(false);
@@ -424,23 +399,21 @@ namespace Armada.Test.Automated.Suites
             await RunTest("CaptainLog_NotFound_ReturnsError", async () =>
             {
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/captains/cpt_nonexistent/log").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                ArmadaErrorResponse errorResp = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response).ConfigureAwait(false);
                 Assert(
-                    doc.RootElement.TryGetProperty("Error", out _) ||
-                    doc.RootElement.TryGetProperty("Message", out _),
+                    errorResp.Error != null ||
+                    errorResp.Message != null,
                     "Not found should return error or message");
             }).ConfigureAwait(false);
 
             await RunTest("CaptainLog_NotFound_MessageIndicatesNotFound", async () =>
             {
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/captains/cpt_doesnotexist/log").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                ArmadaErrorResponse errorResp = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response).ConfigureAwait(false);
 
-                if (doc.RootElement.TryGetProperty("Message", out JsonElement msg))
+                if (errorResp.Message != null)
                 {
-                    string msgStr = msg.GetString()!;
+                    string msgStr = errorResp.Message;
                     Assert(msgStr.Contains("not found", StringComparison.OrdinalIgnoreCase),
                         "Expected message to contain 'not found'");
                 }
@@ -453,11 +426,10 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/captains/" + captainId + "/log").ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual("", doc.RootElement.GetProperty("Log").GetString());
-                AssertEqual(0, doc.RootElement.GetProperty("Lines").GetInt32());
-                AssertEqual(0, doc.RootElement.GetProperty("TotalLines").GetInt32());
+                CaptainLogResponse logResp = await JsonHelper.DeserializeAsync<CaptainLogResponse>(response).ConfigureAwait(false);
+                AssertEqual("", logResp.Log);
+                AssertEqual(0, logResp.Lines);
+                AssertEqual(0, logResp.TotalLines);
             }).ConfigureAwait(false);
 
             await RunTest("CaptainLog_NoPointerOrFile_ReturnsCaptainId", async () =>
@@ -465,9 +437,8 @@ namespace Armada.Test.Automated.Suites
                 string captainId = await CreateCaptainAsync("no-log-captain-id").ConfigureAwait(false);
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/captains/" + captainId + "/log").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual(captainId, doc.RootElement.GetProperty("CaptainId").GetString());
+                CaptainLogResponse logResp = await JsonHelper.DeserializeAsync<CaptainLogResponse>(response).ConfigureAwait(false);
+                AssertEqual(captainId, logResp.CaptainId);
             }).ConfigureAwait(false);
 
             await RunTest("CaptainLog_PointerToMissingFile_ReturnsEmpty", async () =>
@@ -479,11 +450,10 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/captains/" + captainId + "/log").ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual("", doc.RootElement.GetProperty("Log").GetString());
-                AssertEqual(0, doc.RootElement.GetProperty("Lines").GetInt32());
-                AssertEqual(0, doc.RootElement.GetProperty("TotalLines").GetInt32());
+                CaptainLogResponse logResp = await JsonHelper.DeserializeAsync<CaptainLogResponse>(response).ConfigureAwait(false);
+                AssertEqual("", logResp.Log);
+                AssertEqual(0, logResp.Lines);
+                AssertEqual(0, logResp.TotalLines);
             }).ConfigureAwait(false);
 
             await RunTest("CaptainLog_WithPointerAndFile_ReturnsContent", async () =>
@@ -499,12 +469,11 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/captains/" + captainId + "/log").ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual(2, doc.RootElement.GetProperty("TotalLines").GetInt32());
-                AssertEqual(2, doc.RootElement.GetProperty("Lines").GetInt32());
-                AssertContains("captain output line 1", doc.RootElement.GetProperty("Log").GetString()!);
-                AssertContains("captain output line 2", doc.RootElement.GetProperty("Log").GetString()!);
+                CaptainLogResponse logResp = await JsonHelper.DeserializeAsync<CaptainLogResponse>(response).ConfigureAwait(false);
+                AssertEqual(2, logResp.TotalLines);
+                AssertEqual(2, logResp.Lines);
+                AssertContains("captain output line 1", logResp.Log!);
+                AssertContains("captain output line 2", logResp.Log!);
             }).ConfigureAwait(false);
 
             await RunTest("CaptainLog_WithPointerAndFile_ReturnsCaptainId", async () =>
@@ -518,9 +487,8 @@ namespace Armada.Test.Automated.Suites
                 WriteCaptainPointer(captainId, missionLogPath);
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/captains/" + captainId + "/log").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual(captainId, doc.RootElement.GetProperty("CaptainId").GetString());
+                CaptainLogResponse logResp = await JsonHelper.DeserializeAsync<CaptainLogResponse>(response).ConfigureAwait(false);
+                AssertEqual(captainId, logResp.CaptainId);
             }).ConfigureAwait(false);
 
             await RunTest("CaptainLog_LinesParam_Works", async () =>
@@ -537,11 +505,10 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/captains/" + captainId + "/log?lines=5").ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual(5, doc.RootElement.GetProperty("Lines").GetInt32());
-                AssertEqual(30, doc.RootElement.GetProperty("TotalLines").GetInt32());
-                string log = doc.RootElement.GetProperty("Log").GetString()!;
+                CaptainLogResponse logResp = await JsonHelper.DeserializeAsync<CaptainLogResponse>(response).ConfigureAwait(false);
+                AssertEqual(5, logResp.Lines);
+                AssertEqual(30, logResp.TotalLines);
+                string log = logResp.Log!;
                 AssertContains("captain line 1", log);
                 AssertContains("captain line 5", log);
                 AssertFalse(log.Contains("captain line 6"), "Should not contain captain line 6");
@@ -561,11 +528,10 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/captains/" + captainId + "/log?offset=15").ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual(5, doc.RootElement.GetProperty("Lines").GetInt32());
-                AssertEqual(20, doc.RootElement.GetProperty("TotalLines").GetInt32());
-                string log = doc.RootElement.GetProperty("Log").GetString()!;
+                CaptainLogResponse logResp = await JsonHelper.DeserializeAsync<CaptainLogResponse>(response).ConfigureAwait(false);
+                AssertEqual(5, logResp.Lines);
+                AssertEqual(20, logResp.TotalLines);
+                string log = logResp.Log!;
                 AssertContains("captain line 16", log);
                 AssertContains("captain line 20", log);
                 AssertFalse(log.Contains("captain line 15\n"), "Should not contain captain line 15");
@@ -585,12 +551,11 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/captains/" + captainId + "/log?offset=10&lines=5").ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual(5, doc.RootElement.GetProperty("Lines").GetInt32());
-                AssertEqual(30, doc.RootElement.GetProperty("TotalLines").GetInt32());
+                CaptainLogResponse logResp = await JsonHelper.DeserializeAsync<CaptainLogResponse>(response).ConfigureAwait(false);
+                AssertEqual(5, logResp.Lines);
+                AssertEqual(30, logResp.TotalLines);
 
-                string log = doc.RootElement.GetProperty("Log").GetString()!;
+                string log = logResp.Log!;
                 AssertContains("captain line 11", log);
                 AssertContains("captain line 15", log);
                 AssertFalse(log.Contains("captain line 10\n"), "Should not contain captain line 10");
@@ -612,13 +577,12 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/captains/" + captainId + "/log").ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);
 
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
-                AssertEqual(2, doc.RootElement.GetProperty("TotalLines").GetInt32());
-                AssertContains("whitespace test line 1", doc.RootElement.GetProperty("Log").GetString()!);
+                CaptainLogResponse logResp = await JsonHelper.DeserializeAsync<CaptainLogResponse>(response).ConfigureAwait(false);
+                AssertEqual(2, logResp.TotalLines);
+                AssertContains("whitespace test line 1", logResp.Log!);
             }).ConfigureAwait(false);
 
-            await RunTest("CaptainLog_DefaultLines_Returns100", async () =>
+            await RunTest("CaptainLog_DefaultLines_Returns50", async () =>
             {
                 string captainId = await CreateCaptainAsync("default-lines-captain").ConfigureAwait(false);
 
@@ -630,11 +594,10 @@ namespace Armada.Test.Automated.Suites
                 WriteCaptainPointer(captainId, logPath);
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/captains/" + captainId + "/log").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                CaptainLogResponse logResp = await JsonHelper.DeserializeAsync<CaptainLogResponse>(response).ConfigureAwait(false);
 
-                AssertEqual(100, doc.RootElement.GetProperty("Lines").GetInt32());
-                AssertEqual(150, doc.RootElement.GetProperty("TotalLines").GetInt32());
+                AssertEqual(50, logResp.Lines);
+                AssertEqual(150, logResp.TotalLines);
             }).ConfigureAwait(false);
 
             await RunTest("CaptainLog_LargeOffset_ReturnsEmpty", async () =>
@@ -649,12 +612,11 @@ namespace Armada.Test.Automated.Suites
                 WriteCaptainPointer(captainId, logPath);
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/captains/" + captainId + "/log?offset=9999").ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                JsonDocument doc = JsonDocument.Parse(body);
+                CaptainLogResponse logResp = await JsonHelper.DeserializeAsync<CaptainLogResponse>(response).ConfigureAwait(false);
 
-                AssertEqual("", doc.RootElement.GetProperty("Log").GetString());
-                AssertEqual(0, doc.RootElement.GetProperty("Lines").GetInt32());
-                AssertEqual(5, doc.RootElement.GetProperty("TotalLines").GetInt32());
+                AssertEqual("", logResp.Log);
+                AssertEqual(0, logResp.Lines);
+                AssertEqual(5, logResp.TotalLines);
             }).ConfigureAwait(false);
 
             await RunTest("CaptainLog_ResponseIsJson", async () =>
