@@ -33,5 +33,29 @@ namespace Armada.Test.Common
         public long ElapsedMs { get; set; } = 0;
 
         #endregion
+
+        #region Public-Methods
+
+        /// <summary>
+        /// Mark this test result as passed with the given elapsed time.
+        /// </summary>
+        public void MarkPassed(long elapsedMs)
+        {
+            Passed = true;
+            ElapsedMs = elapsedMs;
+        }
+
+        /// <summary>
+        /// Mark this test result as failed with the given elapsed time, message, and optional exception.
+        /// </summary>
+        public void MarkFailed(long elapsedMs, string message, Exception? exception = null)
+        {
+            Passed = false;
+            ElapsedMs = elapsedMs;
+            Message = message;
+            Exception = exception;
+        }
+
+        #endregion
     }
 }

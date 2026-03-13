@@ -15,4 +15,8 @@
     <NoWarn>1701;1702;CS1998;CS8600;CS8602;CS8603;CS8604;CS8618;CS8625;CS0108;CS8601;CS0618</NoWarn>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Armada.Core\Armada.Core.csproj" />
+  </ItemGroup>
+
 </Project>
