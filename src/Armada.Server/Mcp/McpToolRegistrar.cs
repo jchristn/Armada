@@ -157,6 +157,7 @@ namespace Armada.Server.Mcp
                         case "missions":
                         case "mission":
                             EnumerationResult<Mission> missions = await database.Missions.EnumerateAsync(query).ConfigureAwait(false);
+                            foreach (Mission m in missions.Objects) m.DiffSnapshot = null;
                             return (object)missions;
                         case "voyages":
                         case "voyage":
@@ -658,9 +659,11 @@ namespace Armada.Server.Mcp
                     if (!String.IsNullOrEmpty(request.Status) && Enum.TryParse<MissionStatusEnum>(request.Status, true, out MissionStatusEnum status))
                     {
                         List<Mission> filtered = await database.Missions.EnumerateByStatusAsync(status).ConfigureAwait(false);
+                        foreach (Mission m in filtered) m.DiffSnapshot = null;
                         return (object)filtered;
                     }
                     List<Mission> missions = await database.Missions.EnumerateAsync().ConfigureAwait(false);
+                    foreach (Mission m in missions) m.DiffSnapshot = null;
                     return (object)missions;
                 });
 
@@ -682,6 +685,7 @@ namespace Armada.Server.Mcp
                     string missionId = request.MissionId;
                     Mission? mission = await database.Missions.ReadAsync(missionId).ConfigureAwait(false);
                     if (mission == null) return (object)new { Error = "Mission not found" };
+                    mission.DiffSnapshot = null;
                     return (object)mission;
                 });
 
