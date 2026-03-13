@@ -655,7 +655,7 @@ List all missions, optionally filtered by status.
   "properties": {
     "status": {
       "type": "string",
-      "description": "Filter by status: Pending, Assigned, InProgress, Testing, Review, Complete, Failed, Cancelled"
+      "description": "Filter by status: Pending, Assigned, InProgress, WorkProduced, Testing, Review, Complete, Failed, LandingFailed, Cancelled"
     }
   }
 }
@@ -1294,9 +1294,11 @@ Transition a mission to a new status with validation.
 |---|---|
 | Pending | Assigned, Cancelled |
 | Assigned | InProgress, Cancelled |
-| InProgress | Testing, Review, Complete, Failed, Cancelled |
+| InProgress | WorkProduced, Testing, Review, Complete, Failed, Cancelled |
+| WorkProduced | Complete, LandingFailed, Cancelled |
 | Testing | Review, InProgress, Complete, Failed |
 | Review | Complete, InProgress, Failed |
+| LandingFailed | WorkProduced, Failed, Cancelled |
 
 **Input Schema:**
 

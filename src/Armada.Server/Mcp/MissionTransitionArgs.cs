@@ -11,7 +11,7 @@ namespace Armada.Server.Mcp
         public string MissionId { get; set; } = "";
 
         /// <summary>
-        /// Target status: Pending, Assigned, InProgress, Testing, Review, Complete, Failed, Cancelled.
+        /// Target status: Pending, Assigned, InProgress, WorkProduced, Testing, Review, Complete, Failed, LandingFailed, Cancelled.
         /// </summary>
         public string Status { get; set; } = "";
     }

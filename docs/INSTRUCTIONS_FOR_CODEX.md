@@ -181,7 +181,7 @@ Optional filters: `pageNumber`, `pageSize`, `order` (CreatedAscending/CreatedDes
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `armada_list_missions` | `status` (Pending/Assigned/InProgress/Testing/Review/Complete/Failed/Cancelled) | List missions |
+| `armada_list_missions` | `status` (Pending/Assigned/InProgress/WorkProduced/Testing/Review/Complete/Failed/LandingFailed/Cancelled) | List missions |
 | `armada_mission_status` | `missionId` (required) | Get mission details |
 | `armada_create_mission` | `title` (required), `description` (required), `vesselId` (required), `voyageId` | Create a standalone mission |
 | `armada_update_mission` | `missionId` (required), `title`, `description`, `vesselId`, `voyageId`, `priority`, `branchName`, `prUrl`, `parentMissionId` | Update mission metadata |

@@ -260,8 +260,9 @@ h3 { font-size: 1.1rem; margin-bottom: 0.5rem; font-weight: 600; margin-top: 1re
 
 .tag.idle, .tag.pending, .tag.queued { background: var(--tag-idle-bg); color: var(--tag-idle-fg); }
 .tag.working, .tag.inprogress, .tag.assigned, .tag.open, .tag.testing { background: var(--tag-working-bg); color: var(--tag-working-fg); }
+.tag.workproduced { background: var(--tag-review-bg); color: var(--tag-review-fg); }
 .tag.complete, .tag.completed, .tag.landed, .tag.passed { background: var(--tag-complete-bg); color: var(--tag-complete-fg); }
-.tag.failed, .tag.error, .tag.stalled { background: var(--tag-failed-bg); color: var(--tag-failed-fg); }
+.tag.failed, .tag.error, .tag.stalled, .tag.landingfailed { background: var(--tag-failed-bg); color: var(--tag-failed-fg); }
 .tag.review { background: var(--tag-review-bg); color: var(--tag-review-fg); }
 .tag.cancelled, .tag.stopping { background: var(--tag-cancelled-bg); color: var(--tag-cancelled-fg); }
 .tag.assignment { background: var(--tag-working-bg); color: var(--tag-working-fg); }

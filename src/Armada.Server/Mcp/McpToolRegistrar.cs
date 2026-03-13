@@ -650,7 +650,7 @@ namespace Armada.Server.Mcp
                     type = "object",
                     properties = new
                     {
-                        status = new { type = "string", description = "Filter by status: Pending, Assigned, InProgress, Testing, Review, Complete, Failed, Cancelled" }
+                        status = new { type = "string", description = "Filter by status: Pending, Assigned, InProgress, WorkProduced, Testing, Review, Complete, Failed, LandingFailed, Cancelled" }
                     }
                 },
                 async (args) =>
@@ -894,7 +894,7 @@ namespace Armada.Server.Mcp
                     properties = new
                     {
                         missionId = new { type = "string", description = "Mission ID (msn_ prefix)" },
-                        status = new { type = "string", description = "Target status: Pending, Assigned, InProgress, Testing, Review, Complete, Failed, Cancelled" }
+                        status = new { type = "string", description = "Target status: Pending, Assigned, InProgress, WorkProduced, Testing, Review, Complete, Failed, LandingFailed, Cancelled" }
                     },
                     required = new[] { "missionId", "status" }
                 },
@@ -1539,11 +1539,15 @@ namespace Armada.Server.Mcp
                 (MissionStatusEnum.Pending, MissionStatusEnum.Cancelled) => true,
                 (MissionStatusEnum.Assigned, MissionStatusEnum.InProgress) => true,
                 (MissionStatusEnum.Assigned, MissionStatusEnum.Cancelled) => true,
+                (MissionStatusEnum.InProgress, MissionStatusEnum.WorkProduced) => true,
                 (MissionStatusEnum.InProgress, MissionStatusEnum.Testing) => true,
                 (MissionStatusEnum.InProgress, MissionStatusEnum.Review) => true,
                 (MissionStatusEnum.InProgress, MissionStatusEnum.Complete) => true,
                 (MissionStatusEnum.InProgress, MissionStatusEnum.Failed) => true,
                 (MissionStatusEnum.InProgress, MissionStatusEnum.Cancelled) => true,
+                (MissionStatusEnum.WorkProduced, MissionStatusEnum.Complete) => true,
+                (MissionStatusEnum.WorkProduced, MissionStatusEnum.LandingFailed) => true,
+                (MissionStatusEnum.WorkProduced, MissionStatusEnum.Cancelled) => true,
                 (MissionStatusEnum.Testing, MissionStatusEnum.Review) => true,
                 (MissionStatusEnum.Testing, MissionStatusEnum.InProgress) => true,
                 (MissionStatusEnum.Testing, MissionStatusEnum.Complete) => true,
@@ -1551,6 +1555,9 @@ namespace Armada.Server.Mcp
                 (MissionStatusEnum.Review, MissionStatusEnum.Complete) => true,
                 (MissionStatusEnum.Review, MissionStatusEnum.InProgress) => true,
                 (MissionStatusEnum.Review, MissionStatusEnum.Failed) => true,
+                (MissionStatusEnum.LandingFailed, MissionStatusEnum.WorkProduced) => true,
+                (MissionStatusEnum.LandingFailed, MissionStatusEnum.Failed) => true,
+                (MissionStatusEnum.LandingFailed, MissionStatusEnum.Cancelled) => true,
                 _ => false
             };
         }

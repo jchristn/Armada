@@ -1892,9 +1892,11 @@ Not all status transitions are valid. The following table documents the allowed 
 |---|---|
 | `Pending` | `Assigned`, `Cancelled` |
 | `Assigned` | `InProgress`, `Cancelled` |
-| `InProgress` | `Testing`, `Review`, `Complete`, `Failed`, `Cancelled` |
+| `InProgress` | `WorkProduced`, `Testing`, `Review`, `Complete`, `Failed`, `Cancelled` |
+| `WorkProduced` | `Complete`, `LandingFailed`, `Cancelled` |
 | `Testing` | `Review`, `InProgress`, `Complete`, `Failed` |
 | `Review` | `Complete`, `InProgress`, `Failed` |
+| `LandingFailed` | `WorkProduced`, `Failed`, `Cancelled` |
 
 Invalid transitions will return a `command.error` response.
 

@@ -1056,7 +1056,7 @@ namespace Armada.Server
                 .WithTag("Missions")
                 .WithSummary("List all missions")
                 .WithDescription("Returns all missions, filterable by status, vesselId, captainId, or voyageId.")
-                .WithParameter(OpenApiParameterMetadata.Query("status", "Filter by mission status (Pending, Assigned, InProgress, Testing, Review, Complete, Failed, Cancelled)", false))
+                .WithParameter(OpenApiParameterMetadata.Query("status", "Filter by mission status (Pending, Assigned, InProgress, WorkProduced, Testing, Review, Complete, Failed, LandingFailed, Cancelled)", false))
                 .WithParameter(OpenApiParameterMetadata.Query("vesselId", "Filter by vessel ID", false))
                 .WithParameter(OpenApiParameterMetadata.Query("captainId", "Filter by captain ID", false))
                 .WithParameter(OpenApiParameterMetadata.Query("voyageId", "Filter by voyage ID", false))
@@ -2538,11 +2538,15 @@ namespace Armada.Server
                 (MissionStatusEnum.Pending, MissionStatusEnum.Cancelled) => true,
                 (MissionStatusEnum.Assigned, MissionStatusEnum.InProgress) => true,
                 (MissionStatusEnum.Assigned, MissionStatusEnum.Cancelled) => true,
+                (MissionStatusEnum.InProgress, MissionStatusEnum.WorkProduced) => true,
                 (MissionStatusEnum.InProgress, MissionStatusEnum.Testing) => true,
                 (MissionStatusEnum.InProgress, MissionStatusEnum.Review) => true,
                 (MissionStatusEnum.InProgress, MissionStatusEnum.Complete) => true,
                 (MissionStatusEnum.InProgress, MissionStatusEnum.Failed) => true,
                 (MissionStatusEnum.InProgress, MissionStatusEnum.Cancelled) => true,
+                (MissionStatusEnum.WorkProduced, MissionStatusEnum.Complete) => true,
+                (MissionStatusEnum.WorkProduced, MissionStatusEnum.LandingFailed) => true,
+                (MissionStatusEnum.WorkProduced, MissionStatusEnum.Cancelled) => true,
                 (MissionStatusEnum.Testing, MissionStatusEnum.Review) => true,
                 (MissionStatusEnum.Testing, MissionStatusEnum.InProgress) => true,
                 (MissionStatusEnum.Testing, MissionStatusEnum.Complete) => true,
@@ -2550,6 +2554,9 @@ namespace Armada.Server
                 (MissionStatusEnum.Review, MissionStatusEnum.Complete) => true,
                 (MissionStatusEnum.Review, MissionStatusEnum.InProgress) => true,
                 (MissionStatusEnum.Review, MissionStatusEnum.Failed) => true,
+                (MissionStatusEnum.LandingFailed, MissionStatusEnum.WorkProduced) => true,
+                (MissionStatusEnum.LandingFailed, MissionStatusEnum.Failed) => true,
+                (MissionStatusEnum.LandingFailed, MissionStatusEnum.Cancelled) => true,
                 _ => false
             };
         }

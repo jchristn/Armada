@@ -28,6 +28,13 @@ namespace Armada.Core.Enums
         InProgress,
 
         /// <summary>
+        /// Agent exited successfully and work exists on the mission branch,
+        /// but landing (merge, PR, or push) has not yet been attempted or completed.
+        /// </summary>
+        [EnumMember(Value = "WorkProduced")]
+        WorkProduced,
+
+        /// <summary>
         /// Mission work complete, under testing.
         /// </summary>
         [EnumMember(Value = "Testing")]
@@ -50,6 +57,12 @@ namespace Armada.Core.Enums
         /// </summary>
         [EnumMember(Value = "Failed")]
         Failed,
+
+        /// <summary>
+        /// Landing was attempted but failed (merge conflict, push failure, PR creation failure, etc.).
+        /// </summary>
+        [EnumMember(Value = "LandingFailed")]
+        LandingFailed,
 
         /// <summary>
         /// Mission cancelled.
