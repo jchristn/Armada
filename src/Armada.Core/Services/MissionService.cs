@@ -481,6 +481,8 @@ namespace Armada.Core.Services
                 "- Commit and push your changes — the Admiral will also push if needed\n" +
                 "- If you encounter a blocking issue, commit what you have and exit\n" +
                 "- Exit with code 0 on success\n" +
+                "- Do not use extended/Unicode characters (em dashes, smart quotes, etc.) -- use only ASCII characters in all output and commit messages\n" +
+                "- Do not use ANSI color codes or terminal formatting in output -- keep all output plain text\n" +
                 "\n" +
                 "## Progress Signals (Optional)\n" +
                 "You can report progress to the Admiral by printing these lines to stdout:\n" +
