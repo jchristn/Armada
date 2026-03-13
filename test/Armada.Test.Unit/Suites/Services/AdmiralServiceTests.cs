@@ -53,7 +53,7 @@ namespace Armada.Test.Unit.Suites.Services
             ICaptainService captainService = new CaptainService(logging, db, settings, git, dockService);
             IMissionService missionService = new MissionService(logging, db, settings, dockService, captainService);
             IVoyageService voyageService = new VoyageService(logging, db);
-            return new AdmiralService(logging, db, settings, captainService, missionService, voyageService);
+            return new AdmiralService(logging, db, settings, captainService, missionService, voyageService, dockService);
         }
 
         protected override async Task RunTestsAsync()
@@ -61,13 +61,13 @@ namespace Armada.Test.Unit.Suites.Services
             await RunTest("Constructor NullLogging Throws", () =>
             {
                 AssertThrows<ArgumentNullException>(() =>
-                    new AdmiralService(null!, null!, null!, null!, null!, null!));
+                    new AdmiralService(null!, null!, null!, null!, null!, null!, null!));
             });
 
             await RunTest("Constructor NullDatabase Throws", () =>
             {
                 AssertThrows<ArgumentNullException>(() =>
-                    new AdmiralService(CreateLogging(), null!, null!, null!, null!, null!));
+                    new AdmiralService(CreateLogging(), null!, null!, null!, null!, null!, null!));
             });
 
             await RunTest("GetStatusAsync EmptyDatabase ReturnsDefaults", async () =>

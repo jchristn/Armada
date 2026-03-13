@@ -57,6 +57,7 @@ namespace Armada.Core.Services
         private ICaptainService _Captains;
         private IMissionService _Missions;
         private IVoyageService _Voyages;
+        private IDockService _Docks;
         private IEscalationService? _Escalation;
         private bool _RetryDispatchNeeded = false;
 
@@ -73,6 +74,7 @@ namespace Armada.Core.Services
         /// <param name="captains">Captain service.</param>
         /// <param name="missions">Mission service.</param>
         /// <param name="voyages">Voyage service.</param>
+        /// <param name="docks">Dock service.</param>
         /// <param name="escalation">Optional escalation service.</param>
         public AdmiralService(
             LoggingModule logging,
@@ -81,6 +83,7 @@ namespace Armada.Core.Services
             ICaptainService captains,
             IMissionService missions,
             IVoyageService voyages,
+            IDockService docks,
             IEscalationService? escalation = null)
         {
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
@@ -89,6 +92,7 @@ namespace Armada.Core.Services
             _Captains = captains ?? throw new ArgumentNullException(nameof(captains));
             _Missions = missions ?? throw new ArgumentNullException(nameof(missions));
             _Voyages = voyages ?? throw new ArgumentNullException(nameof(voyages));
+            _Docks = docks ?? throw new ArgumentNullException(nameof(docks));
             _Escalation = escalation;
         }
 
@@ -350,7 +354,16 @@ namespace Armada.Core.Services
                     // Reclaim dock if assigned
                     if (!String.IsNullOrEmpty(mission.DockId))
                     {
-                        string dockId = mission.DockId;
+                        try
+                        {
+                            await _Docks.ReclaimAsync(mission.DockId, token).ConfigureAwait(false);
+                            _Logging.Info(_Header + "reclaimed dock " + mission.DockId + " for stale mission " + mission.Id);
+                        }
+                        catch (Exception ex)
+                        {
+                            _Logging.Warn(_Header + "error reclaiming dock " + mission.DockId + " for stale mission " + mission.Id + ": " + ex.Message);
+                        }
+
                         mission.DockId = null;
                     }
 
@@ -488,6 +501,9 @@ namespace Armada.Core.Services
                                 captainId: captain.Id, missionId: mission.Id, token: token).ConfigureAwait(false);
                         }
 
+                        // Reclaim the dock worktree so it doesn't leak
+                        await ReclaimDockAsync(captain, mission, token).ConfigureAwait(false);
+
                         await _Database.Captains.UpdateStateAsync(captain.Id, CaptainStateEnum.Stalled, token).ConfigureAwait(false);
 
                         if (_Escalation != null)
@@ -543,6 +559,9 @@ namespace Armada.Core.Services
                                     entityType: "mission", entityId: mission.Id,
                                     captainId: captain.Id, missionId: mission.Id, token: token).ConfigureAwait(false);
                             }
+
+                            // Reclaim the dock worktree so it doesn't leak
+                            await ReclaimDockAsync(captain, mission, token).ConfigureAwait(false);
                         }
                     }
                 }
@@ -684,6 +703,45 @@ namespace Armada.Core.Services
             // Only idle captains have capacity for new assignments
             List<Captain> idleCaptains = await _Database.Captains.EnumerateByStateAsync(CaptainStateEnum.Idle, token).ConfigureAwait(false);
             return idleCaptains.Count > 0;
+        }
+
+        /// <summary>
+        /// Reclaim the dock associated with a captain and/or mission.
+        /// Clears CurrentDockId on the captain and DockId on the mission after reclaim.
+        /// Handles gracefully if the dock or worktree is already gone.
+        /// </summary>
+        private async Task ReclaimDockAsync(Captain captain, Mission? mission, CancellationToken token)
+        {
+            string? dockId = captain.CurrentDockId;
+            if (String.IsNullOrEmpty(dockId) && mission != null)
+            {
+                dockId = mission.DockId;
+            }
+
+            if (String.IsNullOrEmpty(dockId)) return;
+
+            try
+            {
+                await _Docks.ReclaimAsync(dockId, token).ConfigureAwait(false);
+                _Logging.Info(_Header + "reclaimed dock " + dockId + " for captain " + captain.Id);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "error reclaiming dock " + dockId + " for captain " + captain.Id + ": " + ex.Message);
+            }
+
+            // Clear dock references
+            if (!String.IsNullOrEmpty(captain.CurrentDockId))
+            {
+                captain.CurrentDockId = null;
+                await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
+            }
+
+            if (mission != null && !String.IsNullOrEmpty(mission.DockId))
+            {
+                mission.DockId = null;
+                await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+            }
         }
 
         private async Task MaintainCaptainPoolAsync(CancellationToken token)
