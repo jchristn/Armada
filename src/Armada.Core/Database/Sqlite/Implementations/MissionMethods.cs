@@ -18,7 +18,9 @@ namespace Armada.Core.Database.Sqlite.Implementations
     {
         #region Private-Members
 
+#pragma warning disable CS0414
         private readonly string _Header = "[MissionMethods] ";
+#pragma warning restore CS0414
         private readonly SqliteDatabaseDriver _Driver;
         private readonly DatabaseSettings _Settings;
         private readonly LoggingModule _Logging;

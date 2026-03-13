@@ -18,7 +18,9 @@ namespace Armada.Core.Database.Postgresql.Implementations
     {
         #region Private-Members
 
+#pragma warning disable CS0414
         private string _Header = "[VesselMethods] ";
+#pragma warning restore CS0414
         private PostgresqlDatabaseDriver _Driver;
         private DatabaseSettings _Settings;
         private LoggingModule _Logging;

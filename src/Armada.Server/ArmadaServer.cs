@@ -2393,7 +2393,7 @@ namespace Armada.Server
                                 _Logging.Info(_Header + "enabled auto-merge for PR: " + prUrl);
 
                                 // Poll for merge completion, then pull into the user's working directory
-                                if (vessel != null && !String.IsNullOrEmpty(vessel.WorkingDirectory))
+                                if (vessel != null && !String.IsNullOrEmpty(vessel.WorkingDirectory) && !String.IsNullOrEmpty(vessel.LocalPath) && !String.IsNullOrEmpty(dock.BranchName))
                                 {
                                     _ = PollAndPullAfterMergeAsync(vessel.WorkingDirectory, vessel.LocalPath, dock.BranchName, prUrl, mission.Id);
                                 }

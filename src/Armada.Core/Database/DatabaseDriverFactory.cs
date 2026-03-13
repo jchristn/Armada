@@ -1,8 +1,11 @@
 namespace Armada.Core.Database
 {
     using System;
+    using System.Threading;
+    using System.Threading.Tasks;
     using SyslogLogging;
     using Armada.Core.Database.Mysql;
+    using Armada.Core.Database.Postgresql;
     using Armada.Core.Database.Sqlite;
     using Armada.Core.Enums;
     using Armada.Core.Settings;
@@ -34,7 +37,7 @@ namespace Armada.Core.Database
                     return new MysqlDatabaseDriver(settings, logging);
 
                 case DatabaseTypeEnum.Postgresql:
-                    throw new NotSupportedException("PostgreSQL driver is not yet implemented.");
+                    return new PostgresqlDatabaseDriver(settings, logging);
 
                 case DatabaseTypeEnum.SqlServer:
                     throw new NotSupportedException("SQL Server driver is not yet implemented.");
@@ -42,6 +45,24 @@ namespace Armada.Core.Database
                 default:
                     throw new ArgumentException("Unknown database type: " + settings.Type.ToString());
             }
+        }
+
+        /// <summary>
+        /// Create a database driver and initialize its schema.
+        /// </summary>
+        /// <param name="settings">Database settings.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>An initialized DatabaseDriver instance.</returns>
+        public static async Task<DatabaseDriver> CreateAndInitializeAsync(DatabaseSettings settings, CancellationToken token = default)
+        {
+            if (settings == null) throw new ArgumentNullException(nameof(settings));
+
+            LoggingModule logging = new LoggingModule();
+            logging.Settings.EnableConsole = false;
+
+            DatabaseDriver driver = Create(settings, logging);
+            await driver.InitializeAsync(token).ConfigureAwait(false);
+            return driver;
         }
 
         #endregion
