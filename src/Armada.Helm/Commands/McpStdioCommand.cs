@@ -64,7 +64,7 @@ namespace Armada.Helm.Commands
             ICaptainService captainService = new CaptainService(logging, database, armadaSettings, git, dockService);
             IMissionService missionService = new MissionService(logging, database, armadaSettings, dockService, captainService);
             IVoyageService voyageService = new VoyageService(logging, database);
-            IAdmiralService admiral = new AdmiralService(logging, database, armadaSettings, captainService, missionService, voyageService);
+            IAdmiralService admiral = new AdmiralService(logging, database, armadaSettings, captainService, missionService, voyageService, dockService);
 
             // Create stdio MCP server
             McpServer mcpServer = new McpServer();
