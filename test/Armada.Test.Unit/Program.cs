@@ -29,6 +29,7 @@ namespace Armada.Test.Unit
             runner.AddSuite(new ConcurrentAccessTests());
             runner.AddSuite(new DatabaseInitializationTests());
             runner.AddSuite(new SchemaMigrationTests());
+            runner.AddSuite(new EdgeCaseTests());
 
             // Model tests
             runner.AddSuite(new FleetModelTests());
