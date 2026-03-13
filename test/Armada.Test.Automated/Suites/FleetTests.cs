@@ -7,6 +7,7 @@ namespace Armada.Test.Automated.Suites
     using System.Text;
     using System.Threading.Tasks;
     using Armada.Core.Models;
+    using Armada.Test.Automated;
     using Armada.Test.Common;
 
     /// <summary>
@@ -338,7 +339,9 @@ namespace Armada.Test.Automated.Suites
                 await _Client.DeleteAsync("/api/v1/fleets/" + fleetId);
                 _CreatedFleetIds.Remove(fleetId);
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync();
+                FleetListResult fleetListResult = await ListFleetsAsync();
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 foreach (Fleet f in result.Objects)
                 {
@@ -394,7 +397,11 @@ namespace Armada.Test.Automated.Suites
             {
                 Fleet created = await CreateFleetAsync("SingleFleet", "Only one");
 
-                (HttpStatusCode status, EnumerationResult<Fleet> result) = await ListFleetsAsync();
+                FleetListResult fleetListResult = await ListFleetsAsync();
+
+                HttpStatusCode status = fleetListResult.StatusCode;
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 AssertEqual(HttpStatusCode.OK, status);
                 Assert(result.Objects.Count >= 1, "Should have at least 1 object");
@@ -422,7 +429,9 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(25, "PagTest");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 10, pageNumber: 1);
+                FleetListResult fleetListResult = await ListFleetsAsync(pageSize: 10, pageNumber: 1);
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 Assert(result.TotalRecords >= 25, "TotalRecords should be >= 25");
                 Assert(result.TotalPages >= 3, "TotalPages should be >= 3");
@@ -432,7 +441,9 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(25, "P1Test");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 10, pageNumber: 1);
+                FleetListResult fleetListResult = await ListFleetsAsync(pageSize: 10, pageNumber: 1);
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 AssertEqual(10, result.Objects.Count);
                 AssertEqual(1, result.PageNumber);
@@ -442,7 +453,9 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(25, "P2Test");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 10, pageNumber: 2);
+                FleetListResult fleetListResult = await ListFleetsAsync(pageSize: 10, pageNumber: 2);
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 AssertEqual(10, result.Objects.Count);
                 AssertEqual(2, result.PageNumber);
@@ -452,7 +465,9 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(25, "P3Test");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 10, pageNumber: 3);
+                FleetListResult fleetListResult = await ListFleetsAsync(pageSize: 10, pageNumber: 3);
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 Assert(result.Objects.Count >= 5, "Page 3 should have at least 5 items");
                 AssertEqual(3, result.PageNumber);
@@ -472,7 +487,9 @@ namespace Armada.Test.Automated.Suites
                 int totalPages = 1;
                 for (int page = 1; page <= totalPages; page++)
                 {
-                    (HttpStatusCode _, EnumerationResult<Fleet> pageResult) = await ListFleetsAsync(pageSize: 10, pageNumber: page, order: "CreatedAscending");
+                    FleetListResult pageListResult = await ListFleetsAsync(pageSize: 10, pageNumber: page, order: "CreatedAscending");
+
+                    EnumerationResult<Fleet> pageResult = pageListResult.Result;
                     totalPages = pageResult.TotalPages;
                     foreach (Fleet f in pageResult.Objects)
                     {
@@ -493,7 +510,9 @@ namespace Armada.Test.Automated.Suites
                 int totalPages = 1;
                 for (int page = 1; page <= totalPages && !found; page++)
                 {
-                    (HttpStatusCode _, EnumerationResult<Fleet> pageResult) = await ListFleetsAsync(pageSize: 10, pageNumber: page, order: "CreatedAscending");
+                    FleetListResult pageListResult = await ListFleetsAsync(pageSize: 10, pageNumber: page, order: "CreatedAscending");
+
+                    EnumerationResult<Fleet> pageResult = pageListResult.Result;
                     totalPages = pageResult.TotalPages;
                     foreach (Fleet f in pageResult.Objects)
                     {
@@ -511,7 +530,9 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(25, "PS5Test");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 5, pageNumber: 1);
+                FleetListResult fleetListResult = await ListFleetsAsync(pageSize: 5, pageNumber: 1);
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 Assert(result.TotalRecords >= 25, "TotalRecords should be >= 25");
                 Assert(result.TotalPages >= 5, "TotalPages should be >= 5");
@@ -522,7 +543,9 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(25, "PS5P5");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 5, pageNumber: 5);
+                FleetListResult fleetListResult = await ListFleetsAsync(pageSize: 5, pageNumber: 5);
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 AssertEqual(5, result.Objects.Count);
             });
@@ -532,10 +555,14 @@ namespace Armada.Test.Automated.Suites
                 await CreateFleetsAsync(25, "Beyond");
 
                 // Get total pages first, then request beyond it
-                (HttpStatusCode _, EnumerationResult<Fleet> firstResult) = await ListFleetsAsync(pageSize: 10, pageNumber: 1);
+                FleetListResult firstListResult = await ListFleetsAsync(pageSize: 10, pageNumber: 1);
+
+                EnumerationResult<Fleet> firstResult = firstListResult.Result;
                 int totalPages = firstResult.TotalPages;
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 10, pageNumber: totalPages + 1);
+                FleetListResult fleetListResult = await ListFleetsAsync(pageSize: 10, pageNumber: totalPages + 1);
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 AssertEqual(0, result.Objects.Count);
             });
@@ -545,10 +572,14 @@ namespace Armada.Test.Automated.Suites
                 await CreateFleetsAsync(25, "BeyondTR");
 
                 // Get total pages first, then request well beyond it
-                (HttpStatusCode _, EnumerationResult<Fleet> firstResult) = await ListFleetsAsync(pageSize: 10, pageNumber: 1);
+                FleetListResult firstListResult = await ListFleetsAsync(pageSize: 10, pageNumber: 1);
+
+                EnumerationResult<Fleet> firstResult = firstListResult.Result;
                 long totalRecords = firstResult.TotalRecords;
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 10, pageNumber: 999);
+                FleetListResult fleetListResult = await ListFleetsAsync(pageSize: 10, pageNumber: 999);
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 Assert(result.TotalRecords >= 25, "TotalRecords should be >= 25");
                 AssertEqual(0, result.Objects.Count);
@@ -558,9 +589,15 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(25, "NoOverlap");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> page1Result) = await ListFleetsAsync(pageSize: 10, pageNumber: 1);
-                (HttpStatusCode _, EnumerationResult<Fleet> page2Result) = await ListFleetsAsync(pageSize: 10, pageNumber: 2);
-                (HttpStatusCode _, EnumerationResult<Fleet> page3Result) = await ListFleetsAsync(pageSize: 10, pageNumber: 3);
+                FleetListResult page1ListResult = await ListFleetsAsync(pageSize: 10, pageNumber: 1);
+
+                EnumerationResult<Fleet> page1Result = page1ListResult.Result;
+                FleetListResult page2ListResult = await ListFleetsAsync(pageSize: 10, pageNumber: 2);
+
+                EnumerationResult<Fleet> page2Result = page2ListResult.Result;
+                FleetListResult page3ListResult = await ListFleetsAsync(pageSize: 10, pageNumber: 3);
+
+                EnumerationResult<Fleet> page3Result = page3ListResult.Result;
 
                 HashSet<string> allIds = new HashSet<string>();
 
@@ -589,7 +626,9 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(5, "PSReflect");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 3, pageNumber: 1);
+                FleetListResult fleetListResult = await ListFleetsAsync(pageSize: 3, pageNumber: 1);
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 AssertEqual(3, result.PageSize);
             });
@@ -602,7 +641,9 @@ namespace Armada.Test.Automated.Suites
             {
                 Fleet[] fleets = await CreateFleetsAsync(5, "AscOrd");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(order: "CreatedAscending");
+                FleetListResult fleetListResult = await ListFleetsAsync(order: "CreatedAscending");
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 // With shared data, the first item may not be one we created
                 // Just verify the ordering is correct (ascending by CreatedUtc)
@@ -619,7 +660,9 @@ namespace Armada.Test.Automated.Suites
             {
                 Fleet[] fleets = await CreateFleetsAsync(5, "DescOrd");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(order: "CreatedDescending");
+                FleetListResult fleetListResult = await ListFleetsAsync(order: "CreatedDescending");
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 // With shared data, the first item may not be one we created
                 // Just verify the ordering is correct (descending by CreatedUtc)
@@ -636,7 +679,9 @@ namespace Armada.Test.Automated.Suites
             {
                 Fleet[] fleets = await CreateFleetsAsync(5, "AscAll");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(order: "CreatedAscending");
+                FleetListResult fleetListResult = await ListFleetsAsync(order: "CreatedAscending");
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 for (int i = 0; i < result.Objects.Count - 1; i++)
                 {
@@ -651,7 +696,9 @@ namespace Armada.Test.Automated.Suites
             {
                 Fleet[] fleets = await CreateFleetsAsync(5, "DescAll");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(order: "CreatedDescending");
+                FleetListResult fleetListResult = await ListFleetsAsync(order: "CreatedDescending");
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 for (int i = 0; i < result.Objects.Count - 1; i++)
                 {
@@ -671,7 +718,9 @@ namespace Armada.Test.Automated.Suites
                 for (int i = 0; i < fleets.Length; i++)
                     createdIds.Add(fleets[i].Id);
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(order: "CreatedAscending", pageSize: 10000);
+                FleetListResult fleetListResult = await ListFleetsAsync(order: "CreatedAscending", pageSize: 10000);
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 int foundCount = 0;
                 foreach (Fleet f in result.Objects)
@@ -691,7 +740,9 @@ namespace Armada.Test.Automated.Suites
                 for (int i = 0; i < fleets.Length; i++)
                     createdIds.Add(fleets[i].Id);
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(order: "CreatedDescending", pageSize: 100);
+                FleetListResult fleetListResult = await ListFleetsAsync(order: "CreatedDescending", pageSize: 100);
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 int foundCount = 0;
                 foreach (Fleet f in result.Objects)
@@ -710,7 +761,11 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(3, "EnumDefault");
 
-                (HttpStatusCode status, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync();
+                FleetListResult fleetListResult = await EnumerateFleetsAsync();
+
+                HttpStatusCode status = fleetListResult.StatusCode;
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 AssertEqual(HttpStatusCode.OK, status);
                 Assert(result.Objects.Count >= 3, "Should have at least 3 objects");
@@ -721,7 +776,9 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetAsync("EnumStructure");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync();
+                FleetListResult fleetListResult = await EnumerateFleetsAsync();
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 Assert(result.Objects != null, "Should have Objects");
                 Assert(result.PageNumber >= 0, "Should have PageNumber");
@@ -735,7 +792,9 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(15, "EnumPag");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 1);
+                FleetListResult fleetListResult = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 1);
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 AssertEqual(5, result.Objects.Count);
                 Assert(result.TotalRecords >= 15, "TotalRecords should be >= 15");
@@ -746,7 +805,9 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(15, "EnumP2");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 2);
+                FleetListResult fleetListResult = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 2);
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 AssertEqual(5, result.Objects.Count);
                 AssertEqual(2, result.PageNumber);
@@ -756,7 +817,9 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(15, "EnumP3");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 3);
+                FleetListResult fleetListResult = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 3);
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 AssertEqual(5, result.Objects.Count);
                 AssertEqual(3, result.PageNumber);
@@ -767,10 +830,14 @@ namespace Armada.Test.Automated.Suites
                 await CreateFleetsAsync(10, "EnumBeyond");
 
                 // Get total pages first, then request beyond it
-                (HttpStatusCode _, EnumerationResult<Fleet> firstResult) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 1);
+                FleetListResult firstListResult = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 1);
+
+                EnumerationResult<Fleet> firstResult = firstListResult.Result;
                 int totalPages = firstResult.TotalPages;
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: totalPages + 1);
+                FleetListResult fleetListResult = await EnumerateFleetsAsync(pageSize: 5, pageNumber: totalPages + 1);
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 AssertEqual(0, result.Objects.Count);
             });
@@ -779,7 +846,9 @@ namespace Armada.Test.Automated.Suites
             {
                 Fleet[] fleets = await CreateFleetsAsync(5, "EnumAsc");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync(order: "CreatedAscending");
+                FleetListResult fleetListResult = await EnumerateFleetsAsync(order: "CreatedAscending");
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 // With shared data, just verify ascending order
                 for (int i = 0; i < result.Objects.Count - 1; i++)
@@ -794,7 +863,9 @@ namespace Armada.Test.Automated.Suites
             {
                 Fleet[] fleets = await CreateFleetsAsync(5, "EnumDesc");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync(order: "CreatedDescending");
+                FleetListResult fleetListResult = await EnumerateFleetsAsync(order: "CreatedDescending");
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 // With shared data, just verify descending order
                 for (int i = 0; i < result.Objects.Count - 1; i++)
@@ -809,7 +880,9 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(5, "EnumAscAll");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync(order: "CreatedAscending");
+                FleetListResult fleetListResult = await EnumerateFleetsAsync(order: "CreatedAscending");
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 for (int i = 0; i < result.Objects.Count - 1; i++)
                 {
@@ -824,7 +897,9 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(5, "EnumDescAll");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync(order: "CreatedDescending");
+                FleetListResult fleetListResult = await EnumerateFleetsAsync(order: "CreatedDescending");
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 for (int i = 0; i < result.Objects.Count - 1; i++)
                 {
@@ -839,8 +914,12 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(12, "EnumMatch");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> listResult) = await ListFleetsAsync(pageSize: 5, pageNumber: 1, order: "CreatedAscending");
-                (HttpStatusCode _, EnumerationResult<Fleet> enumResult) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 1, order: "CreatedAscending");
+                FleetListResult listListResult = await ListFleetsAsync(pageSize: 5, pageNumber: 1, order: "CreatedAscending");
+
+                EnumerationResult<Fleet> listResult = listListResult.Result;
+                FleetListResult enumListResult = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 1, order: "CreatedAscending");
+
+                EnumerationResult<Fleet> enumResult = enumListResult.Result;
 
                 AssertEqual(listResult.TotalRecords, enumResult.TotalRecords);
                 AssertEqual(listResult.TotalPages, enumResult.TotalPages);
@@ -856,8 +935,12 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(12, "EnumMatchP2");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> listResult) = await ListFleetsAsync(pageSize: 5, pageNumber: 2, order: "CreatedAscending");
-                (HttpStatusCode _, EnumerationResult<Fleet> enumResult) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 2, order: "CreatedAscending");
+                FleetListResult listListResult = await ListFleetsAsync(pageSize: 5, pageNumber: 2, order: "CreatedAscending");
+
+                EnumerationResult<Fleet> listResult = listListResult.Result;
+                FleetListResult enumListResult = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 2, order: "CreatedAscending");
+
+                EnumerationResult<Fleet> enumResult = enumListResult.Result;
 
                 AssertEqual(listResult.Objects.Count, enumResult.Objects.Count);
 
@@ -869,7 +952,11 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("Enumerate Fleets Empty Returns Zero Total Records", async () =>
             {
-                (HttpStatusCode status, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync();
+                FleetListResult fleetListResult = await EnumerateFleetsAsync();
+
+                HttpStatusCode status = fleetListResult.StatusCode;
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 AssertEqual(HttpStatusCode.OK, status);
             });
@@ -878,7 +965,9 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(5, "EnumPSR");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync(pageSize: 3);
+                FleetListResult fleetListResult = await EnumerateFleetsAsync(pageSize: 3);
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 AssertEqual(3, result.PageSize);
                 AssertEqual(3, result.Objects.Count);
@@ -892,7 +981,9 @@ namespace Armada.Test.Automated.Suites
 
                 for (int page = 1; page <= 3; page++)
                 {
-                    (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: page);
+                    FleetListResult fleetListResult = await EnumerateFleetsAsync(pageSize: 5, pageNumber: page);
+
+                    EnumerationResult<Fleet> result = fleetListResult.Result;
                     foreach (Fleet f in result.Objects)
                     {
                         string id = f.Id;
@@ -911,7 +1002,9 @@ namespace Armada.Test.Automated.Suites
             {
                 Fleet[] fleets = await CreateFleetsAsync(10, "EnumAscP2");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 2, order: "CreatedAscending");
+                FleetListResult fleetListResult = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 2, order: "CreatedAscending");
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 AssertEqual(5, result.Objects.Count);
 
@@ -928,7 +1021,9 @@ namespace Armada.Test.Automated.Suites
             {
                 Fleet[] fleets = await CreateFleetsAsync(10, "EnumDescP2");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 2, order: "CreatedDescending");
+                FleetListResult fleetListResult = await EnumerateFleetsAsync(pageSize: 5, pageNumber: 2, order: "CreatedDescending");
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 AssertEqual(5, result.Objects.Count);
 
@@ -949,7 +1044,9 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(15, "DefPS");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync();
+                FleetListResult fleetListResult = await ListFleetsAsync();
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 Assert(result.Objects.Count <= 100,
                     "Default page size should return at most 100 items");
@@ -959,7 +1056,9 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(3, "DefPN");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync();
+                FleetListResult fleetListResult = await ListFleetsAsync();
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 AssertEqual(1, result.PageNumber);
             });
@@ -968,7 +1067,9 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetAsync("SinglePage");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 10);
+                FleetListResult fleetListResult = await ListFleetsAsync(pageSize: 10);
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 Assert(result.TotalRecords >= 1, "TotalRecords should be >= 1");
                 Assert(result.TotalPages >= 1, "TotalPages should be >= 1");
@@ -978,7 +1079,9 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(10, "Exact10");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 10);
+                FleetListResult fleetListResult = await ListFleetsAsync(pageSize: 10);
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 Assert(result.TotalRecords >= 10, "TotalRecords should be >= 10");
                 Assert(result.TotalPages >= 1, "TotalPages should be >= 1");
@@ -989,7 +1092,9 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(11, "Plus1");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 10);
+                FleetListResult fleetListResult = await ListFleetsAsync(pageSize: 10);
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 Assert(result.TotalRecords >= 11, "TotalRecords should be >= 11");
                 Assert(result.TotalPages >= 2, "TotalPages should be >= 2");
@@ -999,7 +1104,9 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(3, "PS1");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 1, pageNumber: 1);
+                FleetListResult fleetListResult = await ListFleetsAsync(pageSize: 1, pageNumber: 1);
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 AssertEqual(1, result.Objects.Count);
                 Assert(result.TotalPages >= 3, "TotalPages should be >= 3");
@@ -1009,7 +1116,9 @@ namespace Armada.Test.Automated.Suites
             {
                 await CreateFleetsAsync(5, "LargePS");
 
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync(pageSize: 100);
+                FleetListResult fleetListResult = await ListFleetsAsync(pageSize: 100);
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 Assert(result.Objects.Count >= 5, "Should return at least 5 items");
                 Assert(result.TotalPages >= 1, "TotalPages should be >= 1");
@@ -1017,7 +1126,9 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("List Fleets Success Is True", async () =>
             {
-                (HttpStatusCode _, EnumerationResult<Fleet> result) = await ListFleetsAsync();
+                FleetListResult fleetListResult = await ListFleetsAsync();
+
+                EnumerationResult<Fleet> result = fleetListResult.Result;
 
                 AssertTrue(result.Success);
             });
@@ -1121,7 +1232,7 @@ namespace Armada.Test.Automated.Suites
         /// <summary>
         /// Performs a GET list request with optional query parameters.
         /// </summary>
-        private async Task<(HttpStatusCode StatusCode, EnumerationResult<Fleet> Result)> ListFleetsAsync(
+        private async Task<FleetListResult> ListFleetsAsync(
             int? pageSize = null, int? pageNumber = null, string? order = null)
         {
             StringBuilder url = new StringBuilder("/api/v1/fleets");
@@ -1150,13 +1261,13 @@ namespace Armada.Test.Automated.Suites
 
             HttpResponseMessage resp = await _Client.GetAsync(url.ToString());
             EnumerationResult<Fleet> result = await JsonHelper.DeserializeAsync<EnumerationResult<Fleet>>(resp);
-            return (resp.StatusCode, result);
+            return new FleetListResult(resp.StatusCode, result);
         }
 
         /// <summary>
         /// Performs a POST enumerate request with the given query body.
         /// </summary>
-        private async Task<(HttpStatusCode StatusCode, EnumerationResult<Fleet> Result)> EnumerateFleetsAsync(
+        private async Task<FleetListResult> EnumerateFleetsAsync(
             int? pageSize = null, int? pageNumber = null, string? order = null)
         {
             object queryBody;
@@ -1180,7 +1291,7 @@ namespace Armada.Test.Automated.Suites
             HttpResponseMessage resp = await _Client.PostAsync("/api/v1/fleets/enumerate",
                 JsonHelper.ToJsonContent(queryBody));
             EnumerationResult<Fleet> result = await JsonHelper.DeserializeAsync<EnumerationResult<Fleet>>(resp);
-            return (resp.StatusCode, result);
+            return new FleetListResult(resp.StatusCode, result);
         }
 
         #endregion

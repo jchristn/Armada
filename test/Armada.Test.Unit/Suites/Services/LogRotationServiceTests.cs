@@ -2,13 +2,14 @@ namespace Armada.Test.Unit.Suites.Services
 {
     using Armada.Core.Services;
     using Armada.Test.Common;
+    using Armada.Test.Unit.TestHelpers;
     using SyslogLogging;
 
     public class LogRotationServiceTests : TestSuite
     {
         public override string Name => "Log Rotation Service";
 
-        private (string TestDir, LogRotationService Service) CreateTestContext()
+        private LogRotationTestContext CreateTestContext()
         {
             string testDir = Path.Combine(Path.GetTempPath(), "armada_test_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(testDir);
@@ -17,7 +18,7 @@ namespace Armada.Test.Unit.Suites.Services
             logging.Settings.EnableConsole = false;
 
             LogRotationService service = new LogRotationService(logging, 100, 3); // 100 bytes max, 3 files max
-            return (testDir, service);
+            return new LogRotationTestContext(testDir, service);
         }
 
         private void CleanupTestDir(string testDir)
@@ -32,7 +33,9 @@ namespace Armada.Test.Unit.Suites.Services
         {
             await RunTest("RotateIfNeeded UnderThreshold NoRotation", () =>
             {
-                (string testDir, LogRotationService service) = CreateTestContext();
+                LogRotationTestContext context = CreateTestContext();
+                string testDir = context.TestDir;
+                LogRotationService service = context.Service;
                 try
                 {
                     string filePath = Path.Combine(testDir, "small.log");
@@ -51,7 +54,9 @@ namespace Armada.Test.Unit.Suites.Services
 
             await RunTest("RotateIfNeeded OverThreshold RotatesFile", () =>
             {
-                (string testDir, LogRotationService service) = CreateTestContext();
+                LogRotationTestContext context = CreateTestContext();
+                string testDir = context.TestDir;
+                LogRotationService service = context.Service;
                 try
                 {
                     string filePath = Path.Combine(testDir, "large.log");
@@ -70,7 +75,9 @@ namespace Armada.Test.Unit.Suites.Services
 
             await RunTest("RotateIfNeeded ShiftsExistingFiles", () =>
             {
-                (string testDir, LogRotationService service) = CreateTestContext();
+                LogRotationTestContext context = CreateTestContext();
+                string testDir = context.TestDir;
+                LogRotationService service = context.Service;
                 try
                 {
                     string filePath = Path.Combine(testDir, "shift.log");
@@ -95,7 +102,9 @@ namespace Armada.Test.Unit.Suites.Services
 
             await RunTest("RotateIfNeeded NonExistentFile NoOp", () =>
             {
-                (string testDir, LogRotationService service) = CreateTestContext();
+                LogRotationTestContext context = CreateTestContext();
+                string testDir = context.TestDir;
+                LogRotationService service = context.Service;
                 try
                 {
                     service.RotateIfNeeded(Path.Combine(testDir, "nonexistent.log"));
@@ -108,7 +117,9 @@ namespace Armada.Test.Unit.Suites.Services
 
             await RunTest("RotateIfNeeded NullPath NoOp", () =>
             {
-                (string testDir, LogRotationService service) = CreateTestContext();
+                LogRotationTestContext context = CreateTestContext();
+                string testDir = context.TestDir;
+                LogRotationService service = context.Service;
                 try
                 {
                     service.RotateIfNeeded(null!);
@@ -121,7 +132,9 @@ namespace Armada.Test.Unit.Suites.Services
 
             await RunTest("RotateIfNeeded EmptyPath NoOp", () =>
             {
-                (string testDir, LogRotationService service) = CreateTestContext();
+                LogRotationTestContext context = CreateTestContext();
+                string testDir = context.TestDir;
+                LogRotationService service = context.Service;
                 try
                 {
                     service.RotateIfNeeded("");
@@ -134,7 +147,9 @@ namespace Armada.Test.Unit.Suites.Services
 
             await RunTest("RotateAllInDirectory RotatesLargeFiles", () =>
             {
-                (string testDir, LogRotationService service) = CreateTestContext();
+                LogRotationTestContext context = CreateTestContext();
+                string testDir = context.TestDir;
+                LogRotationService service = context.Service;
                 try
                 {
                     File.WriteAllText(Path.Combine(testDir, "a.log"), new string('x', 200));
@@ -154,7 +169,9 @@ namespace Armada.Test.Unit.Suites.Services
 
             await RunTest("RotateAllInDirectory NonExistentDir NoOp", () =>
             {
-                (string testDir, LogRotationService service) = CreateTestContext();
+                LogRotationTestContext context = CreateTestContext();
+                string testDir = context.TestDir;
+                LogRotationService service = context.Service;
                 try
                 {
                     service.RotateAllInDirectory("/nonexistent/path");

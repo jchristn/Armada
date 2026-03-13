@@ -33,7 +33,7 @@ namespace Armada.Test.Unit.Suites.Services
             return settings;
         }
 
-        private async Task<(Captain captain, Mission mission, Dock dock)> CreateTestEntitiesAsync(
+        private async Task<TestEntitiesResult> CreateTestEntitiesAsync(
             SqliteDatabaseDriver db)
         {
             // Create a vessel (fleet is optional)
@@ -69,7 +69,7 @@ namespace Armada.Test.Unit.Suites.Services
             captain.CurrentDockId = dock.Id;
             await db.Captains.UpdateAsync(captain).ConfigureAwait(false);
 
-            return (captain, mission, dock);
+            return new TestEntitiesResult(captain, mission, dock);
         }
 
         protected override async Task RunTestsAsync()
@@ -125,7 +125,10 @@ namespace Armada.Test.Unit.Suites.Services
                     ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
                     IMissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService);
 
-                    var (captain, mission, dock) = await CreateTestEntitiesAsync(testDb.Driver);
+                    TestEntitiesResult entities = await CreateTestEntitiesAsync(testDb.Driver);
+                    Captain captain = entities.Captain;
+                    Mission mission = entities.Mission;
+                    Dock dock = entities.Dock;
 
                     await missionService.HandleCompletionAsync(captain);
 
@@ -147,7 +150,10 @@ namespace Armada.Test.Unit.Suites.Services
                     ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
                     IMissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService);
 
-                    var (captain, mission, dock) = await CreateTestEntitiesAsync(testDb.Driver);
+                    TestEntitiesResult entities = await CreateTestEntitiesAsync(testDb.Driver);
+                    Captain captain = entities.Captain;
+                    Mission mission = entities.Mission;
+                    Dock dock = entities.Dock;
 
                     // Set a process ID to verify it gets cleared
                     mission.ProcessId = 12345;
@@ -173,7 +179,10 @@ namespace Armada.Test.Unit.Suites.Services
                     ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
                     IMissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService);
 
-                    var (captain, mission, dock) = await CreateTestEntitiesAsync(testDb.Driver);
+                    TestEntitiesResult entities = await CreateTestEntitiesAsync(testDb.Driver);
+                    Captain captain = entities.Captain;
+                    Mission mission = entities.Mission;
+                    Dock dock = entities.Dock;
 
                     await missionService.HandleCompletionAsync(captain);
 

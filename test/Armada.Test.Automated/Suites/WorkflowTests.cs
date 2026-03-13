@@ -107,9 +107,9 @@ namespace Armada.Test.Automated.Suites
                 // Create voyage with multiple missions
                 Voyage voyage = await CreateVoyageAsync(
                     "API Hardening", vesselId,
-                    ("Add rate limiting", "Add rate limiting middleware"),
-                    ("Add input validation", "Validate all POST endpoints"),
-                    ("Add request logging", "Log with correlation IDs")).ConfigureAwait(false);
+                    new MissionDescription("Add rate limiting", "Add rate limiting middleware"),
+                    new MissionDescription("Add input validation", "Validate all POST endpoints"),
+                    new MissionDescription("Add request logging", "Log with correlation IDs")).ConfigureAwait(false);
 
                 string voyageId = voyage.Id!;
                 AssertStartsWith("vyg_", voyageId);
@@ -339,12 +339,12 @@ namespace Armada.Test.Automated.Suites
             return mission;
         }
 
-        private async Task<Voyage> CreateVoyageAsync(string title, string vesselId, params (string Title, string Description)[] missions)
+        private async Task<Voyage> CreateVoyageAsync(string title, string vesselId, params MissionDescription[] missions)
         {
             List<object> missionList = new List<object>();
-            foreach ((string t, string d) in missions)
+            foreach (MissionDescription m in missions)
             {
-                missionList.Add(new { Title = t, Description = d });
+                missionList.Add(new { Title = m.Title, Description = m.Description });
             }
             HttpResponseMessage resp = await _AuthClient.PostAsync("/api/v1/voyages", JsonHelper.ToJsonContent(new { Title = title, VesselId = vesselId, Missions = missionList })).ConfigureAwait(false);
             resp.EnsureSuccessStatusCode();
