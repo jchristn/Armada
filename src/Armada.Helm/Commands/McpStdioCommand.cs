@@ -61,7 +61,7 @@ namespace Armada.Helm.Commands
             // Initialize services
             IGitService git = new GitService(logging);
             IDockService dockService = new DockService(logging, database, armadaSettings, git);
-            ICaptainService captainService = new CaptainService(logging, database, armadaSettings, git);
+            ICaptainService captainService = new CaptainService(logging, database, armadaSettings, git, dockService);
             IMissionService missionService = new MissionService(logging, database, armadaSettings, dockService, captainService);
             IVoyageService voyageService = new VoyageService(logging, database);
             IAdmiralService admiral = new AdmiralService(logging, database, armadaSettings, captainService, missionService, voyageService);

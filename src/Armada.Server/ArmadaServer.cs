@@ -114,7 +114,7 @@ namespace Armada.Server
             // Initialize services
             _Git = new GitService(_Logging);
             IDockService dockService = new DockService(_Logging, _Database, _Settings, _Git);
-            ICaptainService captainService = new CaptainService(_Logging, _Database, _Settings, _Git);
+            ICaptainService captainService = new CaptainService(_Logging, _Database, _Settings, _Git, dockService);
             IMissionService missionService = new MissionService(_Logging, _Database, _Settings, dockService, captainService);
             IVoyageService voyageService = new VoyageService(_Logging, _Database);
             IEscalationService escalationService = new EscalationService(_Logging, _Database, _Settings);

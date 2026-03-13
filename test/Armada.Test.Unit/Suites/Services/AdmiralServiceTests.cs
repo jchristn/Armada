@@ -50,7 +50,7 @@ namespace Armada.Test.Unit.Suites.Services
         private AdmiralService CreateAdmiralService(LoggingModule logging, SqliteDatabaseDriver db, ArmadaSettings settings, StubGitService git)
         {
             IDockService dockService = new DockService(logging, db, settings, git);
-            ICaptainService captainService = new CaptainService(logging, db, settings, git);
+            ICaptainService captainService = new CaptainService(logging, db, settings, git, dockService);
             IMissionService missionService = new MissionService(logging, db, settings, dockService, captainService);
             IVoyageService voyageService = new VoyageService(logging, db);
             return new AdmiralService(logging, db, settings, captainService, missionService, voyageService);

@@ -46,7 +46,7 @@ namespace Armada.Test.Unit.Suites.Services
         private ServiceSet CreateServices(LoggingModule logging, SqliteDatabaseDriver db, ArmadaSettings settings, StubGitService git)
         {
             IDockService dockService = new DockService(logging, db, settings, git);
-            CaptainService captainService = new CaptainService(logging, db, settings, git);
+            CaptainService captainService = new CaptainService(logging, db, settings, git, dockService);
 
             int nextPid = 1000;
             captainService.OnLaunchAgent = (captain, mission, dock) =>

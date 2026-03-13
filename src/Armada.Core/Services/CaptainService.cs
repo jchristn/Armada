@@ -29,6 +29,7 @@ namespace Armada.Core.Services
         private DatabaseDriver _Database;
         private ArmadaSettings _Settings;
         private IGitService _Git;
+        private IDockService _Docks;
 
         #endregion
 
@@ -41,16 +42,19 @@ namespace Armada.Core.Services
         /// <param name="database">Database driver.</param>
         /// <param name="settings">Application settings.</param>
         /// <param name="git">Git service.</param>
+        /// <param name="docks">Dock service.</param>
         public CaptainService(
             LoggingModule logging,
             DatabaseDriver database,
             ArmadaSettings settings,
-            IGitService git)
+            IGitService git,
+            IDockService docks)
         {
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _Database = database ?? throw new ArgumentNullException(nameof(database));
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _Git = git ?? throw new ArgumentNullException(nameof(git));
+            _Docks = docks ?? throw new ArgumentNullException(nameof(docks));
         }
 
         #endregion
@@ -96,6 +100,19 @@ namespace Armada.Core.Services
                     currentMission.CompletedUtc = DateTime.UtcNow;
                     currentMission.LastUpdateUtc = DateTime.UtcNow;
                     await _Database.Missions.UpdateAsync(currentMission, token).ConfigureAwait(false);
+                }
+            }
+
+            // Reclaim the dock worktree
+            if (!String.IsNullOrEmpty(captain.CurrentDockId))
+            {
+                try
+                {
+                    await _Docks.ReclaimAsync(captain.CurrentDockId, token).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _Logging.Warn(_Header + "error reclaiming dock " + captain.CurrentDockId + " for captain " + captainId + ": " + ex.Message);
                 }
             }
 
