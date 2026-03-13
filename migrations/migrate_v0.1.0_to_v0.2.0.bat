@@ -6,6 +6,13 @@ echo Armada Settings Migration: v0.1.0 to v0.2.0
 echo =============================================
 echo.
 
+REM Check for PowerShell
+where powershell >nul 2>nul
+if %ERRORLEVEL% neq 0 (
+    echo ERROR: PowerShell is required but not found on PATH.
+    exit /b 1
+)
+
 REM Determine settings file path
 if "%~1"=="" (
     set "SETTINGS_FILE=%USERPROFILE%\.armada\settings.json"
