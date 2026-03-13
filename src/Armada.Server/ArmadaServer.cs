@@ -1049,6 +1049,7 @@ namespace Armada.Server
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Mission> result = await _Database.Missions.EnumerateAsync(query).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
+                foreach (Mission m in result.Objects) m.DiffSnapshot = null;
                 return result;
             },
             api => api
@@ -1069,6 +1070,7 @@ namespace Armada.Server
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Mission> result = await _Database.Missions.EnumerateAsync(query).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
+                foreach (Mission m in result.Objects) m.DiffSnapshot = null;
                 return result;
             },
             api => api
@@ -1106,6 +1108,7 @@ namespace Armada.Server
                 string id = req.Parameters["id"];
                 Mission? mission = await _Database.Missions.ReadAsync(id).ConfigureAwait(false);
                 if (mission == null) return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Mission not found" };
+                mission.DiffSnapshot = null;
                 return (object)mission;
             },
             api => api

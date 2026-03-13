@@ -997,6 +997,62 @@ namespace Armada.Test.Automated.Suites
                 Assert(isError || isEmptyDiff, "Expected error or empty diff but got: " + body);
             });
 
+            await RunTest("GetMission_DiffSnapshotIsNull", async () =>
+            {
+                string vesselId = await SetupVesselAsync();
+                JsonElement created = await CreateMissionAsync(vesselId, "DiffSnapshotExclusion");
+                string missionId = created.GetProperty("Id").GetString()!;
+
+                HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/missions/" + missionId);
+                string body = await response.Content.ReadAsStringAsync();
+                JsonDocument doc = JsonDocument.Parse(body);
+                JsonElement root = doc.RootElement;
+
+                AssertTrue(root.TryGetProperty("DiffSnapshot", out JsonElement diffSnapshot));
+                AssertEqual(JsonValueKind.Null, diffSnapshot.ValueKind);
+            });
+
+            await RunTest("ListMissions_DiffSnapshotIsNullInResults", async () =>
+            {
+                string vesselId = await SetupVesselAsync();
+                await CreateMissionAsync(vesselId, "DiffSnapshotListCheck");
+
+                HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/missions");
+                string body = await response.Content.ReadAsStringAsync();
+                JsonDocument doc = JsonDocument.Parse(body);
+                JsonElement data = doc.RootElement.GetProperty("Objects");
+
+                foreach (JsonElement mission in data.EnumerateArray())
+                {
+                    if (mission.TryGetProperty("DiffSnapshot", out JsonElement diffSnapshot))
+                    {
+                        AssertEqual(JsonValueKind.Null, diffSnapshot.ValueKind);
+                    }
+                }
+            });
+
+            await RunTest("EnumerateMissions_DiffSnapshotIsNullInResults", async () =>
+            {
+                string vesselId = await SetupVesselAsync();
+                await CreateMissionAsync(vesselId, "DiffSnapshotEnumCheck");
+
+                StringContent enumContent = new StringContent(
+                    JsonSerializer.Serialize(new { Status = "Pending", PageSize = 10 }),
+                    Encoding.UTF8, "application/json");
+                HttpResponseMessage response = await _AuthClient.PostAsync("/api/v1/missions/enumerate", enumContent);
+                string body = await response.Content.ReadAsStringAsync();
+                JsonDocument doc = JsonDocument.Parse(body);
+                JsonElement data = doc.RootElement.GetProperty("Objects");
+
+                foreach (JsonElement mission in data.EnumerateArray())
+                {
+                    if (mission.TryGetProperty("DiffSnapshot", out JsonElement diffSnapshot))
+                    {
+                        AssertEqual(JsonValueKind.Null, diffSnapshot.ValueKind);
+                    }
+                }
+            });
+
             #endregion
 
             #region List-Pagination
