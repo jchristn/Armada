@@ -10,10 +10,11 @@ namespace Armada.Core.Services
 
 
     /// <summary>
-    /// Sequential merge queue that processes entries one at a time, landing each
-    /// immediately before moving to the next.  This ensures that every subsequent
-    /// merge is attempted against the up-to-date target branch, eliminating the
-    /// cascade failures that occur with batch-style processing.
+    /// Merge queue that processes vessel+target-branch groups in parallel, while
+    /// entries within each group are processed sequentially one at a time.  Each
+    /// successful merge is landed immediately so the next entry in the same group
+    /// merges against the up-to-date target branch, eliminating the cascade
+    /// failures that occur with batch-style processing.
     /// </summary>
     public class MergeQueueService : IMergeQueueService
     {
@@ -85,6 +86,8 @@ namespace Armada.Core.Services
                 IEnumerable<IGrouping<string, MergeEntry>> groups = queued.GroupBy(
                     e => (e.VesselId ?? "default") + ":" + e.TargetBranch);
 
+                List<Task> groupTasks = new List<Task>();
+
                 foreach (IGrouping<string, MergeEntry> group in groups)
                 {
                     // Order by priority (lower = higher priority) then by creation time ascending
@@ -93,8 +96,10 @@ namespace Armada.Core.Services
                         .ThenBy(e => e.CreatedUtc)
                         .ToList();
 
-                    await ProcessGroupAsync(entries, token).ConfigureAwait(false);
+                    groupTasks.Add(ProcessGroupSafeAsync(entries, token));
                 }
+
+                await Task.WhenAll(groupTasks).ConfigureAwait(false);
             }
             finally
             {
@@ -246,6 +251,22 @@ namespace Armada.Core.Services
         #endregion
 
         #region Private-Methods
+
+        /// <summary>
+        /// Wraps <see cref="ProcessGroupAsync"/> in a try-catch so that an
+        /// unexpected exception in one group does not cancel other groups.
+        /// </summary>
+        private async Task ProcessGroupSafeAsync(List<MergeEntry> entries, CancellationToken token)
+        {
+            try
+            {
+                await ProcessGroupAsync(entries, token).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "group processing error: " + ex.Message);
+            }
+        }
 
         /// <summary>
         /// Process a group of entries that share the same vessel and target branch.
