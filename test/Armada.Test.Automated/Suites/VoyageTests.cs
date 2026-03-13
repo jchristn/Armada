@@ -9,6 +9,7 @@ namespace Armada.Test.Automated.Suites
     using System.Threading.Tasks;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Test.Automated;
     using Armada.Test.Common;
 
     public class VoyageTests : TestSuite
@@ -48,7 +49,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("CreateVoyage_WithMissions_Returns201WithCorrectProperties", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage voyage = await CreateVoyageAsync(vesselId, "My Voyage", missionCount: 1);
 
@@ -63,7 +65,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("CreateVoyage_WithDescription_ReturnsDescription", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage voyage = await CreateVoyageAsync(vesselId, "Described Voyage", description: "A detailed description");
 
@@ -72,7 +75,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("CreateVoyage_StatusDefaultsToOpenOrInProgress", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage voyage = await CreateVoyageAsync(vesselId, "Open Status Voyage");
 
@@ -83,7 +87,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("CreateVoyage_IdHasVygPrefix", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage voyage = await CreateVoyageAsync(vesselId, "Id Prefix Voyage");
 
@@ -94,7 +99,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("CreateVoyage_WithSingleMission_MissionsCreated", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage voyage = await CreateVoyageAsync(vesselId, "Single Mission Voyage", missionCount: 1);
                 string voyageId = voyage.Id;
@@ -107,7 +113,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("CreateVoyage_WithMultipleMissions_AllMissionsCreated", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage voyage = await CreateVoyageAsync(vesselId, "Multi Mission Voyage", missionCount: 5);
                 string voyageId = voyage.Id;
@@ -119,7 +126,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("CreateVoyage_MissionsHaveCorrectTitles", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage voyage = await CreateVoyageAsync(vesselId, "Title Check Voyage", missionCount: 3);
                 string voyageId = voyage.Id;
@@ -136,7 +144,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("CreateVoyage_MissionsHaveMsnPrefix", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage voyage = await CreateVoyageAsync(vesselId, "Msn Prefix Voyage", missionCount: 2);
                 string voyageId = voyage.Id;
@@ -152,7 +161,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("CreateVoyage_MissionsLinkedToVoyage", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage voyage = await CreateVoyageAsync(vesselId, "Linked Voyage", missionCount: 2);
                 string voyageId = voyage.Id;
@@ -168,7 +178,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("CreateVoyage_MissionsLinkedToVessel", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage voyage = await CreateVoyageAsync(vesselId, "Vessel Link Voyage", missionCount: 2);
                 string voyageId = voyage.Id;
@@ -184,7 +195,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("CreateVoyage_CompletedUtcIsNullOrOmitted", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage voyage = await CreateVoyageAsync(vesselId, "No Completion Voyage");
 
@@ -208,7 +220,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("CreateVoyage_BareVoyageWithEmptyMissions_Returns201", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 StringContent content = JsonHelper.ToJsonContent(new { Title = "Empty Missions Voyage", VesselId = vesselId, Missions = Array.Empty<object>() });
 
@@ -222,7 +235,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("CreateVoyage_MultipleVoyagesGetUniqueIds", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage voyage1 = await CreateVoyageAsync(vesselId, "Unique Id Voyage 1");
                 Voyage voyage2 = await CreateVoyageAsync(vesselId, "Unique Id Voyage 2");
@@ -243,7 +257,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("GetVoyage_Exists_ReturnsVoyageAndMissions", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage created = await CreateVoyageAsync(vesselId, "GetVoyage Test", missionCount: 2);
                 string voyageId = created.Id;
@@ -262,7 +277,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("GetVoyage_ReturnsCorrectVoyageProperties", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage created = await CreateVoyageAsync(vesselId, "Property Check", description: "Check all props");
                 string voyageId = created.Id;
@@ -301,7 +317,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("GetVoyage_MissionsIncludeMissionDetails", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage created = await CreateVoyageAsync(vesselId, "Mission Details Voyage", missionCount: 1);
                 string voyageId = created.Id;
@@ -321,7 +338,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("CancelVoyage_ReturnsCancelledStatus", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage created = await CreateVoyageAsync(vesselId, "Cancel Me", missionCount: 2);
                 string voyageId = created.Id;
@@ -336,7 +354,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("CancelVoyage_VoyageStatusSetToCancelled", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage created = await CreateVoyageAsync(vesselId, "Cancel Status Check", missionCount: 1);
                 string voyageId = created.Id;
@@ -350,7 +369,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("CancelVoyage_SetsCompletedUtc", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage created = await CreateVoyageAsync(vesselId, "CompletedUtc Cancel", missionCount: 1);
                 string voyageId = created.Id;
@@ -364,7 +384,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("CancelVoyage_CancelsAllPendingMissions", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage created = await CreateVoyageAsync(vesselId, "Cancel Missions Voyage", missionCount: 3);
                 string voyageId = created.Id;
@@ -391,7 +412,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("CancelVoyage_VoyageStillRetrievableAfterCancel", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage created = await CreateVoyageAsync(vesselId, "Still Retrievable", missionCount: 1);
                 string voyageId = created.Id;
@@ -411,7 +433,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("PurgeVoyage_ReturnsDeletedStatus", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage created = await CreateVoyageAsync(vesselId, "Purge Me", missionCount: 2);
                 string voyageId = created.Id;
@@ -431,7 +454,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("PurgeVoyage_ReturnsMissionsDeletedCount", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage created = await CreateVoyageAsync(vesselId, "Purge Count", missionCount: 3);
                 string voyageId = created.Id;
@@ -448,7 +472,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("PurgeVoyage_VoyageNotFoundAfterPurge", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage created = await CreateVoyageAsync(vesselId, "Purge Gone", missionCount: 1);
                 string voyageId = created.Id;
@@ -466,7 +491,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("PurgeVoyage_MissionsAlsoDeleted", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage created = await CreateVoyageAsync(vesselId, "Purge Missions Gone", missionCount: 2);
                 string voyageId = created.Id;
@@ -516,7 +542,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("PurgeVoyage_VoyageNotInListAfterPurge", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage created = await CreateVoyageAsync(vesselId, "Purge List Check", missionCount: 1);
                 string voyageId = created.Id;
@@ -564,7 +591,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("ListVoyages_AfterCreate_ReturnsVoyages", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 await CreateVoyageAsync(vesselId, "List Test Voyage");
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/voyages");
@@ -574,7 +602,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("ListVoyages_MultipleVoyages_ReturnsAll", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 await CreateVoyageAsync(vesselId, "List Multi 1");
                 await CreateVoyageAsync(vesselId, "List Multi 2");
                 await CreateVoyageAsync(vesselId, "List Multi 3");
@@ -586,7 +615,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("ListVoyages_Pagination_25Voyages_PageSize10_CorrectTotals", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 for (int i = 1; i <= 25; i++)
                 {
                     await CreateVoyageAsync(vesselId, "Pagination Voyage " + i);
@@ -600,7 +630,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("ListVoyages_Pagination_Page2_ReturnsCorrectPage", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 for (int i = 1; i <= 25; i++)
                 {
                     await CreateVoyageAsync(vesselId, "Page2 Voyage " + i);
@@ -615,7 +646,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("ListVoyages_Pagination_LastPage_ReturnsRemainingRecords", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 for (int i = 1; i <= 25; i++)
                 {
                     await CreateVoyageAsync(vesselId, "LastPage Voyage " + i);
@@ -637,7 +669,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("ListVoyages_Pagination_BeyondLastPage_ReturnsEmpty", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 for (int i = 1; i <= 5; i++)
                 {
                     await CreateVoyageAsync(vesselId, "Beyond Voyage " + i);
@@ -651,7 +684,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("ListVoyages_Pagination_PageSize1_EachPageHasOneRecord", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 await CreateVoyageAsync(vesselId, "Single A");
                 await CreateVoyageAsync(vesselId, "Single B");
                 await CreateVoyageAsync(vesselId, "Single C");
@@ -665,7 +699,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("ListVoyages_NoPaginationOverlap_AllRecordsUnique", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 for (int i = 1; i <= 15; i++)
                 {
                     await CreateVoyageAsync(vesselId, "NoOverlap Voyage " + i);
@@ -692,7 +727,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("ListVoyages_OrderCreatedAscending_OldestFirst", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 await CreateVoyageAsync(vesselId, "Asc Voyage 1");
                 await Task.Delay(50);
                 await CreateVoyageAsync(vesselId, "Asc Voyage 2");
@@ -716,7 +752,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("ListVoyages_OrderCreatedDescending_NewestFirst", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 await CreateVoyageAsync(vesselId, "Desc Voyage 1");
                 await Task.Delay(50);
                 await CreateVoyageAsync(vesselId, "Desc Voyage 2");
@@ -740,7 +777,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("ListVoyages_FilterByStatus_Open_ReturnsOnlyOpen", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 await CreateVoyageAsync(vesselId, "Open Voyage 1");
                 await CreateVoyageAsync(vesselId, "Open Voyage 2");
 
@@ -762,7 +800,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("ListVoyages_FilterByStatus_Cancelled_ReturnsOnlyCancelled", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage v1 = await CreateVoyageAsync(vesselId, "Cancel Filter 1");
                 Voyage v2 = await CreateVoyageAsync(vesselId, "Cancel Filter 2");
@@ -784,7 +823,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("ListVoyages_FilterByNonMatchingStatus_ReturnsEmpty", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 await CreateVoyageAsync(vesselId, "Open Only");
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/voyages?status=Complete");
@@ -794,7 +834,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("ListVoyages_VoyagesContainExpectedProperties", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 await CreateVoyageAsync(vesselId, "Props Voyage");
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/voyages");
@@ -813,7 +854,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("EnumerateVoyages_DefaultQuery_ReturnsEnumerationResult", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 await CreateVoyageAsync(vesselId, "Enumerate Default");
 
                 StringContent content = JsonHelper.ToJsonContent(new { });
@@ -843,7 +885,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("EnumerateVoyages_WithPageSize_RespectsLimit", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 for (int i = 1; i <= 15; i++)
                 {
                     await CreateVoyageAsync(vesselId, "Enum PageSize " + i);
@@ -859,7 +902,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("EnumerateVoyages_WithPageNumber_ReturnsCorrectPage", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 for (int i = 1; i <= 20; i++)
                 {
                     await CreateVoyageAsync(vesselId, "Enum Page " + i);
@@ -876,7 +920,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("EnumerateVoyages_WithStatusFilter_ReturnsOnlyMatching", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 await CreateVoyageAsync(vesselId, "Enum InProgress 1");
                 await CreateVoyageAsync(vesselId, "Enum InProgress 2");
 
@@ -896,7 +941,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("EnumerateVoyages_WithCancelledStatusFilter_ReturnsOnlyCancelled", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 await CreateVoyageAsync(vesselId, "Enum Keep Open");
 
                 Voyage c1 = await CreateVoyageAsync(vesselId, "Enum Cancel A");
@@ -919,7 +965,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("EnumerateVoyages_OrderCreatedAscending_SortsCorrectly", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 await CreateVoyageAsync(vesselId, "Enum Asc 1");
                 await Task.Delay(50);
                 await CreateVoyageAsync(vesselId, "Enum Asc 2");
@@ -945,7 +992,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("EnumerateVoyages_OrderCreatedDescending_SortsCorrectly", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 await CreateVoyageAsync(vesselId, "Enum Desc 1");
                 await Task.Delay(50);
                 await CreateVoyageAsync(vesselId, "Enum Desc 2");
@@ -971,7 +1019,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("EnumerateVoyages_PaginationAndFilter_Combined", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 for (int i = 1; i <= 12; i++)
                 {
                     await CreateVoyageAsync(vesselId, "Enum Combined " + i);
@@ -1005,7 +1054,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("EnumerateVoyages_ReturnsTotalPagesCorrectly", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 for (int i = 1; i <= 7; i++)
                 {
                     await CreateVoyageAsync(vesselId, "TotalPages Voyage " + i);
@@ -1039,7 +1089,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("CancelVoyage_ThenPurge_BothSucceed", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage created = await CreateVoyageAsync(vesselId, "Cancel Then Purge", missionCount: 2);
                 string voyageId = created.Id;
@@ -1058,7 +1109,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("CreateMultipleVoyages_SameVessel_AllSucceed", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage v1 = await CreateVoyageAsync(vesselId, "Same Vessel 1", missionCount: 2);
                 Voyage v2 = await CreateVoyageAsync(vesselId, "Same Vessel 2", missionCount: 3);
@@ -1070,7 +1122,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("CancelledVoyage_StillAppearsInList", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage created = await CreateVoyageAsync(vesselId, "Cancelled In List");
                 string voyageId = created.Id;
@@ -1094,7 +1147,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("ListVoyages_DefaultOrder_IsCreatedDescending", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 await CreateVoyageAsync(vesselId, "Default Order 1");
                 await Task.Delay(50);
                 await CreateVoyageAsync(vesselId, "Default Order 2");
@@ -1118,7 +1172,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("ListVoyages_CancelledVoyage_HasCompletedUtcSet", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage created = await CreateVoyageAsync(vesselId, "CompletedUtc Check");
                 string voyageId = created.Id;
@@ -1139,7 +1194,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("GetVoyage_AfterCancel_MissionsHaveCompletedUtc", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage created = await CreateVoyageAsync(vesselId, "Missions CompletedUtc", missionCount: 2);
                 string voyageId = created.Id;
@@ -1159,7 +1215,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("EnumerateVoyages_BeyondLastPage_ReturnsEmpty", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 await CreateVoyageAsync(vesselId, "Enum Beyond 1");
                 await CreateVoyageAsync(vesselId, "Enum Beyond 2");
 
@@ -1173,7 +1230,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("ListVoyages_FilterByStatus_InProgress_ReturnsEmpty_WhenNoneInProgress", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 await CreateVoyageAsync(vesselId, "No InProgress");
 
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/voyages?status=InProgress");
@@ -1187,7 +1245,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("PurgeVoyage_DoublePurge_SecondReturnsError", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage created = await CreateVoyageAsync(vesselId, "Double Purge", missionCount: 1);
                 string voyageId = created.Id;
@@ -1206,7 +1265,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("CancelVoyage_DoubleCancel_SecondStillSucceeds", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
 
                 Voyage created = await CreateVoyageAsync(vesselId, "Double Cancel", missionCount: 1);
                 string voyageId = created.Id;
@@ -1223,7 +1283,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("ListVoyages_WithPageSizeQueryParam_OverridesDefault", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 for (int i = 1; i <= 5; i++)
                 {
                     await CreateVoyageAsync(vesselId, "PageSize Override " + i);
@@ -1237,7 +1298,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("EnumerateVoyages_NullBody_ReturnsResults", async () =>
             {
-                (string _, string vesselId) = await CreatePrerequisitesAsync();
+                PrerequisiteResult prereqs = await CreatePrerequisitesAsync();
+                string vesselId = prereqs.VesselId;
                 await CreateVoyageAsync(vesselId, "Null Body Enum");
 
                 StringContent content = new StringContent(
@@ -1300,11 +1362,11 @@ namespace Armada.Test.Automated.Suites
             return voyage;
         }
 
-        private async Task<(string FleetId, string VesselId)> CreatePrerequisitesAsync()
+        private async Task<PrerequisiteResult> CreatePrerequisitesAsync()
         {
             string fleetId = await CreateFleetAsync();
             string vesselId = await CreateVesselAsync(fleetId);
-            return (fleetId, vesselId);
+            return new PrerequisiteResult(fleetId, vesselId);
         }
 
         private async Task CleanupAsync()

@@ -56,7 +56,7 @@ namespace Armada.Test.Unit.Suites.Database
 
         #region Private-Methods
 
-        private async Task<(Fleet fleet, Vessel vessel, Voyage voyage)> CreatePrerequisitesAsync(SqliteDatabaseDriver db)
+        private async Task<MissionTestPrerequisites> CreatePrerequisitesAsync(SqliteDatabaseDriver db)
         {
             Fleet fleet = new Fleet("Test Fleet");
             fleet.CreatedUtc = _BaseTime;
@@ -71,7 +71,7 @@ namespace Armada.Test.Unit.Suites.Database
             voyage.CreatedUtc = _BaseTime;
             await db.Voyages.CreateAsync(voyage).ConfigureAwait(false);
 
-            return (fleet, vessel, voyage);
+            return new MissionTestPrerequisites(fleet, vessel, voyage);
         }
 
         private async Task Mission_Create()
@@ -81,7 +81,10 @@ namespace Armada.Test.Unit.Suites.Database
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
                     SqliteDatabaseDriver db = testDb.Driver;
-                    (Fleet fleet, Vessel vessel, Voyage voyage) = await CreatePrerequisitesAsync(db);
+                    MissionTestPrerequisites prereqs = await CreatePrerequisitesAsync(db);
+                    Fleet fleet = prereqs.Fleet;
+                    Vessel vessel = prereqs.Vessel;
+                    Voyage voyage = prereqs.Voyage;
 
                     Mission mission = new Mission("Create Test Mission", "A test mission description");
                     mission.VesselId = vessel.Id;
@@ -111,7 +114,10 @@ namespace Armada.Test.Unit.Suites.Database
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
                     SqliteDatabaseDriver db = testDb.Driver;
-                    (Fleet fleet, Vessel vessel, Voyage voyage) = await CreatePrerequisitesAsync(db);
+                    MissionTestPrerequisites prereqs = await CreatePrerequisitesAsync(db);
+                    Fleet fleet = prereqs.Fleet;
+                    Vessel vessel = prereqs.Vessel;
+                    Voyage voyage = prereqs.Voyage;
 
                     Mission mission = new Mission("Read Test Mission");
                     mission.VesselId = vessel.Id;
@@ -139,7 +145,10 @@ namespace Armada.Test.Unit.Suites.Database
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
                     SqliteDatabaseDriver db = testDb.Driver;
-                    (Fleet fleet, Vessel vessel, Voyage voyage) = await CreatePrerequisitesAsync(db);
+                    MissionTestPrerequisites prereqs = await CreatePrerequisitesAsync(db);
+                    Fleet fleet = prereqs.Fleet;
+                    Vessel vessel = prereqs.Vessel;
+                    Voyage voyage = prereqs.Voyage;
 
                     Captain captain = new Captain("update-captain");
                     await db.Captains.CreateAsync(captain);
@@ -179,7 +188,10 @@ namespace Armada.Test.Unit.Suites.Database
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
                     SqliteDatabaseDriver db = testDb.Driver;
-                    (Fleet fleet, Vessel vessel, Voyage voyage) = await CreatePrerequisitesAsync(db);
+                    MissionTestPrerequisites prereqs = await CreatePrerequisitesAsync(db);
+                    Fleet fleet = prereqs.Fleet;
+                    Vessel vessel = prereqs.Vessel;
+                    Voyage voyage = prereqs.Voyage;
 
                     Mission mission = new Mission("Exists Test Mission");
                     mission.VesselId = vessel.Id;
@@ -199,7 +211,10 @@ namespace Armada.Test.Unit.Suites.Database
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
                     SqliteDatabaseDriver db = testDb.Driver;
-                    (Fleet fleet, Vessel vessel, Voyage voyage) = await CreatePrerequisitesAsync(db);
+                    MissionTestPrerequisites prereqs = await CreatePrerequisitesAsync(db);
+                    Fleet fleet = prereqs.Fleet;
+                    Vessel vessel = prereqs.Vessel;
+                    Voyage voyage = prereqs.Voyage;
 
                     Mission m1 = new Mission("Enumerate Mission 1");
                     m1.VesselId = vessel.Id;
@@ -228,7 +243,10 @@ namespace Armada.Test.Unit.Suites.Database
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
                     SqliteDatabaseDriver db = testDb.Driver;
-                    (Fleet fleet, Vessel vessel, Voyage voyage) = await CreatePrerequisitesAsync(db);
+                    MissionTestPrerequisites prereqs = await CreatePrerequisitesAsync(db);
+                    Fleet fleet = prereqs.Fleet;
+                    Vessel vessel = prereqs.Vessel;
+                    Voyage voyage = prereqs.Voyage;
 
                     for (int i = 0; i < 10; i++)
                     {
@@ -291,7 +309,10 @@ namespace Armada.Test.Unit.Suites.Database
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
                     SqliteDatabaseDriver db = testDb.Driver;
-                    (Fleet fleet, Vessel vessel, Voyage voyage) = await CreatePrerequisitesAsync(db);
+                    MissionTestPrerequisites prereqs = await CreatePrerequisitesAsync(db);
+                    Fleet fleet = prereqs.Fleet;
+                    Vessel vessel = prereqs.Vessel;
+                    Voyage voyage = prereqs.Voyage;
 
                     Voyage voyage2 = new Voyage("Other Voyage");
                     await db.Voyages.CreateAsync(voyage2);
@@ -330,7 +351,10 @@ namespace Armada.Test.Unit.Suites.Database
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
                     SqliteDatabaseDriver db = testDb.Driver;
-                    (Fleet fleet, Vessel vessel, Voyage voyage) = await CreatePrerequisitesAsync(db);
+                    MissionTestPrerequisites prereqs = await CreatePrerequisitesAsync(db);
+                    Fleet fleet = prereqs.Fleet;
+                    Vessel vessel = prereqs.Vessel;
+                    Voyage voyage = prereqs.Voyage;
 
                     Vessel vessel2 = new Vessel("Second Vessel", "https://github.com/test/repo2");
                     vessel2.FleetId = fleet.Id;
@@ -367,7 +391,10 @@ namespace Armada.Test.Unit.Suites.Database
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
                     SqliteDatabaseDriver db = testDb.Driver;
-                    (Fleet fleet, Vessel vessel, Voyage voyage) = await CreatePrerequisitesAsync(db);
+                    MissionTestPrerequisites prereqs = await CreatePrerequisitesAsync(db);
+                    Fleet fleet = prereqs.Fleet;
+                    Vessel vessel = prereqs.Vessel;
+                    Voyage voyage = prereqs.Voyage;
 
                     Captain captain1 = new Captain("captain-alpha");
                     await db.Captains.CreateAsync(captain1);
@@ -408,7 +435,10 @@ namespace Armada.Test.Unit.Suites.Database
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
                     SqliteDatabaseDriver db = testDb.Driver;
-                    (Fleet fleet, Vessel vessel, Voyage voyage) = await CreatePrerequisitesAsync(db);
+                    MissionTestPrerequisites prereqs = await CreatePrerequisitesAsync(db);
+                    Fleet fleet = prereqs.Fleet;
+                    Vessel vessel = prereqs.Vessel;
+                    Voyage voyage = prereqs.Voyage;
 
                     Mission mPending = new Mission("Pending Mission");
                     mPending.VesselId = vessel.Id;
@@ -471,7 +501,10 @@ namespace Armada.Test.Unit.Suites.Database
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
                     SqliteDatabaseDriver db = testDb.Driver;
-                    (Fleet fleet, Vessel vessel, Voyage voyage) = await CreatePrerequisitesAsync(db);
+                    MissionTestPrerequisites prereqs = await CreatePrerequisitesAsync(db);
+                    Fleet fleet = prereqs.Fleet;
+                    Vessel vessel = prereqs.Vessel;
+                    Voyage voyage = prereqs.Voyage;
 
                     Mission mission = new Mission("Delete Test Mission");
                     mission.VesselId = vessel.Id;

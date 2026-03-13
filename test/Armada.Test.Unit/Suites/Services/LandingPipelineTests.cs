@@ -35,7 +35,7 @@ namespace Armada.Test.Unit.Suites.Services
             return settings;
         }
 
-        private async Task<(Captain captain, Mission mission, Dock dock, Vessel vessel)> CreateTestEntitiesAsync(
+        private async Task<LandingTestEntitiesResult> CreateTestEntitiesAsync(
             SqliteDatabaseDriver db, LandingModeEnum? landingMode = null, BranchCleanupPolicyEnum? cleanupPolicy = null)
         {
             Vessel vessel = new Vessel("test-vessel", "https://github.com/test/repo.git");
@@ -68,7 +68,7 @@ namespace Armada.Test.Unit.Suites.Services
             captain.CurrentDockId = dock.Id;
             await db.Captains.UpdateAsync(captain).ConfigureAwait(false);
 
-            return (captain, mission, dock, vessel);
+            return new LandingTestEntitiesResult(captain, mission, dock, vessel);
         }
 
         protected override async Task RunTestsAsync()
@@ -87,7 +87,11 @@ namespace Armada.Test.Unit.Suites.Services
                     ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
                     IMissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService);
 
-                    var (captain, mission, dock, vessel) = await CreateTestEntitiesAsync(testDb.Driver, LandingModeEnum.LocalMerge);
+                    LandingTestEntitiesResult entities = await CreateTestEntitiesAsync(testDb.Driver, LandingModeEnum.LocalMerge);
+                    Captain captain = entities.Captain;
+                    Mission mission = entities.Mission;
+                    Dock dock = entities.Dock;
+                    Vessel vessel = entities.Vessel;
 
                     // HandleCompletionAsync should set to WorkProduced
                     await missionService.HandleCompletionAsync(captain);
@@ -110,7 +114,11 @@ namespace Armada.Test.Unit.Suites.Services
                     ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
                     IMissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService);
 
-                    var (captain, mission, dock, vessel) = await CreateTestEntitiesAsync(testDb.Driver, LandingModeEnum.LocalMerge);
+                    LandingTestEntitiesResult entities = await CreateTestEntitiesAsync(testDb.Driver, LandingModeEnum.LocalMerge);
+                    Captain captain = entities.Captain;
+                    Mission mission = entities.Mission;
+                    Dock dock = entities.Dock;
+                    Vessel vessel = entities.Vessel;
 
                     // Simulate: agent completion -> WorkProduced
                     await missionService.HandleCompletionAsync(captain);
@@ -141,7 +149,11 @@ namespace Armada.Test.Unit.Suites.Services
                     ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
                     IMissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService);
 
-                    var (captain, mission, dock, vessel) = await CreateTestEntitiesAsync(testDb.Driver, LandingModeEnum.LocalMerge);
+                    LandingTestEntitiesResult entities = await CreateTestEntitiesAsync(testDb.Driver, LandingModeEnum.LocalMerge);
+                    Captain captain = entities.Captain;
+                    Mission mission = entities.Mission;
+                    Dock dock = entities.Dock;
+                    Vessel vessel = entities.Vessel;
 
                     // WorkProduced is set by HandleCompletionAsync
                     await missionService.HandleCompletionAsync(captain);

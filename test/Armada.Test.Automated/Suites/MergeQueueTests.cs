@@ -7,6 +7,7 @@ namespace Armada.Test.Automated.Suites
     using System.Net.Http;
     using System.Threading.Tasks;
     using Armada.Core.Models;
+    using Armada.Test.Automated;
     using Armada.Test.Common;
 
     /// <summary>
@@ -87,12 +88,12 @@ namespace Armada.Test.Automated.Suites
             return entry;
         }
 
-        private async Task<(string FleetId, string VesselId, string MissionId)> CreatePrerequisitesAsync(string suffix = "")
+        private async Task<MergeQueuePrerequisiteResult> CreatePrerequisitesAsync(string suffix = "")
         {
             string fleetId = await CreateFleetAsync("Fleet" + suffix).ConfigureAwait(false);
             string vesselId = await CreateVesselAsync(fleetId, "Vessel" + suffix).ConfigureAwait(false);
             string missionId = await CreateMissionAsync("Mission" + suffix).ConfigureAwait(false);
-            return (fleetId, vesselId, missionId);
+            return new MergeQueuePrerequisiteResult(fleetId, vesselId, missionId);
         }
 
         #endregion
@@ -106,7 +107,9 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("Enqueue_Returns201_WithCorrectProperties", async () =>
             {
-                (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("Enqueue201").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("Enqueue201").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
+                string missionId = prereqs.MissionId;
 
                 MergeEntry entry = await EnqueueAsync(missionId, vesselId, "feat/enqueue-test").ConfigureAwait(false);
 
@@ -120,7 +123,9 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("Enqueue_WithCustomTargetBranch_ReturnsCorrectTarget", async () =>
             {
-                (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("CustomTarget").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("CustomTarget").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
+                string missionId = prereqs.MissionId;
 
                 MergeEntry entry = await EnqueueAsync(missionId, vesselId, "feat/custom-target", "develop").ConfigureAwait(false);
 
@@ -129,7 +134,9 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("Enqueue_SetsTimestamps", async () =>
             {
-                (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("Timestamps").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("Timestamps").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
+                string missionId = prereqs.MissionId;
 
                 DateTime before = DateTime.UtcNow.AddSeconds(-5);
                 MergeEntry entry = await EnqueueAsync(missionId, vesselId, "feat/timestamps").ConfigureAwait(false);
@@ -144,7 +151,9 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("Enqueue_StatusIsQueued", async () =>
             {
-                (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("StatusQueued").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("StatusQueued").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
+                string missionId = prereqs.MissionId;
 
                 MergeEntry entry = await EnqueueAsync(missionId, vesselId, "feat/status-check").ConfigureAwait(false);
 
@@ -153,7 +162,9 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("Enqueue_IdHasMrgPrefix", async () =>
             {
-                (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("IdPrefix").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("IdPrefix").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
+                string missionId = prereqs.MissionId;
 
                 MergeEntry entry = await EnqueueAsync(missionId, vesselId, "feat/id-prefix").ConfigureAwait(false);
 
@@ -168,7 +179,9 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("GetById_ExistingEntry_ReturnsEntry", async () =>
             {
-                (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("GetById").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("GetById").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
+                string missionId = prereqs.MissionId;
 
                 MergeEntry created = await EnqueueAsync(missionId, vesselId, "feat/get-by-id").ConfigureAwait(false);
                 string entryId = created.Id;
@@ -194,7 +207,9 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("GetById_PreservesAllFields", async () =>
             {
-                (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("PreserveFields").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("PreserveFields").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
+                string missionId = prereqs.MissionId;
 
                 MergeEntry created = await EnqueueAsync(missionId, vesselId, "feat/preserve-fields", "develop").ConfigureAwait(false);
                 string entryId = created.Id;
@@ -213,7 +228,9 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("Cancel_ExistingEntry_Returns204", async () =>
             {
-                (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("Cancel204").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("Cancel204").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
+                string missionId = prereqs.MissionId;
 
                 MergeEntry created = await EnqueueAsync(missionId, vesselId, "feat/cancel-test").ConfigureAwait(false);
                 string entryId = created.Id;
@@ -230,7 +247,9 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("Cancel_ThenGet_ShowsCancelledStatus", async () =>
             {
-                (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("CancelThenGet").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("CancelThenGet").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
+                string missionId = prereqs.MissionId;
 
                 MergeEntry created = await EnqueueAsync(missionId, vesselId, "feat/cancel-then-get").ConfigureAwait(false);
                 string entryId = created.Id;
@@ -245,7 +264,9 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("Cancel_SetsCompletedUtc", async () =>
             {
-                (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("CancelCompleted").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("CancelCompleted").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
+                string missionId = prereqs.MissionId;
 
                 MergeEntry created = await EnqueueAsync(missionId, vesselId, "feat/cancel-completed").ConfigureAwait(false);
                 string entryId = created.Id;
@@ -261,7 +282,9 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("Cancel_UpdatesLastUpdateUtc", async () =>
             {
-                (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("CancelUpdate").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("CancelUpdate").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
+                string missionId = prereqs.MissionId;
 
                 MergeEntry created = await EnqueueAsync(missionId, vesselId, "feat/cancel-update").ConfigureAwait(false);
                 string entryId = created.Id;
@@ -309,7 +332,9 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("List_AfterEnqueue_ReturnsEntries", async () =>
             {
-                (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("ListAfter").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("ListAfter").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
+                string missionId = prereqs.MissionId;
 
                 await EnqueueAsync(missionId, vesselId, "feat/list-test").ConfigureAwait(false);
 
@@ -322,7 +347,9 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("List_MultipleEntries_ReturnsAll", async () =>
             {
-                (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("ListMulti").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("ListMulti").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
+                string missionId = prereqs.MissionId;
                 string missionId2 = await CreateMissionAsync("Mission2").ConfigureAwait(false);
                 string missionId3 = await CreateMissionAsync("Mission3").ConfigureAwait(false);
 
@@ -342,7 +369,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("List_25Entries_PageSize10_Returns3Pages", async () =>
             {
-                (string fleetId, string vesselId, string _) = await CreatePrerequisitesAsync("Pag25").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("Pag25").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
 
                 for (int i = 0; i < 25; i++)
                 {
@@ -362,7 +390,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("List_25Entries_PageSize10_Page2_Returns10", async () =>
             {
-                (string fleetId, string vesselId, string _) = await CreatePrerequisitesAsync("Pag25P2").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("Pag25P2").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
 
                 for (int i = 0; i < 25; i++)
                 {
@@ -379,7 +408,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("List_25Entries_PageSize10_Page3_Returns5", async () =>
             {
-                (string fleetId, string vesselId, string _) = await CreatePrerequisitesAsync("Pag25P3").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("Pag25P3").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
 
                 for (int i = 0; i < 25; i++)
                 {
@@ -396,7 +426,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("List_25Entries_PageSize10_Page4_BeyondLastPage_ReturnsEmpty", async () =>
             {
-                (string fleetId, string vesselId, string _) = await CreatePrerequisitesAsync("Pag25P4").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("Pag25P4").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
 
                 for (int i = 0; i < 25; i++)
                 {
@@ -413,7 +444,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("List_PageBoundaries_FirstAndLastRecords", async () =>
             {
-                (string fleetId, string vesselId, string _) = await CreatePrerequisitesAsync("PagBound").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("PagBound").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
 
                 List<string> createdIds = new List<string>();
                 for (int i = 0; i < 5; i++)
@@ -439,7 +471,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("List_Ordering_EntriesOrderedByCreatedUtc", async () =>
             {
-                (string fleetId, string vesselId, string _) = await CreatePrerequisitesAsync("Order").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("Order").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
 
                 List<string> createdIds = new List<string>();
                 for (int i = 0; i < 5; i++)
@@ -481,7 +514,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("Enumerate_WithPageSizeAndPageNumber_ReturnsCorrectPage", async () =>
             {
-                (string fleetId, string vesselId, string _) = await CreatePrerequisitesAsync("EnumPage").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("EnumPage").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
 
                 for (int i = 0; i < 15; i++)
                 {
@@ -510,7 +544,9 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("Enumerate_AfterEnqueue_ContainsEntry", async () =>
             {
-                (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("EnumAfter").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("EnumAfter").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
+                string missionId = prereqs.MissionId;
 
                 await EnqueueAsync(missionId, vesselId, "feat/enum-after").ConfigureAwait(false);
 
@@ -522,7 +558,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("Enumerate_QuerystringOverrides_Work", async () =>
             {
-                (string fleetId, string vesselId, string _) = await CreatePrerequisitesAsync("EnumQS").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("EnumQS").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
 
                 for (int i = 0; i < 8; i++)
                 {
@@ -552,7 +589,9 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("Process_ReturnsProcessedStatus", async () =>
             {
-                (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("Process").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("Process").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
+                string missionId = prereqs.MissionId;
 
                 await EnqueueAsync(missionId, vesselId, "feat/process-test").ConfigureAwait(false);
 
@@ -569,7 +608,9 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("List_IncludesCancelledEntries", async () =>
             {
-                (string fleetId, string vesselId, string missionId) = await CreatePrerequisitesAsync("ListCancelled").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("ListCancelled").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
+                string missionId = prereqs.MissionId;
 
                 MergeEntry entry = await EnqueueAsync(missionId, vesselId, "feat/list-cancelled").ConfigureAwait(false);
                 string entryId = entry.Id;
@@ -597,7 +638,8 @@ namespace Armada.Test.Automated.Suites
 
             await RunTest("Enqueue_MultipleEntries_HaveUniqueIds", async () =>
             {
-                (string fleetId, string vesselId, string _) = await CreatePrerequisitesAsync("UniqueIds").ConfigureAwait(false);
+                MergeQueuePrerequisiteResult prereqs = await CreatePrerequisitesAsync("UniqueIds").ConfigureAwait(false);
+                string vesselId = prereqs.VesselId;
 
                 HashSet<string> ids = new HashSet<string>();
                 for (int i = 0; i < 10; i++)
