@@ -258,7 +258,8 @@ namespace Armada.Test.Unit.Suites.Services
                         new List<MissionDescription> { new MissionDescription("Mission 1", "Desc 1"), new MissionDescription("Mission 2", "Desc 2") });
 
                     AssertNotNull(result);
-                    AssertEqual(VoyageStatusEnum.InProgress, result.Status);
+                    // Voyage stays Open when no captains are available to auto-assign missions
+                    AssertEqual(VoyageStatusEnum.Open, result.Status);
 
                     List<Mission> missions = await db.Missions.EnumerateByVoyageAsync(result.Id);
                     AssertEqual(2, missions.Count);
@@ -376,7 +377,7 @@ namespace Armada.Test.Unit.Suites.Services
                 }
             });
 
-            await RunTest("HealthCheckAsync WorkingCaptainNoProcessId SkipsCheck", async () =>
+            await RunTest("HealthCheckAsync WorkingCaptainNoProcessId NoMission ReleasesToIdle", async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
@@ -384,6 +385,8 @@ namespace Armada.Test.Unit.Suites.Services
                     StubGitService git = new StubGitService();
                     AdmiralService service = CreateAdmiralService(CreateLogging(), db, CreateSettings(), git);
 
+                    // A Working captain with no process ID and no mission is orphaned
+                    // and should be released to Idle by the health check.
                     Captain captain = new Captain("no-pid");
                     captain.State = CaptainStateEnum.Working;
                     captain.ProcessId = null;
@@ -392,7 +395,7 @@ namespace Armada.Test.Unit.Suites.Services
                     await service.HealthCheckAsync();
 
                     Captain? result = await db.Captains.ReadAsync(captain.Id);
-                    AssertEqual(CaptainStateEnum.Working, result!.State);
+                    AssertEqual(CaptainStateEnum.Idle, result!.State);
                 }
             });
 

@@ -152,8 +152,7 @@ namespace Armada.Test.Unit.Suites.Services
                     await missionService.HandleCompletionAsync(captainForCompletion!, captainForCompletion!.CurrentMissionId!);
 
                     m1 = await db.Missions.ReadAsync(missions[0].Id);
-                    AssertEqual(MissionStatusEnum.Complete, m1!.Status, "Mission 1 should be Complete");
-                    AssertNotNull(m1.CompletedUtc, "Mission 1 should have CompletedUtc set");
+                    AssertEqual(MissionStatusEnum.WorkProduced, m1!.Status, "Mission 1 should be WorkProduced (landing happens in ArmadaServer)");
 
                     m2 = await db.Missions.ReadAsync(missions[1].Id);
                     AssertEqual(MissionStatusEnum.InProgress, m2!.Status, "Mission 2 should be InProgress after mission 1 completion");
@@ -167,7 +166,7 @@ namespace Armada.Test.Unit.Suites.Services
                     await missionService.HandleCompletionAsync(captainForCompletion!, m2.Id);
 
                     m2 = await db.Missions.ReadAsync(missions[1].Id);
-                    AssertEqual(MissionStatusEnum.Complete, m2!.Status, "Mission 2 should be Complete");
+                    AssertEqual(MissionStatusEnum.WorkProduced, m2!.Status, "Mission 2 should be WorkProduced (landing happens in ArmadaServer)");
 
                     m3 = await db.Missions.ReadAsync(missions[2].Id);
                     AssertEqual(MissionStatusEnum.InProgress, m3!.Status, "Mission 3 should be InProgress after mission 2 completion");
@@ -178,17 +177,17 @@ namespace Armada.Test.Unit.Suites.Services
                     await missionService.HandleCompletionAsync(captainForCompletion!, m3.Id);
 
                     m3 = await db.Missions.ReadAsync(missions[2].Id);
-                    AssertEqual(MissionStatusEnum.Complete, m3!.Status, "Mission 3 should be Complete");
+                    AssertEqual(MissionStatusEnum.WorkProduced, m3!.Status, "Mission 3 should be WorkProduced (landing happens in ArmadaServer)");
 
                     Captain? captainFinal = await db.Captains.ReadAsync(captain.Id);
                     AssertEqual(CaptainStateEnum.Idle, captainFinal!.State, "Captain should be Idle after all missions complete");
                     AssertNull(captainFinal.CurrentMissionId, "Captain CurrentMissionId should be null");
                     AssertNull(captainFinal.CurrentDockId, "Captain CurrentDockId should be null");
 
-                    // Verify all 3 missions reached Complete
+                    // Verify all 3 missions reached WorkProduced (landing to Complete happens in ArmadaServer)
                     List<Mission> allMissions = await db.Missions.EnumerateByVoyageAsync(fixture.Voyage.Id);
-                    int completeCount = allMissions.Count(m => m.Status == MissionStatusEnum.Complete);
-                    AssertEqual(3, completeCount, "All 3 missions should be Complete");
+                    int workProducedCount = allMissions.Count(m => m.Status == MissionStatusEnum.WorkProduced);
+                    AssertEqual(3, workProducedCount, "All 3 missions should be WorkProduced");
                 }
             });
 
@@ -240,7 +239,7 @@ namespace Armada.Test.Unit.Suites.Services
                     await missionService.HandleCompletionAsync(captain1!, m1.Id);
 
                     m1 = await db.Missions.ReadAsync(missions[0].Id);
-                    AssertEqual(MissionStatusEnum.Complete, m1!.Status, "Mission 1 should be Complete");
+                    AssertEqual(MissionStatusEnum.WorkProduced, m1!.Status, "Mission 1 should be WorkProduced");
 
                     m3 = await db.Missions.ReadAsync(missions[2].Id);
                     AssertEqual(MissionStatusEnum.InProgress, m3!.Status, "Mission 3 should be InProgress after mission 1 completion");
@@ -250,7 +249,7 @@ namespace Armada.Test.Unit.Suites.Services
                     await missionService.HandleCompletionAsync(captain2!, m2.Id);
 
                     m2 = await db.Missions.ReadAsync(missions[1].Id);
-                    AssertEqual(MissionStatusEnum.Complete, m2!.Status, "Mission 2 should be Complete");
+                    AssertEqual(MissionStatusEnum.WorkProduced, m2!.Status, "Mission 2 should be WorkProduced");
 
                     m4 = await db.Missions.ReadAsync(missions[3].Id);
                     AssertEqual(MissionStatusEnum.InProgress, m4!.Status, "Mission 4 should be InProgress after mission 2 completion");
@@ -260,7 +259,7 @@ namespace Armada.Test.Unit.Suites.Services
                     await missionService.HandleCompletionAsync(captain1!, m3.Id);
 
                     m3 = await db.Missions.ReadAsync(missions[2].Id);
-                    AssertEqual(MissionStatusEnum.Complete, m3!.Status, "Mission 3 should be Complete");
+                    AssertEqual(MissionStatusEnum.WorkProduced, m3!.Status, "Mission 3 should be WorkProduced");
 
                     m5 = await db.Missions.ReadAsync(missions[4].Id);
                     AssertEqual(MissionStatusEnum.InProgress, m5!.Status, "Mission 5 should be InProgress after mission 3 completion");
@@ -270,7 +269,7 @@ namespace Armada.Test.Unit.Suites.Services
                     await missionService.HandleCompletionAsync(captain2!, m4.Id);
 
                     m4 = await db.Missions.ReadAsync(missions[3].Id);
-                    AssertEqual(MissionStatusEnum.Complete, m4!.Status, "Mission 4 should be Complete");
+                    AssertEqual(MissionStatusEnum.WorkProduced, m4!.Status, "Mission 4 should be WorkProduced");
 
                     captain2 = await db.Captains.ReadAsync(captain2!.Id);
                     AssertEqual(CaptainStateEnum.Idle, captain2!.State, "Captain 2 should be Idle");
@@ -280,12 +279,12 @@ namespace Armada.Test.Unit.Suites.Services
                     await missionService.HandleCompletionAsync(captain1!, m5.Id);
 
                     m5 = await db.Missions.ReadAsync(missions[4].Id);
-                    AssertEqual(MissionStatusEnum.Complete, m5!.Status, "Mission 5 should be Complete");
+                    AssertEqual(MissionStatusEnum.WorkProduced, m5!.Status, "Mission 5 should be WorkProduced");
 
-                    // Verify all 5 missions complete
+                    // Verify all 5 missions reached WorkProduced (landing to Complete happens in ArmadaServer)
                     List<Mission> allMissions = await db.Missions.EnumerateByVoyageAsync(fixture.Voyage.Id);
-                    int completeCount = allMissions.Count(m => m.Status == MissionStatusEnum.Complete);
-                    AssertEqual(5, completeCount, "All 5 missions should be Complete");
+                    int workProducedCount = allMissions.Count(m => m.Status == MissionStatusEnum.WorkProduced);
+                    AssertEqual(5, workProducedCount, "All 5 missions should be WorkProduced");
 
                     // Verify both captains are Idle
                     foreach (Captain c in captains)
@@ -377,7 +376,7 @@ namespace Armada.Test.Unit.Suites.Services
 
                     // Verify mission 1 is Complete despite handler failure
                     m1 = await db.Missions.ReadAsync(fixture.Missions[0].Id);
-                    AssertEqual(MissionStatusEnum.Complete, m1!.Status, "Mission 1 should be Complete even though handler threw");
+                    AssertEqual(MissionStatusEnum.WorkProduced, m1!.Status, "Mission 1 should be WorkProduced even though handler threw");
 
                     // Verify mission 2 was picked up (re-dispatch was attempted)
                     Mission? m2 = await db.Missions.ReadAsync(fixture.Missions[1].Id);
@@ -408,12 +407,12 @@ namespace Armada.Test.Unit.Suites.Services
                     Captain? captainForCompletion = await db.Captains.ReadAsync(captain.Id);
                     await missionService.HandleCompletionAsync(captainForCompletion!, fixture.Missions[0].Id);
 
-                    // Verify mission.completed event was emitted
+                    // Verify mission.work_produced event was emitted (mission.completed happens in ArmadaServer after landing)
                     EnumerationResult<ArmadaEvent> eventResult = await db.Events.EnumerateAsync(new EnumerationQuery());
-                    List<ArmadaEvent> completionEvents = eventResult.Objects.Where(e => e.EventType == "mission.completed").ToList();
-                    AssertTrue(completionEvents.Count >= 1, "Should have at least 1 mission.completed event");
-                    AssertEqual(fixture.Missions[0].Id, completionEvents[0].MissionId, "Event should reference the completed mission");
-                    AssertEqual(captain.Id, completionEvents[0].CaptainId, "Event should reference the captain");
+                    List<ArmadaEvent> workProducedEvents = eventResult.Objects.Where(e => e.EventType == "mission.work_produced").ToList();
+                    AssertTrue(workProducedEvents.Count >= 1, "Should have at least 1 mission.work_produced event");
+                    AssertEqual(fixture.Missions[0].Id, workProducedEvents[0].MissionId, "Event should reference the work_produced mission");
+                    AssertEqual(captain.Id, workProducedEvents[0].CaptainId, "Event should reference the captain");
                 }
             });
 
