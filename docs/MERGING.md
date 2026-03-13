@@ -96,8 +96,40 @@ Because each entry is landed immediately, the next entry in the same group alway
 
 ---
 
+## Landing Mode
+
+When a mission's agent exits successfully, Armada sets the mission to `WorkProduced` and then applies the **landing mode** to determine how to integrate the work. The landing mode is resolved in priority order:
+
+1. **Voyage-level** `LandingMode` (if the mission belongs to a voyage with a non-null `LandingMode`)
+2. **Vessel-level** `LandingMode` (on the target vessel)
+3. **Global** `LandingMode` (in `ArmadaSettings`)
+4. **Legacy booleans** (`AutoCreatePullRequests`, `AutoMergePullRequests`) if all of the above are null
+
+| Landing Mode | Behavior |
+|---|---|
+| `LocalMerge` | Merge the branch into the default branch locally and push. Mission transitions to `Complete` on success or `LandingFailed` on failure. |
+| `PullRequest` | Create a pull request. Mission transitions to `PullRequestOpen`. Armada polls for merge confirmation; once merged, transitions to `Complete`. |
+| `MergeQueue` | Enqueue the branch into Armada's merge queue for serialized testing and landing. |
+| `None` | No automated landing. The mission stays at `WorkProduced` for manual handling. |
+
+---
+
+## Branch Cleanup Policy
+
+After a mission's work has landed, Armada can automatically clean up the mission branch. The policy is resolved from the vessel level (falling back to global settings):
+
+| Policy | Behavior |
+|---|---|
+| `LocalOnly` | Delete the local branch only (default) |
+| `LocalAndRemote` | Delete both local and remote branches |
+| `None` | Leave branches in place |
+
+---
+
 ## Configuration
 
+- **`LandingMode`** (in `ArmadaSettings`) -- global landing policy. Can be overridden per-vessel (`Vessel.LandingMode`) or per-voyage (`Voyage.LandingMode`).
+- **`BranchCleanupPolicy`** (in `ArmadaSettings`) -- global branch cleanup policy. Can be overridden per-vessel (`Vessel.BranchCleanupPolicy`).
 - **`MergeQueueTestCommand`** (in `ArmadaSettings`) -- default test command to run for entries that don't specify their own. Can be overridden per entry via the `testCommand` parameter on `armada_enqueue_merge`.
 - **`DocksDirectory`** -- parent directory for temporary merge worktrees. Worktrees are created under `_merge-queue/` within this directory.
 - **`ReposDirectory`** -- fallback repository path when a vessel's `LocalPath` is not set.

@@ -181,7 +181,7 @@ Optional filters: `pageNumber`, `pageSize`, `order` (CreatedAscending/CreatedDes
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `armada_list_missions` | `status` (Pending/Assigned/InProgress/WorkProduced/Testing/Review/Complete/Failed/LandingFailed/Cancelled) | List missions |
+| `armada_list_missions` | `status` (Pending/Assigned/InProgress/WorkProduced/PullRequestOpen/Testing/Review/Complete/Failed/LandingFailed/Cancelled) | List missions |
 | `armada_mission_status` | `missionId` (required) | Get mission details |
 | `armada_create_mission` | `title` (required), `description` (required), `vesselId` (required), `voyageId` | Create a standalone mission |
 | `armada_update_mission` | `missionId` (required), `title`, `description`, `vesselId`, `voyageId`, `priority`, `branchName`, `prUrl`, `parentMissionId` | Update mission metadata |
@@ -246,7 +246,7 @@ Valid status transitions:
 
 ## Decision-Making Guidance
 
-**When to use `armada_list_*` vs `armada_enumerate`?** Use `armada_list_*` for quick, unfiltered lookups when you expect a small number of results (e.g., listing all fleets, listing all captains). Use `armada_enumerate` when you need to filter by related entity (e.g., missions for a specific vessel or voyage), filter by status or date range, paginate through large result sets, or sort results. When in doubt, prefer `armada_enumerate` — it supports all the same entity types and will never return more data than you ask for.
+**IMPORTANT — Always prefer `armada_enumerate` over `armada_list_*`.** The `armada_enumerate` tool supports pagination, filtering by status/entity/date range, and sorting — and it works for ALL entity types. The `armada_list_*` tools return all results at once with no filtering or pagination, which is wasteful and can return very large payloads. **Use `armada_enumerate` as your default for querying data.** Only fall back to `armada_list_*` when you genuinely need every record of a small entity type (e.g., listing all fleets when you know there are only a few).
 
 **How many missions per voyage?** 2-6 is typical. More than 8 parallel missions on the same repo risks merge conflicts even with non-overlapping files (shared imports, lock files, etc.).
 

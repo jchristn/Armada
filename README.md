@@ -359,6 +359,8 @@ armada config init              # Interactive setup (optional)
 | `AutoPush` | true | Push branches to remote on mission completion |
 | `AutoCreatePullRequests` | false | Create PRs on mission completion |
 | `AutoMergePullRequests` | false | Auto-merge PRs after creation |
+| `LandingMode` | null | Landing policy: `LocalMerge`, `PullRequest`, `MergeQueue`, or `None` |
+| `BranchCleanupPolicy` | `LocalOnly` | Branch cleanup after landing: `LocalOnly`, `LocalAndRemote`, or `None` |
 | `TerminalBell` | true | Ring terminal bell during `armada watch` |
 | `DefaultRuntime` | null (auto-detect) | Default agent runtime |
 

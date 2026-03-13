@@ -699,7 +699,8 @@ Transition a mission to a new status. Only valid transitions are allowed.
 | `Pending` | `Assigned`, `Cancelled` |
 | `Assigned` | `InProgress`, `Cancelled` |
 | `InProgress` | `WorkProduced`, `Testing`, `Review`, `Complete`, `Failed`, `Cancelled` |
-| `WorkProduced` | `Complete`, `LandingFailed`, `Cancelled` |
+| `WorkProduced` | `PullRequestOpen`, `Complete`, `LandingFailed`, `Cancelled` |
+| `PullRequestOpen` | `Complete`, `LandingFailed`, `Cancelled` |
 | `Testing` | `Review`, `InProgress`, `Complete`, `Failed` |
 | `Review` | `Complete`, `InProgress`, `Failed` |
 | `LandingFailed` | `WorkProduced`, `Failed`, `Cancelled` |
@@ -1377,6 +1378,8 @@ A git repository registered with Armada.
   "DefaultBranch": "main",
   "ProjectContext": null,
   "StyleGuide": null,
+  "LandingMode": null,
+  "BranchCleanupPolicy": null,
   "Active": true,
   "CreatedUtc": "2026-03-07T12:00:00Z",
   "LastUpdateUtc": "2026-03-07T12:00:00Z"
@@ -1394,6 +1397,8 @@ A git repository registered with Armada.
 | `DefaultBranch` | string | `"main"` | Default branch name |
 | `ProjectContext` | string? | null | Project context describing architecture, key files, and dependencies |
 | `StyleGuide` | string? | null | Style guide describing naming conventions, patterns, and library preferences |
+| `LandingMode` | [LandingModeEnum](#landingmodeenum)? | null | Per-vessel landing policy override (null = use global setting) |
+| `BranchCleanupPolicy` | [BranchCleanupPolicyEnum](#branchcleanuppolicyenum)? | null | Per-vessel branch cleanup policy override (null = use global setting) |
 | `Active` | bool | true | Whether vessel is active |
 | `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
 | `LastUpdateUtc` | datetime | now | Last update timestamp (UTC) |
@@ -1415,7 +1420,8 @@ A batch of related missions tracked together.
   "LastUpdateUtc": "2026-03-07T12:00:00Z",
   "AutoPush": null,
   "AutoCreatePullRequests": null,
-  "AutoMergePullRequests": null
+  "AutoMergePullRequests": null,
+  "LandingMode": null
 }
 ```
 
@@ -1431,6 +1437,7 @@ A batch of related missions tracked together.
 | `AutoPush` | bool? | null | Per-voyage auto-push override (null = use global setting) |
 | `AutoCreatePullRequests` | bool? | null | Per-voyage auto-create PRs override |
 | `AutoMergePullRequests` | bool? | null | Per-voyage auto-merge PRs override |
+| `LandingMode` | [LandingModeEnum](#landingmodeenum)? | null | Per-voyage landing policy override (null = use vessel/global setting) |
 
 ---
 
@@ -1728,11 +1735,35 @@ All enumerations serialize as strings in JSON (e.g., `"InProgress"`, not `2`).
 | `Pending` | Created but not yet assigned to a captain |
 | `Assigned` | Assigned to a captain, awaiting work start |
 | `InProgress` | Captain is actively working |
+| `WorkProduced` | Agent exited successfully; work ready for landing |
+| `PullRequestOpen` | Pull request created, awaiting merge confirmation |
 | `Testing` | Work complete, under automated testing |
 | `Review` | Awaiting human review |
-| `Complete` | Successfully completed (terminal) |
+| `Complete` | Successfully completed — code landed (terminal) |
 | `Failed` | Mission failed (terminal) |
+| `LandingFailed` | Landing (merge/PR) failed; may be retried |
 | `Cancelled` | Mission cancelled (terminal) |
+
+---
+
+#### LandingModeEnum
+
+| Value | Description |
+|---|---|
+| `LocalMerge` | Merge branch into default branch locally and push |
+| `PullRequest` | Create a pull request and poll for merge confirmation |
+| `MergeQueue` | Enqueue the branch into Armada's merge queue |
+| `None` | No automated landing; leave work on the branch |
+
+---
+
+#### BranchCleanupPolicyEnum
+
+| Value | Description |
+|---|---|
+| `LocalOnly` | Delete the local branch after landing |
+| `LocalAndRemote` | Delete both local and remote branches after landing |
+| `None` | Do not delete branches after landing |
 
 ---
 

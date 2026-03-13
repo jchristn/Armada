@@ -655,7 +655,7 @@ List all missions, optionally filtered by status.
   "properties": {
     "status": {
       "type": "string",
-      "description": "Filter by status: Pending, Assigned, InProgress, WorkProduced, Testing, Review, Complete, Failed, LandingFailed, Cancelled"
+      "description": "Filter by status: Pending, Assigned, InProgress, WorkProduced, PullRequestOpen, Testing, Review, Complete, Failed, LandingFailed, Cancelled"
     }
   }
 }
@@ -1295,7 +1295,8 @@ Transition a mission to a new status with validation.
 | Pending | Assigned, Cancelled |
 | Assigned | InProgress, Cancelled |
 | InProgress | WorkProduced, Testing, Review, Complete, Failed, Cancelled |
-| WorkProduced | Complete, LandingFailed, Cancelled |
+| WorkProduced | PullRequestOpen, Complete, LandingFailed, Cancelled |
+| PullRequestOpen | Complete, LandingFailed, Cancelled |
 | Testing | Review, InProgress, Complete, Failed |
 | Review | Complete, InProgress, Failed |
 | LandingFailed | WorkProduced, Failed, Cancelled |
@@ -1843,6 +1844,8 @@ Paginated result wrapper returned by `armada_enumerate`.
 | `defaultBranch` | string | Default branch name (default: `"main"`) |
 | `projectContext` | string \| null | Project context describing architecture, key files, and dependencies |
 | `styleGuide` | string \| null | Style guide describing naming conventions, patterns, and library preferences |
+| `landingMode` | string \| null | [LandingModeEnum](#landingmodeenum) — per-vessel landing policy override |
+| `branchCleanupPolicy` | string \| null | [BranchCleanupPolicyEnum](#branchcleanuppolicyenum) — per-vessel branch cleanup override |
 | `active` | bool | Whether the vessel is active |
 | `createdUtc` | string | ISO 8601 creation timestamp |
 | `lastUpdateUtc` | string | ISO 8601 last update timestamp |
@@ -1861,6 +1864,7 @@ Paginated result wrapper returned by `armada_enumerate`.
 | `autoPush` | bool \| null | Override global auto-push setting |
 | `autoCreatePullRequests` | bool \| null | Override global auto-create PR setting |
 | `autoMergePullRequests` | bool \| null | Override global auto-merge PR setting |
+| `landingMode` | string \| null | [LandingModeEnum](#landingmodeenum) — per-voyage landing policy override |
 
 #### Mission
 
@@ -1974,11 +1978,31 @@ Paginated result wrapper returned by `armada_enumerate`.
 | `Pending` | Not yet assigned to a captain |
 | `Assigned` | Assigned to a captain, not yet started |
 | `InProgress` | Captain actively working |
+| `WorkProduced` | Agent exited successfully; work ready for landing |
+| `PullRequestOpen` | Pull request created, awaiting merge confirmation |
 | `Testing` | Work complete, under automated testing |
 | `Review` | Awaiting human review |
-| `Complete` | Successfully completed |
+| `Complete` | Successfully completed (code landed) |
 | `Failed` | Mission failed |
+| `LandingFailed` | Landing (merge/PR) failed; may be retried |
 | `Cancelled` | Mission was cancelled |
+
+#### LandingModeEnum
+
+| Value | Description |
+|---|---|
+| `LocalMerge` | Merge branch into default branch locally and push |
+| `PullRequest` | Create a pull request and poll for merge confirmation |
+| `MergeQueue` | Enqueue the branch into Armada's merge queue |
+| `None` | No automated landing; leave work on the branch |
+
+#### BranchCleanupPolicyEnum
+
+| Value | Description |
+|---|---|
+| `LocalOnly` | Delete the local branch after landing |
+| `LocalAndRemote` | Delete both local and remote branches after landing |
+| `None` | Do not delete branches after landing |
 
 #### VoyageStatusEnum
 
