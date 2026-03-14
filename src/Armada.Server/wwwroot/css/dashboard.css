@@ -527,6 +527,13 @@ td {
     vertical-align: top;
 }
 
+.truncate-cell {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 250px;
+}
+
 th.col-checkbox, td.col-checkbox {
     width: 1.5rem;
     padding: 0.4rem 0.25rem;

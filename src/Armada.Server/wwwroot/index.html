@@ -730,7 +730,7 @@
                         <template x-for="voyage in sortedRows(columnFilteredVoyages())" :key="voyage.id">
                             <tr class="clickable" @click="navigate('voyages', 'voyage-detail', voyage.id)">
                                 <td class="col-checkbox" @click.stop><input type="checkbox" :checked="selectedVoyages.includes(voyage.id)" @change.stop="toggleVoyageSelection(voyage.id)" title="Select this voyage"></td>
-                                <td><strong x-text="voyage.title || voyage.id"></strong></td>
+                                <td class="truncate-cell" :title="voyage.title || voyage.id"><strong x-text="voyage.title || voyage.id"></strong></td>
                                 <td class="mono text-dim"><span class="id-display"><span x-text="voyage.id"></span><button class="copy-btn" @click.stop="copyId(voyage.id, $event)" title="Copy ID"></button></span></td>
                                 <td><span class="tag" :class="(voyage.status || '').toLowerCase()" x-text="voyage.status" :title="statusTooltip(voyage.status)"></span></td>
                                 <td class="text-dim" x-text="formatTime(voyage.createdUtc)" :title="formatTimeAbsolute(voyage.createdUtc)" style="white-space:nowrap"></td>
@@ -992,12 +992,12 @@
                         <template x-for="m in sortedRows(columnFilteredMissions())" :key="m.id">
                             <tr class="clickable" @click="navigate('missions', 'mission-detail', m.id)">
                                 <td class="col-checkbox" @click.stop><input type="checkbox" :checked="selectedMissions.includes(m.id)" @change="toggleMissionSelection(m.id)" title="Select this mission"></td>
-                                <td @click.stop class="clickable" @click="openEditMission(m)"><strong x-text="m.title"></strong></td>
+                                <td @click.stop class="clickable truncate-cell" @click="openEditMission(m)" :title="m.title"><strong x-text="m.title"></strong></td>
                                 <td class="mono text-dim"><span class="id-display"><span x-text="m.id"></span><button class="copy-btn" @click.stop="copyId(m.id, $event)" title="Copy ID"></button></span></td>
                                 <td><span class="tag" :class="(m.status || '').toLowerCase()" x-text="m.status" :title="statusTooltip(m.status)"></span></td>
                                 <td x-text="vesselName(m.vesselId)"></td>
                                 <td x-text="captainName(m.captainId)"></td>
-                                <td class="text-dim" x-text="m.branchName || '-'"></td>
+                                <td class="text-dim truncate-cell mono" style="font-size:0.8rem" x-text="m.branchName || '-'" :title="m.branchName"></td>
                                 <td class="text-dim" x-text="formatTime(m.createdUtc)" :title="formatTimeAbsolute(m.createdUtc)"></td>
                                 <td @click.stop>
                                     <div class="action-menu-wrap">
