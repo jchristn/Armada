@@ -114,6 +114,7 @@ function dashboard() {
         selectedCaptains: [],
         selectedSignals: [],
         selectedMergeQueue: [],
+        selectedEvents: [],
         selectedVessels: [],
 
         // Sorting
@@ -615,6 +616,7 @@ function dashboard() {
         },
 
         async loadEvents() {
+            this.selectedEvents = [];
             try {
                 let params = [];
                 if (this.eventFilters.type) params.push('type=' + this.eventFilters.type);
@@ -887,6 +889,37 @@ function dashboard() {
             await this.loadMergeQueue();
         },
 
+        // Event multi-select
+        toggleEventSelection(id) {
+            let idx = this.selectedEvents.indexOf(id);
+            if (idx >= 0) { this.selectedEvents.splice(idx, 1); } else { this.selectedEvents.push(id); }
+        },
+        selectAllEvents() { this.selectedEvents = this.columnFilteredEvents().map(e => e.id); },
+        clearEventSelection() { this.selectedEvents = []; },
+        async deleteEvent(eventId) {
+            if (!await this.showConfirm('Permanently delete event ' + eventId + '? This cannot be undone.')) return;
+            try {
+                await this.api('DELETE', '/api/v1/events/' + eventId);
+                this.toast('Event deleted');
+                if (this.detailView === 'event-detail' && this.detailId === eventId) this.goBack();
+                await this.loadEvents();
+            } catch (e) { this.toast('Failed: ' + e.message, 'error'); }
+        },
+        async deleteSelectedEvents() {
+            if (this.selectedEvents.length === 0) return;
+            if (!await this.showConfirm('Delete ' + this.selectedEvents.length + ' selected event(s)? This cannot be undone.')) return;
+            let ids = [...this.selectedEvents];
+            let failed = 0;
+            for (let id of ids) {
+                try { await this.api('DELETE', '/api/v1/events/' + id); }
+                catch (e) { failed++; console.warn('Failed to delete event ' + id + ':', e); }
+            }
+            this.selectedEvents = [];
+            if (failed > 0) { this.toast('Deleted ' + (ids.length - failed) + ' events, ' + failed + ' failed', 'warning'); }
+            else { this.toast('Deleted ' + ids.length + ' event(s)'); }
+            await this.loadEvents();
+        },
+
         // Vessel multi-select
         toggleVesselSelection(id) {
             let idx = this.selectedVessels.indexOf(id);
@@ -963,6 +996,7 @@ function dashboard() {
             if (view === 'voyages') this.selectedVoyages = [];
             if (view === 'captains') this.selectedCaptains = [];
             if (view === 'signals') this.selectedSignals = [];
+            if (view === 'events') this.selectedEvents = [];
             if (view === 'merge-queue') this.selectedMergeQueue = [];
             if (view === 'fleets-list') { this.loadFleets(); }
             if (view === 'fleets') { this.selectedVessels = []; this.sortColumn = '_fleetName'; this.sortAsc = true; this.loadFleets().then(() => { this.loadVessels(); }); }
