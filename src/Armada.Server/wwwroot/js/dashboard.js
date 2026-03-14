@@ -101,6 +101,13 @@ function dashboard() {
         mergeQueueVoyageFilter: '',
         mergeQueueVoyages: [],
         dockFilters: { status: '' },
+        // Per-column filter state
+        vesselColFilters: { fleet: '', name: '', repoUrl: '', branch: '' },
+        missionColFilters: { title: '', status: '', vessel: '', captain: '', branch: '' },
+        captainColFilters: { name: '', state: '', runtime: '' },
+        dockColFilters: { vessel: '', captain: '', branch: '', status: '' },
+        signalColFilters: { type: '', from: '', to: '', payload: '' },
+        eventColFilters: { type: '', message: '', entity: '', captain: '', mission: '' },
         selectedDocks: [],
         selectedMissions: [],
         selectedVoyages: [],
@@ -932,6 +939,7 @@ function dashboard() {
             this.detailDiff = null;
             this.detailLog = null;
             this.listSearch = '';
+            this.clearColumnFilters();
             this.showDispatchForm = false;
             this.dispatchResult = null;
             this.quickDispatchResult = null;
@@ -2272,6 +2280,95 @@ function dashboard() {
                 'sig_': { view: 'signals', detail: 'signal-detail' }
             };
             return map[prefix] || null;
+        },
+
+        // Case-insensitive substring match for column filters
+        filterMatch(value, filter) {
+            if (!filter) return true;
+            return (String(value || '')).toLowerCase().includes(filter.toLowerCase());
+        },
+
+        // Column-filtered vessels
+        columnFilteredVessels() {
+            let rows = this.filteredVesselsList();
+            let f = this.vesselColFilters;
+            return rows.filter(v =>
+                this.filterMatch(this.fleetName(v.fleetId), f.fleet) &&
+                this.filterMatch(v.name, f.name) &&
+                this.filterMatch(v.repoUrl, f.repoUrl) &&
+                this.filterMatch(v.defaultBranch || 'main', f.branch)
+            );
+        },
+
+        // Column-filtered missions
+        columnFilteredMissions() {
+            let rows = this.filterRows(this.allMissions);
+            let f = this.missionColFilters;
+            return rows.filter(m =>
+                this.filterMatch(m.title, f.title) &&
+                this.filterMatch(m.status, f.status) &&
+                this.filterMatch(this.vesselName(m.vesselId), f.vessel) &&
+                this.filterMatch(this.captainName(m.captainId), f.captain) &&
+                this.filterMatch(m.branchName, f.branch)
+            );
+        },
+
+        // Column-filtered captains
+        columnFilteredCaptains() {
+            let rows = this.filterRows(this.captains);
+            let f = this.captainColFilters;
+            return rows.filter(c =>
+                this.filterMatch(c.name, f.name) &&
+                this.filterMatch(c.state, f.state) &&
+                this.filterMatch(c.runtime || 'ClaudeCode', f.runtime)
+            );
+        },
+
+        // Column-filtered docks
+        columnFilteredDocks() {
+            let rows = this.filterRows(this.docks);
+            let f = this.dockColFilters;
+            return rows.filter(d =>
+                this.filterMatch(this.vesselName(d.vesselId), f.vessel) &&
+                this.filterMatch(this.captainName(d.captainId), f.captain) &&
+                this.filterMatch(d.branchName, f.branch) &&
+                this.filterMatch(d.active ? 'Active' : 'Inactive', f.status)
+            );
+        },
+
+        // Column-filtered signals
+        columnFilteredSignals() {
+            let rows = this.filterRows(this.signals);
+            let f = this.signalColFilters;
+            return rows.filter(s =>
+                this.filterMatch(s.type, f.type) &&
+                this.filterMatch(s.fromCaptainId || 'Admiral', f.from) &&
+                this.filterMatch(s.toCaptainId || 'Admiral', f.to) &&
+                this.filterMatch(s.payload, f.payload)
+            );
+        },
+
+        // Column-filtered events
+        columnFilteredEvents() {
+            let rows = this.events;
+            let f = this.eventColFilters;
+            return rows.filter(e =>
+                this.filterMatch(e.eventType, f.type) &&
+                this.filterMatch(e.message, f.message) &&
+                this.filterMatch(e.entityId, f.entity) &&
+                this.filterMatch(e.captainId, f.captain) &&
+                this.filterMatch(e.missionId, f.mission)
+            );
+        },
+
+        // Clear all column filters
+        clearColumnFilters() {
+            this.vesselColFilters = { fleet: '', name: '', repoUrl: '', branch: '' };
+            this.missionColFilters = { title: '', status: '', vessel: '', captain: '', branch: '' };
+            this.captainColFilters = { name: '', state: '', runtime: '' };
+            this.dockColFilters = { vessel: '', captain: '', branch: '', status: '' };
+            this.signalColFilters = { type: '', from: '', to: '', payload: '' };
+            this.eventColFilters = { type: '', message: '', entity: '', captain: '', mission: '' };
         },
 
         // Client-side text search filter

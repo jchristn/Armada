@@ -1906,3 +1906,26 @@ a:hover { text-decoration: underline; }
     word-break: break-word;
     color: var(--text);
 }
+
+/* Column filter row */
+thead tr.column-filter-row td {
+    padding: 0.2rem 0.4rem;
+    border-top: 1px solid var(--border);
+    background: var(--bg-hover);
+}
+
+thead tr.column-filter-row td input.col-filter {
+    width: 100%;
+    font-size: 0.75rem;
+    padding: 0.2rem 0.4rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    box-sizing: border-box;
+}
+
+thead tr.column-filter-row td input.col-filter::placeholder {
+    color: var(--text-dim);
+    opacity: 0.6;
+}

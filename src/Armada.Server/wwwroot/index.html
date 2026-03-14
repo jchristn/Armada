@@ -431,9 +431,18 @@
                             <th title="Context and style guide indicators"></th>
                             <th class="text-right">Actions</th>
                         </tr>
+                        <tr class="column-filter-row">
+                            <td></td>
+                            <td><input type="text" class="col-filter" x-model="vesselColFilters.name" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="vesselColFilters.fleet" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="vesselColFilters.repoUrl" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="vesselColFilters.branch" placeholder="Filter..."></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
                     </thead>
                     <tbody>
-                        <template x-for="v in sortedRows(filteredVesselsList())" :key="v.id">
+                        <template x-for="v in sortedRows(columnFilteredVessels())" :key="v.id">
                             <tr>
                                 <td><input type="checkbox" :checked="selectedVessels.includes(v.id)" @change="toggleVesselSelection(v.id)" title="Select this vessel"></td>
                                 <td class="clickable" @click="navigate('fleets', 'vessel-detail', v.id)"><strong x-text="v.name"></strong><div class="text-dim id-display"><span class="mono" x-text="v.id"></span><button class="copy-btn" @click.stop="copyId(v.id, $event)" title="Copy ID"></button></div></td>
@@ -874,9 +883,19 @@
                             <th class="sortable" @click="sortBy('createdUtc', allMissions)" title="When this mission was created -- click to sort">Created<span x-text="sortIcon('createdUtc')"></span></th>
                             <th></th>
                         </tr>
+                        <tr class="column-filter-row">
+                            <td></td>
+                            <td><input type="text" class="col-filter" x-model="missionColFilters.title" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="missionColFilters.status" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="missionColFilters.vessel" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="missionColFilters.captain" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="missionColFilters.branch" placeholder="Filter..."></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
                     </thead>
                     <tbody>
-                        <template x-for="m in sortedRows(filterRows(allMissions))" :key="m.id">
+                        <template x-for="m in sortedRows(columnFilteredMissions())" :key="m.id">
                             <tr class="clickable" @click="navigate('missions', 'mission-detail', m.id)">
                                 <td @click.stop><input type="checkbox" :checked="selectedMissions.includes(m.id)" @change="toggleMissionSelection(m.id)" title="Select this mission"></td>
                                 <td><strong x-text="m.title"></strong><div class="text-dim id-display"><span class="mono" x-text="m.id"></span><button class="copy-btn" @click.stop="copyId(m.id, $event)" title="Copy ID"></button></div></td>
@@ -1033,9 +1052,19 @@
                             <th title="Last time this captain reported activity">Heartbeat</th>
                             <th>Actions</th>
                         </tr>
+                        <tr class="column-filter-row">
+                            <td></td>
+                            <td><input type="text" class="col-filter" x-model="captainColFilters.name" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="captainColFilters.state" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="captainColFilters.runtime" placeholder="Filter..."></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
                     </thead>
                     <tbody>
-                        <template x-for="cpt in sortedRows(filterRows(captains))" :key="cpt.id">
+                        <template x-for="cpt in sortedRows(columnFilteredCaptains())" :key="cpt.id">
                             <tr>
                                 <td><input type="checkbox" :checked="selectedCaptains.includes(cpt.id)" @change="toggleCaptainSelection(cpt.id)" title="Select this captain"></td>
                                 <td class="clickable" @click="navigate('captains', 'captain-detail', cpt.id)">
@@ -1193,9 +1222,19 @@
                             <th class="sortable" @click="sortBy('createdUtc', docks)" title="When the dock was created -- click to sort">Created<span x-text="sortIcon('createdUtc')"></span></th>
                             <th>Actions</th>
                         </tr>
+                        <tr class="column-filter-row">
+                            <td></td>
+                            <td></td>
+                            <td><input type="text" class="col-filter" x-model="dockColFilters.vessel" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="dockColFilters.captain" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="dockColFilters.branch" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="dockColFilters.status" placeholder="Filter..."></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
                     </thead>
                     <tbody>
-                        <template x-for="dock in sortedRows(filterRows(docks))" :key="dock.id">
+                        <template x-for="dock in sortedRows(columnFilteredDocks())" :key="dock.id">
                             <tr>
                                 <td><input type="checkbox" :checked="selectedDocks.includes(dock.id)" @change="toggleDockSelection(dock.id)" title="Select this dock"></td>
                                 <td class="clickable" @click="navigate('docks', 'dock-detail', dock.id)">
@@ -1304,9 +1343,21 @@
             </div>
             <div class="table-wrap" x-show="signals.length > 0">
                 <table>
-                    <thead><tr><th style="width: 2.5rem;"><input type="checkbox" @change="$event.target.checked ? selectAllSignals() : clearSignalSelection()" :checked="selectedSignals.length > 0 && selectedSignals.length === signals.length" title="Select all signals"></th><th title="Unique signal identifier">ID</th><th title="Signal type (Nudge, Mail, Assignment, Progress, Completion, Error)">Type</th><th title="Sender -- captain or Admiral">From</th><th title="Recipient -- captain or Admiral">To</th><th title="Signal message content">Payload</th><th title="When the signal was created">Time</th><th>Action</th></tr></thead>
+                    <thead>
+                        <tr><th style="width: 2.5rem;"><input type="checkbox" @change="$event.target.checked ? selectAllSignals() : clearSignalSelection()" :checked="selectedSignals.length > 0 && selectedSignals.length === signals.length" title="Select all signals"></th><th title="Unique signal identifier">ID</th><th title="Signal type (Nudge, Mail, Assignment, Progress, Completion, Error)">Type</th><th title="Sender -- captain or Admiral">From</th><th title="Recipient -- captain or Admiral">To</th><th title="Signal message content">Payload</th><th title="When the signal was created">Time</th><th>Action</th></tr>
+                        <tr class="column-filter-row">
+                            <td></td>
+                            <td></td>
+                            <td><input type="text" class="col-filter" x-model="signalColFilters.type" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="signalColFilters.from" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="signalColFilters.to" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="signalColFilters.payload" placeholder="Filter..."></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                    </thead>
                     <tbody>
-                        <template x-for="sig in filterRows(signals)" :key="sig.id">
+                        <template x-for="sig in columnFilteredSignals()" :key="sig.id">
                             <tr>
                                 <td><input type="checkbox" :checked="selectedSignals.includes(sig.id)" @change="toggleSignalSelection(sig.id)" title="Select this signal"></td>
                                 <td class="mono text-dim"><span class="id-display"><span x-text="sig.id"></span><button class="copy-btn" @click.stop="copyId(sig.id, $event)" title="Copy ID"></button></span></td>
@@ -1421,9 +1472,20 @@
             </div>
             <div class="table-wrap" x-show="events.length > 0">
                 <table>
-                    <thead><tr><th title="When the event occurred">Time</th><th title="Event type category">Type</th><th title="Human-readable event description">Message</th><th title="Related entity ID (fleet, vessel, voyage, etc.)">Entity</th><th title="Captain involved in this event">Captain</th><th title="Mission related to this event">Mission</th><th>Action</th></tr></thead>
+                    <thead>
+                        <tr><th title="When the event occurred">Time</th><th title="Event type category">Type</th><th title="Human-readable event description">Message</th><th title="Related entity ID (fleet, vessel, voyage, etc.)">Entity</th><th title="Captain involved in this event">Captain</th><th title="Mission related to this event">Mission</th><th>Action</th></tr>
+                        <tr class="column-filter-row">
+                            <td></td>
+                            <td><input type="text" class="col-filter" x-model="eventColFilters.type" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="eventColFilters.message" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="eventColFilters.entity" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="eventColFilters.captain" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="eventColFilters.mission" placeholder="Filter..."></td>
+                            <td></td>
+                        </tr>
+                    </thead>
                     <tbody>
-                        <template x-for="evt in events" :key="evt.id">
+                        <template x-for="evt in columnFilteredEvents()" :key="evt.id">
                             <tr>
                                 <td class="text-dim" x-text="formatTime(evt.createdUtc)" :title="formatTimeAbsolute(evt.createdUtc)"></td>
                                 <td><span class="tag" x-text="evt.eventType"></span></td>
