@@ -50,6 +50,7 @@ function dashboard() {
         signals: [],
         events: [],
         mergeQueue: [],
+        docks: [],
         healthInfo: null,
         backupLoading: false,
         serverSettings: null,
@@ -90,8 +91,11 @@ function dashboard() {
         signalPaging: { pageNumber: 1, totalPages: 0, totalRecords: 0, pageSize: 25, totalMs: 0 },
         eventPaging: { pageNumber: 1, totalPages: 0, totalRecords: 0, pageSize: 50, totalMs: 0 },
         mergeQueuePaging: { pageNumber: 1, totalPages: 0, totalRecords: 0, pageSize: 25, totalMs: 0 },
+        dockPaging: { pageNumber: 1, totalPages: 0, totalRecords: 0, pageSize: 25, totalMs: 0 },
         mergeQueueVoyageFilter: '',
         mergeQueueVoyages: [],
+        dockFilters: { status: '' },
+        selectedDocks: [],
 
         // Sorting
         sortColumn: null,
@@ -292,7 +296,8 @@ function dashboard() {
                 this.loadCaptains(),
                 this.loadVessels(),
                 this.loadRecentMissions(),
-                this.loadMergeQueue()
+                this.loadMergeQueue(),
+                this.loadDocks()
             ]);
         },
 
@@ -609,6 +614,85 @@ function dashboard() {
             } catch (e) { console.warn('Failed to load merge queue:', e); }
         },
 
+        async loadDocks() {
+            try {
+                let params = [];
+                params.push('pageNumber=' + this.dockPaging.pageNumber);
+                params.push('pageSize=' + this.dockPaging.pageSize);
+                let url = '/api/v1/docks?' + params.join('&');
+                let result = await this.api('GET', url);
+                let allDocks = (result && result.objects) ? result.objects : [];
+                if (!Array.isArray(allDocks)) allDocks = [];
+                // Apply client-side status filter
+                if (this.dockFilters.status === 'active') {
+                    allDocks = allDocks.filter(d => d.active === true);
+                } else if (this.dockFilters.status === 'inactive') {
+                    allDocks = allDocks.filter(d => d.active === false);
+                }
+                this.docks = allDocks;
+                if (result) {
+                    this.dockPaging.pageNumber = result.pageNumber || 1;
+                    this.dockPaging.totalPages = result.totalPages || 0;
+                    this.dockPaging.totalRecords = result.totalRecords || 0;
+                    this.dockPaging.totalMs = result.totalMs || 0;
+                }
+            } catch (e) { console.warn('Failed to load docks:', e); }
+        },
+
+        async deleteDock(id) {
+            if (!await this.showConfirm('Delete dock ' + id + '? This will clean up the git worktree and cannot be undone.')) return;
+            try {
+                await this.api('DELETE', '/api/v1/docks/' + id);
+                this.toast('Dock deleted');
+                this.selectedDocks = this.selectedDocks.filter(d => d !== id);
+                if (this.view === 'docks' && !this.detailView) {
+                    await this.loadDocks();
+                } else if (this.detailView === 'dock-detail' && this.detailId === id) {
+                    this.goBack();
+                    await this.loadDocks();
+                }
+            } catch (e) { this.toast('Failed: ' + e.message, 'error'); }
+        },
+
+        async deleteSelectedDocks() {
+            if (this.selectedDocks.length === 0) return;
+            if (!await this.showConfirm('Delete ' + this.selectedDocks.length + ' selected dock(s)? This cannot be undone.')) return;
+            let ids = [...this.selectedDocks];
+            let failed = 0;
+            for (let id of ids) {
+                try {
+                    await this.api('DELETE', '/api/v1/docks/' + id);
+                } catch (e) {
+                    failed++;
+                    console.warn('Failed to delete dock ' + id + ':', e);
+                }
+            }
+            this.selectedDocks = [];
+            if (failed > 0) {
+                this.toast('Deleted ' + (ids.length - failed) + ' docks, ' + failed + ' failed', 'warning');
+            } else {
+                this.toast('Deleted ' + ids.length + ' dock(s)');
+            }
+            await this.loadDocks();
+        },
+
+        toggleDockSelection(id) {
+            let idx = this.selectedDocks.indexOf(id);
+            if (idx >= 0) {
+                this.selectedDocks.splice(idx, 1);
+            } else {
+                this.selectedDocks.push(id);
+            }
+        },
+
+        selectAllDocks() {
+            this.selectedDocks = this.docks.map(d => d.id);
+        },
+
+        clearDockSelection() {
+            this.selectedDocks = [];
+        },
+
         async loadHealth() {
             try { this.healthInfo = await this.api('GET', '/api/v1/status/health'); } catch (e) { console.warn('Failed to load health:', e); }
         },
@@ -651,11 +735,13 @@ function dashboard() {
             if (view === 'signals') this.signalPaging.pageNumber = 1;
             if (view === 'events') this.eventPaging.pageNumber = 1;
             if (view === 'merge-queue') this.mergeQueuePaging.pageNumber = 1;
+            if (view === 'docks') this.dockPaging.pageNumber = 1;
 
             // Load data for new views
             if (view === 'signals') this.loadSignals();
             if (view === 'events') this.loadEvents();
             if (view === 'merge-queue') this.loadMergeQueue();
+            if (view === 'docks') { this.selectedDocks = []; this.loadDocks(); }
             if (view === 'server') { this.loadHealth(); this.loadSettings(); }
             if (view === 'missions') this.loadMissions();
             if (view === 'voyages') this.loadVoyageMissionMap();
@@ -694,6 +780,8 @@ function dashboard() {
                         this.detail.vessels = (vesselResult && vesselResult.objects) ? vesselResult.objects : [];
                         if (!Array.isArray(this.detail.vessels)) this.detail.vessels = [];
                     } catch (_) { }
+                } else if (detailView === 'dock-detail') {
+                    this.detail = await this.api('GET', '/api/v1/docks/' + id);
                 } else if (detailView === 'merge-detail') {
                     this.detail = await this.api('GET', '/api/v1/merge-queue/' + id);
                 } else if (detailView === 'signal-detail') {
@@ -1002,7 +1090,7 @@ function dashboard() {
                 'home': 'Dashboard', 'fleets': 'Fleets', 'voyages': 'Voyages',
                 'captains': 'Captains', 'missions': 'Missions', 'dispatch': 'Dispatch',
                 'signals': 'Signals', 'events': 'Events', 'merge-queue': 'Merge Queue',
-                'server': 'Server', 'config': 'Config'
+                'docks': 'Docks', 'server': 'Server', 'config': 'Config'
             };
             this.breadcrumbs.push({ label: viewLabels[this.view] || this.view, view: this.view });
             if (this.detailView) {
