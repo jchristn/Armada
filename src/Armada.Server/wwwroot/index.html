@@ -383,7 +383,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <template x-for="f in sortedRows(filterRows(fleets))" :key="f.id">
+                        <template x-for="f in paginateLocal(sortedRows(filterRows(fleets)), fleetListPaging)" :key="f.id">
                             <tr class="clickable" @click="navigate('fleets-list', 'fleet-detail', f.id)">
                                 <td><strong x-text="f.name"></strong><div class="text-dim id-display"><span class="mono" x-text="f.id"></span><button class="copy-btn" @click.stop="copyId(f.id, $event)" title="Copy ID"></button></div></td>
                                 <td class="text-dim" x-text="f.description || '-'"></td>
@@ -403,6 +403,26 @@
                         </template>
                     </tbody>
                 </table>
+            </div>
+            <div class="pagination-bar" x-show="fleetListPaging.totalPages > 0">
+                <div class="pagination-info">
+                    <span class="pagination-records" x-text="fleetListPaging.totalRecords + ' records'"></span>
+                    <select class="page-size-select" title="Number of records per page" :value="fleetListPaging.pageSize" @change="changePageSize(fleetListPaging, $event.target.value, noopLoad)">
+                        <option value="10">10 / page</option>
+                        <option value="25">25 / page</option>
+                        <option value="50">50 / page</option>
+                        <option value="100">100 / page</option>
+                    </select>
+                </div>
+                <div class="pagination-controls">
+                    <button class="btn btn-sm" @click="prevPage(fleetListPaging, noopLoad)" :disabled="fleetListPaging.pageNumber <= 1">&larr; Prev</button>
+                    <span class="pagination-page">
+                        Page <input type="number" class="page-input" :value="fleetListPaging.pageNumber" min="1" :max="fleetListPaging.totalPages"
+                            @change="goToPage(fleetListPaging, parseInt($event.target.value), noopLoad)">
+                        of <span x-text="fleetListPaging.totalPages"></span>
+                    </span>
+                    <button class="btn btn-sm" @click="nextPage(fleetListPaging, noopLoad)" :disabled="fleetListPaging.pageNumber >= fleetListPaging.totalPages">Next &rarr;</button>
+                </div>
             </div>
         </div>
 
@@ -455,7 +475,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <template x-for="v in sortedRows(columnFilteredVessels())" :key="v.id">
+                        <template x-for="v in paginateLocal(sortedRows(columnFilteredVessels()), vesselPaging)" :key="v.id">
                             <tr>
                                 <td><input type="checkbox" :checked="selectedVessels.includes(v.id)" @change="toggleVesselSelection(v.id)" title="Select this vessel"></td>
                                 <td class="clickable" @click="navigate('fleets', 'vessel-detail', v.id)"><strong x-text="v.name"></strong></td>
@@ -478,6 +498,26 @@
                         </template>
                     </tbody>
                 </table>
+            </div>
+            <div class="pagination-bar" x-show="vesselPaging.totalPages > 0">
+                <div class="pagination-info">
+                    <span class="pagination-records" x-text="vesselPaging.totalRecords + ' records'"></span>
+                    <select class="page-size-select" title="Number of records per page" :value="vesselPaging.pageSize" @change="changePageSize(vesselPaging, $event.target.value, noopLoad)">
+                        <option value="10">10 / page</option>
+                        <option value="25">25 / page</option>
+                        <option value="50">50 / page</option>
+                        <option value="100">100 / page</option>
+                    </select>
+                </div>
+                <div class="pagination-controls">
+                    <button class="btn btn-sm" @click="prevPage(vesselPaging, noopLoad)" :disabled="vesselPaging.pageNumber <= 1">&larr; Prev</button>
+                    <span class="pagination-page">
+                        Page <input type="number" class="page-input" :value="vesselPaging.pageNumber" min="1" :max="vesselPaging.totalPages"
+                            @change="goToPage(vesselPaging, parseInt($event.target.value), noopLoad)">
+                        of <span x-text="vesselPaging.totalPages"></span>
+                    </span>
+                    <button class="btn btn-sm" @click="nextPage(vesselPaging, noopLoad)" :disabled="vesselPaging.pageNumber >= vesselPaging.totalPages">Next &rarr;</button>
+                </div>
             </div>
         </div>
 

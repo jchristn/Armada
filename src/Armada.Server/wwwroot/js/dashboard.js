@@ -94,6 +94,7 @@ function dashboard() {
         voyagePaging: { pageNumber: 1, totalPages: 0, totalRecords: 0, pageSize: 25, totalMs: 0 },
         captainPaging: { pageNumber: 1, totalPages: 0, totalRecords: 0, pageSize: 25, totalMs: 0 },
         vesselPaging: { pageNumber: 1, totalPages: 0, totalRecords: 0, pageSize: 25, totalMs: 0 },
+        fleetListPaging: { pageNumber: 1, totalPages: 0, totalRecords: 0, pageSize: 25, totalMs: 0 },
         signalPaging: { pageNumber: 1, totalPages: 0, totalRecords: 0, pageSize: 25, totalMs: 0 },
         eventPaging: { pageNumber: 1, totalPages: 0, totalRecords: 0, pageSize: 50, totalMs: 0 },
         mergeQueuePaging: { pageNumber: 1, totalPages: 0, totalRecords: 0, pageSize: 25, totalMs: 0 },
@@ -2721,6 +2722,22 @@ function dashboard() {
             pagingObj.pageNumber = 1;
             loadFn.call(this);
         },
+
+        /// <summary>
+        /// Client-side pagination: slice an array and update paging metadata.
+        /// </summary>
+        paginateLocal(arr, pagingObj) {
+            pagingObj.totalRecords = arr.length;
+            pagingObj.totalPages = Math.ceil(arr.length / pagingObj.pageSize) || 1;
+            if (pagingObj.pageNumber > pagingObj.totalPages) pagingObj.pageNumber = pagingObj.totalPages;
+            let start = (pagingObj.pageNumber - 1) * pagingObj.pageSize;
+            return arr.slice(start, start + pagingObj.pageSize);
+        },
+
+        /// <summary>
+        /// No-op load function for client-side paginated tables.
+        /// </summary>
+        noopLoad() {},
 
         // Keyboard shortcuts
         handleKeyboard(e) {
