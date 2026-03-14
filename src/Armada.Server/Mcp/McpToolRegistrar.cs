@@ -2034,7 +2034,6 @@ namespace Armada.Server.Mcp
                         return (object)new { Error = "entryIds is required and must not be empty" };
 
                     MergeQueuePurgeResult result = await mergeQueue.DeleteMultipleAsync(request.EntryIds).ConfigureAwait(false);
-                    result.ResolveStatus();
                     return (object)result;
                 });
         }
