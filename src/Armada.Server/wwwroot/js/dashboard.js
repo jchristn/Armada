@@ -2661,7 +2661,7 @@ function dashboard() {
                     this.diffViewerTitle = 'Mission Diff';
                     this.$nextTick(() => {
                         let el = document.getElementById('diff-content-area');
-                        if (el) el.innerHTML = '<div class="diff-empty-state"><p>No diff available for this mission.</p><p class="text-dim" style="font-size:0.85rem; margin-top:0.5rem">' + ((diff && diff.error) || 'The mission may not have produced any work yet.') + '</p></div>';
+                        if (el) el.innerHTML = '<div class="diff-empty-state"><p>No diff available for this mission.</p><p class="text-dim" style="font-size:0.85rem; margin-top:0.5rem">This can happen if the mission has not produced any work yet, the worktree has been cleaned up, or the branch was already merged and deleted.</p></div>';
                     });
                 }
             } catch (e) {
