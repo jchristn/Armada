@@ -317,7 +317,7 @@ body {
     align-items: center;
     justify-content: flex-end;
     gap: 0.75rem;
-    padding: 0.5rem 1.5rem;
+    padding: 0.5rem 1rem;
     background: var(--bg-card);
     border-bottom: 1px solid var(--border);
     position: sticky;
@@ -379,6 +379,7 @@ body {
     flex-direction: column;
     min-height: 100vh;
     min-width: 0;
+    background: var(--bg-card);
 }
 
 .main {
