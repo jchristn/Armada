@@ -687,7 +687,7 @@ user's live checkout.
 
 ### T3-5: Fix stall detection (depends on T1-2)
 
-**Status:** `[ ]` Not started
+**Status:** `[x]` Complete
 
 **Goal:** Stall detection is based on actual agent output, not the health-check
 loop refreshing the heartbeat.
@@ -714,9 +714,9 @@ loop refreshing the heartbeat.
 
 #### Checklist
 
-- [ ] 15a — Stop health-check heartbeat refresh
-- [ ] 15b — Output-driven heartbeat updates
-- [ ] 15c — Stall detection uses output heartbeat
+- [x] 15a — Removed UpdateHeartbeatAsync from health check loop
+- [x] 15b — HandleAgentHeartbeat updates heartbeat on every agent output line
+- [x] 15c — Stall detection now compares against output-driven heartbeat only
 
 ---
 
@@ -761,6 +761,7 @@ Phase 3 (after Phase 2):
 | 2026-03-13 | T2-4 | Complete | Synchronous handoff; removed Task.Run fire-and-forget |
 | 2026-03-13 | T2-5 | Complete | ReclaimOrphanedDocksAsync in health check, 5-min threshold |
 | 2026-03-13 | T2-2 | Complete | LandingService + ILandingService, armada_retry_landing MCP tool |
+| 2026-03-13 | T3-5 | Complete | Heartbeat from output only; removed health-check refresh |
 
 ---
 

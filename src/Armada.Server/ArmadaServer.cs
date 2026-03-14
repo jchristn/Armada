@@ -2259,8 +2259,9 @@ namespace Armada.Server
 
             Armada.Runtimes.Interfaces.IAgentRuntime runtime = _RuntimeFactory.Create(captain.Runtime);
 
-            // Wire up progress tracking and process exit detection
+            // Wire up progress tracking, heartbeat, and process exit detection
             runtime.OnOutputReceived += HandleAgentOutput;
+            runtime.OnOutputReceived += HandleAgentHeartbeat;
             runtime.OnProcessExited += HandleAgentProcessExited;
 
             string prompt = "Mission: " + mission.Title + "\n\n" + (mission.Description ?? "");
@@ -2312,6 +2313,32 @@ namespace Armada.Server
             }
 
             return processId;
+        }
+
+        /// <summary>
+        /// Update captain heartbeat on any agent output line.
+        /// This is the ONLY place heartbeat should be updated — not the health check loop.
+        /// Stall detection relies on this to distinguish alive-but-hung from alive-and-working.
+        /// </summary>
+        private void HandleAgentHeartbeat(int processId, string line)
+        {
+            string? captainId = null;
+            lock (_ProcessToCaptain)
+            {
+                _ProcessToCaptain.TryGetValue(processId, out captainId);
+            }
+
+            if (String.IsNullOrEmpty(captainId)) return;
+
+            // Fire and forget heartbeat update
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _Database.Captains.UpdateHeartbeatAsync(captainId).ConfigureAwait(false);
+                }
+                catch { }
+            });
         }
 
         private void HandleAgentOutput(int processId, string line)

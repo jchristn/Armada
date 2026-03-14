@@ -628,10 +628,13 @@ namespace Armada.Core.Services
             }
             else
             {
-                // Process is alive - update heartbeat
-                await _Database.Captains.UpdateHeartbeatAsync(captain.Id, token).ConfigureAwait(false);
+                // Process is alive — do NOT update heartbeat here.
+                // Heartbeat should only be updated when the agent produces actual output
+                // (handled by HandleAgentOutput in ArmadaServer). Updating it here from the
+                // health check would mask stalled agents that are technically running but
+                // producing no output.
 
-                // Check for stall (no heartbeat update for too long)
+                // Check for stall (no output for too long)
                 if (captain.LastHeartbeatUtc.HasValue)
                 {
                     TimeSpan elapsed = DateTime.UtcNow - captain.LastHeartbeatUtc.Value;
