@@ -47,10 +47,6 @@
                 <img src="/dashboard/img/logo-light-grey.png" alt="Armada" class="sidebar-logo">
                 <h1 class="sidebar-label">Armada</h1>
             </div>
-            <div class="sidebar-status" x-show="!sidebarCollapsed">
-                <span class="status-dot" :class="connected ? 'connected' : 'disconnected'" title="Server connection status"></span>
-                <span class="sidebar-label" x-text="wsConnected ? 'Live' : (apiConnected ? 'Online' : 'Offline')" title="Live = WebSocket real-time updates, Online = HTTP polling, Offline = no connection"></span>
-            </div>
             <nav class="sidebar-nav">
                 <!-- Dashboard -->
                 <button class="sidebar-nav-item" :class="{ active: view === 'home' }" @click="navigate('home')" :title="sidebarCollapsed ? 'Dashboard' : 'System overview with voyage progress, recent missions, and signals'">
@@ -158,6 +154,10 @@
         <div class="main-content-area">
             <!-- Top Bar -->
             <div class="top-bar">
+                <a href="#" class="top-bar-health" @click.prevent="navigate('doctor')" :title="doctorStatusTooltip" x-show="doctorOverallStatus !== 'unknown'">
+                    <span class="status-dot" :class="doctorOverallStatus"></span>
+                    <span class="top-bar-status-label" x-text="doctorStatusLabel"></span>
+                </a>
                 <span class="top-bar-status" :title="wsConnected ? 'Live: WebSocket real-time updates' : (apiConnected ? 'Online: HTTP polling' : 'Disconnected: no connection')">
                     <span class="status-dot" :class="connected ? 'connected' : 'disconnected'"></span>
                     <span class="top-bar-status-label" x-text="wsConnected ? 'Live' : (apiConnected ? 'Online' : 'Offline')"></span>

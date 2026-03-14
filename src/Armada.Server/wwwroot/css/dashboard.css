@@ -114,10 +114,6 @@ body {
     padding: 1rem 0.5rem;
 }
 
-.sidebar-collapsed .sidebar-status {
-    justify-content: center;
-    padding: 0.5rem 0.5rem 0.75rem;
-}
 
 .sidebar-collapsed .sidebar-nav-item {
     justify-content: center;
@@ -163,16 +159,6 @@ body {
 :root .login-logo, [data-theme="light"] .login-logo { filter: invert(1) brightness(0.2); }
 [data-theme="dark"] .login-logo { filter: none; }
 
-.sidebar-status {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.5rem 1.25rem 0.75rem;
-    font-size: 0.75rem;
-    color: var(--sidebar-text);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
 .status-dot {
     width: 8px;
     height: 8px;
@@ -183,6 +169,9 @@ body {
 
 .status-dot.connected { background: var(--green); }
 .status-dot.disconnected { background: var(--red); }
+.status-dot.healthy { background: var(--green); }
+.status-dot.warning { background: var(--yellow); }
+.status-dot.error { background: var(--red); }
 
 /* Sidebar navigation */
 .sidebar-nav {
@@ -362,6 +351,19 @@ body {
 .top-bar-status-label {
     line-height: 1;
 }
+
+/* Top bar health indicator */
+.top-bar-health {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    text-decoration: none;
+    cursor: pointer;
+    transition: color 0.15s;
+}
+.top-bar-health:hover { color: var(--text); }
 
 .github-link {
     color: var(--text-dim);

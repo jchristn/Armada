@@ -303,8 +303,61 @@ function dashboard() {
                 this.loadVessels(),
                 this.loadRecentMissions(),
                 this.loadMergeQueue(),
-                this.loadDocks()
+                this.loadDocks(),
+                this.refreshDoctorStatus()
             ]);
+        },
+
+        /// <summary>
+        /// Silently refresh doctor health checks for the top-bar indicator.
+        /// Unlike runDoctorChecks(), this does not set doctorRunning or clear results on start.
+        /// </summary>
+        async refreshDoctorStatus() {
+            try {
+                this.doctorResults = await this.api('GET', '/api/v1/doctor');
+            } catch (e) {
+                // Silently fail -- top-bar will show unknown state
+            }
+        },
+
+        /// <summary>
+        /// Returns the aggregate health status: 'healthy', 'warning', or 'error'.
+        /// Based on the worst status across all doctor check results.
+        /// </summary>
+        get doctorOverallStatus() {
+            if (!this.doctorResults || this.doctorResults.length === 0) return 'unknown';
+            let hasWarn = false;
+            for (let check of this.doctorResults) {
+                let s = (check.status || '').toLowerCase();
+                if (s === 'fail') return 'error';
+                if (s === 'warn') hasWarn = true;
+            }
+            return hasWarn ? 'warning' : 'healthy';
+        },
+
+        /// <summary>
+        /// Returns the label text for the top-bar health indicator.
+        /// </summary>
+        get doctorStatusLabel() {
+            let s = this.doctorOverallStatus;
+            if (s === 'healthy') return 'Healthy';
+            if (s === 'warning') return 'Warning';
+            if (s === 'error') return 'Error';
+            return '';
+        },
+
+        /// <summary>
+        /// Returns a tooltip for the top-bar health indicator with details.
+        /// </summary>
+        get doctorStatusTooltip() {
+            let s = this.doctorOverallStatus;
+            if (s === 'unknown') return 'Health status unknown -- click to run checks';
+            let issues = (this.doctorResults || []).filter(function(c) {
+                let st = (c.status || '').toLowerCase();
+                return st === 'fail' || st === 'warn';
+            });
+            if (issues.length === 0) return 'All health checks passed';
+            return issues.map(function(c) { return c.name + ': ' + c.message; }).join('; ');
         },
 
         async dashboardRefresh(event) {
