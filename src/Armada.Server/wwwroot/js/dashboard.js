@@ -2658,24 +2658,26 @@ function dashboard() {
                     let rawDiff = diff.diff || '';
                     this.openDiffViewer(title, rawDiff);
                 } else {
-                    this.diffViewerTitle = 'Diff Error';
+                    this.diffViewerTitle = 'Mission Diff';
                     this.$nextTick(() => {
                         let el = document.getElementById('diff-content-area');
-                        if (el) el.textContent = (diff && diff.error) || 'Failed to load diff';
+                        if (el) el.innerHTML = '<div class="diff-empty-state"><p>No diff available for this mission.</p><p class="text-dim" style="font-size:0.85rem; margin-top:0.5rem">' + ((diff && diff.error) || 'The mission may not have produced any work yet.') + '</p></div>';
                     });
                 }
             } catch (e) {
                 let errMsg = e.message || 'Request failed';
                 let isNotFound = errMsg.toLowerCase().includes('not found') || errMsg.includes('404') || errMsg.toLowerCase().includes('no diff available');
-                if (isNotFound) {
-                    this.openDiffViewer('Mission Diff', '');
-                } else {
-                    this.diffViewerTitle = 'Diff Error';
-                    this.$nextTick(() => {
-                        let el = document.getElementById('diff-content-area');
-                        if (el) el.textContent = errMsg;
-                    });
-                }
+                this.diffViewerTitle = 'Mission Diff';
+                this.$nextTick(() => {
+                    let el = document.getElementById('diff-content-area');
+                    if (el) {
+                        if (isNotFound) {
+                            el.innerHTML = '<div class="diff-empty-state"><p>No diff available for this mission.</p><p class="text-dim" style="font-size:0.85rem; margin-top:0.5rem">This can happen if the mission has not produced any work yet, the worktree has been cleaned up, or the branch was already merged and deleted.</p></div>';
+                        } else {
+                            el.innerHTML = '<div class="diff-empty-state"><p>Failed to load diff</p><p class="text-dim" style="font-size:0.85rem; margin-top:0.5rem">' + errMsg + '</p></div>';
+                        }
+                    }
+                });
             } finally {
                 this.diffViewerLoading = false;
             }

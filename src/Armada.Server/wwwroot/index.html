@@ -1024,7 +1024,11 @@
 
         <!-- Mission Detail -->
         <div x-show="detailView === 'mission-detail'" class="view">
-            <button class="btn btn-sm" @click="goBack()" title="Return to previous view">&larr; Back</button>
+            <div style="display:flex; gap:0.5rem; align-items:center; margin-bottom:0.5rem">
+                <button class="btn btn-sm" @click="goBack()" title="Return to previous view">&larr; Back</button>
+                <button class="btn btn-sm" @click="viewMissionDiff(detail?.id)" x-show="detail" title="View git diff of changes">Diff</button>
+                <button class="btn btn-sm" @click="viewMissionLog(detail?.id)" x-show="detail" title="View captain session log">Log</button>
+            </div>
             <template x-if="detail">
                 <div>
                     <div class="detail-header">
@@ -1058,12 +1062,6 @@
                         <div class="detail-field"><span class="detail-label">Created</span><span x-text="formatTimeAbsolute(detail.createdUtc)"></span></div>
                         <div class="detail-field" x-show="detail.startedUtc"><span class="detail-label">Started</span><span x-text="formatTimeAbsolute(detail.startedUtc)"></span></div>
                         <div class="detail-field" x-show="detail.completedUtc"><span class="detail-label">Completed</span><span x-text="formatTimeAbsolute(detail.completedUtc)"></span></div>
-                    </div>
-
-                    <!-- Mission actions -->
-                    <div style="display:flex; gap:0.5rem; margin:0.75rem 0">
-                        <button class="btn btn-sm" @click="viewMissionDiff(detail.id)" title="View git diff of changes">View Diff</button>
-                        <button class="btn btn-sm" @click="viewMissionLog(detail.id)" title="View captain session log">View Log</button>
                     </div>
 
                     <!-- Status transitions -->
