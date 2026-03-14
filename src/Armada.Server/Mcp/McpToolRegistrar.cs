@@ -297,6 +297,44 @@ namespace Armada.Server.Mcp
                     await database.Fleets.DeleteAsync(fleetId).ConfigureAwait(false);
                     return (object)new { Status = "deleted", FleetId = fleetId };
                 });
+
+            register(
+                "armada_delete_fleets",
+                "Permanently delete multiple fleets from the database by ID. Returns a summary of deleted and skipped entries. This cannot be undone.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        ids = new { type = "array", items = new { type = "string" }, description = "List of fleet IDs to delete (flt_ prefix)" }
+                    },
+                    required = new[] { "ids" }
+                },
+                async (args) =>
+                {
+                    DeleteMultipleArgs request = JsonSerializer.Deserialize<DeleteMultipleArgs>(args!.Value, _JsonOptions)!;
+                    if (request.Ids == null || request.Ids.Count == 0)
+                        return (object)new { Error = "ids is required and must not be empty" };
+
+                    DeleteMultipleResult result = new DeleteMultipleResult();
+                    foreach (string id in request.Ids)
+                    {
+                        if (String.IsNullOrEmpty(id))
+                        {
+                            result.Skipped.Add(new DeleteMultipleSkipped(id ?? "", "Empty ID"));
+                            continue;
+                        }
+                        bool exists = await database.Fleets.ExistsAsync(id).ConfigureAwait(false);
+                        if (!exists)
+                        {
+                            result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
+                            continue;
+                        }
+                        await database.Fleets.DeleteAsync(id).ConfigureAwait(false);
+                        result.Deleted++;
+                    }
+                    return (object)result;
+                });
         }
 
         private static void RegisterVesselTools(RegisterToolDelegate register, DatabaseDriver database)
@@ -430,6 +468,44 @@ namespace Armada.Server.Mcp
                     if (!exists) return (object)new { Error = "Vessel not found" };
                     await database.Vessels.DeleteAsync(vesselId).ConfigureAwait(false);
                     return (object)new { Status = "deleted", VesselId = vesselId };
+                });
+
+            register(
+                "armada_delete_vessels",
+                "Permanently delete multiple vessels from the database by ID. Returns a summary of deleted and skipped entries. This cannot be undone.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        ids = new { type = "array", items = new { type = "string" }, description = "List of vessel IDs to delete (vsl_ prefix)" }
+                    },
+                    required = new[] { "ids" }
+                },
+                async (args) =>
+                {
+                    DeleteMultipleArgs request = JsonSerializer.Deserialize<DeleteMultipleArgs>(args!.Value, _JsonOptions)!;
+                    if (request.Ids == null || request.Ids.Count == 0)
+                        return (object)new { Error = "ids is required and must not be empty" };
+
+                    DeleteMultipleResult result = new DeleteMultipleResult();
+                    foreach (string id in request.Ids)
+                    {
+                        if (String.IsNullOrEmpty(id))
+                        {
+                            result.Skipped.Add(new DeleteMultipleSkipped(id ?? "", "Empty ID"));
+                            continue;
+                        }
+                        bool exists = await database.Vessels.ExistsAsync(id).ConfigureAwait(false);
+                        if (!exists)
+                        {
+                            result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
+                            continue;
+                        }
+                        await database.Vessels.DeleteAsync(id).ConfigureAwait(false);
+                        result.Deleted++;
+                    }
+                    return (object)result;
                 });
 
             register(
@@ -647,6 +723,60 @@ namespace Armada.Server.Mcp
                     await database.Voyages.DeleteAsync(voyageId).ConfigureAwait(false);
                     return (object)new { Status = "deleted", VoyageId = voyageId, MissionsDeleted = missions.Count };
                 });
+
+            register(
+                "armada_delete_voyages",
+                "Permanently delete multiple voyages and their associated missions from the database by ID. Voyages that are Open/InProgress or have active missions are skipped. Returns a summary of deleted and skipped entries. This cannot be undone.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        ids = new { type = "array", items = new { type = "string" }, description = "List of voyage IDs to delete (vyg_ prefix)" }
+                    },
+                    required = new[] { "ids" }
+                },
+                async (args) =>
+                {
+                    DeleteMultipleArgs request = JsonSerializer.Deserialize<DeleteMultipleArgs>(args!.Value, _JsonOptions)!;
+                    if (request.Ids == null || request.Ids.Count == 0)
+                        return (object)new { Error = "ids is required and must not be empty" };
+
+                    DeleteMultipleResult result = new DeleteMultipleResult();
+                    foreach (string id in request.Ids)
+                    {
+                        if (String.IsNullOrEmpty(id))
+                        {
+                            result.Skipped.Add(new DeleteMultipleSkipped(id ?? "", "Empty ID"));
+                            continue;
+                        }
+                        Voyage? voyage = await database.Voyages.ReadAsync(id).ConfigureAwait(false);
+                        if (voyage == null)
+                        {
+                            result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
+                            continue;
+                        }
+                        if (voyage.Status == VoyageStatusEnum.Open || voyage.Status == VoyageStatusEnum.InProgress)
+                        {
+                            result.Skipped.Add(new DeleteMultipleSkipped(id, "Cannot delete voyage while status is " + voyage.Status + ". Cancel the voyage first."));
+                            continue;
+                        }
+                        List<Mission> missions = await database.Missions.EnumerateByVoyageAsync(id).ConfigureAwait(false);
+                        int activeMissionCount = missions.Count(m => m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress);
+                        if (activeMissionCount > 0)
+                        {
+                            result.Skipped.Add(new DeleteMultipleSkipped(id, "Cannot delete voyage with " + activeMissionCount + " active mission(s). Cancel or complete them first."));
+                            continue;
+                        }
+                        foreach (Mission m in missions)
+                        {
+                            await database.Missions.DeleteAsync(m.Id).ConfigureAwait(false);
+                        }
+                        await database.Voyages.DeleteAsync(id).ConfigureAwait(false);
+                        result.Deleted++;
+                    }
+                    return (object)result;
+                });
         }
 
         private static void RegisterMissionTools(RegisterToolDelegate register, DatabaseDriver database, IAdmiralService admiral, ArmadaSettings? settings, IGitService? git, ILandingService? landingService = null)
@@ -849,6 +979,44 @@ namespace Armada.Server.Mcp
 
                     await database.Missions.DeleteAsync(missionId).ConfigureAwait(false);
                     return (object)new { Status = "deleted", MissionId = missionId };
+                });
+
+            register(
+                "armada_delete_missions",
+                "Permanently delete multiple missions from the database by ID. Returns a summary of deleted and skipped entries. This cannot be undone.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        ids = new { type = "array", items = new { type = "string" }, description = "List of mission IDs to delete (msn_ prefix)" }
+                    },
+                    required = new[] { "ids" }
+                },
+                async (args) =>
+                {
+                    DeleteMultipleArgs request = JsonSerializer.Deserialize<DeleteMultipleArgs>(args!.Value, _JsonOptions)!;
+                    if (request.Ids == null || request.Ids.Count == 0)
+                        return (object)new { Error = "ids is required and must not be empty" };
+
+                    DeleteMultipleResult result = new DeleteMultipleResult();
+                    foreach (string id in request.Ids)
+                    {
+                        if (String.IsNullOrEmpty(id))
+                        {
+                            result.Skipped.Add(new DeleteMultipleSkipped(id ?? "", "Empty ID"));
+                            continue;
+                        }
+                        Mission? mission = await database.Missions.ReadAsync(id).ConfigureAwait(false);
+                        if (mission == null)
+                        {
+                            result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
+                            continue;
+                        }
+                        await database.Missions.DeleteAsync(id).ConfigureAwait(false);
+                        result.Deleted++;
+                    }
+                    return (object)result;
                 });
 
             register(
@@ -1220,6 +1388,56 @@ namespace Armada.Server.Mcp
                     return (object)new { Status = "deleted", CaptainId = captainId };
                 });
 
+            register(
+                "armada_delete_captains",
+                "Permanently delete multiple captains from the database by ID. Captains that are Working or have active missions are skipped. Returns a summary of deleted and skipped entries. This cannot be undone.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        ids = new { type = "array", items = new { type = "string" }, description = "List of captain IDs to delete (cpt_ prefix)" }
+                    },
+                    required = new[] { "ids" }
+                },
+                async (args) =>
+                {
+                    DeleteMultipleArgs request = JsonSerializer.Deserialize<DeleteMultipleArgs>(args!.Value, _JsonOptions)!;
+                    if (request.Ids == null || request.Ids.Count == 0)
+                        return (object)new { Error = "ids is required and must not be empty" };
+
+                    DeleteMultipleResult result = new DeleteMultipleResult();
+                    foreach (string id in request.Ids)
+                    {
+                        if (String.IsNullOrEmpty(id))
+                        {
+                            result.Skipped.Add(new DeleteMultipleSkipped(id ?? "", "Empty ID"));
+                            continue;
+                        }
+                        Captain? captain = await database.Captains.ReadAsync(id).ConfigureAwait(false);
+                        if (captain == null)
+                        {
+                            result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
+                            continue;
+                        }
+                        if (captain.State == CaptainStateEnum.Working)
+                        {
+                            result.Skipped.Add(new DeleteMultipleSkipped(id, "Cannot delete captain while state is Working. Stop the captain first."));
+                            continue;
+                        }
+                        List<Mission> captainMissions = await database.Missions.EnumerateByCaptainAsync(id).ConfigureAwait(false);
+                        int activeMissionCount = captainMissions.Count(m => m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress);
+                        if (activeMissionCount > 0)
+                        {
+                            result.Skipped.Add(new DeleteMultipleSkipped(id, "Cannot delete captain with " + activeMissionCount + " active mission(s). Cancel or complete them first."));
+                            continue;
+                        }
+                        await database.Captains.DeleteAsync(id).ConfigureAwait(false);
+                        result.Deleted++;
+                    }
+                    return (object)result;
+                });
+
             // Captain log requires settings
             if (settings != null)
             {
@@ -1317,6 +1535,44 @@ namespace Armada.Server.Mcp
                     signal.ToCaptainId = captainId;
                     signal = await database.Signals.CreateAsync(signal).ConfigureAwait(false);
                     return (object)signal;
+                });
+
+            register(
+                "armada_delete_signals",
+                "Soft-delete multiple signals by marking them as read. Returns a summary of deleted and skipped entries.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        ids = new { type = "array", items = new { type = "string" }, description = "List of signal IDs to delete (sig_ prefix)" }
+                    },
+                    required = new[] { "ids" }
+                },
+                async (args) =>
+                {
+                    DeleteMultipleArgs request = JsonSerializer.Deserialize<DeleteMultipleArgs>(args!.Value, _JsonOptions)!;
+                    if (request.Ids == null || request.Ids.Count == 0)
+                        return (object)new { Error = "ids is required and must not be empty" };
+
+                    DeleteMultipleResult result = new DeleteMultipleResult();
+                    foreach (string id in request.Ids)
+                    {
+                        if (String.IsNullOrEmpty(id))
+                        {
+                            result.Skipped.Add(new DeleteMultipleSkipped(id ?? "", "Empty ID"));
+                            continue;
+                        }
+                        Signal? signal = await database.Signals.ReadAsync(id).ConfigureAwait(false);
+                        if (signal == null)
+                        {
+                            result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
+                            continue;
+                        }
+                        await database.Signals.MarkReadAsync(id).ConfigureAwait(false);
+                        result.Deleted++;
+                    }
+                    return (object)result;
                 });
         }
 
@@ -1451,6 +1707,45 @@ namespace Armada.Server.Mcp
 
                     await dockService.PurgeAsync(request.DockId).ConfigureAwait(false);
                     return (object)new { Status = "purged", DockId = request.DockId };
+                });
+
+            register(
+                "armada_delete_docks",
+                "Permanently delete multiple docks and their git worktrees from the database by ID. Returns a summary of deleted and skipped entries. This cannot be undone.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        ids = new { type = "array", items = new { type = "string" }, description = "List of dock IDs to delete (dck_ prefix)" }
+                    },
+                    required = new[] { "ids" }
+                },
+                async (args) =>
+                {
+                    if (dockService == null) return (object)new { Error = "Dock service not available" };
+                    DeleteMultipleArgs request = JsonSerializer.Deserialize<DeleteMultipleArgs>(args!.Value, _JsonOptions)!;
+                    if (request.Ids == null || request.Ids.Count == 0)
+                        return (object)new { Error = "ids is required and must not be empty" };
+
+                    DeleteMultipleResult result = new DeleteMultipleResult();
+                    foreach (string id in request.Ids)
+                    {
+                        if (String.IsNullOrEmpty(id))
+                        {
+                            result.Skipped.Add(new DeleteMultipleSkipped(id ?? "", "Empty ID"));
+                            continue;
+                        }
+                        Dock? dock = await database.Docks.ReadAsync(id).ConfigureAwait(false);
+                        if (dock == null)
+                        {
+                            result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
+                            continue;
+                        }
+                        await dockService.PurgeAsync(id).ConfigureAwait(false);
+                        result.Deleted++;
+                    }
+                    return (object)result;
                 });
         }
 

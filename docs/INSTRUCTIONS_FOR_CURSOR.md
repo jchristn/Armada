@@ -41,9 +41,35 @@ Break the user's request into missions. Each mission should:
 - Touch **non-overlapping files** to avoid merge conflicts between parallel captains
 - Be **self-contained** — a captain should be able to complete it without context from other missions
 - Have a **clear, detailed description** — this is the captain's only instruction
+- **Explicitly list which files to modify** in the description so captains stay in their lane
 
 Bad: "Fix the auth system" (too vague, captain won't know what to do)
 Good: "Add JWT validation middleware in src/middleware/auth.ts. Import jsonwebtoken, validate the Authorization header, and attach the decoded payload to req.user. Add tests in tests/middleware/auth.test.ts."
+
+#### Avoiding Merge Conflicts (CRITICAL)
+
+**Merge conflicts and landing failures are the #1 cause of mission failure.** Follow these rules strictly:
+
+**Rule 1 — One file, one mission.** Never assign the same file to two missions in the same voyage. If two missions both need to edit `index.html`, they WILL conflict. Instead, combine that work into a single mission, or chain them sequentially in separate voyages.
+
+**Rule 2 — Monolithic files require sequential missions.** Some codebases have large files that many features touch (e.g., a single-page app with one `index.html` and one `app.js`). You CANNOT parallelize work on these files. Instead:
+- Put all changes to the shared file in a **single mission**, OR
+- Split across **separate sequential voyages** (dispatch voyage 2 only after voyage 1 completes), OR
+- Use one mission per voyage and let `AllowConcurrentMissions: false` serialize execution
+
+**Rule 3 — Never dispatch overlapping voyages.** If Voyage A has a mission that touches `dashboard.js`, do NOT dispatch Voyage B with another mission that also touches `dashboard.js` while Voyage A is still running. The second voyage's missions will branch from stale code and fail to land even if execution is serialized.
+
+**Rule 4 — Explicitly scope files in descriptions.** Tell each captain exactly which files to create or modify, and which to leave alone:
+- Good: "Add validation to src/routes/users.ts and tests/routes/users.test.ts. Do NOT modify any other route files."
+- Bad: "Add validation to the API" (captain may touch shared files unpredictably)
+
+**Rule 5 — Watch for implicit shared files.** Even with separate source files, missions may conflict on:
+- Package lock files (`package-lock.json`, `*.csproj`)
+- Barrel/index exports (`index.ts`, `mod.rs`)
+- Configuration files (`tsconfig.json`, `.csproj`)
+- Generated files (OpenAPI specs, migration snapshots)
+
+If a mission might touch these, either assign ALL such work to one mission or serialize the voyages.
 
 ### 3. Dispatch
 
@@ -56,11 +82,11 @@ armada_dispatch({
   missions: [
     {
       title: "Validate user endpoints",
-      description: "Add Zod schemas and validation to POST /users and PUT /users/{id} in src/routes/users.ts. Validate email format, password length >= 8, and name is non-empty. Return 400 with field-level errors. Add tests in tests/routes/users.test.ts."
+      description: "Add Zod schemas and validation to POST /users and PUT /users/{id} in src/routes/users.ts. Validate email format, password length >= 8, and name is non-empty. Return 400 with field-level errors. Add tests in tests/routes/users.test.ts. Do NOT modify any other route files."
     },
     {
       title: "Validate order endpoints",
-      description: "Add Zod schemas and validation to POST /orders in src/routes/orders.ts. Validate quantity > 0, productId exists, and shipping address fields. Return 400 with field-level errors. Add tests in tests/routes/orders.test.ts."
+      description: "Add Zod schemas and validation to POST /orders in src/routes/orders.ts. Validate quantity > 0, productId exists, and shipping address fields. Return 400 with field-level errors. Add tests in tests/routes/orders.test.ts. Do NOT modify any other route files."
     }
   ]
 })
@@ -134,7 +160,8 @@ When missions fail:
 3. **Dispatch a new voyage** with corrected mission descriptions. Common fixes:
    - Mission was too vague → add specific file paths and expected behavior
    - Captain hit a dependency issue → add setup instructions to the description
-   - Files overlapped with another mission → narrow the scope
+   - Files overlapped with another mission → narrow the scope or combine into one mission
+   - `LandingFailed` status → the code was produced but couldn't merge into the target branch. This almost always means another mission modified the same files. Check if the work is already on `main` from a prior mission before redispatching. If you need to redispatch, wait until all other missions on the same files have landed first.
 
    For broader event queries (e.g. all events for a voyage), use enumerate instead of `armada_list_events`:
    ```
@@ -262,19 +289,26 @@ Valid status transitions:
 | `armada_purge_merge_entry` | `entryId` (required) | Purge a single terminal merge entry by ID |
 | `armada_purge_merge_entries` | `entryIds` (required) | Batch purge multiple terminal merge entries by ID |
 
-**Merge queue lifecycle**: Queued → Testing → Passed/Failed → Landed/Cancelled. Use `armada_enqueue_merge` after a mission completes to queue its branch, then `armada_process_merge_queue` to test and land. Failed entries can be retried by cancelling and re-enqueuing.
+**Merge queue lifecycle**: Queued → Testing → Passed/Failed → Landed/Cancelled. Use `armada_enqueue_merge` after a mission completes to queue its branch, then `armada_process_merge_queue` to test and land. Failed entries can be retried by cancelling and re-enqueuing. Terminal entries (Landed/Failed/Cancelled) accumulate over time — use `armada_purge_merge_queue` to clean them up in bulk, or `armada_purge_merge_entries` to delete specific ones by ID.
 
 ## Decision-Making Guidance
 
 **IMPORTANT — Always prefer `armada_enumerate` over `armada_list_*`.** The `armada_enumerate` tool supports pagination, filtering by status/entity/date range, and sorting — and it works for ALL entity types. The `armada_list_*` tools return all results at once with no filtering or pagination, which is wasteful and can return very large payloads. **Use `armada_enumerate` as your default for querying data.** Only fall back to `armada_list_*` when you genuinely need every record of a small entity type (e.g., listing all fleets when you know there are only a few).
 
-**How many missions per voyage?** 2-6 is typical. More than 8 parallel missions on the same repo risks merge conflicts even with non-overlapping files (shared imports, lock files, etc.).
+**How many missions per voyage?** 2-6 is typical. More than 8 parallel missions on the same repo risks merge conflicts even with non-overlapping files (shared imports, lock files, etc.). For monolithic codebases (single-page apps, single large files), prefer 1-2 missions per voyage and dispatch sequentially.
+
+**How to handle monolithic/shared files?** When multiple changes must go into the same file (e.g., a single `index.html` or `app.js`), you have three options:
+1. **Combine into one mission** — put all the changes in a single mission description. This is the safest approach.
+2. **Chain voyages** — dispatch voyage 1, wait for it to complete, then dispatch voyage 2. Each voyage builds on the prior one's landed code.
+3. **Single-mission voyages with serialization** — create one mission per voyage and rely on `AllowConcurrentMissions: false`. But be aware that if two voyages are active simultaneously, their branches may still conflict.
+
+**NEVER** dispatch two voyages that modify the same files concurrently. This is the most common cause of `LandingFailed` status.
 
 **When to use a voyage vs standalone mission?** Use a voyage when work is related and you want to track it as a unit. Use standalone missions for one-off fixes or tasks unrelated to a larger effort.
 
 **When to create captains manually?** Usually you don't need to — Armada auto-provisions captains when missions are dispatched. Create captains manually with `armada_create_captain` only when you need to pre-configure a specific runtime or name.
 
-**When to use the merge queue?** When multiple missions complete and you want their branches tested and merged in order. Enqueue completed mission branches, then call `armada_process_merge_queue` to test and land them. This prevents broken merges from landing.
+**When to use the merge queue?** When multiple missions complete and you want their branches tested and merged in order. Enqueue completed mission branches, then call `armada_process_merge_queue` to test and land them. This prevents broken merges from landing. After merges land, use `armada_purge_merge_queue` to bulk-delete old terminal entries (Landed/Failed/Cancelled) and keep the queue clean. You can filter by `vesselId` or `status`. For selective cleanup, use `armada_purge_merge_entries` with an array of entry IDs.
 
 **How to handle a stalled captain?** Check `armada_list_captains` — stalled captains have stopped sending heartbeats. Read the log with `armada_get_captain_log` to diagnose. Stop it with `armada_stop_captain` and the mission will be marked Failed for redispatch.
 

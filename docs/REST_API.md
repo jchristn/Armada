@@ -313,6 +313,32 @@ curl -X DELETE http://localhost:7890/api/v1/fleets/flt_abc123
 
 ---
 
+#### `POST /api/v1/fleets/delete/multiple`
+
+Batch delete multiple fleets from the database by ID. Returns a summary of deleted and skipped entries. **This cannot be undone.**
+
+**Request Body:**
+
+```json
+{
+  "Ids": ["flt_abc123", "flt_def456"]
+}
+```
+
+**Response:** `200 OK`
+
+```json
+{
+  "Status": "deleted",
+  "Deleted": 2,
+  "Skipped": []
+}
+```
+
+Skipped entries include the entity ID and the reason (e.g., "Not found" or "Empty ID").
+
+---
+
 ### Vessels
 
 A vessel is a git repository registered with Armada.
@@ -414,6 +440,32 @@ Delete a vessel.
 | `id` | Vessel ID (`vsl_` prefix) |
 
 **Response:** `204 No Content`
+
+---
+
+#### `POST /api/v1/vessels/delete/multiple`
+
+Batch delete multiple vessels from the database by ID. Returns a summary of deleted and skipped entries. **This cannot be undone.**
+
+**Request Body:**
+
+```json
+{
+  "Ids": ["vsl_abc123", "vsl_def456"]
+}
+```
+
+**Response:** `200 OK`
+
+```json
+{
+  "Status": "deleted",
+  "Deleted": 2,
+  "Skipped": []
+}
+```
+
+Skipped entries include the entity ID and the reason (e.g., "Not found" or "Empty ID").
 
 ---
 
@@ -574,6 +626,32 @@ Permanently delete a voyage and all its associated missions from the database. *
 
 ---
 
+#### `POST /api/v1/voyages/delete/multiple`
+
+Batch delete multiple voyages and their associated missions from the database by ID. Voyages that are Open/InProgress or have active missions are skipped. Returns a summary of deleted and skipped entries. **This cannot be undone.**
+
+**Request Body:**
+
+```json
+{
+  "Ids": ["vyg_abc123", "vyg_def456"]
+}
+```
+
+**Response:** `200 OK`
+
+```json
+{
+  "Status": "deleted",
+  "Deleted": 2,
+  "Skipped": []
+}
+```
+
+Skipped entries include the entity ID and the reason (e.g., "Not found", "Cannot delete voyage while status is Open", or "Cannot delete voyage with N active mission(s)").
+
+---
+
 ### Missions
 
 A mission is an atomic unit of work assigned to a captain (AI agent).
@@ -728,6 +806,32 @@ Cancel a mission by setting its status to `Cancelled`. Returns the full updated 
 **Response:** `200 OK` - [Mission](#mission) (with `Status: "Cancelled"`)
 
 **Error:** `404` - Mission not found
+
+---
+
+#### `POST /api/v1/missions/delete/multiple`
+
+Batch delete multiple missions from the database by ID. Returns a summary of deleted and skipped entries. **This cannot be undone.**
+
+**Request Body:**
+
+```json
+{
+  "Ids": ["msn_abc123", "msn_def456"]
+}
+```
+
+**Response:** `200 OK`
+
+```json
+{
+  "Status": "deleted",
+  "Deleted": 2,
+  "Skipped": []
+}
+```
+
+Skipped entries include the entity ID and the reason (e.g., "Not found" or "Empty ID").
 
 ---
 
@@ -1028,6 +1132,32 @@ Delete a captain. Blocked if the captain is currently working or has active miss
 
 ---
 
+#### `POST /api/v1/captains/delete/multiple`
+
+Batch delete multiple captains from the database by ID. Captains that are Working or have active missions are skipped. Returns a summary of deleted and skipped entries. **This cannot be undone.**
+
+**Request Body:**
+
+```json
+{
+  "Ids": ["cpt_abc123", "cpt_def456"]
+}
+```
+
+**Response:** `200 OK`
+
+```json
+{
+  "Status": "deleted",
+  "Deleted": 2,
+  "Skipped": []
+}
+```
+
+Skipped entries include the entity ID and the reason (e.g., "Not found", "Cannot delete captain while state is Working", or "Cannot delete captain with N active mission(s)").
+
+---
+
 ### Signals
 
 A signal is a message between the admiral and captains or between captains.
@@ -1082,6 +1212,32 @@ curl -X POST http://localhost:7890/api/v1/signals \
   -H "Content-Type: application/json" \
   -d '{"Type": "Mail", "Payload": "Please check the test results", "ToCaptainId": "cpt_abc123"}'
 ```
+
+---
+
+#### `POST /api/v1/signals/delete/multiple`
+
+Batch soft-delete multiple signals by marking them as read. Returns a summary of deleted and skipped entries.
+
+**Request Body:**
+
+```json
+{
+  "Ids": ["sig_abc123", "sig_def456"]
+}
+```
+
+**Response:** `200 OK`
+
+```json
+{
+  "Status": "deleted",
+  "Deleted": 2,
+  "Skipped": []
+}
+```
+
+Skipped entries include the entity ID and the reason (e.g., "Not found" or "Empty ID").
 
 ---
 
@@ -1226,6 +1382,32 @@ Force purge a dock and its git worktree, even if a mission references it. **This
 ```
 
 **Error:** `404` - Dock not found
+
+---
+
+#### `POST /api/v1/docks/delete/multiple`
+
+Batch delete multiple docks and their git worktrees from the database by ID. Returns a summary of deleted and skipped entries. **This cannot be undone.**
+
+**Request Body:**
+
+```json
+{
+  "Ids": ["dck_abc123", "dck_def456"]
+}
+```
+
+**Response:** `200 OK`
+
+```json
+{
+  "Status": "deleted",
+  "Deleted": 2,
+  "Skipped": []
+}
+```
+
+Skipped entries include the entity ID and the reason (e.g., "Not found" or "Empty ID").
 
 ---
 

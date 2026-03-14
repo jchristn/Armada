@@ -281,6 +281,33 @@
 						},
 						"description": "Deletes a fleet. Vessels in the fleet are not deleted; their FleetId is set to null."
 					}
+				},
+				{
+					"name": "Batch Delete Fleets",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Ids\": [\"flt_abc123\", \"flt_def456\"]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/fleets/delete/multiple",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "fleets", "delete", "multiple"]
+						},
+						"description": "Batch delete multiple fleets by ID. Returns a summary of deleted and skipped entries."
+					},
+					"response": [
+						{
+							"name": "Batch Deleted",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Status\": \"deleted\",\n  \"Deleted\": 2,\n  \"Skipped\": []\n}"
+						}
+					]
 				}
 			]
 		},
@@ -413,6 +440,33 @@
 						},
 						"description": "Deletes a vessel."
 					}
+				},
+				{
+					"name": "Batch Delete Vessels",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Ids\": [\"vsl_abc123\", \"vsl_def456\"]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/vessels/delete/multiple",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "vessels", "delete", "multiple"]
+						},
+						"description": "Batch delete multiple vessels by ID. Returns a summary of deleted and skipped entries."
+					},
+					"response": [
+						{
+							"name": "Batch Deleted",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Status\": \"deleted\",\n  \"Deleted\": 2,\n  \"Skipped\": []\n}"
+						}
+					]
 				}
 			]
 		},
@@ -561,6 +615,33 @@
 							"status": "OK",
 							"code": 200,
 							"body": "{\n  \"Status\": \"deleted\",\n  \"VoyageId\": \"vyg_abc123\",\n  \"MissionsDeleted\": 3\n}"
+						}
+					]
+				},
+				{
+					"name": "Batch Delete Voyages",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Ids\": [\"vyg_abc123\", \"vyg_def456\"]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/voyages/delete/multiple",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "voyages", "delete", "multiple"]
+						},
+						"description": "Batch delete multiple voyages and their associated missions by ID. Voyages that are Open/InProgress or have active missions are skipped."
+					},
+					"response": [
+						{
+							"name": "Batch Deleted",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Status\": \"deleted\",\n  \"Deleted\": 2,\n  \"Skipped\": []\n}"
 						}
 					]
 				}
@@ -839,6 +920,33 @@
 							"body": "{\n  \"MissionId\": \"msn_abc123\",\n  \"Log\": \"[2026-03-07 10:00:00] Starting mission...\\n[2026-03-07 10:00:01] Cloning repository...\",\n  \"Lines\": 2,\n  \"TotalLines\": 150\n}"
 						}
 					]
+				},
+				{
+					"name": "Batch Delete Missions",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Ids\": [\"msn_abc123\", \"msn_def456\"]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/missions/delete/multiple",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "missions", "delete", "multiple"]
+						},
+						"description": "Batch delete multiple missions by ID. Returns a summary of deleted and skipped entries."
+					},
+					"response": [
+						{
+							"name": "Batch Deleted",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Status\": \"deleted\",\n  \"Deleted\": 2,\n  \"Skipped\": []\n}"
+						}
+					]
 				}
 			]
 		},
@@ -1025,6 +1133,33 @@
 						},
 						"description": "Deletes a captain. If the captain is currently working, it is recalled first."
 					}
+				},
+				{
+					"name": "Batch Delete Captains",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Ids\": [\"cpt_abc123\", \"cpt_def456\"]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/captains/delete/multiple",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "captains", "delete", "multiple"]
+						},
+						"description": "Batch delete multiple captains by ID. Captains that are Working or have active missions are skipped."
+					},
+					"response": [
+						{
+							"name": "Batch Deleted",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Status\": \"deleted\",\n  \"Deleted\": 2,\n  \"Skipped\": []\n}"
+						}
+					]
 				}
 			]
 		},
@@ -1112,6 +1247,33 @@
 							"status": "Created",
 							"code": 201,
 							"body": "{\n  \"Id\": \"sig_abc123\",\n  \"FromCaptainId\": null,\n  \"ToCaptainId\": \"cpt_abc123\",\n  \"Type\": \"Mail\",\n  \"Payload\": \"Please check the test results and fix any failures.\",\n  \"Read\": false,\n  \"CreatedUtc\": \"2026-03-07T12:00:00Z\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Batch Delete Signals",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Ids\": [\"sig_abc123\", \"sig_def456\"]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/signals/delete/multiple",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "signals", "delete", "multiple"]
+						},
+						"description": "Batch soft-delete multiple signals by marking them as read."
+					},
+					"response": [
+						{
+							"name": "Batch Deleted",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Status\": \"deleted\",\n  \"Deleted\": 2,\n  \"Skipped\": []\n}"
 						}
 					]
 				}
@@ -1397,6 +1559,33 @@
 							"status": "OK",
 							"code": 200,
 							"body": "{\n  \"Status\": \"purged\",\n  \"DockId\": \"dck_abc123\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Batch Delete Docks",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Ids\": [\"dck_abc123\", \"dck_def456\"]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/docks/delete/multiple",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "docks", "delete", "multiple"]
+						},
+						"description": "Batch delete multiple docks and their git worktrees by ID."
+					},
+					"response": [
+						{
+							"name": "Batch Deleted",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Status\": \"deleted\",\n  \"Deleted\": 2,\n  \"Skipped\": []\n}"
 						}
 					]
 				}

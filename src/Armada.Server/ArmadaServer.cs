@@ -732,6 +732,43 @@ namespace Armada.Server
                 .WithResponse(204, OpenApiResponseMetadata.NoContent())
                 .WithSecurity("ApiKey"));
 
+            _App.Rest.Post<DeleteMultipleRequest>("/api/v1/fleets/delete/multiple", async (AppRequest req) =>
+            {
+                DeleteMultipleRequest body = req.GetData<DeleteMultipleRequest>();
+                if (body == null || body.Ids == null || body.Ids.Count == 0)
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Ids is required and must not be empty" };
+
+                DeleteMultipleResult result = new DeleteMultipleResult();
+                foreach (string id in body.Ids)
+                {
+                    if (String.IsNullOrEmpty(id))
+                    {
+                        result.Skipped.Add(new DeleteMultipleSkipped(id ?? "", "Empty ID"));
+                        continue;
+                    }
+                    bool exists = await _Database.Fleets.ExistsAsync(id).ConfigureAwait(false);
+                    if (!exists)
+                    {
+                        result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
+                        continue;
+                    }
+                    await _Database.Fleets.DeleteAsync(id).ConfigureAwait(false);
+                    result.Deleted++;
+                }
+
+                await EmitEventAsync("fleet.batch_deleted", "Batch deleted " + result.Deleted + " fleets",
+                    entityType: "fleet").ConfigureAwait(false);
+
+                return (object)result;
+            },
+            api => api
+                .WithTag("Fleets")
+                .WithSummary("Batch delete multiple fleets")
+                .WithDescription("Permanently deletes multiple fleets from the database by ID. Returns a summary of deleted and skipped entries. This cannot be undone.")
+                .WithRequestBody(OpenApiRequestBodyMetadata.Json<DeleteMultipleRequest>("List of fleet IDs to delete"))
+                .WithResponse(200, OpenApiResponseMetadata.Json<DeleteMultipleResult>("Delete result summary"))
+                .WithSecurity("ApiKey"));
+
             // Vessels
             _App.Rest.Get("/api/v1/vessels", async (AppRequest req) =>
             {
@@ -853,6 +890,43 @@ namespace Armada.Server
                 .WithDescription("Deletes a vessel by ID.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
                 .WithResponse(204, OpenApiResponseMetadata.NoContent())
+                .WithSecurity("ApiKey"));
+
+            _App.Rest.Post<DeleteMultipleRequest>("/api/v1/vessels/delete/multiple", async (AppRequest req) =>
+            {
+                DeleteMultipleRequest body = req.GetData<DeleteMultipleRequest>();
+                if (body == null || body.Ids == null || body.Ids.Count == 0)
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Ids is required and must not be empty" };
+
+                DeleteMultipleResult result = new DeleteMultipleResult();
+                foreach (string id in body.Ids)
+                {
+                    if (String.IsNullOrEmpty(id))
+                    {
+                        result.Skipped.Add(new DeleteMultipleSkipped(id ?? "", "Empty ID"));
+                        continue;
+                    }
+                    bool exists = await _Database.Vessels.ExistsAsync(id).ConfigureAwait(false);
+                    if (!exists)
+                    {
+                        result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
+                        continue;
+                    }
+                    await _Database.Vessels.DeleteAsync(id).ConfigureAwait(false);
+                    result.Deleted++;
+                }
+
+                await EmitEventAsync("vessel.batch_deleted", "Batch deleted " + result.Deleted + " vessels",
+                    entityType: "vessel").ConfigureAwait(false);
+
+                return (object)result;
+            },
+            api => api
+                .WithTag("Vessels")
+                .WithSummary("Batch delete multiple vessels")
+                .WithDescription("Permanently deletes multiple vessels from the database by ID. Returns a summary of deleted and skipped entries. This cannot be undone.")
+                .WithRequestBody(OpenApiRequestBodyMetadata.Json<DeleteMultipleRequest>("List of vessel IDs to delete"))
+                .WithResponse(200, OpenApiResponseMetadata.Json<DeleteMultipleResult>("Delete result summary"))
                 .WithSecurity("ApiKey"));
 
             // Voyages
@@ -1054,6 +1128,59 @@ namespace Armada.Server
                 .WithResponse(200, OpenApiResponseMetadata.Json<object>("Deleted voyage and missions"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithResponse(409, OpenApiResponseMetadata.Json<object>("Voyage cannot be deleted while active"))
+                .WithSecurity("ApiKey"));
+
+            _App.Rest.Post<DeleteMultipleRequest>("/api/v1/voyages/delete/multiple", async (AppRequest req) =>
+            {
+                DeleteMultipleRequest body = req.GetData<DeleteMultipleRequest>();
+                if (body == null || body.Ids == null || body.Ids.Count == 0)
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Ids is required and must not be empty" };
+
+                DeleteMultipleResult result = new DeleteMultipleResult();
+                foreach (string id in body.Ids)
+                {
+                    if (String.IsNullOrEmpty(id))
+                    {
+                        result.Skipped.Add(new DeleteMultipleSkipped(id ?? "", "Empty ID"));
+                        continue;
+                    }
+                    Voyage? voyage = await _Database.Voyages.ReadAsync(id).ConfigureAwait(false);
+                    if (voyage == null)
+                    {
+                        result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
+                        continue;
+                    }
+                    if (voyage.Status == VoyageStatusEnum.Open || voyage.Status == VoyageStatusEnum.InProgress)
+                    {
+                        result.Skipped.Add(new DeleteMultipleSkipped(id, "Cannot delete voyage while status is " + voyage.Status + ". Cancel the voyage first."));
+                        continue;
+                    }
+                    List<Mission> missions = await _Database.Missions.EnumerateByVoyageAsync(id).ConfigureAwait(false);
+                    List<Mission> activeMissions = missions.Where(m => m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress).ToList();
+                    if (activeMissions.Count > 0)
+                    {
+                        result.Skipped.Add(new DeleteMultipleSkipped(id, "Cannot delete voyage with " + activeMissions.Count + " active mission(s). Cancel or complete them first."));
+                        continue;
+                    }
+                    foreach (Mission m in missions)
+                    {
+                        await _Database.Missions.DeleteAsync(m.Id).ConfigureAwait(false);
+                    }
+                    await _Database.Voyages.DeleteAsync(id).ConfigureAwait(false);
+                    result.Deleted++;
+                }
+
+                await EmitEventAsync("voyage.batch_deleted", "Batch deleted " + result.Deleted + " voyages",
+                    entityType: "voyage").ConfigureAwait(false);
+
+                return (object)result;
+            },
+            api => api
+                .WithTag("Voyages")
+                .WithSummary("Batch delete multiple voyages")
+                .WithDescription("Permanently deletes multiple voyages and their associated missions from the database by ID. Voyages that are Open/InProgress or have active missions are skipped. Returns a summary of deleted and skipped entries. This cannot be undone.")
+                .WithRequestBody(OpenApiRequestBodyMetadata.Json<DeleteMultipleRequest>("List of voyage IDs to delete"))
+                .WithResponse(200, OpenApiResponseMetadata.Json<DeleteMultipleResult>("Delete result summary"))
                 .WithSecurity("ApiKey"));
 
             // Missions
@@ -1329,6 +1456,43 @@ namespace Armada.Server
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
                 .WithResponse(200, OpenApiResponseMetadata.Json<object>("Deleted mission"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            _App.Rest.Post<DeleteMultipleRequest>("/api/v1/missions/delete/multiple", async (AppRequest req) =>
+            {
+                DeleteMultipleRequest body = req.GetData<DeleteMultipleRequest>();
+                if (body == null || body.Ids == null || body.Ids.Count == 0)
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Ids is required and must not be empty" };
+
+                DeleteMultipleResult result = new DeleteMultipleResult();
+                foreach (string id in body.Ids)
+                {
+                    if (String.IsNullOrEmpty(id))
+                    {
+                        result.Skipped.Add(new DeleteMultipleSkipped(id ?? "", "Empty ID"));
+                        continue;
+                    }
+                    Mission? mission = await _Database.Missions.ReadAsync(id).ConfigureAwait(false);
+                    if (mission == null)
+                    {
+                        result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
+                        continue;
+                    }
+                    await _Database.Missions.DeleteAsync(id).ConfigureAwait(false);
+                    result.Deleted++;
+                }
+
+                await EmitEventAsync("mission.batch_deleted", "Batch deleted " + result.Deleted + " missions",
+                    entityType: "mission").ConfigureAwait(false);
+
+                return (object)result;
+            },
+            api => api
+                .WithTag("Missions")
+                .WithSummary("Batch delete multiple missions")
+                .WithDescription("Permanently deletes multiple missions from the database by ID. Returns a summary of deleted and skipped entries. This cannot be undone.")
+                .WithRequestBody(OpenApiRequestBodyMetadata.Json<DeleteMultipleRequest>("List of mission IDs to delete"))
+                .WithResponse(200, OpenApiResponseMetadata.Json<DeleteMultipleResult>("Delete result summary"))
                 .WithSecurity("ApiKey"));
 
             _App.Rest.Post<MissionRestartRequest>("/api/v1/missions/{id}/restart", async (AppRequest req) =>
@@ -1697,6 +1861,55 @@ namespace Armada.Server
                 .WithResponse(409, OpenApiResponseMetadata.Json<object>("Captain cannot be deleted while active"))
                 .WithSecurity("ApiKey"));
 
+            _App.Rest.Post<DeleteMultipleRequest>("/api/v1/captains/delete/multiple", async (AppRequest req) =>
+            {
+                DeleteMultipleRequest body = req.GetData<DeleteMultipleRequest>();
+                if (body == null || body.Ids == null || body.Ids.Count == 0)
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Ids is required and must not be empty" };
+
+                DeleteMultipleResult result = new DeleteMultipleResult();
+                foreach (string id in body.Ids)
+                {
+                    if (String.IsNullOrEmpty(id))
+                    {
+                        result.Skipped.Add(new DeleteMultipleSkipped(id ?? "", "Empty ID"));
+                        continue;
+                    }
+                    Captain? captain = await _Database.Captains.ReadAsync(id).ConfigureAwait(false);
+                    if (captain == null)
+                    {
+                        result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
+                        continue;
+                    }
+                    if (captain.State == CaptainStateEnum.Working)
+                    {
+                        result.Skipped.Add(new DeleteMultipleSkipped(id, "Cannot delete captain while state is Working. Stop the captain first."));
+                        continue;
+                    }
+                    List<Mission> captainMissions = await _Database.Missions.EnumerateByCaptainAsync(id).ConfigureAwait(false);
+                    List<Mission> activeCaptainMissions = captainMissions.Where(m => m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress).ToList();
+                    if (activeCaptainMissions.Count > 0)
+                    {
+                        result.Skipped.Add(new DeleteMultipleSkipped(id, "Cannot delete captain with " + activeCaptainMissions.Count + " active mission(s). Cancel or complete them first."));
+                        continue;
+                    }
+                    await _Database.Captains.DeleteAsync(id).ConfigureAwait(false);
+                    result.Deleted++;
+                }
+
+                await EmitEventAsync("captain.batch_deleted", "Batch deleted " + result.Deleted + " captains",
+                    entityType: "captain").ConfigureAwait(false);
+
+                return (object)result;
+            },
+            api => api
+                .WithTag("Captains")
+                .WithSummary("Batch delete multiple captains")
+                .WithDescription("Permanently deletes multiple captains from the database by ID. Captains that are Working or have active missions are skipped. Returns a summary of deleted and skipped entries. This cannot be undone.")
+                .WithRequestBody(OpenApiRequestBodyMetadata.Json<DeleteMultipleRequest>("List of captain IDs to delete"))
+                .WithResponse(200, OpenApiResponseMetadata.Json<DeleteMultipleResult>("Delete result summary"))
+                .WithSecurity("ApiKey"));
+
             // Docks
             _App.Rest.Get("/api/v1/docks", async (AppRequest req) =>
             {
@@ -1796,6 +2009,43 @@ namespace Armada.Server
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Dock ID (dck_ prefix)"))
                 .WithResponse(200, OpenApiResponseMetadata.Json<object>("Purged dock"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            _App.Rest.Post<DeleteMultipleRequest>("/api/v1/docks/delete/multiple", async (AppRequest req) =>
+            {
+                DeleteMultipleRequest body = req.GetData<DeleteMultipleRequest>();
+                if (body == null || body.Ids == null || body.Ids.Count == 0)
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Ids is required and must not be empty" };
+
+                DeleteMultipleResult result = new DeleteMultipleResult();
+                foreach (string id in body.Ids)
+                {
+                    if (String.IsNullOrEmpty(id))
+                    {
+                        result.Skipped.Add(new DeleteMultipleSkipped(id ?? "", "Empty ID"));
+                        continue;
+                    }
+                    Dock? dock = await _Database.Docks.ReadAsync(id).ConfigureAwait(false);
+                    if (dock == null)
+                    {
+                        result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
+                        continue;
+                    }
+                    await _Docks.PurgeAsync(id).ConfigureAwait(false);
+                    result.Deleted++;
+                }
+
+                await EmitEventAsync("dock.batch_deleted", "Batch deleted " + result.Deleted + " docks",
+                    entityType: "dock").ConfigureAwait(false);
+
+                return (object)result;
+            },
+            api => api
+                .WithTag("Docks")
+                .WithSummary("Batch delete multiple docks")
+                .WithDescription("Permanently deletes multiple docks and their git worktrees from the database by ID. Returns a summary of deleted and skipped entries. This cannot be undone.")
+                .WithRequestBody(OpenApiRequestBodyMetadata.Json<DeleteMultipleRequest>("List of dock IDs to delete"))
+                .WithResponse(200, OpenApiResponseMetadata.Json<DeleteMultipleResult>("Delete result summary"))
                 .WithSecurity("ApiKey"));
 
             // Signals
@@ -1930,6 +2180,43 @@ namespace Armada.Server
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Signal ID (sig_ prefix)"))
                 .WithResponse(204, OpenApiResponseMetadata.NoContent())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            _App.Rest.Post<DeleteMultipleRequest>("/api/v1/signals/delete/multiple", async (AppRequest req) =>
+            {
+                DeleteMultipleRequest body = req.GetData<DeleteMultipleRequest>();
+                if (body == null || body.Ids == null || body.Ids.Count == 0)
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Ids is required and must not be empty" };
+
+                DeleteMultipleResult result = new DeleteMultipleResult();
+                foreach (string id in body.Ids)
+                {
+                    if (String.IsNullOrEmpty(id))
+                    {
+                        result.Skipped.Add(new DeleteMultipleSkipped(id ?? "", "Empty ID"));
+                        continue;
+                    }
+                    Signal? signal = await _Database.Signals.ReadAsync(id).ConfigureAwait(false);
+                    if (signal == null)
+                    {
+                        result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
+                        continue;
+                    }
+                    await _Database.Signals.MarkReadAsync(id).ConfigureAwait(false);
+                    result.Deleted++;
+                }
+
+                await EmitEventAsync("signal.batch_deleted", "Batch deleted " + result.Deleted + " signals",
+                    entityType: "signal").ConfigureAwait(false);
+
+                return (object)result;
+            },
+            api => api
+                .WithTag("Signals")
+                .WithSummary("Batch delete multiple signals")
+                .WithDescription("Soft-deletes multiple signals by marking them as read. Returns a summary of deleted and skipped entries.")
+                .WithRequestBody(OpenApiRequestBodyMetadata.Json<DeleteMultipleRequest>("List of signal IDs to delete"))
+                .WithResponse(200, OpenApiResponseMetadata.Json<DeleteMultipleResult>("Delete result summary"))
                 .WithSecurity("ApiKey"));
 
             // Events

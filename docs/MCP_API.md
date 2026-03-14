@@ -28,6 +28,7 @@
     - [armada_create_fleet](#armada_create_fleet)
     - [armada_update_fleet](#armada_update_fleet)
     - [armada_delete_fleet](#armada_delete_fleet)
+    - [armada_delete_fleets](#armada_delete_fleets)
   - **Vessels**
     - [armada_list_vessels](#armada_list_vessels)
     - [armada_get_vessel](#armada_get_vessel)
@@ -35,12 +36,14 @@
     - [armada_update_vessel](#armada_update_vessel)
     - [armada_update_vessel_context](#armada_update_vessel_context)
     - [armada_delete_vessel](#armada_delete_vessel)
+    - [armada_delete_vessels](#armada_delete_vessels)
   - **Voyages**
     - [armada_dispatch](#armada_dispatch)
     - [armada_list_voyages](#armada_list_voyages)
     - [armada_voyage_status](#armada_voyage_status)
     - [armada_cancel_voyage](#armada_cancel_voyage)
     - [armada_purge_voyage](#armada_purge_voyage)
+    - [armada_delete_voyages](#armada_delete_voyages)
   - **Missions**
     - [armada_list_missions](#armada_list_missions)
     - [armada_mission_status](#armada_mission_status)
@@ -49,6 +52,7 @@
     - [armada_cancel_mission](#armada_cancel_mission)
     - [armada_restart_mission](#armada_restart_mission)
     - [armada_purge_mission](#armada_purge_mission)
+    - [armada_delete_missions](#armada_delete_missions)
     - [armada_transition_mission_status](#armada_transition_mission_status)
     - [armada_get_mission_diff](#armada_get_mission_diff)
     - [armada_get_mission_log](#armada_get_mission_log)
@@ -60,10 +64,12 @@
     - [armada_stop_captain](#armada_stop_captain)
     - [armada_stop_all](#armada_stop_all)
     - [armada_delete_captain](#armada_delete_captain)
+    - [armada_delete_captains](#armada_delete_captains)
     - [armada_get_captain_log](#armada_get_captain_log)
   - **Signals**
     - [armada_list_signals](#armada_list_signals)
     - [armada_send_signal](#armada_send_signal)
+    - [armada_delete_signals](#armada_delete_signals)
   - **Events**
     - [armada_list_events](#armada_list_events)
   - **Docks**
@@ -71,6 +77,7 @@
     - [armada_get_dock](#armada_get_dock)
     - [armada_delete_dock](#armada_delete_dock)
     - [armada_purge_dock](#armada_purge_dock)
+    - [armada_delete_docks](#armada_delete_docks)
   - **Merge Queue**
     - [armada_list_merge_queue](#armada_list_merge_queue)
     - [armada_get_merge_entry](#armada_get_merge_entry)
@@ -836,6 +843,42 @@ The signal is created with type `Mail` (persistent message) from the Admiral (no
 
 ---
 
+### armada_delete_signals
+
+Soft-delete multiple signals by marking them as read. Returns a summary of deleted and skipped entries.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "ids": { "type": "array", "items": { "type": "string" }, "description": "List of signal IDs to delete (sig_ prefix)" }
+  },
+  "required": ["ids"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `ids` | string[] | Yes | List of signal IDs to soft-delete (prefix `sig_`) |
+
+**Response:**
+
+```json
+{
+  "Status": "deleted",
+  "Deleted": 2,
+  "Skipped": [
+    { "Id": "sig_xyz789", "Reason": "Not found" }
+  ]
+}
+```
+
+Returns `{ "Error": "ids is required and must not be empty" }` if no IDs are provided.
+
+---
+
 ### armada_stop_captain
 
 Stop a specific captain agent.
@@ -1033,6 +1076,42 @@ Permanently delete a voyage and all its missions from the database. **This canno
 
 ---
 
+### armada_delete_voyages
+
+Permanently delete multiple voyages and their associated missions from the database by ID. Voyages that are Open/InProgress or have active missions are skipped. Returns a summary of deleted and skipped entries. **This cannot be undone.**
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "ids": { "type": "array", "items": { "type": "string" }, "description": "List of voyage IDs to delete (vyg_ prefix)" }
+  },
+  "required": ["ids"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `ids` | string[] | Yes | List of voyage IDs to delete (prefix `vyg_`) |
+
+**Response:**
+
+```json
+{
+  "Status": "deleted",
+  "Deleted": 2,
+  "Skipped": [
+    { "Id": "vyg_xyz789", "Reason": "Cannot delete voyage while status is Open. Cancel the voyage first." }
+  ]
+}
+```
+
+Returns `{ "Error": "ids is required and must not be empty" }` if no IDs are provided.
+
+---
+
 ### armada_create_fleet
 
 Create a new fleet (collection of repositories).
@@ -1097,6 +1176,42 @@ Delete a fleet by ID.
 ```json
 { "Status": "deleted", "FleetId": "flt_..." }
 ```
+
+---
+
+### armada_delete_fleets
+
+Permanently delete multiple fleets from the database by ID. Returns a summary of deleted and skipped entries. **This cannot be undone.**
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "ids": { "type": "array", "items": { "type": "string" }, "description": "List of fleet IDs to delete (flt_ prefix)" }
+  },
+  "required": ["ids"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `ids` | string[] | Yes | List of fleet IDs to delete (prefix `flt_`) |
+
+**Response:**
+
+```json
+{
+  "Status": "deleted",
+  "Deleted": 2,
+  "Skipped": [
+    { "Id": "flt_xyz789", "Reason": "Not found" }
+  ]
+}
+```
+
+Returns `{ "Error": "ids is required and must not be empty" }` if no IDs are provided.
 
 ---
 
@@ -1198,6 +1313,42 @@ Delete a vessel by ID.
 
 ---
 
+### armada_delete_vessels
+
+Permanently delete multiple vessels from the database by ID. Returns a summary of deleted and skipped entries. **This cannot be undone.**
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "ids": { "type": "array", "items": { "type": "string" }, "description": "List of vessel IDs to delete (vsl_ prefix)" }
+  },
+  "required": ["ids"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `ids` | string[] | Yes | List of vessel IDs to delete (prefix `vsl_`) |
+
+**Response:**
+
+```json
+{
+  "Status": "deleted",
+  "Deleted": 2,
+  "Skipped": [
+    { "Id": "vsl_xyz789", "Reason": "Not found" }
+  ]
+}
+```
+
+Returns `{ "Error": "ids is required and must not be empty" }` if no IDs are provided.
+
+---
+
 ### armada_create_mission
 
 Create and dispatch a standalone mission to a vessel. The Admiral assigns a captain and sets up a worktree.
@@ -1288,6 +1439,42 @@ Permanently delete a mission from the database. This cannot be undone.
 ```
 
 Returns `{ "Error": "Mission not found" }` if the ID does not exist.
+
+---
+
+### armada_delete_missions
+
+Permanently delete multiple missions from the database by ID. Returns a summary of deleted and skipped entries. **This cannot be undone.**
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "ids": { "type": "array", "items": { "type": "string" }, "description": "List of mission IDs to delete (msn_ prefix)" }
+  },
+  "required": ["ids"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `ids` | string[] | Yes | List of mission IDs to delete (prefix `msn_`) |
+
+**Response:**
+
+```json
+{
+  "Status": "deleted",
+  "Deleted": 2,
+  "Skipped": [
+    { "Id": "msn_xyz789", "Reason": "Not found" }
+  ]
+}
+```
+
+Returns `{ "Error": "ids is required and must not be empty" }` if no IDs are provided.
 
 ---
 
@@ -1482,6 +1669,42 @@ Delete a captain. If working, the captain is recalled first.
 
 ---
 
+### armada_delete_captains
+
+Permanently delete multiple captains from the database by ID. Captains that are Working or have active missions are skipped. Returns a summary of deleted and skipped entries. **This cannot be undone.**
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "ids": { "type": "array", "items": { "type": "string" }, "description": "List of captain IDs to delete (cpt_ prefix)" }
+  },
+  "required": ["ids"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `ids` | string[] | Yes | List of captain IDs to delete (prefix `cpt_`) |
+
+**Response:**
+
+```json
+{
+  "Status": "deleted",
+  "Deleted": 2,
+  "Skipped": [
+    { "Id": "cpt_xyz789", "Reason": "Cannot delete captain while state is Working. Stop the captain first." }
+  ]
+}
+```
+
+Returns `{ "Error": "ids is required and must not be empty" }` if no IDs are provided.
+
+---
+
 ### armada_get_captain_log
 
 Get the current session log for a captain. Supports pagination.
@@ -1627,6 +1850,42 @@ Force purge a dock and its git worktree, even if a mission references it. **This
 ```
 
 Returns `{ "Error": "Dock not found" }` if the ID does not exist.
+
+---
+
+### armada_delete_docks
+
+Permanently delete multiple docks and their git worktrees from the database by ID. Returns a summary of deleted and skipped entries. **This cannot be undone.**
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "ids": { "type": "array", "items": { "type": "string" }, "description": "List of dock IDs to delete (dck_ prefix)" }
+  },
+  "required": ["ids"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `ids` | string[] | Yes | List of dock IDs to delete (prefix `dck_`) |
+
+**Response:**
+
+```json
+{
+  "Status": "deleted",
+  "Deleted": 2,
+  "Skipped": [
+    { "Id": "dck_xyz789", "Reason": "Not found" }
+  ]
+}
+```
+
+Returns `{ "Error": "ids is required and must not be empty" }` if no IDs are provided.
 
 ---
 
