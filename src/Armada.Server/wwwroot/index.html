@@ -305,7 +305,8 @@
                         <table>
                             <thead>
                                 <tr>
-                                    <th title="Mission name and unique identifier">Mission</th>
+                                    <th title="Mission title">Mission</th>
+                                    <th>ID</th>
                                     <th title="Current mission lifecycle state">Status</th>
                                     <th title="Target repository for this mission">Vessel</th>
                                     <th title="AI captain assigned to execute this mission">Captain</th>
@@ -316,7 +317,8 @@
                             <tbody>
                                 <template x-for="m in filteredRecentMissions()" :key="m.id">
                                     <tr class="clickable" @click="navigate('missions', 'mission-detail', m.id)">
-                                        <td><strong x-text="m.title"></strong><div class="text-dim id-display"><span class="mono" x-text="m.id"></span><button class="copy-btn" @click.stop="copyId(m.id, $event)" title="Copy ID"></button></div></td>
+                                        <td class="truncate-cell" :title="m.title"><strong x-text="m.title"></strong></td>
+                                        <td class="mono text-dim"><span class="id-display"><span x-text="m.id"></span><button class="copy-btn" @click.stop="copyId(m.id, $event)" title="Copy ID"></button></span></td>
                                         <td><span class="tag" :class="(m.status || '').toLowerCase()" x-text="m.status" :title="statusTooltip(m.status)"></span></td>
                                         <td x-text="vesselName(m.vesselId)"></td>
                                         <td x-text="captainName(m.captainId)"></td>
