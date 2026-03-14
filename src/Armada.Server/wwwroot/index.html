@@ -2262,10 +2262,8 @@
                 <span class="mono" x-text="jsonViewer.id"></span>
                 <button class="copy-btn" @click.stop="copyId(jsonViewer.id, $event)" title="Copy ID"></button>
             </div>
-            <div class="json-viewer-actions">
-                <button class="btn btn-sm btn-primary" @click="copyJsonContent()" title="Copy full JSON to clipboard">Copy JSON</button>
-            </div>
             <div class="json-viewer-body">
+                <button class="json-viewer-copy copy-btn" @click="copyJsonContent()" title="Copy JSON to clipboard"></button>
                 <pre x-text="jsonViewer.content"></pre>
             </div>
         </div>
