@@ -77,12 +77,16 @@
                 </div>
 
                 <!-- FLEET -->
-                <div class="sidebar-section" :class="{ 'section-active': ['fleets','captains','docks'].includes(view), collapsed: isSectionCollapsed('fleet') }">
+                <div class="sidebar-section" :class="{ 'section-active': ['fleets-list','fleets','captains','docks'].includes(view), collapsed: isSectionCollapsed('fleet') }">
                     <button class="sidebar-section-header" x-show="!sidebarCollapsed" @click="toggleSection('fleet')">
                         FLEET
                         <span class="sidebar-section-chevron"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
                     </button>
                     <div class="sidebar-section-items" x-show="sidebarCollapsed || sidebarSections.fleet">
+                        <button class="sidebar-nav-item" :class="{ active: view === 'fleets-list' }" @click="navigate('fleets-list')" :title="sidebarCollapsed ? 'Fleets' : 'Fleet groups for organizing repositories'">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/></svg>
+                            <span class="sidebar-label">Fleets</span>
+                        </button>
                         <button class="sidebar-nav-item" :class="{ active: view === 'fleets' }" @click="navigate('fleets')" :title="sidebarCollapsed ? 'Vessels' : 'Git repositories organized by fleet'">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
                             <span class="sidebar-label">Vessels</span>
@@ -340,6 +344,46 @@
             </template>
         </div>
 
+        <!-- ========== Fleets List View ========== -->
+        <div x-show="view === 'fleets-list' && !detailView" class="view">
+            <div class="view-header">
+                <div>
+                    <h2>Fleets</h2>
+                    <p class="text-dim view-subtitle">Fleet groups for organizing repositories. Click a fleet to view its details.</p>
+                </div>
+                <div class="view-actions">
+                    <input type="text" class="filter-input" x-model="listSearch" placeholder="Search..." title="Search fleets by name or description">
+                    <button class="btn btn-primary btn-sm" @click="openCreateFleet()" title="Create a new fleet to group repositories">+ Fleet</button>
+                    <button class="btn btn-sm" @click="loadFleets()" title="Refresh fleet data">&#x21bb;</button>
+                </div>
+            </div>
+            <template x-if="fleets.length === 0">
+                <p class="text-dim">No fleets configured.</p>
+            </template>
+            <div class="table-wrap" x-show="fleets.length > 0">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable" @click="sortBy('name', fleets)" title="Fleet name -- click to sort">Name<span x-text="sortIcon('name')"></span></th>
+                            <th>Description</th>
+                            <th class="sortable" @click="sortBy('_vesselCount', fleets)" title="Vessel count -- click to sort">Vessels<span x-text="sortIcon('_vesselCount')"></span></th>
+                            <th class="sortable" @click="sortBy('createdUtc', fleets)" title="Created date -- click to sort">Created<span x-text="sortIcon('createdUtc')"></span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="f in sortedRows(filterRows(fleets))" :key="f.id">
+                            <tr class="clickable" @click="navigate('fleets-list', 'fleet-detail', f.id)">
+                                <td><strong x-text="f.name"></strong><div class="text-dim id-display"><span class="mono" x-text="f.id"></span><button class="copy-btn" @click.stop="copyId(f.id, $event)" title="Copy ID"></button></div></td>
+                                <td class="text-dim" x-text="f.description || '-'"></td>
+                                <td x-text="(f.vessels || []).length"></td>
+                                <td class="text-dim" x-text="formatTime(f.createdUtc)"></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- ========== Fleets View ========== -->
         <div x-show="view === 'fleets' && !detailView" class="view">
             <div class="view-header">
@@ -370,9 +414,9 @@
                         <tr>
                             <th style="width: 2.5rem;"><input type="checkbox" @change="$event.target.checked ? selectAllVessels() : clearVesselSelection()" :checked="selectedVessels.length > 0 && selectedVessels.length === filteredVesselsList().length" title="Select all vessels"></th>
                             <th class="sortable" @click="sortBy('name', allVessels)" title="Vessel name -- click to sort">Vessel<span x-text="sortIcon('name')"></span></th>
-                            <th title="Fleet this vessel belongs to">Fleet</th>
-                            <th title="Git repository URL">Repo URL</th>
-                            <th title="Default branch for merging">Branch</th>
+                            <th class="sortable" @click="sortBy('_fleetName', allVessels)" title="Fleet -- click to sort">Fleet<span x-text="sortIcon('_fleetName')"></span></th>
+                            <th class="sortable" @click="sortBy('repoUrl', allVessels)" title="Git repository URL -- click to sort">Repo URL<span x-text="sortIcon('repoUrl')"></span></th>
+                            <th class="sortable" @click="sortBy('defaultBranch', allVessels)" title="Default branch -- click to sort">Branch<span x-text="sortIcon('defaultBranch')"></span></th>
                             <th title="Context and style guide indicators"></th>
                             <th class="text-right">Actions</th>
                         </tr>
@@ -398,7 +442,7 @@
         </div>
 
         <!-- Fleet Detail -->
-        <div x-show="view === 'fleets' && detailView === 'fleet-detail'" class="view">
+        <div x-show="(view === 'fleets' || view === 'fleets-list') && detailView === 'fleet-detail'" class="view">
             <button class="btn btn-sm" @click="goBack()" title="Return to fleets list">&larr; Back</button>
             <template x-if="detail">
                 <div>

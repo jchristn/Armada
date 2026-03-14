@@ -469,6 +469,7 @@ function dashboard() {
                         fleet.vessels = (vesselResult && vesselResult.objects) ? vesselResult.objects : [];
                         if (!Array.isArray(fleet.vessels)) fleet.vessels = [];
                     } catch (e) { fleet.vessels = []; }
+                    fleet._vesselCount = (fleet.vessels || []).length;
                 }
                 this.fleets = fleets;
             } catch (e) { console.warn('Failed to load fleets:', e); }
@@ -539,6 +540,9 @@ function dashboard() {
                 let result = await this.api('GET', '/api/v1/vessels?pageSize=1000');
                 this.allVessels = (result && result.objects) ? result.objects : [];
                 if (!Array.isArray(this.allVessels)) this.allVessels = [];
+                for (let vessel of this.allVessels) {
+                    vessel._fleetName = this.fleetName(vessel.fleetId);
+                }
             } catch (e) { console.warn('Failed to load vessels:', e); }
         },
 
@@ -939,7 +943,8 @@ function dashboard() {
             if (view === 'captains') this.selectedCaptains = [];
             if (view === 'signals') this.selectedSignals = [];
             if (view === 'merge-queue') this.selectedMergeQueue = [];
-            if (view === 'fleets') { this.selectedVessels = []; this.loadFleets(); this.loadVessels(); }
+            if (view === 'fleets-list') { this.loadFleets(); }
+            if (view === 'fleets') { this.selectedVessels = []; this.sortColumn = '_fleetName'; this.sortAsc = true; this.loadFleets().then(() => { this.loadVessels(); }); }
             if (view === 'docks') { this.selectedDocks = []; this.loadDocks(); }
             if (view === 'server') { this.loadHealth(); this.loadSettings(); }
             if (view === 'missions') this.loadMissions();
@@ -1286,7 +1291,7 @@ function dashboard() {
         updateBreadcrumbs() {
             this.breadcrumbs = [];
             let viewLabels = {
-                'home': 'Dashboard', 'fleets': 'Vessels', 'voyages': 'Voyages',
+                'home': 'Dashboard', 'fleets-list': 'Fleets', 'fleets': 'Vessels', 'voyages': 'Voyages',
                 'captains': 'Captains', 'missions': 'Missions', 'dispatch': 'Dispatch',
                 'signals': 'Signals', 'events': 'Events', 'merge-queue': 'Merge Queue',
                 'docks': 'Docks', 'server': 'Server', 'config': 'Config'
