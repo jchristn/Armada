@@ -39,5 +39,10 @@ namespace Armada.Server.Mcp
         /// Optional local working directory where completed mission changes will be pulled after merge.
         /// </summary>
         public string? WorkingDirectory { get; set; }
+
+        /// <summary>
+        /// Whether to allow multiple concurrent missions on this vessel. Default false.
+        /// </summary>
+        public bool? AllowConcurrentMissions { get; set; }
     }
 }

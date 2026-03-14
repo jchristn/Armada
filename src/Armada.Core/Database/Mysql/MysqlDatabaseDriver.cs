@@ -280,6 +280,11 @@ namespace Armada.Core.Database.Mysql
                     1,
                     "Initial schema: fleets, vessels, captains, voyages, missions, docks, signals, events, merge_entries",
                     initialStatements.ToArray()
+                ),
+                new SchemaMigration(
+                    2,
+                    "Add allow_concurrent_missions to vessels",
+                    @"ALTER TABLE vessels ADD COLUMN allow_concurrent_missions TINYINT(1) NOT NULL DEFAULT 0;"
                 )
             };
         }

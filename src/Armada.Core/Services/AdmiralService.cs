@@ -548,9 +548,11 @@ namespace Armada.Core.Services
             }
             catch (ArgumentException)
             {
-                // Process no longer exists in process table - treat as clean exit
+                // Process no longer exists in process table — treat as unknown failure, not success.
+                // A missing PID could mean the agent crashed, was killed externally, or the OS
+                // recycled the PID. Only a confirmed clean exit should be treated as success.
                 isAlive = false;
-                exitCode = 0;
+                exitCode = -1;
             }
 
             string missionId = captain.CurrentMissionId ?? "unknown";

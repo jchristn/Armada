@@ -89,6 +89,13 @@ namespace Armada.Core.Models
         public BranchCleanupPolicyEnum? BranchCleanupPolicy { get; set; } = null;
 
         /// <summary>
+        /// Whether this vessel allows multiple concurrent missions. Default false.
+        /// When false, only one mission may be in an active state
+        /// (Assigned, InProgress, WorkProduced, PullRequestOpen) at a time.
+        /// </summary>
+        public bool AllowConcurrentMissions { get; set; } = false;
+
+        /// <summary>
         /// Whether the vessel is active.
         /// </summary>
         public bool Active { get; set; } = true;

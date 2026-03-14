@@ -196,6 +196,9 @@ namespace Armada.Core.Database.Sqlite.Queries
                 ),
                 new SchemaMigration(11, "Add branch_cleanup_policy to vessels",
                     @"ALTER TABLE vessels ADD COLUMN branch_cleanup_policy TEXT;"
+                ),
+                new SchemaMigration(12, "Add allow_concurrent_missions to vessels",
+                    @"ALTER TABLE vessels ADD COLUMN allow_concurrent_missions INTEGER NOT NULL DEFAULT 0;"
                 )
             };
         }

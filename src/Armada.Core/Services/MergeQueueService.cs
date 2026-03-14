@@ -458,6 +458,10 @@ namespace Armada.Core.Services
                 entry.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.MergeEntries.UpdateAsync(entry, token).ConfigureAwait(false);
                 _Logging.Info(_Header + "landed " + entry.Id + " branch " + entry.BranchName);
+
+                // Reconcile linked mission to Complete
+                await ReconcileMissionStatusAsync(entry.MissionId, MissionStatusEnum.Complete,
+                    "Landed via merge queue entry " + entry.Id, token).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -467,6 +471,43 @@ namespace Armada.Core.Services
                 entry.CompletedUtc = DateTime.UtcNow;
                 entry.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.MergeEntries.UpdateAsync(entry, token).ConfigureAwait(false);
+
+                // Reconcile linked mission to LandingFailed
+                await ReconcileMissionStatusAsync(entry.MissionId, MissionStatusEnum.LandingFailed,
+                    "Merge queue landing failed: " + ex.Message, token).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        /// Reconcile the linked mission status after a merge queue entry reaches a terminal state.
+        /// </summary>
+        private async Task ReconcileMissionStatusAsync(string? missionId, MissionStatusEnum targetStatus, string reason, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(missionId)) return;
+
+            try
+            {
+                Mission? mission = await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
+                if (mission == null) return;
+
+                // Only update if the mission is not already in a terminal state
+                if (mission.Status == MissionStatusEnum.Complete ||
+                    mission.Status == MissionStatusEnum.Failed ||
+                    mission.Status == MissionStatusEnum.Cancelled)
+                {
+                    return;
+                }
+
+                mission.Status = targetStatus;
+                mission.LastUpdateUtc = DateTime.UtcNow;
+                if (targetStatus == MissionStatusEnum.Complete)
+                    mission.CompletedUtc = DateTime.UtcNow;
+                await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                _Logging.Info(_Header + "reconciled mission " + missionId + " to " + targetStatus + ": " + reason);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "failed to reconcile mission " + missionId + " to " + targetStatus + ": " + ex.Message);
             }
         }
 

@@ -90,12 +90,19 @@ namespace Armada.Core.Services
                 }
                 catch { }
 
-                // Clean up ALL stale worktree directories under this vessel's dock directory.
-                // This handles worktrees left behind by renamed/deleted captains that would
-                // block git fetch with "refusing to fetch into branch checked out at..." errors.
+                // Clean up stale worktree directories under this vessel's dock directory.
+                // Only removes directories that are NOT associated with any active dock record.
                 string vesselDockDir = Path.Combine(_Settings.DocksDirectory, vessel.Name);
                 if (Directory.Exists(vesselDockDir))
                 {
+                    // Query active docks for this vessel to avoid deleting in-use worktrees
+                    List<Dock> vesselDocks = await _Database.Docks.EnumerateByVesselAsync(vessel.Id, token).ConfigureAwait(false);
+                    HashSet<string> activeDockPaths = new HashSet<string>(
+                        vesselDocks
+                            .Where(d => d.Active && !String.IsNullOrEmpty(d.WorktreePath))
+                            .Select(d => d.WorktreePath!),
+                        StringComparer.OrdinalIgnoreCase);
+
                     foreach (string existingDir in Directory.GetDirectories(vesselDockDir))
                     {
                         string dirName = Path.GetFileName(existingDir);
@@ -103,8 +110,15 @@ namespace Armada.Core.Services
                         // Skip the current captain's directory — handled below
                         if (dirName == captain.Name) continue;
 
-                        // Simple heuristic: if it's a git worktree or repo but not for any active captain, clean it up.
-                        // Worktrees have .git as a file; cloned repos have .git as a directory.
+                        // Skip directories belonging to active docks
+                        if (activeDockPaths.Contains(existingDir))
+                        {
+                            _Logging.Info(_Header + "skipping cleanup of " + existingDir + ": still in use by an active dock");
+                            continue;
+                        }
+
+                        // Only clean up directories that look like git worktrees or repos
+                        // and are not associated with any active dock.
                         string dotGitPath = Path.Combine(existingDir, ".git");
                         if (File.Exists(dotGitPath) || Directory.Exists(dotGitPath))
                         {

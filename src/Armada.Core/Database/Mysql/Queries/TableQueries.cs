@@ -45,6 +45,7 @@ namespace Armada.Core.Database.Mysql.Queries
             style_guide LONGTEXT,
             landing_mode TEXT,
             branch_cleanup_policy TEXT,
+            allow_concurrent_missions TINYINT(1) NOT NULL DEFAULT 0,
             active TINYINT(1) NOT NULL DEFAULT 1,
             created_utc DATETIME(6) NOT NULL,
             last_update_utc DATETIME(6) NOT NULL,

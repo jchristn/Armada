@@ -86,8 +86,10 @@ namespace Armada.Core.Services
 
             // Check if this mission is broad-scope and vessel already has active work
             int concurrentCount = activeMissions.Count(m =>
+                m.Status == MissionStatusEnum.Assigned ||
                 m.Status == MissionStatusEnum.InProgress ||
-                m.Status == MissionStatusEnum.Assigned);
+                m.Status == MissionStatusEnum.WorkProduced ||
+                m.Status == MissionStatusEnum.PullRequestOpen);
 
             if (IsBroadScope(mission) && concurrentCount > 0)
             {
@@ -95,10 +97,17 @@ namespace Armada.Core.Services
                 return false;
             }
 
-            // Warn about concurrent missions on same vessel
-            if (concurrentCount > 0)
+            // Enforce per-vessel serialization unless explicitly allowed
+            if (!vessel.AllowConcurrentMissions && concurrentCount > 0)
             {
-                _Logging.Warn(_Header + "vessel " + vessel.Id + " already has " + concurrentCount + " active mission(s) — potential for conflicts");
+                _Logging.Info(_Header + "vessel " + vessel.Id + " already has " + concurrentCount + " active mission(s); deferring " + mission.Id + " (AllowConcurrentMissions=false)");
+                return false;
+            }
+
+            // Warn about concurrent missions on same vessel when allowed
+            if (vessel.AllowConcurrentMissions && concurrentCount > 0)
+            {
+                _Logging.Warn(_Header + "vessel " + vessel.Id + " already has " + concurrentCount + " active mission(s) — potential for conflicts (AllowConcurrentMissions=true)");
             }
 
             // Find an idle captain

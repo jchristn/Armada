@@ -57,8 +57,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = @"INSERT INTO vessels (id, fleet_id, name, repo_url, local_path, working_directory, project_context, style_guide, landing_mode, branch_cleanup_policy, default_branch, active, created_utc, last_update_utc)
-                            VALUES (@id, @fleet_id, @name, @repo_url, @local_path, @working_directory, @project_context, @style_guide, @landing_mode, @branch_cleanup_policy, @default_branch, @active, @created_utc, @last_update_utc);";
+                    cmd.CommandText = @"INSERT INTO vessels (id, fleet_id, name, repo_url, local_path, working_directory, project_context, style_guide, landing_mode, branch_cleanup_policy, allow_concurrent_missions, default_branch, active, created_utc, last_update_utc)
+                            VALUES (@id, @fleet_id, @name, @repo_url, @local_path, @working_directory, @project_context, @style_guide, @landing_mode, @branch_cleanup_policy, @allow_concurrent_missions, @default_branch, @active, @created_utc, @last_update_utc);";
                     cmd.Parameters.AddWithValue("@id", vessel.Id);
                     cmd.Parameters.AddWithValue("@fleet_id", (object?)vessel.FleetId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@name", vessel.Name);
@@ -69,6 +69,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     cmd.Parameters.AddWithValue("@style_guide", (object?)vessel.StyleGuide ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@landing_mode", vessel.LandingMode.HasValue ? vessel.LandingMode.Value.ToString() : DBNull.Value);
                     cmd.Parameters.AddWithValue("@branch_cleanup_policy", vessel.BranchCleanupPolicy.HasValue ? vessel.BranchCleanupPolicy.Value.ToString() : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@allow_concurrent_missions", vessel.AllowConcurrentMissions ? 1 : 0);
                     cmd.Parameters.AddWithValue("@default_branch", vessel.DefaultBranch);
                     cmd.Parameters.AddWithValue("@active", vessel.Active ? 1 : 0);
                     cmd.Parameters.AddWithValue("@created_utc", SqliteDatabaseDriver.ToIso8601(vessel.CreatedUtc));
@@ -147,6 +148,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                             style_guide = @style_guide,
                             landing_mode = @landing_mode,
                             branch_cleanup_policy = @branch_cleanup_policy,
+                            allow_concurrent_missions = @allow_concurrent_missions,
                             default_branch = @default_branch,
                             active = @active,
                             last_update_utc = @last_update_utc
@@ -161,6 +163,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     cmd.Parameters.AddWithValue("@style_guide", (object?)vessel.StyleGuide ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@landing_mode", vessel.LandingMode.HasValue ? vessel.LandingMode.Value.ToString() : DBNull.Value);
                     cmd.Parameters.AddWithValue("@branch_cleanup_policy", vessel.BranchCleanupPolicy.HasValue ? vessel.BranchCleanupPolicy.Value.ToString() : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@allow_concurrent_missions", vessel.AllowConcurrentMissions ? 1 : 0);
                     cmd.Parameters.AddWithValue("@default_branch", vessel.DefaultBranch);
                     cmd.Parameters.AddWithValue("@active", vessel.Active ? 1 : 0);
                     cmd.Parameters.AddWithValue("@last_update_utc", SqliteDatabaseDriver.ToIso8601(vessel.LastUpdateUtc));

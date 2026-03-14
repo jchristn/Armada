@@ -2660,13 +2660,30 @@ namespace Armada.Server
 
                         landingSucceeded = true;
 
-                        // Clean up the mission branch based on cleanup policy
-                        if (cleanupPolicy != BranchCleanupPolicyEnum.None)
+                        // Push the merged changes to the remote BEFORE branch cleanup,
+                        // so the branch is preserved for retry if push fails.
+                        if (effectivePush)
+                        {
+                            try
+                            {
+                                await _Git.PushBranchAsync(vessel.WorkingDirectory).ConfigureAwait(false);
+                                _Logging.Info(_Header + "pushed merged changes from " + vessel.WorkingDirectory);
+                            }
+                            catch (Exception pushEx)
+                            {
+                                _Logging.Warn(_Header + "local merge succeeded but push failed for mission " + mission.Id + ": " + pushEx.Message);
+                                landingSucceeded = false;
+                            }
+                        }
+
+                        // Only clean up the mission branch after confirmed success (merge + push).
+                        // Preserve branch on failure for retry.
+                        if (landingSucceeded && cleanupPolicy != BranchCleanupPolicyEnum.None)
                         {
                             try
                             {
                                 await _Git.DeleteLocalBranchAsync(vessel.LocalPath, dock.BranchName).ConfigureAwait(false);
-                                _Logging.Info(_Header + "deleted branch " + dock.BranchName + " from bare repo after successful merge");
+                                _Logging.Info(_Header + "deleted branch " + dock.BranchName + " from bare repo after successful landing");
                             }
                             catch (Exception branchEx)
                             {
@@ -2678,7 +2695,7 @@ namespace Armada.Server
                                 try
                                 {
                                     await _Git.DeleteRemoteBranchAsync(vessel.WorkingDirectory, dock.BranchName).ConfigureAwait(false);
-                                    _Logging.Info(_Header + "deleted remote branch " + dock.BranchName + " after successful merge");
+                                    _Logging.Info(_Header + "deleted remote branch " + dock.BranchName + " after successful landing");
                                 }
                                 catch (Exception remoteBranchEx)
                                 {
@@ -2686,24 +2703,13 @@ namespace Armada.Server
                                 }
                             }
                         }
+                        else if (!landingSucceeded)
+                        {
+                            _Logging.Info(_Header + "preserving branch " + dock.BranchName + " for retry (landing failed)");
+                        }
                         else
                         {
                             _Logging.Info(_Header + "branch cleanup policy is None — retaining branch " + dock.BranchName + " for inspection");
-                        }
-
-                        // Push the merged changes to the remote
-                        if (effectivePush)
-                        {
-                            try
-                            {
-                                await _Git.PushBranchAsync(vessel.WorkingDirectory).ConfigureAwait(false);
-                                _Logging.Info(_Header + "pushed merged changes from " + vessel.WorkingDirectory);
-                            }
-                            catch (Exception pushEx)
-                            {
-                                _Logging.Warn(_Header + "local merge succeeded but push failed for mission " + mission.Id + ": " + pushEx.Message);
-                                // Local merge succeeded, so landing still counts as succeeded
-                            }
                         }
                     }
                     catch (Exception ex)
