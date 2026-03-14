@@ -470,7 +470,7 @@
                             <th class="sortable" @click="sortBy('_fleetName', allVessels)" title="Fleet -- click to sort">Fleet<span x-text="sortIcon('_fleetName')"></span></th>
                             <th class="sortable" @click="sortBy('repoUrl', allVessels)" title="Git repository URL -- click to sort">Repo URL<span x-text="sortIcon('repoUrl')"></span></th>
                             <th class="sortable" @click="sortBy('defaultBranch', allVessels)" title="Default branch -- click to sort">Branch<span x-text="sortIcon('defaultBranch')"></span></th>
-                            <th style="width: 3.5rem;" title="Context and style guide indicators"></th>
+                            <th style="width: 4.5rem; white-space: nowrap;" title="Context and style guide indicators"></th>
                             <th class="text-right">Actions</th>
                         </tr>
                         <tr class="column-filter-row">
@@ -492,8 +492,8 @@
                                 <td class="mono text-dim"><span class="id-display"><span x-text="v.id"></span><button class="copy-btn" @click.stop="copyId(v.id, $event)" title="Copy ID"></button></span></td>
                                 <td><a href="#" @click.prevent="navigate('fleets', 'fleet-detail', v.fleetId)" x-text="fleetName(v.fleetId)" x-show="v.fleetId"></a><span x-show="!v.fleetId">-</span></td>
                                 <td class="text-dim vessel-repo-cell" x-text="v.repoUrl"></td>
-                                <td x-text="v.defaultBranch || 'main'"></td>
-                                <td><span class="vessel-badge" x-show="v.projectContext" title="Has Project Context">CTX</span><span class="vessel-badge" x-show="v.styleGuide" title="Has Style Guide">STY</span></td>
+                                <td class="text-dim" style="white-space:nowrap" x-text="v.defaultBranch || 'main'"></td>
+                                <td style="white-space:nowrap"><span class="vessel-badge" x-show="v.projectContext" title="Has Project Context">CTX</span><span class="vessel-badge" x-show="v.styleGuide" title="Has Style Guide">STY</span></td>
                                 <td class="text-right">
                                     <div class="action-menu-wrap">
                                         <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'vsl-' + v.id)" title="Actions">&#8942;</button>

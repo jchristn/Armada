@@ -1102,7 +1102,7 @@ a:hover { text-decoration: underline; }
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 0;
+    max-width: 200px;
 }
 
 .vessel-table-detail .vessel-col-name { width: 30%; }
