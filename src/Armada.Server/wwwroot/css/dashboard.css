@@ -1785,6 +1785,12 @@ a:hover { text-decoration: underline; }
     min-width: 150px;
     overflow: hidden;
 }
+.action-menu-dropdown.drop-up {
+    top: auto;
+    bottom: 100%;
+    margin-top: 0;
+    margin-bottom: 4px;
+}
 
 .action-menu-item {
     display: block;

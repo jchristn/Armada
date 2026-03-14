@@ -255,7 +255,7 @@
                                         </td>
                                         <td @click.stop>
                                             <div class="action-menu-wrap">
-                                                <button class="action-menu-btn" @click.stop="toggleActionMenu('home-vyg-' + vp.voyage?.id)" title="Actions">&#8942;</button>
+                                                <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'home-vyg-' + vp.voyage?.id)" title="Actions">&#8942;</button>
                                                 <div class="action-menu-dropdown" x-show="openActionMenu === 'home-vyg-' + vp.voyage?.id" x-cloak>
                                                     <button class="action-menu-item" @click="showJson('Voyage: ' + (vp.voyage?.title || vp.voyage?.id), vp.voyage?.id, vp.voyage); closeActionMenu()">View JSON</button>
                                                     <button class="action-menu-item danger" x-show="vp.voyage?.status !== 'Open' && vp.voyage?.status !== 'InProgress'" @click="deleteVoyage(vp.voyage?.id); closeActionMenu()">Delete</button>
@@ -323,7 +323,7 @@
                                         <td class="text-dim" x-text="formatTime(m.createdUtc)" :title="formatTimeAbsolute(m.createdUtc)"></td>
                                         <td @click.stop>
                                             <div class="action-menu-wrap">
-                                                <button class="action-menu-btn" @click.stop="toggleActionMenu('home-msn-' + m.id)" title="Actions">&#8942;</button>
+                                                <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'home-msn-' + m.id)" title="Actions">&#8942;</button>
                                                 <div class="action-menu-dropdown" x-show="openActionMenu === 'home-msn-' + m.id" x-cloak>
                                                     <button class="action-menu-item" @click="showJson('Mission: ' + m.title, m.id, m); closeActionMenu()">View JSON</button>
                                                     <button class="action-menu-item danger" @click="deleteMission(m.id); closeActionMenu()">Delete</button>
@@ -379,6 +379,7 @@
                             <th>Description</th>
                             <th class="sortable" @click="sortBy('_vesselCount', fleets)" title="Vessel count -- click to sort">Vessels<span x-text="sortIcon('_vesselCount')"></span></th>
                             <th class="sortable" @click="sortBy('createdUtc', fleets)" title="Created date -- click to sort">Created<span x-text="sortIcon('createdUtc')"></span></th>
+                            <th class="text-right">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -388,6 +389,16 @@
                                 <td class="text-dim" x-text="f.description || '-'"></td>
                                 <td x-text="(f.vessels || []).length"></td>
                                 <td class="text-dim" x-text="formatTime(f.createdUtc)"></td>
+                                <td class="text-right">
+                                    <div class="action-menu-wrap">
+                                        <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'flt-' + f.id)" title="Actions">&#8942;</button>
+                                        <div class="action-menu-dropdown" x-show="openActionMenu === 'flt-' + f.id" x-cloak>
+                                            <button class="action-menu-item" @click="openEditFleet(f); closeActionMenu()">Edit</button>
+                                            <button class="action-menu-item" @click="showJson('Fleet: ' + f.name, f.id, f); closeActionMenu()">View JSON</button>
+                                            <button class="action-menu-item danger" @click="deleteFleet(f.id); closeActionMenu()">Delete</button>
+                                        </div>
+                                    </div>
+                                </td>
                             </tr>
                         </template>
                     </tbody>
@@ -423,7 +434,7 @@
                 <table>
                     <thead>
                         <tr>
-                            <th style="width: 2.5rem;"><input type="checkbox" @change="$event.target.checked ? selectAllVessels() : clearVesselSelection()" :checked="selectedVessels.length > 0 && selectedVessels.length === filteredVesselsList().length" title="Select all vessels"></th>
+                            <th style="width: 1.5rem; padding: 0.25rem;"><input type="checkbox" @change="$event.target.checked ? selectAllVessels() : clearVesselSelection()" :checked="selectedVessels.length > 0 && selectedVessels.length === filteredVesselsList().length" title="Select all vessels"></th>
                             <th class="sortable" @click="sortBy('name', allVessels)" title="Vessel name -- click to sort">Vessel<span x-text="sortIcon('name')"></span></th>
                             <th class="sortable" @click="sortBy('_fleetName', allVessels)" title="Fleet -- click to sort">Fleet<span x-text="sortIcon('_fleetName')"></span></th>
                             <th class="sortable" @click="sortBy('repoUrl', allVessels)" title="Git repository URL -- click to sort">Repo URL<span x-text="sortIcon('repoUrl')"></span></th>
@@ -452,7 +463,7 @@
                                 <td><span class="vessel-badge" x-show="v.projectContext" title="Has Project Context">CTX</span><span class="vessel-badge" x-show="v.styleGuide" title="Has Style Guide">STY</span></td>
                                 <td class="text-right">
                                     <div class="action-menu-wrap">
-                                        <button class="action-menu-btn" @click.stop="toggleActionMenu('vsl-' + v.id)" title="Actions">&#8942;</button>
+                                        <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'vsl-' + v.id)" title="Actions">&#8942;</button>
                                         <div class="action-menu-dropdown" x-show="openActionMenu === 'vsl-' + v.id" x-cloak>
                                             <button class="action-menu-item" @click="openEditVessel(v); closeActionMenu()">Edit</button>
                                             <button class="action-menu-item" @click="showJson('Vessel: ' + v.name, v.id, v); closeActionMenu()">View JSON</button>
@@ -476,7 +487,7 @@
                         <h2 x-text="detail.name"></h2>
                         <div class="inline-actions">
                             <div class="action-menu-wrap">
-                                <button class="action-menu-btn" @click.stop="toggleActionMenu('flt-detail-' + detail.id)" title="Actions">&#8942;</button>
+                                <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'flt-detail-' + detail.id)" title="Actions">&#8942;</button>
                                 <div class="action-menu-dropdown" x-show="openActionMenu === 'flt-detail-' + detail.id" x-cloak>
                                     <button class="action-menu-item" @click="openEditFleet(detail); closeActionMenu()">Edit</button>
                                     <button class="action-menu-item" @click="showJson('Fleet: ' + detail.name, detail.id, detail); closeActionMenu()">View JSON</button>
@@ -528,7 +539,7 @@
                         <h2 x-text="detail.name"></h2>
                         <div class="inline-actions">
                             <div class="action-menu-wrap">
-                                <button class="action-menu-btn" @click.stop="toggleActionMenu('vsl-detail-' + detail.id)" title="Actions">&#8942;</button>
+                                <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'vsl-detail-' + detail.id)" title="Actions">&#8942;</button>
                                 <div class="action-menu-dropdown" x-show="openActionMenu === 'vsl-detail-' + detail.id" x-cloak>
                                     <button class="action-menu-item" @click="openEditVessel(detail); closeActionMenu()">Edit</button>
                                     <button class="action-menu-item" @click="showJson('Vessel: ' + detail.name, detail.id, detail); closeActionMenu()">View JSON</button>
@@ -645,7 +656,7 @@
                         <div class="inline-actions" @click.stop>
                             <span class="tag" :class="(voyage.status || '').toLowerCase()" x-text="voyage.status" :title="statusTooltip(voyage.status)"></span>
                             <div class="action-menu-wrap">
-                                <button class="action-menu-btn" @click.stop="toggleActionMenu('vyg-' + voyage.id)" title="Actions">&#8942;</button>
+                                <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'vyg-' + voyage.id)" title="Actions">&#8942;</button>
                                 <div class="action-menu-dropdown" x-show="openActionMenu === 'vyg-' + voyage.id" x-cloak>
                                     <button class="action-menu-item" @click="showJson('Voyage: ' + (voyage.title || voyage.id), voyage.id, voyage); closeActionMenu()">View JSON</button>
                                     <button class="action-menu-item danger" x-show="voyage.status !== 'Open' && voyage.status !== 'InProgress'" @click="deleteVoyage(voyage.id); closeActionMenu()">Delete</button>
@@ -669,7 +680,7 @@
                         <h2 x-text="detail.title || detail.id"></h2>
                         <div class="inline-actions">
                             <div class="action-menu-wrap">
-                                <button class="action-menu-btn" @click.stop="toggleActionMenu('vyg-detail-' + detail.id)" title="Actions">&#8942;</button>
+                                <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'vyg-detail-' + detail.id)" title="Actions">&#8942;</button>
                                 <div class="action-menu-dropdown" x-show="openActionMenu === 'vyg-detail-' + detail.id" x-cloak>
                                     <button class="action-menu-item" @click="retryVoyageMissions(detail.id); closeActionMenu()">Retry Failed</button>
                                     <button class="action-menu-item" @click="showJson('Voyage: ' + (detail.title || detail.id), detail.id, detail); closeActionMenu()">View JSON</button>
@@ -874,7 +885,7 @@
                 <table>
                     <thead>
                         <tr>
-                            <th style="width: 2.5rem;"><input type="checkbox" @change="$event.target.checked ? selectAllMissions() : clearMissionSelection()" :checked="selectedMissions.length > 0 && selectedMissions.length === allMissions.length" title="Select all missions"></th>
+                            <th style="width: 1.5rem; padding: 0.25rem;"><input type="checkbox" @change="$event.target.checked ? selectAllMissions() : clearMissionSelection()" :checked="selectedMissions.length > 0 && selectedMissions.length === allMissions.length" title="Select all missions"></th>
                             <th class="sortable" @click="sortBy('title', allMissions)" title="Mission name and unique identifier -- click to sort">Mission<span x-text="sortIcon('title')"></span></th>
                             <th class="sortable" @click="sortBy('status', allMissions)" title="Current mission lifecycle state -- click to sort">Status<span x-text="sortIcon('status')"></span></th>
                             <th title="Target repository for this mission">Vessel</th>
@@ -906,7 +917,7 @@
                                 <td class="text-dim" x-text="formatTime(m.createdUtc)" :title="formatTimeAbsolute(m.createdUtc)"></td>
                                 <td @click.stop>
                                     <div class="action-menu-wrap">
-                                        <button class="action-menu-btn" @click.stop="toggleActionMenu('msn-' + m.id)" title="Actions">&#8942;</button>
+                                        <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'msn-' + m.id)" title="Actions">&#8942;</button>
                                         <div class="action-menu-dropdown" x-show="openActionMenu === 'msn-' + m.id" x-cloak>
                                             <button class="action-menu-item" @click="showJson('Mission: ' + m.title, m.id, m); closeActionMenu()">View JSON</button>
                                             <button class="action-menu-item danger" @click="deleteMission(m.id); closeActionMenu()">Delete</button>
@@ -930,7 +941,7 @@
                         <h2 x-text="detail.title"></h2>
                         <div class="inline-actions">
                             <div class="action-menu-wrap">
-                                <button class="action-menu-btn" @click.stop="toggleActionMenu('msn-detail-' + detail.id)" title="Actions">&#8942;</button>
+                                <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'msn-detail-' + detail.id)" title="Actions">&#8942;</button>
                                 <div class="action-menu-dropdown" x-show="openActionMenu === 'msn-detail-' + detail.id" x-cloak>
                                     <button class="action-menu-item" @click="openEditMission(detail); closeActionMenu()">Edit</button>
                                     <button class="action-menu-item" @click="viewMissionDiff(detail.id); closeActionMenu()">Diff</button>
@@ -1043,7 +1054,7 @@
                 <table>
                     <thead>
                         <tr>
-                            <th style="width: 2.5rem;"><input type="checkbox" @change="$event.target.checked ? selectAllCaptains() : clearCaptainSelection()" :checked="selectedCaptains.length > 0 && selectedCaptains.length === captains.length" title="Select all captains"></th>
+                            <th style="width: 1.5rem; padding: 0.25rem;"><input type="checkbox" @change="$event.target.checked ? selectAllCaptains() : clearCaptainSelection()" :checked="selectedCaptains.length > 0 && selectedCaptains.length === captains.length" title="Select all captains"></th>
                             <th class="sortable" @click="sortBy('name', captains)" title="Captain name and unique identifier -- click to sort">Name<span x-text="sortIcon('name')"></span></th>
                             <th class="sortable" @click="sortBy('state', captains)" title="Idle, Working, or Stalled -- click to sort">State<span x-text="sortIcon('state')"></span></th>
                             <th title="AI agent runtime type (e.g. Claude Code, Codex)">Runtime</th>
@@ -1081,7 +1092,7 @@
                                 <td class="text-dim" x-text="formatTime(cpt.lastHeartbeatUtc)" :title="formatTimeAbsolute(cpt.lastHeartbeatUtc)"></td>
                                 <td>
                                     <div class="action-menu-wrap">
-                                        <button class="action-menu-btn" @click.stop="toggleActionMenu('cpt-' + cpt.id)" title="Actions">&#8942;</button>
+                                        <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'cpt-' + cpt.id)" title="Actions">&#8942;</button>
                                         <div class="action-menu-dropdown" x-show="openActionMenu === 'cpt-' + cpt.id" x-cloak>
                                             <button class="action-menu-item" @click="showJson('Captain: ' + cpt.name, cpt.id, cpt); closeActionMenu()">View JSON</button>
                                             <button class="action-menu-item danger" x-show="cpt.state === 'Working' || cpt.state === 'Stalled'" @click="recallCaptain(cpt.id); closeActionMenu()">Recall</button>
@@ -1105,7 +1116,7 @@
                         <h2 x-text="detail.name"></h2>
                         <div class="inline-actions">
                             <div class="action-menu-wrap">
-                                <button class="action-menu-btn" @click.stop="toggleActionMenu('cpt-detail-' + detail.id)" title="Actions">&#8942;</button>
+                                <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'cpt-detail-' + detail.id)" title="Actions">&#8942;</button>
                                 <div class="action-menu-dropdown" x-show="openActionMenu === 'cpt-detail-' + detail.id" x-cloak>
                                     <button class="action-menu-item" @click="openEditCaptain(detail); closeActionMenu()">Edit</button>
                                     <button class="action-menu-item" @click="showJson('Captain: ' + detail.name, detail.id, detail); closeActionMenu()">View JSON</button>
@@ -1213,7 +1224,7 @@
                 <table>
                     <thead>
                         <tr>
-                            <th style="width: 2.5rem;"><input type="checkbox" @change="$event.target.checked ? selectAllDocks() : clearDockSelection()" :checked="selectedDocks.length > 0 && selectedDocks.length === docks.length" title="Select all docks"></th>
+                            <th style="width: 1.5rem; padding: 0.25rem;"><input type="checkbox" @change="$event.target.checked ? selectAllDocks() : clearDockSelection()" :checked="selectedDocks.length > 0 && selectedDocks.length === docks.length" title="Select all docks"></th>
                             <th class="sortable" @click="sortBy('id', docks)" title="Unique dock identifier -- click to sort">ID<span x-text="sortIcon('id')"></span></th>
                             <th class="sortable" @click="sortBy('vesselId', docks)" title="Vessel this dock belongs to -- click to sort">Vessel<span x-text="sortIcon('vesselId')"></span></th>
                             <th title="Captain currently using this dock">Captain</th>
@@ -1253,7 +1264,7 @@
                                 <td class="text-dim" x-text="formatTime(dock.createdUtc)" :title="formatTimeAbsolute(dock.createdUtc)"></td>
                                 <td>
                                     <div class="action-menu-wrap">
-                                        <button class="action-menu-btn" @click.stop="toggleActionMenu('dock-' + dock.id)" title="Actions">&#8942;</button>
+                                        <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'dock-' + dock.id)" title="Actions">&#8942;</button>
                                         <div class="action-menu-dropdown" x-show="openActionMenu === 'dock-' + dock.id" x-cloak>
                                             <button class="action-menu-item" @click="showJson('Dock: ' + dock.id, dock.id, dock); closeActionMenu()">View JSON</button>
                                             <button class="action-menu-item danger" @click="deleteDock(dock.id); closeActionMenu()">Delete</button>
@@ -1276,7 +1287,7 @@
                         <h2>Dock Details</h2>
                         <div class="inline-actions">
                             <div class="action-menu-wrap">
-                                <button class="action-menu-btn" @click.stop="toggleActionMenu('dock-detail-' + detail.id)" title="Actions">&#8942;</button>
+                                <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'dock-detail-' + detail.id)" title="Actions">&#8942;</button>
                                 <div class="action-menu-dropdown" x-show="openActionMenu === 'dock-detail-' + detail.id" x-cloak>
                                     <button class="action-menu-item" @click="showJson('Dock: ' + detail.id, detail.id, detail); closeActionMenu()">View JSON</button>
                                     <button class="action-menu-item danger" @click="deleteDock(detail.id); closeActionMenu()">Delete</button>
@@ -1344,7 +1355,7 @@
             <div class="table-wrap" x-show="signals.length > 0">
                 <table>
                     <thead>
-                        <tr><th style="width: 2.5rem;"><input type="checkbox" @change="$event.target.checked ? selectAllSignals() : clearSignalSelection()" :checked="selectedSignals.length > 0 && selectedSignals.length === signals.length" title="Select all signals"></th><th title="Unique signal identifier">ID</th><th title="Signal type (Nudge, Mail, Assignment, Progress, Completion, Error)">Type</th><th title="Sender -- captain or Admiral">From</th><th title="Recipient -- captain or Admiral">To</th><th title="Signal message content">Payload</th><th title="When the signal was created">Time</th><th>Action</th></tr>
+                        <tr><th style="width: 1.5rem; padding: 0.25rem;"><input type="checkbox" @change="$event.target.checked ? selectAllSignals() : clearSignalSelection()" :checked="selectedSignals.length > 0 && selectedSignals.length === signals.length" title="Select all signals"></th><th title="Unique signal identifier">ID</th><th title="Signal type (Nudge, Mail, Assignment, Progress, Completion, Error)">Type</th><th title="Sender -- captain or Admiral">From</th><th title="Recipient -- captain or Admiral">To</th><th title="Signal message content">Payload</th><th title="When the signal was created">Time</th><th>Action</th></tr>
                         <tr class="column-filter-row">
                             <td></td>
                             <td></td>
@@ -1368,7 +1379,7 @@
                                 <td class="text-dim" x-text="formatTime(sig.createdUtc)" :title="formatTimeAbsolute(sig.createdUtc)"></td>
                                 <td>
                                     <div class="action-menu-wrap">
-                                        <button class="action-menu-btn" @click.stop="toggleActionMenu('sig-' + sig.id)" title="Actions">&#8942;</button>
+                                        <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'sig-' + sig.id)" title="Actions">&#8942;</button>
                                         <div class="action-menu-dropdown" x-show="openActionMenu === 'sig-' + sig.id" x-cloak>
                                             <button class="action-menu-item" @click="navigate('signals', 'signal-detail', sig.id); closeActionMenu()">Show Details</button>
                                             <button class="action-menu-item" @click="showJson('Signal: ' + sig.id, sig.id, sig); closeActionMenu()">View JSON</button>
@@ -1495,7 +1506,7 @@
                                 <td class="text-dim"><span x-show="evt.missionId" class="id-display"><span class="mono" x-text="evt.missionId"></span><button class="copy-btn" @click.stop="copyId(evt.missionId, $event)" title="Copy ID"></button></span><span x-show="!evt.missionId">-</span></td>
                                 <td>
                                     <div class="action-menu-wrap">
-                                        <button class="action-menu-btn" @click.stop="toggleActionMenu('evt-' + evt.id)" title="Actions">&#8942;</button>
+                                        <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'evt-' + evt.id)" title="Actions">&#8942;</button>
                                         <div class="action-menu-dropdown" x-show="openActionMenu === 'evt-' + evt.id" x-cloak>
                                             <button class="action-menu-item" @click="navigate('events', 'event-detail', evt.id); closeActionMenu()">Show Details</button>
                                             <button class="action-menu-item" @click="showJson('Event: ' + evt.id, evt.id, evt); closeActionMenu()">View JSON</button>
@@ -1619,7 +1630,7 @@
                         <div class="text-dim" style="font-size:0.8rem; margin-top:0.25rem" x-text="formatTime(entry.createdUtc)" :title="formatTimeAbsolute(entry.createdUtc)"></div>
                         <div class="mq-card-actions">
                             <div class="action-menu-wrap">
-                                <button class="action-menu-btn" @click.stop="toggleActionMenu('mq-' + entry.id)" title="Actions">&#8942;</button>
+                                <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'mq-' + entry.id)" title="Actions">&#8942;</button>
                                 <div class="action-menu-dropdown" x-show="openActionMenu === 'mq-' + entry.id" x-cloak>
                                     <button class="action-menu-item" x-show="entry.missionId" @click="viewMissionLog(entry.missionId); closeActionMenu()">Log</button>
                                     <button class="action-menu-item" x-show="entry.missionId" @click="viewMissionDiff(entry.missionId); closeActionMenu()">Diff</button>
@@ -1650,7 +1661,7 @@
             </div>
             <div x-show="notificationHistory.length > 0" class="table-wrap">
                 <table>
-                    <thead><tr><th style="width: 2.5rem;"></th><th>Title</th><th>Message</th><th>Time</th></tr></thead>
+                    <thead><tr><th style="width: 1.5rem; padding: 0.25rem;"></th><th>Title</th><th>Message</th><th>Time</th></tr></thead>
                     <tbody>
                         <template x-for="ntf in notificationHistory" :key="ntf.id">
                             <tr class="clickable" :class="{ 'notif-unread': !ntf.read }" @click="markNotificationRead(ntf)">
