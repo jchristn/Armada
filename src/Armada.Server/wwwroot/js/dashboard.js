@@ -118,6 +118,7 @@ function dashboard() {
         selectedSignals: [],
         selectedMergeQueue: [],
         selectedEvents: [],
+        selectedFleets: [],
         selectedVessels: [],
 
         // Sorting
@@ -925,6 +926,30 @@ function dashboard() {
                 this.toast('Failed to delete events: ' + e.message, 'error');
             }
             await this.loadEvents();
+        },
+
+        // Fleet multi-select
+        toggleFleetSelection(id) {
+            let idx = this.selectedFleets.indexOf(id);
+            if (idx >= 0) { this.selectedFleets.splice(idx, 1); } else { this.selectedFleets.push(id); }
+        },
+        selectAllFleets() { this.selectedFleets = this.fleets.map(f => f.id); },
+        clearFleetSelection() { this.selectedFleets = []; },
+        async deleteSelectedFleets() {
+            if (this.selectedFleets.length === 0) return;
+            if (!await this.showConfirm('Delete ' + this.selectedFleets.length + ' selected fleet(s)? This cannot be undone.')) return;
+            try {
+                let result = await this.api('POST', '/api/v1/fleets/delete/multiple', { Ids: [...this.selectedFleets] });
+                this.selectedFleets = [];
+                let deleted = result.deleted || 0;
+                let skipped = (result.skipped || []).length;
+                if (skipped > 0) { this.toast('Deleted ' + deleted + ', skipped ' + skipped, 'warning'); }
+                else { this.toast('Deleted ' + deleted + ' fleet(s)'); }
+            } catch (e) {
+                this.selectedFleets = [];
+                this.toast('Failed to delete fleets: ' + e.message, 'error');
+            }
+            await this.loadFleets();
         },
 
         // Vessel multi-select
