@@ -1058,7 +1058,8 @@
                     <thead>
                         <tr>
                             <th style="width: 1.5rem; padding: 0.25rem;"><input type="checkbox" @change="$event.target.checked ? selectAllCaptains() : clearCaptainSelection()" :checked="selectedCaptains.length > 0 && selectedCaptains.length === captains.length" title="Select all captains"></th>
-                            <th class="sortable" @click="sortBy('name', captains)" title="Captain name and unique identifier -- click to sort">Name<span x-text="sortIcon('name')"></span></th>
+                            <th class="sortable" @click="sortBy('name', captains)" title="Captain name -- click to sort">Name<span x-text="sortIcon('name')"></span></th>
+                            <th title="Unique captain identifier">ID</th>
                             <th class="sortable" @click="sortBy('state', captains)" title="Idle, Working, or Stalled -- click to sort">State<span x-text="sortIcon('state')"></span></th>
                             <th title="AI agent runtime type (e.g. Claude Code, Codex)">Runtime</th>
                             <th title="Currently assigned mission, if any">Mission</th>
@@ -1069,6 +1070,7 @@
                         <tr class="column-filter-row">
                             <td></td>
                             <td><input type="text" class="col-filter" x-model="captainColFilters.name" placeholder="Filter..."></td>
+                            <td></td>
                             <td><input type="text" class="col-filter" x-model="captainColFilters.state" placeholder="Filter..."></td>
                             <td><input type="text" class="col-filter" x-model="captainColFilters.runtime" placeholder="Filter..."></td>
                             <td></td>
@@ -1081,10 +1083,8 @@
                         <template x-for="cpt in sortedRows(columnFilteredCaptains())" :key="cpt.id">
                             <tr>
                                 <td><input type="checkbox" :checked="selectedCaptains.includes(cpt.id)" @change="toggleCaptainSelection(cpt.id)" title="Select this captain"></td>
-                                <td class="clickable" @click="navigate('captains', 'captain-detail', cpt.id)">
-                                    <strong x-text="cpt.name"></strong>
-                                    <div class="text-dim id-display"><span class="mono" x-text="cpt.id"></span><button class="copy-btn" @click.stop="copyId(cpt.id, $event)" title="Copy ID"></button></div>
-                                </td>
+                                <td class="clickable" @click="navigate('captains', 'captain-detail', cpt.id)"><strong x-text="cpt.name"></strong></td>
+                                <td class="mono text-dim"><span class="id-display"><span x-text="cpt.id"></span><button class="copy-btn" @click.stop="copyId(cpt.id, $event)" title="Copy ID"></button></span></td>
                                 <td><span class="tag" :class="(cpt.state || '').toLowerCase()" x-text="cpt.state" :title="statusTooltip(cpt.state)"></span></td>
                                 <td x-text="cpt.runtime || 'ClaudeCode'"></td>
                                 <td>
