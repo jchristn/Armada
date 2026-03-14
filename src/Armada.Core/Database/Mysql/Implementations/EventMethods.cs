@@ -73,6 +73,55 @@ namespace Armada.Core.Database.Mysql.Implementations
         }
 
         /// <summary>
+        /// Read an event by identifier.
+        /// </summary>
+        /// <param name="id">Event identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Event if found, null otherwise.</returns>
+        public async Task<ArmadaEvent?> ReadAsync(string id, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (MySqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT * FROM events WHERE id = @id;";
+                    cmd.Parameters.AddWithValue("@id", id);
+                    using (MySqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        if (await reader.ReadAsync(token).ConfigureAwait(false))
+                            return EventFromReader(reader);
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Delete an event by identifier.
+        /// </summary>
+        /// <param name="id">Event identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        public async Task DeleteAsync(string id, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (MySqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "DELETE FROM events WHERE id = @id;";
+                    cmd.Parameters.AddWithValue("@id", id);
+                    await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                }
+            }
+        }
+
+        /// <summary>
         /// Enumerate recent events.
         /// </summary>
         /// <param name="limit">Maximum number of events to return.</param>

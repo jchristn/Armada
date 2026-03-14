@@ -13,6 +13,16 @@ namespace Armada.Core.Database.Interfaces
         Task<ArmadaEvent> CreateAsync(ArmadaEvent armadaEvent, CancellationToken token = default);
 
         /// <summary>
+        /// Read an event by identifier.
+        /// </summary>
+        Task<ArmadaEvent?> ReadAsync(string id, CancellationToken token = default);
+
+        /// <summary>
+        /// Delete an event by identifier.
+        /// </summary>
+        Task DeleteAsync(string id, CancellationToken token = default);
+
+        /// <summary>
         /// Enumerate recent events.
         /// </summary>
         Task<List<ArmadaEvent>> EnumerateRecentAsync(int limit = 50, CancellationToken token = default);
