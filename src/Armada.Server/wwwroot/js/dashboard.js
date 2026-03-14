@@ -96,6 +96,12 @@ function dashboard() {
         mergeQueueVoyages: [],
         dockFilters: { status: '' },
         selectedDocks: [],
+        selectedMissions: [],
+        selectedVoyages: [],
+        selectedCaptains: [],
+        selectedSignals: [],
+        selectedMergeQueue: [],
+        selectedVessels: [],
 
         // Sorting
         sortColumn: null,
@@ -693,6 +699,139 @@ function dashboard() {
             this.selectedDocks = [];
         },
 
+        // Mission multi-select
+        toggleMissionSelection(id) {
+            let idx = this.selectedMissions.indexOf(id);
+            if (idx >= 0) { this.selectedMissions.splice(idx, 1); } else { this.selectedMissions.push(id); }
+        },
+        selectAllMissions() { this.selectedMissions = this.allMissions.map(m => m.id); },
+        clearMissionSelection() { this.selectedMissions = []; },
+        async deleteSelectedMissions() {
+            if (this.selectedMissions.length === 0) return;
+            if (!await this.showConfirm('Delete ' + this.selectedMissions.length + ' selected mission(s)? This cannot be undone.')) return;
+            let ids = [...this.selectedMissions];
+            let failed = 0;
+            for (let id of ids) {
+                try { await this.api('DELETE', '/api/v1/missions/' + id + '/purge'); }
+                catch (e) { failed++; console.warn('Failed to delete mission ' + id + ':', e); }
+            }
+            this.selectedMissions = [];
+            if (failed > 0) { this.toast('Deleted ' + (ids.length - failed) + ' missions, ' + failed + ' failed', 'warning'); }
+            else { this.toast('Deleted ' + ids.length + ' mission(s)'); }
+            await this.loadMissions();
+        },
+
+        // Voyage multi-select
+        toggleVoyageSelection(id) {
+            let idx = this.selectedVoyages.indexOf(id);
+            if (idx >= 0) { this.selectedVoyages.splice(idx, 1); } else { this.selectedVoyages.push(id); }
+        },
+        selectAllVoyages() { this.selectedVoyages = this.voyages.map(v => v.id); },
+        clearVoyageSelection() { this.selectedVoyages = []; },
+        async deleteSelectedVoyages() {
+            if (this.selectedVoyages.length === 0) return;
+            if (!await this.showConfirm('Delete ' + this.selectedVoyages.length + ' selected voyage(s) and all their missions? This cannot be undone.')) return;
+            let ids = [...this.selectedVoyages];
+            let failed = 0;
+            for (let id of ids) {
+                try { await this.api('DELETE', '/api/v1/voyages/' + id + '/purge'); }
+                catch (e) { failed++; console.warn('Failed to delete voyage ' + id + ':', e); }
+            }
+            this.selectedVoyages = [];
+            if (failed > 0) { this.toast('Deleted ' + (ids.length - failed) + ' voyages, ' + failed + ' failed', 'warning'); }
+            else { this.toast('Deleted ' + ids.length + ' voyage(s)'); }
+            await this.loadVoyages();
+        },
+
+        // Captain multi-select
+        toggleCaptainSelection(id) {
+            let idx = this.selectedCaptains.indexOf(id);
+            if (idx >= 0) { this.selectedCaptains.splice(idx, 1); } else { this.selectedCaptains.push(id); }
+        },
+        selectAllCaptains() { this.selectedCaptains = this.captains.map(c => c.id); },
+        clearCaptainSelection() { this.selectedCaptains = []; },
+        async deleteSelectedCaptains() {
+            if (this.selectedCaptains.length === 0) return;
+            if (!await this.showConfirm('Remove ' + this.selectedCaptains.length + ' selected captain(s)? This cannot be undone.')) return;
+            let ids = [...this.selectedCaptains];
+            let failed = 0;
+            for (let id of ids) {
+                try { await this.api('DELETE', '/api/v1/captains/' + id); }
+                catch (e) { failed++; console.warn('Failed to remove captain ' + id + ':', e); }
+            }
+            this.selectedCaptains = [];
+            if (failed > 0) { this.toast('Removed ' + (ids.length - failed) + ' captains, ' + failed + ' failed', 'warning'); }
+            else { this.toast('Removed ' + ids.length + ' captain(s)'); }
+            await this.loadCaptains();
+        },
+
+        // Signal multi-select
+        toggleSignalSelection(id) {
+            let idx = this.selectedSignals.indexOf(id);
+            if (idx >= 0) { this.selectedSignals.splice(idx, 1); } else { this.selectedSignals.push(id); }
+        },
+        selectAllSignals() { this.selectedSignals = this.signals.map(s => s.id); },
+        clearSignalSelection() { this.selectedSignals = []; },
+        async deleteSelectedSignals() {
+            if (this.selectedSignals.length === 0) return;
+            if (!await this.showConfirm('Delete ' + this.selectedSignals.length + ' selected signal(s)? This cannot be undone.')) return;
+            let ids = [...this.selectedSignals];
+            let failed = 0;
+            for (let id of ids) {
+                try { await this.api('DELETE', '/api/v1/signals/' + id); }
+                catch (e) { failed++; console.warn('Failed to delete signal ' + id + ':', e); }
+            }
+            this.selectedSignals = [];
+            if (failed > 0) { this.toast('Deleted ' + (ids.length - failed) + ' signals, ' + failed + ' failed', 'warning'); }
+            else { this.toast('Deleted ' + ids.length + ' signal(s)'); }
+            await this.loadSignals();
+        },
+
+        // Merge Queue multi-select
+        toggleMergeQueueSelection(id) {
+            let idx = this.selectedMergeQueue.indexOf(id);
+            if (idx >= 0) { this.selectedMergeQueue.splice(idx, 1); } else { this.selectedMergeQueue.push(id); }
+        },
+        selectAllMergeQueue() { this.selectedMergeQueue = this.mergeQueue.map(e => e.id); },
+        clearMergeQueueSelection() { this.selectedMergeQueue = []; },
+        async deleteSelectedMergeQueue() {
+            if (this.selectedMergeQueue.length === 0) return;
+            if (!await this.showConfirm('Delete ' + this.selectedMergeQueue.length + ' selected merge queue entry(ies)? This will delete branches from local and remote repositories.', { width: '880px' })) return;
+            let ids = [...this.selectedMergeQueue];
+            let failed = 0;
+            for (let id of ids) {
+                try { await this.api('DELETE', '/api/v1/merge-queue/' + id); }
+                catch (e) { failed++; console.warn('Failed to delete merge entry ' + id + ':', e); }
+            }
+            this.selectedMergeQueue = [];
+            if (failed > 0) { this.toast('Deleted ' + (ids.length - failed) + ' entries, ' + failed + ' failed', 'warning'); }
+            else { this.toast('Deleted ' + ids.length + ' merge queue entry(ies)'); }
+            await this.loadMergeQueue();
+        },
+
+        // Vessel multi-select
+        toggleVesselSelection(id) {
+            let idx = this.selectedVessels.indexOf(id);
+            if (idx >= 0) { this.selectedVessels.splice(idx, 1); } else { this.selectedVessels.push(id); }
+        },
+        selectAllVessels() { this.selectedVessels = this.allVessels.map(v => v.id); },
+        clearVesselSelection() { this.selectedVessels = []; },
+        async deleteSelectedVessels() {
+            if (this.selectedVessels.length === 0) return;
+            if (!await this.showConfirm('Delete ' + this.selectedVessels.length + ' selected vessel(s)? This cannot be undone.')) return;
+            let ids = [...this.selectedVessels];
+            let failed = 0;
+            for (let id of ids) {
+                try { await this.api('DELETE', '/api/v1/vessels/' + id); }
+                catch (e) { failed++; console.warn('Failed to delete vessel ' + id + ':', e); }
+            }
+            this.selectedVessels = [];
+            if (failed > 0) { this.toast('Deleted ' + (ids.length - failed) + ' vessels, ' + failed + ' failed', 'warning'); }
+            else { this.toast('Deleted ' + ids.length + ' vessel(s)'); }
+            await this.loadFleets();
+            await this.loadVessels();
+        },
+
         async loadHealth() {
             try { this.healthInfo = await this.api('GET', '/api/v1/status/health'); } catch (e) { console.warn('Failed to load health:', e); }
         },
@@ -741,6 +880,12 @@ function dashboard() {
             if (view === 'signals') this.loadSignals();
             if (view === 'events') this.loadEvents();
             if (view === 'merge-queue') this.loadMergeQueue();
+            if (view === 'missions') this.selectedMissions = [];
+            if (view === 'voyages') this.selectedVoyages = [];
+            if (view === 'captains') this.selectedCaptains = [];
+            if (view === 'signals') this.selectedSignals = [];
+            if (view === 'merge-queue') this.selectedMergeQueue = [];
+            if (view === 'fleets') { this.selectedVessels = []; this.loadFleets(); this.loadVessels(); }
             if (view === 'docks') { this.selectedDocks = []; this.loadDocks(); }
             if (view === 'server') { this.loadHealth(); this.loadSettings(); }
             if (view === 'missions') this.loadMissions();
@@ -1087,7 +1232,7 @@ function dashboard() {
         updateBreadcrumbs() {
             this.breadcrumbs = [];
             let viewLabels = {
-                'home': 'Dashboard', 'fleets': 'Fleets', 'voyages': 'Voyages',
+                'home': 'Dashboard', 'fleets': 'Vessels', 'voyages': 'Voyages',
                 'captains': 'Captains', 'missions': 'Missions', 'dispatch': 'Dispatch',
                 'signals': 'Signals', 'events': 'Events', 'merge-queue': 'Merge Queue',
                 'docks': 'Docks', 'server': 'Server', 'config': 'Config'
@@ -2069,6 +2214,15 @@ function dashboard() {
                 }
             }
             return result;
+        },
+
+        // Client-side filter for Vessels view (flat table with fleet filter)
+        filteredVesselsList() {
+            let rows = this.allVessels;
+            if (this.vesselFilters.fleetId) {
+                rows = rows.filter(v => v.fleetId === this.vesselFilters.fleetId);
+            }
+            return this.filterRows(rows);
         },
 
         // Client-side filter for Recent Missions on dashboard home

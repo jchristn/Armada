@@ -87,7 +87,7 @@
                         <span class="sidebar-section-chevron"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
                     </button>
                     <div class="sidebar-section-items" x-show="sidebarCollapsed || sidebarSections.fleet">
-                        <button class="sidebar-nav-item" :class="{ active: view === 'fleets' }" @click="navigate('fleets')" :title="sidebarCollapsed ? 'Vessels' : 'Repository groups and their vessels'">
+                        <button class="sidebar-nav-item" :class="{ active: view === 'fleets' }" @click="navigate('fleets')" :title="sidebarCollapsed ? 'Vessels' : 'Git repositories organized by fleet'">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
                             <span class="sidebar-label">Vessels</span>
                         </button>
@@ -346,61 +346,57 @@
         <div x-show="view === 'fleets' && !detailView" class="view">
             <div class="view-header">
                 <div>
-                    <h2>Fleets &amp; Vessels</h2>
-                    <p class="text-dim view-subtitle">Manage repository groups and their vessels. Each fleet organizes related repos for coordinated work.</p>
+                    <h2>Vessels</h2>
+                    <p class="text-dim view-subtitle">Git repositories organized by fleet. Filter by fleet, manage vessels, and view project details.</p>
                 </div>
                 <div class="view-actions">
-                    <input type="text" class="filter-input" x-model="listSearch" placeholder="Search..." title="Search fleets and vessels by name, ID, repo URL, or branch">
+                    <select class="filter-select" x-model="vesselFilters.fleetId" title="Filter vessels by fleet">
+                        <option value="">All Fleets</option>
+                        <template x-for="f in fleets" :key="f.id">
+                            <option :value="f.id" x-text="f.name"></option>
+                        </template>
+                    </select>
+                    <input type="text" class="filter-input" x-model="listSearch" placeholder="Search..." title="Search vessels by name, ID, repo URL, or branch">
+                    <button class="btn btn-sm btn-danger" x-show="selectedVessels.length > 0" @click="deleteSelectedVessels()" title="Delete all selected vessels">Delete Selected (<span x-text="selectedVessels.length"></span>)</button>
                     <button class="btn btn-primary btn-sm" @click="openCreateFleet()" title="Create a new fleet to group repositories">+ Fleet</button>
                     <button class="btn btn-primary btn-sm" @click="openCreateVessel()" title="Add a new vessel (repository) to a fleet">+ Vessel</button>
-                    <button class="btn btn-sm" @click="loadFleets()" title="Refresh fleet and vessel data">&#x21bb;</button>
+                    <button class="btn btn-sm" @click="loadFleets(); loadVessels()" title="Refresh vessel data">&#x21bb;</button>
                 </div>
             </div>
-            <template x-if="fleets.length === 0">
-                <p class="text-dim">No fleets configured.</p>
+            <template x-if="allVessels.length === 0">
+                <p class="text-dim">No vessels configured.</p>
             </template>
-            <template x-for="fleet in filteredFleets()" :key="fleet.id">
-                <div class="fleet-card">
-                    <div class="fleet-card-header">
-                        <div class="clickable" @click="navigate('fleets', 'fleet-detail', fleet.id)">
-                            <h3 x-text="fleet.name"></h3>
-                            <div class="text-dim id-display"><span class="mono" x-text="fleet.id"></span><button class="copy-btn" @click.stop="copyId(fleet.id, $event)" title="Copy ID"></button></div>
-                        </div>
-                        <div class="inline-actions">
-                            <button class="btn btn-sm" @click.stop="openEditFleet(fleet)" title="Edit fleet name and description">Edit</button>
-                            <button class="btn btn-sm btn-danger" @click.stop="deleteFleet(fleet.id)" title="Permanently delete this fleet">Delete</button>
-                        </div>
-                    </div>
-                    <template x-if="fleet._filteredVessels && fleet._filteredVessels.length > 0">
-                        <div class="table-wrap">
-                            <table class="vessel-table">
-                                <colgroup>
-                                    <col class="vessel-col-name">
-                                    <col class="vessel-col-repo">
-                                    <col class="vessel-col-branch">
-                                    <col class="vessel-col-badges">
-                                    <col class="vessel-col-actions">
-                                </colgroup>
-                                <thead><tr><th title="Vessel name and unique identifier">Vessel</th><th title="Git repository URL for this vessel">Repo URL</th><th title="Default branch used for merging (e.g. main)">Branch</th><th title="Context and style guide indicators"></th><th class="text-right">Actions</th></tr></thead>
-                                <tbody>
-                                    <template x-for="v in fleet._filteredVessels" :key="v.id">
-                                        <tr>
-                                            <td class="clickable" @click="navigate('fleets', 'vessel-detail', v.id)"><strong x-text="v.name"></strong><div class="text-dim id-display"><span class="mono" x-text="v.id"></span><button class="copy-btn" @click.stop="copyId(v.id, $event)" title="Copy ID"></button></div></td>
-                                            <td class="text-dim vessel-repo-cell" x-text="v.repoUrl"></td>
-                                            <td x-text="v.defaultBranch || 'main'"></td>
-                                            <td><span class="vessel-badge" x-show="v.projectContext" title="Has Project Context">CTX</span><span class="vessel-badge" x-show="v.styleGuide" title="Has Style Guide">STY</span></td>
-                                            <td class="text-right">
-                                                <button class="btn btn-sm" @click.stop="openEditVessel(v)" title="Edit vessel settings, context, and style guide">Edit</button>
-                                                <button class="btn btn-sm btn-danger" @click.stop="deleteVessel(v.id)" title="Permanently delete this vessel">Delete</button>
-                                            </td>
-                                        </tr>
-                                    </template>
-                                </tbody>
-                            </table>
-                        </div>
-                    </template>
-                </div>
-            </template>
+            <div class="table-wrap" x-show="allVessels.length > 0">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 2.5rem;"><input type="checkbox" @change="$event.target.checked ? selectAllVessels() : clearVesselSelection()" :checked="selectedVessels.length > 0 && selectedVessels.length === filteredVesselsList().length" title="Select all vessels"></th>
+                            <th class="sortable" @click="sortBy('name', allVessels)" title="Vessel name -- click to sort">Vessel<span x-text="sortIcon('name')"></span></th>
+                            <th title="Fleet this vessel belongs to">Fleet</th>
+                            <th title="Git repository URL">Repo URL</th>
+                            <th title="Default branch for merging">Branch</th>
+                            <th title="Context and style guide indicators"></th>
+                            <th class="text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="v in sortedRows(filteredVesselsList())" :key="v.id">
+                            <tr>
+                                <td><input type="checkbox" :checked="selectedVessels.includes(v.id)" @change="toggleVesselSelection(v.id)" title="Select this vessel"></td>
+                                <td class="clickable" @click="navigate('fleets', 'vessel-detail', v.id)"><strong x-text="v.name"></strong><div class="text-dim id-display"><span class="mono" x-text="v.id"></span><button class="copy-btn" @click.stop="copyId(v.id, $event)" title="Copy ID"></button></div></td>
+                                <td><a href="#" @click.prevent="navigate('fleets', 'fleet-detail', v.fleetId)" x-text="fleetName(v.fleetId)" x-show="v.fleetId"></a><span x-show="!v.fleetId">-</span></td>
+                                <td class="text-dim vessel-repo-cell" x-text="v.repoUrl"></td>
+                                <td x-text="v.defaultBranch || 'main'"></td>
+                                <td><span class="vessel-badge" x-show="v.projectContext" title="Has Project Context">CTX</span><span class="vessel-badge" x-show="v.styleGuide" title="Has Style Guide">STY</span></td>
+                                <td class="text-right">
+                                    <button class="btn btn-sm" @click.stop="openEditVessel(v)" title="Edit vessel settings, context, and style guide">Edit</button>
+                                    <button class="btn btn-sm btn-danger" @click.stop="deleteVessel(v.id)" title="Permanently delete this vessel">Delete</button>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- Fleet Detail -->
@@ -525,6 +521,7 @@
                         </template>
                     </select>
                     <input type="text" class="filter-input" x-model="listSearch" placeholder="Search..." title="Search voyages by title or ID">
+                    <button class="btn btn-sm btn-danger" x-show="selectedVoyages.length > 0" @click="deleteSelectedVoyages()" title="Delete all selected voyages">Delete Selected (<span x-text="selectedVoyages.length"></span>)</button>
                     <button class="btn btn-primary btn-sm" @click="openCreateVoyage()" title="Create a new voyage with multiple missions">+ Voyage</button>
                 </div>
             </div>
@@ -558,9 +555,12 @@
             <template x-for="voyage in filteredVoyages()" :key="voyage.id">
                 <div class="fleet-card clickable" @click="navigate('voyages', 'voyage-detail', voyage.id)">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <div>
-                            <h3 x-text="voyage.title || voyage.id"></h3>
-                            <div class="text-dim id-display"><span class="mono" x-text="voyage.id"></span><button class="copy-btn" @click.stop="copyId(voyage.id, $event)" title="Copy ID"></button></div>
+                        <div style="display:flex; align-items:center; gap:0.5rem;">
+                            <input type="checkbox" :checked="selectedVoyages.includes(voyage.id)" @change.stop="toggleVoyageSelection(voyage.id)" @click.stop title="Select this voyage">
+                            <div>
+                                <h3 x-text="voyage.title || voyage.id"></h3>
+                                <div class="text-dim id-display"><span class="mono" x-text="voyage.id"></span><button class="copy-btn" @click.stop="copyId(voyage.id, $event)" title="Copy ID"></button></div>
+                            </div>
                         </div>
                         <div class="inline-actions" @click.stop>
                             <span class="tag" :class="(voyage.status || '').toLowerCase()" x-text="voyage.status" :title="statusTooltip(voyage.status)"></span>
@@ -660,6 +660,7 @@
                         </template>
                     </select>
                     <input type="text" class="filter-input" x-model="listSearch" placeholder="Search..." title="Search missions by title or ID">
+                    <button class="btn btn-sm btn-danger" x-show="selectedMissions.length > 0" @click="deleteSelectedMissions()" title="Delete all selected missions">Delete Selected (<span x-text="selectedMissions.length"></span>)</button>
                 </div>
             </div>
             <!-- Inline Dispatch Form (two-mode) -->
@@ -784,18 +785,20 @@
                 <table>
                     <thead>
                         <tr>
-                            <th class="sortable" @click="sortBy('title', allMissions)" title="Mission name and unique identifier — click to sort">Mission<span x-text="sortIcon('title')"></span></th>
-                            <th class="sortable" @click="sortBy('status', allMissions)" title="Current mission lifecycle state — click to sort">Status<span x-text="sortIcon('status')"></span></th>
+                            <th style="width: 2.5rem;"><input type="checkbox" @change="$event.target.checked ? selectAllMissions() : clearMissionSelection()" :checked="selectedMissions.length > 0 && selectedMissions.length === allMissions.length" title="Select all missions"></th>
+                            <th class="sortable" @click="sortBy('title', allMissions)" title="Mission name and unique identifier -- click to sort">Mission<span x-text="sortIcon('title')"></span></th>
+                            <th class="sortable" @click="sortBy('status', allMissions)" title="Current mission lifecycle state -- click to sort">Status<span x-text="sortIcon('status')"></span></th>
                             <th title="Target repository for this mission">Vessel</th>
                             <th title="AI captain assigned to execute this mission">Captain</th>
                             <th title="Git branch for this mission's work">Branch</th>
-                            <th class="sortable" @click="sortBy('createdUtc', allMissions)" title="When this mission was created — click to sort">Created<span x-text="sortIcon('createdUtc')"></span></th>
+                            <th class="sortable" @click="sortBy('createdUtc', allMissions)" title="When this mission was created -- click to sort">Created<span x-text="sortIcon('createdUtc')"></span></th>
                             <th></th>
                         </tr>
                     </thead>
                     <tbody>
                         <template x-for="m in sortedRows(filterRows(allMissions))" :key="m.id">
                             <tr class="clickable" @click="navigate('missions', 'mission-detail', m.id)">
+                                <td @click.stop><input type="checkbox" :checked="selectedMissions.includes(m.id)" @change="toggleMissionSelection(m.id)" title="Select this mission"></td>
                                 <td><strong x-text="m.title"></strong><div class="text-dim id-display"><span class="mono" x-text="m.id"></span><button class="copy-btn" @click.stop="copyId(m.id, $event)" title="Copy ID"></button></div></td>
                                 <td><span class="tag" :class="(m.status || '').toLowerCase()" x-text="m.status" :title="statusTooltip(m.status)"></span></td>
                                 <td x-text="vesselName(m.vesselId)"></td>
@@ -895,6 +898,7 @@
                 <div class="view-actions">
                     <input type="text" class="filter-input" x-model="listSearch" placeholder="Search..." title="Search captains by name or ID">
                     <button class="btn btn-primary btn-sm" @click="openAddCaptain()" title="Register a new AI captain agent">+ Captain</button>
+                    <button class="btn btn-sm btn-danger" x-show="selectedCaptains.length > 0" @click="deleteSelectedCaptains()" title="Remove all selected captains">Delete Selected (<span x-text="selectedCaptains.length"></span>)</button>
                     <button class="btn btn-sm btn-danger" @click="stopAllCaptains()"
                         x-show="captains.some(c => c.state === 'Working' || c.state === 'Stalled')" title="Stop all active captain processes">Stop All</button>
                 </div>
@@ -930,8 +934,9 @@
                 <table>
                     <thead>
                         <tr>
-                            <th class="sortable" @click="sortBy('name', captains)" title="Captain name and unique identifier — click to sort">Name<span x-text="sortIcon('name')"></span></th>
-                            <th class="sortable" @click="sortBy('state', captains)" title="Idle, Working, or Stalled — click to sort">State<span x-text="sortIcon('state')"></span></th>
+                            <th style="width: 2.5rem;"><input type="checkbox" @change="$event.target.checked ? selectAllCaptains() : clearCaptainSelection()" :checked="selectedCaptains.length > 0 && selectedCaptains.length === captains.length" title="Select all captains"></th>
+                            <th class="sortable" @click="sortBy('name', captains)" title="Captain name and unique identifier -- click to sort">Name<span x-text="sortIcon('name')"></span></th>
+                            <th class="sortable" @click="sortBy('state', captains)" title="Idle, Working, or Stalled -- click to sort">State<span x-text="sortIcon('state')"></span></th>
                             <th title="AI agent runtime type (e.g. Claude Code, Codex)">Runtime</th>
                             <th title="Currently assigned mission, if any">Mission</th>
                             <th title="Operating system process ID of the captain agent">PID</th>
@@ -942,6 +947,7 @@
                     <tbody>
                         <template x-for="cpt in sortedRows(filterRows(captains))" :key="cpt.id">
                             <tr>
+                                <td><input type="checkbox" :checked="selectedCaptains.includes(cpt.id)" @change="toggleCaptainSelection(cpt.id)" title="Select this captain"></td>
                                 <td class="clickable" @click="navigate('captains', 'captain-detail', cpt.id)">
                                     <strong x-text="cpt.name"></strong>
                                     <div class="text-dim id-display"><span class="mono" x-text="cpt.id"></span><button class="copy-btn" @click.stop="copyId(cpt.id, $event)" title="Copy ID"></button></div>
@@ -1160,6 +1166,7 @@
                 </div>
                 <div class="view-actions">
                     <input type="text" class="filter-input" x-model="listSearch" placeholder="Search..." title="Search signals by type, payload, or ID">
+                    <button class="btn btn-sm btn-danger" x-show="selectedSignals.length > 0" @click="deleteSelectedSignals()" title="Delete all selected signals">Delete Selected (<span x-text="selectedSignals.length"></span>)</button>
                     <button class="btn btn-primary btn-sm" @click="openSendSignal()" title="Send a new signal to a captain or the admiral">+ Signal</button>
                 </div>
             </div>
@@ -1189,10 +1196,11 @@
             </div>
             <div class="table-wrap" x-show="signals.length > 0">
                 <table>
-                    <thead><tr><th title="Unique signal identifier">ID</th><th title="Signal type (Nudge, Mail, Assignment, Progress, Completion, Error)">Type</th><th title="Sender — captain or Admiral">From</th><th title="Recipient — captain or Admiral">To</th><th title="Signal message content">Payload</th><th title="When the signal was created">Time</th><th>Action</th></tr></thead>
+                    <thead><tr><th style="width: 2.5rem;"><input type="checkbox" @change="$event.target.checked ? selectAllSignals() : clearSignalSelection()" :checked="selectedSignals.length > 0 && selectedSignals.length === signals.length" title="Select all signals"></th><th title="Unique signal identifier">ID</th><th title="Signal type (Nudge, Mail, Assignment, Progress, Completion, Error)">Type</th><th title="Sender -- captain or Admiral">From</th><th title="Recipient -- captain or Admiral">To</th><th title="Signal message content">Payload</th><th title="When the signal was created">Time</th><th>Action</th></tr></thead>
                     <tbody>
                         <template x-for="sig in filterRows(signals)" :key="sig.id">
                             <tr>
+                                <td><input type="checkbox" :checked="selectedSignals.includes(sig.id)" @change="toggleSignalSelection(sig.id)" title="Select this signal"></td>
                                 <td class="mono text-dim"><span class="id-display"><span x-text="sig.id"></span><button class="copy-btn" @click.stop="copyId(sig.id, $event)" title="Copy ID"></button></span></td>
                                 <td><span class="tag" :class="(sig.type || '').toLowerCase()" x-text="sig.type"></span></td>
                                 <td><span x-show="sig.fromCaptainId" class="id-display"><span class="mono" x-text="sig.fromCaptainId"></span><button class="copy-btn" @click.stop="copyId(sig.fromCaptainId, $event)" title="Copy ID"></button></span><span x-show="!sig.fromCaptainId">Admiral</span></td>
@@ -1381,6 +1389,7 @@
                             <option :value="v.id" x-text="v.name"></option>
                         </template>
                     </select>
+                    <button class="btn btn-sm btn-danger" x-show="selectedMergeQueue.length > 0" @click="deleteSelectedMergeQueue()" title="Delete all selected merge queue entries">Delete Selected (<span x-text="selectedMergeQueue.length"></span>)</button>
                     <button class="btn btn-primary btn-sm" @click="openEnqueueMerge()" title="Add a branch to the merge queue">+ Enqueue</button>
                     <button class="btn btn-sm" @click="processMergeQueue()" title="Process all queued entries and merge branches">Process Queue</button>
                 </div>
@@ -1413,6 +1422,7 @@
                 <template x-for="entry in filteredMergeQueue()" :key="entry.id">
                     <div class="card merge-queue-card">
                         <div class="mq-card-header">
+                            <input type="checkbox" :checked="selectedMergeQueue.includes(entry.id)" @change.stop="toggleMergeQueueSelection(entry.id)" @click.stop title="Select this entry">
                             <span class="tag" :class="(entry.status || '').toLowerCase()" x-text="entry.status" :title="statusTooltip(entry.status)"></span>
                             <span class="text-dim" style="font-size:0.8rem" x-text="'Priority: ' + entry.priority"></span>
                         </div>
