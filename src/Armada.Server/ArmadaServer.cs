@@ -2262,6 +2262,63 @@ namespace Armada.Server
                 .WithRequestBody(OpenApiRequestBodyMetadata.Json<EnumerationQuery>("Enumeration query", false))
                 .WithSecurity("ApiKey"));
 
+            _App.Rest.Delete("/api/v1/events/{id}", async (AppRequest req) =>
+            {
+                string id = req.Parameters["id"];
+                ArmadaEvent? evt = await _Database.Events.ReadAsync(id).ConfigureAwait(false);
+                if (evt == null) return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Event not found" };
+                await _Database.Events.DeleteAsync(id).ConfigureAwait(false);
+                await EmitEventAsync("event.deleted", "Deleted event " + id,
+                    entityType: "event", entityId: id).ConfigureAwait(false);
+                req.Http.Response.StatusCode = 204;
+                return null;
+            },
+            api => api
+                .WithTag("Events")
+                .WithSummary("Delete an event")
+                .WithDescription("Permanently deletes an event by ID.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Event ID (evt_ prefix)"))
+                .WithResponse(204, OpenApiResponseMetadata.NoContent())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            _App.Rest.Post<DeleteMultipleRequest>("/api/v1/events/delete/multiple", async (AppRequest req) =>
+            {
+                DeleteMultipleRequest body = req.GetData<DeleteMultipleRequest>();
+                if (body == null || body.Ids == null || body.Ids.Count == 0)
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Ids is required and must not be empty" };
+
+                DeleteMultipleResult result = new DeleteMultipleResult();
+                foreach (string id in body.Ids)
+                {
+                    if (String.IsNullOrEmpty(id))
+                    {
+                        result.Skipped.Add(new DeleteMultipleSkipped(id ?? "", "Empty ID"));
+                        continue;
+                    }
+                    ArmadaEvent? evt = await _Database.Events.ReadAsync(id).ConfigureAwait(false);
+                    if (evt == null)
+                    {
+                        result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
+                        continue;
+                    }
+                    await _Database.Events.DeleteAsync(id).ConfigureAwait(false);
+                    result.Deleted++;
+                }
+
+                await EmitEventAsync("event.batch_deleted", "Batch deleted " + result.Deleted + " events",
+                    entityType: "event").ConfigureAwait(false);
+
+                return (object)result;
+            },
+            api => api
+                .WithTag("Events")
+                .WithSummary("Batch delete multiple events")
+                .WithDescription("Permanently deletes multiple events by ID. Returns a summary of deleted and skipped entries.")
+                .WithRequestBody(OpenApiRequestBodyMetadata.Json<DeleteMultipleRequest>("List of event IDs to delete"))
+                .WithResponse(200, OpenApiResponseMetadata.Json<DeleteMultipleResult>("Delete result summary"))
+                .WithSecurity("ApiKey"));
+
             // Merge Queue
             _App.Rest.Get("/api/v1/merge-queue", async (AppRequest req) =>
             {
