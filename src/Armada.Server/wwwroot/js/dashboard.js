@@ -174,6 +174,7 @@ function dashboard() {
         diffViewerFiles: [],
         diffViewerSelectedFile: null,
         diffViewerLoading: false,
+        diffViewerContentHtml: '',
 
         // Confirm dialog
         confirmMessage: '',

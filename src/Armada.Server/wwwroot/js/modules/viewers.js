@@ -97,16 +97,11 @@ window.ArmadaModules.viewers = {
         this.diffViewerOpen = true;
         let isEmpty = !rawDiff || !rawDiff.trim() || rawDiff === 'No changes' || rawDiff === 'No modified files';
         this.diffViewerFiles = isEmpty ? [] : this.parseDiffFiles(rawDiff);
-        this.$nextTick(() => {
-            let el = document.getElementById('diff-content-area');
-            if (el) {
-                if (isEmpty) {
-                    el.innerHTML = '<div class="diff-empty-state"><span class="text-dim">No modified files</span></div>';
-                } else {
-                    el.innerHTML = this.renderAllDiffs(rawDiff);
-                }
-            }
-        });
+        if (isEmpty) {
+            this.diffViewerContentHtml = '<div class="diff-empty-state"><span class="text-dim">No modified files</span></div>';
+        } else {
+            this.diffViewerContentHtml = this.renderAllDiffs(rawDiff);
+        }
     },
 
     closeDiffViewer() {
@@ -114,21 +109,16 @@ window.ArmadaModules.viewers = {
         this.diffViewerRawDiff = '';
         this.diffViewerFiles = [];
         this.diffViewerSelectedFile = null;
+        this.diffViewerContentHtml = '';
     },
 
     selectDiffFile(fileName) {
         if (this.diffViewerSelectedFile === fileName) {
             this.diffViewerSelectedFile = null;
-            this.$nextTick(() => {
-                let el = document.getElementById('diff-content-area');
-                if (el) el.innerHTML = this.renderAllDiffs(this.diffViewerRawDiff);
-            });
+            this.diffViewerContentHtml = this.renderAllDiffs(this.diffViewerRawDiff);
         } else {
             this.diffViewerSelectedFile = fileName;
-            this.$nextTick(() => {
-                let el = document.getElementById('diff-content-area');
-                if (el) el.innerHTML = this.renderFileDiff(this.diffViewerRawDiff, fileName);
-            });
+            this.diffViewerContentHtml = this.renderFileDiff(this.diffViewerRawDiff, fileName);
         }
     },
 
@@ -146,6 +136,7 @@ window.ArmadaModules.viewers = {
         this.diffViewerFiles = [];
         this.diffViewerSelectedFile = null;
         this.diffViewerRawDiff = '';
+        this.diffViewerContentHtml = '';
         this.detailDiffLoading = true;
         try {
             let controller = new AbortController();
@@ -176,10 +167,7 @@ window.ArmadaModules.viewers = {
             } else {
                 this.diffViewerRawDiff = 'Error: ' + errMsg;
                 this.diffViewerFiles = [];
-                this.$nextTick(() => {
-                    let el = document.getElementById('diff-content-area');
-                    if (el) el.textContent = 'Error: ' + errMsg;
-                });
+                this.diffViewerContentHtml = '<div class="diff-empty-state"><span class="text-dim">Error: ' + errMsg.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span></div>';
             }
         } finally {
             this.detailDiffLoading = false;
@@ -262,6 +250,7 @@ window.ArmadaModules.viewers = {
         this.diffViewerFiles = [];
         this.diffViewerSelectedFile = null;
         this.diffViewerRawDiff = '';
+        this.diffViewerContentHtml = '';
         try {
             let response = await this.api('GET', '/api/v1/missions/' + missionId + '/diff', null, 30000);
             let diff = response ? this.toCamel(response) : null;
@@ -271,25 +260,15 @@ window.ArmadaModules.viewers = {
                 this.openDiffViewer(title, rawDiff);
             } else {
                 this.diffViewerTitle = 'Mission Diff';
-                this.$nextTick(() => {
-                    let el = document.getElementById('diff-content-area');
-                    if (el) el.innerHTML = '<div class="diff-empty-state"><p>No diff available for this mission.</p><p class="text-dim" style="font-size:0.85rem; margin-top:0.5rem">This can happen if the mission has not produced any work yet, the worktree has been cleaned up, or the branch was already merged and deleted.</p></div>';
-                });
+                this.diffViewerContentHtml = '<div class="diff-empty-state"><p>No diff available for this mission.</p><p class="text-dim" style="font-size:0.85rem; margin-top:0.5rem">This can happen if the mission has not produced any work yet, the worktree has been cleaned up, or the branch was already merged and deleted.</p></div>';
             }
         } catch (e) {
             let errMsg = e.message || 'Request failed';
             let isNotFound = errMsg.toLowerCase().includes('not found') || errMsg.includes('404') || errMsg.toLowerCase().includes('no diff available');
             this.diffViewerTitle = 'Mission Diff';
-            this.$nextTick(() => {
-                let el = document.getElementById('diff-content-area');
-                if (el) {
-                    if (isNotFound) {
-                        el.innerHTML = '<div class="diff-empty-state"><p>No diff available for this mission.</p><p class="text-dim" style="font-size:0.85rem; margin-top:0.5rem">This can happen if the mission has not produced any work yet, the worktree has been cleaned up, or the branch was already merged and deleted.</p></div>';
-                    } else {
-                        el.innerHTML = '<div class="diff-empty-state"><p>Failed to load diff</p><p class="text-dim" style="font-size:0.85rem; margin-top:0.5rem">' + errMsg + '</p></div>';
-                    }
-                }
-            });
+            let noDiffMsg = '<div class="diff-empty-state"><p>No diff available for this mission.</p><p class="text-dim" style="font-size:0.85rem; margin-top:0.5rem">This can happen if the mission has not produced any work yet, the worktree has been cleaned up, or the branch was already merged and deleted.</p></div>';
+            let failMsg = '<div class="diff-empty-state"><p>Failed to load diff</p><p class="text-dim" style="font-size:0.85rem; margin-top:0.5rem">' + errMsg.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p></div>';
+            this.diffViewerContentHtml = isNotFound ? noDiffMsg : failMsg;
         } finally {
             this.diffViewerLoading = false;
         }
