@@ -105,16 +105,16 @@
                 </div>
                 <template x-if="recentMissions.length > 0">
                     <div class="table-wrap">
-                        <table>
+                        <table class="mission-table">
                             <thead>
                                 <tr>
-                                    <th title="Mission title">Mission</th>
-                                    <th>ID</th>
-                                    <th title="Current mission lifecycle state">Status</th>
-                                    <th title="Target repository for this mission">Vessel</th>
-                                    <th title="AI captain assigned to execute this mission">Captain</th>
-                                    <th title="When this mission was created">Created</th>
-                                    <th></th>
+                                    <th class="col-title" title="Mission title">Mission</th>
+                                    <th class="col-id">ID</th>
+                                    <th class="col-status" title="Current mission lifecycle state">Status</th>
+                                    <th class="col-vessel" title="Target repository for this mission">Vessel</th>
+                                    <th class="col-captain" title="AI captain assigned to execute this mission">Captain</th>
+                                    <th class="col-date" title="When this mission was created">Created</th>
+                                    <th class="col-actions"></th>
                                 </tr>
                             </thead>
                             <tbody>

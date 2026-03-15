@@ -531,7 +531,6 @@ td {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 250px;
 }
 
 th.col-checkbox, td.col-checkbox {
@@ -539,6 +538,20 @@ th.col-checkbox, td.col-checkbox {
     padding: 0.4rem 0.25rem;
     text-align: center;
 }
+
+/* Mission table -- fixed layout so title column gets the most space */
+.mission-table {
+    table-layout: fixed;
+}
+
+.mission-table .col-title   { width: auto; }  /* takes remaining space */
+.mission-table .col-id      { width: 13%; }
+.mission-table .col-status  { width: 8%; }
+.mission-table .col-vessel  { width: 11%; }
+.mission-table .col-captain { width: 11%; }
+.mission-table .col-branch  { width: 13%; }
+.mission-table .col-date    { width: 9%; }
+.mission-table .col-actions { width: 3%; }
 
 tr:hover td { background: var(--bg-hover); color: var(--text); }
 tr:hover td .text-dim { color: var(--text-dim); }

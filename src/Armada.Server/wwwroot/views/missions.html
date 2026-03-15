@@ -153,18 +153,18 @@
                 </div>
             </div>
             <div class="table-wrap" x-show="allMissions.length > 0">
-                <table>
+                <table class="mission-table">
                     <thead>
                         <tr>
                             <th class="col-checkbox"><input type="checkbox" @change="$event.target.checked ? selectAllMissions() : clearMissionSelection()" :checked="selectedMissions.length > 0 && selectedMissions.length === allMissions.length" title="Select all missions"></th>
-                            <th class="sortable" @click="sortBy('title', allMissions)" title="Mission title -- click to sort">Mission<span x-text="sortIcon('title')"></span></th>
-                            <th>ID</th>
-                            <th class="sortable" @click="sortBy('status', allMissions)" title="Current mission lifecycle state -- click to sort">Status<span x-text="sortIcon('status')"></span></th>
-                            <th title="Target repository for this mission">Vessel</th>
-                            <th title="AI captain assigned to execute this mission">Captain</th>
-                            <th title="Git branch for this mission's work">Branch</th>
-                            <th class="sortable" @click="sortBy('createdUtc', allMissions)" title="When this mission was created -- click to sort">Created<span x-text="sortIcon('createdUtc')"></span></th>
-                            <th></th>
+                            <th class="col-title sortable" @click="sortBy('title', allMissions)" title="Mission title -- click to sort">Mission<span x-text="sortIcon('title')"></span></th>
+                            <th class="col-id">ID</th>
+                            <th class="col-status sortable" @click="sortBy('status', allMissions)" title="Current mission lifecycle state -- click to sort">Status<span x-text="sortIcon('status')"></span></th>
+                            <th class="col-vessel" title="Target repository for this mission">Vessel</th>
+                            <th class="col-captain" title="AI captain assigned to execute this mission">Captain</th>
+                            <th class="col-branch" title="Git branch for this mission's work">Branch</th>
+                            <th class="col-date sortable" @click="sortBy('createdUtc', allMissions)" title="When this mission was created -- click to sort">Created<span x-text="sortIcon('createdUtc')"></span></th>
+                            <th class="col-actions"></th>
                         </tr>
                         <tr class="column-filter-row">
                             <td></td>
