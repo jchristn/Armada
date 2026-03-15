@@ -525,43 +525,25 @@ function dashboard() {
             return ok;
         },
 
-        copyToClipboard(text, buttonEl) {
-            return new Promise((resolve) => {
-                let success = false;
-                if (navigator.clipboard && window.isSecureContext) {
-                    navigator.clipboard.writeText(text).then(() => {
-                        if (buttonEl) {
-                            buttonEl.classList.add('copied');
-                            setTimeout(() => buttonEl.classList.remove('copied'), 2000);
-                        }
-                        resolve(true);
-                    }).catch(() => {
-                        success = this.fallbackCopy(text);
-                        if (buttonEl) {
-                            if (success) {
-                                buttonEl.classList.add('copied');
-                                setTimeout(() => buttonEl.classList.remove('copied'), 2000);
-                            } else {
-                                buttonEl.classList.add('copy-failed');
-                                setTimeout(() => buttonEl.classList.remove('copy-failed'), 2000);
-                            }
-                        }
-                        resolve(success);
-                    });
-                } else {
-                    success = this.fallbackCopy(text);
-                    if (buttonEl) {
-                        if (success) {
-                            buttonEl.classList.add('copied');
-                            setTimeout(() => buttonEl.classList.remove('copied'), 2000);
-                        } else {
-                            buttonEl.classList.add('copy-failed');
-                            setTimeout(() => buttonEl.classList.remove('copy-failed'), 2000);
-                        }
-                    }
-                    resolve(success);
+        async copyToClipboard(text, buttonEl) {
+            let ok = false;
+            // Strategy 1: Clipboard API (works in secure contexts)
+            try {
+                if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                    await navigator.clipboard.writeText(text);
+                    ok = true;
                 }
-            });
+            } catch (e) { /* fall through to fallback */ }
+            // Strategy 2: textarea + execCommand fallback (works on HTTP)
+            if (!ok) {
+                ok = this.fallbackCopy(text);
+            }
+            // ALWAYS show visual feedback on the button
+            if (buttonEl) {
+                buttonEl.classList.add(ok ? 'copied' : 'copy-failed');
+                setTimeout(() => buttonEl.classList.remove('copied', 'copy-failed'), 2000);
+            }
+            return ok;
         },
 
         copyId(id, $event) {
