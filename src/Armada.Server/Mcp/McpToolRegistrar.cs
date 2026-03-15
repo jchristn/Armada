@@ -686,23 +686,58 @@ namespace Armada.Server.Mcp
 
             register(
                 "armada_voyage_status",
-                "Get status of a specific voyage with all its missions",
+                "Get status of a specific voyage. Returns summary with mission counts by default; opt-in to full mission details.",
                 new
                 {
                     type = "object",
                     properties = new
                     {
-                        voyageId = new { type = "string", description = "Voyage ID (vyg_ prefix)" }
+                        voyageId = new { type = "string", description = "Voyage ID (vyg_ prefix)" },
+                        summary = new { type = "boolean", description = "Return summary only with mission counts by status (default true). Set false to include mission objects." },
+                        includeMissions = new { type = "boolean", description = "Include full mission objects (default false). Only used when summary=false." },
+                        includeDescription = new { type = "boolean", description = "Include Description on embedded missions (default false)" },
+                        includeDiffs = new { type = "boolean", description = "Include saved diff for each mission (default false)" },
+                        includeLogs = new { type = "boolean", description = "Include log excerpt for each mission (default false). Currently reserved for future use." }
                     },
                     required = new[] { "voyageId" }
                 },
                 async (args) =>
                 {
-                    VoyageIdArgs request = JsonSerializer.Deserialize<VoyageIdArgs>(args!.Value, _JsonOptions)!;
+                    VoyageStatusArgs request = JsonSerializer.Deserialize<VoyageStatusArgs>(args!.Value, _JsonOptions)!;
                     string voyageId = request.VoyageId;
                     Voyage? voyage = await database.Voyages.ReadAsync(voyageId).ConfigureAwait(false);
                     if (voyage == null) return (object)new { Error = "Voyage not found" };
+
                     List<Mission> missions = await database.Missions.EnumerateByVoyageAsync(voyageId).ConfigureAwait(false);
+
+                    // Default: summary mode (returns voyage metadata + mission counts by status, no mission objects)
+                    bool isSummary = request.Summary != false;
+                    if (isSummary)
+                    {
+                        Dictionary<string, int> counts = missions.GroupBy(m => m.Status.ToString())
+                            .ToDictionary(g => g.Key, g => g.Count());
+                        return (object)new
+                        {
+                            Voyage = new { voyage.Id, voyage.Title, voyage.Description, voyage.Status, voyage.CreatedUtc, voyage.LastUpdateUtc },
+                            TotalMissions = missions.Count,
+                            MissionCountsByStatus = counts
+                        };
+                    }
+
+                    // Non-summary: optionally include mission objects
+                    if (request.IncludeMissions != true)
+                    {
+                        return (object)new { Voyage = voyage, TotalMissions = missions.Count };
+                    }
+
+                    // Full mission objects with optional field inclusion
+                    foreach (Mission m in missions)
+                    {
+                        m.DiffSnapshot = request.IncludeDiffs == true ? m.DiffSnapshot : null;
+                        if (request.IncludeDescription != true) m.Description = null;
+                        // includeLogs is reserved for future use -- logs are stored in external files
+                        // and are not available on the mission object. This flag currently has no effect.
+                    }
                     return (object)new { Voyage = voyage, Missions = missions };
                 });
 
