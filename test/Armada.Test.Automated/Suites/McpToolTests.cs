@@ -72,7 +72,7 @@ namespace Armada.Test.Automated.Suites
                     toolNames.Add(tool.GetProperty("name").GetString()!);
                 }
                 List<string> armadaTools = toolNames.Where(t => t.StartsWith("armada_")).ToList();
-                AssertEqual(51, armadaTools.Count);
+                AssertEqual(42, armadaTools.Count);
             }).ConfigureAwait(false);
 
             await RunTest("ToolsList_ContainsAllExpectedToolNames", async () =>
@@ -90,22 +90,18 @@ namespace Armada.Test.Automated.Suites
                     "armada_status",
                     "armada_stop_server",
                     "armada_enumerate",
-                    "armada_list_fleets",
                     "armada_get_fleet",
                     "armada_create_fleet",
                     "armada_update_fleet",
                     "armada_delete_fleet",
-                    "armada_list_vessels",
                     "armada_get_vessel",
                     "armada_add_vessel",
                     "armada_update_vessel",
                     "armada_delete_vessel",
                     "armada_dispatch",
-                    "armada_list_voyages",
                     "armada_voyage_status",
                     "armada_cancel_voyage",
                     "armada_purge_voyage",
-                    "armada_list_missions",
                     "armada_mission_status",
                     "armada_create_mission",
                     "armada_update_mission",
@@ -113,7 +109,6 @@ namespace Armada.Test.Automated.Suites
                     "armada_transition_mission_status",
                     "armada_get_mission_diff",
                     "armada_get_mission_log",
-                    "armada_list_captains",
                     "armada_get_captain",
                     "armada_create_captain",
                     "armada_update_captain",
@@ -121,11 +116,7 @@ namespace Armada.Test.Automated.Suites
                     "armada_stop_all",
                     "armada_delete_captain",
                     "armada_get_captain_log",
-                    "armada_list_signals",
                     "armada_send_signal",
-                    "armada_list_events",
-                    "armada_list_docks",
-                    "armada_list_merge_queue",
                     "armada_get_merge_entry",
                     "armada_enqueue_merge",
                     "armada_cancel_merge",
@@ -237,236 +228,6 @@ namespace Armada.Test.Automated.Suites
                 AssertToolResultValid(result);
             }).ConfigureAwait(false);
 
-            // ArmadaListCaptains
-            await RunTest("ArmadaListCaptains_EmptyList_ReturnsArray", async () =>
-            {
-                JsonElement result = await CallToolAsync("armada_list_captains", new { }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                List<Captain> captains = JsonHelper.Deserialize<List<Captain>>(text);
-                AssertNotNull(captains);
-            }).ConfigureAwait(false);
-
-            await RunTest("ArmadaListCaptains_AfterCreate_ReturnsCaptain", async () =>
-            {
-                string captainId = await RestCreateCaptainAsync("mcp-list-captain").ConfigureAwait(false);
-                JsonElement result = await CallToolAsync("armada_list_captains", new { }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains(captainId, text);
-            }).ConfigureAwait(false);
-
-            // ArmadaListVessels
-            await RunTest("ArmadaListVessels_EmptyList_ReturnsArray", async () =>
-            {
-                JsonElement result = await CallToolAsync("armada_list_vessels", new { }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                List<Vessel> vessels = JsonHelper.Deserialize<List<Vessel>>(text);
-                AssertNotNull(vessels);
-            }).ConfigureAwait(false);
-
-            await RunTest("ArmadaListVessels_AfterCreate_ReturnsVessel", async () =>
-            {
-                string fleetId = await RestCreateFleetAsync("VesselListFleet").ConfigureAwait(false);
-                string vesselId = await RestCreateVesselAsync(fleetId, "VesselListVessel").ConfigureAwait(false);
-                JsonElement result = await CallToolAsync("armada_list_vessels", new { }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains(vesselId, text);
-            }).ConfigureAwait(false);
-
-            // ArmadaListFleets
-            await RunTest("ArmadaListFleets_EmptyList_ReturnsArray", async () =>
-            {
-                JsonElement result = await CallToolAsync("armada_list_fleets", new { }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                List<Fleet> fleets = JsonHelper.Deserialize<List<Fleet>>(text);
-                AssertNotNull(fleets);
-            }).ConfigureAwait(false);
-
-            await RunTest("ArmadaListFleets_AfterRestCreate_ReflectsData", async () =>
-            {
-                string fleetId = await RestCreateFleetAsync("MCP Fleet Reflect").ConfigureAwait(false);
-                JsonElement result = await CallToolAsync("armada_list_fleets", new { }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains(fleetId, text);
-            }).ConfigureAwait(false);
-
-            await RunTest("ArmadaListFleets_AfterMultipleCreates_ReturnsAll", async () =>
-            {
-                string fleetId1 = await RestCreateFleetAsync("FleetAlpha").ConfigureAwait(false);
-                string fleetId2 = await RestCreateFleetAsync("FleetBeta").ConfigureAwait(false);
-                JsonElement result = await CallToolAsync("armada_list_fleets", new { }).ConfigureAwait(false);
-                string text = GetToolResultText(result);
-                AssertContains(fleetId1, text);
-                AssertContains(fleetId2, text);
-            }).ConfigureAwait(false);
-
-            // ArmadaListMissions
-            await RunTest("ArmadaListMissions_EmptyList_ReturnsArray", async () =>
-            {
-                JsonElement result = await CallToolAsync("armada_list_missions", new { }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                List<Mission> missions = JsonHelper.Deserialize<List<Mission>>(text);
-                AssertNotNull(missions);
-            }).ConfigureAwait(false);
-
-            await RunTest("ArmadaListMissions_AfterCreate_ReturnsMission", async () =>
-            {
-                string missionId = await RestCreateMissionAsync("MCP Mission List").ConfigureAwait(false);
-                JsonElement result = await CallToolAsync("armada_list_missions", new { }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains(missionId, text);
-            }).ConfigureAwait(false);
-
-            await RunTest("ArmadaListMissions_WithStatusFilter_ReturnsFiltered", async () =>
-            {
-                string missionId = await RestCreateMissionAsync("FilteredMission").ConfigureAwait(false);
-                JsonElement result = await CallToolAsync("armada_list_missions", new { status = "Pending" }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                // Mission may auto-transition away from Pending, so just verify the tool returns a valid array
-                List<Mission> missions = JsonHelper.Deserialize<List<Mission>>(text);
-                AssertNotNull(missions);
-            }).ConfigureAwait(false);
-
-            await RunTest("ArmadaListMissions_WithNonMatchingStatusFilter_ReturnsEmpty", async () =>
-            {
-                await RestCreateMissionAsync("NonMatchMission").ConfigureAwait(false);
-                JsonElement result = await CallToolAsync("armada_list_missions", new { status = "Complete" }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                List<Mission> missions = JsonHelper.Deserialize<List<Mission>>(text);
-                AssertEqual(0, missions.Count);
-            }).ConfigureAwait(false);
-
-            await RunTest("ArmadaListMissions_WithInvalidStatusFilter_ReturnsAllMissions", async () =>
-            {
-                await RestCreateMissionAsync("InvalidFilterMission").ConfigureAwait(false);
-                JsonElement result = await CallToolAsync("armada_list_missions", new { status = "NotAValidStatus" }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                List<Mission> missions = JsonHelper.Deserialize<List<Mission>>(text);
-                AssertTrue(missions.Count >= 1);
-            }).ConfigureAwait(false);
-
-            // ArmadaListVoyages
-            await RunTest("ArmadaListVoyages_EmptyList_ReturnsArray", async () =>
-            {
-                JsonElement result = await CallToolAsync("armada_list_voyages", new { }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                List<Voyage> voyages = JsonHelper.Deserialize<List<Voyage>>(text);
-                AssertNotNull(voyages);
-            }).ConfigureAwait(false);
-
-            await RunTest("ArmadaListVoyages_AfterCreate_ReturnsVoyage", async () =>
-            {
-                string fleetId = await RestCreateFleetAsync("VoyageListFleet").ConfigureAwait(false);
-                string vesselId = await RestCreateVesselAsync(fleetId, "VoyageListVessel").ConfigureAwait(false);
-                string voyageId = await RestCreateVoyageAsync(vesselId).ConfigureAwait(false);
-                JsonElement result = await CallToolAsync("armada_list_voyages", new { }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                AssertContains(voyageId, text);
-            }).ConfigureAwait(false);
-
-            await RunTest("ArmadaListVoyages_WithStatusFilter_Executes", async () =>
-            {
-                string fleetId = await RestCreateFleetAsync("VoyageFilterFleet").ConfigureAwait(false);
-                string vesselId = await RestCreateVesselAsync(fleetId, "VoyageFilterVessel").ConfigureAwait(false);
-                await RestCreateVoyageAsync(vesselId).ConfigureAwait(false);
-                JsonElement result = await CallToolAsync("armada_list_voyages", new { status = "Cancelled" }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-            }).ConfigureAwait(false);
-
-            await RunTest("ArmadaListVoyages_WithInvalidStatusFilter_ReturnsAllVoyages", async () =>
-            {
-                string fleetId = await RestCreateFleetAsync("VoyageInvalidFilterFleet").ConfigureAwait(false);
-                string vesselId = await RestCreateVesselAsync(fleetId, "VoyageInvalidFilterVessel").ConfigureAwait(false);
-                await RestCreateVoyageAsync(vesselId).ConfigureAwait(false);
-                JsonElement result = await CallToolAsync("armada_list_voyages", new { status = "BogusStatus" }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                List<Voyage> voyages = JsonHelper.Deserialize<List<Voyage>>(text);
-                AssertTrue(voyages.Count >= 1);
-            }).ConfigureAwait(false);
-
-            // ArmadaListEvents
-            await RunTest("ArmadaListEvents_EmptyList_ReturnsArray", async () =>
-            {
-                JsonElement result = await CallToolAsync("armada_list_events", new { }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                List<ArmadaEvent> events = JsonHelper.Deserialize<List<ArmadaEvent>>(text);
-                AssertNotNull(events);
-            }).ConfigureAwait(false);
-
-            await RunTest("ArmadaListEvents_WithLimit_Executes", async () =>
-            {
-                JsonElement result = await CallToolAsync("armada_list_events", new { limit = 5 }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-            }).ConfigureAwait(false);
-
-            await RunTest("ArmadaListEvents_AfterActivity_ReturnsEvents", async () =>
-            {
-                string missionId = await RestCreateMissionAsync("EventGenMission").ConfigureAwait(false);
-                // Transition mission status via MCP tool instead of REST
-                await CallToolAsync("armada_transition_mission_status", new
-                {
-                    missionId = missionId,
-                    status = "Assigned"
-                }).ConfigureAwait(false);
-
-                JsonElement result = await CallToolAsync("armada_list_events", new { }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                List<ArmadaEvent> events = JsonHelper.Deserialize<List<ArmadaEvent>>(text);
-                AssertTrue(events.Count >= 1);
-            }).ConfigureAwait(false);
-
-            // ArmadaListSignals
-            await RunTest("ArmadaListSignals_EmptyList_ReturnsArray", async () =>
-            {
-                JsonElement result = await CallToolAsync("armada_list_signals", new { }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                List<Signal> signals = JsonHelper.Deserialize<List<Signal>>(text);
-                AssertNotNull(signals);
-            }).ConfigureAwait(false);
-
-            await RunTest("ArmadaListSignals_AfterCreate_ReturnsSignals", async () =>
-            {
-                try
-                {
-                    await RestCreateSignalAsync().ConfigureAwait(false);
-                }
-                catch (Exception)
-                {
-                    // Signal creation may fail if no captainId is matched - skip listing
-                }
-
-                JsonElement rawResult = await SendRawMcpRequestAsync("tools/call", new
-                {
-                    name = "armada_list_signals",
-                    arguments = new { }
-                }).ConfigureAwait(false);
-
-                // If MCP returns an error, accept it (known issue with signal enumeration)
-                if (rawResult.TryGetProperty("error", out _))
-                {
-                    return;
-                }
-
-                JsonElement result = rawResult.GetProperty("result");
-                AssertToolResultValid(result);
-            }).ConfigureAwait(false);
-
             // ArmadaSendSignal
             await RunTest("ArmadaSendSignal_CreatesSignal", async () =>
             {
@@ -481,7 +242,7 @@ namespace Armada.Test.Automated.Suites
                 AssertContains("sig_", text);
             }).ConfigureAwait(false);
 
-            await RunTest("ArmadaSendSignal_SignalVisibleInList", async () =>
+            await RunTest("ArmadaSendSignal_SignalVisibleViaEnumerate", async () =>
             {
                 string captainId = await RestCreateCaptainAsync("signal-list-captain").ConfigureAwait(false);
                 await CallToolAsync("armada_send_signal", new
@@ -490,7 +251,11 @@ namespace Armada.Test.Automated.Suites
                     message = "Signal visibility test"
                 }).ConfigureAwait(false);
 
-                JsonElement listResult = await CallToolAsync("armada_list_signals", new { }).ConfigureAwait(false);
+                JsonElement listResult = await CallToolAsync("armada_enumerate", new
+                {
+                    entityType = "signals",
+                    pageSize = 50
+                }).ConfigureAwait(false);
                 string listText = GetToolResultText(listResult);
                 AssertContains("Signal visibility test", listText);
             }).ConfigureAwait(false);
@@ -571,7 +336,7 @@ namespace Armada.Test.Automated.Suites
                 AssertNotNull(text);
             }).ConfigureAwait(false);
 
-            await RunTest("ArmadaVoyageStatus_IncludesMissions", async () =>
+            await RunTest("ArmadaVoyageStatus_DefaultSummary_ReturnsCounts", async () =>
             {
                 string fleetId = await RestCreateFleetAsync("VoyageMissionsFleet").ConfigureAwait(false);
                 string vesselId = await RestCreateVesselAsync(fleetId, "VoyageMissionsVessel").ConfigureAwait(false);
@@ -581,9 +346,9 @@ namespace Armada.Test.Automated.Suites
                     voyageId = voyageId
                 }).ConfigureAwait(false);
                 string text = GetToolResultText(result);
-                VoyageDetailResponse data = JsonHelper.Deserialize<VoyageDetailResponse>(text);
-                AssertNotNull(data.Missions);
-                AssertTrue(data.Missions!.Count >= 1);
+                AssertContains("TotalMissions", text);
+                AssertContains("MissionCountsByStatus", text);
+                AssertFalse(text.Contains("\"Missions\""), "Default summary mode should not contain Missions array");
             }).ConfigureAwait(false);
 
             // ArmadaGetFleet
@@ -658,7 +423,7 @@ namespace Armada.Test.Automated.Suites
                 AssertContains("develop", text);
             }).ConfigureAwait(false);
 
-            await RunTest("ArmadaAddVessel_VisibleViaListVessels", async () =>
+            await RunTest("ArmadaAddVessel_VisibleViaEnumerate", async () =>
             {
                 string fleetId = await RestCreateFleetAsync("AddVesselVisibleFleet").ConfigureAwait(false);
                 JsonElement addResult = await CallToolAsync("armada_add_vessel", new
@@ -671,7 +436,11 @@ namespace Armada.Test.Automated.Suites
                 Vessel vessel = JsonHelper.Deserialize<Vessel>(addText);
                 string vesselId = vessel.Id;
 
-                JsonElement listResult = await CallToolAsync("armada_list_vessels", new { }).ConfigureAwait(false);
+                JsonElement listResult = await CallToolAsync("armada_enumerate", new
+                {
+                    entityType = "vessels",
+                    fleetId = fleetId
+                }).ConfigureAwait(false);
                 string listText = GetToolResultText(listResult);
                 AssertContains(vesselId, listText);
             }).ConfigureAwait(false);
@@ -1004,7 +773,7 @@ namespace Armada.Test.Automated.Suites
                 AssertContains("MCP Created Fleet", text);
             }).ConfigureAwait(false);
 
-            await RunTest("ArmadaCreateFleet_VisibleViaListFleets", async () =>
+            await RunTest("ArmadaCreateFleet_VisibleViaEnumerate", async () =>
             {
                 JsonElement createResult = await CallToolAsync("armada_create_fleet", new
                 {
@@ -1014,7 +783,11 @@ namespace Armada.Test.Automated.Suites
                 Fleet fleet = JsonHelper.Deserialize<Fleet>(createText);
                 string fleetId = fleet.Id;
 
-                JsonElement listResult = await CallToolAsync("armada_list_fleets", new { }).ConfigureAwait(false);
+                JsonElement listResult = await CallToolAsync("armada_enumerate", new
+                {
+                    entityType = "fleets",
+                    pageSize = 50
+                }).ConfigureAwait(false);
                 string listText = GetToolResultText(listResult);
                 AssertContains(fleetId, listText);
             }).ConfigureAwait(false);
@@ -1172,7 +945,7 @@ namespace Armada.Test.Automated.Suites
                 AssertContains("ClaudeCode", text);
             }).ConfigureAwait(false);
 
-            await RunTest("ArmadaCreateCaptain_VisibleViaListCaptains", async () =>
+            await RunTest("ArmadaCreateCaptain_VisibleViaEnumerate", async () =>
             {
                 JsonElement createResult = await CallToolAsync("armada_create_captain", new
                 {
@@ -1182,7 +955,11 @@ namespace Armada.Test.Automated.Suites
                 Captain captain = JsonHelper.Deserialize<Captain>(createText);
                 string captainId = captain.Id;
 
-                JsonElement listResult = await CallToolAsync("armada_list_captains", new { }).ConfigureAwait(false);
+                JsonElement listResult = await CallToolAsync("armada_enumerate", new
+                {
+                    entityType = "captains",
+                    pageSize = 50
+                }).ConfigureAwait(false);
                 string listText = GetToolResultText(listResult);
                 AssertContains(captainId, listText);
             }).ConfigureAwait(false);
@@ -1583,38 +1360,7 @@ namespace Armada.Test.Automated.Suites
                 Assert(text.Contains("not found", StringComparison.OrdinalIgnoreCase), "Should contain 'not found'");
             }).ConfigureAwait(false);
 
-            // ArmadaListDocks
-            await RunTest("ArmadaListDocks_EmptyList_ReturnsArray", async () =>
-            {
-                JsonElement result = await CallToolAsync("armada_list_docks", new { }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                List<Dock> docks = JsonHelper.Deserialize<List<Dock>>(text);
-                AssertNotNull(docks);
-            }).ConfigureAwait(false);
-
-            await RunTest("ArmadaListDocks_WithVesselFilter_Executes", async () =>
-            {
-                JsonElement result = await CallToolAsync("armada_list_docks", new
-                {
-                    vesselId = "vsl_nonexistent"
-                }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                List<Dock> docks = JsonHelper.Deserialize<List<Dock>>(text);
-                AssertNotNull(docks);
-            }).ConfigureAwait(false);
-
             // ArmadaMergeQueue
-            await RunTest("ArmadaListMergeQueue_EmptyList_ReturnsArray", async () =>
-            {
-                JsonElement result = await CallToolAsync("armada_list_merge_queue", new { }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-                string text = GetToolResultText(result);
-                List<MergeEntry> entries = JsonHelper.Deserialize<List<MergeEntry>>(text);
-                AssertNotNull(entries);
-            }).ConfigureAwait(false);
-
             await RunTest("ArmadaGetMergeEntry_NotFound_ReturnsError", async () =>
             {
                 JsonElement result = await CallToolAsync("armada_get_merge_entry", new
@@ -1641,7 +1387,7 @@ namespace Armada.Test.Automated.Suites
                 AssertContains("feature/test-merge", text);
             }).ConfigureAwait(false);
 
-            await RunTest("ArmadaEnqueueMerge_VisibleViaList", async () =>
+            await RunTest("ArmadaEnqueueMerge_VisibleViaEnumerate", async () =>
             {
                 string fleetId = await RestCreateFleetAsync("MergeVisFleet").ConfigureAwait(false);
                 string vesselId = await RestCreateVesselAsync(fleetId, "MergeVisVessel").ConfigureAwait(false);
@@ -1654,7 +1400,11 @@ namespace Armada.Test.Automated.Suites
                 MergeEntry entry = JsonHelper.Deserialize<MergeEntry>(enqText);
                 string entryId = entry.Id;
 
-                JsonElement listResult = await CallToolAsync("armada_list_merge_queue", new { }).ConfigureAwait(false);
+                JsonElement listResult = await CallToolAsync("armada_enumerate", new
+                {
+                    entityType = "merge_queue",
+                    vesselId = vesselId
+                }).ConfigureAwait(false);
                 string listText = GetToolResultText(listResult);
                 AssertContains(entryId, listText);
             }).ConfigureAwait(false);
@@ -1742,7 +1492,11 @@ namespace Armada.Test.Automated.Suites
             await RunTest("CrossInterface_FleetCreatedViaRest_VisibleViaMcp", async () =>
             {
                 string fleetId = await RestCreateFleetAsync("CrossFleet").ConfigureAwait(false);
-                JsonElement result = await CallToolAsync("armada_list_fleets", new { }).ConfigureAwait(false);
+                JsonElement result = await CallToolAsync("armada_enumerate", new
+                {
+                    entityType = "fleets",
+                    pageSize = 50
+                }).ConfigureAwait(false);
                 string text = GetToolResultText(result);
                 AssertContains(fleetId, text);
             }).ConfigureAwait(false);
@@ -1762,7 +1516,11 @@ namespace Armada.Test.Automated.Suites
             await RunTest("CrossInterface_CaptainCreatedViaRest_VisibleViaMcp", async () =>
             {
                 string captainId = await RestCreateCaptainAsync("cross-captain").ConfigureAwait(false);
-                JsonElement result = await CallToolAsync("armada_list_captains", new { }).ConfigureAwait(false);
+                JsonElement result = await CallToolAsync("armada_enumerate", new
+                {
+                    entityType = "captains",
+                    pageSize = 50
+                }).ConfigureAwait(false);
                 string text = GetToolResultText(result);
                 AssertContains(captainId, text);
             }).ConfigureAwait(false);
@@ -1792,7 +1550,7 @@ namespace Armada.Test.Automated.Suites
                 AssertEqual(voyageId, voyageData.Voyage!.Id);
             }).ConfigureAwait(false);
 
-            await RunTest("CrossInterface_VesselAddedViaMcp_VisibleViaRest", async () =>
+            await RunTest("CrossInterface_VesselAddedViaMcp_VisibleViaEnumerate", async () =>
             {
                 string fleetId = await RestCreateFleetAsync("CrossAddVesselFleet").ConfigureAwait(false);
                 string vesselName = "Cross-Added-Vessel-" + Guid.NewGuid().ToString("N").Substring(0, 8);
@@ -1806,20 +1564,13 @@ namespace Armada.Test.Automated.Suites
                 Vessel addedVessel = JsonHelper.Deserialize<Vessel>(addText);
                 string vesselId = addedVessel.Id;
 
-                // Verify via MCP tool instead of REST (different ports)
-                JsonElement getResult = await CallToolAsync("armada_list_vessels", new { }).ConfigureAwait(false);
-                string getBody = GetToolResultText(getResult);
-                List<Vessel> vessels = JsonHelper.Deserialize<List<Vessel>>(getBody);
-                bool found = false;
-                for (int i = 0; i < vessels.Count; i++)
+                JsonElement getResult = await CallToolAsync("armada_enumerate", new
                 {
-                    if (vessels[i].Id == vesselId)
-                    {
-                        found = true;
-                        break;
-                    }
-                }
-                Assert(found, "Vessel added via MCP should be visible");
+                    entityType = "vessels",
+                    fleetId = fleetId
+                }).ConfigureAwait(false);
+                string getBody = GetToolResultText(getResult);
+                AssertContains(vesselId, getBody);
             }).ConfigureAwait(false);
 
             await RunTest("CrossInterface_MissionCancelledViaMcp_StatusChangedViaRest", async () =>
@@ -1837,7 +1588,7 @@ namespace Armada.Test.Automated.Suites
                 AssertEqual("Cancelled", mission.Status.ToString());
             }).ConfigureAwait(false);
 
-            await RunTest("CrossInterface_SignalSentViaMcp_VisibleViaRest", async () =>
+            await RunTest("CrossInterface_SignalSentViaMcp_VisibleViaEnumerate", async () =>
             {
                 string captainId = await RestCreateCaptainAsync("cross-signal-captain").ConfigureAwait(false);
                 await CallToolAsync("armada_send_signal", new
@@ -1846,82 +1597,20 @@ namespace Armada.Test.Automated.Suites
                     message = "Cross-interface signal"
                 }).ConfigureAwait(false);
 
-                // Verify via MCP tool instead of REST (different ports)
-                JsonElement listResult = await CallToolAsync("armada_list_signals", new { }).ConfigureAwait(false);
-                string listBody = GetToolResultText(listResult);
-                List<Signal> signals = JsonHelper.Deserialize<List<Signal>>(listBody);
-                AssertTrue(signals.Count >= 1);
-
-                bool found = false;
-                for (int i = 0; i < signals.Count; i++)
+                JsonElement listResult = await CallToolAsync("armada_enumerate", new
                 {
-                    if (signals[i].Payload?.Contains("Cross-interface signal") == true)
-                    {
-                        found = true;
-                        break;
-                    }
-                }
-                Assert(found, "Signal sent via MCP should be visible");
+                    entityType = "signals",
+                    includeMessage = true,
+                    pageSize = 50
+                }).ConfigureAwait(false);
+                string listBody = GetToolResultText(listResult);
+                AssertContains("Cross-interface signal", listBody);
             }).ConfigureAwait(false);
 
             // AllTools Execute
             await RunTest("AllTools_ArmadaStatus_Executes", async () =>
             {
                 JsonElement result = await CallToolAsync("armada_status", new { }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-            }).ConfigureAwait(false);
-
-            await RunTest("AllTools_ArmadaListCaptains_Executes", async () =>
-            {
-                JsonElement result = await CallToolAsync("armada_list_captains", new { }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-            }).ConfigureAwait(false);
-
-            await RunTest("AllTools_ArmadaListVessels_Executes", async () =>
-            {
-                JsonElement result = await CallToolAsync("armada_list_vessels", new { }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-            }).ConfigureAwait(false);
-
-            await RunTest("AllTools_ArmadaListFleets_Executes", async () =>
-            {
-                JsonElement result = await CallToolAsync("armada_list_fleets", new { }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-            }).ConfigureAwait(false);
-
-            await RunTest("AllTools_ArmadaListMissions_Executes", async () =>
-            {
-                JsonElement result = await CallToolAsync("armada_list_missions", new { }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-            }).ConfigureAwait(false);
-
-            await RunTest("AllTools_ArmadaListVoyages_Executes", async () =>
-            {
-                JsonElement result = await CallToolAsync("armada_list_voyages", new { }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-            }).ConfigureAwait(false);
-
-            await RunTest("AllTools_ArmadaListEvents_Executes", async () =>
-            {
-                JsonElement result = await CallToolAsync("armada_list_events", new { }).ConfigureAwait(false);
-                AssertToolResultValid(result);
-            }).ConfigureAwait(false);
-
-            await RunTest("AllTools_ArmadaListSignals_Executes", async () =>
-            {
-                JsonElement rawResult = await SendRawMcpRequestAsync("tools/call", new
-                {
-                    name = "armada_list_signals",
-                    arguments = new { }
-                }).ConfigureAwait(false);
-
-                if (rawResult.TryGetProperty("error", out _))
-                {
-                    // Known issue: list_signals may throw Internal error
-                    return;
-                }
-
-                JsonElement result = rawResult.GetProperty("result");
                 AssertToolResultValid(result);
             }).ConfigureAwait(false);
 
@@ -1949,16 +1638,131 @@ namespace Armada.Test.Automated.Suites
                 AssertToolResultValid(result);
             }).ConfigureAwait(false);
 
-            await RunTest("AllTools_ArmadaListDocks_Executes", async () =>
+            // Enumerate Boolean Flags
+            await RunTest("ArmadaEnumerate_DefaultNoIncludeFlags_OmitsHeavyFields", async () =>
             {
-                JsonElement result = await CallToolAsync("armada_list_docks", new { }).ConfigureAwait(false);
+                await RestCreateMissionAsync("EnumFlagsMission").ConfigureAwait(false);
+                JsonElement result = await CallToolAsync("armada_enumerate", new
+                {
+                    entityType = "missions"
+                }).ConfigureAwait(false);
                 AssertToolResultValid(result);
+                string text = GetToolResultText(result);
+                // Default should omit Description and include length hints instead
+                AssertFalse(text.Contains("\"Description\""), "Default enumerate should not include Description field");
+                AssertContains("descriptionLength", text);
             }).ConfigureAwait(false);
 
-            await RunTest("AllTools_ArmadaListMergeQueue_Executes", async () =>
+            await RunTest("ArmadaEnumerate_IncludeDescriptionTrue_ReturnsMissionDescription", async () =>
             {
-                JsonElement result = await CallToolAsync("armada_list_merge_queue", new { }).ConfigureAwait(false);
+                await RestCreateMissionAsync("EnumDescMission").ConfigureAwait(false);
+                JsonElement result = await CallToolAsync("armada_enumerate", new
+                {
+                    entityType = "missions",
+                    includeDescription = true
+                }).ConfigureAwait(false);
                 AssertToolResultValid(result);
+                string text = GetToolResultText(result);
+                AssertContains("Description", text);
+            }).ConfigureAwait(false);
+
+            await RunTest("ArmadaEnumerate_IncludeContextTrue_ReturnsVesselContext", async () =>
+            {
+                string fleetId = await RestCreateFleetAsync("EnumCtxFleet").ConfigureAwait(false);
+                await RestCreateVesselAsync(fleetId, "EnumCtxVessel").ConfigureAwait(false);
+                JsonElement result = await CallToolAsync("armada_enumerate", new
+                {
+                    entityType = "vessels",
+                    includeContext = true
+                }).ConfigureAwait(false);
+                AssertToolResultValid(result);
+                string text = GetToolResultText(result);
+                // With includeContext=true, ProjectContext and StyleGuide fields should be present
+                AssertContains("ProjectContext", text);
+                AssertContains("StyleGuide", text);
+            }).ConfigureAwait(false);
+
+            await RunTest("ArmadaEnumerate_DefaultNoContext_OmitsVesselContext", async () =>
+            {
+                string fleetId = await RestCreateFleetAsync("EnumNoCtxFleet").ConfigureAwait(false);
+                await RestCreateVesselAsync(fleetId, "EnumNoCtxVessel").ConfigureAwait(false);
+                JsonElement result = await CallToolAsync("armada_enumerate", new
+                {
+                    entityType = "vessels"
+                }).ConfigureAwait(false);
+                AssertToolResultValid(result);
+                string text = GetToolResultText(result);
+                AssertFalse(text.Contains("\"ProjectContext\""), "Default enumerate should not include ProjectContext");
+                AssertFalse(text.Contains("\"StyleGuide\""), "Default enumerate should not include StyleGuide");
+            }).ConfigureAwait(false);
+
+            await RunTest("ArmadaEnumerate_DefaultPageSizeIsTen", async () =>
+            {
+                JsonElement result = await CallToolAsync("armada_enumerate", new
+                {
+                    entityType = "fleets"
+                }).ConfigureAwait(false);
+                AssertToolResultValid(result);
+                string text = GetToolResultText(result);
+                EnumerationResult<JsonElement> data = JsonHelper.Deserialize<EnumerationResult<JsonElement>>(text);
+                AssertEqual(10, data.PageSize);
+            }).ConfigureAwait(false);
+
+            // VoyageStatus Summary Mode
+            await RunTest("ArmadaVoyageStatus_DefaultSummaryMode_NoMissionsArray", async () =>
+            {
+                string fleetId = await RestCreateFleetAsync("VoySumFleet").ConfigureAwait(false);
+                string vesselId = await RestCreateVesselAsync(fleetId, "VoySumVessel").ConfigureAwait(false);
+                string voyageId = await RestCreateVoyageAsync(vesselId).ConfigureAwait(false);
+                JsonElement result = await CallToolAsync("armada_voyage_status", new
+                {
+                    voyageId = voyageId
+                }).ConfigureAwait(false);
+                AssertToolResultValid(result);
+                string text = GetToolResultText(result);
+                AssertContains("MissionCountsByStatus", text);
+                AssertContains("TotalMissions", text);
+                AssertFalse(text.Contains("\"Missions\""), "Summary mode should not include Missions array");
+            }).ConfigureAwait(false);
+
+            await RunTest("ArmadaVoyageStatus_NonSummaryWithMissions_ReturnsMissionsArray", async () =>
+            {
+                string fleetId = await RestCreateFleetAsync("VoyNonSumFleet").ConfigureAwait(false);
+                string vesselId = await RestCreateVesselAsync(fleetId, "VoyNonSumVessel").ConfigureAwait(false);
+                string voyageId = await RestCreateVoyageAsync(vesselId).ConfigureAwait(false);
+                JsonElement result = await CallToolAsync("armada_voyage_status", new
+                {
+                    voyageId = voyageId,
+                    summary = false,
+                    includeMissions = true
+                }).ConfigureAwait(false);
+                AssertToolResultValid(result);
+                string text = GetToolResultText(result);
+                AssertContains("Missions", text);
+                JsonElement parsed = JsonSerializer.Deserialize<JsonElement>(text);
+                Assert(parsed.TryGetProperty("Missions", out JsonElement missionsArr), "Non-summary with includeMissions should have Missions array");
+                AssertTrue(missionsArr.GetArrayLength() >= 1, "Missions array should contain at least one mission");
+            }).ConfigureAwait(false);
+
+            await RunTest("ArmadaVoyageStatus_NonSummaryWithDescription_ReturnsMissionDescription", async () =>
+            {
+                string fleetId = await RestCreateFleetAsync("VoyDescFleet").ConfigureAwait(false);
+                string vesselId = await RestCreateVesselAsync(fleetId, "VoyDescVessel").ConfigureAwait(false);
+                string voyageId = await RestCreateVoyageAsync(vesselId).ConfigureAwait(false);
+                JsonElement result = await CallToolAsync("armada_voyage_status", new
+                {
+                    voyageId = voyageId,
+                    summary = false,
+                    includeMissions = true,
+                    includeDescription = true
+                }).ConfigureAwait(false);
+                AssertToolResultValid(result);
+                string text = GetToolResultText(result);
+                JsonElement parsed = JsonSerializer.Deserialize<JsonElement>(text);
+                Assert(parsed.TryGetProperty("Missions", out JsonElement missionsArr), "Should have Missions array");
+                AssertTrue(missionsArr.GetArrayLength() >= 1, "Missions array should not be empty");
+                JsonElement firstMission = missionsArr[0];
+                Assert(firstMission.TryGetProperty("Description", out _), "Missions should include Description when includeDescription=true");
             }).ConfigureAwait(false);
 
             await RunTest("AllTools_ArmadaProcessMergeQueue_Executes", async () =>
