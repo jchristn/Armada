@@ -6,6 +6,22 @@ window.ArmadaModules = window.ArmadaModules || {};
 window.ArmadaModules.partialLoader = {
     _partialCache: {},
 
+    async loadModalsPartial() {
+        let container = document.getElementById('modals-container');
+        if (!container) return;
+
+        let url = '/dashboard/views/modals.html';
+        try {
+            let response = await fetch(url);
+            if (!response.ok) return;
+            let html = await response.text();
+            container.innerHTML = html;
+            Alpine.initTree(container);
+        } catch (e) {
+            // Network error -- modals will not be available
+        }
+    },
+
     async loadViewPartial(viewName) {
         // Look for a view-specific container first, then fall back to generic container
         let container = document.getElementById('view-' + viewName) || document.getElementById('view-container');

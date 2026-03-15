@@ -332,6 +332,10 @@ function dashboard() {
             await this.refresh();
             this.connectWebSocket();
             this.pollTimer = setInterval(() => this.refresh(), 10000);
+            // Load modals partial once at startup (modals are used across all views)
+            if (this.loadModalsPartial) {
+                this.loadModalsPartial();
+            }
             // Load the initial view partial (home by default)
             if (this.loadViewPartial) {
                 this.loadViewPartial(this.view);

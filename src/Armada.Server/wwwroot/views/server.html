@@ -1,0 +1,133 @@
+        <div x-show="view === 'server' && !detailView" class="view">
+            <div class="view-header">
+                <div>
+                    <h2>Server Settings</h2>
+                    <p class="text-dim view-subtitle">Admiral server health, configuration, and operational controls.</p>
+                </div>
+                <div class="view-actions">
+                    <button class="btn btn-sm" @click="refresh()" title="Refresh">&#x21bb;</button>
+                </div>
+            </div>
+
+            <!-- Server Info Cards -->
+            <div class="cards">
+                <div class="card" title="Current health status of the admiral server">
+                    <div class="card-label">Health</div>
+                    <div class="card-value" style="font-size:1.2rem" x-text="healthInfo ? healthInfo.status : 'Loading...'"></div>
+                    <div class="card-detail text-dim" x-show="healthInfo" x-text="'Checked: ' + formatTimeAbsolute(healthInfo?.timestamp)"></div>
+                </div>
+                <div class="card" title="How long the server has been running">
+                    <div class="card-label">Uptime</div>
+                    <div class="card-value" style="font-size:1.2rem" x-text="healthInfo?.uptime || '-'"></div>
+                    <div class="card-detail text-dim" x-show="healthInfo?.startUtc" x-text="'Started: ' + formatTimeAbsolute(healthInfo?.startUtc)"></div>
+                </div>
+                <div class="card" title="Current connection method to the server">
+                    <div class="card-label">Connection</div>
+                    <div class="card-value" style="font-size:1.2rem">
+                        <span class="status-dot" :class="connected ? 'connected' : 'disconnected'" style="display:inline-block;vertical-align:middle;margin-right:0.5rem"></span>
+                        <span x-text="wsConnected ? 'Live (WebSocket)' : (apiConnected ? 'Online (HTTP)' : 'Disconnected')"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="detail-grid" style="margin-top:1rem">
+                <div class="detail-field"><span class="detail-label">Version</span><span class="mono" x-text="healthInfo?.version || '-'"></span></div>
+                <div class="detail-field"><span class="detail-label">API URL</span><span class="mono" x-text="window.location.origin"></span></div>
+                <div class="detail-field"><span class="detail-label">Admiral Port</span><span class="mono" x-text="healthInfo?.ports?.admiral || window.location.port"></span></div>
+                <div class="detail-field"><span class="detail-label">MCP Port</span><span class="mono" x-text="healthInfo?.ports?.mcp || '-'"></span></div>
+                <div class="detail-field"><span class="detail-label">WebSocket Port</span><span class="mono" x-text="healthInfo?.ports?.webSocket || wsPort"></span></div>
+            </div>
+
+            <!-- Server Configuration Section -->
+            <div class="settings-section" x-show="serverSettings">
+                <h3 class="settings-section-title">Server Configuration</h3>
+                <div class="settings-grid">
+                    <div class="form-group">
+                        <label>Admiral Port</label>
+                        <input type="number" x-model.number="serverSettings.admiralPort" min="1" max="65535" title="REST API port (1-65535)">
+                    </div>
+                    <div class="form-group">
+                        <label>MCP Port</label>
+                        <input type="number" x-model.number="serverSettings.mcpPort" min="1" max="65535" title="MCP server port (1-65535)">
+                    </div>
+                    <div class="form-group">
+                        <label>Max Captains</label>
+                        <input type="number" x-model.number="serverSettings.maxCaptains" min="0" title="Maximum captains (0 = unlimited)">
+                    </div>
+                </div>
+                <button class="btn btn-primary btn-sm" @click="saveServerConfig()" title="Save server configuration changes">Save Server Config</button>
+            </div>
+
+            <!-- Agent Settings Section -->
+            <div class="settings-section" x-show="serverSettings">
+                <h3 class="settings-section-title">Agent Settings</h3>
+                <div class="settings-grid">
+                    <div class="form-group">
+                        <label>Heartbeat Interval (seconds)</label>
+                        <input type="number" x-model.number="serverSettings.heartbeatIntervalSeconds" min="5" title="Health check interval, minimum 5 seconds">
+                    </div>
+                    <div class="form-group">
+                        <label>Stall Threshold (minutes)</label>
+                        <input type="number" x-model.number="serverSettings.stallThresholdMinutes" min="1" title="Minutes before a captain is considered stalled">
+                    </div>
+                    <div class="form-group">
+                        <label>Idle Captain Timeout (seconds)</label>
+                        <input type="number" x-model.number="serverSettings.idleCaptainTimeoutSeconds" min="0" title="Auto-remove idle captains after this many seconds (0 = disabled)">
+                    </div>
+                    <div class="form-group">
+                        <label class="settings-checkbox-label">
+                            <input type="checkbox" x-model="serverSettings.autoCreatePr">
+                            <span>Auto-Create Pull Requests</span>
+                        </label>
+                    </div>
+                </div>
+                <button class="btn btn-primary btn-sm" @click="saveAgentSettings()" title="Save agent settings changes">Save Agent Settings</button>
+            </div>
+
+            <!-- MCP Configuration Section -->
+            <div class="settings-section" x-show="serverSettings">
+                <h3 class="settings-section-title">MCP Configuration</h3>
+                <p class="text-dim" style="margin-bottom:0.75rem">Add to <span class="mono">~/.claude/settings.json</span> under <span class="mono">mcpServers.armada</span></p>
+                <div class="settings-config-block">
+                    <div class="settings-config-header">
+                        <span class="text-dim">HTTP (Streamable)</span>
+                        <button class="btn btn-sm" @click="copyMcpConfig('http')" title="Copy HTTP config to clipboard">Copy</button>
+                    </div>
+                    <pre class="settings-config-code" x-text="getMcpConfigHttp()"></pre>
+                </div>
+                <div class="settings-config-block" style="margin-top:0.75rem">
+                    <div class="settings-config-header">
+                        <span class="text-dim">STDIO</span>
+                        <button class="btn btn-sm" @click="copyMcpConfig('stdio')" title="Copy STDIO config to clipboard">Copy</button>
+                    </div>
+                    <pre class="settings-config-code" x-text="getMcpConfigStdio()"></pre>
+                </div>
+            </div>
+
+            <!-- System Paths Section -->
+            <div class="settings-section" x-show="serverSettings">
+                <h3 class="settings-section-title">System Paths</h3>
+                <div class="detail-grid">
+                    <div class="detail-field"><span class="detail-label">Data Directory</span><span class="mono" x-text="serverSettings?.dataDirectory || '-'"></span></div>
+                    <div class="detail-field"><span class="detail-label">Database Path</span><span class="mono" x-text="serverSettings?.databasePath || '-'"></span></div>
+                    <div class="detail-field"><span class="detail-label">Log Directory</span><span class="mono" x-text="serverSettings?.logDirectory || '-'"></span></div>
+                    <div class="detail-field"><span class="detail-label">Docks Directory</span><span class="mono" x-text="serverSettings?.docksDirectory || '-'"></span></div>
+                    <div class="detail-field"><span class="detail-label">Repos Directory</span><span class="mono" x-text="serverSettings?.reposDirectory || '-'"></span></div>
+                </div>
+            </div>
+
+            <!-- Server Actions Section -->
+            <div class="settings-section">
+                <h3 class="settings-section-title">Server Actions</h3>
+                <div class="settings-actions">
+                    <button class="btn btn-sm" @click="healthCheck()" title="Run a health check and display the result">Health Check</button>
+                    <button class="btn btn-sm" @click="backupNow()" :disabled="backupLoading" title="Create a backup ZIP of the database and download it">
+                        <span x-show="!backupLoading">Backup Now</span>
+                        <span x-show="backupLoading">Backing up...</span>
+                    </button>
+                    <button class="btn btn-danger btn-sm" @click="restoreFromBackup()" title="Restore the database from a backup ZIP file">Restore from Backup</button>
+                    <button class="btn btn-danger btn-sm" @click="stopServer()" title="Shut down the admiral server process">Stop Server</button>
+                    <button class="btn btn-danger btn-sm" @click="factoryReset()" title="Delete all data and reset to factory defaults">Factory Reset</button>
+                    <input type="file" x-ref="restoreFileInput" accept=".zip" style="display:none" @change="handleRestoreFile($event)">
+                </div>
+            </div>
+        </div>

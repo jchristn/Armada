@@ -1,0 +1,284 @@
+    <!-- ========== Modals ========== -->
+    <div class="modal-overlay" x-show="modal" @click.self="modal === 'confirm-dialog' ? confirmNo() : (modal = null)" x-cloak>
+
+        <!-- Create Fleet -->
+        <div class="modal-box" x-show="modal === 'create-fleet'">
+            <h3>Create Fleet</h3>
+            <form @submit.prevent="createFleet()">
+                <div class="form-group"><label>Name</label><input type="text" x-model="modalData.name" required autofocus title="A descriptive name for this fleet"></div>
+                <div class="form-group"><label>Description</label><textarea x-model="modalData.description" rows="2" title="Optional description of the fleet's purpose"></textarea></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-sm" @click="modal = null" title="Cancel without creating">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading" title="Create the fleet">Create</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Edit Fleet -->
+        <div class="modal-box" x-show="modal === 'edit-fleet'">
+            <h3>Edit Fleet</h3>
+            <form @submit.prevent="saveFleetEdit()">
+                <div class="form-group"><label>Name</label><input type="text" x-model="modalData.name" required title="Fleet name"></div>
+                <div class="form-group"><label>Description</label><textarea x-model="modalData.description" rows="2" title="Optional description of the fleet's purpose"></textarea></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-sm" @click="modal = null" title="Cancel without saving">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading" title="Save changes">Save</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Create Vessel -->
+        <div class="modal-box modal-box-wide" x-show="modal === 'create-vessel'">
+            <h3>Create Vessel</h3>
+            <form @submit.prevent="createVessel()">
+                <div class="form-group"><label>Name</label><input type="text" x-model="modalData.name" required autofocus title="A descriptive name for this vessel"></div>
+                <div class="form-group"><label>Repo URL</label><input type="text" x-model="modalData.repoUrl" placeholder="https://github.com/..." title="Git repository URL (HTTPS or SSH)"></div>
+                <div class="form-group"><label>Default Branch</label><input type="text" x-model="modalData.defaultBranch" placeholder="main" title="The branch to merge completed work into (e.g. main)"></div>
+                <div class="form-group"><label>Local Path (Bare Repo)</label><input type="text" x-model="modalData.localPath" placeholder="e.g. C:\armada\repos\my-project.git" title="Path to the bare git repository clone used by Armada for worktrees"></div>
+                <div class="form-group"><label>Working Directory</label><input type="text" x-model="modalData.workingDirectory" placeholder="e.g. C:\code\my-project" title="Path to your local checkout -- completed missions are merged here automatically"></div>
+                <div class="form-group">
+                    <label>Fleet</label>
+                    <select x-model="modalData.fleetId" title="Optionally assign this vessel to a fleet">
+                        <option value="">No fleet</option>
+                        <template x-for="f in fleets" :key="f.id"><option :value="f.id" x-text="f.name"></option></template>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Project Context</label>
+                    <small class="form-help">Describe the project, its architecture, key files, and dependencies. This is prepended to every mission prompt.</small>
+                    <textarea x-model="modalData.projectContext" rows="4" placeholder="e.g. This is a Node.js REST API using Express and PostgreSQL..."></textarea>
+                    <span class="char-count" x-text="(modalData.projectContext || '').length + ' chars'"></span>
+                </div>
+                <div class="form-group">
+                    <label>Style Guide</label>
+                    <small class="form-help">Define naming conventions, patterns, language restrictions. Agents will follow these when writing code.</small>
+                    <textarea x-model="modalData.styleGuide" rows="4" placeholder="e.g. Use camelCase for variables, PascalCase for classes..."></textarea>
+                    <span class="char-count" x-text="(modalData.styleGuide || '').length + ' chars'"></span>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-sm" @click="modal = null" title="Cancel without creating">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading" title="Create the vessel">Create</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Edit Vessel -->
+        <div class="modal-box modal-vessel-edit" x-show="modal === 'edit-vessel'">
+            <h3>Edit Vessel</h3>
+            <form @submit.prevent="saveVesselEdit()">
+                <div class="modal-two-col">
+                    <div class="form-group"><label>Name</label><input type="text" x-model="modalData.name" required title="Vessel name"></div>
+                    <div class="form-group"><label>Repo URL</label><input type="text" x-model="modalData.repoUrl" title="Git repository URL (HTTPS or SSH)"></div>
+                    <div class="form-group"><label>Default Branch</label><input type="text" x-model="modalData.defaultBranch" title="The branch to merge completed work into (e.g. main)"></div>
+                    <div class="form-group"><label>Local Path (Bare Repo)</label><input type="text" x-model="modalData.localPath" placeholder="e.g. C:\armada\repos\my-project.git" title="Path to the bare git repository clone used by Armada for worktrees"></div>
+                    <div class="form-group"><label>Working Directory</label><input type="text" x-model="modalData.workingDirectory" placeholder="e.g. C:\code\my-project" title="Path to your local checkout -- completed missions are merged here automatically"></div>
+                    <div class="form-group">
+                        <label>Fleet</label>
+                        <select x-model="modalData.fleetId" title="Assign this vessel to a fleet">
+                            <option value="">No fleet</option>
+                            <template x-for="f in fleets" :key="f.id"><option :value="f.id" x-text="f.name"></option></template>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Project Context</label>
+                    <small class="form-help">Describe the project, its architecture, key files, and dependencies. This is prepended to every mission prompt.</small>
+                    <textarea x-model="modalData.projectContext" rows="4" placeholder="e.g. This is a Node.js REST API using Express and PostgreSQL..."></textarea>
+                    <span class="char-count" x-text="(modalData.projectContext || '').length + ' chars'"></span>
+                </div>
+                <div class="form-group">
+                    <label>Style Guide</label>
+                    <small class="form-help">Define naming conventions, patterns, language restrictions. Agents will follow these when writing code.</small>
+                    <textarea x-model="modalData.styleGuide" rows="4" placeholder="e.g. Use camelCase for variables, PascalCase for classes..."></textarea>
+                    <span class="char-count" x-text="(modalData.styleGuide || '').length + ' chars'"></span>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-sm" @click="modal = null" title="Cancel without saving">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading" title="Save changes">Save</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Add Captain -->
+        <div class="modal-box" x-show="modal === 'add-captain'">
+            <h3>Add Captain</h3>
+            <form @submit.prevent="addCaptain()">
+                <div class="form-group"><label>Name</label><input type="text" x-model="modalData.name" required autofocus title="A unique name for this captain agent"></div>
+                <div class="form-group">
+                    <label>Runtime</label>
+                    <select x-model="modalData.runtime" title="The AI agent runtime this captain will use">
+                        <option value="ClaudeCode">Claude Code</option>
+                        <option value="Codex">Codex</option>
+                        <option value="Gemini">Gemini</option>
+                        <option value="Cursor">Cursor</option>
+                        <option value="Custom">Custom</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-sm" @click="modal = null" title="Cancel without adding">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading" title="Register the captain">Add</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Edit Captain -->
+        <div class="modal-box" x-show="modal === 'edit-captain'">
+            <h3>Edit Captain</h3>
+            <form @submit.prevent="saveCaptainEdit()">
+                <div class="form-group"><label>Name</label><input type="text" x-model="modalData.name" required autofocus title="Captain name"></div>
+                <div class="form-group">
+                    <label>Runtime</label>
+                    <select x-model="modalData.runtime" title="The AI agent runtime this captain uses">
+                        <option value="ClaudeCode">Claude Code</option>
+                        <option value="Codex">Codex</option>
+                        <option value="Gemini">Gemini</option>
+                        <option value="Cursor">Cursor</option>
+                        <option value="Custom">Custom</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-sm" @click="modal = null" title="Cancel without saving">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading" title="Save changes">Save</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Edit Mission -->
+        <div class="modal-box modal-large" x-show="modal === 'edit-mission'">
+            <h3>Edit Mission</h3>
+            <form @submit.prevent="saveMissionEdit()">
+                <div class="form-group"><label>Title</label><input type="text" x-model="modalData.title" required title="Short summary of the mission"></div>
+                <div class="form-group"><label>Description</label><textarea x-model="modalData.description" rows="6" title="Detailed instructions for the AI captain"></textarea></div>
+                <div class="form-group"><label>Priority</label><input type="number" x-model="modalData.priority" min="0" title="Higher priority missions are assigned first"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-sm" @click="modal = null" title="Cancel without saving">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading" title="Save changes">Save</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Restart Mission -->
+        <div class="modal-box" x-show="modal === 'restart-mission'">
+            <h3>Restart Mission</h3>
+            <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px;">Modify the instructions before restarting, or leave as-is.</p>
+            <form @submit.prevent="restartMission()">
+                <div class="form-group"><label>Title</label><input type="text" x-model="restartTitle" required title="Mission title -- modify if needed before restarting"></div>
+                <div class="form-group"><label>Description</label><textarea x-model="restartDescription" rows="4" title="Mission instructions -- update to fix issues from previous attempt"></textarea></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-sm" @click="modal = null" title="Cancel without restarting">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading" title="Create a new mission with these instructions">Restart Mission</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Create Voyage -->
+        <div class="modal-box modal-wide" x-show="modal === 'create-voyage'">
+            <h3>Create Voyage</h3>
+            <form @submit.prevent="createVoyage()">
+                <div class="form-group"><label>Title</label><input type="text" x-model="voyageForm.title" required autofocus title="A descriptive name for this voyage"></div>
+                <div class="form-group"><label>Description</label><textarea x-model="voyageForm.description" rows="4" title="Overall description of what this voyage should accomplish"></textarea></div>
+                <div class="form-group">
+                    <label>Vessel</label>
+                    <select x-model="voyageForm.vesselId" required title="The repository where all missions in this voyage will be executed">
+                        <option value="">Select a vessel...</option>
+                        <template x-for="v in allVessels" :key="v.id"><option :value="v.id" x-text="v.name"></option></template>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Missions</label>
+                    <template x-for="(m, i) in voyageForm.missions" :key="i">
+                        <div class="voyage-mission-row">
+                            <input type="text" x-model="m.title" placeholder="Mission title" style="flex:1" title="Short title for this mission">
+                            <input type="text" x-model="m.description" placeholder="Description" style="flex:2" title="Detailed instructions for this mission">
+                            <button type="button" class="btn btn-sm btn-danger" @click="removeVoyageMission(i)" x-show="voyageForm.missions.length > 1" title="Remove this mission">X</button>
+                        </div>
+                    </template>
+                    <button type="button" class="btn btn-sm" @click="addVoyageMission()" style="margin-top:0.25rem" title="Add another mission to this voyage">+ Mission</button>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-sm" @click="modal = null" title="Cancel without creating">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading" title="Create the voyage and all its missions">Create Voyage</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Send Signal -->
+        <div class="modal-box" x-show="modal === 'send-signal'">
+            <h3>Send Signal</h3>
+            <form @submit.prevent="sendSignal()">
+                <div class="form-group">
+                    <label>Type</label>
+                    <select x-model="modalData.type" title="Signal category -- determines how the recipient handles it">
+                        <option value="Nudge">Nudge</option>
+                        <option value="Mail">Mail</option>
+                        <option value="Assignment">Assignment</option>
+                        <option value="Progress">Progress</option>
+                        <option value="Completion">Completion</option>
+                        <option value="Error">Error</option>
+                    </select>
+                </div>
+                <div class="form-group"><label>Payload</label><textarea x-model="modalData.payload" rows="3" placeholder="Message content..." title="The message content to send"></textarea></div>
+                <div class="form-group"><label>To Captain (optional)</label><input type="text" x-model="modalData.toCaptainId" placeholder="cpt_..." title="Target captain ID -- leave empty to send to the admiral"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-sm" @click="modal = null" title="Cancel without sending">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading" title="Send the signal">Send</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Enqueue Merge -->
+        <div class="modal-box" x-show="modal === 'enqueue-merge'">
+            <h3>Enqueue Branch</h3>
+            <form @submit.prevent="enqueueMerge()">
+                <div class="form-group"><label>Branch Name</label><input type="text" x-model="modalData.branchName" required autofocus placeholder="feature/my-branch" title="The source branch to be merged"></div>
+                <div class="form-group"><label>Target Branch</label><input type="text" x-model="modalData.targetBranch" placeholder="main" title="The branch to merge into (e.g. main)"></div>
+                <div class="form-group"><label>Mission ID (optional)</label><input type="text" x-model="modalData.missionId" placeholder="msn_..." title="Link this merge to a specific mission"></div>
+                <div class="form-group">
+                    <label>Vessel (optional)</label>
+                    <select x-model="modalData.vesselId" title="The vessel (repository) containing these branches">
+                        <option value="">None</option>
+                        <template x-for="v in allVessels" :key="v.id"><option :value="v.id" x-text="v.name"></option></template>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-sm" @click="modal = null" title="Cancel without enqueueing">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" :disabled="modalLoading" title="Add this branch to the merge queue">Enqueue</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Viewer Modal (reusable read-only content viewer) -->
+        <div class="modal-box viewer-modal-box" x-show="modal === 'viewer'">
+            <div class="viewer-header">
+                <h3 x-text="viewerTitle" class="viewer-title"></h3>
+                <div class="viewer-actions">
+                    <button type="button" class="btn btn-sm" @click="copyViewerContent()" title="Copy full content to clipboard">Copy</button>
+                    <button type="button" class="btn btn-sm" @click="modal = null" title="Close viewer">Close</button>
+                </div>
+            </div>
+            <div class="viewer-body-wrap">
+                <template x-if="viewerLoading">
+                    <div style="display:flex;align-items:center;gap:0.5rem;padding:1rem">
+                        <span class="spinner" style="width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;display:inline-block;animation:spin 0.8s linear infinite"></span>
+                        <span class="text-dim">Loading...</span>
+                    </div>
+                </template>
+                <template x-if="!viewerLoading && viewerIsHtml">
+                    <pre class="diff-viewer viewer-pre" x-html="viewerContent"></pre>
+                </template>
+                <template x-if="!viewerLoading && !viewerIsHtml">
+                    <pre class="diff-viewer viewer-pre" x-text="viewerContent"></pre>
+                </template>
+            </div>
+        </div>
+
+        <!-- Confirm Dialog (replaces native browser confirm()) -->
+        <div class="modal-box" x-show="modal === 'confirm-dialog'" :style="confirmWidth ? 'max-width:' + confirmWidth : ''">
+            <h3>Confirm</h3>
+            <p x-text="confirmMessage" style="margin:1rem 0;white-space:pre-wrap"></p>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-sm" @click="confirmNo()">Cancel</button>
+                <button type="button" class="btn btn-danger btn-sm" @click="confirmYes()">OK</button>
+            </div>
+        </div>
+    </div>
