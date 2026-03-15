@@ -1,9 +1,5 @@
 // Armada Dashboard - Partial view loader
 // This module is loaded via <script> tag and attaches to window.ArmadaModules
-//
-// Alpine.js 3.x uses a MutationObserver to automatically detect and initialize
-// new DOM elements. We just need to inject HTML into the container and Alpine
-// picks up the new directives. No explicit Alpine.initTree() call needed.
 
 window.ArmadaModules = window.ArmadaModules || {};
 
@@ -18,16 +14,18 @@ window.ArmadaModules.partialLoader = {
             let response = await fetch('/dashboard/views/modals.html');
             if (!response.ok) return;
             container.innerHTML = await response.text();
-        } catch (e) {
-            console.warn('[Armada] Failed to load modals:', e);
-        }
+            // Delay initTree to next frame so Alpine's reactive cycle is idle
+            requestAnimationFrame(() => {
+                try { Alpine.initTree(container); } catch (e) { /* modals will lack reactivity */ }
+            });
+        } catch (e) { /* network error */ }
     },
 
     async loadViewPartial(viewName) {
         let container = document.getElementById('view-' + viewName) || document.getElementById('view-container');
         if (!container) return;
 
-        // Already loaded
+        // Already loaded and initialized
         if (container.dataset.partialLoaded === viewName) return;
 
         // Fetch (or use cache)
@@ -38,15 +36,26 @@ window.ArmadaModules.partialLoader = {
                 if (!response.ok) { this._partialCache[viewName] = ''; return; }
                 html = await response.text();
                 this._partialCache[viewName] = html;
-            } catch (e) {
-                console.warn('[Armada] Failed to fetch partial:', viewName, e);
-                return;
-            }
+            } catch (e) { return; }
         }
         if (!html) return;
 
-        // Inject HTML -- Alpine's MutationObserver initializes the new elements
+        // Inject HTML
         container.innerHTML = html;
         container.dataset.partialLoaded = viewName;
+
+        // Initialize Alpine directives on the next animation frame.
+        // This ensures Alpine's reactive cycle (from navigate setting this.view)
+        // has completed before we try to initialize the new subtree.
+        requestAnimationFrame(() => {
+            try {
+                let children = Array.from(container.children);
+                for (let i = 0; i < children.length; i++) {
+                    Alpine.initTree(children[i]);
+                }
+            } catch (e) {
+                console.warn('[Armada] initTree error for', viewName, e);
+            }
+        });
     }
 };
