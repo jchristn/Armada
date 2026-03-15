@@ -73,8 +73,6 @@ That's it. Armada auto-initializes, detects your installed agent runtime (Claude
 
 ![Screenshot 4](assets/screenshot-4.png)
 
-![Screenshot 5](assets/screenshot-5.png)
-
 </details>
 
 ## Quick Start
