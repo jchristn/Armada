@@ -1,0 +1,138 @@
+            <div x-show="!detailView">
+            <div class="view-header">
+                <div>
+                    <h2>Fleets</h2>
+                    <p class="text-dim view-subtitle">Fleets are groups of vessels (repositories) useful for organizing and understanding relationships amongst code assets.  Click a fleet to view its details.</p>
+                </div>
+                <div class="view-actions">
+                    <input type="text" class="filter-input" x-model="listSearch" placeholder="Search..." title="Search fleets by name or description">
+                    <button class="btn btn-sm btn-danger" x-show="selectedFleets.length > 0" @click="deleteSelectedFleets()" title="Delete all selected fleets">Delete Selected (<span x-text="selectedFleets.length"></span>)</button>
+                    <button class="btn btn-primary btn-sm" @click="openCreateFleet()" title="Create a new fleet to group repositories">+ Fleet</button>
+                    <button class="btn btn-sm" @click="loadFleets()" title="Refresh fleet data">&#x21bb;</button>
+                </div>
+            </div>
+            <div class="pagination-bar" x-show="fleetListPaging.totalPages > 0">
+                <div class="pagination-info">
+                    <span class="pagination-records" x-text="fleetListPaging.totalRecords + ' records'"></span>
+                    <select class="page-size-select" title="Number of records per page" :value="fleetListPaging.pageSize" @change="changePageSize(fleetListPaging, $event.target.value, noopLoad)">
+                        <option value="10">10 / page</option>
+                        <option value="25">25 / page</option>
+                        <option value="50">50 / page</option>
+                        <option value="100">100 / page</option>
+                        <option value="250">250 / page</option>
+                        <option value="500">500 / page</option>
+                        <option value="1000">1000 / page</option>
+                    </select>
+                </div>
+                <div class="pagination-controls">
+                    <button class="btn btn-sm" @click="prevPage(fleetListPaging, noopLoad)" :disabled="fleetListPaging.pageNumber <= 1">&larr; Prev</button>
+                    <span class="pagination-page">
+                        Page <input type="number" class="page-input" :value="fleetListPaging.pageNumber" min="1" :max="fleetListPaging.totalPages"
+                            @change="goToPage(fleetListPaging, parseInt($event.target.value), noopLoad)">
+                        of <span x-text="fleetListPaging.totalPages"></span>
+                    </span>
+                    <button class="btn btn-sm" @click="nextPage(fleetListPaging, noopLoad)" :disabled="fleetListPaging.pageNumber >= fleetListPaging.totalPages">Next &rarr;</button>
+                </div>
+            </div>
+            <template x-if="fleets.length === 0">
+                <p class="text-dim">No fleets configured.</p>
+            </template>
+            <div class="table-wrap" x-show="fleets.length > 0">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="col-checkbox"><input type="checkbox" @change="$event.target.checked ? selectAllFleets() : clearFleetSelection()" :checked="selectedFleets.length > 0 && selectedFleets.length === columnFilteredFleets().length" title="Select all fleets"></th>
+                            <th class="sortable" @click="sortBy('name', fleets)" title="Fleet name -- click to sort">Name<span x-text="sortIcon('name')"></span></th>
+                            <th>ID</th>
+                            <th class="sortable" @click="sortBy('description', fleets)" title="Description -- click to sort">Description<span x-text="sortIcon('description')"></span></th>
+                            <th class="sortable" @click="sortBy('_vesselCount', fleets)" title="Vessel count -- click to sort">Vessels<span x-text="sortIcon('_vesselCount')"></span></th>
+                            <th class="sortable" @click="sortBy('createdUtc', fleets)" title="Created date -- click to sort">Created<span x-text="sortIcon('createdUtc')"></span></th>
+                            <th class="text-right">Actions</th>
+                        </tr>
+                        <tr class="column-filter-row">
+                            <td></td>
+                            <td><input type="text" class="col-filter" x-model="fleetColFilters.name" placeholder="Filter..."></td>
+                            <td></td>
+                            <td><input type="text" class="col-filter" x-model="fleetColFilters.description" placeholder="Filter..."></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="f in paginateLocal(sortedRows(columnFilteredFleets()), fleetListPaging)" :key="f.id">
+                            <tr class="clickable" @click="navigate('fleets-list', 'fleet-detail', f.id)">
+                                <td class="col-checkbox" @click.stop><input type="checkbox" :checked="selectedFleets.includes(f.id)" @change="toggleFleetSelection(f.id)" title="Select this fleet"></td>
+                                <td class="clickable" @click.stop="openEditFleet(f)"><strong x-text="f.name"></strong></td>
+                                <td class="mono text-dim"><span class="id-display"><span x-text="f.id"></span><button class="copy-btn" @click.stop="copyId(f.id, $event)" title="Copy ID"></button></span></td>
+                                <td class="text-dim" x-text="f.description || '-'"></td>
+                                <td x-text="(f.vessels || []).length"></td>
+                                <td class="text-dim" x-text="formatTime(f.createdUtc)"></td>
+                                <td class="text-right">
+                                    <div class="action-menu-wrap">
+                                        <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'flt-' + f.id)" title="Actions">&#8942;</button>
+                                        <div class="action-menu-dropdown" x-show="openActionMenu === 'flt-' + f.id" x-cloak>
+                                            <button class="action-menu-item" @click="openEditFleet(f); closeActionMenu()">Edit</button>
+                                            <button class="action-menu-item" @click="showJson('Fleet: ' + f.name, f.id, f); closeActionMenu()">View JSON</button>
+                                            <button class="action-menu-item danger" @click="deleteFleet(f.id); closeActionMenu()">Delete</button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+            </div>
+
+            <!-- Fleet Detail -->
+            <div x-show="detailView === 'fleet-detail'">
+            <button class="btn btn-sm" @click="goBack()" title="Return to fleets list">&larr; Back</button>
+            <template x-if="detail">
+                <div>
+                    <div class="detail-header">
+                        <h2 x-text="detail.name"></h2>
+                        <div class="inline-actions">
+                            <div class="action-menu-wrap">
+                                <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'flt-detail-' + detail.id)" title="Actions">&#8942;</button>
+                                <div class="action-menu-dropdown" x-show="openActionMenu === 'flt-detail-' + detail.id" x-cloak>
+                                    <button class="action-menu-item" @click="openEditFleet(detail); closeActionMenu()">Edit</button>
+                                    <button class="action-menu-item" @click="showJson('Fleet: ' + detail.name, detail.id, detail); closeActionMenu()">View JSON</button>
+                                    <button class="action-menu-item danger" @click="deleteFleet(detail.id); closeActionMenu()">Delete</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="detail-grid">
+                        <div class="detail-field"><span class="detail-label">ID</span><span class="id-display"><span class="mono" x-text="detail.id"></span><button class="copy-btn" @click.stop="copyId(detail.id, $event)" title="Copy ID"></button></span></div>
+                        <div class="detail-field"><span class="detail-label">Description</span><span x-text="detail.description || '-'"></span></div>
+                        <div class="detail-field"><span class="detail-label">Active</span><span x-text="detail.active !== false ? 'Yes' : 'No'"></span></div>
+                        <div class="detail-field"><span class="detail-label">Created</span><span x-text="formatTimeAbsolute(detail.createdUtc)" :title="detail.createdUtc"></span></div>
+                    </div>
+                    <template x-if="detail.vessels && detail.vessels.length > 0">
+                        <div>
+                            <h3>Vessels</h3>
+                            <div class="table-wrap">
+                                <table class="vessel-table vessel-table-detail">
+                                    <colgroup>
+                                        <col class="vessel-col-name">
+                                        <col class="vessel-col-repo">
+                                        <col class="vessel-col-branch">
+                                    </colgroup>
+                                    <thead><tr><th title="Vessel name and unique identifier">Name</th><th title="Git repository URL">Repo URL</th><th title="Default branch for merging">Branch</th></tr></thead>
+                                    <tbody>
+                                        <template x-for="v in detail.vessels" :key="v.id">
+                                            <tr class="clickable" @click="navigate('fleets-list', 'vessel-detail', v.id)">
+                                                <td><strong x-text="v.name"></strong><div class="text-dim id-display"><span class="mono" x-text="v.id"></span><button class="copy-btn" @click.stop="copyId(v.id, $event)" title="Copy ID"></button></div></td>
+                                                <td class="text-dim vessel-repo-cell" x-text="v.repoUrl"></td>
+                                                <td x-text="v.defaultBranch || 'main'"></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </template>
+            </div>
