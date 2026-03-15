@@ -266,13 +266,13 @@ namespace Armada.Helm.Commands
                 ## Common Workflows
 
                 **Dispatch work:**
-                1. Ensure fleet and vessels exist (`armada_list_fleets`, `armada_list_vessels`)
-                2. Ensure captains are registered (`armada_list_captains`)
+                1. Ensure fleet and vessels exist (`armada_enumerate` with entityType 'fleets' or 'vessels')
+                2. Ensure captains are registered (`armada_enumerate` with entityType 'captains')
                 3. Dispatch a voyage with missions (`armada_dispatch`) or create standalone missions (`armada_create_mission`)
 
                 **Monitor progress:**
                 1. `armada_status` for overview
-                2. `armada_voyage_status` or `armada_mission_status` for details
+                2. `armada_voyage_status` for voyage summary (returns mission counts by status; set summary=false and includeMissions=true for full mission objects) or `armada_mission_status` for individual mission details
                 3. `armada_get_mission_log` / `armada_get_captain_log` to see what an agent is doing
                 4. `armada_get_mission_diff` to review code changes
 
