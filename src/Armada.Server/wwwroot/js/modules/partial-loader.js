@@ -1,13 +1,9 @@
 // Armada Dashboard - Partial view loader
 // This module is loaded via <script> tag and attaches to window.ArmadaModules
 //
-// Alpine.js 3.x has a built-in MutationObserver that auto-initializes Alpine
-// directives on newly added DOM elements. We MUST NOT call Alpine.initTree()
-// explicitly, as that causes double-initialization which corrupts x-for
-// templates and breaks reactivity.
-//
-// We defer HTML injection with setTimeout(0) so it runs AFTER Alpine has
-// processed the reactive x-show changes triggered by navigate().
+// Strategy: preload ALL view partials at startup so that tab navigation only
+// toggles x-show visibility. This eliminates timing issues between Alpine's
+// reactive cycle and dynamic HTML injection during navigation.
 
 window.ArmadaModules = window.ArmadaModules || {};
 
@@ -25,14 +21,42 @@ window.ArmadaModules.partialLoader = {
         } catch (e) { /* network error */ }
     },
 
+    async preloadAllPartials() {
+        let views = [
+            'home', 'fleets-list', 'fleets', 'voyages', 'missions', 'dispatch',
+            'captains', 'docks', 'signals', 'events', 'merge-queue', 'server', 'doctor'
+        ];
+
+        // Fetch all view HTML files in parallel
+        await Promise.all(views.map(viewName =>
+            fetch('/dashboard/views/' + viewName + '.html')
+                .then(r => r.ok ? r.text() : '')
+                .then(html => { this._partialCache[viewName] = html; })
+                .catch(() => { this._partialCache[viewName] = ''; })
+        ));
+
+        // Inject each into its container
+        for (let i = 0; i < views.length; i++) {
+            let viewName = views[i];
+            let html = this._partialCache[viewName];
+            if (!html) continue;
+
+            let container = document.getElementById('view-' + viewName) || document.getElementById('view-container');
+            if (!container) continue;
+            if (container.dataset.partialLoaded === viewName) continue;
+
+            container.innerHTML = html;
+            container.dataset.partialLoaded = viewName;
+        }
+    },
+
     async loadViewPartial(viewName) {
+        // If already preloaded, nothing to do — x-show handles visibility
         let container = document.getElementById('view-' + viewName) || document.getElementById('view-container');
         if (!container) return;
-
-        // Already loaded — Alpine's MutationObserver initialized it on first inject
         if (container.dataset.partialLoaded === viewName) return;
 
-        // Fetch (or use cache)
+        // Fallback: lazy-load if somehow not preloaded
         let html = this._partialCache[viewName];
         if (html === undefined) {
             try {
@@ -44,15 +68,6 @@ window.ArmadaModules.partialLoader = {
         }
         if (!html) return;
 
-        // Yield to the event loop so Alpine's reactive effects (x-show toggles
-        // from navigate setting this.view) complete before we inject HTML.
-        // This ensures the container is visible when MutationObserver processes
-        // the new elements.
-        await new Promise(resolve => setTimeout(resolve, 0));
-
-        // Inject HTML — Alpine's MutationObserver auto-initializes directives.
-        // Do NOT call Alpine.initTree() — it causes double-init that corrupts
-        // x-for templates and breaks the component.
         container.innerHTML = html;
         container.dataset.partialLoaded = viewName;
     }

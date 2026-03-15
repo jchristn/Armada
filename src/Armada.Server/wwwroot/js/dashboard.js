@@ -335,9 +335,10 @@ function dashboard() {
             if (this.loadModalsPartial) {
                 this.loadModalsPartial();
             }
-            // Load the initial view partial (home by default)
-            if (this.loadViewPartial) {
-                this.loadViewPartial(this.view);
+            // Preload ALL view partials at startup so tab navigation only toggles
+            // x-show visibility — no dynamic HTML injection during navigation.
+            if (this.preloadAllPartials) {
+                await this.preloadAllPartials();
             }
         },
 
