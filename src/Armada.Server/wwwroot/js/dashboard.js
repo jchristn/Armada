@@ -18,6 +18,7 @@ function dashboard() {
         ...(_modules.dataLoaders || {}),
         ...(_modules.navigation || {}),
         ...(_modules.websocket || {}),
+        ...(_modules.partialLoader || {}),
 
         // Theme
         darkMode: false,
@@ -331,6 +332,10 @@ function dashboard() {
             await this.refresh();
             this.connectWebSocket();
             this.pollTimer = setInterval(() => this.refresh(), 10000);
+            // Load the initial view partial (home by default)
+            if (this.loadViewPartial) {
+                this.loadViewPartial(this.view);
+            }
         },
 
         async refresh() {

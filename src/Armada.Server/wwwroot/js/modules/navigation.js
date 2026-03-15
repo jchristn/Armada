@@ -48,6 +48,14 @@ window.ArmadaModules.navigation = {
         if (view === 'doctor') this.runDoctorChecks();
 
         if (detailView) this.loadDetail(detailView, detailId);
+
+        // Load partial view if available
+        if (this.loadViewPartial) {
+            this.loadViewPartial(view);
+            if (detailView) {
+                this.loadViewPartial(detailView);
+            }
+        }
     },
 
     updateBreadcrumbs() {
