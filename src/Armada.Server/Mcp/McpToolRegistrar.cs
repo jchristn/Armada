@@ -113,7 +113,7 @@ namespace Armada.Server.Mcp
         {
             register(
                 "armada_enumerate",
-                "PREFERRED tool for finding and browsing entities. Use this instead of armada_list_* tools to avoid context bloat. Supports paginated, filtered, and sorted access to: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue. Returns paginated results with total counts. Filter by vesselId, fleetId, captainId, voyageId, status, date range, and more.",
+                "Find and browse entities with paginated, filtered, sorted access to: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue. Returns paginated results with total counts. Filter by vesselId, fleetId, captainId, voyageId, status, date range, and more.",
                 new
                 {
                     type = "object",
@@ -193,16 +193,6 @@ namespace Armada.Server.Mcp
 
         private static void RegisterFleetTools(RegisterToolDelegate register, DatabaseDriver database)
         {
-            register(
-                "armada_list_fleets",
-                "List all registered fleets. NOTE: prefer armada_enumerate with entityType='fleets' for paginated results that conserve context.",
-                new { type = "object", properties = new { } },
-                async (args) =>
-                {
-                    List<Fleet> fleets = await database.Fleets.EnumerateAsync().ConfigureAwait(false);
-                    return (object)fleets;
-                });
-
             register(
                 "armada_get_fleet",
                 "Get details of a specific fleet including its vessels",
@@ -340,16 +330,6 @@ namespace Armada.Server.Mcp
 
         private static void RegisterVesselTools(RegisterToolDelegate register, DatabaseDriver database)
         {
-            register(
-                "armada_list_vessels",
-                "List all registered vessels (repositories). WARNING: returns ALL vessels unfiltered. Prefer armada_enumerate with entityType='vessels' for paginated/filtered results that conserve context.",
-                new { type = "object", properties = new { } },
-                async (args) =>
-                {
-                    List<Vessel> vessels = await database.Vessels.EnumerateAsync().ConfigureAwait(false);
-                    return (object)vessels;
-                });
-
             register(
                 "armada_get_vessel",
                 "Get details of a specific vessel (repository)",
@@ -581,29 +561,6 @@ namespace Armada.Server.Mcp
                 });
 
             register(
-                "armada_list_voyages",
-                "List all voyages, optionally filtered by status. WARNING: returns ALL matching voyages and can produce very large responses. Prefer armada_enumerate with entityType='voyages' for paginated/filtered results that conserve context.",
-                new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        status = new { type = "string", description = "Filter by status: Active, Complete, Cancelled" }
-                    }
-                },
-                async (args) =>
-                {
-                    StatusFilterArgs request = JsonSerializer.Deserialize<StatusFilterArgs>(args!.Value, _JsonOptions)!;
-                    if (!String.IsNullOrEmpty(request.Status) && Enum.TryParse<VoyageStatusEnum>(request.Status, true, out VoyageStatusEnum status))
-                    {
-                        List<Voyage> filtered = await database.Voyages.EnumerateByStatusAsync(status).ConfigureAwait(false);
-                        return (object)filtered;
-                    }
-                    List<Voyage> voyages = await database.Voyages.EnumerateAsync().ConfigureAwait(false);
-                    return (object)voyages;
-                });
-
-            register(
                 "armada_voyage_status",
                 "Get status of a specific voyage with all its missions",
                 new
@@ -784,31 +741,6 @@ namespace Armada.Server.Mcp
 
         private static void RegisterMissionTools(RegisterToolDelegate register, DatabaseDriver database, IAdmiralService admiral, ArmadaSettings? settings, IGitService? git, ILandingService? landingService = null)
         {
-            register(
-                "armada_list_missions",
-                "List all missions, optionally filtered by status. WARNING: returns ALL matching missions and can produce very large responses. Prefer armada_enumerate with entityType='missions' for paginated/filtered results that conserve context.",
-                new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        status = new { type = "string", description = "Filter by status: Pending, Assigned, InProgress, WorkProduced, Testing, Review, Complete, Failed, LandingFailed, Cancelled" }
-                    }
-                },
-                async (args) =>
-                {
-                    StatusFilterArgs request = JsonSerializer.Deserialize<StatusFilterArgs>(args!.Value, _JsonOptions)!;
-                    if (!String.IsNullOrEmpty(request.Status) && Enum.TryParse<MissionStatusEnum>(request.Status, true, out MissionStatusEnum status))
-                    {
-                        List<Mission> filtered = await database.Missions.EnumerateByStatusAsync(status).ConfigureAwait(false);
-                        foreach (Mission m in filtered) m.DiffSnapshot = null;
-                        return (object)filtered;
-                    }
-                    List<Mission> missions = await database.Missions.EnumerateAsync().ConfigureAwait(false);
-                    foreach (Mission m in missions) m.DiffSnapshot = null;
-                    return (object)missions;
-                });
-
             register(
                 "armada_mission_status",
                 "Get status of a specific mission",
@@ -1244,16 +1176,6 @@ namespace Armada.Server.Mcp
         private static void RegisterCaptainTools(RegisterToolDelegate register, DatabaseDriver database, IAdmiralService admiral, ArmadaSettings? settings, Func<string, Task>? onStopCaptain = null)
         {
             register(
-                "armada_list_captains",
-                "List all captains with their current state. NOTE: prefer armada_enumerate with entityType='captains' for paginated results that conserve context.",
-                new { type = "object", properties = new { } },
-                async (args) =>
-                {
-                    List<Captain> captains = await database.Captains.EnumerateAsync().ConfigureAwait(false);
-                    return (object)captains;
-                });
-
-            register(
                 "armada_get_captain",
                 "Get details of a specific captain (AI agent)",
                 new
@@ -1496,29 +1418,6 @@ namespace Armada.Server.Mcp
         private static void RegisterSignalTools(RegisterToolDelegate register, DatabaseDriver database)
         {
             register(
-                "armada_list_signals",
-                "List signals (messages between admiral and captains). WARNING: can return large result sets. Prefer armada_enumerate with entityType='signals' for paginated/filtered results that conserve context.",
-                new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        captainId = new { type = "string", description = "Filter signals by captain ID" }
-                    }
-                },
-                async (args) =>
-                {
-                    CaptainIdArgs request = JsonSerializer.Deserialize<CaptainIdArgs>(args!.Value, _JsonOptions)!;
-                    if (!String.IsNullOrEmpty(request.CaptainId))
-                    {
-                        List<Signal> filtered = await database.Signals.EnumerateByRecipientAsync(request.CaptainId, false).ConfigureAwait(false);
-                        return (object)filtered;
-                    }
-                    List<Signal> signals = await database.Signals.EnumerateRecentAsync().ConfigureAwait(false);
-                    return (object)signals;
-                });
-
-            register(
                 "armada_send_signal",
                 "Send a signal/message to a captain",
                 new
@@ -1585,44 +1484,6 @@ namespace Armada.Server.Mcp
         private static void RegisterEventTools(RegisterToolDelegate register, DatabaseDriver database)
         {
             register(
-                "armada_list_events",
-                "Query the event audit trail with optional filters. WARNING: can return large result sets. Prefer armada_enumerate with entityType='events' for paginated/filtered results that conserve context.",
-                new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        missionId = new { type = "string", description = "Filter events by mission ID" },
-                        captainId = new { type = "string", description = "Filter events by captain ID" },
-                        voyageId = new { type = "string", description = "Filter events by voyage ID" },
-                        limit = new { type = "integer", description = "Maximum number of events to return (default 50)" }
-                    }
-                },
-                async (args) =>
-                {
-                    EventListArgs request = JsonSerializer.Deserialize<EventListArgs>(args!.Value, _JsonOptions)!;
-                    int limit = request.Limit ?? 50;
-
-                    List<ArmadaEvent> events = await database.Events.EnumerateRecentAsync(limit).ConfigureAwait(false);
-
-                    // Apply optional filters
-                    if (!String.IsNullOrEmpty(request.MissionId))
-                    {
-                        events = await database.Events.EnumerateByMissionAsync(request.MissionId, limit).ConfigureAwait(false);
-                    }
-                    else if (!String.IsNullOrEmpty(request.CaptainId))
-                    {
-                        events = await database.Events.EnumerateByCaptainAsync(request.CaptainId, limit).ConfigureAwait(false);
-                    }
-                    else if (!String.IsNullOrEmpty(request.VoyageId))
-                    {
-                        events = await database.Events.EnumerateByVoyageAsync(request.VoyageId, limit).ConfigureAwait(false);
-                    }
-
-                    return (object)events;
-                });
-
-            register(
                 "armada_delete_event",
                 "Delete a single event by ID. Permanently removes the event from the database.",
                 new
@@ -1686,29 +1547,6 @@ namespace Armada.Server.Mcp
 
         private static void RegisterDockTools(RegisterToolDelegate register, DatabaseDriver database, IDockService? dockService = null)
         {
-            register(
-                "armada_list_docks",
-                "List all docks (git worktrees) with their status, optionally filtered by vessel. NOTE: prefer armada_enumerate with entityType='docks' for paginated/filtered results that conserve context.",
-                new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        vesselId = new { type = "string", description = "Filter docks by vessel ID (vsl_ prefix)" }
-                    }
-                },
-                async (args) =>
-                {
-                    VesselIdArgs request = JsonSerializer.Deserialize<VesselIdArgs>(args!.Value, _JsonOptions)!;
-                    if (!String.IsNullOrEmpty(request.VesselId))
-                    {
-                        List<Dock> filtered = await database.Docks.EnumerateByVesselAsync(request.VesselId).ConfigureAwait(false);
-                        return (object)filtered;
-                    }
-                    List<Dock> docks = await database.Docks.EnumerateAsync().ConfigureAwait(false);
-                    return (object)docks;
-                });
-
             register(
                 "armada_get_dock",
                 "Get a dock (git worktree) by ID.",
@@ -1819,16 +1657,6 @@ namespace Armada.Server.Mcp
 
         private static void RegisterMergeQueueTools(RegisterToolDelegate register, IMergeQueueService mergeQueue)
         {
-            register(
-                "armada_list_merge_queue",
-                "List all entries in the merge queue. NOTE: prefer armada_enumerate with entityType='merge_queue' for paginated/filtered results that conserve context.",
-                new { type = "object", properties = new { } },
-                async (args) =>
-                {
-                    List<MergeEntry> entries = await mergeQueue.ListAsync().ConfigureAwait(false);
-                    return (object)entries;
-                });
-
             register(
                 "armada_get_merge_entry",
                 "Get details of a specific merge queue entry",
