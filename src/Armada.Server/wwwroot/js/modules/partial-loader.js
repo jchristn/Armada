@@ -6,6 +6,17 @@ window.ArmadaModules = window.ArmadaModules || {};
 window.ArmadaModules.partialLoader = {
     _partialCache: {},
 
+    /// <summary>
+    /// Initialize Alpine directives on newly injected children without
+    /// re-initializing the container itself (which is already managed by
+    /// the parent x-data scope).
+    /// </summary>
+    _initChildren(container) {
+        for (let child of container.children) {
+            Alpine.initTree(child);
+        }
+    },
+
     async loadModalsPartial() {
         let container = document.getElementById('modals-container');
         if (!container) return;
@@ -16,7 +27,7 @@ window.ArmadaModules.partialLoader = {
             if (!response.ok) return;
             let html = await response.text();
             container.innerHTML = html;
-            Alpine.initTree(container);
+            this._initChildren(container);
         } catch (e) {
             // Network error -- modals will not be available
         }
@@ -27,11 +38,11 @@ window.ArmadaModules.partialLoader = {
         let container = document.getElementById('view-' + viewName) || document.getElementById('view-container');
         if (!container) return;
 
-        // Hide container if no partial exists for this view
+        // Return cached partial if already loaded
         let cached = this._partialCache[viewName];
         if (cached !== undefined) {
             container.innerHTML = cached;
-            Alpine.initTree(container);
+            this._initChildren(container);
             return;
         }
 
@@ -47,7 +58,7 @@ window.ArmadaModules.partialLoader = {
             let html = await response.text();
             this._partialCache[viewName] = html;
             container.innerHTML = html;
-            Alpine.initTree(container);
+            this._initChildren(container);
         } catch (e) {
             // Network error or similar -- fall back gracefully
             this._partialCache[viewName] = '';

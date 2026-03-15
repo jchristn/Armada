@@ -595,6 +595,10 @@ tr.clickable { cursor: pointer; }
 
 .copy-btn.copy-failed { color: var(--red); opacity: 1; }
 
+/* Copy feedback for regular buttons (without copy-btn icon styling) */
+.btn.copied { color: var(--green); border-color: var(--green); }
+.btn.copy-failed { color: var(--red); border-color: var(--red); }
+
 /* Progress bar */
 .progress-bar {
     width: 100%;

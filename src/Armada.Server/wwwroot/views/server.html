@@ -1,4 +1,4 @@
-        <div x-show="view === 'server' && !detailView" class="view">
+        <div x-show="!detailView">
             <div class="view-header">
                 <div>
                     <h2>Server Settings</h2>
@@ -90,14 +90,14 @@
                 <div class="settings-config-block">
                     <div class="settings-config-header">
                         <span class="text-dim">HTTP (Streamable)</span>
-                        <button class="btn btn-sm copy-btn" @click="copyMcpConfig('http', $el)" title="Copy HTTP config to clipboard">Copy</button>
+                        <button class="btn btn-sm" @click="copyMcpConfig('http', $el)" title="Copy HTTP config to clipboard">Copy</button>
                     </div>
                     <pre class="settings-config-code" x-text="getMcpConfigHttp()"></pre>
                 </div>
                 <div class="settings-config-block" style="margin-top:0.75rem">
                     <div class="settings-config-header">
                         <span class="text-dim">STDIO</span>
-                        <button class="btn btn-sm copy-btn" @click="copyMcpConfig('stdio', $el)" title="Copy STDIO config to clipboard">Copy</button>
+                        <button class="btn btn-sm" @click="copyMcpConfig('stdio', $el)" title="Copy STDIO config to clipboard">Copy</button>
                     </div>
                     <pre class="settings-config-code" x-text="getMcpConfigStdio()"></pre>
                 </div>

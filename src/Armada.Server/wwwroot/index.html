@@ -428,7 +428,7 @@
             <div class="viewer-header">
                 <h3 class="viewer-title" x-text="viewer.title"></h3>
                 <div class="viewer-actions">
-                    <button class="btn btn-sm btn-primary copy-btn" @click="copyViewerContent($el)"
+                    <button class="btn btn-sm btn-primary" @click="copyViewerContent($el)"
                             title="Copy full content to clipboard">Copy to Clipboard</button>
                     <button class="btn btn-sm" @click="closeViewer()" title="Close viewer (Esc)">Close</button>
                 </div>
@@ -458,7 +458,7 @@
                         <span class="follow-dot" :class="{ 'follow-dot-active': logViewer.following }"></span>
                         <span x-text="logViewer.following ? 'Following' : 'Follow'"></span>
                     </button>
-                    <button class="btn btn-sm btn-primary copy-btn" @click="copyLogContent($el)"
+                    <button class="btn btn-sm btn-primary" @click="copyLogContent($el)"
                             title="Copy log content to clipboard">Copy</button>
                     <button class="btn btn-sm" @click="closeLogViewer()" title="Close log viewer (Esc)">Close</button>
                 </div>
@@ -479,7 +479,7 @@
                     <span class="diff-stat-del" x-text="'-' + diffViewerFiles.reduce((s, f) => s + f.deletions, 0)"></span>
                 </div>
                 <div class="viewer-actions">
-                    <button class="btn btn-sm copy-btn" @click="copyDiffRaw($el)"
+                    <button class="btn btn-sm" @click="copyDiffRaw($el)"
                             title="Copy raw diff to clipboard">Copy Raw</button>
                     <button class="btn btn-sm" @click="closeDiffViewer()" title="Close diff viewer (Esc)">Close</button>
                 </div>
