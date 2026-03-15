@@ -62,12 +62,12 @@
                         <template x-for="evt in columnFilteredEvents()" :key="evt.id">
                             <tr>
                                 <td class="col-checkbox"><input type="checkbox" :checked="selectedEvents.includes(evt.id)" @change="toggleEventSelection(evt.id)" title="Select this event"></td>
-                                <td class="text-dim" x-text="formatTime(evt.createdUtc)" :title="formatTimeAbsolute(evt.createdUtc)"></td>
-                                <td><span class="tag" x-text="evt.eventType"></span></td>
+                                <td class="text-dim" style="white-space:nowrap" x-text="formatTime(evt.createdUtc)" :title="formatTimeAbsolute(evt.createdUtc)"></td>
+                                <td style="white-space:nowrap"><span class="tag" x-text="evt.eventType"></span></td>
                                 <td x-text="evt.message"></td>
-                                <td class="mono text-dim"><span x-show="evt.entityId" class="id-display"><span x-text="evt.entityId"></span><button class="copy-btn" @click.stop="copyId(evt.entityId, $event)" title="Copy ID"></button></span><span x-show="!evt.entityId">-</span></td>
-                                <td class="text-dim"><span x-show="evt.captainId" class="id-display"><span class="mono" x-text="evt.captainId"></span><button class="copy-btn" @click.stop="copyId(evt.captainId, $event)" title="Copy ID"></button></span><span x-show="!evt.captainId">-</span></td>
-                                <td class="text-dim"><span x-show="evt.missionId" class="id-display"><span class="mono" x-text="evt.missionId"></span><button class="copy-btn" @click.stop="copyId(evt.missionId, $event)" title="Copy ID"></button></span><span x-show="!evt.missionId">-</span></td>
+                                <td class="mono text-dim" style="white-space:nowrap"><span x-show="evt.entityId" class="id-display"><span x-text="evt.entityId"></span><button class="copy-btn" @click.stop="copyId(evt.entityId, $event)" title="Copy ID"></button></span><span x-show="!evt.entityId">-</span></td>
+                                <td class="text-dim" style="white-space:nowrap"><span x-show="evt.captainId" class="id-display"><span class="mono" x-text="evt.captainId"></span><button class="copy-btn" @click.stop="copyId(evt.captainId, $event)" title="Copy ID"></button></span><span x-show="!evt.captainId">-</span></td>
+                                <td class="text-dim" style="white-space:nowrap"><span x-show="evt.missionId" class="id-display"><span class="mono" x-text="evt.missionId"></span><button class="copy-btn" @click.stop="copyId(evt.missionId, $event)" title="Copy ID"></button></span><span x-show="!evt.missionId">-</span></td>
                                 <td>
                                     <div class="action-menu-wrap">
                                         <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'evt-' + evt.id)" title="Actions">&#8942;</button>
