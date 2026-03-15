@@ -526,6 +526,50 @@ function dashboard() {
             return ok;
         },
 
+        copyToClipboard(text, buttonEl) {
+            return new Promise((resolve) => {
+                let success = false;
+                if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(text).then(() => {
+                        if (buttonEl) {
+                            buttonEl.classList.add('copied');
+                            setTimeout(() => buttonEl.classList.remove('copied'), 2000);
+                        }
+                        resolve(true);
+                    }).catch(() => {
+                        success = this.fallbackCopy(text);
+                        if (buttonEl) {
+                            if (success) {
+                                buttonEl.classList.add('copied');
+                                setTimeout(() => buttonEl.classList.remove('copied'), 2000);
+                            } else {
+                                buttonEl.classList.add('copy-failed');
+                                setTimeout(() => buttonEl.classList.remove('copy-failed'), 2000);
+                            }
+                        }
+                        resolve(success);
+                    });
+                } else {
+                    success = this.fallbackCopy(text);
+                    if (buttonEl) {
+                        if (success) {
+                            buttonEl.classList.add('copied');
+                            setTimeout(() => buttonEl.classList.remove('copied'), 2000);
+                        } else {
+                            buttonEl.classList.add('copy-failed');
+                            setTimeout(() => buttonEl.classList.remove('copy-failed'), 2000);
+                        }
+                    }
+                    resolve(success);
+                }
+            });
+        },
+
+        copyId(id, $event) {
+            let buttonEl = $event.currentTarget;
+            this.copyToClipboard(id, buttonEl);
+        },
+
         // updateBreadcrumbs, goBack: moved to modules/navigation.js
 
         // ============================================================
