@@ -69,7 +69,7 @@ namespace Armada.Test.Database
 
                     using (driver)
                     {
-                        DatabaseTestRunner runner = new DatabaseTestRunner(driver, options.NoCleanup);
+                        DatabaseTestRunner runner = new DatabaseTestRunner(driver, settings, options.NoCleanup);
                         List<TestResult> results = await runner.RunAllAsync(cts.Token).ConfigureAwait(false);
                         return PrintResults(results);
                     }

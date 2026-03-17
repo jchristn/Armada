@@ -217,7 +217,6 @@ namespace Armada.Core.Database.Sqlite.Queries
                         first_name TEXT,
                         last_name TEXT,
                         is_admin INTEGER NOT NULL DEFAULT 0,
-                        is_tenant_admin INTEGER NOT NULL DEFAULT 0,
                         active INTEGER NOT NULL DEFAULT 1,
                         created_utc TEXT NOT NULL,
                         last_update_utc TEXT NOT NULL,
