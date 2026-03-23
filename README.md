@@ -34,6 +34,24 @@ That's it. Armada auto-initializes, detects your installed agent runtime (Claude
 
 > **⚠️ Security Note:** Armada runs AI agents with auto-approve flags enabled by default — Claude Code uses `--dangerously-skip-permissions`, Codex uses `--approval-mode full-auto`, and Gemini uses `--sandbox none`. This means agents can read, write, and execute code in their worktrees without user confirmation. Review the [configuration](#configuration) options and understand the implications before running Armada in sensitive environments.
 
+## New in v0.3.0
+
+- **Multi-tenant support** -- tenant isolation, user management, bearer token and session token authentication with role-based access (admin, tenant admin, user)
+- **Per-captain system instructions** -- customize each captain's behavior with persistent instructions injected into every mission prompt (e.g., "You are a testing specialist")
+- **Model context accumulation** -- agents discover and record key information about repositories during missions, building a shared knowledge base for future agents (enabled by default)
+- **Mission history chart** -- SVG bar chart on the Dashboard tab showing missions over time with fleet/vessel filters and time range tabs
+- **Dashboard alert banners** -- proactive warnings when captains are stalled, missions have failed, or dispatch is blocked
+- **Vessel git sync status** -- GitHub-style "ahead/behind" badges on the Vessels page showing commits that need to be pushed or pulled
+- **Captain no longer stalls on failure** -- recovery exhaustion releases captains to Idle instead of Stalled, so they pick up new work immediately
+- **WorkProduced missions no longer block dispatch** -- post-agent states don't prevent new missions on the same vessel
+- **Dock preservation on crash** -- when a captain's process dies, the worktree and branch are preserved so the next captain can continue from partial work
+- **Error modals** -- all data loading errors are shown in dismissable modals instead of inline text
+- **Improved deserialization** -- all REST routes use explicit JSON deserialization with case-insensitive options, fixing camelCase request bodies from the dashboard
+- **Default vessel settings** -- new vessels default to LocalMerge landing mode and LocalAndRemote branch cleanup
+- **Dependency updates** -- SqlClient 7.0.0, Sqlite 10.0.5, MySqlConnector 2.5.0, Npgsql 10.0.2, SwiftStack 0.4.8, Spectre.Console 0.54.0
+- **Copy button fix** -- clipboard icons use CSS pseudo-elements with green checkmark on copy instead of "Copied!" text
+- **Status tooltips with guidance** -- every status badge tooltip now includes a "Next:" action telling users what to do
+
 ## Features
 
 - **Zero-config startup** -- sensible defaults, auto-detection of runtimes and repositories
