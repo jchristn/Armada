@@ -43,6 +43,8 @@ namespace Armada.Core.Database.Mysql.Queries
             working_directory LONGTEXT,
             project_context LONGTEXT,
             style_guide LONGTEXT,
+            enable_model_context TINYINT(1) NOT NULL DEFAULT 1,
+            model_context LONGTEXT,
             landing_mode TEXT,
             branch_cleanup_policy TEXT,
             allow_concurrent_missions TINYINT(1) NOT NULL DEFAULT 0,
@@ -396,6 +398,15 @@ namespace Armada.Core.Database.Mysql.Queries
         {
             @"ALTER TABLE users ADD COLUMN is_tenant_admin TINYINT(1) NOT NULL DEFAULT 0;",
             @"UPDATE users SET is_tenant_admin = 1 WHERE is_admin = 1;"
+        };
+
+        /// <summary>
+        /// Migration v7 statements for adding model context fields to vessels.
+        /// </summary>
+        public static readonly string[] MigrationV7Statements = new string[]
+        {
+            @"ALTER TABLE vessels ADD COLUMN enable_model_context TINYINT(1) NOT NULL DEFAULT 1;",
+            @"ALTER TABLE vessels ADD COLUMN model_context LONGTEXT;"
         };
 
         /// <summary>

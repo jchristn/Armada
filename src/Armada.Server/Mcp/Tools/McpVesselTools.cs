@@ -63,7 +63,8 @@ namespace Armada.Server.Mcp.Tools
                         projectContext = new { type = "string", description = "Project context describing architecture, key files, and dependencies" },
                         styleGuide = new { type = "string", description = "Style guide describing naming conventions, patterns, and library preferences" },
                         workingDirectory = new { type = "string", description = "Optional local directory where completed mission changes will be pulled after merge" },
-                        allowConcurrentMissions = new { type = "boolean", description = "Allow multiple concurrent missions on this vessel (default false)" }
+                        allowConcurrentMissions = new { type = "boolean", description = "Allow multiple concurrent missions on this vessel (default false)" },
+                        enableModelContext = new { type = "boolean", description = "Enable model context accumulation -- agents will update context with key information discovered during missions (default false)" }
                     },
                     required = new[] { "name", "repoUrl", "fleetId" }
                 },
@@ -80,6 +81,7 @@ namespace Armada.Server.Mcp.Tools
                     vessel.StyleGuide = request.StyleGuide;
                     vessel.WorkingDirectory = request.WorkingDirectory;
                     vessel.AllowConcurrentMissions = request.AllowConcurrentMissions ?? false;
+                    vessel.EnableModelContext = request.EnableModelContext ?? true;
                     vessel = await database.Vessels.CreateAsync(vessel).ConfigureAwait(false);
                     return (object)vessel;
                 });
@@ -99,7 +101,9 @@ namespace Armada.Server.Mcp.Tools
                         projectContext = new { type = "string", description = "New project context" },
                         styleGuide = new { type = "string", description = "New style guide" },
                         workingDirectory = new { type = "string", description = "New local directory where completed mission changes will be pulled after merge" },
-                        allowConcurrentMissions = new { type = "boolean", description = "Allow multiple concurrent missions on this vessel" }
+                        allowConcurrentMissions = new { type = "boolean", description = "Allow multiple concurrent missions on this vessel" },
+                        enableModelContext = new { type = "boolean", description = "Enable or disable model context accumulation" },
+                        modelContext = new { type = "string", description = "Agent-accumulated context about this repository" }
                     },
                     required = new[] { "vesselId" }
                 },
@@ -123,6 +127,10 @@ namespace Armada.Server.Mcp.Tools
                         vessel.WorkingDirectory = request.WorkingDirectory;
                     if (request.AllowConcurrentMissions.HasValue)
                         vessel.AllowConcurrentMissions = request.AllowConcurrentMissions.Value;
+                    if (request.EnableModelContext.HasValue)
+                        vessel.EnableModelContext = request.EnableModelContext.Value;
+                    if (request.ModelContext != null)
+                        vessel.ModelContext = request.ModelContext;
                     vessel = await database.Vessels.UpdateAsync(vessel).ConfigureAwait(false);
                     return (object)vessel;
                 });
@@ -198,7 +206,8 @@ namespace Armada.Server.Mcp.Tools
                     {
                         vesselId = new { type = "string", description = "Vessel ID (vsl_ prefix)" },
                         projectContext = new { type = "string", description = "Project context describing architecture, key files, and dependencies" },
-                        styleGuide = new { type = "string", description = "Style guide describing naming conventions, patterns, and library preferences" }
+                        styleGuide = new { type = "string", description = "Style guide describing naming conventions, patterns, and library preferences" },
+                        modelContext = new { type = "string", description = "Agent-accumulated context about this repository -- key information discovered during missions" }
                     },
                     required = new[] { "vesselId" }
                 },
@@ -212,6 +221,8 @@ namespace Armada.Server.Mcp.Tools
                         vessel.ProjectContext = request.ProjectContext;
                     if (request.StyleGuide != null)
                         vessel.StyleGuide = request.StyleGuide;
+                    if (request.ModelContext != null)
+                        vessel.ModelContext = request.ModelContext;
                     vessel = await database.Vessels.UpdateAsync(vessel).ConfigureAwait(false);
                     return (object)vessel;
                 });

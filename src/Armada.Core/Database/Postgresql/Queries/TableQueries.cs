@@ -91,6 +91,8 @@ namespace Armada.Core.Database.Postgresql.Queries
                         working_directory TEXT,
                         project_context TEXT,
                         style_guide TEXT,
+                        enable_model_context BOOLEAN NOT NULL DEFAULT TRUE,
+                        model_context TEXT,
                         landing_mode TEXT,
                         branch_cleanup_policy TEXT,
                         allow_concurrent_missions BOOLEAN NOT NULL DEFAULT FALSE,
@@ -393,6 +395,10 @@ namespace Armada.Core.Database.Postgresql.Queries
                 new SchemaMigration(4, "Add tenant admin role to users",
                     @"ALTER TABLE users ADD COLUMN IF NOT EXISTS is_tenant_admin BOOLEAN NOT NULL DEFAULT FALSE;",
                     @"UPDATE users SET is_tenant_admin = TRUE WHERE is_admin = TRUE;"
+                ),
+                new SchemaMigration(5, "Add enable_model_context and model_context to vessels",
+                    @"ALTER TABLE vessels ADD COLUMN IF NOT EXISTS enable_model_context BOOLEAN NOT NULL DEFAULT TRUE;",
+                    @"ALTER TABLE vessels ADD COLUMN IF NOT EXISTS model_context TEXT;"
                 )
             };
         }

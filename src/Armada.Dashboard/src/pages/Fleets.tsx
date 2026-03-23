@@ -63,7 +63,7 @@ export default function Fleets() {
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const [fResult, vResult] = await Promise.all([listFleets(), listVessels()]);
+      const [fResult, vResult] = await Promise.all([listFleets({ pageSize: 9999 }), listVessels({ pageSize: 9999 })]);
       const vesselsByFleet = new Map<string, Vessel[]>();
       for (const v of vResult.objects) {
         if (v.fleetId) {

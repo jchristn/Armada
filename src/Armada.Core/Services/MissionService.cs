@@ -452,6 +452,17 @@ namespace Armada.Core.Services
                     "\n";
             }
 
+            if (vessel.EnableModelContext && !String.IsNullOrEmpty(vessel.ModelContext))
+            {
+                content +=
+                    "## Model Context\n" +
+                    "The following context was accumulated by AI agents during previous missions on this repository. " +
+                    "Use this information to work more effectively.\n" +
+                    "\n" +
+                    vessel.ModelContext + "\n" +
+                    "\n";
+            }
+
             content +=
                 "# Mission Instructions\n" +
                 "\n" +
@@ -515,6 +526,26 @@ namespace Armada.Core.Services
                 "- `[ARMADA:STATUS] Testing` -- transition mission to Testing status\n" +
                 "- `[ARMADA:STATUS] Review` -- transition mission to Review status\n" +
                 "- `[ARMADA:MESSAGE] your message here` -- send a progress message\n";
+
+            if (vessel.EnableModelContext)
+            {
+                content +=
+                    "\n" +
+                    "## Model Context Updates\n" +
+                    "\n" +
+                    "Model context accumulation is enabled for this vessel. Before you finish your mission, " +
+                    "review the existing model context above (if any) and consider whether you have discovered " +
+                    "key information that would help future agents work on this repository more effectively. " +
+                    "Examples include: architectural insights, testing patterns, build quirks, common pitfalls, " +
+                    "important dependencies, or performance considerations.\n" +
+                    "\n" +
+                    "If you have useful additions, call `armada_update_vessel_context` with the `modelContext` " +
+                    "parameter set to the COMPLETE updated model context (not just your additions -- include " +
+                    "the existing content with your additions merged in). Keep the context concise, factual, " +
+                    "and focused on information that is not obvious from reading the code.\n" +
+                    "\n" +
+                    "If you have nothing to add, skip this step.\n";
+            }
 
             // If there's an existing CLAUDE.md, preserve it and prepend our instructions
             if (File.Exists(claudeMdPath))

@@ -86,7 +86,7 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return (object)new { Error = ctx.IsAuthenticated ? "Forbidden" : "Unauthorized" };
                 }
-                EnumerationQuery query = req.GetData<EnumerationQuery>() ?? new EnumerationQuery();
+                EnumerationQuery query = JsonSerializer.Deserialize<EnumerationQuery>(req.Http.Request.DataAsString, _jsonOptions) ?? new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
                 Stopwatch sw = Stopwatch.StartNew();
                 List<MergeEntry> all = await _mergeQueue.ListAsync().ConfigureAwait(false);
@@ -113,7 +113,8 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return (object)new { Error = ctx.IsAuthenticated ? "Forbidden" : "Unauthorized" };
                 }
-                MergeEntry entry = req.GetData<MergeEntry>();
+                MergeEntry entry = JsonSerializer.Deserialize<MergeEntry>(req.Http.Request.DataAsString, _jsonOptions)
+                    ?? throw new InvalidOperationException("Request body could not be deserialized as MergeEntry.");
                 entry = await _mergeQueue.EnqueueAsync(entry).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 201;
                 return entry;
@@ -255,7 +256,7 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return (object)new { Error = ctx.IsAuthenticated ? "Forbidden" : "Unauthorized" };
                 }
-                PurgeMergeEntriesRequest body = req.GetData<PurgeMergeEntriesRequest>();
+                PurgeMergeEntriesRequest? body = JsonSerializer.Deserialize<PurgeMergeEntriesRequest>(req.Http.Request.DataAsString, _jsonOptions);
                 if (body == null || body.EntryIds == null || body.EntryIds.Count == 0)
                     return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "EntryIds is required and must not be empty" };
 

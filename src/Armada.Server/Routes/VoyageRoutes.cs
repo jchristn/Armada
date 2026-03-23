@@ -97,7 +97,7 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return (object)new { Error = ctx.IsAuthenticated ? "Forbidden" : "Unauthorized" };
                 }
-                EnumerationQuery query = req.GetData<EnumerationQuery>() ?? new EnumerationQuery();
+                EnumerationQuery query = JsonSerializer.Deserialize<EnumerationQuery>(req.Http.Request.DataAsString, _jsonOptions) ?? new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Voyage> result = ctx.IsAdmin
@@ -121,7 +121,8 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return (object)new { Error = ctx.IsAuthenticated ? "Forbidden" : "Unauthorized" };
                 }
-                VoyageRequest voyageReq = req.GetData<VoyageRequest>();
+                VoyageRequest voyageReq = JsonSerializer.Deserialize<VoyageRequest>(req.Http.Request.DataAsString, _jsonOptions)
+                    ?? throw new InvalidOperationException("Request body could not be deserialized as VoyageRequest.");
                 List<MissionDescription> missions = new List<MissionDescription>();
                 if (voyageReq.Missions != null)
                 {
@@ -320,7 +321,7 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return (object)new { Error = ctx.IsAuthenticated ? "Forbidden" : "Unauthorized" };
                 }
-                DeleteMultipleRequest body = req.GetData<DeleteMultipleRequest>();
+                DeleteMultipleRequest? body = JsonSerializer.Deserialize<DeleteMultipleRequest>(req.Http.Request.DataAsString, _jsonOptions);
                 if (body == null || body.Ids == null || body.Ids.Count == 0)
                     return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Ids is required and must not be empty" };
 

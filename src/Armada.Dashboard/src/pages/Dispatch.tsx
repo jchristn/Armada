@@ -81,8 +81,8 @@ export default function Dispatch() {
 
   useEffect(() => {
     Promise.all([
-      listVessels().catch(() => null),
-      listVoyages().catch(() => null),
+      listVessels({ pageSize: 9999 }).catch(() => null),
+      listVoyages({ pageSize: 9999 }).catch(() => null),
     ]).then(([vRes, voyRes]) => {
       if (vRes) setVessels(vRes.objects);
       if (voyRes) setVoyages(voyRes.objects.filter((v) => v.status === 'Open' || v.status === 'InProgress'));

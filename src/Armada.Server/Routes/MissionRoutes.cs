@@ -174,7 +174,7 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return (object)new { Error = ctx.IsAuthenticated ? "Forbidden" : "Unauthorized" };
                 }
-                EnumerationQuery query = req.GetData<EnumerationQuery>() ?? new EnumerationQuery();
+                EnumerationQuery query = JsonSerializer.Deserialize<EnumerationQuery>(req.Http.Request.DataAsString, _jsonOptions) ?? new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Mission> result = ctx.IsAdmin
@@ -199,7 +199,8 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return (object)new { Error = ctx.IsAuthenticated ? "Forbidden" : "Unauthorized" };
                 }
-                Mission mission = req.GetData<Mission>();
+                Mission mission = JsonSerializer.Deserialize<Mission>(req.Http.Request.DataAsString, _jsonOptions)
+                    ?? throw new InvalidOperationException("Request body could not be deserialized as Mission.");
                 mission.TenantId = ctx.TenantId;
                 mission.UserId = ctx.UserId;
                 mission = await _admiral.DispatchMissionAsync(mission).ConfigureAwait(false);
@@ -260,7 +261,8 @@ namespace Armada.Server.Routes
                     ? await _database.Missions.ReadAsync(id).ConfigureAwait(false)
                     : await _database.Missions.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false);
                 if (existing == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Mission not found" }; }
-                Mission incoming = req.GetData<Mission>();
+                Mission incoming = JsonSerializer.Deserialize<Mission>(req.Http.Request.DataAsString, _jsonOptions)
+                    ?? throw new InvalidOperationException("Request body could not be deserialized as Mission.");
 
                 // Merge only metadata fields onto the existing record
                 existing.Title = incoming.Title;
@@ -303,7 +305,8 @@ namespace Armada.Server.Routes
                     : await _database.Missions.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false);
                 if (mission == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Mission not found" }; }
 
-                StatusTransitionRequest transition = req.GetData<StatusTransitionRequest>();
+                StatusTransitionRequest transition = JsonSerializer.Deserialize<StatusTransitionRequest>(req.Http.Request.DataAsString, _jsonOptions)
+                    ?? throw new InvalidOperationException("Request body could not be deserialized as StatusTransitionRequest.");
                 if (String.IsNullOrEmpty(transition.Status))
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Status is required" };
 
@@ -483,7 +486,7 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return (object)new { Error = ctx.IsAuthenticated ? "Forbidden" : "Unauthorized" };
                 }
-                DeleteMultipleRequest body = req.GetData<DeleteMultipleRequest>();
+                DeleteMultipleRequest? body = JsonSerializer.Deserialize<DeleteMultipleRequest>(req.Http.Request.DataAsString, _jsonOptions);
                 if (body == null || body.Ids == null || body.Ids.Count == 0)
                     return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Ids is required and must not be empty" };
 
@@ -543,7 +546,8 @@ namespace Armada.Server.Routes
 
                 try
                 {
-                    MissionRestartRequest body = req.GetData<MissionRestartRequest>();
+                    MissionRestartRequest body = JsonSerializer.Deserialize<MissionRestartRequest>(req.Http.Request.DataAsString, _jsonOptions)
+                        ?? throw new InvalidOperationException("Request body could not be deserialized as MissionRestartRequest.");
                     if (!String.IsNullOrEmpty(body.Title)) mission.Title = body.Title;
                     if (!String.IsNullOrEmpty(body.Description)) mission.Description = body.Description;
                 }

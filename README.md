@@ -46,6 +46,7 @@ That's it. Armada auto-initializes, detects your installed agent runtime (Claude
 - **REST API + WebSocket** -- programmatic access and real-time status updates
 - **MCP server** -- 18 tools let Claude Code, Codex, or any MCP client orchestrate Armada (see [AI-powered orchestration](#ai-powered-orchestration))
 - **React dashboard** -- optional standalone React dashboard for Docker/production deployments
+- **Model context** -- agents accumulate key knowledge about repositories across missions, so future agents start with institutional memory
 - **Cross-platform** -- Windows, macOS, Linux (C#/.NET)
 
 ## Benefits
@@ -55,6 +56,7 @@ That's it. Armada auto-initializes, detects your installed agent runtime (Claude
 - **Scale across more projects** -- Dispatch parallel missions across multiple repositories simultaneously, letting you take on more work than a single developer normally could.
 - **Project management meets conversational AI** -- Integrate task tracking, prioritization, and workflow orchestration directly into AI coding agents like Claude Code, bridging the gap between planning and execution.
 - **Safe isolated worktrees** -- Every agent operates in its own git worktree, so parallel work never collides and your main branch stays clean until you're ready to merge.
+- **Model context accumulation** -- Agents discover and record key information about each repository during missions, building a shared knowledge base that makes future missions faster and more effective.
 - **Automated merge queues** -- Completed missions are queued for merge automatically, reducing manual branch management and keeping your integration pipeline flowing.
 - **Auditable event trails** -- Every mission dispatch, status transition, completion, and failure is recorded in a structured event log you can query at any time.
 - **Reproducible workflows** -- Voyages capture a batch of missions as a reusable unit; retry a failed voyage or re-dispatch it against a new branch with a single command.

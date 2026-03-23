@@ -32,6 +32,8 @@ interface VesselForm {
   workingDirectory: string;
   projectContext: string;
   styleGuide: string;
+  enableModelContext: boolean;
+  modelContext: string;
   landingMode: string;
   branchCleanupPolicy: string;
   allowConcurrentMissions: boolean;
@@ -39,7 +41,7 @@ interface VesselForm {
 
 const emptyForm: VesselForm = {
   name: '', fleetId: '', repoUrl: '', defaultBranch: 'main', localPath: '', workingDirectory: '',
-  projectContext: '', styleGuide: '', landingMode: '', branchCleanupPolicy: '', allowConcurrentMissions: false,
+  projectContext: '', styleGuide: '', enableModelContext: true, modelContext: '', landingMode: '', branchCleanupPolicy: '', allowConcurrentMissions: false,
 };
 
 export default function Vessels() {
@@ -68,7 +70,7 @@ export default function Vessels() {
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
   // Column filters
-  const [colFilters, setColFilters] = useState({ name: '', fleetId: '', repoUrl: '' });
+  const [colFilters, setColFilters] = useState({ name: '', fleetId: '', repoUrl: '', landingMode: '' });
 
   // Pagination
   const [pageNumber, setPageNumber] = useState(1);
@@ -88,7 +90,7 @@ export default function Vessels() {
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const [vResult, fResult] = await Promise.all([listVessels(), listFleets()]);
+      const [vResult, fResult] = await Promise.all([listVessels({ pageSize: 9999 }), listFleets({ pageSize: 9999 })]);
       setVessels(vResult.objects);
       setFleets(fResult.objects);
       setError('');
@@ -105,8 +107,9 @@ export default function Vessels() {
   const filtered = useMemo(() => {
     return vessels.filter(v =>
       (!colFilters.name || v.name.toLowerCase().includes(colFilters.name.toLowerCase())) &&
-      (!colFilters.fleetId || fleetName(v.fleetId).toLowerCase().includes(colFilters.fleetId.toLowerCase())) &&
-      (!colFilters.repoUrl || (v.repoUrl ?? '').toLowerCase().includes(colFilters.repoUrl.toLowerCase()))
+      (!colFilters.fleetId || v.fleetId === colFilters.fleetId) &&
+      (!colFilters.repoUrl || (v.repoUrl ?? '').toLowerCase().includes(colFilters.repoUrl.toLowerCase())) &&
+      (!colFilters.landingMode || (v.landingMode ?? '') === colFilters.landingMode)
     );
   }, [vessels, colFilters, fleetMap]);
 
@@ -169,6 +172,8 @@ export default function Vessels() {
       landingMode: v.landingMode ?? '',
       branchCleanupPolicy: v.branchCleanupPolicy ?? '',
       allowConcurrentMissions: v.allowConcurrentMissions,
+      enableModelContext: v.enableModelContext,
+      modelContext: v.modelContext ?? '',
     });
     setEditing(v);
     setShowForm(true);
@@ -184,6 +189,7 @@ export default function Vessels() {
       if (!payload.styleGuide) delete payload.styleGuide;
       if (!payload.landingMode) delete payload.landingMode;
       if (!payload.branchCleanupPolicy) delete payload.branchCleanupPolicy;
+      if (!payload.modelContext) delete payload.modelContext;
       if (editing) await updateVessel(editing.id, payload);
       else await createVessel(payload);
       setShowForm(false);
@@ -269,22 +275,34 @@ export default function Vessels() {
             <label>Landing Mode
               <select value={form.landingMode} onChange={e => setForm({ ...form, landingMode: e.target.value })}>
                 <option value="">Default</option>
-                <option value="Merge">Merge</option>
-                <option value="Squash">Squash</option>
-                <option value="Rebase">Rebase</option>
+                <option value="LocalMerge">Local Merge</option>
+                <option value="PullRequest">Pull Request</option>
+                <option value="MergeQueue">Merge Queue</option>
+                <option value="None">None</option>
               </select>
             </label>
             <label>Branch Cleanup Policy
               <select value={form.branchCleanupPolicy} onChange={e => setForm({ ...form, branchCleanupPolicy: e.target.value })}>
                 <option value="">Default</option>
-                <option value="Delete">Delete</option>
-                <option value="Keep">Keep</option>
+                <option value="LocalOnly">Local Only</option>
+                <option value="LocalAndRemote">Local and Remote</option>
+                <option value="None">None</option>
               </select>
             </label>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input type="checkbox" checked={form.allowConcurrentMissions} onChange={e => setForm({ ...form, allowConcurrentMissions: e.target.checked })} style={{ width: 'auto' }} />
               Allow Concurrent Missions
             </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input type="checkbox" checked={form.enableModelContext} onChange={e => setForm({ ...form, enableModelContext: e.target.checked })} style={{ width: 'auto' }} />
+              Enable Model Context
+            </label>
+            {form.enableModelContext && (
+              <label>
+                Model Context
+                <textarea value={form.modelContext} onChange={e => setForm({ ...form, modelContext: e.target.value })} rows={4} placeholder="Agent-accumulated context will appear here after missions run with model context enabled..." />
+              </label>
+            )}
             <div className="modal-actions">
               <button type="submit" className="btn btn-primary">Save</button>
               <button type="button" className="btn" onClick={() => setShowForm(false)}>Cancel</button>
@@ -335,11 +353,24 @@ export default function Vessels() {
                   <td></td>
                   <td><input type="text" className="col-filter" value={colFilters.name} onChange={e => { setColFilters(f => ({ ...f, name: e.target.value })); setPageNumber(1); }} placeholder="Filter..." /></td>
                   <td></td>
-                  <td><input type="text" className="col-filter" value={colFilters.fleetId} onChange={e => { setColFilters(f => ({ ...f, fleetId: e.target.value })); setPageNumber(1); }} placeholder="Filter..." /></td>
+                  <td>
+                    <select className="col-filter" value={colFilters.fleetId} onChange={e => { setColFilters(f => ({ ...f, fleetId: e.target.value })); setPageNumber(1); }}>
+                      <option value="">All Fleets</option>
+                      {fleets.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                    </select>
+                  </td>
                   <td><input type="text" className="col-filter" value={colFilters.repoUrl} onChange={e => { setColFilters(f => ({ ...f, repoUrl: e.target.value })); setPageNumber(1); }} placeholder="Filter..." /></td>
                   <td></td>
                   <td></td>
-                  <td></td>
+                  <td>
+                    <select className="col-filter" value={colFilters.landingMode} onChange={e => { setColFilters(f => ({ ...f, landingMode: e.target.value })); setPageNumber(1); }}>
+                      <option value="">All Modes</option>
+                      <option value="LocalMerge">LocalMerge</option>
+                      <option value="PullRequest">PullRequest</option>
+                      <option value="MergeQueue">MergeQueue</option>
+                      <option value="None">None</option>
+                    </select>
+                  </td>
                   <td></td>
                   <td></td>
                 </tr>

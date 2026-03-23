@@ -33,6 +33,8 @@ interface VesselForm {
   workingDirectory: string;
   projectContext: string;
   styleGuide: string;
+  enableModelContext: boolean;
+  modelContext: string;
 }
 
 export default function VesselDetail() {
@@ -46,7 +48,7 @@ export default function VesselDetail() {
 
   // Edit modal
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<VesselForm>({ name: '', fleetId: '', repoUrl: '', defaultBranch: 'main', localPath: '', workingDirectory: '', projectContext: '', styleGuide: '' });
+  const [form, setForm] = useState<VesselForm>({ name: '', fleetId: '', repoUrl: '', defaultBranch: 'main', localPath: '', workingDirectory: '', projectContext: '', styleGuide: '', enableModelContext: true, modelContext: '' });
 
   // JSON viewer
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
@@ -64,7 +66,7 @@ export default function VesselDetail() {
     if (!id) return;
     try {
       setLoading(true);
-      const [vResult, fResult, mResult] = await Promise.all([listVessels(), listFleets(), listMissions()]);
+      const [vResult, fResult, mResult] = await Promise.all([listVessels({ pageSize: 9999 }), listFleets({ pageSize: 9999 }), listMissions({ pageSize: 9999 })]);
       const found = vResult.objects.find(v => v.id === id);
       if (!found) { setError('Vessel not found.'); setLoading(false); return; }
       setVessel(found);
@@ -91,6 +93,8 @@ export default function VesselDetail() {
       workingDirectory: vessel.workingDirectory ?? '',
       projectContext: vessel.projectContext ?? '',
       styleGuide: vessel.styleGuide ?? '',
+      enableModelContext: vessel.enableModelContext,
+      modelContext: vessel.modelContext ?? '',
     });
     setShowForm(true);
   }
@@ -104,6 +108,7 @@ export default function VesselDetail() {
       if (!payload.workingDirectory) delete payload.workingDirectory;
       if (!payload.projectContext) delete payload.projectContext;
       if (!payload.styleGuide) delete payload.styleGuide;
+      if (!payload.modelContext) delete payload.modelContext;
       await updateVessel(vessel.id, payload);
       setShowForm(false);
       load();
@@ -176,6 +181,17 @@ export default function VesselDetail() {
               <textarea value={form.styleGuide} onChange={e => setForm({ ...form, styleGuide: e.target.value })} rows={4} />
               <span className="text-dim" style={{ fontSize: '0.8em' }}>{form.styleGuide.length} characters</span>
             </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input type="checkbox" checked={form.enableModelContext} onChange={e => setForm({ ...form, enableModelContext: e.target.checked })} style={{ width: 'auto' }} />
+              Enable Model Context
+            </label>
+            {form.enableModelContext && (
+              <label>
+                Model Context
+                <textarea value={form.modelContext} onChange={e => setForm({ ...form, modelContext: e.target.value })} rows={4} placeholder="Agent-accumulated context will appear here after missions run with model context enabled..." />
+                <span className="text-dim" style={{ fontSize: '0.8em' }}>{form.modelContext.length} characters</span>
+              </label>
+            )}
             <div className="modal-actions">
               <button type="submit" className="btn btn-primary">Save</button>
               <button type="button" className="btn" onClick={() => setShowForm(false)}>Cancel</button>
@@ -246,6 +262,14 @@ export default function VesselDetail() {
         <div className="detail-context-section">
           <h4>Style Guide</h4>
           <pre className="detail-context-block">{vessel.styleGuide}</pre>
+        </div>
+      )}
+
+      {/* Model Context */}
+      {vessel.enableModelContext && vessel.modelContext && (
+        <div className="detail-context-section">
+          <h4>Model Context</h4>
+          <pre className="detail-context-block">{vessel.modelContext}</pre>
         </div>
       )}
 

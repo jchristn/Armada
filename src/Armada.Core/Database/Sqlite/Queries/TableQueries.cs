@@ -392,6 +392,8 @@ namespace Armada.Core.Database.Sqlite.Queries
                         working_directory TEXT,
                         project_context TEXT,
                         style_guide TEXT,
+                        enable_model_context INTEGER NOT NULL DEFAULT 1,
+                        model_context TEXT,
                         landing_mode TEXT,
                         branch_cleanup_policy TEXT,
                         allow_concurrent_missions INTEGER NOT NULL DEFAULT 0,
@@ -537,8 +539,8 @@ namespace Armada.Core.Database.Sqlite.Queries
                       SELECT id, tenant_id, COALESCE(user_id, 'default'), name, runtime, state, current_mission_id, current_dock_id, process_id, recovery_attempts, last_heartbeat_utc, created_utc, last_update_utc FROM captains_old;",
                     @"INSERT INTO voyages (id, tenant_id, user_id, title, description, status, created_utc, completed_utc, last_update_utc, auto_push, auto_create_pull_requests, auto_merge_pull_requests, landing_mode)
                       SELECT id, tenant_id, COALESCE(user_id, 'default'), title, description, status, created_utc, completed_utc, last_update_utc, auto_push, auto_create_pull_requests, auto_merge_pull_requests, landing_mode FROM voyages_old;",
-                    @"INSERT INTO vessels (id, tenant_id, user_id, fleet_id, name, repo_url, local_path, default_branch, active, created_utc, last_update_utc, working_directory, project_context, style_guide, landing_mode, branch_cleanup_policy, allow_concurrent_missions)
-                      SELECT id, tenant_id, COALESCE(user_id, 'default'), fleet_id, name, repo_url, local_path, default_branch, active, created_utc, last_update_utc, working_directory, project_context, style_guide, landing_mode, branch_cleanup_policy, allow_concurrent_missions FROM vessels_old;",
+                    @"INSERT INTO vessels (id, tenant_id, user_id, fleet_id, name, repo_url, local_path, default_branch, active, created_utc, last_update_utc, working_directory, project_context, style_guide, enable_model_context, model_context, landing_mode, branch_cleanup_policy, allow_concurrent_missions)
+                      SELECT id, tenant_id, COALESCE(user_id, 'default'), fleet_id, name, repo_url, local_path, default_branch, active, created_utc, last_update_utc, working_directory, project_context, style_guide, 0, NULL, landing_mode, branch_cleanup_policy, allow_concurrent_missions FROM vessels_old;",
                     @"INSERT INTO missions (id, tenant_id, user_id, voyage_id, vessel_id, captain_id, title, description, status, priority, parent_mission_id, branch_name, pr_url, created_utc, started_utc, completed_utc, last_update_utc, dock_id, process_id, commit_hash, diff_snapshot)
                       SELECT id, tenant_id, COALESCE(user_id, 'default'), voyage_id, vessel_id, captain_id, title, description, status, priority, parent_mission_id, branch_name, pr_url, created_utc, started_utc, completed_utc, last_update_utc, dock_id, process_id, commit_hash, diff_snapshot FROM missions_old;",
                     @"INSERT INTO docks (id, tenant_id, user_id, vessel_id, captain_id, worktree_path, branch_name, active, created_utc, last_update_utc)
@@ -647,6 +649,10 @@ namespace Armada.Core.Database.Sqlite.Queries
                 new SchemaMigration(16, "Add tenant admin role to users",
                     @"ALTER TABLE users ADD COLUMN is_tenant_admin INTEGER NOT NULL DEFAULT 0;",
                     @"UPDATE users SET is_tenant_admin = 1 WHERE is_admin = 1;"
+                ),
+                new SchemaMigration(17, "Add enable_model_context and model_context to vessels",
+                    @"ALTER TABLE vessels ADD COLUMN enable_model_context INTEGER NOT NULL DEFAULT 1;",
+                    @"ALTER TABLE vessels ADD COLUMN model_context TEXT;"
                 )
             };
         }

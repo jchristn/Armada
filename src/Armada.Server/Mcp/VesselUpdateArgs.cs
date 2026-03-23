@@ -44,5 +44,15 @@ namespace Armada.Server.Mcp
         /// Whether to allow multiple concurrent missions on this vessel.
         /// </summary>
         public bool? AllowConcurrentMissions { get; set; }
+
+        /// <summary>
+        /// Whether to enable model context accumulation on this vessel.
+        /// </summary>
+        public bool? EnableModelContext { get; set; }
+
+        /// <summary>
+        /// Agent-accumulated context about this repository.
+        /// </summary>
+        public string? ModelContext { get; set; }
     }
 }

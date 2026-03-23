@@ -342,7 +342,8 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return (object)new { Error = ctx.IsAuthenticated ? "Forbidden" : "Unauthorized" };
                 }
-                SettingsUpdateRequest body = req.GetData<SettingsUpdateRequest>();
+                SettingsUpdateRequest body = JsonSerializer.Deserialize<SettingsUpdateRequest>(req.Http.Request.DataAsString, _jsonOptions)
+                    ?? throw new InvalidOperationException("Request body could not be deserialized as SettingsUpdateRequest.");
 
                 if (body.AdmiralPort.HasValue)
                     _settings.AdmiralPort = body.AdmiralPort.Value;

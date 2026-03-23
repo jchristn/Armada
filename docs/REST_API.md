@@ -956,7 +956,7 @@ Skipped entries include the entity ID and the reason (e.g., "Not found" or "Empt
 
 #### PATCH /api/v1/vessels/{id}/context
 
-Update only the `ProjectContext` and `StyleGuide` fields of a vessel.
+Update only the `ProjectContext`, `StyleGuide`, and `ModelContext` fields of a vessel.
 
 **Path Parameters:**
 | Parameter | Description |
@@ -969,6 +969,7 @@ Update only the `ProjectContext` and `StyleGuide` fields of a vessel.
 |---|---|---|---|
 | `ProjectContext` | string | no | Project context describing architecture, key files, and dependencies |
 | `StyleGuide` | string | no | Style guide describing naming conventions, patterns, and library preferences |
+| `ModelContext` | string | no | Agent-accumulated context about this repository |
 
 ```bash
 curl -X PATCH http://localhost:7890/api/v1/vessels/vsl_abc123/context \
@@ -2404,6 +2405,8 @@ A git repository registered with Armada.
   "DefaultBranch": "main",
   "ProjectContext": null,
   "StyleGuide": null,
+  "EnableModelContext": false,
+  "ModelContext": null,
   "LandingMode": null,
   "BranchCleanupPolicy": null,
   "Active": true,
@@ -2423,6 +2426,8 @@ A git repository registered with Armada.
 | `DefaultBranch` | string | `"main"` | Default branch name |
 | `ProjectContext` | string? | null | Project context describing architecture, key files, and dependencies |
 | `StyleGuide` | string? | null | Style guide describing naming conventions, patterns, and library preferences |
+| `EnableModelContext` | bool | false | Whether model context accumulation is enabled |
+| `ModelContext` | string? | null | Agent-accumulated context about this repository |
 | `LandingMode` | [LandingModeEnum](#landingmodeenum)? | null | Per-vessel landing policy override (null = use global setting) |
 | `BranchCleanupPolicy` | [BranchCleanupPolicyEnum](#branchcleanuppolicyenum)? | null | Per-vessel branch cleanup policy override (null = use global setting) |
 | `Active` | bool | true | Whether vessel is active |

@@ -614,6 +614,10 @@ Register a new vessel (git repository) in a fleet.
     "workingDirectory": {
       "type": "string",
       "description": "Optional local directory where completed mission changes will be pulled after merge"
+    },
+    "enableModelContext": {
+      "type": "boolean",
+      "description": "Enable model context accumulation -- agents will update context with key information discovered during missions (default false)"
     }
   },
   "required": ["name", "repoUrl", "fleetId"]
@@ -629,6 +633,7 @@ Register a new vessel (git repository) in a fleet.
 | `projectContext` | string | No | Project context describing architecture, key files, and dependencies |
 | `styleGuide` | string | No | Style guide describing naming conventions, patterns, and library preferences |
 | `workingDirectory` | string | No | Optional local directory where completed mission changes will be pulled after merge |
+| `enableModelContext` | boolean | No | Enable model context accumulation (default false) |
 
 **Example Input:**
 
@@ -1159,7 +1164,9 @@ Update an existing vessel's properties.
     "defaultBranch": { "type": "string", "description": "New default branch" },
     "projectContext": { "type": "string", "description": "New project context" },
     "styleGuide": { "type": "string", "description": "New style guide" },
-    "workingDirectory": { "type": "string", "description": "New local directory where completed mission changes will be pulled after merge" }
+    "workingDirectory": { "type": "string", "description": "New local directory where completed mission changes will be pulled after merge" },
+    "enableModelContext": { "type": "boolean", "description": "Enable or disable model context accumulation" },
+    "modelContext": { "type": "string", "description": "Agent-accumulated context about this repository" }
   },
   "required": ["vesselId"]
 }
@@ -1181,7 +1188,8 @@ Update a vessel's project context and style guide without modifying other proper
   "properties": {
     "vesselId": { "type": "string", "description": "Vessel ID (vsl_ prefix)" },
     "projectContext": { "type": "string", "description": "Project context describing architecture, key files, and dependencies" },
-    "styleGuide": { "type": "string", "description": "Style guide describing naming conventions, patterns, and library preferences" }
+    "styleGuide": { "type": "string", "description": "Style guide describing naming conventions, patterns, and library preferences" },
+    "modelContext": { "type": "string", "description": "Agent-accumulated context about this repository -- key information discovered during missions" }
   },
   "required": ["vesselId"]
 }
@@ -1192,6 +1200,7 @@ Update a vessel's project context and style guide without modifying other proper
 | `vesselId` | string | Yes | Vessel ID (prefix `vsl_`) |
 | `projectContext` | string | No | Project context describing architecture, key files, and dependencies |
 | `styleGuide` | string | No | Style guide describing naming conventions, patterns, and library preferences |
+| `modelContext` | string | No | Agent-accumulated context about this repository |
 
 **Response:** Updated [Vessel](#vessel) object, or `{ "Error": "Vessel not found" }`.
 

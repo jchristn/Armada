@@ -80,7 +80,7 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return (object)new { Error = ctx.IsAuthenticated ? "Forbidden" : "Unauthorized" };
                 }
-                EnumerationQuery query = req.GetData<EnumerationQuery>() ?? new EnumerationQuery();
+                EnumerationQuery query = JsonSerializer.Deserialize<EnumerationQuery>(req.Http.Request.DataAsString, _jsonOptions) ?? new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Vessel> result = ctx.IsAdmin
@@ -104,7 +104,8 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return (object)new { Error = ctx.IsAuthenticated ? "Forbidden" : "Unauthorized" };
                 }
-                Vessel vessel = req.GetData<Vessel>();
+                Vessel vessel = JsonSerializer.Deserialize<Vessel>(req.Http.Request.DataAsString, _jsonOptions)
+                    ?? throw new InvalidOperationException("Request body could not be deserialized as Vessel.");
                 vessel.TenantId = ctx.TenantId;
                 vessel.UserId = ctx.UserId;
                 vessel = await _database.Vessels.CreateAsync(vessel).ConfigureAwait(false);
@@ -156,7 +157,8 @@ namespace Armada.Server.Routes
                     ? await _database.Vessels.ReadAsync(id).ConfigureAwait(false)
                     : await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false);
                 if (existing == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
-                Vessel updated = req.GetData<Vessel>();
+                Vessel updated = JsonSerializer.Deserialize<Vessel>(req.Http.Request.DataAsString, _jsonOptions)
+                    ?? throw new InvalidOperationException("Request body could not be deserialized as Vessel.");
                 updated.Id = id;
                 updated = await _database.Vessels.UpdateAsync(updated).ConfigureAwait(false);
                 return (object)updated;
@@ -184,11 +186,14 @@ namespace Armada.Server.Routes
                     ? await _database.Vessels.ReadAsync(id).ConfigureAwait(false)
                     : await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false);
                 if (existing == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
-                Vessel patch = req.GetData<Vessel>();
+                Vessel patch = JsonSerializer.Deserialize<Vessel>(req.Http.Request.DataAsString, _jsonOptions)
+                    ?? throw new InvalidOperationException("Request body could not be deserialized as Vessel.");
                 if (patch.ProjectContext != null)
                     existing.ProjectContext = patch.ProjectContext;
                 if (patch.StyleGuide != null)
                     existing.StyleGuide = patch.StyleGuide;
+                if (patch.ModelContext != null)
+                    existing.ModelContext = patch.ModelContext;
                 existing = await _database.Vessels.UpdateAsync(existing).ConfigureAwait(false);
                 return (object)existing;
             },
@@ -234,7 +239,7 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return (object)new { Error = ctx.IsAuthenticated ? "Forbidden" : "Unauthorized" };
                 }
-                DeleteMultipleRequest body = req.GetData<DeleteMultipleRequest>();
+                DeleteMultipleRequest? body = JsonSerializer.Deserialize<DeleteMultipleRequest>(req.Http.Request.DataAsString, _jsonOptions);
                 if (body == null || body.Ids == null || body.Ids.Count == 0)
                     return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Ids is required and must not be empty" };
 

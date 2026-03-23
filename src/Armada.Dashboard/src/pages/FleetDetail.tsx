@@ -34,7 +34,7 @@ export default function FleetDetail() {
     if (!id) return;
     try {
       setLoading(true);
-      const [fResult, vResult] = await Promise.all([listFleets(), listVessels()]);
+      const [fResult, vResult] = await Promise.all([listFleets({ pageSize: 9999 }), listVessels({ pageSize: 9999 })]);
       const found = fResult.objects.find(f => f.id === id);
       if (!found) { setError('Fleet not found.'); setLoading(false); return; }
       setFleet(found);

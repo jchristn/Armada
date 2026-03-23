@@ -57,7 +57,7 @@ export default function Captains() {
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const result = await listCaptains();
+      const result = await listCaptains({ pageSize: 9999 });
       setCaptains(result.objects);
       setError('');
     } catch {

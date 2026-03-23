@@ -110,6 +110,8 @@ export interface Vessel {
   defaultBranch: string;
   projectContext: string | null;
   styleGuide: string | null;
+  enableModelContext: boolean;
+  modelContext: string | null;
   landingMode: string | null;
   branchCleanupPolicy: string | null;
   allowConcurrentMissions: boolean;

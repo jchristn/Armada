@@ -112,9 +112,9 @@ export default function Dashboard() {
     try {
       const [statusRes, missionRes, vesselRes, captainRes] = await Promise.all([
         getStatus().catch(() => null),
-        listMissions().catch(() => null),
-        listVessels().catch(() => null),
-        listCaptains().catch(() => null),
+        listMissions({ pageSize: 9999 }).catch(() => null),
+        listVessels({ pageSize: 9999 }).catch(() => null),
+        listCaptains({ pageSize: 9999 }).catch(() => null),
       ]);
       if (statusRes) setStatus(statusRes as unknown as StatusData);
       if (missionRes) {

@@ -123,6 +123,16 @@ namespace Armada.Core.Database.SqlServer.Queries
                     IF COL_LENGTH('users', 'is_tenant_admin') IS NULL
                         ALTER TABLE users ADD is_tenant_admin BIT NOT NULL CONSTRAINT DF_users_is_tenant_admin DEFAULT 0;",
                     @"UPDATE users SET is_tenant_admin = 1 WHERE is_admin = 1;"
+                ),
+                new SchemaMigration(
+                    5,
+                    "Add enable_model_context and model_context to vessels",
+                    @"
+                    IF COL_LENGTH('vessels', 'enable_model_context') IS NULL
+                        ALTER TABLE vessels ADD enable_model_context BIT NOT NULL CONSTRAINT DF_vessels_enable_model_context DEFAULT 1;",
+                    @"
+                    IF COL_LENGTH('vessels', 'model_context') IS NULL
+                        ALTER TABLE vessels ADD model_context NVARCHAR(MAX);"
                 )
             };
         }
@@ -218,6 +228,8 @@ namespace Armada.Core.Database.SqlServer.Queries
                 working_directory NVARCHAR(450),
                 project_context NVARCHAR(MAX),
                 style_guide NVARCHAR(MAX),
+                enable_model_context BIT NOT NULL DEFAULT 1,
+                model_context NVARCHAR(MAX),
                 landing_mode NVARCHAR(450),
                 branch_cleanup_policy NVARCHAR(450),
                 allow_concurrent_missions BIT NOT NULL DEFAULT 0,

@@ -93,7 +93,9 @@ namespace Armada.Server.Mcp.Tools
                                         v.DefaultBranch, v.LandingMode, v.BranchCleanupPolicy,
                                         v.AllowConcurrentMissions, v.Active, v.CreatedUtc, v.LastUpdateUtc,
                                         ProjectContextLength = v.ProjectContext?.Length ?? 0,
-                                        StyleGuideLength = v.StyleGuide?.Length ?? 0
+                                        StyleGuideLength = v.StyleGuide?.Length ?? 0,
+                                        v.EnableModelContext,
+                                        ModelContextLength = v.ModelContext?.Length ?? 0
                                     }).ToList(),
                                     vessels.TotalMs
                                 };

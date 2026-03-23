@@ -79,7 +79,7 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return (object)new { Error = ctx.IsAuthenticated ? "Forbidden" : "Unauthorized" };
                 }
-                EnumerationQuery query = req.GetData<EnumerationQuery>() ?? new EnumerationQuery();
+                EnumerationQuery query = JsonSerializer.Deserialize<EnumerationQuery>(req.Http.Request.DataAsString, _jsonOptions) ?? new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Fleet> result = ctx.IsAdmin
@@ -103,7 +103,8 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return (object)new { Error = ctx.IsAuthenticated ? "Forbidden" : "Unauthorized" };
                 }
-                Fleet fleet = req.GetData<Fleet>();
+                Fleet fleet = JsonSerializer.Deserialize<Fleet>(req.Http.Request.DataAsString, _jsonOptions)
+                    ?? throw new InvalidOperationException("Request body could not be deserialized as Fleet.");
                 fleet.TenantId = ctx.TenantId;
                 fleet.UserId = ctx.UserId;
                 fleet = await _database.Fleets.CreateAsync(fleet).ConfigureAwait(false);
@@ -156,7 +157,8 @@ namespace Armada.Server.Routes
                     ? await _database.Fleets.ReadAsync(id).ConfigureAwait(false)
                     : await _database.Fleets.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false);
                 if (existing == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Fleet not found" }; }
-                Fleet updated = req.GetData<Fleet>();
+                Fleet updated = JsonSerializer.Deserialize<Fleet>(req.Http.Request.DataAsString, _jsonOptions)
+                    ?? throw new InvalidOperationException("Request body could not be deserialized as Fleet.");
                 updated.Id = id;
                 updated = await _database.Fleets.UpdateAsync(updated).ConfigureAwait(false);
                 return (object)updated;
@@ -203,7 +205,7 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return (object)new { Error = ctx.IsAuthenticated ? "Forbidden" : "Unauthorized" };
                 }
-                DeleteMultipleRequest body = req.GetData<DeleteMultipleRequest>();
+                DeleteMultipleRequest? body = JsonSerializer.Deserialize<DeleteMultipleRequest>(req.Http.Request.DataAsString, _jsonOptions);
                 if (body == null || body.Ids == null || body.Ids.Count == 0)
                     return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Ids is required and must not be empty" };
 

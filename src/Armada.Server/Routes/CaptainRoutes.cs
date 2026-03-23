@@ -115,7 +115,7 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return (object)new { Error = ctx.IsAuthenticated ? "Forbidden" : "Unauthorized" };
                 }
-                EnumerationQuery query = req.GetData<EnumerationQuery>() ?? new EnumerationQuery();
+                EnumerationQuery query = JsonSerializer.Deserialize<EnumerationQuery>(req.Http.Request.DataAsString, _jsonOptions) ?? new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Captain> result = ctx.IsAdmin
@@ -139,7 +139,8 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return (object)new { Error = ctx.IsAuthenticated ? "Forbidden" : "Unauthorized" };
                 }
-                Captain captain = req.GetData<Captain>();
+                Captain captain = JsonSerializer.Deserialize<Captain>(req.Http.Request.DataAsString, _jsonOptions)
+                    ?? throw new InvalidOperationException("Request body could not be deserialized as Captain.");
                 captain.TenantId = ctx.TenantId;
                 captain.UserId = ctx.UserId;
                 captain = await _database.Captains.CreateAsync(captain).ConfigureAwait(false);
@@ -191,7 +192,8 @@ namespace Armada.Server.Routes
                     ? await _database.Captains.ReadAsync(id).ConfigureAwait(false)
                     : await _database.Captains.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false);
                 if (existing == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Captain not found" }; }
-                Captain updated = req.GetData<Captain>();
+                Captain updated = JsonSerializer.Deserialize<Captain>(req.Http.Request.DataAsString, _jsonOptions)
+                    ?? throw new InvalidOperationException("Request body could not be deserialized as Captain.");
                 updated.Id = id;
                 updated.State = existing.State;
                 updated.CurrentMissionId = existing.CurrentMissionId;
@@ -372,7 +374,7 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return (object)new { Error = ctx.IsAuthenticated ? "Forbidden" : "Unauthorized" };
                 }
-                DeleteMultipleRequest body = req.GetData<DeleteMultipleRequest>();
+                DeleteMultipleRequest? body = JsonSerializer.Deserialize<DeleteMultipleRequest>(req.Http.Request.DataAsString, _jsonOptions);
                 if (body == null || body.Ids == null || body.Ids.Count == 0)
                     return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Ids is required and must not be empty" };
 

@@ -975,6 +975,7 @@ tr.clickable { cursor: pointer; }
     box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
 }
 
+.modal-lg { max-width: 730px; }
 .modal-wide { max-width: 1280px; min-height: 66vh; }
 .modal-box-wide { max-width: 600px; }
 .modal-vessel-edit { max-width: 900px; }
@@ -2068,7 +2069,8 @@ thead tr.column-filter-row td {
     background: var(--bg-hover);
 }
 
-thead tr.column-filter-row td input.col-filter {
+thead tr.column-filter-row td input.col-filter,
+thead tr.column-filter-row td select.col-filter {
     width: 100%;
     font-size: 0.75rem;
     padding: 0.2rem 0.4rem;
