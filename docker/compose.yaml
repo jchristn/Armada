@@ -1,9 +1,20 @@
 services:
   armada-server:
-    image: jchristn77/armada-server:v0.2.0
+    image: jchristn77/armada-server:v0.3.0
     ports:
       - "7890:7890"
       - "7891:7891"
+      - "7892:7892"
     volumes:
-      - ./server:/app/data
-      - ./server/logs:/app/data/logs
+      - ./server/armada.json:/app/data/armada.json
+      - ./armada/db:/app/data/db
+      - ./armada/logs:/app/data/logs
+
+  armada-dashboard:
+    image: jchristn77/armada-dashboard:v0.3.0
+    ports:
+      - "3000:80"
+    environment:
+      - ARMADA_SERVER_URL=http://armada-server:7890
+    depends_on:
+      - armada-server

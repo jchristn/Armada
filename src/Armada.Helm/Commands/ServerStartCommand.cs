@@ -47,6 +47,9 @@ namespace Armada.Helm.Commands
                 return 1;
             }
 
+            // Build and deploy the React dashboard if source is available
+            BuildAndDeployDashboard(serverExe);
+
             // Launch the server executable detached
             ProcessStartInfo startInfo;
 
@@ -275,6 +278,151 @@ namespace Armada.Helm.Commands
             catch { }
 
             return null;
+        }
+
+        /// <summary>
+        /// Build the React dashboard and deploy it to the data directory.
+        /// </summary>
+        private void BuildAndDeployDashboard(string serverExe)
+        {
+            // Find the dashboard source relative to the server project
+            string? dashboardDir = FindDashboardProject(serverExe);
+            if (dashboardDir == null) return;
+
+            string distDir = Path.Combine(dashboardDir, "dist");
+            string targetDir = Path.Combine(Constants.DefaultDataDirectory, "dashboard");
+
+            // Check if dashboard needs rebuilding
+            bool needsBuild = !Directory.Exists(distDir)
+                || !File.Exists(Path.Combine(distDir, "index.html"));
+
+            if (!needsBuild)
+            {
+                // Check if source is newer than dist
+                try
+                {
+                    DateTime srcMtime = Directory.GetFiles(Path.Combine(dashboardDir, "src"), "*", SearchOption.AllDirectories)
+                        .Select(f => File.GetLastWriteTimeUtc(f))
+                        .DefaultIfEmpty(DateTime.MinValue)
+                        .Max();
+                    DateTime distMtime = File.GetLastWriteTimeUtc(Path.Combine(distDir, "index.html"));
+                    if (srcMtime > distMtime) needsBuild = true;
+                }
+                catch
+                {
+                    needsBuild = true;
+                }
+            }
+
+            if (needsBuild)
+            {
+                AnsiConsole.MarkupLine("[dim]Building dashboard...[/]");
+
+                // Run npm run build
+                ProcessStartInfo npmInfo = new ProcessStartInfo
+                {
+                    FileName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "cmd" : "npm",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    WorkingDirectory = dashboardDir
+                };
+
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    npmInfo.ArgumentList.Add("/c");
+                    npmInfo.ArgumentList.Add("npm");
+                    npmInfo.ArgumentList.Add("run");
+                    npmInfo.ArgumentList.Add("build");
+                }
+                else
+                {
+                    npmInfo.ArgumentList.Add("run");
+                    npmInfo.ArgumentList.Add("build");
+                }
+
+                Process npmProcess = new Process { StartInfo = npmInfo };
+                npmProcess.Start();
+                npmProcess.StandardOutput.ReadToEnd();
+                string npmStderr = npmProcess.StandardError.ReadToEnd();
+                npmProcess.WaitForExit();
+
+                if (npmProcess.ExitCode != 0)
+                {
+                    AnsiConsole.MarkupLine("[gold1]Dashboard build failed (non-fatal). Server will use legacy dashboard.[/]");
+                    if (!string.IsNullOrEmpty(npmStderr))
+                        AnsiConsole.MarkupLine($"[dim]{Markup.Escape(npmStderr.Trim())}[/]");
+                    return;
+                }
+            }
+
+            if (!Directory.Exists(distDir) || !File.Exists(Path.Combine(distDir, "index.html")))
+            {
+                return;
+            }
+
+            // Deploy: copy dist/ to {dataDir}/dashboard/
+            try
+            {
+                if (Directory.Exists(targetDir))
+                    Directory.Delete(targetDir, recursive: true);
+
+                CopyDirectory(distDir, targetDir);
+                AnsiConsole.MarkupLine("[dim]Dashboard deployed to " + Markup.Escape(targetDir) + "[/]");
+            }
+            catch (Exception ex)
+            {
+                AnsiConsole.MarkupLine($"[gold1]Dashboard deploy failed: {Markup.Escape(ex.Message)}[/]");
+            }
+        }
+
+        /// <summary>
+        /// Find the Armada.Dashboard source directory.
+        /// </summary>
+        private string? FindDashboardProject(string serverExe)
+        {
+            // From the server project dir: ../Armada.Dashboard
+            string? serverProjectDir = FindServerProject();
+            if (serverProjectDir != null)
+            {
+                string candidate = Path.GetFullPath(Path.Combine(serverProjectDir, "..", "Armada.Dashboard"));
+                if (File.Exists(Path.Combine(candidate, "package.json")))
+                    return candidate;
+            }
+
+            // From the server exe: walk up looking for src/Armada.Dashboard
+            string? exeDir = Path.GetDirectoryName(serverExe);
+            if (exeDir != null)
+            {
+                DirectoryInfo? dir = new DirectoryInfo(exeDir);
+                while (dir != null)
+                {
+                    string candidate = Path.Combine(dir.FullName, "src", "Armada.Dashboard");
+                    if (File.Exists(Path.Combine(candidate, "package.json")))
+                        return candidate;
+                    dir = dir.Parent;
+                }
+            }
+
+            return null;
+        }
+
+        private static void CopyDirectory(string sourceDir, string destDir)
+        {
+            Directory.CreateDirectory(destDir);
+
+            foreach (string file in Directory.GetFiles(sourceDir))
+            {
+                string destFile = Path.Combine(destDir, Path.GetFileName(file));
+                File.Copy(file, destFile, overwrite: true);
+            }
+
+            foreach (string subDir in Directory.GetDirectories(sourceDir))
+            {
+                string destSubDir = Path.Combine(destDir, Path.GetFileName(subDir));
+                CopyDirectory(subDir, destSubDir);
+            }
         }
     }
 }

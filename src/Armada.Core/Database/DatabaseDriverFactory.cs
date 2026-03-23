@@ -7,6 +7,7 @@ namespace Armada.Core.Database
     using Armada.Core.Database.Mysql;
     using Armada.Core.Database.Postgresql;
     using Armada.Core.Database.Sqlite;
+    using Armada.Core.Database.SqlServer;
     using Armada.Core.Enums;
     using Armada.Core.Settings;
 
@@ -40,7 +41,7 @@ namespace Armada.Core.Database
                     return new PostgresqlDatabaseDriver(settings, logging);
 
                 case DatabaseTypeEnum.SqlServer:
-                    throw new NotSupportedException("SQL Server driver is not yet implemented.");
+                    return new SqlServerDatabaseDriver(settings, logging);
 
                 default:
                     throw new ArgumentException("Unknown database type: " + settings.Type.ToString());

@@ -19,13 +19,16 @@ Verify:
 armada doctor
 ```
 
+Helper scripts are available in the project root if you are working from source:
+`install.bat/.sh`, `reinstall.bat/.sh`, `remove.bat/.sh`, `update.bat/.sh`, `install-mcp.bat/.sh`, and `remove-mcp.bat/.sh`.
+
 ## Connect Claude Code
 
 ```bash
 armada mcp install
 ```
 
-Say yes to both prompts. This registers Armada's MCP server and installs the orchestrator agent.
+This configures Armada MCP for Claude Code, Codex, Gemini, and Cursor, and installs the Claude Code orchestrator agent. Use `armada mcp remove` to remove those entries later.
 
 ## Start the server
 
@@ -183,3 +186,61 @@ armada mcp     install|stdio
 **REST API** — Full CRUD on port 7890 under `/api/v1/`. See `docs/REST_API.md`.
 
 **MCP tools** — 43 tools for fleets, vessels, voyages, missions, captains, signals, events, docks, and the merge queue. Any MCP client can orchestrate Armada. See `docs/CLAUDE_CODE_AS_ORCHESTRATOR.md`.
+
+---
+
+## Running with Docker
+
+If you prefer Docker over a local .NET SDK install:
+
+```bash
+cd docker
+docker compose up -d
+```
+
+This starts the Armada server on port 7890 and an optional React dashboard on port 3000. Open `http://localhost:7890/dashboard` or `http://localhost:3000` in your browser.
+
+Log in with the default credentials:
+
+| Field | Value |
+|-------|-------|
+| Email | `admin@armada` |
+| Password | `password` |
+
+For API access from scripts or curl, use `Authorization: Bearer default`.
+
+Data is persisted in `docker/armada/db/`. To stop: `docker compose down`. To reset all data: run `docker/factory/reset.sh` (or `reset.bat` on Windows).
+
+See the [README](README.md#running-locally-with-docker) for full Docker details including volume layout, configuration, and building images from source.
+
+---
+
+## Authentication (v0.3.0)
+
+As of v0.3.0, all REST API endpoints require authentication. The default bearer token (`default`) provides backward-compatible access:
+
+```bash
+curl -H "Authorization: Bearer default" http://localhost:7890/api/v1/status
+```
+
+The dashboard login screen accepts the default email (`admin@armada`) and password (`password`). After login, the dashboard uses encrypted session tokens automatically.
+
+Creating a tenant through the admin UI/API also seeds a protected `admin@armada` user and default credential for that tenant.
+
+`IsAdmin` is the global admin flag. `IsTenantAdmin` is the tenant-scoped admin flag. Tenant-created seeded admins are created with `IsAdmin = false` and `IsTenantAdmin = true`.
+
+The effective access tiers are:
+
+- `IsAdmin = true`: full system-wide access.
+- `IsAdmin = false`, `IsTenantAdmin = true`: full access within the user's tenant, including user and credential management in that tenant.
+- `IsAdmin = false`, `IsTenantAdmin = false`: regular-user access limited to tenant-scoped visibility plus self-service on that user's own account and credentials.
+
+Operational records are owned by both tenant and user. Armada persists and indexes those ownership columns consistently across SQLite, PostgreSQL, SQL Server, and MySQL.
+
+`IsProtected` is server-controlled for tenants, users, and credentials. Protected objects cannot be deleted directly, and immutable fields such as IDs, ownership columns, and creation timestamps are preserved by the API on update.
+
+User creation and user updates accept a plaintext `Password` field. Armada hashes the password server-side before storing it. If `Password` is omitted on update, the existing password is preserved. The dashboard Users modal supports both admin-managed password resets and self-service password changes.
+
+If you want to harden server shutdown, set `RequireAuthForShutdown = true` in your settings. When enabled, `POST /api/v1/server/stop` requires a global admin user with `IsAdmin = true`; tenant admins and regular users cannot shut the server down through the REST API.
+
+For production use, create additional users and credentials via the admin API or dashboard. See `docs/REST_API.md` for details.

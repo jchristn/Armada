@@ -9,7 +9,6 @@ namespace Armada.Helm.Commands
     using Voltaic;
     using Armada.Core;
     using Armada.Core.Database;
-    using Armada.Core.Database.Sqlite;
     using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
@@ -38,7 +37,7 @@ namespace Armada.Helm.Commands
 
             armadaSettings.InitializeDirectories();
 
-            // Quiet logging — stderr only, no console (stdout is the MCP transport)
+            // Quiet logging -- stderr only, no console (stdout is the MCP transport)
             LoggingModule logging = new LoggingModule();
             logging.Settings.EnableConsole = false;
             logging.Settings.FileLogging = FileLoggingMode.FileWithDate;
@@ -46,9 +45,8 @@ namespace Armada.Helm.Commands
                 Directory.CreateDirectory(armadaSettings.LogDirectory);
             logging.Settings.LogFilename = Path.Combine(armadaSettings.LogDirectory, "mcp-stdio.log");
 
-            // Initialize database
-            string connectionString = "Data Source=" + armadaSettings.DatabasePath;
-            DatabaseDriver database = new SqliteDatabaseDriver(connectionString, logging);
+            // Initialize database using DatabaseDriverFactory (supports SQLite, MySQL, PostgreSQL, SQL Server)
+            DatabaseDriver database = DatabaseDriverFactory.Create(armadaSettings.Database, logging);
             await database.InitializeAsync().ConfigureAwait(false);
 
             // Initialize services

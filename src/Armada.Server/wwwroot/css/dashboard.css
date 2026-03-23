@@ -884,6 +884,73 @@ tr.clickable { cursor: pointer; }
 }
 
 .login-box input:focus { border-color: var(--accent); }
+.login-box select {
+    width: 100%;
+    padding: 0.65rem 0.75rem;
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-size: 0.9rem;
+    font-family: var(--font);
+    outline: none;
+    margin-bottom: 1rem;
+    transition: border-color 0.15s;
+    cursor: pointer;
+}
+.login-box select:focus { border-color: var(--accent); }
+
+/* Tenant selection list */
+.login-tenant-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    max-height: 240px;
+    overflow-y: auto;
+}
+.login-tenant-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.15rem;
+    width: 100%;
+    padding: 0.65rem 0.75rem;
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-size: 0.9rem;
+    font-family: var(--font);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    text-align: left;
+}
+.login-tenant-item:hover {
+    border-color: var(--accent);
+    background: var(--bg-hover);
+}
+.login-tenant-name { font-weight: 600; }
+.login-tenant-id { font-size: 0.75rem; }
+
+/* Auth badges in top bar */
+.auth-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.75rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    white-space: nowrap;
+    line-height: 1.4;
+}
+.auth-badge-tenant {
+    background: var(--tag-working-bg);
+    color: var(--tag-working-fg);
+}
+.auth-badge-user {
+    background: var(--tag-idle-bg);
+    color: var(--tag-idle-fg);
+}
 
 /* Modal overlay */
 .modal-overlay {
@@ -1650,8 +1717,14 @@ a:hover { text-decoration: underline; }
     transition: all 0.15s;
 }
 
-.dispatch-tab:hover { color: var(--text); }
-.dispatch-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.dispatch-tab:hover { color: var(--text); background: var(--bg-hover); }
+.dispatch-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    background: var(--bg-hover);
+    font-weight: 600;
+    border-radius: var(--radius) var(--radius) 0 0;
+}
 
 .dispatch-preview {
     background: var(--bg);

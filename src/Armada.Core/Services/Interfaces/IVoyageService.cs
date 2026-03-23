@@ -18,8 +18,9 @@ namespace Armada.Core.Services.Interfaces
         /// Get progress details for a specific voyage.
         /// </summary>
         /// <param name="voyageId">Voyage identifier.</param>
+        /// <param name="tenantId">Optional tenant ID for tenant-scoped reads. Null for system/admin context.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>Voyage progress or null if not found.</returns>
-        Task<VoyageProgress?> GetProgressAsync(string voyageId, CancellationToken token = default);
+        Task<VoyageProgress?> GetProgressAsync(string voyageId, string? tenantId = null, CancellationToken token = default);
     }
 }

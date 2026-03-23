@@ -1,6 +1,6 @@
 # Armada REST API Reference
 
-**Version:** 0.2.0
+**Version:** 0.3.0
 **Base URL:** `http://localhost:7890`
 **Content-Type:** `application/json`
 
@@ -9,9 +9,18 @@
 ## Table of Contents
 
 - [Authentication](#authentication)
+  - [Bearer Token (Recommended)](#bearer-token-recommended)
+  - [Encrypted Session Token](#encrypted-session-token)
+  - [API Key (Deprecated)](#api-key-deprecated)
+  - [Authorization Tiers](#authorization-tiers)
+  - [Authorization Matrix](#authorization-matrix)
 - [Pagination](#pagination)
 - [Error Responses](#error-responses)
 - [Endpoints](#endpoints)
+  - [Authentication Endpoints](#authentication-endpoints)
+  - [Tenant Management](#tenant-management)
+  - [User Management](#user-management)
+  - [Credential Management](#credential-management)
   - [Status](#status)
   - [Fleets](#fleets)
   - [Vessels](#vessels)
@@ -33,16 +42,94 @@
 
 ## Authentication
 
-When `ApiKey` is configured in settings, all endpoints (except health check and dashboard) require an API key via the `X-Api-Key` header.
+As of v0.3.0, Armada supports multi-tenant authentication. All endpoints (except those listed as exempt) require authentication. There are three authentication methods, evaluated in the following order:
+
+### Bearer Token (Recommended)
+
+Bearer tokens are the canonical authentication mechanism. Each token is a 64-character random alphanumeric string stored in a `Credential` record, linked to a specific tenant and user.
+
+```
+Authorization: Bearer <token>
+```
+
+The default installation seeds a credential with bearer token `default`, so `Authorization: Bearer default` works out of the box for single-user setups.
+
+### Encrypted Session Token
+
+Session tokens are self-contained, AES-256-CBC encrypted tokens with a 24-hour lifetime. They are returned by `POST /api/v1/authenticate` and are intended for interactive/dashboard use. No server-side session storage is required -- the token contains the tenant ID, user ID, and expiration timestamp, validated by decryption.
+
+```
+X-Token: <encrypted-session-token>
+```
+
+### API Key (Deprecated)
+
+The `X-Api-Key` header is retained for backward compatibility. When `ApiKey` is configured in settings, the server creates a synthetic admin tenant (`ten_system`) and user (`usr_system`) on startup. The API key resolves to this synthetic admin identity through the same `AuthContext` path as all other auth methods.
 
 ```
 X-Api-Key: your-api-key-here
 ```
 
-Unauthenticated requests return `401 Unauthorized`.
+> **Deprecation notice:** `X-Api-Key` will be removed in a future version. Migrate to bearer tokens for new integrations.
+
+### Authorization Tiers
+
+All endpoints fall into one of three authorization levels:
+
+| Level | Description |
+|-------|-------------|
+| `NoAuthRequired` | Health check, tenant lookup, onboarding, authenticate |
+| `Authenticated` | All operational CRUD within the caller's tenant |
+| `AdminOnly` | Tenant/user/credential management (with self-read exceptions) |
+
+Armada distinguishes three effective caller roles:
+
+- `IsAdmin = true`: global system admin. Can access any tenant and any object in the system.
+- `IsAdmin = false`, `IsTenantAdmin = true`: tenant-scoped admin. Can access and manage any object within the caller's tenant, including users and credentials in that tenant.
+- `IsAdmin = false`, `IsTenantAdmin = false`: regular user. Can read tenant-scoped operational data within the caller's tenant, but self-service routes are limited to the caller's own user account and own credentials. Server-controlled fields and protected resources cannot be modified directly.
+
+Operational entities persist both `TenantId` and `UserId`. Those ownership columns are indexed and enforced by foreign keys across SQLite, PostgreSQL, SQL Server, and MySQL.
+
+### Authorization Matrix
+
+| Endpoint | Method | Permission | Notes |
+|----------|--------|------------|-------|
+| `/api/v1/server/stop` | POST | NoAuthRequired\*\*\* | When `RequireAuthForShutdown` is `true`, requires global admin (`IsAdmin = true`) |
+| `/api/v1/status/health` | GET | NoAuthRequired | |
+| `/api/v1/authenticate` | POST | NoAuthRequired | |
+| `/api/v1/tenants/lookup` | POST | NoAuthRequired | Input: email, returns matching tenants |
+| `/api/v1/onboarding` | POST | NoAuthRequired | Gated by `AllowSelfRegistration` setting |
+| `/api/v1/whoami` | GET | Authenticated | |
+| `/api/v1/status` | GET | Authenticated | Tenant-scoped |
+| `/api/v1/fleets` | ALL | Authenticated | Tenant-scoped |
+| `/api/v1/vessels` | ALL | Authenticated | Tenant-scoped |
+| `/api/v1/captains` | ALL | Authenticated | Tenant-scoped |
+| `/api/v1/missions` | ALL | Authenticated | Tenant-scoped |
+| `/api/v1/voyages` | ALL | Authenticated | Tenant-scoped |
+| `/api/v1/docks` | ALL | Authenticated | Tenant-scoped |
+| `/api/v1/signals` | ALL | Authenticated | Tenant-scoped |
+| `/api/v1/events` | ALL | Authenticated | Tenant-scoped |
+| `/api/v1/merge-queue` | ALL | Authenticated | Tenant-scoped |
+| `/api/v1/tenants` | GET (list) | AdminOnly | Global admin only |
+| `/api/v1/tenants` | POST | AdminOnly | Global admin only |
+| `/api/v1/tenants/{id}` | GET | Authenticated | Global admin: any; tenant admin or regular user: own tenant only |
+| `/api/v1/tenants/{id}` | PUT/DELETE | AdminOnly | Global admin only |
+| `/api/v1/users` | GET (list) | AdminOnly | Global admin: all users. Tenant admin: users in own tenant |
+| `/api/v1/users` | POST | AdminOnly | Global admin: any tenant. Tenant admin: own tenant only |
+| `/api/v1/users/{id}` | GET | Authenticated | Global admin: any. Tenant admin: users in own tenant. Regular user: self only |
+| `/api/v1/users/{id}` | PUT/DELETE | AdminOnly | Global admin: any. Tenant admin: users in own tenant. Regular user: self-update only |
+| `/api/v1/credentials` | GET (list) | Authenticated | Global admin: all. Tenant admin: credentials in own tenant. Regular user: own only |
+| `/api/v1/credentials` | POST | Authenticated | Global admin: any tenant/user. Tenant admin: own tenant. Regular user: self only |
+| `/api/v1/credentials/{id}` | GET | Authenticated | Global admin: any. Tenant admin: own tenant. Regular user: own only |
+| `/api/v1/credentials/{id}` | PUT | Authenticated | Global admin: any. Tenant admin: own tenant. Regular user: own only |
+| `/api/v1/credentials/{id}` | DELETE | Authenticated | Global admin: any. Tenant admin: own tenant. Regular user: own only |
 
 **Exempt routes** (no authentication required):
 - `GET /api/v1/status/health`
+- `POST /api/v1/authenticate`
+- `POST /api/v1/tenants/lookup`
+- `POST /api/v1/onboarding` (when `AllowSelfRegistration` is enabled)
+- `POST /api/v1/server/stop` (when `RequireAuthForShutdown` is `false`, the default)
 - `GET /dashboard` and all `/dashboard/*` paths
 - `GET /` (redirects to `/dashboard`)
 
@@ -136,6 +223,402 @@ All errors return a JSON object with `Error` and `Message` fields:
 
 ## Endpoints
 
+### Authentication Endpoints
+
+#### POST /api/v1/authenticate
+
+Authenticate with email and password to receive an encrypted session token. This is the login endpoint used by the dashboard.
+
+**Permission:** NoAuthRequired
+
+**Request Body:** [AuthenticateRequest](#authenticaterequest)
+
+```json
+{
+  "TenantId": "default",
+  "Email": "admin@armada",
+  "Password": "password"
+}
+```
+
+**Response:** `200 OK` - [AuthenticateResult](#authenticateresult)
+
+```json
+{
+  "Success": true,
+  "Token": "eyJhbGciOi...",
+  "ExpiresUtc": "2026-03-16T12:00:00Z"
+}
+```
+
+**Errors:**
+- `400 Bad Request` - Missing required fields (TenantId, Email, Password)
+- `401 Unauthorized` - Invalid credentials or inactive tenant/user
+
+---
+
+#### GET /api/v1/whoami
+
+Returns the authenticated user's tenant and user information.
+
+**Permission:** Authenticated
+
+**Request Headers:** `Authorization: Bearer <token>` or `X-Token: <session-token>`
+
+**Response:** `200 OK` - [WhoAmIResult](#whoamiresult)
+
+```json
+{
+  "Tenant": {
+    "Id": "default",
+    "Name": "Default Tenant",
+    "Active": true,
+    "CreatedUtc": "2026-03-07T12:00:00Z",
+    "LastUpdateUtc": "2026-03-07T12:00:00Z"
+  },
+  "User": {
+    "Id": "default",
+    "TenantId": "default",
+    "Email": "admin@armada",
+    "PasswordSha256": "********",
+    "FirstName": null,
+    "LastName": null,
+    "IsAdmin": true,
+    "Active": true,
+    "CreatedUtc": "2026-03-07T12:00:00Z",
+    "LastUpdateUtc": "2026-03-07T12:00:00Z"
+  }
+}
+```
+
+**Errors:**
+- `401 Unauthorized` - Not authenticated
+
+---
+
+#### POST /api/v1/tenants/lookup
+
+Look up which tenants a given email address belongs to. Used by the dashboard login flow to determine the tenant before authentication.
+
+**Permission:** NoAuthRequired
+
+**Request Body:** [TenantLookupRequest](#tenantlookuprequest)
+
+```json
+{
+  "Email": "admin@armada"
+}
+```
+
+**Response:** `200 OK` - [TenantLookupResult](#tenantlookupresult)
+
+```json
+{
+  "Tenants": [
+    {
+      "Id": "default",
+      "Name": "Default Tenant"
+    }
+  ]
+}
+```
+
+**Errors:**
+- `400 Bad Request` - Missing email
+
+---
+
+#### POST /api/v1/onboarding
+
+Self-register a new user within an existing tenant. Requires `AllowSelfRegistration` to be enabled in settings (default: `true`).
+
+Creates a new user and an associated bearer token credential.
+
+**Permission:** NoAuthRequired (gated by `AllowSelfRegistration` setting)
+
+**Request Body:** [OnboardingRequest](#onboardingrequest)
+
+```json
+{
+  "TenantId": "default",
+  "Email": "newuser@example.com",
+  "Password": "securepassword",
+  "FirstName": "Jane",
+  "LastName": "Doe"
+}
+```
+
+**Response:** `200 OK` - [OnboardingResult](#onboardingresult)
+
+```json
+{
+  "Success": true,
+  "Tenant": {
+    "Id": "default",
+    "Name": "Default Tenant",
+    "Active": true,
+    "CreatedUtc": "2026-03-07T12:00:00Z",
+    "LastUpdateUtc": "2026-03-07T12:00:00Z"
+  },
+  "User": {
+    "Id": "usr_abc123",
+    "TenantId": "default",
+    "Email": "newuser@example.com",
+    "PasswordSha256": "********",
+    "FirstName": "Jane",
+    "LastName": "Doe",
+    "IsAdmin": false,
+    "Active": true,
+    "CreatedUtc": "2026-03-07T12:00:00Z",
+    "LastUpdateUtc": "2026-03-07T12:00:00Z"
+  },
+  "Credential": {
+    "Id": "crd_abc123",
+    "TenantId": "default",
+    "UserId": "usr_abc123",
+    "Name": null,
+    "BearerToken": "aBcDeFgH...",
+    "Active": true,
+    "CreatedUtc": "2026-03-07T12:00:00Z",
+    "LastUpdateUtc": "2026-03-07T12:00:00Z"
+  },
+  "ErrorMessage": null
+}
+```
+
+**Errors:**
+- `400 Bad Request` - Missing required fields, email already exists in tenant
+- `403 Forbidden` - Self-registration is disabled
+- `404 Not Found` - Tenant not found
+
+---
+
+### Tenant Management
+
+> **Permission:** Global admin for list, create, update, delete. Authenticated users can read their own tenant.
+
+#### GET /api/v1/tenants
+
+List all tenants (paginated). Global admin only.
+
+**Response:** `200 OK` - [EnumerationResult](#enumerationresult)\<[TenantMetadata](#tenantmetadata)\>
+
+---
+
+#### POST /api/v1/tenants/enumerate
+
+Enumerate tenants with filtering and sorting via JSON body. Global admin only.
+
+---
+
+#### POST /api/v1/tenants
+
+Create a new tenant. Global admin only.
+
+**Request Body:** [TenantMetadata](#tenantmetadata)
+
+```json
+{
+  "Name": "Acme Corp"
+}
+```
+
+**Response:** `201 Created` - [TenantMetadata](#tenantmetadata)
+
+---
+
+#### GET /api/v1/tenants/{id}
+
+Get a tenant by ID. Non-admin users can only read their own tenant.
+
+**Response:** `200 OK` - [TenantMetadata](#tenantmetadata)
+
+---
+
+#### PUT /api/v1/tenants/{id}
+
+Update a tenant. Global admin only.
+
+`Id`, `CreatedUtc`, `LastUpdateUtc`, and `IsProtected` are preserved server-side.
+
+**Request Body:** [TenantMetadata](#tenantmetadata)
+
+**Response:** `200 OK` - [TenantMetadata](#tenantmetadata)
+
+---
+
+#### DELETE /api/v1/tenants/{id}
+
+Delete a tenant. Global admin only.
+
+If the tenant is protected, the server returns `403 Forbidden`.
+
+Deleting an unprotected tenant cascades through all tenant-scoped subordinate resources, including protected users and credentials seeded for that tenant.
+
+The delete flow is ownership-aware: direct delete of a protected tenant, user, or credential returns `403`, but protected child auth records can still be removed as part of an allowed parent delete.
+
+**Response:** `200 OK`
+
+---
+
+### User Management
+
+> **Permission:** Global admins can manage users across the system. Tenant admins can manage users within their own tenant. Regular users can read and update only their own user record.
+
+#### GET /api/v1/users
+
+List users (paginated). Global admins can list all users. Tenant admins can list users in their own tenant.
+
+**Response:** `200 OK` - [EnumerationResult](#enumerationresult)\<[UserMaster](#usermaster)\>
+
+Password fields are redacted in responses.
+
+---
+
+#### POST /api/v1/users/enumerate
+
+Enumerate users with filtering and sorting via JSON body. Global admins can enumerate all users. Tenant admins are limited to their own tenant.
+
+---
+
+#### POST /api/v1/users
+
+Create a new user. Global admins can create users in any tenant. Tenant admins can create users only in their own tenant and cannot grant global admin.
+
+`IsProtected` is server-controlled and ignored if supplied by the client.
+`Password` is plaintext in the request body and is hashed server-side before persistence. `PasswordSha256` is accepted only for backward compatibility.
+
+**Request Body:** user upsert payload
+
+```json
+{
+  "TenantId": "default",
+  "Email": "newuser@example.com",
+  "Password": "securepassword",
+  "FirstName": "Jane",
+  "LastName": "Doe",
+  "IsAdmin": false,
+  "IsTenantAdmin": false
+}
+```
+
+**Response:** `201 Created` - [UserMaster](#usermaster) (password redacted)
+
+---
+
+#### GET /api/v1/users/{id}
+
+Get a user by ID. Global admins can read any user. Tenant admins can read users in their own tenant. Regular users can read only their own user record.
+
+**Response:** `200 OK` - [UserMaster](#usermaster) (password redacted)
+
+---
+
+#### PUT /api/v1/users/{id}
+
+Update a user. Global admins can update any user. Tenant admins can update users in their own tenant. Regular users can update only their own user record.
+
+`Id`, `TenantId`, `CreatedUtc`, `LastUpdateUtc`, and `IsProtected` are server-controlled and cannot be modified by API clients.
+If `Password` is supplied, the server hashes and stores the new password. If `Password` is omitted or empty, the current password is preserved.
+
+**Request Body:** user upsert payload
+
+```json
+{
+  "Email": "updated@example.com",
+  "Password": "newpassword",
+  "FirstName": "Jane",
+  "LastName": "Smith",
+  "IsAdmin": false,
+  "IsTenantAdmin": false,
+  "Active": true
+}
+```
+
+**Response:** `200 OK` - [UserMaster](#usermaster) (password redacted)
+
+---
+
+#### DELETE /api/v1/users/{id}
+
+Delete a user. Global admins can delete any unprotected user. Tenant admins can delete unprotected users in their own tenant. Regular users cannot delete users directly.
+
+If the user is protected, the server returns `403 Forbidden`.
+
+Deleting an unprotected user cascades through that user's subordinate resources inside the tenant.
+
+**Response:** `200 OK`
+
+---
+
+### Credential Management
+
+> **Permission:** Authenticated. Global admins can manage all credentials. Tenant admins can manage credentials in their own tenant. Regular users can list, read, create, update, and delete only their own credentials.
+
+#### GET /api/v1/credentials
+
+List credentials (paginated). Global admin: all credentials. Tenant admin: credentials in own tenant. Regular user: own credentials only.
+
+**Response:** `200 OK` - [EnumerationResult](#enumerationresult)\<[Credential](#credential)\>
+
+---
+
+#### POST /api/v1/credentials/enumerate
+
+Enumerate credentials with filtering and sorting via JSON body. Results are scoped by role.
+
+---
+
+#### POST /api/v1/credentials
+
+Create a new credential (bearer token). A bearer token is auto-generated if not provided. Admin: can create for any tenant/user. Non-admin: can create for self only.
+
+`IsProtected` is server-controlled and ignored if supplied by the client.
+
+**Request Body:** [Credential](#credential)
+
+```json
+{
+  "TenantId": "default",
+  "UserId": "default",
+  "Name": "My API Token"
+}
+```
+
+**Response:** `201 Created` - [Credential](#credential)
+
+---
+
+#### GET /api/v1/credentials/{id}
+
+Get a credential by ID. Non-admin users can only read their own credentials.
+
+**Response:** `200 OK` - [Credential](#credential)
+
+---
+
+#### PUT /api/v1/credentials/{id}
+
+Update a credential. Global admins can update any credential. Tenant admins can update credentials inside their tenant. Regular users can update only their own credentials.
+
+`Id`, `TenantId`, `UserId`, `CreatedUtc`, `LastUpdateUtc`, and `IsProtected` are server-controlled and cannot be modified by API clients.
+
+**Request Body:** [Credential](#credential)
+
+**Response:** `200 OK` - [Credential](#credential)
+
+---
+
+#### DELETE /api/v1/credentials/{id}
+
+Delete a credential. Global admin: any. Tenant admin: credentials in own tenant. Regular user: own credentials only.
+
+If the credential is protected, the server returns `403 Forbidden`.
+
+**Response:** `200 OK`
+
+---
+
 ### Status
 
 #### GET /api/v1/status
@@ -190,6 +673,8 @@ Health check endpoint. **Does not require authentication.**
 #### POST /api/v1/server/stop
 
 Initiates a graceful shutdown of the Admiral server.
+
+**Permission:** NoAuthRequired by default. When `RequireAuthForShutdown` is `true`, requires global admin (`IsAdmin = true`).
 
 **Response:** `200 OK`
 
@@ -471,7 +956,7 @@ Skipped entries include the entity ID and the reason (e.g., "Not found" or "Empt
 
 #### PATCH /api/v1/vessels/{id}/context
 
-Update only the `ProjectContext` and `StyleGuide` fields of a vessel.
+Update only the `ProjectContext`, `StyleGuide`, and `ModelContext` fields of a vessel.
 
 **Path Parameters:**
 | Parameter | Description |
@@ -484,6 +969,7 @@ Update only the `ProjectContext` and `StyleGuide` fields of a vessel.
 |---|---|---|---|
 | `ProjectContext` | string | no | Project context describing architecture, key files, and dependencies |
 | `StyleGuide` | string | no | Style guide describing naming conventions, patterns, and library preferences |
+| `ModelContext` | string | no | Agent-accumulated context about this repository |
 
 ```bash
 curl -X PATCH http://localhost:7890/api/v1/vessels/vsl_abc123/context \
@@ -987,7 +1473,7 @@ Register a new captain (AI agent).
 ```bash
 curl -X POST http://localhost:7890/api/v1/captains \
   -H "Content-Type: application/json" \
-  -d '{"Name": "captain-1", "Runtime": "ClaudeCode"}'
+  -d '{"Name": "captain-1", "Runtime": "ClaudeCode", "SystemInstructions": "You are a testing specialist. Always run tests before committing."}'
 ```
 
 ---
@@ -1019,7 +1505,8 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
 ```json
 {
   "name": "captain-bravo",
-  "runtime": "Codex"
+  "runtime": "Codex",
+  "systemInstructions": "Focus on code quality and always run linting before commits."
 }
 ```
 
@@ -1667,6 +2154,217 @@ curl -X POST -H "X-Api-Key: your-key" \
 
 ### Models
 
+#### TenantMetadata
+
+A tenant in the multi-tenant system.
+
+```json
+{
+  "Id": "ten_abc123",
+  "Name": "Acme Corp",
+  "Active": true,
+  "CreatedUtc": "2026-03-07T12:00:00Z",
+  "LastUpdateUtc": "2026-03-07T12:00:00Z"
+}
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `Id` | string | auto-generated | Unique ID with `ten_` prefix |
+| `Name` | string | `"My Tenant"` | Tenant name |
+| `Active` | bool | true | Whether tenant is active |
+| `IsProtected` | bool | false | Protected tenants cannot be deleted directly |
+| `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
+| `LastUpdateUtc` | datetime | now | Last update timestamp (UTC) |
+
+---
+
+#### UserMaster
+
+A user in the multi-tenant system. Passwords are stored as SHA256 hashes and redacted in API responses.
+
+```json
+{
+  "Id": "usr_abc123",
+  "TenantId": "default",
+  "Email": "admin@armada",
+  "PasswordSha256": "********",
+  "FirstName": "Jane",
+  "LastName": "Doe",
+  "IsAdmin": false,
+  "IsTenantAdmin": false,
+  "IsProtected": false,
+  "Active": true,
+  "CreatedUtc": "2026-03-07T12:00:00Z",
+  "LastUpdateUtc": "2026-03-07T12:00:00Z"
+}
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `Id` | string | auto-generated | Unique ID with `usr_` prefix |
+| `TenantId` | string | `"default"` | Parent tenant |
+| `Email` | string | `"admin@armada"` | Email address (unique within tenant) |
+| `PasswordSha256` | string | SHA256("password") | SHA256 hash of password (redacted in responses) |
+| `FirstName` | string? | null | First name |
+| `LastName` | string? | null | Last name |
+| `IsAdmin` | bool | false | Global system admin privileges |
+| `IsTenantAdmin` | bool | false | Tenant-scoped admin privileges |
+| `IsProtected` | bool | false | Protected users cannot be deleted directly |
+| `Active` | bool | true | Whether user is active |
+| `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
+| `LastUpdateUtc` | datetime | now | Last update timestamp (UTC) |
+
+---
+
+#### Credential
+
+A bearer token credential for API authentication.
+
+```json
+{
+  "Id": "crd_abc123",
+  "TenantId": "default",
+  "UserId": "default",
+  "Name": "My API Token",
+  "BearerToken": "aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789...",
+  "IsProtected": false,
+  "Active": true,
+  "CreatedUtc": "2026-03-07T12:00:00Z",
+  "LastUpdateUtc": "2026-03-07T12:00:00Z"
+}
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `Id` | string | auto-generated | Unique ID with `crd_` prefix |
+| `TenantId` | string | `"default"` | Parent tenant |
+| `UserId` | string | `"default"` | Owning user |
+| `Name` | string? | null | Friendly name |
+| `BearerToken` | string | auto-generated | 64-character random alphanumeric token |
+| `IsProtected` | bool | false | Protected credentials cannot be deleted directly |
+| `Active` | bool | true | Whether credential is active |
+| `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
+| `LastUpdateUtc` | datetime | now | Last update timestamp (UTC) |
+
+---
+
+#### AuthContext
+
+Represents the authenticated identity context resolved from any authentication method.
+
+```json
+{
+  "IsAuthenticated": true,
+  "TenantId": "default",
+  "UserId": "default",
+  "IsAdmin": true,
+  "IsTenantAdmin": true,
+  "AuthMethod": "Bearer"
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `IsAuthenticated` | bool | Whether the request is authenticated |
+| `TenantId` | string? | Tenant identifier |
+| `UserId` | string? | User identifier |
+| `IsAdmin` | bool | Global system admin privileges |
+| `IsTenantAdmin` | bool | Tenant-scoped admin privileges |
+| `AuthMethod` | string? | `"Bearer"`, `"Session"`, `"ApiKey"`, or null |
+
+---
+
+Role semantics:
+
+- `IsAdmin = true`: global system-wide admin with access to every tenant and object.
+- `IsAdmin = false`, `IsTenantAdmin = true`: tenant-scoped admin with full access inside that tenant.
+- `IsAdmin = false`, `IsTenantAdmin = false`: regular user limited to read-only tenant visibility plus self-service on their own user account and credentials.
+
+Immutable update fields:
+
+- `Id`, creation timestamps, ownership identifiers (`TenantId`, `UserId` where applicable), and `IsProtected` are preserved server-side on update routes.
+
+---
+
+#### WhoAmIResult
+
+Result of `GET /api/v1/whoami`.
+
+```json
+{
+  "Tenant": { ... },
+  "User": { ... }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `Tenant` | [TenantMetadata](#tenantmetadata) | Tenant information |
+| `User` | [UserMaster](#usermaster) | User information (password redacted) |
+
+---
+
+#### AuthenticateRequest
+
+Request body for `POST /api/v1/authenticate`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `TenantId` | string | Yes | Tenant identifier |
+| `Email` | string | Yes | User email address |
+| `Password` | string | Yes | Plaintext password |
+
+---
+
+#### TenantLookupRequest
+
+Request body for `POST /api/v1/tenants/lookup`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `Email` | string | Yes | Email address to look up |
+
+---
+
+#### TenantLookupResult
+
+Result of `POST /api/v1/tenants/lookup`.
+
+| Field | Type | Description |
+|---|---|---|
+| `Tenants` | array | List of `{ TenantId, TenantName }` entries matching the email |
+
+---
+
+#### OnboardingRequest
+
+Request body for `POST /api/v1/onboarding`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `TenantId` | string | Yes | Tenant to join |
+| `Email` | string | Yes | Email address |
+| `Password` | string | Yes | Plaintext password |
+| `FirstName` | string? | No | First name |
+| `LastName` | string? | No | Last name |
+
+---
+
+#### OnboardingResult
+
+Result of `POST /api/v1/onboarding`.
+
+| Field | Type | Description |
+|---|---|---|
+| `Success` | bool | Whether onboarding succeeded |
+| `Tenant` | [TenantMetadata](#tenantmetadata)? | Created/joined tenant |
+| `User` | [UserMaster](#usermaster)? | Created user (password redacted) |
+| `Credential` | [Credential](#credential)? | Created credential with bearer token |
+| `ErrorMessage` | string? | Error message if failed |
+
+---
+
 #### Fleet
 
 A named collection of repositories under management.
@@ -1708,6 +2406,8 @@ A git repository registered with Armada.
   "DefaultBranch": "main",
   "ProjectContext": null,
   "StyleGuide": null,
+  "EnableModelContext": false,
+  "ModelContext": null,
   "LandingMode": null,
   "BranchCleanupPolicy": null,
   "Active": true,
@@ -1727,6 +2427,8 @@ A git repository registered with Armada.
 | `DefaultBranch` | string | `"main"` | Default branch name |
 | `ProjectContext` | string? | null | Project context describing architecture, key files, and dependencies |
 | `StyleGuide` | string? | null | Style guide describing naming conventions, patterns, and library preferences |
+| `EnableModelContext` | bool | false | Whether model context accumulation is enabled |
+| `ModelContext` | string? | null | Agent-accumulated context about this repository |
 | `LandingMode` | [LandingModeEnum](#landingmodeenum)? | null | Per-vessel landing policy override (null = use global setting) |
 | `BranchCleanupPolicy` | [BranchCleanupPolicyEnum](#branchcleanuppolicyenum)? | null | Per-vessel branch cleanup policy override (null = use global setting) |
 | `Active` | bool | true | Whether vessel is active |
@@ -1832,6 +2534,7 @@ A worker AI agent instance executing missions.
   "Id": "cpt_abc123",
   "Name": "captain-1",
   "Runtime": "ClaudeCode",
+  "SystemInstructions": null,
   "State": "Idle",
   "CurrentMissionId": null,
   "CurrentDockId": null,
@@ -1848,6 +2551,7 @@ A worker AI agent instance executing missions.
 | `Id` | string | auto-generated | Unique ID with `cpt_` prefix |
 | `Name` | string | `"Captain"` | Captain name |
 | `Runtime` | [AgentRuntimeEnum](#agentruntimeenum) | `ClaudeCode` | Agent runtime type |
+| `SystemInstructions` | string? | null | Per-captain system instructions injected into every mission prompt |
 | `State` | [CaptainStateEnum](#captainstateenum) | `Idle` | Current state |
 | `CurrentMissionId` | string? | null | Currently assigned mission ID |
 | `CurrentDockId` | string? | null | Currently assigned dock (worktree) ID |
@@ -2365,57 +3069,83 @@ Response from `GET /api/v1/captains/{id}/log`.
 
 | # | Method | URL | Description | Auth |
 |---|---|---|---|---|
-| 1 | GET | `/api/v1/status` | System status dashboard | Yes |
-| 2 | GET | `/api/v1/status/health` | Health check | No |
-| 3 | POST | `/api/v1/server/stop` | Graceful shutdown | Yes |
-| 4 | GET | `/api/v1/fleets` | List fleets (paginated) | Yes |
-| 5 | POST | `/api/v1/fleets/enumerate` | Enumerate fleets | Yes |
-| 6 | POST | `/api/v1/fleets` | Create fleet | Yes |
-| 7 | GET | `/api/v1/fleets/{id}` | Get fleet | Yes |
-| 8 | PUT | `/api/v1/fleets/{id}` | Update fleet | Yes |
-| 9 | DELETE | `/api/v1/fleets/{id}` | Delete fleet | Yes |
-| 10 | GET | `/api/v1/vessels` | List vessels (paginated) | Yes |
-| 11 | POST | `/api/v1/vessels/enumerate` | Enumerate vessels | Yes |
-| 12 | POST | `/api/v1/vessels` | Create vessel | Yes |
-| 13 | GET | `/api/v1/vessels/{id}` | Get vessel | Yes |
-| 14 | PUT | `/api/v1/vessels/{id}` | Update vessel | Yes |
-| 15 | DELETE | `/api/v1/vessels/{id}` | Delete vessel | Yes |
-| 16 | GET | `/api/v1/voyages` | List voyages (paginated) | Yes |
-| 17 | POST | `/api/v1/voyages/enumerate` | Enumerate voyages | Yes |
-| 18 | POST | `/api/v1/voyages` | Create voyage with missions | Yes |
-| 19 | GET | `/api/v1/voyages/{id}` | Get voyage with missions | Yes |
-| 20 | DELETE | `/api/v1/voyages/{id}` | Cancel voyage | Yes |
-| 21 | DELETE | `/api/v1/voyages/{id}/purge` | Permanently delete voyage | Yes |
-| 22 | GET | `/api/v1/missions` | List missions (paginated) | Yes |
-| 23 | POST | `/api/v1/missions/enumerate` | Enumerate missions | Yes |
-| 24 | POST | `/api/v1/missions` | Create mission | Yes |
-| 25 | GET | `/api/v1/missions/{id}` | Get mission | Yes |
-| 26 | PUT | `/api/v1/missions/{id}` | Update mission | Yes |
-| 27 | PUT | `/api/v1/missions/{id}/status` | Transition mission status | Yes |
-| 28 | DELETE | `/api/v1/missions/{id}` | Cancel mission | Yes |
-| 29 | POST | `/api/v1/missions/{id}/restart` | Restart failed/cancelled mission | Yes |
-| 30 | GET | `/api/v1/missions/{id}/diff` | Get mission diff | Yes |
-| 31 | GET | `/api/v1/missions/{id}/log` | Get mission log | Yes |
-| 32 | GET | `/api/v1/captains` | List captains (paginated) | Yes |
-| 33 | POST | `/api/v1/captains/enumerate` | Enumerate captains | Yes |
-| 34 | POST | `/api/v1/captains` | Create captain | Yes |
-| 35 | GET | `/api/v1/captains/{id}` | Get captain | Yes |
-| 36 | PUT | `/api/v1/captains/{id}` | Update captain | Yes |
-| 37 | POST | `/api/v1/captains/{id}/stop` | Stop captain | Yes |
-| 38 | POST | `/api/v1/captains/stop-all` | Stop all captains | Yes |
-| 39 | GET | `/api/v1/captains/{id}/log` | Get captain current log | Yes |
-| 40 | DELETE | `/api/v1/captains/{id}` | Delete captain | Yes |
-| 41 | GET | `/api/v1/signals` | List signals (paginated) | Yes |
-| 42 | POST | `/api/v1/signals/enumerate` | Enumerate signals | Yes |
-| 43 | POST | `/api/v1/signals` | Send signal | Yes |
-| 44 | GET | `/api/v1/events` | List events (paginated) | Yes |
-| 45 | POST | `/api/v1/events/enumerate` | Enumerate events | Yes |
-| 46 | GET | `/api/v1/merge-queue` | List merge queue (paginated) | Yes |
-| 47 | POST | `/api/v1/merge-queue/enumerate` | Enumerate merge queue | Yes |
-| 48 | POST | `/api/v1/merge-queue` | Enqueue branch | Yes |
-| 49 | GET | `/api/v1/merge-queue/{id}` | Get merge entry | Yes |
-| 50 | DELETE | `/api/v1/merge-queue/{id}` | Cancel merge entry | Yes |
-| 51 | POST | `/api/v1/merge-queue/process` | Process merge queue | Yes |
+| 1 | POST | `/api/v1/authenticate` | Authenticate (get session token) | No |
+| 2 | GET | `/api/v1/whoami` | Get current identity | Yes |
+| 3 | POST | `/api/v1/tenants/lookup` | Lookup tenants by email | No |
+| 4 | POST | `/api/v1/onboarding` | Self-register new user | No* |
+| 5 | GET | `/api/v1/tenants` | List tenants (paginated) | Admin |
+| 6 | POST | `/api/v1/tenants/enumerate` | Enumerate tenants | Admin |
+| 7 | POST | `/api/v1/tenants` | Create tenant | Admin |
+| 8 | GET | `/api/v1/tenants/{id}` | Get tenant | Yes** |
+| 9 | PUT | `/api/v1/tenants/{id}` | Update tenant | Admin |
+| 10 | DELETE | `/api/v1/tenants/{id}` | Delete tenant | Admin |
+| 11 | GET | `/api/v1/users` | List users (paginated) | Admin |
+| 12 | POST | `/api/v1/users/enumerate` | Enumerate users | Admin |
+| 13 | POST | `/api/v1/users` | Create user | Admin |
+| 14 | GET | `/api/v1/users/{id}` | Get user | Yes** |
+| 15 | PUT | `/api/v1/users/{id}` | Update user | Admin |
+| 16 | DELETE | `/api/v1/users/{id}` | Delete user | Admin |
+| 17 | GET | `/api/v1/credentials` | List credentials (paginated) | Yes** |
+| 18 | POST | `/api/v1/credentials/enumerate` | Enumerate credentials | Yes** |
+| 19 | POST | `/api/v1/credentials` | Create credential | Yes** |
+| 20 | GET | `/api/v1/credentials/{id}` | Get credential | Yes** |
+| 21 | PUT | `/api/v1/credentials/{id}` | Update credential | Yes** |
+| 22 | DELETE | `/api/v1/credentials/{id}` | Delete credential | Yes** |
+| 23 | GET | `/api/v1/status` | System status dashboard | Yes |
+| 24 | GET | `/api/v1/status/health` | Health check | No |
+| 25 | POST | `/api/v1/server/stop` | Graceful shutdown | \*\*\* |
+| 26 | GET | `/api/v1/fleets` | List fleets (paginated) | Yes |
+| 27 | POST | `/api/v1/fleets/enumerate` | Enumerate fleets | Yes |
+| 28 | POST | `/api/v1/fleets` | Create fleet | Yes |
+| 29 | GET | `/api/v1/fleets/{id}` | Get fleet | Yes |
+| 30 | PUT | `/api/v1/fleets/{id}` | Update fleet | Yes |
+| 31 | DELETE | `/api/v1/fleets/{id}` | Delete fleet | Yes |
+| 32 | GET | `/api/v1/vessels` | List vessels (paginated) | Yes |
+| 33 | POST | `/api/v1/vessels/enumerate` | Enumerate vessels | Yes |
+| 34 | POST | `/api/v1/vessels` | Create vessel | Yes |
+| 35 | GET | `/api/v1/vessels/{id}` | Get vessel | Yes |
+| 36 | PUT | `/api/v1/vessels/{id}` | Update vessel | Yes |
+| 37 | DELETE | `/api/v1/vessels/{id}` | Delete vessel | Yes |
+| 38 | GET | `/api/v1/voyages` | List voyages (paginated) | Yes |
+| 39 | POST | `/api/v1/voyages/enumerate` | Enumerate voyages | Yes |
+| 40 | POST | `/api/v1/voyages` | Create voyage with missions | Yes |
+| 41 | GET | `/api/v1/voyages/{id}` | Get voyage with missions | Yes |
+| 42 | DELETE | `/api/v1/voyages/{id}` | Cancel voyage | Yes |
+| 43 | DELETE | `/api/v1/voyages/{id}/purge` | Permanently delete voyage | Yes |
+| 44 | GET | `/api/v1/missions` | List missions (paginated) | Yes |
+| 45 | POST | `/api/v1/missions/enumerate` | Enumerate missions | Yes |
+| 46 | POST | `/api/v1/missions` | Create mission | Yes |
+| 47 | GET | `/api/v1/missions/{id}` | Get mission | Yes |
+| 48 | PUT | `/api/v1/missions/{id}` | Update mission | Yes |
+| 49 | PUT | `/api/v1/missions/{id}/status` | Transition mission status | Yes |
+| 50 | DELETE | `/api/v1/missions/{id}` | Cancel mission | Yes |
+| 51 | POST | `/api/v1/missions/{id}/restart` | Restart failed/cancelled mission | Yes |
+| 52 | GET | `/api/v1/missions/{id}/diff` | Get mission diff | Yes |
+| 53 | GET | `/api/v1/missions/{id}/log` | Get mission log | Yes |
+| 54 | GET | `/api/v1/captains` | List captains (paginated) | Yes |
+| 55 | POST | `/api/v1/captains/enumerate` | Enumerate captains | Yes |
+| 56 | POST | `/api/v1/captains` | Create captain | Yes |
+| 57 | GET | `/api/v1/captains/{id}` | Get captain | Yes |
+| 58 | PUT | `/api/v1/captains/{id}` | Update captain | Yes |
+| 59 | POST | `/api/v1/captains/{id}/stop` | Stop captain | Yes |
+| 60 | POST | `/api/v1/captains/stop-all` | Stop all captains | Yes |
+| 61 | GET | `/api/v1/captains/{id}/log` | Get captain current log | Yes |
+| 62 | DELETE | `/api/v1/captains/{id}` | Delete captain | Yes |
+| 63 | GET | `/api/v1/signals` | List signals (paginated) | Yes |
+| 64 | POST | `/api/v1/signals/enumerate` | Enumerate signals | Yes |
+| 65 | POST | `/api/v1/signals` | Send signal | Yes |
+| 66 | GET | `/api/v1/events` | List events (paginated) | Yes |
+| 67 | POST | `/api/v1/events/enumerate` | Enumerate events | Yes |
+| 68 | GET | `/api/v1/merge-queue` | List merge queue (paginated) | Yes |
+| 69 | POST | `/api/v1/merge-queue/enumerate` | Enumerate merge queue | Yes |
+| 70 | POST | `/api/v1/merge-queue` | Enqueue branch | Yes |
+| 71 | GET | `/api/v1/merge-queue/{id}` | Get merge entry | Yes |
+| 72 | DELETE | `/api/v1/merge-queue/{id}` | Cancel merge entry | Yes |
+| 73 | POST | `/api/v1/merge-queue/process` | Process merge queue | Yes |
+
+\* Gated by `AllowSelfRegistration` setting.
+\*\* Non-admin users are scoped to their own records only.
+\*\*\* NoAuthRequired by default; requires global admin (`IsAdmin = true`) when `RequireAuthForShutdown` is `true`.
 
 ---
 
@@ -2433,5 +3163,5 @@ All responses include permissive CORS headers:
 ```
 Access-Control-Allow-Origin: *
 Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
-Access-Control-Allow-Headers: Content-Type, X-Api-Key
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Token, X-Api-Key
 ```

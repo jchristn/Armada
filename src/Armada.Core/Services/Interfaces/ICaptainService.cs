@@ -22,8 +22,9 @@ namespace Armada.Core.Services.Interfaces
         /// Stop a specific captain gracefully.
         /// </summary>
         /// <param name="captainId">Captain identifier.</param>
+        /// <param name="tenantId">Optional tenant ID for tenant-scoped reads. Null for system/admin context.</param>
         /// <param name="token">Cancellation token.</param>
-        Task RecallAsync(string captainId, CancellationToken token = default);
+        Task RecallAsync(string captainId, string? tenantId = null, CancellationToken token = default);
 
         /// <summary>
         /// Attempt auto-recovery of a failed captain.

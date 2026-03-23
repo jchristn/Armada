@@ -1,6 +1,6 @@
 # Armada MCP API Reference
 
-**Version:** 0.2.0
+**Version:** 0.3.0
 **Default URL:** `http://localhost:7891`
 **Protocol:** [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) over HTTP
 **Server Library:** Voltaic (McpHttpServer)
@@ -16,6 +16,7 @@
   - [Stdio Transport](#stdio-transport)
   - [Port Configuration](#port-configuration)
 - [Authentication](#authentication)
+  - [MCP Authentication Scope](#mcp-authentication-scope)
 - [Tools](#tools)
   - **Status**
     - [armada_status](#armada_status)
@@ -146,7 +147,15 @@ The MCP port can be configured in the Armada settings file. The hostname is shar
 
 ## Authentication
 
-The MCP server does not currently enforce API key authentication. Access control should be managed at the network level (firewall, bind address).
+The MCP server does **not** currently enforce authentication. All MCP operations run in the context of the default tenant. Access control should be managed at the network level (firewall, bind address).
+
+> **Note:** Unlike the REST API, which supports bearer tokens, encrypted session tokens, and API keys as of v0.3.0, the MCP server remains unauthenticated. Multi-tenant MCP authentication is planned for a future release. For now, MCP clients have unrestricted access to all operations within the default tenant context.
+
+### MCP Authentication Scope
+
+MCP tools (served via stdio) remain **unauthenticated by design**. The MCP transport assumes the orchestrating agent (e.g., Claude Code) is already trusted and running locally. All MCP tool operations use the default tenant context (`ten_default`). If multi-tenant isolation is required for MCP clients, use the authenticated REST API instead.
+
+This is a deliberate architectural decision, not a missing feature. The stdio transport has no network attack surface -- the only caller is the parent process that spawned Armada. Adding authentication to stdio would add complexity without meaningful security benefit. The HTTP MCP transport inherits the same unauthenticated model for consistency, but should be bound to `localhost` or protected by a firewall in production.
 
 ---
 
@@ -605,6 +614,10 @@ Register a new vessel (git repository) in a fleet.
     "workingDirectory": {
       "type": "string",
       "description": "Optional local directory where completed mission changes will be pulled after merge"
+    },
+    "enableModelContext": {
+      "type": "boolean",
+      "description": "Enable model context accumulation -- agents will update context with key information discovered during missions (default false)"
     }
   },
   "required": ["name", "repoUrl", "fleetId"]
@@ -620,6 +633,7 @@ Register a new vessel (git repository) in a fleet.
 | `projectContext` | string | No | Project context describing architecture, key files, and dependencies |
 | `styleGuide` | string | No | Style guide describing naming conventions, patterns, and library preferences |
 | `workingDirectory` | string | No | Optional local directory where completed mission changes will be pulled after merge |
+| `enableModelContext` | boolean | No | Enable model context accumulation (default false) |
 
 **Example Input:**
 
@@ -1150,7 +1164,9 @@ Update an existing vessel's properties.
     "defaultBranch": { "type": "string", "description": "New default branch" },
     "projectContext": { "type": "string", "description": "New project context" },
     "styleGuide": { "type": "string", "description": "New style guide" },
-    "workingDirectory": { "type": "string", "description": "New local directory where completed mission changes will be pulled after merge" }
+    "workingDirectory": { "type": "string", "description": "New local directory where completed mission changes will be pulled after merge" },
+    "enableModelContext": { "type": "boolean", "description": "Enable or disable model context accumulation" },
+    "modelContext": { "type": "string", "description": "Agent-accumulated context about this repository" }
   },
   "required": ["vesselId"]
 }
@@ -1172,7 +1188,8 @@ Update a vessel's project context and style guide without modifying other proper
   "properties": {
     "vesselId": { "type": "string", "description": "Vessel ID (vsl_ prefix)" },
     "projectContext": { "type": "string", "description": "Project context describing architecture, key files, and dependencies" },
-    "styleGuide": { "type": "string", "description": "Style guide describing naming conventions, patterns, and library preferences" }
+    "styleGuide": { "type": "string", "description": "Style guide describing naming conventions, patterns, and library preferences" },
+    "modelContext": { "type": "string", "description": "Agent-accumulated context about this repository -- key information discovered during missions" }
   },
   "required": ["vesselId"]
 }
@@ -1183,6 +1200,7 @@ Update a vessel's project context and style guide without modifying other proper
 | `vesselId` | string | Yes | Vessel ID (prefix `vsl_`) |
 | `projectContext` | string | No | Project context describing architecture, key files, and dependencies |
 | `styleGuide` | string | No | Style guide describing naming conventions, patterns, and library preferences |
+| `modelContext` | string | No | Agent-accumulated context about this repository |
 
 **Response:** Updated [Vessel](#vessel) object, or `{ "Error": "Vessel not found" }`.
 
@@ -1481,7 +1499,8 @@ Register a new captain (AI agent).
   "type": "object",
   "properties": {
     "name": { "type": "string", "description": "Captain display name" },
-    "runtime": { "type": "string", "description": "Agent runtime: ClaudeCode, Codex" }
+    "runtime": { "type": "string", "description": "Agent runtime: ClaudeCode, Codex, Gemini, Cursor" },
+    "systemInstructions": { "type": "string", "description": "System instructions for this captain -- injected into every mission prompt to specialize behavior" }
   },
   "required": ["name"]
 }
@@ -1490,7 +1509,8 @@ Register a new captain (AI agent).
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `name` | string | Yes | Captain display name |
-| `runtime` | string | No | Agent runtime: `ClaudeCode`, `Codex` |
+| `runtime` | string | No | Agent runtime: `ClaudeCode`, `Codex`, `Gemini`, `Cursor` |
+| `systemInstructions` | string | No | System instructions injected into every mission prompt for this captain |
 
 **Response:** [Captain](#captain) object.
 
@@ -1528,7 +1548,8 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
   "properties": {
     "captainId": { "type": "string", "description": "Captain ID (cpt_ prefix)" },
     "name": { "type": "string", "description": "New display name" },
-    "runtime": { "type": "string", "description": "New agent runtime: ClaudeCode, Codex" }
+    "runtime": { "type": "string", "description": "New agent runtime: ClaudeCode, Codex, Gemini, Cursor" },
+    "systemInstructions": { "type": "string", "description": "New system instructions for this captain" }
   },
   "required": ["captainId"]
 }
@@ -1538,7 +1559,8 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
 |---|---|---|---|
 | `captainId` | string | Yes | Captain ID (prefix `cpt_`) |
 | `name` | string | No | New display name |
-| `runtime` | string | No | New agent runtime: `ClaudeCode`, `Codex` |
+| `runtime` | string | No | New agent runtime: `ClaudeCode`, `Codex`, `Gemini`, `Cursor` |
+| `systemInstructions` | string | No | New system instructions for this captain |
 
 **Response:** Updated [Captain](#captain) object, or `{ "Error": "Captain not found" }`.
 

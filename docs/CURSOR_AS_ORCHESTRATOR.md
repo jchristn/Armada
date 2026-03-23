@@ -14,7 +14,7 @@ Connect Cursor to Armada's MCP server and use natural language to orchestrate pa
 armada mcp install
 ```
 
-This shows the MCP configuration snippets for all supported tools including Cursor. Add the following to `.cursor/mcp.json` in your project (or Cursor Settings > MCP):
+This now writes the MCP configuration for all supported tools automatically. For Cursor specifically, it writes `.cursor/mcp.json` in the current project. If you prefer to edit manually, use:
 
 ```json
 {

@@ -39,6 +39,8 @@ namespace Armada.Core.Services
         /// <inheritdoc />
         public async Task<List<Voyage>> CheckCompletionsAsync(CancellationToken token = default)
         {
+            // CheckCompletionsAsync is a background/system method (called from Admiral loop).
+            // It scans all tenants' voyages, so unscoped calls are appropriate here.
             List<Voyage> completedVoyages = new List<Voyage>();
             List<Voyage> activeVoyages = await _Database.Voyages.EnumerateByStatusAsync(VoyageStatusEnum.InProgress, token).ConfigureAwait(false);
             List<Voyage> openVoyages = await _Database.Voyages.EnumerateByStatusAsync(VoyageStatusEnum.Open, token).ConfigureAwait(false);
@@ -69,11 +71,13 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<VoyageProgress?> GetProgressAsync(string voyageId, CancellationToken token = default)
+        public async Task<VoyageProgress?> GetProgressAsync(string voyageId, string? tenantId = null, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(voyageId)) return null;
 
-            Voyage? voyage = await _Database.Voyages.ReadAsync(voyageId, token).ConfigureAwait(false);
+            Voyage? voyage = !String.IsNullOrEmpty(tenantId)
+                ? await _Database.Voyages.ReadAsync(tenantId, voyageId, token).ConfigureAwait(false)
+                : await _Database.Voyages.ReadAsync(voyageId, token).ConfigureAwait(false);
             if (voyage == null) return null;
 
             List<Mission> missions = await _Database.Missions.EnumerateByVoyageAsync(voyage.Id, token).ConfigureAwait(false);

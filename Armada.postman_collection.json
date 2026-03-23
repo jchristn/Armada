@@ -2,25 +2,15 @@
 	"info": {
 		"_postman_id": "armada-api-collection",
 		"name": "Armada API",
-		"description": "Complete API collection for the Armada multi-agent orchestration system.\n\nVersion: 0.2.0\n\n## Setup\n1. Set the `baseUrl` variable to your Admiral server (default: `http://localhost:7890`)\n2. If API key authentication is enabled, set the `apiKey` variable\n3. Use the Status > Health Check request to verify connectivity",
+		"description": "Complete API collection for the Armada multi-agent orchestration system.\n\nVersion: 0.3.0\n\n## Setup\n1. Set the `baseUrl` variable to your Admiral server (default: `http://localhost:7890`)\n2. For bearer token auth, set `bearerToken` (default: `default`)\n3. For session token auth, use the Authenticate request and set `sessionToken` from the response\n4. Legacy: If API key authentication is enabled, set the `apiKey` variable (deprecated)\n5. Use the Status > Health Check request to verify connectivity\n\n## Role model\n- IsAdmin=true: global system-wide admin\n- IsAdmin=false and IsTenantAdmin=true: tenant-scoped admin\n- IsAdmin=false and IsTenantAdmin=false: regular user with self-service on own account and credentials\n\n## Notes\n- Tenant, user, and credential protection is server-controlled through IsProtected\n- Immutable fields such as IDs, ownership columns, and creation timestamps are preserved server-side on update",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
-		"type": "apikey",
-		"apikey": [
+		"type": "bearer",
+		"bearer": [
 			{
-				"key": "key",
-				"value": "X-Api-Key",
-				"type": "string"
-			},
-			{
-				"key": "value",
-				"value": "{{apiKey}}",
-				"type": "string"
-			},
-			{
-				"key": "in",
-				"value": "header",
+				"key": "token",
+				"value": "{{bearerToken}}",
 				"type": "string"
 			}
 		]
@@ -32,7 +22,33 @@
 			"type": "string"
 		},
 		{
+			"key": "bearerToken",
+			"value": "default",
+			"type": "string"
+		},
+		{
+			"key": "sessionToken",
+			"value": "",
+			"type": "string"
+		},
+		{
 			"key": "apiKey",
+			"value": "",
+			"type": "string",
+			"description": "Deprecated. Use bearerToken instead."
+		},
+		{
+			"key": "tenantId",
+			"value": "default",
+			"type": "string"
+		},
+		{
+			"key": "userId",
+			"value": "default",
+			"type": "string"
+		},
+		{
+			"key": "credentialId",
 			"value": "",
 			"type": "string"
 		},
@@ -74,6 +90,455 @@
 	],
 	"item": [
 		{
+			"name": "Authentication",
+			"description": "Authentication and identity endpoints. These endpoints handle login, identity lookup, and self-registration.",
+			"item": [
+				{
+					"name": "Tenant Lookup",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Email\": \"admin@armada\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/tenants/lookup",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "tenants", "lookup"]
+						},
+						"description": "Look up which tenants a given email address belongs to. No authentication required. Used by the dashboard login flow."
+					},
+					"response": [
+						{
+							"name": "Tenant List",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Tenants\": [\n    {\n      \"TenantId\": \"default\",\n      \"TenantName\": \"Default Tenant\"\n    }\n  ]\n}"
+						}
+					]
+				},
+				{
+					"name": "Authenticate",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const body = pm.response.json();",
+									"    if (body && body.Token) pm.collectionVariables.set('sessionToken', body.Token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"TenantId\": \"default\",\n  \"Email\": \"admin@armada\",\n  \"Password\": \"password\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/authenticate",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "authenticate"]
+						},
+						"description": "Authenticate with tenant ID, email, and password. Returns an encrypted session token (24-hour lifetime). The test script auto-saves the token to the sessionToken variable."
+					},
+					"response": [
+						{
+							"name": "Session Token",
+							"status": "OK",
+							"code": 200,
+							"body": "\"eyJhbGciOi...\""
+						}
+					]
+				},
+				{
+					"name": "Who Am I",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/whoami",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "whoami"]
+						},
+						"description": "Returns the authenticated user's tenant and user information. Requires authentication via bearer token or session token."
+					},
+					"response": [
+						{
+							"name": "Identity",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Tenant\": {\n    \"Id\": \"default\",\n    \"Name\": \"Default Tenant\",\n    \"Active\": true,\n    \"CreatedUtc\": \"2026-03-07T12:00:00Z\",\n    \"LastUpdateUtc\": \"2026-03-07T12:00:00Z\"\n  },\n  \"User\": {\n    \"Id\": \"default\",\n    \"TenantId\": \"default\",\n    \"Email\": \"admin@armada\",\n    \"PasswordSha256\": \"********\",\n    \"FirstName\": null,\n    \"LastName\": null,\n    \"IsAdmin\": true,\n    \"IsTenantAdmin\": true,\n    \"Active\": true,\n    \"CreatedUtc\": \"2026-03-07T12:00:00Z\",\n    \"LastUpdateUtc\": \"2026-03-07T12:00:00Z\"\n  }\n}"
+						}
+					]
+				},
+				{
+					"name": "Onboarding (Self-Register)",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"TenantId\": \"default\",\n  \"Email\": \"newuser@example.com\",\n  \"Password\": \"securepassword\",\n  \"FirstName\": \"Jane\",\n  \"LastName\": \"Doe\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/onboarding",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "onboarding"]
+						},
+						"description": "Self-register a new user within an existing tenant. Creates a user and bearer token credential. Requires AllowSelfRegistration to be enabled in settings."
+					},
+					"response": [
+						{
+							"name": "Onboarding Result",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Success\": true,\n  \"Tenant\": {\n    \"Id\": \"default\",\n    \"Name\": \"Default Tenant\"\n  },\n  \"User\": {\n    \"Id\": \"usr_abc123\",\n    \"TenantId\": \"default\",\n    \"Email\": \"newuser@example.com\",\n    \"PasswordSha256\": \"********\"\n  },\n  \"Credential\": {\n    \"Id\": \"crd_abc123\",\n    \"TenantId\": \"default\",\n    \"UserId\": \"usr_abc123\",\n    \"BearerToken\": \"aBcDeFgH...\"\n  },\n  \"ErrorMessage\": null\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Tenants",
+						"description": "Tenant management endpoints. Global admin only for list/create/update/delete. Authenticated non-admin users may read only their own tenant by ID.",
+			"item": [
+				{
+					"name": "List Tenants",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/tenants?pageNumber=1&pageSize=100",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "tenants"],
+							"query": [
+								{"key": "pageNumber", "value": "1"},
+								{"key": "pageSize", "value": "100"}
+							]
+						},
+						"description": "List all tenants (paginated). Global admin only."
+					}
+				},
+				{
+					"name": "Enumerate Tenants",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 100\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/tenants/enumerate",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "tenants", "enumerate"]
+						},
+						"description": "Enumerate tenants with filtering and sorting. Global admin only."
+					}
+				},
+				{
+					"name": "Create Tenant",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Name\": \"Acme Corp\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/tenants",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "tenants"]
+						},
+						"description": "Create a new tenant. Global admin only. The server seeds a protected admin@armada user and default credential for the new tenant. The seeded user is tenant admin only."
+					}
+				},
+				{
+					"name": "Get Tenant",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "tenants", "{{tenantId}}"]
+						},
+						"description": "Get a tenant by ID. Global admin: any tenant. Tenant admin or regular user: own tenant only."
+					}
+				},
+				{
+					"name": "Update Tenant",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Id\": \"{{tenantId}}\",\n  \"Name\": \"Acme Corp (updated)\",\n  \"Active\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "tenants", "{{tenantId}}"]
+						},
+						"description": "Update a tenant. Global admin only. Immutable fields such as Id, CreatedUtc, LastUpdateUtc, and IsProtected are server-controlled."
+					}
+				},
+				{
+					"name": "Delete Tenant",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "tenants", "{{tenantId}}"]
+						},
+						"description": "Delete a tenant. Global admin only. Returns 403 for protected tenants. Deleting an unprotected tenant cascades to all subordinate tenant resources, including protected child auth records."
+					}
+				}
+			]
+		},
+		{
+			"name": "Users",
+			"description": "User management endpoints. Global admins can manage all users. Tenant admins can manage users within their tenant. Regular users can read and update only themselves.",
+			"item": [
+				{
+					"name": "List Users",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users?pageNumber=1&pageSize=100",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "users"],
+							"query": [
+								{"key": "pageNumber", "value": "1"},
+								{"key": "pageSize", "value": "100"}
+							]
+						},
+						"description": "List users (paginated). Global admins can list all users. Tenant admins can list users in their own tenant. Passwords are redacted."
+					}
+				},
+				{
+					"name": "Enumerate Users",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 100\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/enumerate",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "users", "enumerate"]
+						},
+						"description": "Enumerate users with filtering and sorting. Global admins can enumerate all users. Tenant admins are limited to their own tenant."
+					}
+				},
+				{
+					"name": "Create User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"TenantId\": \"{{tenantId}}\",\n  \"Email\": \"newuser@example.com\",\n  \"Password\": \"securepassword\",\n  \"FirstName\": \"Jane\",\n  \"LastName\": \"Doe\",\n  \"IsAdmin\": false,\n  \"IsTenantAdmin\": false\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "users"]
+						},
+						"description": "Create a new user. Global admins can create users anywhere. Tenant admins can create users only in their tenant and cannot grant global admin. Password is plaintext in the request body and is hashed server-side. PasswordSha256 remains accepted for backward compatibility. IsProtected is server-controlled."
+					}
+				},
+				{
+					"name": "Get User",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/{{userId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "users", "{{userId}}"]
+						},
+						"description": "Get a user by ID. Global admin: any user. Tenant admin: users in own tenant. Regular user: own user only. Password is redacted."
+					}
+				},
+				{
+					"name": "Update User",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Email\": \"updated@example.com\",\n  \"Password\": \"newpassword\",\n  \"FirstName\": \"Jane\",\n  \"LastName\": \"Smith\",\n  \"IsAdmin\": false,\n  \"IsTenantAdmin\": false,\n  \"Active\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/{{userId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "users", "{{userId}}"]
+						},
+						"description": "Update a user. Global admins can update any user. Tenant admins can update users in their tenant. Regular users can update only themselves. If Password is supplied, the server hashes and stores the new password; if omitted, the existing password is preserved. Immutable fields such as Id, TenantId, CreatedUtc, LastUpdateUtc, and IsProtected are server-controlled."
+					}
+				},
+				{
+					"name": "Delete User",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/{{userId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "users", "{{userId}}"]
+						},
+						"description": "Delete a user. Global admins can delete any unprotected user. Tenant admins can delete unprotected users in their tenant. Regular users cannot delete users directly. Returns 403 for protected users."
+					}
+				}
+			]
+		},
+		{
+			"name": "Credentials",
+			"description": "Credential (bearer token) management endpoints. Admins can manage all; non-admins can manage their own.",
+			"item": [
+				{
+					"name": "List Credentials",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/credentials?pageNumber=1&pageSize=100",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "credentials"],
+							"query": [
+								{"key": "pageNumber", "value": "1"},
+								{"key": "pageSize", "value": "100"}
+							]
+						},
+						"description": "List credentials (paginated). Global admin: all. Tenant admin: credentials in own tenant. Regular user: own credentials only."
+					}
+				},
+				{
+					"name": "Enumerate Credentials",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 100\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/credentials/enumerate",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "credentials", "enumerate"]
+						},
+						"description": "Enumerate credentials with filtering. Results are scoped by role: global admin all, tenant admin own tenant, regular user own only."
+					}
+				},
+				{
+					"name": "Create Credential",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"TenantId\": \"{{tenantId}}\",\n  \"UserId\": \"{{userId}}\",\n  \"Name\": \"My API Token\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/credentials",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "credentials"]
+						},
+						"description": "Create a new credential with auto-generated bearer token. Global admin: any tenant/user. Tenant admin: users in own tenant. Regular user: self only. IsProtected is server-controlled."
+					}
+				},
+				{
+					"name": "Get Credential",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/credentials/{{credentialId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "credentials", "{{credentialId}}"]
+						},
+						"description": "Get a credential by ID. Global admin: any. Tenant admin: credentials in own tenant. Regular user: own only."
+					}
+				},
+				{
+					"name": "Update Credential",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Id\": \"{{credentialId}}\",\n  \"TenantId\": \"{{tenantId}}\",\n  \"UserId\": \"{{userId}}\",\n  \"Name\": \"Updated Token Name\",\n  \"Active\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/credentials/{{credentialId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "credentials", "{{credentialId}}"]
+						},
+						"description": "Update a credential. Global admins can update any credential. Tenant admins can update credentials in their tenant. Regular users can update only their own credentials. Immutable fields such as Id, TenantId, UserId, CreatedUtc, LastUpdateUtc, and IsProtected are server-controlled."
+					}
+				},
+				{
+					"name": "Delete Credential",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/credentials/{{credentialId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "credentials", "{{credentialId}}"]
+						},
+						"description": "Delete a credential. Global admin: any. Tenant admin: credentials in own tenant. Regular user: own only. Returns 403 for protected credentials."
+					}
+				}
+			]
+		},
+		{
 			"name": "Status",
 			"description": "Health check and system status endpoints.",
 			"item": [
@@ -97,7 +562,7 @@
 							"name": "Healthy",
 							"status": "OK",
 							"code": 200,
-							"body": "{\n  \"Status\": \"healthy\",\n  \"Timestamp\": \"2026-03-07T12:00:00Z\",\n  \"StartUtc\": \"2026-03-07T08:00:00Z\",\n  \"Uptime\": \"0.04:00:00\",\n  \"Version\": \"0.2.0\",\n  \"Ports\": {\n    \"Admiral\": 7890,\n    \"Mcp\": 7891,\n    \"WebSocket\": 7892\n  }\n}"
+							"body": "{\n  \"Status\": \"healthy\",\n  \"Timestamp\": \"2026-03-07T12:00:00Z\",\n  \"StartUtc\": \"2026-03-07T08:00:00Z\",\n  \"Uptime\": \"0.04:00:00\",\n  \"Version\": \"0.3.0\",\n  \"Ports\": {\n    \"Admiral\": 7890,\n    \"Mcp\": 7891,\n    \"WebSocket\": 7892\n  }\n}"
 						}
 					]
 				},
@@ -1017,21 +1482,21 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"Name\": \"captain-1\",\n  \"Runtime\": \"ClaudeCode\"\n}"
+							"raw": "{\n  \"Name\": \"captain-1\",\n  \"Runtime\": \"ClaudeCode\",\n  \"SystemInstructions\": \"You are a testing specialist. Always run tests before committing.\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/v1/captains",
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "v1", "captains"]
 						},
-						"description": "Registers a new captain (AI agent). Runtime options: ClaudeCode, Codex, Gemini, Cursor, Custom. Auto-saves the ID to the captainId collection variable."
+						"description": "Registers a new captain (AI agent). Runtime options: ClaudeCode, Codex, Gemini, Cursor, Custom. SystemInstructions are optional per-captain instructions injected into every mission prompt. Auto-saves the ID to the captainId collection variable."
 					},
 					"response": [
 						{
 							"name": "Created",
 							"status": "Created",
 							"code": 201,
-							"body": "{\n  \"Id\": \"cpt_abc123\",\n  \"Name\": \"captain-1\",\n  \"Runtime\": \"ClaudeCode\",\n  \"State\": \"Idle\",\n  \"CurrentMissionId\": null,\n  \"CurrentDockId\": null,\n  \"ProcessId\": null,\n  \"RecoveryAttempts\": 0,\n  \"LastHeartbeatUtc\": null,\n  \"CreatedUtc\": \"2026-03-07T12:00:00Z\",\n  \"LastUpdateUtc\": \"2026-03-07T12:00:00Z\"\n}"
+							"body": "{\n  \"Id\": \"cpt_abc123\",\n  \"Name\": \"captain-1\",\n  \"Runtime\": \"ClaudeCode\",\n  \"SystemInstructions\": \"You are a testing specialist. Always run tests before committing.\",\n  \"State\": \"Idle\",\n  \"CurrentMissionId\": null,\n  \"CurrentDockId\": null,\n  \"ProcessId\": null,\n  \"RecoveryAttempts\": 0,\n  \"LastHeartbeatUtc\": null,\n  \"CreatedUtc\": \"2026-03-07T12:00:00Z\",\n  \"LastUpdateUtc\": \"2026-03-07T12:00:00Z\"\n}"
 						}
 					]
 				},
@@ -1057,7 +1522,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"Name\": \"Updated Captain Name\",\n  \"Runtime\": \"ClaudeCode\"\n}"
+							"raw": "{\n  \"Name\": \"Updated Captain Name\",\n  \"Runtime\": \"ClaudeCode\",\n  \"SystemInstructions\": \"Focus on code quality and always run linting before commits.\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/v1/captains/{{captainId}}",

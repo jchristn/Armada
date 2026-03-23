@@ -111,7 +111,7 @@ namespace Armada.Core.Services
                     {
                         string dirName = Path.GetFileName(existingDir);
 
-                        // Skip the current captain's directory — handled below
+                        // Skip the current captain's directory -- handled below
                         if (dirName == captain.Name) continue;
 
                         // Skip directories belonging to active docks
@@ -198,6 +198,8 @@ namespace Armada.Core.Services
 
                 // Create dock record
                 Dock dock = new Dock(vessel.Id);
+                dock.TenantId = vessel.TenantId;
+                dock.UserId = vessel.UserId;
                 dock.CaptainId = captain.Id;
                 dock.WorktreePath = worktreePath;
                 dock.BranchName = branchName;
@@ -210,7 +212,7 @@ namespace Armada.Core.Services
             {
                 _Logging.Warn(_Header + "provisioning failed for vessel " + vessel.Id + " captain " + captain.Id + " repo " + (vessel.RepoUrl ?? "unknown") + ": " + ex.Message);
 
-                // Clean up partial state — remove worktree directory if it was partially created
+                // Clean up partial state -- remove worktree directory if it was partially created
                 if (Directory.Exists(worktreePath))
                 {
                     await ForceRemoveDirectoryAsync(worktreePath, CancellationToken.None).ConfigureAwait(false);
@@ -221,11 +223,13 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task ReclaimAsync(string dockId, CancellationToken token = default)
+        public async Task ReclaimAsync(string dockId, string? tenantId = null, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(dockId)) throw new ArgumentNullException(nameof(dockId));
 
-            Dock? dock = await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
+            Dock? dock = !String.IsNullOrEmpty(tenantId)
+                ? await _Database.Docks.ReadAsync(tenantId, dockId, token).ConfigureAwait(false)
+                : await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
             if (dock == null) return;
 
             // Idempotency guard: if the dock is already inactive, it was already reclaimed.
@@ -233,7 +237,7 @@ namespace Armada.Core.Services
             // and ArmadaServer (HandleMissionCompleteAsync) both call ReclaimAsync for the same dock.
             if (!dock.Active)
             {
-                _Logging.Debug(_Header + "dock " + dockId + " already reclaimed (Active=false) — skipping");
+                _Logging.Debug(_Header + "dock " + dockId + " already reclaimed (Active=false) -- skipping");
                 return;
             }
 
@@ -249,7 +253,7 @@ namespace Armada.Core.Services
                     _Logging.Warn(_Header + "error removing worktree for dock " + dockId + ": " + ex.Message);
                 }
 
-                // Ensure the directory is actually removed — on Windows, file handles
+                // Ensure the directory is actually removed -- on Windows, file handles
                 // from the just-exited agent process can linger and block deletion.
                 await ForceRemoveDirectoryAsync(dock.WorktreePath, token).ConfigureAwait(false);
             }
@@ -262,11 +266,13 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task RepairAsync(string dockId, CancellationToken token = default)
+        public async Task RepairAsync(string dockId, string? tenantId = null, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(dockId)) throw new ArgumentNullException(nameof(dockId));
 
-            Dock? dock = await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
+            Dock? dock = !String.IsNullOrEmpty(tenantId)
+                ? await _Database.Docks.ReadAsync(tenantId, dockId, token).ConfigureAwait(false)
+                : await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
             if (dock == null) throw new InvalidOperationException("Dock not found: " + dockId);
 
             if (!String.IsNullOrEmpty(dock.WorktreePath))
@@ -277,36 +283,50 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<bool> DeleteAsync(string dockId, CancellationToken token = default)
+        public async Task<bool> DeleteAsync(string dockId, string? tenantId = null, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(dockId)) throw new ArgumentNullException(nameof(dockId));
 
-            Dock? dock = await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
+            Dock? dock = !String.IsNullOrEmpty(tenantId)
+                ? await _Database.Docks.ReadAsync(tenantId, dockId, token).ConfigureAwait(false)
+                : await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
             if (dock == null) throw new InvalidOperationException("Dock not found: " + dockId);
 
             // Block deletion if an active mission is using this dock
             if (dock.Active && !String.IsNullOrEmpty(dock.CaptainId))
             {
-                _Logging.Warn(_Header + "cannot delete dock " + dockId + " — it is active with captain " + dock.CaptainId);
+                _Logging.Warn(_Header + "cannot delete dock " + dockId + " -- it is active with captain " + dock.CaptainId);
                 return false;
             }
 
             await CleanupWorktreeAsync(dock, token).ConfigureAwait(false);
-            await _Database.Docks.DeleteAsync(dockId, token).ConfigureAwait(false);
+
+            if (!String.IsNullOrEmpty(tenantId))
+                await _Database.Docks.DeleteAsync(tenantId, dockId, token).ConfigureAwait(false);
+            else
+                await _Database.Docks.DeleteAsync(dockId, token).ConfigureAwait(false);
+
             _Logging.Info(_Header + "deleted dock " + dockId);
             return true;
         }
 
         /// <inheritdoc />
-        public async Task PurgeAsync(string dockId, CancellationToken token = default)
+        public async Task PurgeAsync(string dockId, string? tenantId = null, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(dockId)) throw new ArgumentNullException(nameof(dockId));
 
-            Dock? dock = await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
+            Dock? dock = !String.IsNullOrEmpty(tenantId)
+                ? await _Database.Docks.ReadAsync(tenantId, dockId, token).ConfigureAwait(false)
+                : await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
             if (dock == null) throw new InvalidOperationException("Dock not found: " + dockId);
 
             await CleanupWorktreeAsync(dock, token).ConfigureAwait(false);
-            await _Database.Docks.DeleteAsync(dockId, token).ConfigureAwait(false);
+
+            if (!String.IsNullOrEmpty(tenantId))
+                await _Database.Docks.DeleteAsync(tenantId, dockId, token).ConfigureAwait(false);
+            else
+                await _Database.Docks.DeleteAsync(dockId, token).ConfigureAwait(false);
+
             _Logging.Info(_Header + "purged dock " + dockId + " (force)");
         }
 

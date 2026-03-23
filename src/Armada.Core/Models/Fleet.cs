@@ -36,6 +36,16 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
+        /// Tenant identifier.
+        /// </summary>
+        public string? TenantId { get; set; } = null;
+
+        /// <summary>
+        /// Owning user identifier.
+        /// </summary>
+        public string? UserId { get; set; } = null;
+
+        /// <summary>
         /// Fleet description.
         /// </summary>
         public string? Description { get; set; } = null;

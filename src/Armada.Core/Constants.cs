@@ -20,7 +20,7 @@ namespace Armada.Core
         /// <summary>
         /// Product version.
         /// </summary>
-        public static readonly string ProductVersion = "0.2.0";
+        public static readonly string ProductVersion = "0.3.0";
 
         /// <summary>
         /// Default data directory.
@@ -139,6 +139,86 @@ namespace Armada.Core
         /// 0 = disabled.
         /// </summary>
         public static readonly int DefaultIdleCaptainTimeoutSeconds = 0;
+
+        /// <summary>
+        /// Tenant ID prefix.
+        /// </summary>
+        public static readonly string TenantIdPrefix = "ten_";
+
+        /// <summary>
+        /// User ID prefix.
+        /// </summary>
+        public static readonly string UserIdPrefix = "usr_";
+
+        /// <summary>
+        /// Credential ID prefix.
+        /// </summary>
+        public static readonly string CredentialIdPrefix = "crd_";
+
+        /// <summary>
+        /// Header name for session tokens.
+        /// </summary>
+        public static readonly string SessionTokenHeader = "X-Token";
+
+        /// <summary>
+        /// Default tenant identifier.
+        /// </summary>
+        public static readonly string DefaultTenantId = "default";
+
+        /// <summary>
+        /// Default tenant name.
+        /// </summary>
+        public static readonly string DefaultTenantName = "Default Tenant";
+
+        /// <summary>
+        /// Default user email address.
+        /// </summary>
+        public static readonly string DefaultUserEmail = "admin@armada";
+
+        /// <summary>
+        /// Default user password.
+        /// </summary>
+        public static readonly string DefaultUserPassword = "password";
+
+        /// <summary>
+        /// Default user identifier.
+        /// </summary>
+        public static readonly string DefaultUserId = "default";
+
+        /// <summary>
+        /// Default credential identifier.
+        /// </summary>
+        public static readonly string DefaultCredentialId = "default";
+
+        /// <summary>
+        /// Default bearer token.
+        /// </summary>
+        public static readonly string DefaultBearerToken = "default";
+
+        /// <summary>
+        /// Session token lifetime in hours.
+        /// </summary>
+        public static readonly int SessionTokenLifetimeHours = 24;
+
+        /// <summary>
+        /// System tenant identifier for synthetic admin identity.
+        /// </summary>
+        public static readonly string SystemTenantId = "ten_system";
+
+        /// <summary>
+        /// System tenant name.
+        /// </summary>
+        public static readonly string SystemTenantName = "System";
+
+        /// <summary>
+        /// System user identifier for synthetic admin identity.
+        /// </summary>
+        public static readonly string SystemUserId = "usr_system";
+
+        /// <summary>
+        /// System user email.
+        /// </summary>
+        public static readonly string SystemUserEmail = "system@armada";
 
         #endregion
     }

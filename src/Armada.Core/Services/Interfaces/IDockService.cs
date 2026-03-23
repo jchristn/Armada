@@ -24,30 +24,34 @@ namespace Armada.Core.Services.Interfaces
         /// Reclaim a dock by removing the worktree.
         /// </summary>
         /// <param name="dockId">Dock identifier.</param>
+        /// <param name="tenantId">Optional tenant ID for tenant-scoped reads. Null for system/admin context.</param>
         /// <param name="token">Cancellation token.</param>
-        Task ReclaimAsync(string dockId, CancellationToken token = default);
+        Task ReclaimAsync(string dockId, string? tenantId = null, CancellationToken token = default);
 
         /// <summary>
         /// Repair a dock's worktree.
         /// </summary>
         /// <param name="dockId">Dock identifier.</param>
+        /// <param name="tenantId">Optional tenant ID for tenant-scoped reads. Null for system/admin context.</param>
         /// <param name="token">Cancellation token.</param>
-        Task RepairAsync(string dockId, CancellationToken token = default);
+        Task RepairAsync(string dockId, string? tenantId = null, CancellationToken token = default);
 
         /// <summary>
         /// Delete a dock by ID, cleaning up its worktree.
         /// Blocked if an active mission is using the dock.
         /// </summary>
         /// <param name="dockId">Dock identifier.</param>
+        /// <param name="tenantId">Optional tenant ID for tenant-scoped reads. Null for system/admin context.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>True if deleted, false if blocked by an active mission.</returns>
-        Task<bool> DeleteAsync(string dockId, CancellationToken token = default);
+        Task<bool> DeleteAsync(string dockId, string? tenantId = null, CancellationToken token = default);
 
         /// <summary>
         /// Force purge a dock and its worktree, even if a mission references it.
         /// </summary>
         /// <param name="dockId">Dock identifier.</param>
+        /// <param name="tenantId">Optional tenant ID for tenant-scoped reads. Null for system/admin context.</param>
         /// <param name="token">Cancellation token.</param>
-        Task PurgeAsync(string dockId, CancellationToken token = default);
+        Task PurgeAsync(string dockId, string? tenantId = null, CancellationToken token = default);
     }
 }

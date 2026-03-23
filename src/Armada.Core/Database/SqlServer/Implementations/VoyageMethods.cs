@@ -2,13 +2,14 @@ namespace Armada.Core.Database.SqlServer.Implementations
 {
     using System;
     using System.Collections.Generic;
-    using System.Globalization;
     using System.Threading;
     using System.Threading.Tasks;
     using Microsoft.Data.SqlClient;
+    using SyslogLogging;
     using Armada.Core.Database.Interfaces;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Settings;
 
     /// <summary>
     /// SQL Server implementation of voyage database operations.
@@ -17,8 +18,12 @@ namespace Armada.Core.Database.SqlServer.Implementations
     {
         #region Private-Members
 
-        private string _ConnectionString;
-        private static readonly string _Iso8601Format = "yyyy-MM-ddTHH:mm:ss.fffffffZ";
+#pragma warning disable CS0414
+        private readonly string _Header = "[VoyageMethods] ";
+#pragma warning restore CS0414
+        private readonly SqlServerDatabaseDriver _Driver;
+        private readonly DatabaseSettings _Settings;
+        private readonly LoggingModule _Logging;
 
         #endregion
 
@@ -27,41 +32,42 @@ namespace Armada.Core.Database.SqlServer.Implementations
         /// <summary>
         /// Instantiate.
         /// </summary>
-        /// <param name="connectionString">SQL Server connection string.</param>
-        internal VoyageMethods(string connectionString)
+        internal VoyageMethods(SqlServerDatabaseDriver driver, DatabaseSettings settings, LoggingModule logging)
         {
-            _ConnectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
+            _Driver = driver ?? throw new ArgumentNullException(nameof(driver));
+            _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
+            _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
         }
 
         #endregion
 
         #region Public-Methods
 
-        /// <summary>
-        /// Create a voyage.
-        /// </summary>
+        /// <inheritdoc />
         public async Task<Voyage> CreateAsync(Voyage voyage, CancellationToken token = default)
         {
             if (voyage == null) throw new ArgumentNullException(nameof(voyage));
             voyage.LastUpdateUtc = DateTime.UtcNow;
 
-            using (SqlConnection conn = new SqlConnection(_ConnectionString))
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = @"INSERT INTO voyages (id, title, description, status, created_utc, completed_utc, last_update_utc, auto_push, auto_create_pull_requests, auto_merge_pull_requests, landing_mode)
-                        VALUES (@id, @title, @description, @status, @created_utc, @completed_utc, @last_update_utc, @auto_push, @auto_create_pull_requests, @auto_merge_pull_requests, @landing_mode);";
+                    cmd.CommandText = @"INSERT INTO voyages (id, tenant_id, user_id, title, description, status, created_utc, completed_utc, last_update_utc, auto_push, auto_create_pull_requests, auto_merge_pull_requests, landing_mode)
+                        VALUES (@id, @tenant_id, @user_id, @title, @description, @status, @created_utc, @completed_utc, @last_update_utc, @auto_push, @auto_create_pull_requests, @auto_merge_pull_requests, @landing_mode);";
                     cmd.Parameters.AddWithValue("@id", voyage.Id);
+                    cmd.Parameters.AddWithValue("@tenant_id", (object?)voyage.TenantId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@user_id", (object?)voyage.UserId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@title", voyage.Title);
                     cmd.Parameters.AddWithValue("@description", (object?)voyage.Description ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@status", voyage.Status.ToString());
-                    cmd.Parameters.AddWithValue("@created_utc", ToIso8601(voyage.CreatedUtc));
-                    cmd.Parameters.AddWithValue("@completed_utc", voyage.CompletedUtc.HasValue ? (object)ToIso8601(voyage.CompletedUtc.Value) : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@last_update_utc", ToIso8601(voyage.LastUpdateUtc));
-                    cmd.Parameters.AddWithValue("@auto_push", voyage.AutoPush.HasValue ? (object)(voyage.AutoPush.Value ? 1 : 0) : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@auto_create_pull_requests", voyage.AutoCreatePullRequests.HasValue ? (object)(voyage.AutoCreatePullRequests.Value ? 1 : 0) : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@auto_merge_pull_requests", voyage.AutoMergePullRequests.HasValue ? (object)(voyage.AutoMergePullRequests.Value ? 1 : 0) : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@created_utc", SqlServerDatabaseDriver.ToIso8601(voyage.CreatedUtc));
+                    cmd.Parameters.AddWithValue("@completed_utc", voyage.CompletedUtc.HasValue ? (object)SqlServerDatabaseDriver.ToIso8601(voyage.CompletedUtc.Value) : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@last_update_utc", SqlServerDatabaseDriver.ToIso8601(voyage.LastUpdateUtc));
+                    cmd.Parameters.AddWithValue("@auto_push", voyage.AutoPush.HasValue ? (object)voyage.AutoPush.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@auto_create_pull_requests", voyage.AutoCreatePullRequests.HasValue ? (object)voyage.AutoCreatePullRequests.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@auto_merge_pull_requests", voyage.AutoMergePullRequests.HasValue ? (object)voyage.AutoMergePullRequests.Value : DBNull.Value);
                     cmd.Parameters.AddWithValue("@landing_mode", voyage.LandingMode.HasValue ? voyage.LandingMode.Value.ToString() : DBNull.Value);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
@@ -70,14 +76,12 @@ namespace Armada.Core.Database.SqlServer.Implementations
             return voyage;
         }
 
-        /// <summary>
-        /// Read a voyage by identifier.
-        /// </summary>
+        /// <inheritdoc />
         public async Task<Voyage?> ReadAsync(string id, CancellationToken token = default)
         {
             if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
 
-            using (SqlConnection conn = new SqlConnection(_ConnectionString))
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
@@ -87,7 +91,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
                         if (await reader.ReadAsync(token).ConfigureAwait(false))
-                            return VoyageFromReader(reader);
+                            return SqlServerDatabaseDriver.VoyageFromReader(reader);
                     }
                 }
             }
@@ -95,20 +99,20 @@ namespace Armada.Core.Database.SqlServer.Implementations
             return null;
         }
 
-        /// <summary>
-        /// Update a voyage.
-        /// </summary>
+        /// <inheritdoc />
         public async Task<Voyage> UpdateAsync(Voyage voyage, CancellationToken token = default)
         {
             if (voyage == null) throw new ArgumentNullException(nameof(voyage));
             voyage.LastUpdateUtc = DateTime.UtcNow;
 
-            using (SqlConnection conn = new SqlConnection(_ConnectionString))
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = @"UPDATE voyages SET
+                        tenant_id = @tenant_id,
+                            user_id = @user_id,
                         title = @title,
                         description = @description,
                         status = @status,
@@ -120,14 +124,16 @@ namespace Armada.Core.Database.SqlServer.Implementations
                         landing_mode = @landing_mode
                         WHERE id = @id;";
                     cmd.Parameters.AddWithValue("@id", voyage.Id);
+                    cmd.Parameters.AddWithValue("@tenant_id", (object?)voyage.TenantId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@user_id", (object?)voyage.UserId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@title", voyage.Title);
                     cmd.Parameters.AddWithValue("@description", (object?)voyage.Description ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@status", voyage.Status.ToString());
-                    cmd.Parameters.AddWithValue("@completed_utc", voyage.CompletedUtc.HasValue ? (object)ToIso8601(voyage.CompletedUtc.Value) : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@last_update_utc", ToIso8601(voyage.LastUpdateUtc));
-                    cmd.Parameters.AddWithValue("@auto_push", voyage.AutoPush.HasValue ? (object)(voyage.AutoPush.Value ? 1 : 0) : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@auto_create_pull_requests", voyage.AutoCreatePullRequests.HasValue ? (object)(voyage.AutoCreatePullRequests.Value ? 1 : 0) : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@auto_merge_pull_requests", voyage.AutoMergePullRequests.HasValue ? (object)(voyage.AutoMergePullRequests.Value ? 1 : 0) : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@completed_utc", voyage.CompletedUtc.HasValue ? (object)SqlServerDatabaseDriver.ToIso8601(voyage.CompletedUtc.Value) : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@last_update_utc", SqlServerDatabaseDriver.ToIso8601(voyage.LastUpdateUtc));
+                    cmd.Parameters.AddWithValue("@auto_push", voyage.AutoPush.HasValue ? (object)voyage.AutoPush.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@auto_create_pull_requests", voyage.AutoCreatePullRequests.HasValue ? (object)voyage.AutoCreatePullRequests.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@auto_merge_pull_requests", voyage.AutoMergePullRequests.HasValue ? (object)voyage.AutoMergePullRequests.Value : DBNull.Value);
                     cmd.Parameters.AddWithValue("@landing_mode", voyage.LandingMode.HasValue ? voyage.LandingMode.Value.ToString() : DBNull.Value);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
@@ -136,14 +142,12 @@ namespace Armada.Core.Database.SqlServer.Implementations
             return voyage;
         }
 
-        /// <summary>
-        /// Delete a voyage by identifier.
-        /// </summary>
+        /// <inheritdoc />
         public async Task DeleteAsync(string id, CancellationToken token = default)
         {
             if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
 
-            using (SqlConnection conn = new SqlConnection(_ConnectionString))
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
@@ -155,14 +159,12 @@ namespace Armada.Core.Database.SqlServer.Implementations
             }
         }
 
-        /// <summary>
-        /// Enumerate all voyages.
-        /// </summary>
+        /// <inheritdoc />
         public async Task<List<Voyage>> EnumerateAsync(CancellationToken token = default)
         {
             List<Voyage> results = new List<Voyage>();
 
-            using (SqlConnection conn = new SqlConnection(_ConnectionString))
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
@@ -171,7 +173,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
                         while (await reader.ReadAsync(token).ConfigureAwait(false))
-                            results.Add(VoyageFromReader(reader));
+                            results.Add(SqlServerDatabaseDriver.VoyageFromReader(reader));
                     }
                 }
             }
@@ -179,14 +181,12 @@ namespace Armada.Core.Database.SqlServer.Implementations
             return results;
         }
 
-        /// <summary>
-        /// Enumerate voyages with pagination and filtering.
-        /// </summary>
+        /// <inheritdoc />
         public async Task<EnumerationResult<Voyage>> EnumerateAsync(EnumerationQuery query, CancellationToken token = default)
         {
             if (query == null) query = new EnumerationQuery();
 
-            using (SqlConnection conn = new SqlConnection(_ConnectionString))
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
 
@@ -196,12 +196,12 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 if (query.CreatedAfter.HasValue)
                 {
                     conditions.Add("created_utc > @created_after");
-                    parameters.Add(new SqlParameter("@created_after", ToIso8601(query.CreatedAfter.Value)));
+                    parameters.Add(new SqlParameter("@created_after", SqlServerDatabaseDriver.ToIso8601(query.CreatedAfter.Value)));
                 }
                 if (query.CreatedBefore.HasValue)
                 {
                     conditions.Add("created_utc < @created_before");
-                    parameters.Add(new SqlParameter("@created_before", ToIso8601(query.CreatedBefore.Value)));
+                    parameters.Add(new SqlParameter("@created_before", SqlServerDatabaseDriver.ToIso8601(query.CreatedBefore.Value)));
                 }
                 if (!string.IsNullOrEmpty(query.Status))
                 {
@@ -212,16 +212,14 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 string whereClause = conditions.Count > 0 ? " WHERE " + string.Join(" AND ", conditions) : "";
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
 
-                // Count
-                int totalCount = 0;
+                long totalCount = 0;
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = "SELECT COUNT(*) FROM voyages" + whereClause + ";";
                     foreach (SqlParameter p in parameters) cmd.Parameters.Add(new SqlParameter(p.ParameterName, p.Value));
-                    totalCount = (int)(await cmd.ExecuteScalarAsync(token).ConfigureAwait(false))!;
+                    totalCount = Convert.ToInt64(await cmd.ExecuteScalarAsync(token).ConfigureAwait(false));
                 }
 
-                // Query
                 List<Voyage> results = new List<Voyage>();
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
@@ -232,7 +230,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
                         while (await reader.ReadAsync(token).ConfigureAwait(false))
-                            results.Add(VoyageFromReader(reader));
+                            results.Add(SqlServerDatabaseDriver.VoyageFromReader(reader));
                     }
                 }
 
@@ -240,14 +238,12 @@ namespace Armada.Core.Database.SqlServer.Implementations
             }
         }
 
-        /// <summary>
-        /// Enumerate voyages by status.
-        /// </summary>
+        /// <inheritdoc />
         public async Task<List<Voyage>> EnumerateByStatusAsync(VoyageStatusEnum status, CancellationToken token = default)
         {
             List<Voyage> results = new List<Voyage>();
 
-            using (SqlConnection conn = new SqlConnection(_ConnectionString))
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
@@ -257,7 +253,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
                         while (await reader.ReadAsync(token).ConfigureAwait(false))
-                            results.Add(VoyageFromReader(reader));
+                            results.Add(SqlServerDatabaseDriver.VoyageFromReader(reader));
                     }
                 }
             }
@@ -265,88 +261,319 @@ namespace Armada.Core.Database.SqlServer.Implementations
             return results;
         }
 
-        /// <summary>
-        /// Check if a voyage exists by identifier.
-        /// </summary>
+        /// <inheritdoc />
         public async Task<bool> ExistsAsync(string id, CancellationToken token = default)
         {
             if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
 
-            using (SqlConnection conn = new SqlConnection(_ConnectionString))
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = "SELECT COUNT(*) FROM voyages WHERE id = @id;";
                     cmd.Parameters.AddWithValue("@id", id);
-                    int count = (int)(await cmd.ExecuteScalarAsync(token).ConfigureAwait(false))!;
+                    int count = Convert.ToInt32(await cmd.ExecuteScalarAsync(token).ConfigureAwait(false));
                     return count > 0;
                 }
             }
         }
 
-        #endregion
-
-        #region Private-Methods
-
-        private static Voyage VoyageFromReader(SqlDataReader reader)
+        /// <inheritdoc />
+        public async Task<Voyage?> ReadAsync(string tenantId, string id, CancellationToken token = default)
         {
-            Voyage voyage = new Voyage();
-            voyage.Id = reader["id"].ToString()!;
-            voyage.Title = reader["title"].ToString()!;
-            voyage.Description = NullableString(reader["description"]);
-            voyage.Status = Enum.Parse<VoyageStatusEnum>(reader["status"].ToString()!);
-            voyage.CreatedUtc = FromIso8601(reader["created_utc"].ToString()!);
-            voyage.CompletedUtc = FromIso8601Nullable(reader["completed_utc"]);
-            voyage.LastUpdateUtc = FromIso8601(reader["last_update_utc"].ToString()!);
-            voyage.AutoPush = NullableBool(reader, "auto_push");
-            voyage.AutoCreatePullRequests = NullableBool(reader, "auto_create_pull_requests");
-            voyage.AutoMergePullRequests = NullableBool(reader, "auto_merge_pull_requests");
-            string? voyageLandingModeStr = NullableString(reader["landing_mode"]);
-            if (!String.IsNullOrEmpty(voyageLandingModeStr) && Enum.TryParse<LandingModeEnum>(voyageLandingModeStr, out LandingModeEnum vlm))
-                voyage.LandingMode = vlm;
-            return voyage;
-        }
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
 
-        private static string ToIso8601(DateTime dt)
-        {
-            return dt.ToUniversalTime().ToString(_Iso8601Format, CultureInfo.InvariantCulture);
-        }
-
-        private static DateTime FromIso8601(string value)
-        {
-            return DateTime.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).ToUniversalTime();
-        }
-
-        private static DateTime? FromIso8601Nullable(object value)
-        {
-            if (value == null || value == DBNull.Value) return null;
-            string str = value.ToString()!;
-            if (string.IsNullOrEmpty(str)) return null;
-            return FromIso8601(str);
-        }
-
-        private static string? NullableString(object value)
-        {
-            if (value == null || value == DBNull.Value) return null;
-            string str = value.ToString()!;
-            return string.IsNullOrEmpty(str) ? null : str;
-        }
-
-        private static bool? NullableBool(SqlDataReader reader, string column)
-        {
-            try
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
             {
-                object value = reader[column];
-                if (value == null || value == DBNull.Value) return null;
-                return Convert.ToInt32(value) == 1;
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT * FROM voyages WHERE tenant_id = @tenantId AND id = @id;";
+                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
+                    cmd.Parameters.AddWithValue("@id", id);
+                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        if (await reader.ReadAsync(token).ConfigureAwait(false))
+                            return SqlServerDatabaseDriver.VoyageFromReader(reader);
+                    }
+                }
             }
-            catch
+
+            return null;
+        }
+
+        /// <inheritdoc />
+        public async Task DeleteAsync(string tenantId, string id, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
             {
-                return null;
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "DELETE FROM voyages WHERE tenant_id = @tenantId AND id = @id;";
+                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
+                    cmd.Parameters.AddWithValue("@id", id);
+                    await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<List<Voyage>> EnumerateAsync(string tenantId, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            List<Voyage> results = new List<Voyage>();
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT * FROM voyages WHERE tenant_id = @tenantId ORDER BY created_utc DESC;";
+                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
+                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                            results.Add(SqlServerDatabaseDriver.VoyageFromReader(reader));
+                    }
+                }
+            }
+
+            return results;
+        }
+
+        /// <inheritdoc />
+        public async Task<List<Voyage>> EnumerateByStatusAsync(string tenantId, VoyageStatusEnum status, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            List<Voyage> results = new List<Voyage>();
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT * FROM voyages WHERE tenant_id = @tenantId AND status = @status ORDER BY created_utc DESC;";
+                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
+                    cmd.Parameters.AddWithValue("@status", status.ToString());
+                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                            results.Add(SqlServerDatabaseDriver.VoyageFromReader(reader));
+                    }
+                }
+            }
+
+            return results;
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> ExistsAsync(string tenantId, string id, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT COUNT(*) FROM voyages WHERE tenant_id = @tenantId AND id = @id;";
+                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
+                    cmd.Parameters.AddWithValue("@id", id);
+                    int count = Convert.ToInt32(await cmd.ExecuteScalarAsync(token).ConfigureAwait(false));
+                    return count > 0;
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<EnumerationResult<Voyage>> EnumerateAsync(string tenantId, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (query == null) query = new EnumerationQuery();
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+
+                List<string> conditions = new List<string> { "tenant_id = @tenantId" };
+                List<SqlParameter> parameters = new List<SqlParameter> { new SqlParameter("@tenantId", tenantId) };
+
+                if (query.CreatedAfter.HasValue)
+                {
+                    conditions.Add("created_utc > @created_after");
+                    parameters.Add(new SqlParameter("@created_after", SqlServerDatabaseDriver.ToIso8601(query.CreatedAfter.Value)));
+                }
+                if (query.CreatedBefore.HasValue)
+                {
+                    conditions.Add("created_utc < @created_before");
+                    parameters.Add(new SqlParameter("@created_before", SqlServerDatabaseDriver.ToIso8601(query.CreatedBefore.Value)));
+                }
+
+                string whereClause = " WHERE " + string.Join(" AND ", conditions);
+                string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
+
+                long totalCount = 0;
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT COUNT(*) FROM voyages" + whereClause + ";";
+                    foreach (SqlParameter p in parameters) cmd.Parameters.Add(new SqlParameter(p.ParameterName, p.Value));
+                    totalCount = Convert.ToInt64(await cmd.ExecuteScalarAsync(token).ConfigureAwait(false));
+                }
+
+                List<Voyage> results = new List<Voyage>();
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT * FROM voyages" + whereClause + " ORDER BY created_utc " + orderDirection + " OFFSET " + query.Offset + " ROWS FETCH NEXT " + query.PageSize + " ROWS ONLY;";
+                    foreach (SqlParameter p in parameters) cmd.Parameters.Add(new SqlParameter(p.ParameterName, p.Value));
+                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                            results.Add(SqlServerDatabaseDriver.VoyageFromReader(reader));
+                    }
+                }
+
+                return EnumerationResult<Voyage>.Create(query, results, totalCount);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<Voyage?> ReadAsync(string tenantId, string userId, string id, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (string.IsNullOrEmpty(userId)) throw new ArgumentNullException(nameof(userId));
+            if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT * FROM voyages WHERE tenant_id = @tenantId AND user_id = @userId AND id = @id;";
+                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
+                    cmd.Parameters.AddWithValue("@userId", userId);
+                    cmd.Parameters.AddWithValue("@id", id);
+                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        if (await reader.ReadAsync(token).ConfigureAwait(false))
+                            return SqlServerDatabaseDriver.VoyageFromReader(reader);
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        /// <inheritdoc />
+        public async Task DeleteAsync(string tenantId, string userId, string id, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (string.IsNullOrEmpty(userId)) throw new ArgumentNullException(nameof(userId));
+            if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "DELETE FROM voyages WHERE tenant_id = @tenantId AND user_id = @userId AND id = @id;";
+                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
+                    cmd.Parameters.AddWithValue("@userId", userId);
+                    cmd.Parameters.AddWithValue("@id", id);
+                    await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<List<Voyage>> EnumerateAsync(string tenantId, string userId, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (string.IsNullOrEmpty(userId)) throw new ArgumentNullException(nameof(userId));
+            List<Voyage> results = new List<Voyage>();
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT * FROM voyages WHERE tenant_id = @tenantId AND user_id = @userId ORDER BY created_utc DESC;";
+                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
+                    cmd.Parameters.AddWithValue("@userId", userId);
+                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                            results.Add(SqlServerDatabaseDriver.VoyageFromReader(reader));
+                    }
+                }
+            }
+
+            return results;
+        }
+
+        /// <inheritdoc />
+        public async Task<EnumerationResult<Voyage>> EnumerateAsync(string tenantId, string userId, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (string.IsNullOrEmpty(userId)) throw new ArgumentNullException(nameof(userId));
+            if (query == null) query = new EnumerationQuery();
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+
+                List<string> conditions = new List<string> { "tenant_id = @tenantId", "user_id = @userId" };
+                List<SqlParameter> parameters = new List<SqlParameter>
+                {
+                    new SqlParameter("@tenantId", tenantId),
+                    new SqlParameter("@userId", userId)
+                };
+
+                if (query.CreatedAfter.HasValue)
+                {
+                    conditions.Add("created_utc > @created_after");
+                    parameters.Add(new SqlParameter("@created_after", SqlServerDatabaseDriver.ToIso8601(query.CreatedAfter.Value)));
+                }
+                if (query.CreatedBefore.HasValue)
+                {
+                    conditions.Add("created_utc < @created_before");
+                    parameters.Add(new SqlParameter("@created_before", SqlServerDatabaseDriver.ToIso8601(query.CreatedBefore.Value)));
+                }
+
+                string whereClause = " WHERE " + string.Join(" AND ", conditions);
+                string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
+
+                long totalCount = 0;
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT COUNT(*) FROM voyages" + whereClause + ";";
+                    foreach (SqlParameter p in parameters) cmd.Parameters.Add(new SqlParameter(p.ParameterName, p.Value));
+                    totalCount = Convert.ToInt64(await cmd.ExecuteScalarAsync(token).ConfigureAwait(false));
+                }
+
+                List<Voyage> results = new List<Voyage>();
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT * FROM voyages" + whereClause + " ORDER BY created_utc " + orderDirection + " OFFSET " + query.Offset + " ROWS FETCH NEXT " + query.PageSize + " ROWS ONLY;";
+                    foreach (SqlParameter p in parameters) cmd.Parameters.Add(new SqlParameter(p.ParameterName, p.Value));
+                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                            results.Add(SqlServerDatabaseDriver.VoyageFromReader(reader));
+                    }
+                }
+
+                return EnumerationResult<Voyage>.Create(query, results, totalCount);
             }
         }
 
         #endregion
     }
 }
+

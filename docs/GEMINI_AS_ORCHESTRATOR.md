@@ -14,7 +14,7 @@ Connect the Gemini CLI to Armada's MCP server and use natural language to orches
 armada mcp install
 ```
 
-This shows the MCP configuration snippets for all supported tools including Gemini CLI. Add the following to `~/.gemini/settings.json`:
+This now writes the MCP configuration for all supported tools automatically. For Gemini CLI specifically, it writes `~/.gemini/settings.json`. If you prefer to edit manually, use:
 
 ```json
 {

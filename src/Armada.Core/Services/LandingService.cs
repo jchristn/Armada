@@ -58,11 +58,13 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <inheritdoc />
-        public async Task<bool> RetryLandingAsync(string missionId, CancellationToken token = default)
+        public async Task<bool> RetryLandingAsync(string missionId, string? tenantId = null, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));
 
-            Mission? mission = await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
+            Mission? mission = !String.IsNullOrEmpty(tenantId)
+                ? await _Database.Missions.ReadAsync(tenantId, missionId, token).ConfigureAwait(false)
+                : await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
             if (mission == null)
             {
                 _Logging.Warn(_Header + "mission " + missionId + " not found");
@@ -71,32 +73,34 @@ namespace Armada.Core.Services
 
             if (mission.Status != MissionStatusEnum.LandingFailed)
             {
-                _Logging.Warn(_Header + "mission " + missionId + " is in status " + mission.Status + ", not LandingFailed — cannot retry");
+                _Logging.Warn(_Header + "mission " + missionId + " is in status " + mission.Status + ", not LandingFailed -- cannot retry");
                 return false;
             }
 
             if (String.IsNullOrEmpty(mission.VesselId))
             {
-                _Logging.Warn(_Header + "mission " + missionId + " has no vessel — cannot retry landing");
+                _Logging.Warn(_Header + "mission " + missionId + " has no vessel -- cannot retry landing");
                 return false;
             }
 
-            Vessel? vessel = await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
+            Vessel? vessel = !String.IsNullOrEmpty(tenantId)
+                ? await _Database.Vessels.ReadAsync(tenantId, mission.VesselId, token).ConfigureAwait(false)
+                : await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
             if (vessel == null)
             {
-                _Logging.Warn(_Header + "vessel " + mission.VesselId + " not found — cannot retry landing for mission " + missionId);
+                _Logging.Warn(_Header + "vessel " + mission.VesselId + " not found -- cannot retry landing for mission " + missionId);
                 return false;
             }
 
             if (String.IsNullOrEmpty(vessel.LocalPath))
             {
-                _Logging.Warn(_Header + "vessel " + vessel.Id + " has no LocalPath — cannot retry landing for mission " + missionId);
+                _Logging.Warn(_Header + "vessel " + vessel.Id + " has no LocalPath -- cannot retry landing for mission " + missionId);
                 return false;
             }
 
             if (String.IsNullOrEmpty(mission.BranchName))
             {
-                _Logging.Warn(_Header + "mission " + missionId + " has no branch name — cannot retry landing");
+                _Logging.Warn(_Header + "mission " + missionId + " has no branch name -- cannot retry landing");
                 return false;
             }
 
@@ -127,7 +131,7 @@ namespace Armada.Core.Services
                 bool branchExists = await _Git.BranchExistsAsync(repoPath, missionBranch, token).ConfigureAwait(false);
                 if (!branchExists)
                 {
-                    _Logging.Warn(_Header + "branch " + missionBranch + " no longer exists — cannot retry landing for mission " + missionId);
+                    _Logging.Warn(_Header + "branch " + missionBranch + " no longer exists -- cannot retry landing for mission " + missionId);
                     return false;
                 }
 
@@ -142,7 +146,9 @@ namespace Armada.Core.Services
                 Dock? dock = null;
                 if (!String.IsNullOrEmpty(mission.DockId))
                 {
-                    dock = await _Database.Docks.ReadAsync(mission.DockId, token).ConfigureAwait(false);
+                    dock = !String.IsNullOrEmpty(tenantId)
+                        ? await _Database.Docks.ReadAsync(tenantId, mission.DockId, token).ConfigureAwait(false)
+                        : await _Database.Docks.ReadAsync(mission.DockId, token).ConfigureAwait(false);
                 }
 
                 // If no dock, create a minimal one for the landing handler
@@ -161,12 +167,14 @@ namespace Armada.Core.Services
                     _Logging.Info(_Header + "landing retry completed for mission " + missionId);
 
                     // Re-read mission to get updated status from landing handler
-                    mission = await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
+                    mission = !String.IsNullOrEmpty(tenantId)
+                        ? await _Database.Missions.ReadAsync(tenantId, missionId, token).ConfigureAwait(false)
+                        : await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
                     return mission != null && mission.Status == MissionStatusEnum.Complete;
                 }
                 else
                 {
-                    _Logging.Warn(_Header + "no landing handler configured — cannot retry landing for mission " + missionId);
+                    _Logging.Warn(_Header + "no landing handler configured -- cannot retry landing for mission " + missionId);
                     mission.Status = MissionStatusEnum.LandingFailed;
                     mission.LastUpdateUtc = DateTime.UtcNow;
                     await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
@@ -180,7 +188,9 @@ namespace Armada.Core.Services
                 // Ensure mission goes back to LandingFailed
                 try
                 {
-                    mission = await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
+                    mission = !String.IsNullOrEmpty(tenantId)
+                        ? await _Database.Missions.ReadAsync(tenantId, missionId, token).ConfigureAwait(false)
+                        : await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
                     if (mission != null && mission.Status != MissionStatusEnum.LandingFailed)
                     {
                         mission.Status = MissionStatusEnum.LandingFailed;

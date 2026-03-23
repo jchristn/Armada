@@ -54,6 +54,21 @@ namespace Armada.Core.Database
         /// </summary>
         public IMergeEntryMethods MergeEntries { get; protected set; } = null!;
 
+        /// <summary>
+        /// Tenant operations.
+        /// </summary>
+        public ITenantMethods Tenants { get; protected set; } = null!;
+
+        /// <summary>
+        /// User operations.
+        /// </summary>
+        public IUserMethods Users { get; protected set; } = null!;
+
+        /// <summary>
+        /// Credential operations.
+        /// </summary>
+        public ICredentialMethods Credentials { get; protected set; } = null!;
+
         #endregion
 
         #region Constructors-and-Factories

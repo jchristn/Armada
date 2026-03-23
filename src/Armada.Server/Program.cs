@@ -35,7 +35,7 @@ namespace Armada.Server
             if (File.Exists(settingsPath))
             {
                 string json = File.ReadAllText(settingsPath);
-                ArmadaSettings? loaded = JsonSerializer.Deserialize<ArmadaSettings>(json);
+                ArmadaSettings? loaded = JsonSerializer.Deserialize<ArmadaSettings>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                 if (loaded != null) _Settings = loaded;
             }
 

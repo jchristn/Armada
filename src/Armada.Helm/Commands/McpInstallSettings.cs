@@ -1,14 +1,10 @@
 namespace Armada.Helm.Commands
 {
     using System.ComponentModel;
-    using System.Text.Json;
-    using System.Threading;
-    using Spectre.Console;
     using Spectre.Console.Cli;
-    using Armada.Core.Settings;
 
     /// <summary>
-    /// Settings for MCP install command.
+     /// Settings for MCP install command.
     /// </summary>
     public class McpInstallSettings : BaseSettings
     {
@@ -18,5 +14,12 @@ namespace Armada.Helm.Commands
         [Description("Only display the configuration, don't write it")]
         [CommandOption("--dry-run")]
         public bool DryRun { get; set; } = false;
+
+        /// <summary>
+        /// Apply changes without interactive confirmation prompts.
+        /// </summary>
+        [Description("Apply changes without confirmation prompts")]
+        [CommandOption("--yes")]
+        public bool Yes { get; set; } = false;
     }
 }

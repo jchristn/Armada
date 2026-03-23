@@ -69,6 +69,8 @@ namespace Armada.Core.Services
         /// <inheritdoc />
         public async Task ProcessQueueAsync(CancellationToken token = default)
         {
+            // ProcessQueueAsync is a background/system method (called from Admiral loop).
+            // It processes all tenants' entries, so unscoped calls are appropriate here.
             lock (_ProcessLock)
             {
                 if (_Processing) return;
@@ -108,11 +110,13 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task CancelAsync(string entryId, CancellationToken token = default)
+        public async Task CancelAsync(string entryId, string? tenantId = null, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(entryId)) throw new ArgumentNullException(nameof(entryId));
 
-            MergeEntry? entry = await _Database.MergeEntries.ReadAsync(entryId, token).ConfigureAwait(false);
+            MergeEntry? entry = !String.IsNullOrEmpty(tenantId)
+                ? await _Database.MergeEntries.ReadAsync(tenantId, entryId, token).ConfigureAwait(false)
+                : await _Database.MergeEntries.ReadAsync(entryId, token).ConfigureAwait(false);
             if (entry != null)
             {
                 entry.Status = MergeStatusEnum.Cancelled;
@@ -124,18 +128,22 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<List<MergeEntry>> ListAsync(CancellationToken token = default)
+        public async Task<List<MergeEntry>> ListAsync(string? tenantId = null, CancellationToken token = default)
         {
-            List<MergeEntry> results = await _Database.MergeEntries.EnumerateAsync(token).ConfigureAwait(false);
+            List<MergeEntry> results = !String.IsNullOrEmpty(tenantId)
+                ? await _Database.MergeEntries.EnumerateAsync(tenantId, token).ConfigureAwait(false)
+                : await _Database.MergeEntries.EnumerateAsync(token).ConfigureAwait(false);
             return results;
         }
 
         /// <inheritdoc />
-        public async Task<MergeEntry?> ProcessSingleAsync(string entryId, CancellationToken token = default)
+        public async Task<MergeEntry?> ProcessSingleAsync(string entryId, string? tenantId = null, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(entryId)) throw new ArgumentNullException(nameof(entryId));
 
-            MergeEntry? entry = await _Database.MergeEntries.ReadAsync(entryId, token).ConfigureAwait(false);
+            MergeEntry? entry = !String.IsNullOrEmpty(tenantId)
+                ? await _Database.MergeEntries.ReadAsync(tenantId, entryId, token).ConfigureAwait(false)
+                : await _Database.MergeEntries.ReadAsync(entryId, token).ConfigureAwait(false);
             if (entry == null) return null;
             if (entry.Status != MergeStatusEnum.Queued) return null;
 
@@ -143,22 +151,28 @@ namespace Armada.Core.Services
             await ProcessEntryAsync(entry, token).ConfigureAwait(false);
 
             // Re-read from DB to get updated state
-            return await _Database.MergeEntries.ReadAsync(entryId, token).ConfigureAwait(false);
+            return !String.IsNullOrEmpty(tenantId)
+                ? await _Database.MergeEntries.ReadAsync(tenantId, entryId, token).ConfigureAwait(false)
+                : await _Database.MergeEntries.ReadAsync(entryId, token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
-        public async Task<MergeEntry?> GetAsync(string entryId, CancellationToken token = default)
+        public async Task<MergeEntry?> GetAsync(string entryId, string? tenantId = null, CancellationToken token = default)
         {
-            MergeEntry? entry = await _Database.MergeEntries.ReadAsync(entryId, token).ConfigureAwait(false);
+            MergeEntry? entry = !String.IsNullOrEmpty(tenantId)
+                ? await _Database.MergeEntries.ReadAsync(tenantId, entryId, token).ConfigureAwait(false)
+                : await _Database.MergeEntries.ReadAsync(entryId, token).ConfigureAwait(false);
             return entry;
         }
 
         /// <inheritdoc />
-        public async Task<bool> DeleteAsync(string entryId, CancellationToken token = default)
+        public async Task<bool> DeleteAsync(string entryId, string? tenantId = null, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(entryId)) throw new ArgumentNullException(nameof(entryId));
 
-            MergeEntry? entry = await _Database.MergeEntries.ReadAsync(entryId, token).ConfigureAwait(false);
+            MergeEntry? entry = !String.IsNullOrEmpty(tenantId)
+                ? await _Database.MergeEntries.ReadAsync(tenantId, entryId, token).ConfigureAwait(false)
+                : await _Database.MergeEntries.ReadAsync(entryId, token).ConfigureAwait(false);
             if (entry == null) return false;
 
             // Only allow deletion of terminal entries
@@ -200,13 +214,17 @@ namespace Armada.Core.Services
                 }
             }
 
-            await _Database.MergeEntries.DeleteAsync(entryId, token).ConfigureAwait(false);
+            if (!String.IsNullOrEmpty(tenantId))
+                await _Database.MergeEntries.DeleteAsync(tenantId, entryId, token).ConfigureAwait(false);
+            else
+                await _Database.MergeEntries.DeleteAsync(entryId, token).ConfigureAwait(false);
+
             _Logging.Info(_Header + "deleted " + entryId);
             return true;
         }
 
         /// <inheritdoc />
-        public async Task<MergeQueuePurgeResult> DeleteMultipleAsync(List<string> entryIds, CancellationToken token = default)
+        public async Task<MergeQueuePurgeResult> DeleteMultipleAsync(List<string> entryIds, string? tenantId = null, CancellationToken token = default)
         {
             if (entryIds == null) throw new ArgumentNullException(nameof(entryIds));
 
@@ -220,14 +238,16 @@ namespace Armada.Core.Services
                     continue;
                 }
 
-                MergeEntry? entry = await _Database.MergeEntries.ReadAsync(entryId, token).ConfigureAwait(false);
+                MergeEntry? entry = !String.IsNullOrEmpty(tenantId)
+                    ? await _Database.MergeEntries.ReadAsync(tenantId, entryId, token).ConfigureAwait(false)
+                    : await _Database.MergeEntries.ReadAsync(entryId, token).ConfigureAwait(false);
                 if (entry == null)
                 {
                     result.Skipped.Add(new MergeQueuePurgeSkipped(entryId, "Not found"));
                     continue;
                 }
 
-                bool deleted = await DeleteAsync(entryId, token).ConfigureAwait(false);
+                bool deleted = await DeleteAsync(entryId, tenantId, token).ConfigureAwait(false);
                 if (deleted)
                 {
                     result.EntriesPurged++;
@@ -243,7 +263,7 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<int> PurgeTerminalAsync(string? vesselId = null, MergeStatusEnum? status = null, CancellationToken token = default)
+        public async Task<int> PurgeTerminalAsync(string? vesselId = null, MergeStatusEnum? status = null, string? tenantId = null, CancellationToken token = default)
         {
             List<MergeStatusEnum> terminalStatuses = new List<MergeStatusEnum>
             {
@@ -265,6 +285,8 @@ namespace Armada.Core.Services
             List<MergeEntry> candidates = new List<MergeEntry>();
             foreach (MergeStatusEnum s in statusesToPurge)
             {
+                // PurgeTerminalAsync enumerates by status (no tenant-scoped overload for EnumerateByStatusAsync).
+                // Use unscoped enumeration and filter by tenantId in-memory if needed.
                 List<MergeEntry> entries = await _Database.MergeEntries.EnumerateByStatusAsync(s, token).ConfigureAwait(false);
                 candidates.AddRange(entries);
             }
@@ -277,7 +299,7 @@ namespace Armada.Core.Services
             int deleted = 0;
             foreach (MergeEntry entry in candidates)
             {
-                bool result = await DeleteAsync(entry.Id, token).ConfigureAwait(false);
+                bool result = await DeleteAsync(entry.Id, tenantId, token).ConfigureAwait(false);
                 if (result) deleted++;
             }
 
@@ -320,7 +342,7 @@ namespace Armada.Core.Services
 
             if (repoPath == null)
             {
-                _Logging.Warn(_Header + "unable to resolve repo path for vessel " + first.VesselId + " — failing all entries");
+                _Logging.Warn(_Header + "unable to resolve repo path for vessel " + first.VesselId + " -- failing all entries");
                 foreach (MergeEntry entry in entries)
                 {
                     entry.Status = MergeStatusEnum.Failed;
@@ -424,7 +446,7 @@ namespace Armada.Core.Services
                     _Logging.Info(_Header + "tests PASSED for " + entryTag);
                 }
 
-                // Land immediately — push the integration branch to update the target
+                // Land immediately -- push the integration branch to update the target
                 await LandEntryAsync(entry, repoPath, integrationBranch, token).ConfigureAwait(false);
 
                 // Cleanup
@@ -461,7 +483,7 @@ namespace Armada.Core.Services
 
                 // Reconcile linked mission to Complete
                 await ReconcileMissionStatusAsync(entry.MissionId, MissionStatusEnum.Complete,
-                    "Landed via merge queue entry " + entry.Id, token).ConfigureAwait(false);
+                    "Landed via merge queue entry " + entry.Id, token, entry.TenantId).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -474,20 +496,22 @@ namespace Armada.Core.Services
 
                 // Reconcile linked mission to LandingFailed
                 await ReconcileMissionStatusAsync(entry.MissionId, MissionStatusEnum.LandingFailed,
-                    "Merge queue landing failed: " + ex.Message, token).ConfigureAwait(false);
+                    "Merge queue landing failed: " + ex.Message, token, entry.TenantId).ConfigureAwait(false);
             }
         }
 
         /// <summary>
         /// Reconcile the linked mission status after a merge queue entry reaches a terminal state.
         /// </summary>
-        private async Task ReconcileMissionStatusAsync(string? missionId, MissionStatusEnum targetStatus, string reason, CancellationToken token)
+        private async Task ReconcileMissionStatusAsync(string? missionId, MissionStatusEnum targetStatus, string reason, CancellationToken token, string? tenantId = null)
         {
             if (String.IsNullOrEmpty(missionId)) return;
 
             try
             {
-                Mission? mission = await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
+                Mission? mission = !String.IsNullOrEmpty(tenantId)
+                    ? await _Database.Missions.ReadAsync(tenantId, missionId, token).ConfigureAwait(false)
+                    : await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
                 if (mission == null) return;
 
                 // Only update if the mission is not already in a terminal state
@@ -608,7 +632,9 @@ namespace Armada.Core.Services
         {
             if (!String.IsNullOrEmpty(entry.VesselId))
             {
-                Vessel? vessel = await _Database.Vessels.ReadAsync(entry.VesselId, token).ConfigureAwait(false);
+                Vessel? vessel = !String.IsNullOrEmpty(entry.TenantId)
+                    ? await _Database.Vessels.ReadAsync(entry.TenantId, entry.VesselId, token).ConfigureAwait(false)
+                    : await _Database.Vessels.ReadAsync(entry.VesselId, token).ConfigureAwait(false);
                 if (vessel == null)
                 {
                     _Logging.Warn(_Header + "vessel not found for vessel ID " + entry.VesselId);

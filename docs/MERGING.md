@@ -33,7 +33,7 @@ Terminal states: `Landed`, `Failed`, `Cancelled`.
 
 2. **Fetch queued entries** -- all entries with status `Queued` are loaded, ordered by priority (lower number = higher priority) then by creation time.
 
-3. **Group by vessel + target branch** -- entries targeting the same repository and branch form a group. Groups are processed **in parallel** using `Task.WhenAll`. Each group is wrapped in error isolation (`ProcessGroupSafeAsync`) so that one group's failure does not affect other groups. Entries *within* each group remain strictly sequential: each entry is merged, tested, and landed before the next entry in the same group begins. This is safe because each group operates on a different bare repository, different worktree paths, and different database rows, so there is no shared mutable state between groups.
+3. **Group by vessel + target branch** -- entries targeting the same vessel and branch form a group. Groups are processed **in parallel** using `Task.WhenAll`. Each group is wrapped in error isolation (`ProcessGroupSafeAsync`) so that one group's failure does not affect other groups. Entries *within* each group remain strictly sequential: each entry is merged, tested, and landed before the next entry in the same group begins. Each entry gets its own temporary worktree path, so the integration worktrees do not collide. Note, however, that different groups may still resolve to the same underlying bare repository when they target different branches on the same vessel.
 
 4. **For each entry in a group** (sequential within the group):
    1. Mark the entry as `Testing`.
@@ -53,7 +53,7 @@ Because each entry is landed immediately, the next entry in the same group alway
 ## Thread Safety
 
 - A single `_ProcessLock` object gate-keeps entry to `ProcessQueueAsync`. The lock is checked-and-set inside a `lock` block. If `_Processing` is already `true`, the call returns immediately.
-- Within a processing run, each vessel+target-branch group runs as an independent `Task`. Groups execute in parallel via `Task.WhenAll`. Each group task is wrapped in a `try-catch` (`ProcessGroupSafeAsync`) for error isolation, so a failure in one group does not cancel or affect other groups. This is safe because each group operates on a different bare repository, uses different worktree paths under `_merge-queue/`, and updates different database rows -- there is no shared mutable state between groups.
+- Within a processing run, each vessel+target-branch group runs as an independent `Task`. Groups execute in parallel via `Task.WhenAll`. Each group task is wrapped in a `try-catch` (`ProcessGroupSafeAsync`) for error isolation, so a failure in one group does not cancel or affect other groups. Worktree paths under `_merge-queue/` are unique per entry, and groups update different merge-entry rows. Different groups can still point at the same bare repository if they target different branches on the same vessel.
 - Within a single group, entries are processed strictly one at a time. There is no concurrency within a group.
 - The lock is released in a `finally` block, so even if `Task.WhenAll` throws, the next call to `ProcessQueueAsync` will be able to proceed.
 
@@ -102,11 +102,11 @@ When a mission's agent exits successfully, Armada sets the mission to `WorkProdu
 1. **Voyage-level** `LandingMode` (if the mission belongs to a voyage with a non-null `LandingMode`)
 2. **Vessel-level** `LandingMode` (on the target vessel)
 3. **Global** `LandingMode` (in `ArmadaSettings`)
-4. **Legacy booleans** (`AutoCreatePullRequests`, `AutoMergePullRequests`) if all of the above are null
+4. **Legacy booleans** (`AutoPush`, `AutoCreatePullRequests`, `AutoMergePullRequests`) if all of the above are null
 
 | Landing Mode | Behavior |
 |---|---|
-| `LocalMerge` | Merge the branch into the default branch locally and push. Mission transitions to `Complete` on success or `LandingFailed` on failure. |
+| `LocalMerge` | Merge the branch into the vessel's configured working directory and optionally push, but only when the vessel has both `WorkingDirectory` and `LocalPath` configured. Mission transitions to `Complete` on success or `LandingFailed` on failure. If those vessel paths are not configured, the mission remains at `WorkProduced`. |
 | `PullRequest` | Create a pull request. Mission transitions to `PullRequestOpen`. Armada polls for merge confirmation; once merged, transitions to `Complete`. |
 | `MergeQueue` | Enqueue the branch into Armada's merge queue for serialized testing and landing. |
 | `None` | No automated landing. The mission stays at `WorkProduced` for manual handling. |

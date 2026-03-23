@@ -85,11 +85,12 @@ namespace Armada.Core.Services
             }
 
             // Check if this mission is broad-scope and vessel already has active work
+            // Only count truly active missions (agent running or assigned).
+            // WorkProduced and PullRequestOpen are post-agent states where the agent
+            // has finished -- they should NOT block new mission dispatch.
             int concurrentCount = activeMissions.Count(m =>
                 m.Status == MissionStatusEnum.Assigned ||
-                m.Status == MissionStatusEnum.InProgress ||
-                m.Status == MissionStatusEnum.WorkProduced ||
-                m.Status == MissionStatusEnum.PullRequestOpen);
+                m.Status == MissionStatusEnum.InProgress);
 
             if (IsBroadScope(mission) && concurrentCount > 0)
             {
@@ -184,7 +185,7 @@ namespace Armada.Core.Services
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
 
                 // Reclaim the dock we provisioned since we can't use it
-                await _Docks.ReclaimAsync(dock.Id, token).ConfigureAwait(false);
+                await _Docks.ReclaimAsync(dock.Id, token: token).ConfigureAwait(false);
 
                 return false;
             }
@@ -198,11 +199,13 @@ namespace Armada.Core.Services
 
             // Create assignment signal
             Signal signal = new Signal(SignalTypeEnum.Assignment, mission.Title);
+            signal.TenantId = mission.TenantId;
+            signal.UserId = mission.UserId;
             signal.ToCaptainId = captain.Id;
             await _Database.Signals.CreateAsync(signal, token).ConfigureAwait(false);
 
             // Generate mission CLAUDE.md into worktree
-            await GenerateClaudeMdAsync(dock.WorktreePath!, mission, vessel, token).ConfigureAwait(false);
+            await GenerateClaudeMdAsync(dock.WorktreePath!, mission, vessel, captain, token).ConfigureAwait(false);
 
             // Launch agent process via captain service
             if (_Captains.OnLaunchAgent != null)
@@ -239,6 +242,8 @@ namespace Armada.Core.Services
                     await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
 
                     Signal errorSignal = new Signal(SignalTypeEnum.Error, "Failed to launch agent: " + ex.Message);
+                    errorSignal.TenantId = mission.TenantId;
+                    errorSignal.UserId = mission.UserId;
                     errorSignal.FromCaptainId = captain.Id;
                     await _Database.Signals.CreateAsync(errorSignal, token).ConfigureAwait(false);
 
@@ -282,7 +287,9 @@ namespace Armada.Core.Services
             if (captain == null) throw new ArgumentNullException(nameof(captain));
             if (String.IsNullOrEmpty(missionId)) return;
 
-            Mission? mission = await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
+            Mission? mission = !String.IsNullOrEmpty(captain.TenantId)
+                ? await _Database.Missions.ReadAsync(captain.TenantId, missionId, token).ConfigureAwait(false)
+                : await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
             if (mission == null) return;
 
             // Mark mission as work produced (agent finished, landing not yet attempted)
@@ -296,6 +303,8 @@ namespace Armada.Core.Services
             try
             {
                 ArmadaEvent workProducedEvent = new ArmadaEvent("mission.work_produced", "Work produced: " + mission.Title);
+                workProducedEvent.TenantId = mission.TenantId;
+                workProducedEvent.UserId = mission.UserId;
                 workProducedEvent.EntityType = "mission";
                 workProducedEvent.EntityId = mission.Id;
                 workProducedEvent.CaptainId = captain.Id;
@@ -314,7 +323,9 @@ namespace Armada.Core.Services
             string? dockId = mission.DockId ?? captain.CurrentDockId;
             if (!String.IsNullOrEmpty(dockId))
             {
-                dock = await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
+                dock = !String.IsNullOrEmpty(mission.TenantId)
+                    ? await _Database.Docks.ReadAsync(mission.TenantId, dockId, token).ConfigureAwait(false)
+                    : await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
             }
 
             // Capture diff synchronously before releasing the captain, to ensure the worktree is still available
@@ -352,7 +363,7 @@ namespace Armada.Core.Services
             {
                 try
                 {
-                    await _Docks.ReclaimAsync(completionDockId, token).ConfigureAwait(false);
+                    await _Docks.ReclaimAsync(completionDockId, token: token).ConfigureAwait(false);
                 }
                 catch (Exception reclaimEx)
                 {
@@ -416,7 +427,7 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task GenerateClaudeMdAsync(string worktreePath, Mission mission, Vessel vessel, CancellationToken token = default)
+        public async Task GenerateClaudeMdAsync(string worktreePath, Mission mission, Vessel vessel, Captain? captain = null, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(worktreePath)) throw new ArgumentNullException(nameof(worktreePath));
             if (mission == null) throw new ArgumentNullException(nameof(mission));
@@ -425,6 +436,14 @@ namespace Armada.Core.Services
             string claudeMdPath = Path.Combine(worktreePath, "CLAUDE.md");
 
             string content = "";
+
+            if (captain != null && !String.IsNullOrEmpty(captain.SystemInstructions))
+            {
+                content +=
+                    "## Captain Instructions\n" +
+                    captain.SystemInstructions + "\n" +
+                    "\n";
+            }
 
             if (!String.IsNullOrEmpty(vessel.ProjectContext))
             {
@@ -439,6 +458,17 @@ namespace Armada.Core.Services
                 content +=
                     "## Code Style\n" +
                     vessel.StyleGuide + "\n" +
+                    "\n";
+            }
+
+            if (vessel.EnableModelContext && !String.IsNullOrEmpty(vessel.ModelContext))
+            {
+                content +=
+                    "## Model Context\n" +
+                    "The following context was accumulated by AI agents during previous missions on this repository. " +
+                    "Use this information to work more effectively.\n" +
+                    "\n" +
+                    vessel.ModelContext + "\n" +
                     "\n";
             }
 
@@ -505,6 +535,26 @@ namespace Armada.Core.Services
                 "- `[ARMADA:STATUS] Testing` -- transition mission to Testing status\n" +
                 "- `[ARMADA:STATUS] Review` -- transition mission to Review status\n" +
                 "- `[ARMADA:MESSAGE] your message here` -- send a progress message\n";
+
+            if (vessel.EnableModelContext)
+            {
+                content +=
+                    "\n" +
+                    "## Model Context Updates\n" +
+                    "\n" +
+                    "Model context accumulation is enabled for this vessel. Before you finish your mission, " +
+                    "review the existing model context above (if any) and consider whether you have discovered " +
+                    "key information that would help future agents work on this repository more effectively. " +
+                    "Examples include: architectural insights, testing patterns, build quirks, common pitfalls, " +
+                    "important dependencies, or performance considerations.\n" +
+                    "\n" +
+                    "If you have useful additions, call `armada_update_vessel_context` with the `modelContext` " +
+                    "parameter set to the COMPLETE updated model context (not just your additions -- include " +
+                    "the existing content with your additions merged in). Keep the context concise, factual, " +
+                    "and focused on information that is not obvious from reading the code.\n" +
+                    "\n" +
+                    "If you have nothing to add, skip this step.\n";
+            }
 
             // If there's an existing CLAUDE.md, preserve it and prepend our instructions
             if (File.Exists(claudeMdPath))

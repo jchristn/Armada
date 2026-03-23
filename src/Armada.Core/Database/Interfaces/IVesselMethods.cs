@@ -51,5 +51,60 @@ namespace Armada.Core.Database.Interfaces
         /// Check if a vessel exists by identifier.
         /// </summary>
         Task<bool> ExistsAsync(string id, CancellationToken token = default);
+
+        /// <summary>
+        /// Read a vessel by tenant and identifier (tenant-scoped).
+        /// </summary>
+        Task<Vessel?> ReadAsync(string tenantId, string id, CancellationToken token = default);
+
+        /// <summary>
+        /// Delete a vessel by tenant and identifier (tenant-scoped).
+        /// </summary>
+        Task DeleteAsync(string tenantId, string id, CancellationToken token = default);
+
+        /// <summary>
+        /// Enumerate all vessels in a tenant (tenant-scoped).
+        /// </summary>
+        Task<List<Vessel>> EnumerateAsync(string tenantId, CancellationToken token = default);
+
+        /// <summary>
+        /// Enumerate vessels with pagination and filtering (tenant-scoped).
+        /// </summary>
+        Task<EnumerationResult<Vessel>> EnumerateAsync(string tenantId, EnumerationQuery query, CancellationToken token = default);
+
+        /// <summary>
+        /// Read a vessel by tenant and name (tenant-scoped).
+        /// </summary>
+        Task<Vessel?> ReadByNameAsync(string tenantId, string name, CancellationToken token = default);
+
+        /// <summary>
+        /// Enumerate vessels by tenant and fleet identifier (tenant-scoped).
+        /// </summary>
+        Task<List<Vessel>> EnumerateByFleetAsync(string tenantId, string fleetId, CancellationToken token = default);
+
+        /// <summary>
+        /// Check if a vessel exists by tenant and identifier (tenant-scoped).
+        /// </summary>
+        Task<bool> ExistsAsync(string tenantId, string id, CancellationToken token = default);
+
+        /// <summary>
+        /// Read a vessel by tenant, user, and identifier (user-scoped).
+        /// </summary>
+        Task<Vessel?> ReadAsync(string tenantId, string userId, string id, CancellationToken token = default);
+
+        /// <summary>
+        /// Delete a vessel by tenant, user, and identifier (user-scoped).
+        /// </summary>
+        Task DeleteAsync(string tenantId, string userId, string id, CancellationToken token = default);
+
+        /// <summary>
+        /// Enumerate all vessels owned by a user within a tenant (user-scoped).
+        /// </summary>
+        Task<List<Vessel>> EnumerateAsync(string tenantId, string userId, CancellationToken token = default);
+
+        /// <summary>
+        /// Enumerate vessels with pagination and filtering (user-scoped).
+        /// </summary>
+        Task<EnumerationResult<Vessel>> EnumerateAsync(string tenantId, string userId, EnumerationQuery query, CancellationToken token = default);
     }
 }

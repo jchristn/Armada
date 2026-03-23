@@ -6,11 +6,11 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>armada</ToolCommandName>
     <PackageId>Armada.Helm</PackageId>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Spectre.Console" Version="0.53.1" />
+    <PackageReference Include="Spectre.Console" Version="0.54.0" />
     <PackageReference Include="Spectre.Console.Cli" Version="0.53.1" />
     <PackageReference Include="SyslogLogging" Version="2.0.13" />
     <PackageReference Include="Voltaic" Version="0.1.9" />

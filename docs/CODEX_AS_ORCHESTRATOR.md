@@ -14,7 +14,7 @@ Connect OpenAI Codex CLI to Armada's MCP server and use natural language to orch
 armada mcp install
 ```
 
-This shows the MCP configuration snippets for all supported tools. For Codex, add the following to `~/.codex/config.json`:
+This now writes the MCP configuration for all supported tools automatically. For Codex specifically, it writes `~/.codex/config.json`. If you prefer to edit manually, use:
 
 ```json
 {

@@ -23,6 +23,16 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
+        /// Tenant identifier.
+        /// </summary>
+        public string? TenantId { get; set; } = null;
+
+        /// <summary>
+        /// Owning user identifier.
+        /// </summary>
+        public string? UserId { get; set; } = null;
+
+        /// <summary>
         /// Mission identifier this merge entry belongs to.
         /// </summary>
         public string? MissionId { get; set; } = null;

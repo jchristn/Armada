@@ -20,5 +20,10 @@ namespace Armada.Server.Mcp
         /// </summary>
         public string? Runtime { get; set; }
 
+        /// <summary>
+        /// New system instructions for this captain.
+        /// </summary>
+        public string? SystemInstructions { get; set; }
+
     }
 }

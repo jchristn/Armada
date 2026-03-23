@@ -280,8 +280,35 @@ namespace Armada.Core.Settings
 
         /// <summary>
         /// Optional API key for Admiral REST API authentication.
+        /// Deprecated: retained for backward compatibility, maps to synthetic admin identity.
         /// </summary>
         public string? ApiKey { get; set; } = null;
+
+        /// <summary>
+        /// Path to the external web dashboard directory (React build output).
+        /// When set, the server serves static files from this directory at /dashboard.
+        /// When null/empty, falls back to embedded wwwroot resources (legacy dashboard).
+        /// </summary>
+        public string? DashboardPath { get; set; } = null;
+
+        /// <summary>
+        /// Whether self-registration via POST /api/v1/onboarding is enabled.
+        /// </summary>
+        public bool AllowSelfRegistration { get; set; } = true;
+
+        /// <summary>
+        /// Whether POST /api/v1/server/stop requires authentication.
+        /// When false (default), the shutdown endpoint is accessible without credentials,
+        /// suitable for local development. When true, requires an authenticated identity,
+        /// suitable for centralized or Docker deployments.
+        /// </summary>
+        public bool RequireAuthForShutdown { get; set; } = false;
+
+        /// <summary>
+        /// AES-256 encryption key for session tokens.
+        /// Auto-generated if not provided.
+        /// </summary>
+        public string? SessionTokenEncryptionKey { get; set; } = null;
 
         /// <summary>
         /// Default agent runtime to use when auto-creating captains.

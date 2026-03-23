@@ -27,14 +27,62 @@
         <div class="login-box">
             <img :src="darkMode ? '/dashboard/img/logo-light-grey.png' : '/dashboard/img/logo-dark-grey.png'" alt="Armada" class="login-logo">
             <h2>Armada</h2>
-            <p>Enter your API key to continue.</p>
-            <form @submit.prevent="login()">
-                <input type="password" x-model="apiKeyInput" placeholder="API Key" required autofocus title="Enter your Armada API key to authenticate">
-                <template x-if="authError">
-                    <div class="alert alert-error" x-text="authError"></div>
-                </template>
-                <button type="submit" class="btn btn-primary" style="width:100%" title="Authenticate with the provided API key">Sign In</button>
-            </form>
+
+            <!-- Step 1: Email entry -->
+            <template x-if="loginStep === 'email'">
+                <div>
+                    <p>Enter your email to continue.</p>
+                    <form @submit.prevent="lookupTenants()">
+                        <input type="email" x-model="loginEmail" placeholder="Email address" required autofocus title="Enter your email address">
+                        <template x-if="authError">
+                            <div class="alert alert-error" x-text="authError"></div>
+                        </template>
+                        <button type="submit" class="btn btn-primary" style="width:100%" :disabled="loginLoading" title="Look up tenants for this email">
+                            <span x-show="!loginLoading">Continue</span>
+                            <span x-show="loginLoading">Looking up...</span>
+                        </button>
+                    </form>
+                </div>
+            </template>
+
+            <!-- Step 2: Tenant selection (only if multiple tenants) -->
+            <template x-if="loginStep === 'tenant'">
+                <div>
+                    <p>Select a tenant to sign in to.</p>
+                    <div class="login-tenant-list">
+                        <template x-for="t in loginTenants" :key="t.id || t.tenantId">
+                            <button class="login-tenant-item" @click="selectTenant(t)" :title="t.name || t.tenantName || t.id || t.tenantId">
+                                <span class="login-tenant-name" x-text="t.name || t.tenantName || t.id || t.tenantId"></span>
+                                <span class="login-tenant-id text-dim mono" x-text="t.id || t.tenantId" x-show="t.name || t.tenantName"></span>
+                            </button>
+                        </template>
+                    </div>
+                    <button class="btn btn-sm" style="width:100%; margin-top:0.75rem" @click="loginStep = 'email'; authError = null" title="Go back to email entry">&larr; Back</button>
+                </div>
+            </template>
+
+            <!-- Step 3: Password entry -->
+            <template x-if="loginStep === 'password'">
+                <div>
+                    <p>
+                        <span x-text="loginEmail"></span>
+                        <template x-if="loginSelectedTenant">
+                            <span class="text-dim" x-text="' @ ' + (loginSelectedTenant.name || loginSelectedTenant.tenantName || loginSelectedTenant.id || loginSelectedTenant.tenantId)"></span>
+                        </template>
+                    </p>
+                    <form @submit.prevent="authenticate()">
+                        <input type="password" x-model="loginPassword" placeholder="Password" required autofocus title="Enter your password">
+                        <template x-if="authError">
+                            <div class="alert alert-error" x-text="authError"></div>
+                        </template>
+                        <button type="submit" class="btn btn-primary" style="width:100%" :disabled="loginLoading" title="Sign in with your credentials">
+                            <span x-show="!loginLoading">Sign In</span>
+                            <span x-show="loginLoading">Signing in...</span>
+                        </button>
+                    </form>
+                    <button class="btn btn-sm" style="width:100%; margin-top:0.75rem" @click="loginStep = 'email'; authError = null; loginPassword = ''" title="Go back to email entry">&larr; Back</button>
+                </div>
+            </template>
         </div>
     </div>
 
@@ -166,6 +214,13 @@
                     <span class="status-dot" :class="connected ? 'connected' : 'disconnected'"></span>
                     <span class="top-bar-status-label" x-text="wsConnected ? 'Live' : (apiConnected ? 'Online' : 'Offline')"></span>
                 </span>
+                <template x-if="whoami && whoami.tenantName">
+                    <span class="auth-badge auth-badge-tenant" x-text="whoami.tenantName" title="Current tenant"></span>
+                </template>
+                <template x-if="whoami && whoami.email">
+                    <span class="auth-badge auth-badge-user" x-text="whoami.email" title="Signed-in user"></span>
+                </template>
+                <button class="btn btn-sm" x-show="authenticated" @click="logout()" title="Sign out">Logout</button>
                 <button class="theme-toggle" @click="toggleTheme()" x-text="darkMode ? '&#9728;' : '&#9790;'" title="Toggle theme"></button>
                 <a href="https://github.com/jchristn/Armada" target="_blank" rel="noopener noreferrer" class="github-link" title="View on GitHub">
                     <svg height="18" width="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>

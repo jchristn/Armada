@@ -31,6 +31,15 @@ namespace Armada.Test.Unit
             runner.AddSuite(new DatabaseInitializationTests());
             runner.AddSuite(new SchemaMigrationTests());
             runner.AddSuite(new EdgeCaseTests());
+            runner.AddSuite(new TenantMethodsTests());
+            runner.AddSuite(new UserMethodsTests());
+            runner.AddSuite(new CredentialMethodsTests());
+            runner.AddSuite(new TenantFencingTests());
+            runner.AddSuite(new EntityTenantScopedTests());
+            runner.AddSuite(new DefaultSeedingTests());
+            runner.AddSuite(new TenantScopedEnumerationTests());
+            runner.AddSuite(new TenantScopedPaginationTests());
+            runner.AddSuite(new TenantScopedPaginationTests2());
 
             // Model tests
             runner.AddSuite(new FleetModelTests());
@@ -43,6 +52,10 @@ namespace Armada.Test.Unit
             runner.AddSuite(new ArmadaEventModelTests());
             runner.AddSuite(new ArmadaStatusModelTests());
             runner.AddSuite(new EnumModelTests());
+            runner.AddSuite(new TenantMetadataTests());
+            runner.AddSuite(new UserMasterTests());
+            runner.AddSuite(new CredentialTests());
+            runner.AddSuite(new AuthContextTests());
 
             // Service tests
             runner.AddSuite(new AdmiralServiceTests());
@@ -60,6 +73,11 @@ namespace Armada.Test.Unit
             runner.AddSuite(new SequentialDispatchTests());
             runner.AddSuite(new MissionStatusTransitionTests());
             runner.AddSuite(new LandingPipelineTests());
+            runner.AddSuite(new SessionTokenServiceTests());
+            runner.AddSuite(new AuthenticationServiceTests());
+            runner.AddSuite(new AuthorizationConfigTests());
+            runner.AddSuite(new AuthorizationServiceTests());
+            runner.AddSuite(new AuthEndpointTests());
 
             int exitCode = await runner.RunAllAsync().ConfigureAwait(false);
             return exitCode;

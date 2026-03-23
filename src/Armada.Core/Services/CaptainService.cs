@@ -62,11 +62,13 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <inheritdoc />
-        public async Task RecallAsync(string captainId, CancellationToken token = default)
+        public async Task RecallAsync(string captainId, string? tenantId = null, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));
 
-            Captain? captain = await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false);
+            Captain? captain = !String.IsNullOrEmpty(tenantId)
+                ? await _Database.Captains.ReadAsync(tenantId, captainId, token).ConfigureAwait(false)
+                : await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false);
             if (captain == null) throw new InvalidOperationException("Captain not found: " + captainId);
 
             _Logging.Info(_Header + "recalling captain " + captainId);
@@ -90,7 +92,9 @@ namespace Armada.Core.Services
             // Mark the current mission as failed
             if (!String.IsNullOrEmpty(captain.CurrentMissionId))
             {
-                Mission? currentMission = await _Database.Missions.ReadAsync(captain.CurrentMissionId, token).ConfigureAwait(false);
+                Mission? currentMission = !String.IsNullOrEmpty(tenantId)
+                    ? await _Database.Missions.ReadAsync(tenantId, captain.CurrentMissionId, token).ConfigureAwait(false)
+                    : await _Database.Missions.ReadAsync(captain.CurrentMissionId, token).ConfigureAwait(false);
                 if (currentMission != null &&
                     (currentMission.Status == MissionStatusEnum.InProgress ||
                      currentMission.Status == MissionStatusEnum.Assigned))
@@ -108,7 +112,7 @@ namespace Armada.Core.Services
             {
                 try
                 {
-                    await _Docks.ReclaimAsync(captain.CurrentDockId, token).ConfigureAwait(false);
+                    await _Docks.ReclaimAsync(captain.CurrentDockId, tenantId, token).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {

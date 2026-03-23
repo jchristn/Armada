@@ -24,6 +24,16 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
+        /// Tenant identifier.
+        /// </summary>
+        public string? TenantId { get; set; } = null;
+
+        /// <summary>
+        /// Owning user identifier.
+        /// </summary>
+        public string? UserId { get; set; } = null;
+
+        /// <summary>
         /// Fleet identifier this vessel belongs to.
         /// </summary>
         public string? FleetId { get; set; } = null;
@@ -76,17 +86,32 @@ namespace Armada.Core.Models
         public string? StyleGuide { get; set; } = null;
 
         /// <summary>
+        /// Whether model context accumulation is enabled for this vessel.
+        /// When true, captains are instructed to update the model context with
+        /// key information discovered during missions.
+        /// </summary>
+        public bool EnableModelContext { get; set; } = true;
+
+        /// <summary>
+        /// Agent-accumulated context about this repository. Contains key information
+        /// discovered by AI agents during missions, such as architectural insights,
+        /// testing patterns, build quirks, and other knowledge useful for future missions.
+        /// Updated by agents via armada_update_vessel_context when EnableModelContext is true.
+        /// </summary>
+        public string? ModelContext { get; set; } = null;
+
+        /// <summary>
         /// Landing mode for this vessel. Determines how completed mission work is integrated.
         /// Null means use the voyage or global setting. When set, this takes precedence over
         /// the legacy boolean flags (AutoPush, AutoCreatePullRequests, AutoMergePullRequests).
         /// </summary>
-        public LandingModeEnum? LandingMode { get; set; } = null;
+        public LandingModeEnum? LandingMode { get; set; } = LandingModeEnum.LocalMerge;
 
         /// <summary>
         /// Branch cleanup policy for this vessel. Determines when and how mission branches
         /// are deleted after successful landing. Null means use the global setting (default: LocalOnly).
         /// </summary>
-        public BranchCleanupPolicyEnum? BranchCleanupPolicy { get; set; } = null;
+        public BranchCleanupPolicyEnum? BranchCleanupPolicy { get; set; } = BranchCleanupPolicyEnum.LocalAndRemote;
 
         /// <summary>
         /// Whether this vessel allows multiple concurrent missions. Default false.

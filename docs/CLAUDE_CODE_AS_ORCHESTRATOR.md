@@ -19,6 +19,8 @@ This does two things automatically:
 1. **Adds the Armada MCP server** to `~/.claude.json` (user-scoped, available from any directory)
 2. **Installs the Armada agent** to `~/.claude/agents/armada.md` (a custom agent with full Armada context)
 
+It also configures Codex, Gemini CLI, and Cursor MCP files in their default locations.
+
 Use `--dry-run` to preview without writing.
 
 ## Launch

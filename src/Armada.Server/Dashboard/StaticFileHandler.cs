@@ -6,7 +6,9 @@ namespace Armada.Server.Dashboard
     using System.Reflection;
 
     /// <summary>
-    /// Serves embedded static files from the wwwroot directory.
+    /// Serves static files for the web dashboard.
+    /// Checks an external directory first (React build output),
+    /// then falls back to embedded wwwroot resources (legacy dashboard).
     /// </summary>
     public static class StaticFileHandler
     {
@@ -22,21 +24,49 @@ namespace Armada.Server.Dashboard
             { ".js", "application/javascript; charset=utf-8" },
             { ".json", "application/json; charset=utf-8" },
             { ".png", "image/png" },
+            { ".jpg", "image/jpeg" },
+            { ".jpeg", "image/jpeg" },
+            { ".gif", "image/gif" },
             { ".svg", "image/svg+xml" },
-            { ".ico", "image/x-icon" }
+            { ".ico", "image/x-icon" },
+            { ".woff", "font/woff" },
+            { ".woff2", "font/woff2" },
+            { ".ttf", "font/ttf" },
+            { ".eot", "application/vnd.ms-fontobject" },
+            { ".map", "application/json" }
         };
+
+        private static string? _ExternalDashboardPath = null;
 
         #endregion
 
         #region Public-Methods
 
         /// <summary>
-        /// Try to read an embedded resource for the given URL path.
+        /// Set the external dashboard directory path.
+        /// When set, files are served from this directory before falling back to embedded resources.
+        /// </summary>
+        /// <param name="path">Absolute path to the dashboard build output directory (e.g., dist/).</param>
+        public static void SetExternalPath(string? path)
+        {
+            if (!String.IsNullOrEmpty(path) && Directory.Exists(path))
+            {
+                _ExternalDashboardPath = Path.GetFullPath(path);
+            }
+            else
+            {
+                _ExternalDashboardPath = null;
+            }
+        }
+
+        /// <summary>
+        /// Try to read a static file for the given URL path.
+        /// Checks external dashboard directory first, then falls back to embedded resources.
         /// </summary>
         /// <param name="urlPath">URL path (e.g., "/dashboard/index.html").</param>
         /// <param name="content">File content bytes.</param>
         /// <param name="contentType">MIME content type.</param>
-        /// <returns>True if the resource was found.</returns>
+        /// <returns>True if the file was found.</returns>
         public static bool TryGetFile(string urlPath, out byte[] content, out string contentType)
         {
             content = Array.Empty<byte>();
@@ -54,6 +84,81 @@ namespace Armada.Server.Dashboard
             if (String.IsNullOrEmpty(relativePath) || relativePath == "/")
                 relativePath = "index.html";
 
+            // Sanitize: prevent directory traversal
+            relativePath = relativePath.Replace('\\', '/');
+            if (relativePath.Contains("..")) return false;
+
+            // Try external directory first
+            if (_ExternalDashboardPath != null)
+            {
+                if (TryGetExternalFile(relativePath, out content, out contentType))
+                    return true;
+            }
+
+            // Fall back to embedded resources
+            return TryGetEmbeddedFile(relativePath, out content, out contentType);
+        }
+
+        /// <summary>
+        /// Try to get the SPA index.html fallback for client-side routing.
+        /// </summary>
+        /// <param name="content">File content bytes.</param>
+        /// <param name="contentType">MIME content type.</param>
+        /// <returns>True if index.html was found.</returns>
+        public static bool TryGetIndex(out byte[] content, out string contentType)
+        {
+            return TryGetFile("/dashboard/index.html", out content, out contentType);
+        }
+
+        /// <summary>
+        /// Returns true if an external dashboard directory is configured and exists.
+        /// </summary>
+        public static bool HasExternalDashboard => _ExternalDashboardPath != null;
+
+        /// <summary>
+        /// List all embedded resource names (for debugging).
+        /// </summary>
+        /// <returns>All embedded resource names.</returns>
+        public static string[] ListResources()
+        {
+            return _Assembly.GetManifestResourceNames();
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private static bool TryGetExternalFile(string relativePath, out byte[] content, out string contentType)
+        {
+            content = Array.Empty<byte>();
+            contentType = "application/octet-stream";
+
+            string filePath = Path.Combine(_ExternalDashboardPath!, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            filePath = Path.GetFullPath(filePath);
+
+            // Ensure the resolved path is still within the dashboard directory
+            if (!filePath.StartsWith(_ExternalDashboardPath!, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (!File.Exists(filePath))
+                return false;
+
+            content = File.ReadAllBytes(filePath);
+
+            string ext = Path.GetExtension(filePath);
+            if (!String.IsNullOrEmpty(ext) && _ContentTypes.TryGetValue(ext, out string? ct))
+            {
+                contentType = ct;
+            }
+
+            return true;
+        }
+
+        private static bool TryGetEmbeddedFile(string relativePath, out byte[] content, out string contentType)
+        {
+            content = Array.Empty<byte>();
+            contentType = "application/octet-stream";
+
             // Convert URL path to resource name (replace / with .)
             string resourceName = _Prefix + relativePath.Replace('/', '.').Replace('\\', '.');
 
@@ -68,7 +173,6 @@ namespace Armada.Server.Dashboard
                 }
             }
 
-            // Determine content type from extension
             string ext = Path.GetExtension(relativePath);
             if (!String.IsNullOrEmpty(ext) && _ContentTypes.TryGetValue(ext, out string? ct))
             {
@@ -76,15 +180,6 @@ namespace Armada.Server.Dashboard
             }
 
             return true;
-        }
-
-        /// <summary>
-        /// List all embedded resource names (for debugging).
-        /// </summary>
-        /// <returns>All embedded resource names.</returns>
-        public static string[] ListResources()
-        {
-            return _Assembly.GetManifestResourceNames();
         }
 
         #endregion

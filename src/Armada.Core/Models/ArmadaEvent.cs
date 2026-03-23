@@ -23,6 +23,16 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
+        /// Tenant identifier.
+        /// </summary>
+        public string? TenantId { get; set; } = null;
+
+        /// <summary>
+        /// Owning user identifier.
+        /// </summary>
+        public string? UserId { get; set; } = null;
+
+        /// <summary>
         /// Event type (e.g. "mission.created", "captain.stalled", "voyage.completed").
         /// </summary>
         public string EventType { get; set; } = "";

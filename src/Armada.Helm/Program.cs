@@ -38,7 +38,7 @@ namespace Armada.Helm
             if (args.Length == 0 && !File.Exists(ArmadaSettings.DefaultSettingsPath))
             {
                 WriteBanner();
-                AnsiConsole.MarkupLine("[dim]Multi-Agent Orchestration System  v0.2.0[/]");
+                AnsiConsole.MarkupLine("[dim]Multi-Agent Orchestration System  v0.3.0[/]");
                 AnsiConsole.WriteLine();
                 AnsiConsole.MarkupLine("Welcome to Armada. To dispatch your first task:");
                 AnsiConsole.WriteLine();
@@ -52,7 +52,7 @@ namespace Armada.Helm
             if (args.Length == 0 || args[0] == "--help" || args[0] == "-h")
             {
                 WriteBanner();
-                AnsiConsole.MarkupLine("[dim]Multi-Agent Orchestration System  v0.2.0[/]");
+                AnsiConsole.MarkupLine("[dim]Multi-Agent Orchestration System  v0.3.0[/]");
                 AnsiConsole.WriteLine();
             }
 
@@ -62,7 +62,7 @@ namespace Armada.Helm
             app.Configure(config =>
             {
                 config.SetApplicationName("armada");
-                config.SetApplicationVersion("0.2.0");
+                config.SetApplicationVersion("0.3.0");
 
                 // --- Common commands (top-level, used most often) ---
                 config.AddCommand<GoCommand>("go")
@@ -193,7 +193,9 @@ namespace Armada.Helm
                 {
                     mcp.SetDescription("MCP integration");
                     mcp.AddCommand<McpInstallCommand>("install")
-                        .WithDescription("Configure MCP integration for Claude Code");
+                        .WithDescription("Configure MCP integration for Claude Code, Codex, Gemini, and Cursor");
+                    mcp.AddCommand<McpRemoveCommand>("remove")
+                        .WithDescription("Remove MCP integration for Claude Code, Codex, Gemini, and Cursor");
                     mcp.AddCommand<McpStdioCommand>("stdio")
                         .WithDescription("Run MCP server over stdio (for Claude Code subprocess)");
                 });

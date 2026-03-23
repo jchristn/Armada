@@ -5,16 +5,16 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <Authors>jchristn</Authors>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <NoWarn>1701;1702;CS1998;CS8600;CS8602;CS8603;CS8604;CS8618;CS8625;CS0108;CS8601;CS0618</NoWarn>
+    <NoWarn>1701;1702;CS1998;CS8600;CS8602;CS8603;CS8618;CS8625;CS0108;CS8601;CS0618</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-    <NoWarn>1701;1702;CS1998;CS8600;CS8602;CS8603;CS8604;CS8618;CS8625;CS0108;CS8601;CS0618</NoWarn>
+    <NoWarn>1701;1702;CS1998;CS8600;CS8602;CS8603;CS8618;CS8625;CS0108;CS8601;CS0618</NoWarn>
   </PropertyGroup>
 
 </Project>

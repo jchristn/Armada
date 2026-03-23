@@ -24,6 +24,16 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
+        /// Tenant identifier.
+        /// </summary>
+        public string? TenantId { get; set; } = null;
+
+        /// <summary>
+        /// Owning user identifier.
+        /// </summary>
+        public string? UserId { get; set; } = null;
+
+        /// <summary>
         /// Captain name.
         /// </summary>
         public string Name
@@ -40,6 +50,13 @@ namespace Armada.Core.Models
         /// Agent runtime type.
         /// </summary>
         public AgentRuntimeEnum Runtime { get; set; } = AgentRuntimeEnum.ClaudeCode;
+
+        /// <summary>
+        /// User-supplied system instructions for this captain. Injected into every mission's
+        /// instructions before vessel context and mission details. Use this to specialize
+        /// captain behavior, add guardrails, or provide persistent context.
+        /// </summary>
+        public string? SystemInstructions { get; set; } = null;
 
         /// <summary>
         /// Current state of the captain.

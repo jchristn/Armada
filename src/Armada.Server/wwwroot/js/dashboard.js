@@ -45,6 +45,14 @@ function dashboard() {
         apiKey: null,
         apiKeyInput: '',
         authError: null,
+        sessionToken: null,
+        whoami: null,
+        loginStep: 'email',
+        loginEmail: '',
+        loginPassword: '',
+        loginTenants: [],
+        loginSelectedTenant: null,
+        loginLoading: false,
 
         // Toast notifications
         toasts: [],
@@ -225,6 +233,7 @@ function dashboard() {
             });
 
             this.apiKey = localStorage.getItem(STORAGE_KEY);
+            this.sessionToken = localStorage.getItem('armada_session_token');
 
             // Close action menus on click outside
             document.addEventListener('click', (e) => {
@@ -254,11 +263,17 @@ function dashboard() {
 
             // Probe whether auth is required
             try {
-                let resp = await fetch(API + '/api/v1/status', {
-                    headers: this.apiKey ? { 'X-Api-Key': this.apiKey } : {}
-                });
+                let headers = {};
+                if (this.sessionToken) headers['X-Token'] = this.sessionToken;
+                else if (this.apiKey) headers['X-Api-Key'] = this.apiKey;
+                let resp = await fetch(API + '/api/v1/status', { headers });
                 if (resp.status === 401 || resp.status === 403) {
                     this.authRequired = true;
+                    // Clear stale credentials
+                    if (this.sessionToken) {
+                        localStorage.removeItem('armada_session_token');
+                        this.sessionToken = null;
+                    }
                     if (this.apiKey) {
                         localStorage.removeItem(STORAGE_KEY);
                         this.apiKey = null;
@@ -266,9 +281,11 @@ function dashboard() {
                     return;
                 }
                 this.apiConnected = true;
-                if (this.apiKey) {
+                if (this.sessionToken || this.apiKey) {
                     this.authRequired = true;
                     this.authenticated = true;
+                    // Fetch whoami for user/tenant display
+                    await this.fetchWhoami();
                 }
             } catch (e) {
                 console.warn('Failed to probe auth:', e);
@@ -276,7 +293,112 @@ function dashboard() {
             await this.startDashboard();
         },
 
+        async lookupTenants() {
+            this.authError = null;
+            this.loginLoading = true;
+            try {
+                let resp = await fetch(API + '/api/v1/tenants/lookup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: this.loginEmail })
+                });
+                if (!resp.ok) {
+                    let errText = await resp.text();
+                    let errMsg = 'Lookup failed';
+                    try { let e = JSON.parse(errText); errMsg = e.Message || e.message || e.Error || e.error || errMsg; } catch (_) { }
+                    this.authError = errMsg;
+                    return;
+                }
+                let data = this.toCamel(await resp.json());
+                let tenants = Array.isArray(data) ? data : (data.tenants || data.objects || [data]);
+                if (!tenants || tenants.length === 0) {
+                    this.authError = 'No tenants found for this email.';
+                    return;
+                }
+                this.loginTenants = tenants;
+                if (tenants.length === 1) {
+                    // Skip tenant selection if only one
+                    this.loginSelectedTenant = tenants[0];
+                    this.loginStep = 'password';
+                } else {
+                    this.loginStep = 'tenant';
+                }
+            } catch (e) {
+                this.authError = 'Cannot reach server.';
+            } finally {
+                this.loginLoading = false;
+            }
+        },
+
+        selectTenant(tenant) {
+            this.loginSelectedTenant = tenant;
+            this.authError = null;
+            this.loginStep = 'password';
+        },
+
+        async authenticate() {
+            this.authError = null;
+            this.loginLoading = true;
+            try {
+                let tenantId = this.loginSelectedTenant
+                    ? (this.loginSelectedTenant.id || this.loginSelectedTenant.tenantId)
+                    : null;
+                let body = {
+                    email: this.loginEmail,
+                    password: this.loginPassword
+                };
+                if (tenantId) body.tenantId = tenantId;
+                let resp = await fetch(API + '/api/v1/authenticate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                if (resp.status === 401 || resp.status === 403) {
+                    this.authError = 'Invalid credentials.';
+                    return;
+                }
+                if (!resp.ok) {
+                    let errText = await resp.text();
+                    let errMsg = 'Authentication failed';
+                    try { let e = JSON.parse(errText); errMsg = e.Message || e.message || e.Error || e.error || errMsg; } catch (_) { }
+                    this.authError = errMsg;
+                    return;
+                }
+                let data = this.toCamel(await resp.json());
+                this.sessionToken = data.token || data.sessionToken || data.accessToken || null;
+                if (!this.sessionToken) {
+                    this.authError = 'No token returned from server.';
+                    return;
+                }
+                localStorage.setItem('armada_session_token', this.sessionToken);
+                this.loginPassword = '';
+                this.authenticated = true;
+                // Fetch whoami for user/tenant display
+                await this.fetchWhoami();
+                await this.startDashboard();
+            } catch (e) {
+                this.authError = 'Cannot reach server.';
+            } finally {
+                this.loginLoading = false;
+            }
+        },
+
+        async fetchWhoami() {
+            try {
+                let headers = {};
+                if (this.sessionToken) headers['X-Token'] = this.sessionToken;
+                else if (this.apiKey) headers['X-Api-Key'] = this.apiKey;
+                let resp = await fetch(API + '/api/v1/whoami', { headers });
+                if (resp.ok) {
+                    this.whoami = this.toCamel(await resp.json());
+                }
+            } catch (e) {
+                console.warn('Failed to fetch whoami:', e);
+            }
+        },
+
         async login() {
+            // Legacy API-key login (kept for backward compatibility)
             this.authError = null;
             try {
                 let resp = await fetch(API + '/api/v1/status', {
@@ -290,6 +412,7 @@ function dashboard() {
                 this.apiKeyInput = '';
                 localStorage.setItem(STORAGE_KEY, this.apiKey);
                 this.authenticated = true;
+                await this.fetchWhoami();
                 await this.startDashboard();
             } catch (e) {
                 this.authError = 'Cannot reach server.';
@@ -318,8 +441,17 @@ function dashboard() {
 
         logout() {
             localStorage.removeItem(STORAGE_KEY);
+            localStorage.removeItem('armada_session_token');
             this.apiKey = null;
+            this.sessionToken = null;
+            this.whoami = null;
             this.authenticated = false;
+            this.loginStep = 'email';
+            this.loginEmail = '';
+            this.loginPassword = '';
+            this.loginTenants = [];
+            this.loginSelectedTenant = null;
+            this.authError = null;
             this.status = {};
             this.fleets = [];
             this.voyages = [];
@@ -451,14 +583,19 @@ function dashboard() {
                 method: method,
                 headers: { 'Content-Type': 'application/json' }
             };
+            if (this.sessionToken) opts.headers['X-Token'] = this.sessionToken;
             if (this.apiKey) opts.headers['X-Api-Key'] = this.apiKey;
             if (body) opts.body = JSON.stringify(this.toPascal(body));
             let resp = await fetch(API + path, opts);
             if (resp.status === 401 || resp.status === 403) {
                 this.authRequired = true;
                 this.authenticated = false;
+                this.loginStep = 'email';
+                this.whoami = null;
                 localStorage.removeItem(STORAGE_KEY);
+                localStorage.removeItem('armada_session_token');
                 this.apiKey = null;
+                this.sessionToken = null;
                 throw new Error('Authentication required');
             }
             if (resp.status === 204) return null;

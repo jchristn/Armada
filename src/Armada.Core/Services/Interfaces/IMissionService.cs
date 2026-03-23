@@ -53,7 +53,8 @@ namespace Armada.Core.Services.Interfaces
         /// <param name="worktreePath">Worktree directory path.</param>
         /// <param name="mission">Mission details.</param>
         /// <param name="vessel">Vessel details.</param>
+        /// <param name="captain">Captain assigned to the mission, or null.</param>
         /// <param name="token">Cancellation token.</param>
-        Task GenerateClaudeMdAsync(string worktreePath, Mission mission, Vessel vessel, CancellationToken token = default);
+        Task GenerateClaudeMdAsync(string worktreePath, Mission mission, Vessel vessel, Captain? captain = null, CancellationToken token = default);
     }
 }

@@ -66,6 +66,9 @@ namespace Armada.Core.Database.Sqlite
             Signals = new SignalMethods(this, _Settings, _Logging);
             Events = new EventMethods(this, _Settings, _Logging);
             MergeEntries = new MergeEntryMethods(this, _Settings, _Logging);
+            Tenants = new TenantMethods(this, _Settings, _Logging);
+            Users = new UserMethods(this, _Settings, _Logging);
+            Credentials = new CredentialMethods(this, _Settings, _Logging);
         }
 
         /// <summary>
@@ -88,6 +91,9 @@ namespace Armada.Core.Database.Sqlite
             Signals = new SignalMethods(this, _Settings, _Logging);
             Events = new EventMethods(this, _Settings, _Logging);
             MergeEntries = new MergeEntryMethods(this, _Settings, _Logging);
+            Tenants = new TenantMethods(this, _Settings, _Logging);
+            Users = new UserMethods(this, _Settings, _Logging);
+            Credentials = new CredentialMethods(this, _Settings, _Logging);
         }
 
         #endregion
@@ -184,6 +190,46 @@ namespace Armada.Core.Database.Sqlite
             }
 
             _Logging.Info(_Header + "database initialized successfully");
+
+            // Seed default data on first boot (or after migration that created tenant but not user)
+            bool anyTenants = await Tenants.ExistsAnyAsync(token).ConfigureAwait(false);
+            if (!anyTenants)
+            {
+                _Logging.Info(_Header + "first boot detected, seeding default tenant, user, and credential");
+
+                TenantMetadata defaultTenant = new TenantMetadata();
+                defaultTenant.Id = Constants.DefaultTenantId;
+                defaultTenant.Name = Constants.DefaultTenantName;
+                defaultTenant.IsProtected = true;
+                await Tenants.CreateAsync(defaultTenant, token).ConfigureAwait(false);
+            }
+
+            // Ensure default user and credential exist (migration may have seeded tenant without user)
+            UserMaster? existingUser = await Users.ReadByIdAsync(Constants.DefaultUserId, token).ConfigureAwait(false);
+            if (existingUser == null)
+            {
+                _Logging.Info(_Header + "seeding default user and credential");
+
+                UserMaster defaultUser = new UserMaster();
+                defaultUser.Id = Constants.DefaultUserId;
+                defaultUser.TenantId = Constants.DefaultTenantId;
+                defaultUser.Email = Constants.DefaultUserEmail;
+                defaultUser.PasswordSha256 = UserMaster.ComputePasswordHash(Constants.DefaultUserPassword);
+                defaultUser.IsAdmin = true;
+                defaultUser.IsTenantAdmin = true;
+                defaultUser.IsProtected = true;
+                await Users.CreateAsync(defaultUser, token).ConfigureAwait(false);
+
+                Credential defaultCred = new Credential();
+                defaultCred.Id = Constants.DefaultCredentialId;
+                defaultCred.TenantId = Constants.DefaultTenantId;
+                defaultCred.UserId = Constants.DefaultUserId;
+                defaultCred.BearerToken = Constants.DefaultBearerToken;
+                defaultCred.IsProtected = true;
+                await Credentials.CreateAsync(defaultCred, token).ConfigureAwait(false);
+
+                _Logging.Info(_Header + "default data seeded successfully");
+            }
         }
 
         /// <summary>
@@ -315,6 +361,8 @@ namespace Armada.Core.Database.Sqlite
         {
             Fleet fleet = new Fleet();
             fleet.Id = reader["id"].ToString()!;
+            fleet.TenantId = NullableString(reader["tenant_id"]);
+            fleet.UserId = NullableString(reader["user_id"]);
             fleet.Name = reader["name"].ToString()!;
             fleet.Description = NullableString(reader["description"]);
             fleet.Active = Convert.ToInt64(reader["active"]) == 1;
@@ -332,6 +380,8 @@ namespace Armada.Core.Database.Sqlite
         {
             Vessel vessel = new Vessel();
             vessel.Id = reader["id"].ToString()!;
+            vessel.TenantId = NullableString(reader["tenant_id"]);
+            vessel.UserId = NullableString(reader["user_id"]);
             vessel.FleetId = NullableString(reader["fleet_id"]);
             vessel.Name = reader["name"].ToString()!;
             vessel.RepoUrl = NullableString(reader["repo_url"]);
@@ -339,6 +389,9 @@ namespace Armada.Core.Database.Sqlite
             vessel.WorkingDirectory = NullableString(reader["working_directory"]);
             vessel.ProjectContext = NullableString(reader["project_context"]);
             vessel.StyleGuide = NullableString(reader["style_guide"]);
+            try { vessel.EnableModelContext = Convert.ToInt64(reader["enable_model_context"]) == 1; }
+            catch { vessel.EnableModelContext = false; }
+            vessel.ModelContext = NullableString(reader["model_context"]);
             string? landingModeStr = NullableString(reader["landing_mode"]);
             if (!String.IsNullOrEmpty(landingModeStr) && Enum.TryParse<LandingModeEnum>(landingModeStr, out LandingModeEnum lm))
                 vessel.LandingMode = lm;
@@ -363,8 +416,11 @@ namespace Armada.Core.Database.Sqlite
         {
             Captain captain = new Captain();
             captain.Id = reader["id"].ToString()!;
+            captain.TenantId = NullableString(reader["tenant_id"]);
+            captain.UserId = NullableString(reader["user_id"]);
             captain.Name = reader["name"].ToString()!;
             captain.Runtime = Enum.Parse<AgentRuntimeEnum>(reader["runtime"].ToString()!);
+            captain.SystemInstructions = NullableString(reader["system_instructions"]);
             captain.State = Enum.Parse<CaptainStateEnum>(reader["state"].ToString()!);
             captain.CurrentMissionId = NullableString(reader["current_mission_id"]);
             captain.CurrentDockId = NullableString(reader["current_dock_id"]);
@@ -385,6 +441,8 @@ namespace Armada.Core.Database.Sqlite
         {
             Mission mission = new Mission();
             mission.Id = reader["id"].ToString()!;
+            mission.TenantId = NullableString(reader["tenant_id"]);
+            mission.UserId = NullableString(reader["user_id"]);
             mission.VoyageId = NullableString(reader["voyage_id"]);
             mission.VesselId = NullableString(reader["vessel_id"]);
             mission.CaptainId = NullableString(reader["captain_id"]);
@@ -415,6 +473,8 @@ namespace Armada.Core.Database.Sqlite
         {
             Voyage voyage = new Voyage();
             voyage.Id = reader["id"].ToString()!;
+            voyage.TenantId = NullableString(reader["tenant_id"]);
+            voyage.UserId = NullableString(reader["user_id"]);
             voyage.Title = reader["title"].ToString()!;
             voyage.Description = NullableString(reader["description"]);
             voyage.Status = Enum.Parse<VoyageStatusEnum>(reader["status"].ToString()!);
@@ -439,6 +499,8 @@ namespace Armada.Core.Database.Sqlite
         {
             Dock dock = new Dock();
             dock.Id = reader["id"].ToString()!;
+            dock.TenantId = NullableString(reader["tenant_id"]);
+            dock.UserId = NullableString(reader["user_id"]);
             dock.VesselId = reader["vessel_id"].ToString()!;
             dock.CaptainId = NullableString(reader["captain_id"]);
             dock.WorktreePath = NullableString(reader["worktree_path"]);
@@ -458,6 +520,8 @@ namespace Armada.Core.Database.Sqlite
         {
             Signal signal = new Signal();
             signal.Id = reader["id"].ToString()!;
+            signal.TenantId = NullableString(reader["tenant_id"]);
+            signal.UserId = NullableString(reader["user_id"]);
             signal.FromCaptainId = NullableString(reader["from_captain_id"]);
             signal.ToCaptainId = NullableString(reader["to_captain_id"]);
             signal.Type = Enum.Parse<SignalTypeEnum>(reader["type"].ToString()!);
@@ -476,6 +540,8 @@ namespace Armada.Core.Database.Sqlite
         {
             ArmadaEvent evt = new ArmadaEvent();
             evt.Id = reader["id"].ToString()!;
+            evt.TenantId = NullableString(reader["tenant_id"]);
+            evt.UserId = NullableString(reader["user_id"]);
             evt.EventType = reader["event_type"].ToString()!;
             evt.EntityType = NullableString(reader["entity_type"]);
             evt.EntityId = NullableString(reader["entity_id"]);
@@ -498,6 +564,8 @@ namespace Armada.Core.Database.Sqlite
         {
             MergeEntry entry = new MergeEntry();
             entry.Id = reader["id"].ToString()!;
+            entry.TenantId = NullableString(reader["tenant_id"]);
+            entry.UserId = NullableString(reader["user_id"]);
             entry.MissionId = NullableString(reader["mission_id"]);
             entry.VesselId = NullableString(reader["vessel_id"]);
             entry.BranchName = reader["branch_name"].ToString()!;
@@ -515,6 +583,53 @@ namespace Armada.Core.Database.Sqlite
             return entry;
         }
 
+        internal static TenantMetadata TenantFromReader(SqliteDataReader reader)
+        {
+            TenantMetadata tenant = new TenantMetadata();
+            tenant.Id = reader["id"].ToString()!;
+            tenant.Name = reader["name"].ToString()!;
+            tenant.Active = Convert.ToInt64(reader["active"]) == 1;
+            tenant.IsProtected = Convert.ToInt64(reader["is_protected"]) == 1;
+            tenant.CreatedUtc = FromIso8601(reader["created_utc"].ToString()!);
+            tenant.LastUpdateUtc = FromIso8601(reader["last_update_utc"].ToString()!);
+            return tenant;
+        }
+
+        internal static UserMaster UserFromReader(SqliteDataReader reader)
+        {
+            UserMaster user = new UserMaster();
+            user.Id = reader["id"].ToString()!;
+            user.TenantId = reader["tenant_id"].ToString()!;
+            user.Email = reader["email"].ToString()!;
+            user.PasswordSha256 = reader["password_sha256"].ToString()!;
+            user.FirstName = NullableString(reader["first_name"]);
+            user.LastName = NullableString(reader["last_name"]);
+            user.IsAdmin = Convert.ToInt64(reader["is_admin"]) == 1;
+            user.IsTenantAdmin = Convert.ToInt64(reader["is_tenant_admin"]) == 1;
+            user.IsProtected = Convert.ToInt64(reader["is_protected"]) == 1;
+            user.Active = Convert.ToInt64(reader["active"]) == 1;
+            user.CreatedUtc = FromIso8601(reader["created_utc"].ToString()!);
+            user.LastUpdateUtc = FromIso8601(reader["last_update_utc"].ToString()!);
+            return user;
+        }
+
+        internal static Credential CredentialFromReader(SqliteDataReader reader)
+        {
+            Credential cred = new Credential();
+            cred.Id = reader["id"].ToString()!;
+            cred.TenantId = reader["tenant_id"].ToString()!;
+            cred.UserId = reader["user_id"].ToString()!;
+            cred.Name = NullableString(reader["name"]);
+            cred.BearerToken = reader["bearer_token"].ToString()!;
+            cred.Active = Convert.ToInt64(reader["active"]) == 1;
+            cred.IsProtected = Convert.ToInt64(reader["is_protected"]) == 1;
+            cred.CreatedUtc = FromIso8601(reader["created_utc"].ToString()!);
+            cred.LastUpdateUtc = FromIso8601(reader["last_update_utc"].ToString()!);
+            return cred;
+        }
+
         #endregion
     }
 }
+
+

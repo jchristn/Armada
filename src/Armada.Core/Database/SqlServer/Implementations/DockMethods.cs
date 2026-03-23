@@ -2,13 +2,14 @@ namespace Armada.Core.Database.SqlServer.Implementations
 {
     using System;
     using System.Collections.Generic;
-    using System.Globalization;
     using System.Threading;
     using System.Threading.Tasks;
     using Microsoft.Data.SqlClient;
+    using SyslogLogging;
     using Armada.Core.Database.Interfaces;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Settings;
 
     /// <summary>
     /// SQL Server implementation of dock database operations.
@@ -17,8 +18,12 @@ namespace Armada.Core.Database.SqlServer.Implementations
     {
         #region Private-Members
 
-        private string _ConnectionString;
-        private static readonly string _Iso8601Format = "yyyy-MM-ddTHH:mm:ss.fffffffZ";
+#pragma warning disable CS0414
+        private readonly string _Header = "[DockMethods] ";
+#pragma warning restore CS0414
+        private readonly SqlServerDatabaseDriver _Driver;
+        private readonly DatabaseSettings _Settings;
+        private readonly LoggingModule _Logging;
 
         #endregion
 
@@ -27,39 +32,40 @@ namespace Armada.Core.Database.SqlServer.Implementations
         /// <summary>
         /// Instantiate.
         /// </summary>
-        /// <param name="connectionString">SQL Server connection string.</param>
-        internal DockMethods(string connectionString)
+        internal DockMethods(SqlServerDatabaseDriver driver, DatabaseSettings settings, LoggingModule logging)
         {
-            _ConnectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
+            _Driver = driver ?? throw new ArgumentNullException(nameof(driver));
+            _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
+            _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
         }
 
         #endregion
 
         #region Public-Methods
 
-        /// <summary>
-        /// Create a dock.
-        /// </summary>
+        /// <inheritdoc />
         public async Task<Dock> CreateAsync(Dock dock, CancellationToken token = default)
         {
             if (dock == null) throw new ArgumentNullException(nameof(dock));
             dock.LastUpdateUtc = DateTime.UtcNow;
 
-            using (SqlConnection conn = new SqlConnection(_ConnectionString))
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = @"INSERT INTO docks (id, vessel_id, captain_id, worktree_path, branch_name, active, created_utc, last_update_utc)
-                        VALUES (@id, @vessel_id, @captain_id, @worktree_path, @branch_name, @active, @created_utc, @last_update_utc);";
+                    cmd.CommandText = @"INSERT INTO docks (id, tenant_id, user_id, vessel_id, captain_id, worktree_path, branch_name, active, created_utc, last_update_utc)
+                        VALUES (@id, @tenant_id, @user_id, @vessel_id, @captain_id, @worktree_path, @branch_name, @active, @created_utc, @last_update_utc);";
                     cmd.Parameters.AddWithValue("@id", dock.Id);
+                    cmd.Parameters.AddWithValue("@tenant_id", (object?)dock.TenantId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@user_id", (object?)dock.UserId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@vessel_id", dock.VesselId);
                     cmd.Parameters.AddWithValue("@captain_id", (object?)dock.CaptainId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@worktree_path", (object?)dock.WorktreePath ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@branch_name", (object?)dock.BranchName ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@active", dock.Active ? 1 : 0);
-                    cmd.Parameters.AddWithValue("@created_utc", ToIso8601(dock.CreatedUtc));
-                    cmd.Parameters.AddWithValue("@last_update_utc", ToIso8601(dock.LastUpdateUtc));
+                    cmd.Parameters.AddWithValue("@active", dock.Active);
+                    cmd.Parameters.AddWithValue("@created_utc", SqlServerDatabaseDriver.ToIso8601(dock.CreatedUtc));
+                    cmd.Parameters.AddWithValue("@last_update_utc", SqlServerDatabaseDriver.ToIso8601(dock.LastUpdateUtc));
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
             }
@@ -67,14 +73,12 @@ namespace Armada.Core.Database.SqlServer.Implementations
             return dock;
         }
 
-        /// <summary>
-        /// Read a dock by identifier.
-        /// </summary>
+        /// <inheritdoc />
         public async Task<Dock?> ReadAsync(string id, CancellationToken token = default)
         {
             if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
 
-            using (SqlConnection conn = new SqlConnection(_ConnectionString))
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
@@ -84,7 +88,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
                         if (await reader.ReadAsync(token).ConfigureAwait(false))
-                            return DockFromReader(reader);
+                            return SqlServerDatabaseDriver.DockFromReader(reader);
                     }
                 }
             }
@@ -92,20 +96,20 @@ namespace Armada.Core.Database.SqlServer.Implementations
             return null;
         }
 
-        /// <summary>
-        /// Update a dock.
-        /// </summary>
+        /// <inheritdoc />
         public async Task<Dock> UpdateAsync(Dock dock, CancellationToken token = default)
         {
             if (dock == null) throw new ArgumentNullException(nameof(dock));
             dock.LastUpdateUtc = DateTime.UtcNow;
 
-            using (SqlConnection conn = new SqlConnection(_ConnectionString))
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = @"UPDATE docks SET
+                        tenant_id = @tenant_id,
+                            user_id = @user_id,
                         vessel_id = @vessel_id,
                         captain_id = @captain_id,
                         worktree_path = @worktree_path,
@@ -114,12 +118,14 @@ namespace Armada.Core.Database.SqlServer.Implementations
                         last_update_utc = @last_update_utc
                         WHERE id = @id;";
                     cmd.Parameters.AddWithValue("@id", dock.Id);
+                    cmd.Parameters.AddWithValue("@tenant_id", (object?)dock.TenantId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@user_id", (object?)dock.UserId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@vessel_id", dock.VesselId);
                     cmd.Parameters.AddWithValue("@captain_id", (object?)dock.CaptainId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@worktree_path", (object?)dock.WorktreePath ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@branch_name", (object?)dock.BranchName ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@active", dock.Active ? 1 : 0);
-                    cmd.Parameters.AddWithValue("@last_update_utc", ToIso8601(dock.LastUpdateUtc));
+                    cmd.Parameters.AddWithValue("@active", dock.Active);
+                    cmd.Parameters.AddWithValue("@last_update_utc", SqlServerDatabaseDriver.ToIso8601(dock.LastUpdateUtc));
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
             }
@@ -127,14 +133,12 @@ namespace Armada.Core.Database.SqlServer.Implementations
             return dock;
         }
 
-        /// <summary>
-        /// Delete a dock by identifier.
-        /// </summary>
+        /// <inheritdoc />
         public async Task DeleteAsync(string id, CancellationToken token = default)
         {
             if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
 
-            using (SqlConnection conn = new SqlConnection(_ConnectionString))
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
@@ -146,14 +150,12 @@ namespace Armada.Core.Database.SqlServer.Implementations
             }
         }
 
-        /// <summary>
-        /// Enumerate all docks.
-        /// </summary>
+        /// <inheritdoc />
         public async Task<List<Dock>> EnumerateAsync(CancellationToken token = default)
         {
             List<Dock> results = new List<Dock>();
 
-            using (SqlConnection conn = new SqlConnection(_ConnectionString))
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
@@ -162,7 +164,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
                         while (await reader.ReadAsync(token).ConfigureAwait(false))
-                            results.Add(DockFromReader(reader));
+                            results.Add(SqlServerDatabaseDriver.DockFromReader(reader));
                     }
                 }
             }
@@ -170,14 +172,12 @@ namespace Armada.Core.Database.SqlServer.Implementations
             return results;
         }
 
-        /// <summary>
-        /// Enumerate docks with pagination and filtering.
-        /// </summary>
+        /// <inheritdoc />
         public async Task<EnumerationResult<Dock>> EnumerateAsync(EnumerationQuery query, CancellationToken token = default)
         {
             if (query == null) query = new EnumerationQuery();
 
-            using (SqlConnection conn = new SqlConnection(_ConnectionString))
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
 
@@ -187,12 +187,12 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 if (query.CreatedAfter.HasValue)
                 {
                     conditions.Add("created_utc > @created_after");
-                    parameters.Add(new SqlParameter("@created_after", ToIso8601(query.CreatedAfter.Value)));
+                    parameters.Add(new SqlParameter("@created_after", SqlServerDatabaseDriver.ToIso8601(query.CreatedAfter.Value)));
                 }
                 if (query.CreatedBefore.HasValue)
                 {
                     conditions.Add("created_utc < @created_before");
-                    parameters.Add(new SqlParameter("@created_before", ToIso8601(query.CreatedBefore.Value)));
+                    parameters.Add(new SqlParameter("@created_before", SqlServerDatabaseDriver.ToIso8601(query.CreatedBefore.Value)));
                 }
                 if (!string.IsNullOrEmpty(query.VesselId))
                 {
@@ -208,16 +208,14 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 string whereClause = conditions.Count > 0 ? " WHERE " + string.Join(" AND ", conditions) : "";
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
 
-                // Count
-                int totalCount = 0;
+                long totalCount = 0;
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = "SELECT COUNT(*) FROM docks" + whereClause + ";";
                     foreach (SqlParameter p in parameters) cmd.Parameters.Add(new SqlParameter(p.ParameterName, p.Value));
-                    totalCount = (int)(await cmd.ExecuteScalarAsync(token).ConfigureAwait(false))!;
+                    totalCount = Convert.ToInt64(await cmd.ExecuteScalarAsync(token).ConfigureAwait(false));
                 }
 
-                // Query
                 List<Dock> results = new List<Dock>();
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
@@ -228,7 +226,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
                         while (await reader.ReadAsync(token).ConfigureAwait(false))
-                            results.Add(DockFromReader(reader));
+                            results.Add(SqlServerDatabaseDriver.DockFromReader(reader));
                     }
                 }
 
@@ -236,15 +234,13 @@ namespace Armada.Core.Database.SqlServer.Implementations
             }
         }
 
-        /// <summary>
-        /// Enumerate docks by vessel identifier.
-        /// </summary>
+        /// <inheritdoc />
         public async Task<List<Dock>> EnumerateByVesselAsync(string vesselId, CancellationToken token = default)
         {
             if (string.IsNullOrEmpty(vesselId)) throw new ArgumentNullException(nameof(vesselId));
             List<Dock> results = new List<Dock>();
 
-            using (SqlConnection conn = new SqlConnection(_ConnectionString))
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
@@ -254,7 +250,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
                         while (await reader.ReadAsync(token).ConfigureAwait(false))
-                            results.Add(DockFromReader(reader));
+                            results.Add(SqlServerDatabaseDriver.DockFromReader(reader));
                     }
                 }
             }
@@ -262,14 +258,12 @@ namespace Armada.Core.Database.SqlServer.Implementations
             return results;
         }
 
-        /// <summary>
-        /// Find an available dock for a vessel (no captain assigned, active).
-        /// </summary>
+        /// <inheritdoc />
         public async Task<Dock?> FindAvailableAsync(string vesselId, CancellationToken token = default)
         {
             if (string.IsNullOrEmpty(vesselId)) throw new ArgumentNullException(nameof(vesselId));
 
-            using (SqlConnection conn = new SqlConnection(_ConnectionString))
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
@@ -279,7 +273,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
                         if (await reader.ReadAsync(token).ConfigureAwait(false))
-                            return DockFromReader(reader);
+                            return SqlServerDatabaseDriver.DockFromReader(reader);
                     }
                 }
             }
@@ -287,69 +281,345 @@ namespace Armada.Core.Database.SqlServer.Implementations
             return null;
         }
 
-        /// <summary>
-        /// Check if a dock exists by identifier.
-        /// </summary>
+        /// <inheritdoc />
         public async Task<bool> ExistsAsync(string id, CancellationToken token = default)
         {
             if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
 
-            using (SqlConnection conn = new SqlConnection(_ConnectionString))
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = "SELECT COUNT(*) FROM docks WHERE id = @id;";
                     cmd.Parameters.AddWithValue("@id", id);
-                    int count = (int)(await cmd.ExecuteScalarAsync(token).ConfigureAwait(false))!;
+                    int count = Convert.ToInt32(await cmd.ExecuteScalarAsync(token).ConfigureAwait(false));
                     return count > 0;
                 }
             }
         }
 
-        #endregion
-
-        #region Private-Methods
-
-        private static Dock DockFromReader(SqlDataReader reader)
+        /// <inheritdoc />
+        public async Task<Dock?> ReadAsync(string tenantId, string id, CancellationToken token = default)
         {
-            Dock dock = new Dock();
-            dock.Id = reader["id"].ToString()!;
-            dock.VesselId = reader["vessel_id"].ToString()!;
-            dock.CaptainId = NullableString(reader["captain_id"]);
-            dock.WorktreePath = NullableString(reader["worktree_path"]);
-            dock.BranchName = NullableString(reader["branch_name"]);
-            dock.Active = Convert.ToInt32(reader["active"]) == 1;
-            dock.CreatedUtc = FromIso8601(reader["created_utc"].ToString()!);
-            dock.LastUpdateUtc = FromIso8601(reader["last_update_utc"].ToString()!);
-            return dock;
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT * FROM docks WHERE tenant_id = @tenantId AND id = @id;";
+                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
+                    cmd.Parameters.AddWithValue("@id", id);
+                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        if (await reader.ReadAsync(token).ConfigureAwait(false))
+                            return SqlServerDatabaseDriver.DockFromReader(reader);
+                    }
+                }
+            }
+
+            return null;
         }
 
-        private static string ToIso8601(DateTime dt)
+        /// <inheritdoc />
+        public async Task DeleteAsync(string tenantId, string id, CancellationToken token = default)
         {
-            return dt.ToUniversalTime().ToString(_Iso8601Format, CultureInfo.InvariantCulture);
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "DELETE FROM docks WHERE tenant_id = @tenantId AND id = @id;";
+                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
+                    cmd.Parameters.AddWithValue("@id", id);
+                    await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                }
+            }
         }
 
-        private static DateTime FromIso8601(string value)
+        /// <inheritdoc />
+        public async Task<List<Dock>> EnumerateAsync(string tenantId, CancellationToken token = default)
         {
-            return DateTime.Parse(value, CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind).ToUniversalTime();
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            List<Dock> results = new List<Dock>();
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT * FROM docks WHERE tenant_id = @tenantId ORDER BY name;";
+                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
+                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                            results.Add(SqlServerDatabaseDriver.DockFromReader(reader));
+                    }
+                }
+            }
+
+            return results;
         }
 
-        private static DateTime? FromIso8601Nullable(object value)
+        /// <inheritdoc />
+        public async Task<List<Dock>> EnumerateByVesselAsync(string tenantId, string vesselId, CancellationToken token = default)
         {
-            if (value == null || value == DBNull.Value) return null;
-            string str = value.ToString()!;
-            if (string.IsNullOrEmpty(str)) return null;
-            return FromIso8601(str);
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (string.IsNullOrEmpty(vesselId)) throw new ArgumentNullException(nameof(vesselId));
+            List<Dock> results = new List<Dock>();
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT * FROM docks WHERE tenant_id = @tenantId AND vessel_id = @vessel_id ORDER BY created_utc;";
+                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
+                    cmd.Parameters.AddWithValue("@vessel_id", vesselId);
+                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                            results.Add(SqlServerDatabaseDriver.DockFromReader(reader));
+                    }
+                }
+            }
+
+            return results;
         }
 
-        private static string? NullableString(object value)
+        /// <inheritdoc />
+        public async Task<Dock?> FindAvailableAsync(string tenantId, string vesselId, CancellationToken token = default)
         {
-            if (value == null || value == DBNull.Value) return null;
-            string str = value.ToString()!;
-            return string.IsNullOrEmpty(str) ? null : str;
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (string.IsNullOrEmpty(vesselId)) throw new ArgumentNullException(nameof(vesselId));
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT TOP 1 * FROM docks WHERE tenant_id = @tenantId AND vessel_id = @vessel_id AND active = 1 AND captain_id IS NULL;";
+                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
+                    cmd.Parameters.AddWithValue("@vessel_id", vesselId);
+                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        if (await reader.ReadAsync(token).ConfigureAwait(false))
+                            return SqlServerDatabaseDriver.DockFromReader(reader);
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> ExistsAsync(string tenantId, string id, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT COUNT(*) FROM docks WHERE tenant_id = @tenantId AND id = @id;";
+                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
+                    cmd.Parameters.AddWithValue("@id", id);
+                    int count = Convert.ToInt32(await cmd.ExecuteScalarAsync(token).ConfigureAwait(false));
+                    return count > 0;
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<EnumerationResult<Dock>> EnumerateAsync(string tenantId, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (query == null) query = new EnumerationQuery();
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+
+                List<string> conditions = new List<string> { "tenant_id = @tenantId" };
+                List<SqlParameter> parameters = new List<SqlParameter> { new SqlParameter("@tenantId", tenantId) };
+
+                if (query.CreatedAfter.HasValue)
+                {
+                    conditions.Add("created_utc > @created_after");
+                    parameters.Add(new SqlParameter("@created_after", SqlServerDatabaseDriver.ToIso8601(query.CreatedAfter.Value)));
+                }
+                if (query.CreatedBefore.HasValue)
+                {
+                    conditions.Add("created_utc < @created_before");
+                    parameters.Add(new SqlParameter("@created_before", SqlServerDatabaseDriver.ToIso8601(query.CreatedBefore.Value)));
+                }
+
+                string whereClause = " WHERE " + string.Join(" AND ", conditions);
+                string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
+
+                long totalCount = 0;
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT COUNT(*) FROM docks" + whereClause + ";";
+                    foreach (SqlParameter p in parameters) cmd.Parameters.Add(new SqlParameter(p.ParameterName, p.Value));
+                    totalCount = Convert.ToInt64(await cmd.ExecuteScalarAsync(token).ConfigureAwait(false));
+                }
+
+                List<Dock> results = new List<Dock>();
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT * FROM docks" + whereClause + " ORDER BY created_utc " + orderDirection + " OFFSET " + query.Offset + " ROWS FETCH NEXT " + query.PageSize + " ROWS ONLY;";
+                    foreach (SqlParameter p in parameters) cmd.Parameters.Add(new SqlParameter(p.ParameterName, p.Value));
+                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                            results.Add(SqlServerDatabaseDriver.DockFromReader(reader));
+                    }
+                }
+
+                return EnumerationResult<Dock>.Create(query, results, totalCount);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<Dock?> ReadAsync(string tenantId, string userId, string id, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (string.IsNullOrEmpty(userId)) throw new ArgumentNullException(nameof(userId));
+            if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT * FROM docks WHERE tenant_id = @tenantId AND user_id = @userId AND id = @id;";
+                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
+                    cmd.Parameters.AddWithValue("@userId", userId);
+                    cmd.Parameters.AddWithValue("@id", id);
+                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        if (await reader.ReadAsync(token).ConfigureAwait(false))
+                            return SqlServerDatabaseDriver.DockFromReader(reader);
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        /// <inheritdoc />
+        public async Task DeleteAsync(string tenantId, string userId, string id, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (string.IsNullOrEmpty(userId)) throw new ArgumentNullException(nameof(userId));
+            if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "DELETE FROM docks WHERE tenant_id = @tenantId AND user_id = @userId AND id = @id;";
+                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
+                    cmd.Parameters.AddWithValue("@userId", userId);
+                    cmd.Parameters.AddWithValue("@id", id);
+                    await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<List<Dock>> EnumerateAsync(string tenantId, string userId, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (string.IsNullOrEmpty(userId)) throw new ArgumentNullException(nameof(userId));
+            List<Dock> results = new List<Dock>();
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT * FROM docks WHERE tenant_id = @tenantId AND user_id = @userId ORDER BY name;";
+                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
+                    cmd.Parameters.AddWithValue("@userId", userId);
+                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                            results.Add(SqlServerDatabaseDriver.DockFromReader(reader));
+                    }
+                }
+            }
+
+            return results;
+        }
+
+        /// <inheritdoc />
+        public async Task<EnumerationResult<Dock>> EnumerateAsync(string tenantId, string userId, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (string.IsNullOrEmpty(userId)) throw new ArgumentNullException(nameof(userId));
+            if (query == null) query = new EnumerationQuery();
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+
+                List<string> conditions = new List<string> { "tenant_id = @tenantId", "user_id = @userId" };
+                List<SqlParameter> parameters = new List<SqlParameter>
+                {
+                    new SqlParameter("@tenantId", tenantId),
+                    new SqlParameter("@userId", userId)
+                };
+
+                if (query.CreatedAfter.HasValue)
+                {
+                    conditions.Add("created_utc > @created_after");
+                    parameters.Add(new SqlParameter("@created_after", SqlServerDatabaseDriver.ToIso8601(query.CreatedAfter.Value)));
+                }
+                if (query.CreatedBefore.HasValue)
+                {
+                    conditions.Add("created_utc < @created_before");
+                    parameters.Add(new SqlParameter("@created_before", SqlServerDatabaseDriver.ToIso8601(query.CreatedBefore.Value)));
+                }
+
+                string whereClause = " WHERE " + string.Join(" AND ", conditions);
+                string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
+
+                long totalCount = 0;
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT COUNT(*) FROM docks" + whereClause + ";";
+                    foreach (SqlParameter p in parameters) cmd.Parameters.Add(new SqlParameter(p.ParameterName, p.Value));
+                    totalCount = Convert.ToInt64(await cmd.ExecuteScalarAsync(token).ConfigureAwait(false));
+                }
+
+                List<Dock> results = new List<Dock>();
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT * FROM docks" + whereClause + " ORDER BY created_utc " + orderDirection + " OFFSET " + query.Offset + " ROWS FETCH NEXT " + query.PageSize + " ROWS ONLY;";
+                    foreach (SqlParameter p in parameters) cmd.Parameters.Add(new SqlParameter(p.ParameterName, p.Value));
+                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                            results.Add(SqlServerDatabaseDriver.DockFromReader(reader));
+                    }
+                }
+
+                return EnumerationResult<Dock>.Create(query, results, totalCount);
+            }
         }
 
         #endregion
     }
 }
+

@@ -7,7 +7,7 @@
 <p align="center">
   <strong>Multi-agent orchestration for scaling human developers with AI</strong>
   <br />
-  <strong>⚠️ ALPHA v0.2.0 - APIs, schemas, and behavior may change without notice</strong>
+  <strong>⚠️ ALPHA v0.3.0 - APIs, schemas, and behavior may change without notice</strong>
 </p>
 
 <p align="center">
@@ -34,6 +34,24 @@ That's it. Armada auto-initializes, detects your installed agent runtime (Claude
 
 > **⚠️ Security Note:** Armada runs AI agents with auto-approve flags enabled by default — Claude Code uses `--dangerously-skip-permissions`, Codex uses `--approval-mode full-auto`, and Gemini uses `--sandbox none`. This means agents can read, write, and execute code in their worktrees without user confirmation. Review the [configuration](#configuration) options and understand the implications before running Armada in sensitive environments.
 
+## New in v0.3.0
+
+- **Multi-tenant support** -- tenant isolation, user management, bearer token and session token authentication with role-based access (admin, tenant admin, user)
+- **Per-captain system instructions** -- customize each captain's behavior with persistent instructions injected into every mission prompt (e.g., "You are a testing specialist")
+- **Model context accumulation** -- agents discover and record key information about repositories during missions, building a shared knowledge base for future agents (enabled by default)
+- **Mission history chart** -- SVG bar chart on the Dashboard tab showing missions over time with fleet/vessel filters and time range tabs
+- **Dashboard alert banners** -- proactive warnings when captains are stalled, missions have failed, or dispatch is blocked
+- **Vessel git sync status** -- GitHub-style "ahead/behind" badges on the Vessels page showing commits that need to be pushed or pulled
+- **Captain no longer stalls on failure** -- recovery exhaustion releases captains to Idle instead of Stalled, so they pick up new work immediately
+- **WorkProduced missions no longer block dispatch** -- post-agent states don't prevent new missions on the same vessel
+- **Dock preservation on crash** -- when a captain's process dies, the worktree and branch are preserved so the next captain can continue from partial work
+- **Error modals** -- all data loading errors are shown in dismissable modals instead of inline text
+- **Improved deserialization** -- all REST routes use explicit JSON deserialization with case-insensitive options, fixing camelCase request bodies from the dashboard
+- **Default vessel settings** -- new vessels default to LocalMerge landing mode and LocalAndRemote branch cleanup
+- **Dependency updates** -- SqlClient 7.0.0, Sqlite 10.0.5, MySqlConnector 2.5.0, Npgsql 10.0.2, SwiftStack 0.4.8, Spectre.Console 0.54.0
+- **Copy button fix** -- clipboard icons use CSS pseudo-elements with green checkmark on copy instead of "Copied!" text
+- **Status tooltips with guidance** -- every status badge tooltip now includes a "Next:" action telling users what to do
+
 ## Features
 
 - **Zero-config startup** -- sensible defaults, auto-detection of runtimes and repositories
@@ -42,8 +60,11 @@ That's it. Armada auto-initializes, detects your installed agent runtime (Claude
 - **Multi-runtime support** -- Claude Code, Codex, Gemini, Cursor, and extensible to other agent runtimes via `IAgentRuntime`
 - **Auto-recovery** -- crashed agents are automatically detected, repaired, and relaunched
 - **Broad-scope detection** -- prevents concurrent mutations to the same files across agents
+- **Multi-tenant** -- tenant isolation, user management, bearer token and session token authentication
 - **REST API + WebSocket** -- programmatic access and real-time status updates
 - **MCP server** -- 18 tools let Claude Code, Codex, or any MCP client orchestrate Armada (see [AI-powered orchestration](#ai-powered-orchestration))
+- **React dashboard** -- optional standalone React dashboard for Docker/production deployments
+- **Model context** -- agents accumulate key knowledge about repositories across missions, so future agents start with institutional memory
 - **Cross-platform** -- Windows, macOS, Linux (C#/.NET)
 
 ## Benefits
@@ -53,6 +74,7 @@ That's it. Armada auto-initializes, detects your installed agent runtime (Claude
 - **Scale across more projects** -- Dispatch parallel missions across multiple repositories simultaneously, letting you take on more work than a single developer normally could.
 - **Project management meets conversational AI** -- Integrate task tracking, prioritization, and workflow orchestration directly into AI coding agents like Claude Code, bridging the gap between planning and execution.
 - **Safe isolated worktrees** -- Every agent operates in its own git worktree, so parallel work never collides and your main branch stays clean until you're ready to merge.
+- **Model context accumulation** -- Agents discover and record key information about each repository during missions, building a shared knowledge base that makes future missions faster and more effective.
 - **Automated merge queues** -- Completed missions are queued for merge automatically, reducing manual branch management and keeping your integration pipeline flowing.
 - **Auditable event trails** -- Every mission dispatch, status transition, completion, and failure is recorded in a structured event log you can query at any time.
 - **Reproducible workflows** -- Voyages capture a batch of missions as a reusable unit; retry a failed voyage or re-dispatch it against a new branch with a single command.
@@ -102,7 +124,7 @@ dotnet tool install --global --add-source ./nupkg Armada.Helm
 dotnet tool uninstall --global Armada.Helm
 ```
 
-Helper scripts are in the project root directory: `install-tool.bat/.sh`, `remove-tool.bat/.sh`, and `reinstall-tool.bat/.sh`.
+Helper scripts are in the project root directory: `install.bat/.sh`, `remove.bat/.sh`, `reinstall.bat/.sh`, and `update.bat/.sh`.
 
 ### First Mission
 
@@ -111,6 +133,20 @@ cd your-project
 armada go "Add input validation to the signup form"
 armada watch   # monitor progress
 ```
+
+### Default Credentials
+
+On first boot, Armada seeds a default tenant, user, and credential:
+
+| Item | Value |
+|------|-------|
+| Email | `admin@armada` |
+| Password | `password` |
+| Bearer Token | `default` |
+
+The dashboard login screen accepts the email and password above. For API access, use `Authorization: Bearer default`.
+
+> **Important:** Change the default password in production environments.
 
 For a deeper walkthrough, see the [Getting Started Guide](GETTING_STARTED.md).
 
@@ -164,14 +200,25 @@ If a captain crashes, the Admiral automatically detects it, repairs the worktree
 
 ## Architecture
 
-Armada is a C#/.NET solution with four projects:
+Armada is a C#/.NET solution with five projects:
 
 | Project | Description |
 |---------|-------------|
-| **Armada.Core** | Domain models, database interfaces, service interfaces, settings |
+| **Armada.Core** | Domain models (including tenants, users, credentials), database interfaces, service interfaces, settings |
 | **Armada.Runtimes** | Agent runtime adapters (Claude Code, Codex, Gemini, Cursor, extensible via `IAgentRuntime`) |
-| **Armada.Server** | Admiral process: REST API ([SwiftStack](https://github.com/jchristn/swiftstack)), MCP server ([Voltaic](https://github.com/jchristn/voltaic)), WebSocket hub |
+| **Armada.Server** | Admiral process: REST API ([SwiftStack](https://github.com/jchristn/swiftstack)), MCP server ([Voltaic](https://github.com/jchristn/voltaic)), WebSocket hub, embedded dashboard |
+| **Armada.Dashboard** | Standalone React dashboard for Docker/production deployments |
 | **Armada.Helm** | CLI ([Spectre.Console](https://spectreconsole.net/)), thin HTTP client to Admiral |
+
+All operational data (fleets, vessels, captains, missions, voyages, docks, signals, events, merge entries) is tenant-scoped. Users within a tenant collaborate on shared operational data. Admin users can access data across all tenants.
+
+Each operational table persists both `TenantId` and `UserId`. Armada maintains foreign-key integrity for those ownership columns across all supported databases: SQLite, PostgreSQL, SQL Server, and MySQL.
+
+The authorization model is:
+
+- `IsAdmin = true`: global system admin with access to every tenant and object.
+- `IsAdmin = false`, `IsTenantAdmin = true`: tenant admin with management access inside that tenant, including users and credentials.
+- `IsAdmin = false`, `IsTenantAdmin = false`: regular user with tenant-scoped visibility plus self-service on their own user account and credentials.
 
 ### Key Concepts
 
@@ -259,7 +306,7 @@ Captain works autonomously
 | Component | Technology | Notes |
 |-----------|-----------|-------|
 | Language | C# / .NET 8+ | Cross-platform |
-| Database | SQLite (Microsoft.Data.Sqlite) | Zero-install, embedded |
+| Database | SQLite, PostgreSQL, SQL Server, MySQL | SQLite default; zero-install, embedded |
 | REST API | [SwiftStack](https://github.com/jchristn/swiftstack) | OpenAPI built-in |
 | MCP/JSON-RPC | [Voltaic](https://github.com/jchristn/voltaic) | Standards-compliant MCP server |
 | CLI | [Spectre.Console](https://spectreconsole.net/) | Rich terminal UI |
@@ -302,7 +349,7 @@ armada fleet list|add|remove
 ```
 armada server start|status|stop
 armada config show|set|init
-armada mcp install|stdio
+armada mcp install|remove|stdio
 ```
 
 ### Examples
@@ -357,6 +404,7 @@ armada config init              # Interactive setup (optional)
 | `AutoMergePullRequests` | false | Auto-merge PRs after creation |
 | `LandingMode` | null | Landing policy: `LocalMerge`, `PullRequest`, `MergeQueue`, or `None` |
 | `BranchCleanupPolicy` | `LocalOnly` | Branch cleanup after landing: `LocalOnly`, `LocalAndRemote`, or `None` |
+| `RequireAuthForShutdown` | false | Require authentication for `POST /api/v1/server/stop` |
 | `TerminalBell` | true | Ring terminal bell during `armada watch` |
 | `DefaultRuntime` | null (auto-detect) | Default agent runtime |
 
@@ -469,22 +517,37 @@ No other changes are required -- all other settings remain the same.
 - **Encryption:** Set `requireEncryption` to `true` to require encrypted connections for PostgreSQL, SQL Server, or MySQL.
 - **Backup/restore:** The `armada_backup` and `armada_restore` MCP tools are only available when using SQLite. If you switch to PostgreSQL, SQL Server, or MySQL, use your database's native backup tools instead.
 
+## Authentication
+
+As of v0.3.0, Armada supports multi-tenant authentication with three methods:
+
+| Method | Header | Description |
+|--------|--------|-------------|
+| **Bearer Token** (recommended) | `Authorization: Bearer <token>` | 64-character tokens linked to a tenant and user. Default token: `default` |
+| **Session Token** | `X-Token: <token>` | AES-256-CBC encrypted, 24-hour lifetime. Returned by `POST /api/v1/authenticate` |
+| **API Key** (deprecated) | `X-Api-Key: <key>` | Legacy. Maps to a synthetic admin identity. Migrate to bearer tokens |
+
+The default installation works with `Authorization: Bearer default` -- no additional setup needed for single-user use.
+
+For full details, see [docs/REST_API.md](docs/REST_API.md#authentication).
+
 ## REST API
 
-The Admiral exposes a REST API on port 7890. All endpoints are under `/api/v1/`.
+The Admiral exposes a REST API on port 7890. All endpoints are under `/api/v1/` and require authentication (see above).
 
 ```bash
 API="http://localhost:7890/api/v1"
+AUTH="Authorization: Bearer default"
 
-curl $API/status                  # System status
-curl $API/fleets                  # List fleets
-curl $API/vessels                 # List vessels
-curl $API/missions                # List missions
-curl $API/captains                # List captains
-curl $API/status/health           # Health check
+curl -H "$AUTH" $API/status              # System status
+curl -H "$AUTH" $API/fleets              # List fleets
+curl -H "$AUTH" $API/vessels             # List vessels
+curl -H "$AUTH" $API/missions            # List missions
+curl -H "$AUTH" $API/captains            # List captains
+curl $API/status/health                  # Health check (no auth required)
 ```
 
-Full CRUD endpoints are available for fleets, vessels, missions, voyages, captains, signals, and events.
+Full CRUD endpoints are available for fleets, vessels, missions, voyages, captains, signals, events, tenants, users, and credentials.
 
 Start the Admiral as a standalone server:
 
@@ -497,8 +560,12 @@ armada server start
 Armada runs an MCP (Model Context Protocol) server with 18 tools, allowing Claude Code and other MCP-compatible clients to use Armada tools directly.
 
 ```bash
-armada mcp install    # Configure Armada as an MCP server
+armada mcp install    # Configure Claude Code, Codex, Gemini, and Cursor for Armada MCP
+armada mcp remove     # Remove those Armada MCP entries again
 ```
+
+If you are working from source, repo-root helpers are also available:
+`install-mcp.bat/.sh` and `remove-mcp.bat/.sh`.
 
 Once installed, your MCP client can call tools like `armada_status`, `armada_dispatch`, `armada_enumerate`, `armada_voyage_status`, `armada_cancel_voyage`, and more.
 
@@ -579,25 +646,150 @@ armada go "Fix: pagination returns duplicate results on page 2" --vessel search-
 armada go "Fix: file upload silently fails for files over 10MB" --vessel upload-service
 ```
 
-## Building from Source
+## Running Locally (without Docker)
+
+### Prerequisites
+
+- [.NET 8.0+ SDK](https://dot.net/download)
+- At least one AI agent runtime on your PATH (Claude Code, Codex, Gemini, or Cursor)
+
+### Build and Run
 
 ```bash
-# Clone
 git clone https://github.com/jchristn/armada.git
 cd armada
 
-# Build
-dotnet build Armada.sln
+# Build the solution
+dotnet build src/Armada.sln
 
-# Test
-dotnet test Armada.sln
-
-# Run the CLI directly (without installing as a global tool)
-dotnet run --project src/Armada.Helm -- go "your task here"
-
-# Run the standalone server
+# Run the server directly
 dotnet run --project src/Armada.Server
 ```
+
+The server starts on the following ports:
+
+| Port | Protocol | Description |
+|------|----------|-------------|
+| 7890 | HTTP | REST API + embedded dashboard |
+| 7891 | JSON-RPC | MCP server |
+| 7892 | WebSocket | Real-time event hub |
+
+Open `http://localhost:7890/dashboard` in your browser. Log in with the default credentials:
+
+| Field | Value |
+|-------|-------|
+| Email | `admin@armada` |
+| Password | `password` |
+
+For API access, use `Authorization: Bearer default` in your requests.
+
+Configuration is stored in `armada.json` in the working directory. On first run, Armada creates the SQLite database, applies migrations, and seeds default data automatically. No manual setup is required.
+
+### Install the CLI (optional)
+
+```bash
+dotnet pack src/Armada.Helm -o ./nupkg
+dotnet tool install --global --add-source ./nupkg Armada.Helm
+
+# Then use the CLI from any directory
+armada doctor
+armada go "your task here"
+```
+
+### Run Tests
+
+```bash
+dotnet run --project test/Armada.Test.Unit
+```
+
+## Running Locally (with Docker)
+
+Docker Compose runs the server and optional React dashboard in containers. No .NET SDK required on the host.
+
+### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) with Docker Compose v2
+
+### Start
+
+```bash
+cd docker
+docker compose up -d
+```
+
+### Services
+
+| Service | Port | URL | Description |
+|---------|------|-----|-------------|
+| `armada-server` | 7890 | `http://localhost:7890/dashboard` | REST API, MCP, WebSocket, embedded dashboard |
+| `armada-dashboard` | 3000 | `http://localhost:3000` | Standalone React dashboard |
+
+Both dashboards connect to the same server. The embedded dashboard at port 7890 is always available. The React dashboard at port 3000 is an additional option for production deployments.
+
+### Default Credentials
+
+Same as the non-Docker setup:
+
+| Field | Value |
+|-------|-------|
+| Email | `admin@armada` |
+| Password | `password` |
+| Bearer Token | `default` |
+
+### Data Persistence
+
+Docker volumes are mapped to `docker/armada/`:
+
+```
+docker/
+├── armada/
+│   ├── db/          # SQLite database (persistent across restarts)
+│   └── logs/        # Server logs
+├── server/
+│   └── armada.json  # Server configuration
+└── compose.yaml
+```
+
+To change settings, edit `docker/server/armada.json` and restart:
+
+```bash
+docker compose restart armada-server
+```
+
+### Factory Reset
+
+To delete all data and start fresh (preserves configuration):
+
+```bash
+cd docker/factory
+
+# Linux/macOS
+./reset.sh
+
+# Windows
+reset.bat
+```
+
+### Stop
+
+```bash
+cd docker
+docker compose down
+```
+
+### Build Images Locally
+
+If you want to build the Docker images from source instead of pulling from Docker Hub:
+
+```bash
+# Build server image
+docker build -f src/Armada.Server/Dockerfile -t armada-server:local .
+
+# Build dashboard image
+docker build -f src/Armada.Dashboard/Dockerfile -t armada-dashboard:local .
+```
+
+Build scripts for multi-platform images are also provided: `build-server.bat/.sh` and `build-dashboard.bat/.sh`.
 
 ## Upgrading / Migration
 
@@ -633,7 +825,27 @@ migrations\migrate_v0.1.0_to_v0.2.0.bat C:\path\to\settings.json
 
 The script backs up your original file to `settings.json.v0.1.0.bak` before making changes.
 
-**Requires:** jq (Linux/macOS) — install via `apt install jq`, `brew install jq`, etc.
+**Requires:** jq (Linux/macOS) -- install via `apt install jq`, `brew install jq`, etc.
+
+### v0.2.0 to v0.3.0
+
+v0.3.0 introduces multi-tenant support. The database schema is automatically migrated on first startup. Key changes:
+
+- **New tables:** `TenantMetadata`, `UserMaster`, `Credential` are created automatically
+- **Default data seeded:** A default tenant (`default`), user (`admin@armada` / `password`), and credential (bearer token `default`) are created if no tenants exist
+- **All operational tables gain `TenantId`:** Existing rows are assigned to the `default` tenant during migration
+- **All operational tables gain `UserId`:** Existing rows are assigned to the earliest user in their tenant during migration
+- **Ownership integrity:** Operational `TenantId` and `UserId` columns are indexed and protected by database foreign keys across all supported backends
+- **Protected auth resources:** The default tenant, its default user/credential, and the synthetic system records are seeded as protected and cannot be deleted directly
+- **Role model:** `IsAdmin` now means global system admin. `IsTenantAdmin` means tenant-scoped admin. Regular users are limited to their own tenant, own account, and own credentials
+- **Password management:** User create/update APIs accept plaintext `Password`; the server hashes it before persistence. Leaving `Password` blank on update preserves the existing password. The dashboard exposes this through the Users edit modal for both admin-managed and self-service password changes
+- **Protected resources:** `IsProtected` is server-controlled on tenants, users, and credentials. Protected objects cannot be deleted directly, and immutable identifiers/timestamps/ownership fields are preserved on update
+- **Tenant-created seed admin:** Creating a tenant also creates `admin@armada` with password `password` plus a default credential inside that tenant; that seeded user is tenant admin only (`IsAdmin = false`, `IsTenantAdmin = true`) and those child resources are protected from direct delete
+- **Authentication required:** All REST API endpoints now require authentication. Use `Authorization: Bearer default` for backward-compatible access
+- **`X-Api-Key` deprecated:** The `X-Api-Key` header still works but is deprecated. If configured, it maps to a synthetic admin identity. Migrate to bearer tokens
+- **New settings:** `AllowSelfRegistration` (default: `true`), `RequireAuthForShutdown` (default: `false`), `SessionTokenEncryptionKey` (auto-generated)
+
+No manual changes to `settings.json` are required. Existing `ApiKey` settings continue to work.
 
 ## Issues and Discussions
 
