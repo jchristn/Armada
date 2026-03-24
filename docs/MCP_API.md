@@ -155,6 +155,31 @@ The MCP server does **not** currently enforce authentication. All MCP operations
 
 MCP tools (served via stdio) remain **unauthenticated by design**. The MCP transport assumes the orchestrating agent (e.g., Claude Code) is already trusted and running locally. All MCP tool operations use the default tenant context (`ten_default`). If multi-tenant isolation is required for MCP clients, use the authenticated REST API instead.
 
+---
+
+## Error Responses
+
+When an MCP tool encounters an error, it returns a JSON object with `Error` and optionally `Message` fields:
+
+```json
+{
+  "Error": "Vessel not found"
+}
+```
+
+Common error responses across tools:
+
+| Error | When |
+|---|---|
+| `"Vessel not found"` | Invalid or nonexistent vessel ID |
+| `"Captain not found"` | Invalid or nonexistent captain ID |
+| `"Mission not found"` | Invalid or nonexistent mission ID |
+| `"Dock not found"` | Invalid or nonexistent dock ID |
+| `"Merge entry not found"` | Invalid or nonexistent merge queue entry ID |
+| `"ids is required and must not be empty"` | Bulk delete called with empty ID list |
+
+MCP tools do not return HTTP status codes (MCP uses JSON-RPC, not HTTP). The presence of an `Error` field in the response indicates failure. On success, the response contains the requested data (entity object, status, list, etc.) without an `Error` field.
+
 This is a deliberate architectural decision, not a missing feature. The stdio transport has no network attack surface -- the only caller is the parent process that spawned Armada. Adding authentication to stdio would add complexity without meaningful security benefit. The HTTP MCP transport inherits the same unauthenticated model for consistency, but should be bound to `localhost` or protected by a firewall in production.
 
 ---

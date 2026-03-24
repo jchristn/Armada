@@ -533,7 +533,7 @@ For full details, see [docs/REST_API.md](docs/REST_API.md#authentication).
 
 ## REST API
 
-The Admiral exposes a REST API on port 7890. All endpoints are under `/api/v1/` and require authentication (see above).
+The Admiral exposes a REST API on port 7890. All endpoints are under `/api/v1/` and require authentication (see above). All error responses use a standard format with `Error`, `Description`, `Message`, and `Data` fields -- see [REST_API.md](docs/REST_API.md#error-responses) for the full error code reference.
 
 ```bash
 API="http://localhost:7890/api/v1"
