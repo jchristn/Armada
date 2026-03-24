@@ -204,20 +204,42 @@ Query string parameters **override** body values on POST enumerate endpoints, al
 
 ## Error Responses
 
-All errors return a JSON object with `Error` and `Message` fields:
+All error responses use a consistent JSON format with `Error`, `Description`, `Message`, and `Data` fields:
 
 ```json
 {
   "Error": "NotFound",
-  "Message": "Mission not found"
+  "Description": "The requested resource was not found.",
+  "Message": "Mission not found",
+  "Data": {}
 }
 ```
 
-| Error Value | HTTP Status | Description |
+| Field | Type | Description |
 |---|---|---|
-| `BadRequest` | 400 | Invalid input, missing required fields, or invalid state transition |
-| `Unauthorized` | 401 | Missing or invalid API key |
-| `NotFound` | 404 | Entity not found |
+| `Error` | string | Error code (see table below) |
+| `Description` | string | Standard description for the error code |
+| `Message` | string | Human-readable message with specific details |
+| `Data` | object | Additional context (usually empty) |
+
+### Error Codes
+
+| Error Code | HTTP Status | When Used |
+|---|---|---|
+| `BadRequest` | 400 | Invalid input, missing required fields, malformed request body, invalid state transition |
+| `DeserializationError` | 400 | Request body could not be parsed as valid JSON or does not match the expected type |
+| `Unauthorized` | 401 | Missing or invalid API key / bearer token |
+| `Forbidden` | 403 | Authenticated but not authorized for this operation |
+| `NotFound` | 404 | Entity not found by the given ID |
+| `Conflict` | 409 | Operation conflicts with current state (e.g., deleting an active voyage, retry landing failed) |
+| `InternalError` | 500 | Unexpected server error |
+
+### Notes
+
+- The `Error` field always contains one of the error codes listed above.
+- The `Message` field provides a specific, actionable description of what went wrong.
+- HTTP status codes are set on the response and match the error code mapping above.
+- Clients should check the HTTP status code first, then parse the response body for details.
 
 ---
 
