@@ -17,7 +17,7 @@ import type { WebSocketMessage } from '../types/models';
 import StatusBadge from '../components/shared/StatusBadge';
 import ActionMenu from '../components/shared/ActionMenu';
 import RefreshButton from '../components/shared/RefreshButton';
-import CopyButton, { copyToClipboard } from '../components/shared/CopyButton';
+import CopyButton from '../components/shared/CopyButton';
 import JsonViewer from '../components/shared/JsonViewer';
 import FilterBar from '../components/shared/FilterBar';
 import MissionHistoryChart from '../components/MissionHistoryChart';
@@ -253,10 +253,6 @@ export default function Dashboard() {
     } catch {
       setError('Failed to delete mission.');
     }
-  };
-
-  const copyId = (id: string) => {
-    copyToClipboard(id);
   };
 
   const missionStatuses = [
