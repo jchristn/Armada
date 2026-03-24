@@ -185,11 +185,11 @@ export default function Missions() {
   function handleDelete(id: string, title: string) {
     setConfirm({
       open: true,
-      title: 'Delete Mission',
-      message: `Delete mission "${title}"? This cannot be undone.`,
+      title: 'Cancel Mission',
+      message: `Cancel mission "${title}"? The mission will be set to Cancelled status but remains in the database. Use Purge to permanently remove it.`,
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try { await deleteMission(id); load(); } catch { setError('Delete failed.'); }
+        try { await deleteMission(id); load(); } catch { setError('Cancel failed.'); }
       },
     });
   }
@@ -450,8 +450,8 @@ export default function Missions() {
                         { label: 'View Log', onClick: () => handleViewLog(m.id, `Log: ${m.title}`) },
                         { label: 'Transition Status', onClick: () => { setTransitionModal({ missionId: m.id, currentStatus: m.status }); setTransitionTarget(''); } },
                         { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `Mission: ${m.title}`, data: m }) },
-                        { label: 'Purge', danger: true, onClick: () => handlePurge(m.id, m.title) },
-                        { label: 'Delete', danger: true, onClick: () => handleDelete(m.id, m.title) },
+                        { label: 'Cancel', danger: true, onClick: () => handleDelete(m.id, m.title) },
+                        { label: 'Purge (permanent)', danger: true, onClick: () => handlePurge(m.id, m.title) },
                       ]} />
                     </td>
                   </tr>
