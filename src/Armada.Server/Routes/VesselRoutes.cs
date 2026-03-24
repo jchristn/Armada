@@ -232,7 +232,10 @@ namespace Armada.Server.Routes
                     : await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false);
                 if (vessel == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
                 if (String.IsNullOrEmpty(vessel.WorkingDirectory) || !Directory.Exists(vessel.WorkingDirectory))
-                    return (object)new { VesselId = id, CommitsAhead = (int?)null, CommitsBehind = (int?)null, Error = "No working directory configured or directory does not exist" };
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "No working directory configured or directory does not exist" };
+                }
 
                 try
                 {
@@ -252,7 +255,8 @@ namespace Armada.Server.Routes
                 }
                 catch (Exception ex)
                 {
-                    return (object)new { VesselId = id, CommitsAhead = (int?)null, CommitsBehind = (int?)null, Error = "Git error: " + ex.Message };
+                    req.Http.Response.StatusCode = 500;
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.InternalError, Message = "Git error: " + ex.Message };
                 }
             },
             api => api
