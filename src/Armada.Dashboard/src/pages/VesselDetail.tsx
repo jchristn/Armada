@@ -6,7 +6,7 @@ import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
 import StatusBadge from '../components/shared/StatusBadge';
-import { copyToClipboard } from '../components/shared/CopyButton';
+import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 
 function formatTimeAbsolute(utc: string | null): string {
@@ -211,7 +211,7 @@ export default function VesselDetail() {
           <span className="detail-label">ID</span>
           <span className="id-display">
             <span className="mono">{vessel.id}</span>
-            <button className="copy-btn" onClick={() => copyToClipboard(vessel.id)} title="Copy ID" />
+            <CopyButton text={vessel.id} />
           </span>
         </div>
         <div className="detail-field"><span className="detail-label">Name</span><span>{vessel.name}</span></div>
@@ -295,7 +295,7 @@ export default function VesselDetail() {
                       <strong>{m.title}</strong>
                       <div className="text-dim id-display">
                         <span className="mono">{m.id}</span>
-                        <button className="copy-btn" onClick={e => { e.stopPropagation(); copyToClipboard(m.id); }} title="Copy ID" />
+                        <CopyButton text={m.id} onClick={e => e.stopPropagation()} />
                       </div>
                     </td>
                     <td><StatusBadge status={m.status} /></td>

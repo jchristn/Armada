@@ -5,7 +5,7 @@ import type { Fleet, Vessel } from '../types/models';
 import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
-import CopyButton, { copyToClipboard } from '../components/shared/CopyButton';
+import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 
 function formatTimeAbsolute(utc: string | null): string {
@@ -131,7 +131,7 @@ export default function FleetDetail() {
           <span className="detail-label">ID</span>
           <span className="id-display">
             <span className="mono">{fleet.id}</span>
-            <button className="copy-btn" onClick={() => copyToClipboard(fleet.id)} title="Copy ID" />
+            <CopyButton text={fleet.id} />
           </span>
         </div>
         <div className="detail-field"><span className="detail-label">Name</span><span>{fleet.name}</span></div>
@@ -161,7 +161,7 @@ export default function FleetDetail() {
                       <strong>{v.name}</strong>
                       <div className="text-dim id-display">
                         <span className="mono">{v.id}</span>
-                        <button className="copy-btn" onClick={e => { e.stopPropagation(); copyToClipboard(v.id); }} title="Copy ID" />
+                        <CopyButton text={v.id} onClick={e => e.stopPropagation()} />
                       </div>
                     </td>
                     <td className="text-dim vessel-repo-cell table-url-cell">

@@ -9,7 +9,7 @@ import {
 import type { Dock, Captain, Vessel } from '../types/models';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
-import { copyToClipboard } from '../components/shared/CopyButton';
+import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 
 function formatTimeAbsolute(utc: string): string {
@@ -109,7 +109,7 @@ export default function DockDetail() {
             <div className="text-muted" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>ID</div>
             <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               {dock.id}
-              <button className="btn-sm" style={{ padding: '1px 4px', fontSize: 10 }} onClick={() => copyToClipboard(dock.id)} title="Copy ID">&#x2398;</button>
+              <CopyButton text={dock.id} />
             </div>
           </div>
           <div>

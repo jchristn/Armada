@@ -16,7 +16,7 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import StatusBadge from '../components/shared/StatusBadge';
-import { copyToClipboard } from '../components/shared/CopyButton';
+import CopyButton from '../components/shared/CopyButton';
 
 const RUNTIMES = ['ClaudeCode', 'Codex', 'Gemini', 'Cursor', 'Custom'];
 
@@ -243,7 +243,7 @@ export default function CaptainDetail() {
           <span className="detail-label">ID</span>
           <span className="id-display">
             <span className="mono">{captain.id}</span>
-            <button className="copy-btn" onClick={() => copyToClipboard(captain.id)} title="Copy ID" />
+            <CopyButton text={captain.id} />
           </span>
         </div>
         <div className="detail-field"><span className="detail-label">Name</span><span>{captain.name}</span></div>
@@ -266,7 +266,7 @@ export default function CaptainDetail() {
           {captain.currentMissionId ? (
             <span className="id-display">
               <Link className="mono" to={`/missions/${captain.currentMissionId}`}>{captain.currentMissionId}</Link>
-              <button className="copy-btn" onClick={() => copyToClipboard(captain.currentMissionId!)} title="Copy ID" />
+              <CopyButton text={captain.currentMissionId!} />
             </span>
           ) : <span>-</span>}
         </div>
@@ -275,7 +275,7 @@ export default function CaptainDetail() {
           {captain.currentDockId ? (
             <span className="id-display">
               <Link className="mono" to={`/docks/${captain.currentDockId}`}>{captain.currentDockId}</Link>
-              <button className="copy-btn" onClick={() => copyToClipboard(captain.currentDockId!)} title="Copy ID" />
+              <CopyButton text={captain.currentDockId!} />
             </span>
           ) : <span>-</span>}
         </div>
@@ -374,7 +374,7 @@ export default function CaptainDetail() {
                       <strong>{m.title}</strong>
                       <div className="text-dim id-display">
                         <span className="mono">{m.id}</span>
-                        <button className="copy-btn" onClick={e => { e.stopPropagation(); copyToClipboard(m.id); }} title="Copy ID" />
+                        <CopyButton text={m.id} onClick={e => e.stopPropagation()} />
                       </div>
                     </td>
                     <td><StatusBadge status={m.status} /></td>
