@@ -229,7 +229,13 @@ export default function Missions() {
   }
 
   async function handleRetryLanding(m: Mission) {
-    try { await retryMissionLanding(m.id); load(); } catch { setError('Retry landing failed.'); }
+    try {
+      const result = await retryMissionLanding(m.id);
+      if (result && !result.success) {
+        setError('Retry landing failed: ' + (result.reason || 'Unknown error'));
+      }
+      load();
+    } catch { setError('Retry landing failed.'); }
   }
 
   async function handleViewDiff(id: string) {
