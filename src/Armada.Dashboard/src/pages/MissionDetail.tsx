@@ -248,7 +248,7 @@ export default function MissionDetail() {
           <button className="btn btn-sm" onClick={handleViewDiff} title="View mission diff">Diff</button>
           <button className="btn btn-sm" onClick={handleViewLog} title="View mission log">Log</button>
           {(mission.status === 'WorkProduced' || mission.status === 'LandingFailed') && (
-            <button className="btn btn-sm btn-primary" onClick={async () => { try { const result = await retryMissionLanding(mission.id); if (result && !result.success) { setError('Retry landing failed: ' + (result.reason || 'Unknown error')); } loadMission(); } catch { setError('Retry landing failed.'); } }} title="Rebase the mission branch and re-attempt merge into the target branch">Retry Landing</button>
+            <button className="btn btn-sm btn-primary" onClick={async () => { try { await retryMissionLanding(mission.id); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : 'Retry landing failed.'); } }} title="Rebase the mission branch and re-attempt merge into the target branch">Retry Landing</button>
           )}
           <ActionMenu id={`mission-action-${mission.id}`} items={[
             { label: 'Edit', onClick: openEdit },
@@ -257,7 +257,7 @@ export default function MissionDetail() {
             { label: 'Transition Status', onClick: () => setShowTransition(true) },
             { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `Mission: ${mission.title}`, data: mission }) },
             { label: 'Restart', onClick: handleRestart },
-            ...((mission.status === 'WorkProduced' || mission.status === 'LandingFailed') ? [{ label: 'Retry Landing', onClick: async () => { try { const result = await retryMissionLanding(mission.id); if (result && !result.success) { setError('Retry landing failed: ' + (result.reason || 'Unknown error')); } loadMission(); } catch { setError('Retry landing failed.'); } } }] : []),
+            ...((mission.status === 'WorkProduced' || mission.status === 'LandingFailed') ? [{ label: 'Retry Landing', onClick: async () => { try { await retryMissionLanding(mission.id); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : 'Retry landing failed.'); } } }] : []),
             { label: 'Purge', danger: true, onClick: handlePurge },
             { label: 'Delete', danger: true, onClick: handleDelete },
           ]} />

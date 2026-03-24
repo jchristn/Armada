@@ -640,6 +640,7 @@ namespace Armada.Server.Routes
 
                 bool success = await _landingService.RetryLandingAsync(id, ctx.TenantId).ConfigureAwait(false);
                 mission = await _database.Missions.ReadAsync(id).ConfigureAwait(false);
+                mission = await _database.Missions.ReadAsync(id).ConfigureAwait(false);
                 if (!success)
                 {
                     string reason = "Landing failed.";
@@ -650,9 +651,10 @@ namespace Armada.Server.Routes
                         else if (mission.Status == MissionStatusEnum.LandingFailed) reason = "Rebase or merge failed -- the branch may have conflicts with the target branch.";
                         else if (mission.Status == MissionStatusEnum.WorkProduced) reason = "Landing handler failed -- check server logs for details.";
                     }
-                    return (object)new { Success = false, Reason = reason, Mission = mission };
+                    req.Http.Response.StatusCode = 409;
+                    return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = reason };
                 }
-                return (object)new { Success = true, Mission = mission };
+                return (object)new { Status = "landed", MissionId = id, MissionStatus = mission?.Status.ToString() };
             },
             api => api
                 .WithTag("Missions")
