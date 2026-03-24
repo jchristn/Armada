@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   listMissions, createMission, updateMission, deleteMission, purgeMission,
-  restartMission, transitionMission, getMissionDiff, getMissionLog,
+  restartMission, retryMissionLanding, transitionMission, getMissionDiff, getMissionLog,
   listVessels, listCaptains, listVoyages,
 } from '../api/client';
 import type { Mission, Vessel, Captain, Voyage } from '../types/models';
@@ -228,6 +228,10 @@ export default function Missions() {
     try { await restartMission(m.id); load(); } catch { setError('Restart failed.'); }
   }
 
+  async function handleRetryLanding(m: Mission) {
+    try { await retryMissionLanding(m.id); load(); } catch { setError('Retry landing failed.'); }
+  }
+
   async function handleViewDiff(id: string) {
     try {
       const result = await getMissionDiff(id);
@@ -430,6 +434,7 @@ export default function Missions() {
                         { label: 'View Detail', onClick: () => navigate(`/missions/${m.id}`) },
                         { label: 'Edit', onClick: () => navigate(`/missions/${m.id}`) },
                         { label: 'Restart', onClick: () => handleRestart(m) },
+                        ...((m.status === 'WorkProduced' || m.status === 'LandingFailed') ? [{ label: 'Retry Landing', onClick: () => handleRetryLanding(m) }] : []),
                         { label: 'View Diff', onClick: () => handleViewDiff(m.id) },
                         { label: 'View Log', onClick: () => handleViewLog(m.id, `Log: ${m.title}`) },
                         { label: 'Transition Status', onClick: () => { setTransitionModal({ missionId: m.id, currentStatus: m.status }); setTransitionTarget(''); } },

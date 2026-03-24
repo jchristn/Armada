@@ -8,6 +8,7 @@ import {
   getMissionDiff,
   getMissionLog,
   restartMission,
+  retryMissionLanding,
   transitionMission,
   listVessels,
   listCaptains,
@@ -253,6 +254,7 @@ export default function MissionDetail() {
             { label: 'Transition Status', onClick: () => setShowTransition(true) },
             { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `Mission: ${mission.title}`, data: mission }) },
             { label: 'Restart', onClick: handleRestart },
+            ...((mission.status === 'WorkProduced' || mission.status === 'LandingFailed') ? [{ label: 'Retry Landing', onClick: async () => { try { await retryMissionLanding(mission.id); loadMission(); } catch { setError('Retry landing failed.'); } } }] : []),
             { label: 'Purge', danger: true, onClick: handlePurge },
             { label: 'Delete', danger: true, onClick: handleDelete },
           ]} />

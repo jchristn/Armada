@@ -210,6 +210,7 @@ export const deleteMission = (id: string) => del<void>(`/api/v1/missions/${id}`)
 export const purgeMission = (id: string) => del<void>(`/api/v1/missions/${id}/purge`);
 export const dispatchMission = (data: DispatchRequest) => post<Mission>('/api/v1/missions', data);
 export const restartMission = (id: string) => post<Mission>(`/api/v1/missions/${id}/restart`);
+export const retryMissionLanding = (id: string) => post<any>(`/api/v1/missions/${id}/retry-landing`, {});
 export const transitionMission = (id: string, data: TransitionRequest) => put<Mission>(`/api/v1/missions/${id}/status`, data);
 export const getMissionDiff = (id: string) => get<DiffResult>(`/api/v1/missions/${id}/diff`, { timeout: 30000 });
 export const getMissionLog = (id: string, lines = 500) => get<LogResult>(`/api/v1/missions/${id}/log?lines=${lines}`);
