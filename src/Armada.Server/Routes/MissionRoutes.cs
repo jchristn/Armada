@@ -618,6 +618,40 @@ namespace Armada.Server.Routes
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
+            app.Rest.Post("/api/v1/missions/{id}/retry-landing", async (AppRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
+                {
+                    req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
+                    return (object)new { Error = ctx.IsAuthenticated ? "Forbidden" : "Unauthorized" };
+                }
+                string id = req.Parameters["id"];
+                Mission? mission = ctx.IsAdmin
+                    ? await _database.Missions.ReadAsync(id).ConfigureAwait(false)
+                    : await _database.Missions.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false);
+                if (mission == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Mission not found" }; }
+
+                if (mission.Status != MissionStatusEnum.WorkProduced && mission.Status != MissionStatusEnum.LandingFailed)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Only WorkProduced or LandingFailed missions can retry landing (current: " + mission.Status + ")" };
+                }
+
+                bool success = await _landingService.RetryLandingAsync(id, ctx.TenantId).ConfigureAwait(false);
+                mission = await _database.Missions.ReadAsync(id).ConfigureAwait(false);
+                return (object)new { Success = success, Mission = mission };
+            },
+            api => api
+                .WithTag("Missions")
+                .WithSummary("Retry landing for a mission")
+                .WithDescription("Rebases the mission branch onto the current target and re-attempts landing. Only available for WorkProduced or LandingFailed missions.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
+                .WithResponse(200, OpenApiResponseMetadata.Json<object>("Landing result"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
             app.Rest.Get("/api/v1/missions/{id}/diff", async (AppRequest req) =>
             {
                 AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
