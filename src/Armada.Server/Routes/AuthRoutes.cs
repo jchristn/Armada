@@ -115,7 +115,7 @@ namespace Armada.Server.Routes
                 if (lookupReq == null || string.IsNullOrEmpty(lookupReq.Email))
                 {
                     req.Http.Response.StatusCode = 400;
-                    return (object)new { Error = "Email is required" };
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Email is required" };
                 }
 
                 List<UserMaster> users = await _database.Users.ReadByEmailAnyTenantAsync(lookupReq.Email).ConfigureAwait(false);

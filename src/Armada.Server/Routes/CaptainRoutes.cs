@@ -351,7 +351,7 @@ namespace Armada.Server.Routes
                 if (captain.State == CaptainStateEnum.Working)
                 {
                     req.Http.Response.StatusCode = 409;
-                    return (object)new { Error = "Conflict", Message = "Cannot delete captain while state is Working. Stop the captain first." };
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = "Cannot delete captain while state is Working. Stop the captain first." };
                 }
 
                 // Block deletion if captain has active missions
@@ -362,7 +362,7 @@ namespace Armada.Server.Routes
                 if (activeCaptainMissions.Count > 0)
                 {
                     req.Http.Response.StatusCode = 409;
-                    return (object)new { Error = "Conflict", Message = "Cannot delete captain with " + activeCaptainMissions.Count + " active mission(s) in Assigned or InProgress status. Cancel or complete them first." };
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = "Cannot delete captain with " + activeCaptainMissions.Count + " active mission(s) in Assigned or InProgress status. Cancel or complete them first." };
                 }
 
                 if (ctx.IsAdmin)

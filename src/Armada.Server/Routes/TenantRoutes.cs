@@ -68,7 +68,7 @@ namespace Armada.Server.Routes
                 }
                 string body = req.Http.Request.DataAsString;
                 TenantMetadata? tenant = JsonSerializer.Deserialize<TenantMetadata>(body, _jsonOptions);
-                if (tenant == null) { req.Http.Response.StatusCode = 400; return (object)new { Error = "Invalid request body" }; }
+                if (tenant == null) { req.Http.Response.StatusCode = 400; return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid request body" }; }
                 tenant.IsProtected = false;
                 tenant = await _database.Tenants.CreateAsync(tenant).ConfigureAwait(false);
                 await SeedDefaultTenantAdminAsync(tenant).ConfigureAwait(false);
@@ -86,9 +86,9 @@ namespace Armada.Server.Routes
                     return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 string id = req.Parameters["id"];
-                if (!ctx.IsAdmin && ctx.TenantId != id) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
+                if (!ctx.IsAdmin && ctx.TenantId != id) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
                 TenantMetadata? tenant = await _database.Tenants.ReadAsync(id).ConfigureAwait(false);
-                if (tenant == null) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
+                if (tenant == null) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
                 return (object)tenant;
             },
             api => api.WithTag("Tenants").WithSummary("Get tenant by ID"));
@@ -103,9 +103,9 @@ namespace Armada.Server.Routes
                 }
                 string body = req.Http.Request.DataAsString;
                 TenantMetadata? tenant = JsonSerializer.Deserialize<TenantMetadata>(body, _jsonOptions);
-                if (tenant == null) { req.Http.Response.StatusCode = 400; return (object)new { Error = "Invalid request body" }; }
+                if (tenant == null) { req.Http.Response.StatusCode = 400; return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid request body" }; }
                 TenantMetadata? existing = await _database.Tenants.ReadAsync(req.Parameters["id"]).ConfigureAwait(false);
-                if (existing == null) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
+                if (existing == null) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
                 tenant.Id = req.Parameters["id"];
                 tenant.CreatedUtc = existing.CreatedUtc;
                 tenant.IsProtected = existing.IsProtected;
@@ -124,8 +124,8 @@ namespace Armada.Server.Routes
                 }
                 string id = req.Parameters["id"];
                 TenantMetadata? tenant = await _database.Tenants.ReadAsync(id).ConfigureAwait(false);
-                if (tenant == null) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
-                if (tenant.IsProtected) { req.Http.Response.StatusCode = 403; return (object)new { Error = "Protected resources cannot be deleted directly" }; }
+                if (tenant == null) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
+                if (tenant.IsProtected) { req.Http.Response.StatusCode = 403; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotAuthorized, Message = "Protected resources cannot be deleted directly" }; }
                 await DeleteTenantCascadeAsync(id).ConfigureAwait(false);
                 return (object)new { Success = true };
             },
@@ -174,13 +174,13 @@ namespace Armada.Server.Routes
                 if (userRequest == null || string.IsNullOrWhiteSpace(userRequest.Email))
                 {
                     req.Http.Response.StatusCode = 400;
-                    return (object)new { Error = "Invalid request body" };
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid request body" };
                 }
                 string? passwordHash = ResolvePasswordHash(userRequest, null, true);
                 if (passwordHash == null)
                 {
                     req.Http.Response.StatusCode = 400;
-                    return (object)new { Error = "Password is required" };
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Password is required" };
                 }
                 UserMaster user = new UserMaster
                 {
@@ -202,7 +202,7 @@ namespace Armada.Server.Routes
                 if (!ctx.IsAdmin && !ctx.IsTenantAdmin)
                 {
                     req.Http.Response.StatusCode = 403;
-                    return (object)new { Error = "Forbidden" };
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.NotAuthorized, Message = "Forbidden" };
                 }
                 user = await _database.Users.CreateAsync(user).ConfigureAwait(false);
                 Credential credential = new Credential(user.TenantId, user.Id)
@@ -226,11 +226,11 @@ namespace Armada.Server.Routes
                 }
                 string id = req.Parameters["id"];
                 bool canReadAnyInTenant = ctx.IsAdmin || ctx.IsTenantAdmin;
-                if (!canReadAnyInTenant && ctx.UserId != id) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
+                if (!canReadAnyInTenant && ctx.UserId != id) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
                 UserMaster? user = ctx.IsAdmin
                     ? await _database.Users.ReadByIdAsync(id).ConfigureAwait(false)
                     : await _database.Users.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false);
-                if (user == null) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
+                if (user == null) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
                 return (object)UserMaster.Redact(user);
             },
             api => api.WithTag("Users").WithSummary("Get user by ID"));
@@ -248,12 +248,12 @@ namespace Armada.Server.Routes
                 if (userRequest == null || string.IsNullOrWhiteSpace(userRequest.Email))
                 {
                     req.Http.Response.StatusCode = 400;
-                    return (object)new { Error = "Invalid request body" };
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid request body" };
                 }
                 UserMaster? existing = await _database.Users.ReadByIdAsync(req.Parameters["id"]).ConfigureAwait(false);
-                if (existing == null) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
-                if (!ctx.IsAdmin && existing.TenantId != ctx.TenantId) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
-                if (!ctx.IsAdmin && !ctx.IsTenantAdmin && existing.Id != ctx.UserId) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
+                if (existing == null) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
+                if (!ctx.IsAdmin && existing.TenantId != ctx.TenantId) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
+                if (!ctx.IsAdmin && !ctx.IsTenantAdmin && existing.Id != ctx.UserId) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
                 UserMaster user = new UserMaster
                 {
                     Id = req.Parameters["id"],
@@ -293,9 +293,9 @@ namespace Armada.Server.Routes
                 }
                 string id = req.Parameters["id"];
                 UserMaster? user = await _database.Users.ReadByIdAsync(id).ConfigureAwait(false);
-                if (user == null) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
-                if (!ctx.IsAdmin && (!ctx.IsTenantAdmin || user.TenantId != ctx.TenantId)) { req.Http.Response.StatusCode = 403; return (object)new { Error = "Forbidden" }; }
-                if (user.IsProtected) { req.Http.Response.StatusCode = 403; return (object)new { Error = "Protected resources cannot be deleted directly" }; }
+                if (user == null) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
+                if (!ctx.IsAdmin && (!ctx.IsTenantAdmin || user.TenantId != ctx.TenantId)) { req.Http.Response.StatusCode = 403; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotAuthorized, Message = "Forbidden" }; }
+                if (user.IsProtected) { req.Http.Response.StatusCode = 403; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotAuthorized, Message = "Protected resources cannot be deleted directly" }; }
                 await DeleteUserCascadeAsync(user.TenantId, id).ConfigureAwait(false);
                 return (object)new { Success = true };
             },
@@ -340,7 +340,7 @@ namespace Armada.Server.Routes
                 }
                 string body = req.Http.Request.DataAsString;
                 Credential? cred = JsonSerializer.Deserialize<Credential>(body, _jsonOptions);
-                if (cred == null) { req.Http.Response.StatusCode = 400; return (object)new { Error = "Invalid request body" }; }
+                if (cred == null) { req.Http.Response.StatusCode = 400; return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid request body" }; }
                 cred.IsProtected = false;
                 if (!ctx.IsAdmin)
                 {
@@ -350,7 +350,7 @@ namespace Armada.Server.Routes
                 if (!ctx.IsAdmin && ctx.IsTenantAdmin)
                 {
                     UserMaster? owner = await _database.Users.ReadAsync(ctx.TenantId!, cred.UserId).ConfigureAwait(false);
-                    if (owner == null) { req.Http.Response.StatusCode = 400; return (object)new { Error = "User not found in tenant" }; }
+                    if (owner == null) { req.Http.Response.StatusCode = 400; return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "User not found in tenant" }; }
                 }
                 cred = await _database.Credentials.CreateAsync(cred).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 201;
@@ -368,7 +368,7 @@ namespace Armada.Server.Routes
                 }
                 string id = req.Parameters["id"];
                 Credential? cred = ctx.IsAdmin ? await _database.Credentials.ReadByIdAsync(id).ConfigureAwait(false) : await _database.Credentials.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false);
-                if (cred == null || (!ctx.IsAdmin && !ctx.IsTenantAdmin && cred.UserId != ctx.UserId)) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
+                if (cred == null || (!ctx.IsAdmin && !ctx.IsTenantAdmin && cred.UserId != ctx.UserId)) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
                 return (object)cred;
             },
             api => api.WithTag("Credentials").WithSummary("Get credential by ID"));
@@ -383,11 +383,11 @@ namespace Armada.Server.Routes
                 }
                 string body = req.Http.Request.DataAsString;
                 Credential? cred = JsonSerializer.Deserialize<Credential>(body, _jsonOptions);
-                if (cred == null) { req.Http.Response.StatusCode = 400; return (object)new { Error = "Invalid request body" }; }
+                if (cred == null) { req.Http.Response.StatusCode = 400; return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid request body" }; }
                 Credential? existing = await _database.Credentials.ReadByIdAsync(req.Parameters["id"]).ConfigureAwait(false);
-                if (existing == null) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
-                if (!ctx.IsAdmin && existing.TenantId != ctx.TenantId) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
-                if (!ctx.IsAdmin && !ctx.IsTenantAdmin && existing.UserId != ctx.UserId) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
+                if (existing == null) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
+                if (!ctx.IsAdmin && existing.TenantId != ctx.TenantId) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
+                if (!ctx.IsAdmin && !ctx.IsTenantAdmin && existing.UserId != ctx.UserId) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
                 cred.Id = req.Parameters["id"];
                 cred.TenantId = existing.TenantId;
                 cred.UserId = existing.UserId;
@@ -408,8 +408,8 @@ namespace Armada.Server.Routes
                 }
                 string id = req.Parameters["id"];
                 Credential? cred = ctx.IsAdmin ? await _database.Credentials.ReadByIdAsync(id).ConfigureAwait(false) : await _database.Credentials.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false);
-                if (cred == null || (!ctx.IsAdmin && !ctx.IsTenantAdmin && cred.UserId != ctx.UserId)) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
-                if (cred.IsProtected) { req.Http.Response.StatusCode = 403; return (object)new { Error = "Protected resources cannot be deleted directly" }; }
+                if (cred == null || (!ctx.IsAdmin && !ctx.IsTenantAdmin && cred.UserId != ctx.UserId)) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
+                if (cred.IsProtected) { req.Http.Response.StatusCode = 403; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotAuthorized, Message = "Protected resources cannot be deleted directly" }; }
                 await _database.Credentials.DeleteAsync(cred.TenantId, id).ConfigureAwait(false);
                 return (object)new { Success = true };
             },

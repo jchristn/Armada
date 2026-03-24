@@ -230,7 +230,7 @@ namespace Armada.Server.Routes
                 if (!deleted)
                 {
                     req.Http.Response.StatusCode = 409;
-                    return (object)new { Error = "Conflict", Message = "Cannot purge merge entry in non-terminal status " + entry.Status + ". Only Landed, Failed, or Cancelled entries can be purged." };
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = "Cannot purge merge entry in non-terminal status " + entry.Status + ". Only Landed, Failed, or Cancelled entries can be purged." };
                 }
 
                 await _emitEvent("merge.purged", "Merge entry " + id + " purged",

@@ -150,7 +150,7 @@ namespace Armada.Server.Routes
                 if (!deleted)
                 {
                     req.Http.Response.StatusCode = 409;
-                    return (object)new { Error = "Conflict", Message = "Cannot delete dock while it is actively in use by a captain" };
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = "Cannot delete dock while it is actively in use by a captain" };
                 }
 
                 await _emitEvent("dock.deleted", "Dock " + id + " deleted",

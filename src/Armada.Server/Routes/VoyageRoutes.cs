@@ -292,7 +292,7 @@ namespace Armada.Server.Routes
                 if (voyage.Status == VoyageStatusEnum.Open || voyage.Status == VoyageStatusEnum.InProgress)
                 {
                     req.Http.Response.StatusCode = 409;
-                    return (object)new { Error = "Conflict", Message = "Cannot delete voyage while status is " + voyage.Status + ". Cancel the voyage first." };
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = "Cannot delete voyage while status is " + voyage.Status + ". Cancel the voyage first." };
                 }
 
                 List<Mission> missions = ctx.IsAdmin
@@ -304,7 +304,7 @@ namespace Armada.Server.Routes
                 if (activeMissions.Count > 0)
                 {
                     req.Http.Response.StatusCode = 409;
-                    return (object)new { Error = "Conflict", Message = "Cannot delete voyage with " + activeMissions.Count + " active mission(s) in Assigned or InProgress status. Cancel or complete them first." };
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = "Cannot delete voyage with " + activeMissions.Count + " active mission(s) in Assigned or InProgress status. Cancel or complete them first." };
                 }
 
                 // Cascade delete all missions in this voyage
