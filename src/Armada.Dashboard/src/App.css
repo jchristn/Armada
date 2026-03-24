@@ -1052,6 +1052,29 @@ tr.clickable { cursor: pointer; }
 .git-sync-ahead { background: color-mix(in srgb, var(--accent) 15%, var(--bg)); color: var(--accent); }
 .git-sync-behind { background: color-mix(in srgb, var(--yellow) 15%, var(--bg)); color: var(--yellow); }
 
+/* Success Banner */
+.success-banner {
+    position: fixed;
+    top: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--green);
+    color: #fff;
+    padding: 0.6rem 1.5rem;
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    font-weight: 500;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    z-index: 2000;
+    cursor: pointer;
+    animation: success-fade-in 0.2s ease;
+}
+
+@keyframes success-fade-in {
+    from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
 /* Error Modal */
 .error-modal { max-width: 480px; }
 .error-modal-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; }

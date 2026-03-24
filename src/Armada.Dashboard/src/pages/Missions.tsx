@@ -41,6 +41,7 @@ export default function Missions() {
   const [voyages, setVoyages] = useState<Voyage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
 
   // Pagination (server-side)
   const [pageNumber, setPageNumber] = useState(1);
@@ -231,6 +232,8 @@ export default function Missions() {
   async function handleRetryLanding(m: Mission) {
     try {
       await retryMissionLanding(m.id);
+      setSuccessMsg('Landing succeeded for "' + m.title + '"');
+      setTimeout(() => setSuccessMsg(''), 4000);
       load();
     } catch (e) { setError(e instanceof Error ? e.message : 'Retry landing failed.'); }
   }
@@ -287,6 +290,11 @@ export default function Missions() {
       </div>
 
       <ErrorModal error={error} onClose={() => setError('')} />
+      {successMsg && (
+        <div className="success-banner" onClick={() => setSuccessMsg('')}>
+          {successMsg}
+        </div>
+      )}
 
       {/* Create Modal */}
       {showForm && (
