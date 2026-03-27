@@ -163,7 +163,17 @@ namespace Armada.Core.Database.Sqlite
                             {
                                 cmd.Transaction = tx;
                                 cmd.CommandText = sql;
-                                await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                                try
+                                {
+                                    await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                                }
+                                catch (SqliteException ex) when (ex.SqliteErrorCode == 1 && ex.Message.Contains("duplicate column name"))
+                                {
+                                    // Column already exists in the CREATE TABLE definition.
+                                    // This happens when migrations add columns that were later
+                                    // incorporated into the initial schema. Safe to skip.
+                                    _Logging.Info(_Header + "migration v" + migration.Version + ": column already exists, skipping");
+                                }
                             }
                         }
 
