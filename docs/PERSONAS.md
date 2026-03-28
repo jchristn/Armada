@@ -146,7 +146,38 @@ This avoids the .csproj embedded resource complexity and keeps templates co-loca
 ### 1.7 Refactor MessageTemplateService
 
 - [x] `commit.instructions_preamble` template seeded via PromptTemplateService.SeedDefaultsAsync
-- [ ] Future: inject IPromptTemplateService into MessageTemplateService to resolve preamble at runtime (low priority -- preamble text rarely changes)
+- [ ] Inject IPromptTemplateService into MessageTemplateService to resolve preamble at runtime
+
+### 1.8 Full Template Coverage -- Zero Hardcoded Prompt Strings
+
+Goal: every string that forms part of a prompt to an agent must be resolvable from a template, so it is editable in the dashboard. The following items are still hardcoded in `MissionService.GenerateClaudeMdAsync` and `MissionLandingHandler`:
+
+- [ ] Create template `mission.captain_instructions_wrapper` (category: "mission")
+  - Default: `## Captain Instructions\n{CaptainInstructions}\n`
+  - Rendered only when `{CaptainInstructions}` is non-empty
+- [ ] Create template `mission.project_context_wrapper` (category: "mission")
+  - Default: `## Project Context\n{ProjectContext}\n`
+  - Rendered only when `{ProjectContext}` is non-empty
+- [ ] Create template `mission.code_style_wrapper` (category: "mission")
+  - Default: `## Code Style\n{StyleGuide}\n`
+  - Rendered only when `{StyleGuide}` is non-empty
+- [ ] Create template `mission.model_context_wrapper` (category: "mission")
+  - Default: `## Model Context\nThe following context was accumulated by AI agents during previous missions on this repository. Use this information to work more effectively.\n\n{ModelContext}\n`
+  - Rendered only when model context is enabled and `{ModelContext}` is non-empty
+- [ ] Create template `mission.metadata` (category: "mission")
+  - Default: `# Mission Instructions\n\n{PersonaPrompt}\n\n## Mission\n- **Title:** {MissionTitle}\n- **ID:** {MissionId}\n- **Voyage:** {VoyageId}\n\n## Description\n{MissionDescription}\n\n## Repository\n- **Name:** {VesselName}\n- **Branch:** {BranchName}\n- **Default Branch:** {DefaultBranch}\n`
+  - This controls the entire mission metadata layout -- users can rearrange, add, or remove fields
+- [ ] Create template `mission.existing_instructions_wrapper` (category: "mission")
+  - Default: `\n## Existing Project Instructions\n\n{ExistingClaudeMd}`
+  - Rendered only when the repo already has a CLAUDE.md
+- [ ] Create template `landing.pr_body` (category: "landing")
+  - Default: `## Mission\n**{MissionTitle}**\n\n{MissionDescription}`
+  - Currently hardcoded in `MissionLandingHandler.cs:215-221`
+- [ ] Refactor `MissionService.GenerateClaudeMdAsync` to resolve all wrapper/metadata sections through `ResolveSectionAsync` instead of inline strings
+- [ ] Refactor `MissionLandingHandler` PR body generation to resolve through template service
+- [ ] Refactor `MessageTemplateService.RenderCommitInstructions` to resolve preamble from `commit.instructions_preamble` template at runtime
+- [ ] Seed all new templates in `PromptTemplateService._EmbeddedDefaults`
+- [ ] Update dashboard Prompt Template editor to group these under a "Structure" or "Layout" category so users can find and edit them easily, separate from persona templates
 
 ---
 
@@ -676,27 +707,31 @@ Current highest SQLite migration number: **18**. New migrations should start at 
 
 ## Appendix B: Hardcoded Prompts Inventory
 
-All prompts currently hardcoded in C# that must be extracted into templates:
+All prompts that are or were hardcoded in C#. Status column indicates current state.
 
-| # | Current Location | Template Name | Description |
-|---|-----------------|---------------|-------------|
-| 1 | `MissionService.cs:440-445` | `mission.captain_instructions` | Section header for captain system instructions |
-| 2 | `MissionService.cs:448-453` | `mission.project_context` | Section header for vessel project context |
-| 3 | `MissionService.cs:456-461` | `mission.code_style` | Section header for vessel style guide |
-| 4 | `MissionService.cs:464-472` | `mission.model_context` | Section header + preamble for model context |
-| 5 | `MissionService.cs:475-479` | `mission.preamble` | "You are an Armada captain executing a mission." |
-| 6 | `MissionService.cs:480-492` | `mission.metadata` | Mission title, ID, voyage, repo info |
-| 7 | `MissionService.cs:493-501` | `mission.rules` | Worktree rules, commit rules, ASCII-only |
-| 8 | `MissionService.cs:502-523` | `mission.context_conservation` | Context window management rules |
-| 9 | `MissionService.cs:525-553` | `mission.merge_conflict_avoidance` | Multi-captain conflict prevention |
-| 10 | `MissionService.cs:555-560` | `mission.progress_signals` | ARMADA signal format documentation |
-| 11 | `MissionService.cs:564-582` | `mission.model_context_updates` | Instructions for updating vessel model context |
-| 12 | `AgentLifecycleHandler.cs:100` | `agent.launch_prompt` | Short CLI prompt: "Mission: {Title}\n\n{Description}" |
-| 13 | `MessageTemplateService.cs:131-134` | `commit.instructions_preamble` | "IMPORTANT: For every git commit..." |
-| 14 | `MissionLandingHandler.cs:215-221` | `landing.pr_body` | PR body base template |
-| 15 | `MessageTemplateSettings.cs:61-65` | `commit.message_template` | Commit trailer template (already configurable via settings) |
-| 16 | `MessageTemplateSettings.cs:67-73` | `commit.pr_description_template` | PR description metadata (already configurable via settings) |
-| 17 | `MessageTemplateSettings.cs:75-78` | `commit.merge_message_template` | Merge commit message (already configurable via settings) |
+| # | Template Name | Category | Description | Status |
+|---|--------------|----------|-------------|--------|
+| 1 | `mission.captain_instructions_wrapper` | structure | Wrapper: `## Captain Instructions\n{CaptainInstructions}` | **TODO** (Phase 1.8) |
+| 2 | `mission.project_context_wrapper` | structure | Wrapper: `## Project Context\n{ProjectContext}` | **TODO** (Phase 1.8) |
+| 3 | `mission.code_style_wrapper` | structure | Wrapper: `## Code Style\n{StyleGuide}` | **TODO** (Phase 1.8) |
+| 4 | `mission.model_context_wrapper` | structure | Wrapper: `## Model Context\n` + preamble + `{ModelContext}` | **TODO** (Phase 1.8) |
+| 5 | `mission.metadata` | structure | Mission title, ID, voyage, description, repo info layout | **TODO** (Phase 1.8) |
+| 6 | `mission.existing_instructions_wrapper` | structure | Wrapper: `## Existing Project Instructions\n{ExistingClaudeMd}` | **TODO** (Phase 1.8) |
+| 7 | `mission.rules` | mission | Worktree rules, commit rules, ASCII-only | **DONE** -- template-resolved |
+| 8 | `mission.context_conservation` | mission | Context window management rules | **DONE** -- template-resolved |
+| 9 | `mission.merge_conflict_avoidance` | mission | Multi-captain conflict prevention | **DONE** -- template-resolved |
+| 10 | `mission.progress_signals` | mission | ARMADA signal format documentation | **DONE** -- template-resolved |
+| 11 | `mission.model_context_updates` | mission | Instructions for updating vessel model context | **DONE** -- template-resolved |
+| 12 | `agent.launch_prompt` | agent | Short CLI prompt: `Mission: {MissionTitle}\n\n{MissionDescription}` | **DONE** -- template-resolved |
+| 13 | `commit.instructions_preamble` | commit | "IMPORTANT: For every git commit..." | **SEEDED** -- runtime resolution TODO (Phase 1.8) |
+| 14 | `landing.pr_body` | landing | PR body: `## Mission\n**{MissionTitle}**\n\n{MissionDescription}` | **TODO** (Phase 1.8) |
+| 15 | `commit.message_template` | commit | Commit trailer template | Already configurable via MessageTemplateSettings |
+| 16 | `commit.pr_description_template` | commit | PR description metadata | Already configurable via MessageTemplateSettings |
+| 17 | `commit.merge_message_template` | commit | Merge commit message | Already configurable via MessageTemplateSettings |
+| 18 | `persona.worker` | persona | Default worker persona preamble | **DONE** -- template-resolved |
+| 19 | `persona.architect` | persona | Architect planning instructions | **DONE** -- template-resolved |
+| 20 | `persona.judge` | persona | Judge review instructions | **DONE** -- template-resolved |
+| 21 | `persona.test_engineer` | persona | Test engineer instructions | **DONE** -- template-resolved |
 
 ---
 
