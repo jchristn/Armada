@@ -148,6 +148,18 @@ export default function Pipelines() {
     setForm(f => ({ ...f, stages: [...f.stages, { personaName: '', isOptional: false }] }));
   }
 
+  function moveStage(index: number, direction: number) {
+    setForm(f => {
+      const stages = [...f.stages];
+      const target = index + direction;
+      if (target < 0 || target >= stages.length) return f;
+      const temp = stages[index];
+      stages[index] = stages[target];
+      stages[target] = temp;
+      return { ...f, stages };
+    });
+  }
+
   function removeStage(index: number) {
     setForm(f => {
       const stages = f.stages.filter((_, i) => i !== index);
@@ -221,23 +233,27 @@ export default function Pipelines() {
                     value={stage.personaName}
                     onChange={e => updateStage(i, 'personaName', e.target.value)}
                     required
-                    style={{ flex: 1 }}
+                    style={{ flex: '0 1 200px', minWidth: '120px' }}
                   >
                     <option value="">Select persona...</option>
                     {personaNames.map(name => (
                       <option key={name} value={name}>{name}</option>
                     ))}
                   </select>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', margin: 0, whiteSpace: 'nowrap' }}>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', margin: 0, whiteSpace: 'nowrap', lineHeight: 1, cursor: 'pointer' }}>
                     <input
                       type="checkbox"
                       checked={stage.isOptional}
                       onChange={e => updateStage(i, 'isOptional', e.target.checked)}
-                      style={{ width: 'auto' }}
+                      style={{ width: 'auto', margin: 0, verticalAlign: 'middle' }}
                     />
-                    Optional
+                    <span style={{ verticalAlign: 'middle' }}>Optional</span>
                   </label>
-                  <button type="button" className="btn btn-sm btn-danger" onClick={() => removeStage(i)} title="Remove stage">X</button>
+                  <span style={{ width: '0.75rem', flexShrink: 0 }} />
+                  <button type="button" className="btn btn-sm" onClick={() => moveStage(i, -1)} disabled={i === 0} title="Move up" style={{ padding: '0.15rem 0.4rem', fontSize: '0.75rem' }}>{'\u25B2'}</button>
+                  <button type="button" className="btn btn-sm" onClick={() => moveStage(i, 1)} disabled={i === form.stages.length - 1} title="Move down" style={{ padding: '0.15rem 0.4rem', fontSize: '0.75rem' }}>{'\u25BC'}</button>
+                  <span style={{ width: '0.5rem', flexShrink: 0 }} />
+                  <button type="button" className="btn btn-sm btn-danger" onClick={() => removeStage(i)} title="Remove stage" style={{ flexShrink: 0 }}>X</button>
                 </div>
               ))}
               <button type="button" className="btn btn-sm" onClick={addStage} style={{ marginTop: '0.5rem' }}>+ Stage</button>

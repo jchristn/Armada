@@ -186,10 +186,8 @@ export default function PromptTemplateDetail() {
   return (
     <div>
       {/* Breadcrumb */}
-      <div className="breadcrumb">
-        <Link to="/prompt-templates">Prompt Templates</Link>
-        <span className="breadcrumb-sep">&gt;</span>
-        <span>{template.name}</span>
+      <div className="breadcrumbs">
+        <Link to="/prompt-templates">Prompt Templates</Link> <span className="bc-sep">&gt;</span> <span>{template.name}</span>
       </div>
 
       <div className="detail-header">

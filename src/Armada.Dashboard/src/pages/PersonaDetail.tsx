@@ -94,8 +94,8 @@ export default function PersonaDetail() {
   return (
     <div>
       {/* Breadcrumb */}
-      <div className="breadcrumb">
-        <Link to="/personas">Personas</Link> <span className="breadcrumb-sep">&gt;</span> <span>{persona.name}</span>
+      <div className="breadcrumbs">
+        <Link to="/personas">Personas</Link> <span className="bc-sep">&gt;</span> <span>{persona.name}</span>
       </div>
 
       <div className="detail-header">
