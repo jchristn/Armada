@@ -612,9 +612,9 @@ CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);
 
 ### 7.6 WebSocket Commands
 
-- [ ] Add `get_persona`, `update_persona`, `create_persona`, `delete_persona`
-- [ ] Add `get_prompt_template`, `update_prompt_template`, `reset_prompt_template`
-- [ ] Add `get_pipeline`, `update_pipeline`, `create_pipeline`, `delete_pipeline`
+- [x] Add `get_persona`, `update_persona`, `create_persona`, `delete_persona`
+- [x] Add `get_prompt_template`, `update_prompt_template`
+- [x] Add `get_pipeline`, `update_pipeline`, `create_pipeline`, `delete_pipeline`
 
 ### 7.7 Updated Existing Tools
 

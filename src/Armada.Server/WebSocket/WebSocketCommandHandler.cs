@@ -851,6 +851,110 @@ namespace Armada.Server.WebSocket
                     return new { type = "command.result", action = "restore", data = restoreData };
                 }
 
+                // ── Personas ──────────────────────────────────────────────
+
+                case "get_persona":
+                    string getPersonaName = command.Id ?? "";
+                    Persona? foundPersona = await _Database.Personas.ReadByNameAsync(getPersonaName).ConfigureAwait(false);
+                    if (foundPersona == null)
+                        return new { type = "command.error", action = "get_persona", error = "Persona not found" };
+                    return new { type = "command.result", action = "get_persona", data = (object)foundPersona };
+
+                case "create_persona":
+                    Persona newPersona = JsonSerializer.Deserialize<WebSocketDataCommand<Persona>>(rawBody, _JsonOptions)?.Data!;
+                    newPersona = await _Database.Personas.CreateAsync(newPersona).ConfigureAwait(false);
+                    return new { type = "command.result", action = "create_persona", data = (object)newPersona };
+
+                case "update_persona":
+                    string updPersonaName = command.Id ?? "";
+                    Persona? existPersona = await _Database.Personas.ReadByNameAsync(updPersonaName).ConfigureAwait(false);
+                    if (existPersona == null)
+                        return new { type = "command.error", action = "update_persona", error = "Persona not found" };
+                    else
+                    {
+                        Persona patchPersona = JsonSerializer.Deserialize<WebSocketDataCommand<Persona>>(rawBody, _JsonOptions)?.Data!;
+                        if (patchPersona.Description != null) existPersona.Description = patchPersona.Description;
+                        if (patchPersona.PromptTemplateName != null) existPersona.PromptTemplateName = patchPersona.PromptTemplateName;
+                        existPersona = await _Database.Personas.UpdateAsync(existPersona).ConfigureAwait(false);
+                        return new { type = "command.result", action = "update_persona", data = (object)existPersona };
+                    }
+
+                case "delete_persona":
+                    string delPersonaName = command.Id ?? "";
+                    Persona? delPersona = await _Database.Personas.ReadByNameAsync(delPersonaName).ConfigureAwait(false);
+                    if (delPersona == null)
+                        return new { type = "command.error", action = "delete_persona", error = "Persona not found" };
+                    if (delPersona.IsBuiltIn)
+                        return new { type = "command.error", action = "delete_persona", error = "Cannot delete built-in persona" };
+                    await _Database.Personas.DeleteAsync(delPersona.Id).ConfigureAwait(false);
+                    return new { type = "command.result", action = "delete_persona", data = (object)new { Status = "deleted", Name = delPersonaName } };
+
+                // ── Prompt Templates ─────────────────────────────────────────
+
+                case "get_prompt_template":
+                    string getTemplateName = command.Id ?? "";
+                    PromptTemplate? foundTemplate = await _Database.PromptTemplates.ReadByNameAsync(getTemplateName).ConfigureAwait(false);
+                    if (foundTemplate == null)
+                        return new { type = "command.error", action = "get_prompt_template", error = "Prompt template not found" };
+                    return new { type = "command.result", action = "get_prompt_template", data = (object)foundTemplate };
+
+                case "update_prompt_template":
+                    string updTemplateName = command.Id ?? "";
+                    PromptTemplate? existTemplate = await _Database.PromptTemplates.ReadByNameAsync(updTemplateName).ConfigureAwait(false);
+                    if (existTemplate == null)
+                        return new { type = "command.error", action = "update_prompt_template", error = "Prompt template not found" };
+                    else
+                    {
+                        PromptTemplate patchTemplate = JsonSerializer.Deserialize<WebSocketDataCommand<PromptTemplate>>(rawBody, _JsonOptions)?.Data!;
+                        if (patchTemplate.Content != null) existTemplate.Content = patchTemplate.Content;
+                        if (patchTemplate.Description != null) existTemplate.Description = patchTemplate.Description;
+                        existTemplate = await _Database.PromptTemplates.UpdateAsync(existTemplate).ConfigureAwait(false);
+                        return new { type = "command.result", action = "update_prompt_template", data = (object)existTemplate };
+                    }
+
+                // ── Pipelines ────────────────────────────────────────────────
+
+                case "get_pipeline":
+                    string getPipelineName = command.Id ?? "";
+                    Pipeline? foundPipeline = await _Database.Pipelines.ReadByNameAsync(getPipelineName).ConfigureAwait(false);
+                    if (foundPipeline == null)
+                        return new { type = "command.error", action = "get_pipeline", error = "Pipeline not found" };
+                    return new { type = "command.result", action = "get_pipeline", data = (object)foundPipeline };
+
+                case "create_pipeline":
+                    Pipeline newPipeline = JsonSerializer.Deserialize<WebSocketDataCommand<Pipeline>>(rawBody, _JsonOptions)?.Data!;
+                    newPipeline = await _Database.Pipelines.CreateAsync(newPipeline).ConfigureAwait(false);
+                    return new { type = "command.result", action = "create_pipeline", data = (object)newPipeline };
+
+                case "update_pipeline":
+                    string updPipelineName = command.Id ?? "";
+                    Pipeline? existPipeline = await _Database.Pipelines.ReadByNameAsync(updPipelineName).ConfigureAwait(false);
+                    if (existPipeline == null)
+                        return new { type = "command.error", action = "update_pipeline", error = "Pipeline not found" };
+                    else
+                    {
+                        Pipeline patchPipeline = JsonSerializer.Deserialize<WebSocketDataCommand<Pipeline>>(rawBody, _JsonOptions)?.Data!;
+                        if (patchPipeline.Description != null) existPipeline.Description = patchPipeline.Description;
+                        if (patchPipeline.Stages != null && patchPipeline.Stages.Count > 0)
+                        {
+                            existPipeline.Stages = patchPipeline.Stages;
+                            foreach (PipelineStage stage in existPipeline.Stages)
+                                stage.PipelineId = existPipeline.Id;
+                        }
+                        existPipeline = await _Database.Pipelines.UpdateAsync(existPipeline).ConfigureAwait(false);
+                        return new { type = "command.result", action = "update_pipeline", data = (object)existPipeline };
+                    }
+
+                case "delete_pipeline":
+                    string delPipelineName = command.Id ?? "";
+                    Pipeline? delPipeline = await _Database.Pipelines.ReadByNameAsync(delPipelineName).ConfigureAwait(false);
+                    if (delPipeline == null)
+                        return new { type = "command.error", action = "delete_pipeline", error = "Pipeline not found" };
+                    if (delPipeline.IsBuiltIn)
+                        return new { type = "command.error", action = "delete_pipeline", error = "Cannot delete built-in pipeline" };
+                    await _Database.Pipelines.DeleteAsync(delPipeline.Id).ConfigureAwait(false);
+                    return new { type = "command.result", action = "delete_pipeline", data = (object)new { Status = "deleted", Name = delPipelineName } };
+
                 // ── Default ────────────────────────────────────────────────
 
                 default:
