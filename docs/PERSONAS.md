@@ -459,7 +459,8 @@ CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);
   - Note: combined into migration 22 (mission persona) rather than separate migration 25
 - [x] Create migration scripts:
   - Note: combined into `migrations/migrate_add_mission_persona.sh/.bat` rather than separate scripts
-- [ ] Admiral health check / assignment loop: skip missions whose dependency is not yet satisfied
+- [x] Admiral health check / assignment loop: skip missions whose dependency is not yet satisfied
+  - Dependency check in `TryAssignAsync` -- skips if dependency not Complete/WorkProduced
 
 ### 4.3 Stage Handoff
 
@@ -473,7 +474,7 @@ CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);
 
 ### 4.4 Captain Dispatch Routing
 
-- [ ] Modify `FindAvailableCaptainAsync` to consider persona requirements:
+- [x] Modify `FindAvailableCaptainAsync` to consider persona requirements:
   1. Mission has a `Persona` field (e.g. `"Architect"`)
   2. Filter available captains by `AllowedPersonas` (null = all allowed)
   3. Sort by `PreferredPersona` match (prefer captains whose preference matches)

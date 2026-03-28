@@ -76,6 +76,24 @@ namespace Armada.Core.Services
             if (mission == null) throw new ArgumentNullException(nameof(mission));
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
 
+            // Check pipeline dependency -- skip if the mission depends on another that hasn't completed
+            if (!String.IsNullOrEmpty(mission.DependsOnMissionId))
+            {
+                Mission? dependency = await _Database.Missions.ReadAsync(mission.DependsOnMissionId, token).ConfigureAwait(false);
+                if (dependency == null)
+                {
+                    _Logging.Warn(_Header + "mission " + mission.Id + " depends on " + mission.DependsOnMissionId + " which was not found -- skipping assignment");
+                    return false;
+                }
+
+                if (dependency.Status != MissionStatusEnum.Complete &&
+                    dependency.Status != MissionStatusEnum.WorkProduced)
+                {
+                    // Dependency not yet satisfied -- don't assign
+                    return false;
+                }
+            }
+
             // Check for vessel-level lock (broad-scope missions block new assignments)
             List<Mission> activeMissions = await _Database.Missions.EnumerateByVesselAsync(vessel.Id, token).ConfigureAwait(false);
             List<Mission> broadMissions = activeMissions.Where(m =>
@@ -115,11 +133,12 @@ namespace Armada.Core.Services
                 _Logging.Warn(_Header + "vessel " + vessel.Id + " already has " + concurrentCount + " active mission(s) — potential for conflicts (AllowConcurrentMissions=true)");
             }
 
-            // Find an idle captain
-            Captain? captain = await FindAvailableCaptainAsync(token).ConfigureAwait(false);
+            // Find an idle captain, preferring those matching the mission's persona
+            Captain? captain = await FindAvailableCaptainAsync(mission.Persona, token).ConfigureAwait(false);
             if (captain == null)
             {
-                _Logging.Warn(_Header + "no idle captains available for mission " + mission.Id);
+                _Logging.Warn(_Header + "no idle captains available for mission " + mission.Id +
+                    (mission.Persona != null ? " (persona: " + mission.Persona + ")" : ""));
                 return false;
             }
 
@@ -732,14 +751,56 @@ namespace Armada.Core.Services
 
         #region Private-Methods
 
-        private async Task<Captain?> FindAvailableCaptainAsync(CancellationToken token)
+        private async Task<Captain?> FindAvailableCaptainAsync(string? persona, CancellationToken token)
         {
             // Only idle captains are eligible for assignment
             List<Captain> idleCaptains = await _Database.Captains.EnumerateByStateAsync(CaptainStateEnum.Idle, token).ConfigureAwait(false);
-            if (idleCaptains.Count > 0)
+            if (idleCaptains.Count == 0)
+                return null;
+
+            // If no persona requirement, return any idle captain
+            if (String.IsNullOrEmpty(persona))
                 return idleCaptains[0];
 
-            return null;
+            // Filter by AllowedPersonas (null = any persona is allowed)
+            List<Captain> eligible = new List<Captain>();
+            foreach (Captain captain in idleCaptains)
+            {
+                if (String.IsNullOrEmpty(captain.AllowedPersonas))
+                {
+                    // No restriction -- captain can fill any persona
+                    eligible.Add(captain);
+                }
+                else
+                {
+                    // Check if the persona is in the allowed list
+                    // AllowedPersonas is a JSON array string, e.g. '["Worker","Judge"]'
+                    if (captain.AllowedPersonas.Contains("\"" + persona + "\"", StringComparison.OrdinalIgnoreCase))
+                    {
+                        eligible.Add(captain);
+                    }
+                }
+            }
+
+            if (eligible.Count == 0)
+            {
+                // Fall back to any idle captain if none match persona constraints
+                // This ensures work still gets done even if persona config is incomplete
+                return idleCaptains[0];
+            }
+
+            // Prefer captains whose PreferredPersona matches
+            foreach (Captain captain in eligible)
+            {
+                if (!String.IsNullOrEmpty(captain.PreferredPersona) &&
+                    String.Equals(captain.PreferredPersona, persona, StringComparison.OrdinalIgnoreCase))
+                {
+                    return captain;
+                }
+            }
+
+            // No preferred match -- return first eligible
+            return eligible[0];
         }
 
         #endregion
