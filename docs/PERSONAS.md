@@ -204,12 +204,12 @@ CREATE INDEX idx_personas_prompt_template ON personas(prompt_template_name);
 
 ### 2.3 Built-in Persona Seeding
 
-- [ ] On startup, seed default personas if they don't exist:
+- [x] On startup, seed default personas if they don't exist:
   - `Worker` -- standard mission executor (current behavior)
   - `Architect` -- plans voyages and decomposes work into missions
   - `Judge` -- reviews completed mission diffs for correctness and completeness
   - `TestEngineer` -- writes/updates tests for mission changes
-- [ ] Built-in personas reference built-in prompt templates (`persona.worker`, etc.)
+- [x] Built-in personas reference built-in prompt templates (`persona.worker`, etc.)
 
 ### 2.4 Captain Persona Capabilities
 
@@ -228,18 +228,18 @@ CREATE INDEX idx_captains_preferred_persona ON captains(preferred_persona);
 
 **Implementation checklist:**
 
-- [ ] Add `AllowedPersonas` (string?, nullable JSON array) to `Captain` model
+- [x] Add `AllowedPersonas` (string?, nullable JSON array) to `Captain` model
   - `null` means "can take on any persona" (default)
   - When set, contains a list of persona names the captain is allowed to fill, e.g. `["Worker", "Judge"]`
   - This is a soft preference for dispatch routing -- the Admiral prefers matching captains but can fall back
-- [ ] Add `PreferredPersona` (string?, nullable) to `Captain` model
+- [x] Add `PreferredPersona` (string?, nullable) to `Captain` model
   - Optional hint for dispatch priority
 - [x] Add in-code `SchemaMigration` entry in each driver's `TableQueries.cs` (ALTER TABLE + index)
 - [x] Create migration scripts:
   - `migrations/migrate_add_captain_personas.sh`
   - `migrations/migrate_add_captain_personas.bat`
-- [ ] Update `McpCaptainTools` to expose both fields on create/update
-- [ ] Update `CaptainCreateArgs` and `CaptainUpdateArgs`
+- [x] Update `McpCaptainTools` to expose both fields on create/update
+- [x] Update `CaptainCreateArgs` and `CaptainUpdateArgs`
 
 ### 2.5 Mission Persona Assignment
 
@@ -257,14 +257,14 @@ CREATE INDEX idx_missions_persona ON missions(persona);
 
 **Implementation checklist:**
 
-- [ ] Add `Persona` (string?, nullable) to `Mission` model
+- [x] Add `Persona` (string?, nullable) to `Mission` model
   - When set, indicates which persona this mission requires
   - `null` defaults to `"Worker"` for backward compatibility
 - [x] Add in-code `SchemaMigration` entry in each driver's `TableQueries.cs` (ALTER TABLE + index)
 - [x] Create migration scripts:
   - `migrations/migrate_add_mission_persona.sh`
   - `migrations/migrate_add_mission_persona.bat`
-- [ ] Update `McpMissionTools` to expose `persona` on create/update
+- [ ] Update `McpMissionTools` to expose `persona` on create/update (TBD)
 
 ---
 
@@ -350,7 +350,7 @@ CREATE INDEX idx_pipeline_stages_persona ON pipeline_stages(persona_name);
 
 ### 3.3 Built-in Pipeline Seeding
 
-- [ ] Seed default pipelines on startup:
+- [x] Seed default pipelines on startup:
   - `WorkerOnly` -- `[Worker]` (backward compatible, current behavior)
   - `Reviewed` -- `[Worker, Judge]`
   - `FullPipeline` -- `[Architect, Worker, TestEngineer, Judge]`
@@ -374,19 +374,19 @@ CREATE INDEX idx_vessels_default_pipeline ON vessels(default_pipeline_id);
 
 **Implementation checklist:**
 
-- [ ] Add `DefaultPipelineId` (string?, nullable, `ppl_` prefix) to `Fleet` model
-- [ ] Add `DefaultPipelineId` (string?, nullable, `ppl_` prefix) to `Vessel` model
+- [x] Add `DefaultPipelineId` (string?, nullable, `ppl_` prefix) to `Fleet` model
+- [x] Add `DefaultPipelineId` (string?, nullable, `ppl_` prefix) to `Vessel` model
   - Vessel setting overrides fleet setting
   - `null` means use `WorkerOnly` for backward compatibility
 - [x] Add in-code `SchemaMigration` entry in each driver's `TableQueries.cs` (ALTER TABLEs + indexes)
   - Note: combined into migration 23 (pipelines) rather than separate migration 24
 - [x] Create migration scripts:
   - Note: combined into `migrations/migrate_add_pipelines.sh/.bat` rather than separate scripts
-- [ ] Update `McpFleetTools` and `McpVesselTools` to expose `defaultPipelineId`
+- [x] Update `McpFleetTools` and `McpVesselTools` to expose `defaultPipelineId`
 
 ### 3.5 Dispatch Pipeline Override
 
-- [ ] Add `pipelineId` (string?, optional) parameter to `armada_dispatch` MCP tool
+- [x] Add `pipelineId` (string?, optional) parameter to `armada_dispatch` MCP tool
   - When provided, overrides the fleet/vessel default for this dispatch only
 - [ ] Add `pipeline` (string?, optional) parameter as a convenience alias (accepts pipeline name)
 
@@ -418,7 +418,7 @@ CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);
 
 **Implementation checklist:**
 
-- [ ] Add `DependsOnMissionId` (string?, nullable) to `Mission` model
+- [x] Add `DependsOnMissionId` (string?, nullable) to `Mission` model
   - When set, this mission cannot be assigned until the dependency mission reaches a terminal success state
 - [x] Add in-code `SchemaMigration` entry in each driver's `TableQueries.cs` (ALTER TABLE + index)
   - Note: combined into migration 22 (mission persona) rather than separate migration 25
@@ -583,10 +583,10 @@ CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);
 
 ### 7.7 Updated Existing Tools
 
-- [ ] `armada_dispatch` -- add `pipelineId` and `pipeline` parameters
-- [ ] `armada_create_captain` / `armada_update_captain` -- add `allowedPersonas`, `preferredPersona`
-- [ ] `armada_update_vessel` -- add `defaultPipelineId`
-- [ ] `armada_update_fleet` -- add `defaultPipelineId`
+- [x] `armada_dispatch` -- add `pipelineId` parameter (pipeline name alias TBD)
+- [x] `armada_create_captain` / `armada_update_captain` -- add `allowedPersonas`, `preferredPersona`
+- [x] `armada_update_vessel` -- add `defaultPipelineId`
+- [x] `armada_update_fleet` -- add `defaultPipelineId`
 
 ---
 
