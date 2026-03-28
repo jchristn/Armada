@@ -658,9 +658,9 @@ CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);
 
 ### 9.3 README.md
 
-- [ ] Add Personas section explaining the concept and built-in personas
-- [ ] Add Pipeline section explaining how to configure dispatch workflows
-- [ ] Update architecture section to mention prompt template system
+- [x] Add Personas section explaining the concept and built-in personas
+- [x] Add Pipeline section explaining how to configure dispatch workflows
+- [x] Update architecture section to mention prompt template system
 
 ### 9.4 New Documentation
 

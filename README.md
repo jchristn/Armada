@@ -65,6 +65,9 @@ That's it. Armada auto-initializes, detects your installed agent runtime (Claude
 - **MCP server** -- 18 tools let Claude Code, Codex, or any MCP client orchestrate Armada (see [AI-powered orchestration](#ai-powered-orchestration))
 - **React dashboard** -- optional standalone React dashboard for Docker/production deployments
 - **Model context** -- agents accumulate key knowledge about repositories across missions, so future agents start with institutional memory
+- **Persona-based specialization** -- assign agent roles (Worker, Architect, Judge, TestEngineer) to shape what each captain does, with support for custom personas
+- **Pipeline workflows** -- define ordered sequences of persona stages (e.g. Architect -> Worker -> TestEngineer -> Judge) for multi-stage quality gates, configured at fleet/vessel level or per-dispatch
+- **Prompt template configurability** -- every instruction given to agents is driven by user-editable templates with `{Placeholder}` parameters, giving full control over agent behavior
 - **Cross-platform** -- Windows, macOS, Linux (C#/.NET)
 
 ## Benefits
@@ -232,6 +235,9 @@ The authorization model is:
 | **Voyage** | Batch | A group of related missions dispatched together. |
 | **Dock** | Worktree | A git worktree provisioned for a captain's isolated work. |
 | **Signal** | Message | Communication between the Admiral and captains. |
+| **Persona** | Agent role | A named agent role (Worker, Architect, Judge, TestEngineer) that determines what a captain does during a mission. Personas are extensible -- users can create custom personas with custom prompt templates. |
+| **Pipeline** | Workflow | An ordered sequence of persona stages that a dispatch goes through (e.g. Architect -> Worker -> TestEngineer -> Judge). Configured at fleet/vessel level with per-dispatch override. |
+| **Prompt Template** | Instructions | A user-editable template that controls the instructions given to agents. Every prompt in the system is template-driven with `{Placeholder}` parameters. |
 
 For details on how the Admiral decides which mission to assign to which captain and in what order, see [Mission Scheduling](docs/SCHEDULING.md).
 
@@ -567,7 +573,7 @@ armada mcp remove     # Remove those Armada MCP entries again
 If you are working from source, repo-root helpers are also available:
 `install-mcp.bat/.sh` and `remove-mcp.bat/.sh`.
 
-Once installed, your MCP client can call tools like `armada_status`, `armada_dispatch`, `armada_enumerate`, `armada_voyage_status`, `armada_cancel_voyage`, and more.
+Once installed, your MCP client can call tools like `armada_status`, `armada_dispatch`, `armada_enumerate`, `armada_voyage_status`, `armada_cancel_voyage`, and more. Additional tool categories include persona management, pipeline management, and prompt template management.
 
 ### AI-Powered Orchestration
 
