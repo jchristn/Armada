@@ -648,9 +648,9 @@ CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);
 
 ### 9.1 MCP_API.md
 
-- [ ] Add sections for all new MCP tools (prompt templates, personas, pipelines)
-- [ ] Update `armada_dispatch` documentation with pipeline parameters
-- [ ] Update `armada_create_captain` / `armada_update_captain` with new fields
+- [x] Add sections for all new MCP tools (prompt templates, personas, pipelines)
+- [x] Update `armada_dispatch` documentation with pipeline parameters
+- [x] Update `armada_create_captain` / `armada_update_captain` with new fields
 
 ### 9.2 REST_API.md
 
