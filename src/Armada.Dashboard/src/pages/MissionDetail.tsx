@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useNotifications } from '../context/NotificationContext';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   getMission,
@@ -51,7 +52,7 @@ export default function MissionDetail() {
   const [captains, setCaptains] = useState<Captain[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
+  const { pushToast } = useNotifications();
 
   // Diff viewer (shared modal)
   const [diffModal, setDiffModal] = useState<{ open: boolean; title: string; rawDiff: string; loading: boolean }>({ open: false, title: '', rawDiff: '', loading: false });
@@ -249,7 +250,7 @@ export default function MissionDetail() {
           <button className="btn btn-sm" onClick={handleViewDiff} title="View mission diff">Diff</button>
           <button className="btn btn-sm" onClick={handleViewLog} title="View mission log">Log</button>
           {(mission.status === 'WorkProduced' || mission.status === 'LandingFailed') && (
-            <button className="btn btn-sm btn-primary" onClick={async () => { try { await retryMissionLanding(mission.id); setSuccessMsg('Landing succeeded! Mission status updated.'); setTimeout(() => setSuccessMsg(''), 4000); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : 'Retry landing failed.'); } }} title="Rebase the mission branch and re-attempt merge into the target branch">Retry Landing</button>
+            <button className="btn btn-sm btn-primary" onClick={async () => { try { await retryMissionLanding(mission.id); pushToast('success', 'Landing succeeded! Mission status updated.'); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : 'Retry landing failed.'); } }} title="Rebase the mission branch and re-attempt merge into the target branch">Retry Landing</button>
           )}
           <ActionMenu id={`mission-action-${mission.id}`} items={[
             { label: 'Edit', onClick: openEdit },
@@ -258,7 +259,7 @@ export default function MissionDetail() {
             { label: 'Transition Status', onClick: () => setShowTransition(true) },
             { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `Mission: ${mission.title}`, data: mission }) },
             { label: 'Restart', onClick: handleRestart },
-            ...((mission.status === 'WorkProduced' || mission.status === 'LandingFailed') ? [{ label: 'Retry Landing', onClick: async () => { try { await retryMissionLanding(mission.id); setSuccessMsg('Landing succeeded! Mission status updated.'); setTimeout(() => setSuccessMsg(''), 4000); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : 'Retry landing failed.'); } } }] : []),
+            ...((mission.status === 'WorkProduced' || mission.status === 'LandingFailed') ? [{ label: 'Retry Landing', onClick: async () => { try { await retryMissionLanding(mission.id); pushToast('success', 'Landing succeeded! Mission status updated.'); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : 'Retry landing failed.'); } } }] : []),
             { label: 'Purge', danger: true, onClick: handlePurge },
             { label: 'Delete', danger: true, onClick: handleDelete },
           ]} />
@@ -266,11 +267,6 @@ export default function MissionDetail() {
       </div>
 
       <ErrorModal error={error} onClose={() => setError('')} />
-      {successMsg && (
-        <div className="success-banner" onClick={() => setSuccessMsg('')}>
-          {successMsg}
-        </div>
-      )}
 
       <JsonViewer open={jsonData.open} title={jsonData.title} data={jsonData.data} onClose={() => setJsonData({ open: false, title: '', data: null })} />
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}

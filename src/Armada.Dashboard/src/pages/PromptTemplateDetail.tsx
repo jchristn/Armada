@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNotifications } from '../context/NotificationContext';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getPromptTemplate, updatePromptTemplate, resetPromptTemplate } from '../api/client';
 import type { PromptTemplate } from '../types/models';
@@ -76,7 +77,7 @@ export default function PromptTemplateDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
+  const { pushToast } = useNotifications();
 
   // Editable fields
   const [content, setContent] = useState('');
@@ -129,8 +130,7 @@ export default function PromptTemplateDetail() {
       setContent(result.content);
       setDescription(result.description ?? '');
       setDirty(false);
-      setSuccessMessage('Template saved.');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      pushToast('success', 'Template saved.');
     } catch {
       setError('Save failed.');
     } finally {
@@ -152,8 +152,7 @@ export default function PromptTemplateDetail() {
           setContent(result.content);
           setDescription(result.description ?? '');
           setDirty(false);
-          setSuccessMessage('Template reset to default.');
-          setTimeout(() => setSuccessMessage(''), 3000);
+          pushToast('success', 'Template reset to default.');
         } catch {
           setError('Reset failed.');
         }
@@ -211,20 +210,6 @@ export default function PromptTemplateDetail() {
         onConfirm={confirm.onConfirm}
         onCancel={() => setConfirm(c => ({ ...c, open: false }))}
       />
-
-      {successMessage && (
-        <div style={{
-          padding: '8px 16px',
-          marginBottom: '1rem',
-          borderRadius: '4px',
-          background: 'rgba(80, 200, 120, 0.15)',
-          color: '#50c878',
-          border: '1px solid rgba(80, 200, 120, 0.3)',
-          fontSize: '0.9em',
-        }}>
-          {successMessage}
-        </div>
-      )}
 
       <style>{`
         .template-editor-layout {
