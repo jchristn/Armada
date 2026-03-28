@@ -36,6 +36,7 @@ interface VesselForm {
   styleGuide: string;
   enableModelContext: boolean;
   modelContext: string;
+  defaultPipelineId: string;
 }
 
 export default function VesselDetail() {
@@ -49,7 +50,7 @@ export default function VesselDetail() {
 
   // Edit modal
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<VesselForm>({ name: '', fleetId: '', repoUrl: '', defaultBranch: 'main', localPath: '', workingDirectory: '', projectContext: '', styleGuide: '', enableModelContext: true, modelContext: '' });
+  const [form, setForm] = useState<VesselForm>({ name: '', fleetId: '', repoUrl: '', defaultBranch: 'main', localPath: '', workingDirectory: '', projectContext: '', styleGuide: '', enableModelContext: true, modelContext: '', defaultPipelineId: '' });
 
   // JSON viewer
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
@@ -96,6 +97,7 @@ export default function VesselDetail() {
       styleGuide: vessel.styleGuide ?? '',
       enableModelContext: vessel.enableModelContext,
       modelContext: vessel.modelContext ?? '',
+      defaultPipelineId: vessel.defaultPipelineId ?? '',
     });
     setShowForm(true);
   }
@@ -110,6 +112,7 @@ export default function VesselDetail() {
       if (!payload.projectContext) delete payload.projectContext;
       if (!payload.styleGuide) delete payload.styleGuide;
       if (!payload.modelContext) delete payload.modelContext;
+      if (!payload.defaultPipelineId) delete payload.defaultPipelineId;
       await updateVessel(vessel.id, payload);
       setShowForm(false);
       load();
@@ -182,6 +185,7 @@ export default function VesselDetail() {
               <textarea value={form.styleGuide} onChange={e => setForm({ ...form, styleGuide: e.target.value })} rows={4} />
               <span className="text-dim" style={{ fontSize: '0.8em' }}>{form.styleGuide.length} characters</span>
             </label>
+            <label>Default Pipeline ID<input value={form.defaultPipelineId} onChange={e => setForm({ ...form, defaultPipelineId: e.target.value })} placeholder="e.g., pip_abc123" /></label>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input type="checkbox" checked={form.enableModelContext} onChange={e => setForm({ ...form, enableModelContext: e.target.checked })} style={{ width: 'auto' }} />
               Enable Model Context
@@ -233,6 +237,10 @@ export default function VesselDetail() {
         <div className="detail-field"><span className="detail-label">Landing Mode</span><span>{vessel.landingMode || '-'}</span></div>
         <div className="detail-field"><span className="detail-label">Branch Cleanup Policy</span><span>{vessel.branchCleanupPolicy || '-'}</span></div>
         <div className="detail-field"><span className="detail-label">Allow Concurrent Missions</span><span>{vessel.allowConcurrentMissions ? 'Yes' : 'No'}</span></div>
+        <div className="detail-field">
+          <span className="detail-label">Default Pipeline</span>
+          <span className="mono">{vessel.defaultPipelineId || <span className="text-dim">None (WorkerOnly)</span>}</span>
+        </div>
         <div className="detail-field"><span className="detail-label">Active</span><span>{vessel.active !== false ? 'Yes' : 'No'}</span></div>
         <div className="detail-field">
           <span className="detail-label">Created</span>

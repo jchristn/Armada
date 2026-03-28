@@ -49,7 +49,7 @@ export default function CaptainDetail() {
 
   // Edit
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', runtime: 'ClaudeCode', systemInstructions: '' });
+  const [form, setForm] = useState({ name: '', runtime: 'ClaudeCode', systemInstructions: '', allowedPersonas: '', preferredPersona: '' });
 
   // Log viewer
   const [logText, setLogText] = useState<string | null>(null);
@@ -95,7 +95,7 @@ export default function CaptainDetail() {
 
   function openEdit() {
     if (!captain) return;
-    setForm({ name: captain.name, runtime: captain.runtime || 'ClaudeCode', systemInstructions: captain.systemInstructions ?? '' });
+    setForm({ name: captain.name, runtime: captain.runtime || 'ClaudeCode', systemInstructions: captain.systemInstructions ?? '', allowedPersonas: captain.allowedPersonas ?? '', preferredPersona: captain.preferredPersona ?? '' });
     setShowForm(true);
   }
 
@@ -105,6 +105,8 @@ export default function CaptainDetail() {
     try {
       const payload = { ...form } as Record<string, unknown>;
       if (!payload.systemInstructions) delete payload.systemInstructions;
+      if (!payload.allowedPersonas) delete payload.allowedPersonas;
+      if (!payload.preferredPersona) delete payload.preferredPersona;
       await updateCaptain(captain.id, payload);
       setShowForm(false);
       load();
@@ -225,6 +227,14 @@ export default function CaptainDetail() {
               System Instructions
               <textarea value={form.systemInstructions} onChange={e => setForm({ ...form, systemInstructions: e.target.value })} rows={4} placeholder="e.g., You are a testing specialist. Always run tests before committing..." />
             </label>
+            <label>
+              Allowed Personas (JSON array)
+              <textarea value={form.allowedPersonas} onChange={e => setForm({ ...form, allowedPersonas: e.target.value })} rows={2} placeholder='["Worker", "Judge"]' />
+            </label>
+            <label>
+              Preferred Persona
+              <input value={form.preferredPersona} onChange={e => setForm({ ...form, preferredPersona: e.target.value })} placeholder="e.g., Worker" />
+            </label>
             <div className="modal-actions">
               <button type="submit" className="btn btn-primary">Save</button>
               <button type="button" className="btn" onClick={() => setShowForm(false)}>Cancel</button>
@@ -257,6 +267,14 @@ export default function CaptainDetail() {
         </div>
       )}
       <div className="detail-grid">
+        <div className="detail-field">
+          <span className="detail-label">Allowed Personas</span>
+          <span>{captain.allowedPersonas || <span className="text-dim">Any (no restriction)</span>}</span>
+        </div>
+        <div className="detail-field">
+          <span className="detail-label">Preferred Persona</span>
+          <span>{captain.preferredPersona || <span className="text-dim">None</span>}</span>
+        </div>
         <div className="detail-field">
           <span className="detail-label">State</span>
           <StatusBadge status={captain.state} />

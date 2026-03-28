@@ -370,6 +370,16 @@ export default function MissionDetail() {
             ? <Link to={`/missions/${mission.parentMissionId}`} className="mono">{mission.parentMissionId}</Link>
             : <span>-</span>}
         </div>
+        <div className="detail-field">
+          <span className="detail-label">Persona</span>
+          <span>{mission.persona || <span className="text-dim">Worker</span>}</span>
+        </div>
+        {mission.dependsOnMissionId && (
+          <div className="detail-field">
+            <span className="detail-label">Depends On</span>
+            <Link to={`/missions/${mission.dependsOnMissionId}`} className="mono">{mission.dependsOnMissionId}</Link>
+          </div>
+        )}
         <div className="detail-field"><span className="detail-label">Branch Name</span><span className="mono">{mission.branchName || '-'}</span></div>
         <div className="detail-field">
           <span className="detail-label">Dock</span>

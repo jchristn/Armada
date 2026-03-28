@@ -549,18 +549,17 @@ CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);
 
 ### 6.4 Vessel/Fleet Detail Updates
 
-- [ ] Add `DefaultPipeline` dropdown to `VesselDetail.tsx` (future enhancement)
+- [x] Add `DefaultPipelineId` field to `VesselDetail.tsx` (display + edit form)
 - [ ] Add `DefaultPipeline` dropdown to `FleetDetail.tsx` (future enhancement)
 
 ### 6.5 Captain Detail Updates
 
-- [ ] Add `AllowedPersonas` multi-select to `CaptainDetail.tsx` (future enhancement)
-- [ ] Add `PreferredPersona` dropdown to `CaptainDetail.tsx` (future enhancement)
+- [x] Add `AllowedPersonas` and `PreferredPersona` to `CaptainDetail.tsx` (display + edit form)
 
 ### 6.6 Mission Detail Updates
 
-- [ ] Show `Persona` badge on mission cards/detail view (future enhancement)
-- [ ] Show pipeline stage indicator on missions that are part of a pipeline (future enhancement)
+- [x] Show `Persona` field on MissionDetail.tsx (defaults to "Worker" when null)
+- [x] Show `DependsOnMissionId` link on MissionDetail.tsx (conditional, links to dependency)
 
 ### 6.7 Dashboard Build
 
@@ -622,18 +621,17 @@ CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);
 
 ### 8.1 Unit Tests
 
-- [ ] `PromptTemplateServiceTests.cs` -- resolution order (DB > embedded), rendering, seeding
-- [ ] `PersonaTests.cs` -- CRUD, built-in protection, captain capability filtering
-- [ ] `PipelineTests.cs` -- CRUD, stage ordering, built-in protection
-- [ ] Update `MissionPromptTests.cs` -- verify refactored GenerateClaudeMdAsync produces identical output to current behavior
-- [ ] `PipelineDispatchTests.cs` -- multi-stage dispatch creates correct voyage/missions
+- [x] `PromptTemplateServiceTests.cs` -- 7 tests: seed, resolve DB/embedded, render, reset, list, list by category
+- [x] `PersonaPipelineDbTests.cs` -- 9 tests: persona CRUD, pipeline CRUD with stages, cascade delete
+- [x] `PipelineDispatchTests.cs` -- 5 tests: single/multi-stage dispatch, dependency blocking, persona routing, AllowedPersonas filtering
+- [ ] Update `MissionPromptTests.cs` -- verify refactored GenerateClaudeMdAsync produces identical output (future)
 
 ### 8.2 Automated Tests
 
-- [ ] Template round-trip: create, read, update, delete via MCP tools
-- [ ] Persona round-trip: create, read, update, delete via MCP tools
-- [ ] Pipeline round-trip: create, read, update, delete via MCP tools
-- [ ] Dispatch with pipeline: verify missions created with correct personas and dependencies
+- [ ] Template round-trip: create, read, update, delete via MCP tools (future -- automated/integration tests)
+- [ ] Persona round-trip: create, read, update, delete via MCP tools (future -- automated/integration tests)
+- [ ] Pipeline round-trip: create, read, update, delete via MCP tools (future -- automated/integration tests)
+- [ ] Dispatch with pipeline: verify missions created with correct personas and dependencies (future -- automated/integration tests)
 
 ---
 

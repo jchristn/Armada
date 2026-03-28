@@ -78,6 +78,9 @@ namespace Armada.Test.Unit
             runner.AddSuite(new AuthorizationConfigTests());
             runner.AddSuite(new AuthorizationServiceTests());
             runner.AddSuite(new AuthEndpointTests());
+            runner.AddSuite(new PromptTemplateServiceTests());
+            runner.AddSuite(new PersonaPipelineDbTests());
+            runner.AddSuite(new PipelineDispatchTests());
 
             int exitCode = await runner.RunAllAsync().ConfigureAwait(false);
             return exitCode;

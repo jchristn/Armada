@@ -115,6 +115,7 @@ export interface Vessel {
   landingMode: string | null;
   branchCleanupPolicy: string | null;
   allowConcurrentMissions: boolean;
+  defaultPipelineId: string | null;
   active: boolean;
   createdUtc: string;
   lastUpdateUtc: string;
@@ -126,6 +127,8 @@ export interface Captain {
   name: string;
   runtime: string;
   systemInstructions: string | null;
+  allowedPersonas: string | null;
+  preferredPersona: string | null;
   state: string;
   currentMissionId: string | null;
   currentDockId: string | null;
@@ -147,6 +150,8 @@ export interface Mission {
   status: string;
   priority: number;
   parentMissionId: string | null;
+  persona: string | null;
+  dependsOnMissionId: string | null;
   branchName: string | null;
   dockId: string | null;
   processId: number | null;
