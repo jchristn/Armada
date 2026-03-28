@@ -35,7 +35,7 @@ Extract all hardcoded prompts into a template system with embedded defaults and 
 
 ### 1.1 Prompt Template Model
 
-- [ ] Create `src/Armada.Core/Models/PromptTemplate.cs`
+- [x] Create `src/Armada.Core/Models/PromptTemplate.cs`
   - `Id` (string, `ptpl_` prefix)
   - `TenantId` (string?)
   - `Name` (string, unique key, e.g. `"mission.rules"`, `"mission.context_conservation"`, `"persona.worker"`)
@@ -76,56 +76,56 @@ CREATE INDEX idx_prompt_templates_active ON prompt_templates(active);
 
 **Implementation checklist:**
 
-- [ ] Create `IPromptTemplateMethods` interface in `src/Armada.Core/Database/Interfaces/`
+- [x] Create `IPromptTemplateMethods` interface in `src/Armada.Core/Database/Interfaces/`
   - `CreateAsync`, `ReadAsync`, `ReadByNameAsync`, `UpdateAsync`, `DeleteAsync`, `ExistsAsync`, `AllAsync`
-- [ ] Implement for SQLite in `src/Armada.Core/Database/Sqlite/Implementations/PromptTemplateMethods.cs`
-- [ ] Implement for MySQL in `src/Armada.Core/Database/Mysql/Implementations/PromptTemplateMethods.cs`
+- [x] Implement for SQLite in `src/Armada.Core/Database/Sqlite/Implementations/PromptTemplateMethods.cs`
+- [x] Implement for MySQL in `src/Armada.Core/Database/Mysql/Implementations/PromptTemplateMethods.cs`
   - Use `LONGTEXT` for `content` column
-- [ ] Implement for PostgreSQL in `src/Armada.Core/Database/Postgresql/Implementations/PromptTemplateMethods.cs`
+- [x] Implement for PostgreSQL in `src/Armada.Core/Database/Postgresql/Implementations/PromptTemplateMethods.cs`
   - Use `TEXT` for `content` column
-- [ ] Implement for SQL Server in `src/Armada.Core/Database/SqlServer/Implementations/PromptTemplateMethods.cs`
+- [x] Implement for SQL Server in `src/Armada.Core/Database/SqlServer/Implementations/PromptTemplateMethods.cs`
   - Use `NVARCHAR(MAX)` for `content` column
-- [ ] Add in-code `SchemaMigration` entry (next sequence number after current max) in each driver's `TableQueries.cs`:
+- [x] Add in-code `SchemaMigration` entry (next sequence number after current max) in each driver's `TableQueries.cs`:
   - SQLite: `src/Armada.Core/Database/Sqlite/Queries/TableQueries.cs` (currently at migration 18)
   - MySQL: `src/Armada.Core/Database/Mysql/Queries/TableQueries.cs`
   - PostgreSQL: `src/Armada.Core/Database/Postgresql/Queries/TableQueries.cs`
   - SQL Server: `src/Armada.Core/Database/SqlServer/Queries/TableQueries.cs`
   - Each migration must include CREATE TABLE + all CREATE INDEX statements
-- [ ] Add the table to the initial schema DDL in each driver's `TableQueries.cs` (for fresh installs)
-- [ ] Create migration scripts in `migrations/`:
+- [x] Add the table to the initial schema DDL in each driver's `TableQueries.cs` (for fresh installs)
+- [x] Create migration scripts in `migrations/`:
   - `migrations/migrate_add_prompt_templates.sh`
   - `migrations/migrate_add_prompt_templates.bat`
   - Follow existing pattern (sqlite3 check, settings file, backup, idempotent column check, SQL execution)
   - Scripts must include table creation + all indexes
-- [ ] Wire into `DatabaseDriver` as `PromptTemplates` property
+- [x] Wire into `DatabaseDriver` as `PromptTemplates` property
 
 ### 1.3 Embedded Resource Defaults
 
-- [ ] Create directory `src/Armada.Core/Resources/Templates/`
-- [ ] Create template files for each prompt section currently hardcoded (see Appendix B):
-  - `mission_rules.md` -- worktree rules, ASCII-only, exit codes
-  - `mission_context_conservation.md` -- critical context window rules
-  - `mission_merge_conflict_avoidance.md` -- multi-captain conflict rules
-  - `mission_progress_signals.md` -- ARMADA:PROGRESS/STATUS/MESSAGE format
-  - `mission_model_context_updates.md` -- instructions for updating vessel model context
-  - `commit_instructions.md` -- commit trailer injection instructions
-  - `pr_description.md` -- PR body base template
-  - `agent_launch_prompt.md` -- short CLI prompt wrapper
-  - `persona_worker.md` -- default worker persona (current captain behavior)
-  - `persona_architect.md` -- architect persona
-  - `persona_judge.md` -- judge/reviewer persona
-  - `persona_test_engineer.md` -- test writing persona
-- [ ] Mark all as embedded resources in `Armada.Core.csproj`
+Embedded defaults are stored inline in `PromptTemplateService.cs` constructor rather than as separate resource files.
+This avoids the .csproj embedded resource complexity and keeps templates co-located with the service that uses them.
+
+- [x] Define all built-in template content in `PromptTemplateService._EmbeddedDefaults` dictionary
+  - `mission.rules` -- worktree rules, ASCII-only, exit codes
+  - `mission.context_conservation` -- critical context window rules
+  - `mission.merge_conflict_avoidance` -- multi-captain conflict rules
+  - `mission.progress_signals` -- ARMADA:PROGRESS/STATUS/MESSAGE format
+  - `mission.model_context_updates` -- instructions for updating vessel model context
+  - `commit.instructions_preamble` -- commit trailer injection instructions
+  - `agent.launch_prompt` -- short CLI prompt wrapper
+  - `persona.worker` -- default worker persona (current captain behavior)
+  - `persona.architect` -- architect persona
+  - `persona.judge` -- judge/reviewer persona
+  - `persona.test_engineer` -- test writing persona
 
 ### 1.4 Template Resolution Service
 
-- [ ] Create `src/Armada.Core/Services/PromptTemplateService.cs` implementing `IPromptTemplateService`
+- [x] Create `src/Armada.Core/Services/PromptTemplateService.cs` implementing `IPromptTemplateService`
   - `ResolveAsync(string name)` -- check database first, fall back to embedded resource
   - `RenderAsync(string name, Dictionary<string, string> parameters)` -- resolve + substitute placeholders
   - `SeedDefaultsAsync()` -- on startup, ensure all built-in templates exist in database (insert if missing, do not overwrite user edits)
   - `ListAsync(string? category)` -- list all templates, merged view of DB + embedded
   - `ResetToDefaultAsync(string name)` -- restore a template to its embedded resource content
-- [ ] Create `IPromptTemplateService` interface in `src/Armada.Core/Services/Interfaces/`
+- [x] Create `IPromptTemplateService` interface in `src/Armada.Core/Services/Interfaces/`
 
 ### 1.5 Refactor MissionService.GenerateClaudeMdAsync
 
@@ -150,7 +150,7 @@ CREATE INDEX idx_prompt_templates_active ON prompt_templates(active);
 
 ### 2.1 Persona Model
 
-- [ ] Create `src/Armada.Core/Models/Persona.cs`
+- [x] Create `src/Armada.Core/Models/Persona.cs`
   - `Id` (string, `prs_` prefix)
   - `TenantId` (string?)
   - `Name` (string, unique, e.g. `"Worker"`, `"Architect"`, `"Judge"`, `"TestEngineer"`)
@@ -189,18 +189,18 @@ CREATE INDEX idx_personas_prompt_template ON personas(prompt_template_name);
 
 **Implementation checklist:**
 
-- [ ] Create `IPersonaMethods` interface in `src/Armada.Core/Database/Interfaces/`
+- [x] Create `IPersonaMethods` interface in `src/Armada.Core/Database/Interfaces/`
   - `CreateAsync`, `ReadAsync`, `ReadByNameAsync`, `UpdateAsync`, `DeleteAsync`, `ExistsAsync`, `AllAsync`
-- [ ] Implement for SQLite in `src/Armada.Core/Database/Sqlite/Implementations/PersonaMethods.cs`
-- [ ] Implement for MySQL in `src/Armada.Core/Database/Mysql/Implementations/PersonaMethods.cs`
-- [ ] Implement for PostgreSQL in `src/Armada.Core/Database/Postgresql/Implementations/PersonaMethods.cs`
-- [ ] Implement for SQL Server in `src/Armada.Core/Database/SqlServer/Implementations/PersonaMethods.cs`
-- [ ] Add in-code `SchemaMigration` entry in each driver's `TableQueries.cs` (CREATE TABLE + indexes)
-- [ ] Add the table to the initial schema DDL in each driver's `TableQueries.cs`
-- [ ] Create migration scripts:
+- [x] Implement for SQLite in `src/Armada.Core/Database/Sqlite/Implementations/PersonaMethods.cs`
+- [x] Implement for MySQL in `src/Armada.Core/Database/Mysql/Implementations/PersonaMethods.cs`
+- [x] Implement for PostgreSQL in `src/Armada.Core/Database/Postgresql/Implementations/PersonaMethods.cs`
+- [x] Implement for SQL Server in `src/Armada.Core/Database/SqlServer/Implementations/PersonaMethods.cs`
+- [x] Add in-code `SchemaMigration` entry in each driver's `TableQueries.cs` (CREATE TABLE + indexes)
+- [x] Add the table to the initial schema DDL in each driver's `TableQueries.cs`
+- [x] Create migration scripts:
   - `migrations/migrate_add_personas.sh`
   - `migrations/migrate_add_personas.bat`
-- [ ] Wire into `DatabaseDriver` as `Personas` property
+- [x] Wire into `DatabaseDriver` as `Personas` property
 
 ### 2.3 Built-in Persona Seeding
 
@@ -234,8 +234,8 @@ CREATE INDEX idx_captains_preferred_persona ON captains(preferred_persona);
   - This is a soft preference for dispatch routing -- the Admiral prefers matching captains but can fall back
 - [ ] Add `PreferredPersona` (string?, nullable) to `Captain` model
   - Optional hint for dispatch priority
-- [ ] Add in-code `SchemaMigration` entry in each driver's `TableQueries.cs` (ALTER TABLE + index)
-- [ ] Create migration scripts:
+- [x] Add in-code `SchemaMigration` entry in each driver's `TableQueries.cs` (ALTER TABLE + index)
+- [x] Create migration scripts:
   - `migrations/migrate_add_captain_personas.sh`
   - `migrations/migrate_add_captain_personas.bat`
 - [ ] Update `McpCaptainTools` to expose both fields on create/update
@@ -260,8 +260,8 @@ CREATE INDEX idx_missions_persona ON missions(persona);
 - [ ] Add `Persona` (string?, nullable) to `Mission` model
   - When set, indicates which persona this mission requires
   - `null` defaults to `"Worker"` for backward compatibility
-- [ ] Add in-code `SchemaMigration` entry in each driver's `TableQueries.cs` (ALTER TABLE + index)
-- [ ] Create migration scripts:
+- [x] Add in-code `SchemaMigration` entry in each driver's `TableQueries.cs` (ALTER TABLE + index)
+- [x] Create migration scripts:
   - `migrations/migrate_add_mission_persona.sh`
   - `migrations/migrate_add_mission_persona.bat`
 - [ ] Update `McpMissionTools` to expose `persona` on create/update
@@ -333,20 +333,20 @@ CREATE INDEX idx_pipeline_stages_persona ON pipeline_stages(persona_name);
 
 **Implementation checklist:**
 
-- [ ] Create `IPipelineMethods` interface in `src/Armada.Core/Database/Interfaces/`
+- [x] Create `IPipelineMethods` interface in `src/Armada.Core/Database/Interfaces/`
   - `CreateAsync`, `ReadAsync`, `ReadByNameAsync`, `UpdateAsync`, `DeleteAsync`, `ExistsAsync`, `AllAsync`
   - Must handle loading/saving stages as part of pipeline CRUD (join or separate queries)
-- [ ] Implement for SQLite in `src/Armada.Core/Database/Sqlite/Implementations/PipelineMethods.cs`
-- [ ] Implement for MySQL in `src/Armada.Core/Database/Mysql/Implementations/PipelineMethods.cs`
-- [ ] Implement for PostgreSQL in `src/Armada.Core/Database/Postgresql/Implementations/PipelineMethods.cs`
-- [ ] Implement for SQL Server in `src/Armada.Core/Database/SqlServer/Implementations/PipelineMethods.cs`
-- [ ] Add in-code `SchemaMigration` entry in each driver's `TableQueries.cs` (both CREATE TABLEs + all indexes)
-- [ ] Add both tables to the initial schema DDL in each driver's `TableQueries.cs`
-- [ ] Create migration scripts:
+- [x] Implement for SQLite in `src/Armada.Core/Database/Sqlite/Implementations/PipelineMethods.cs`
+- [x] Implement for MySQL in `src/Armada.Core/Database/Mysql/Implementations/PipelineMethods.cs`
+- [x] Implement for PostgreSQL in `src/Armada.Core/Database/Postgresql/Implementations/PipelineMethods.cs`
+- [x] Implement for SQL Server in `src/Armada.Core/Database/SqlServer/Implementations/PipelineMethods.cs`
+- [x] Add in-code `SchemaMigration` entry in each driver's `TableQueries.cs` (both CREATE TABLEs + all indexes)
+- [x] Add both tables to the initial schema DDL in each driver's `TableQueries.cs`
+- [x] Create migration scripts:
   - `migrations/migrate_add_pipelines.sh`
   - `migrations/migrate_add_pipelines.bat`
   - Must create both tables and all indexes
-- [ ] Wire into `DatabaseDriver` as `Pipelines` property
+- [x] Wire into `DatabaseDriver` as `Pipelines` property
 
 ### 3.3 Built-in Pipeline Seeding
 
@@ -378,10 +378,10 @@ CREATE INDEX idx_vessels_default_pipeline ON vessels(default_pipeline_id);
 - [ ] Add `DefaultPipelineId` (string?, nullable, `ppl_` prefix) to `Vessel` model
   - Vessel setting overrides fleet setting
   - `null` means use `WorkerOnly` for backward compatibility
-- [ ] Add in-code `SchemaMigration` entry in each driver's `TableQueries.cs` (ALTER TABLEs + indexes)
-- [ ] Create migration scripts:
-  - `migrations/migrate_add_default_pipeline.sh`
-  - `migrations/migrate_add_default_pipeline.bat`
+- [x] Add in-code `SchemaMigration` entry in each driver's `TableQueries.cs` (ALTER TABLEs + indexes)
+  - Note: combined into migration 23 (pipelines) rather than separate migration 24
+- [x] Create migration scripts:
+  - Note: combined into `migrations/migrate_add_pipelines.sh/.bat` rather than separate scripts
 - [ ] Update `McpFleetTools` and `McpVesselTools` to expose `defaultPipelineId`
 
 ### 3.5 Dispatch Pipeline Override
@@ -420,10 +420,10 @@ CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);
 
 - [ ] Add `DependsOnMissionId` (string?, nullable) to `Mission` model
   - When set, this mission cannot be assigned until the dependency mission reaches a terminal success state
-- [ ] Add in-code `SchemaMigration` entry in each driver's `TableQueries.cs` (ALTER TABLE + index)
-- [ ] Create migration scripts:
-  - `migrations/migrate_add_mission_dependency.sh`
-  - `migrations/migrate_add_mission_dependency.bat`
+- [x] Add in-code `SchemaMigration` entry in each driver's `TableQueries.cs` (ALTER TABLE + index)
+  - Note: combined into migration 22 (mission persona) rather than separate migration 25
+- [x] Create migration scripts:
+  - Note: combined into `migrations/migrate_add_mission_persona.sh/.bat` rather than separate scripts
 - [ ] Admiral health check / assignment loop: skip missions whose dependency is not yet satisfied
 
 ### 4.3 Stage Handoff
@@ -503,10 +503,11 @@ CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);
 - [ ] Create `src/Armada.Dashboard/src/pages/PromptTemplates.tsx` -- list view grouped by category
 - [ ] Create `src/Armada.Dashboard/src/pages/PromptTemplateDetail.tsx` -- edit view
   - Full-height text editor for template content
-  - Show available placeholders for the selected template
+  - **Parameter reference panel**: display all available `{Placeholder}` parameters for the template's category, with name, source field, and a description of how/when each is populated. Group by context (Mission, Vessel, Captain, Pipeline, System). This panel should be always visible alongside the editor so the user knows exactly what variables are available and what they resolve to at runtime.
   - "Reset to Default" button for built-in templates
-  - Preview pane showing rendered output with sample data
+  - Preview pane showing rendered output with sample data (populate placeholders with realistic example values)
   - Show built-in badge, prevent deletion of built-in templates (allow content override)
+  - Syntax highlighting or visual distinction for `{Placeholder}` tokens within the editor
 - [ ] Add navigation entry in sidebar/header
 
 ### 6.3 Pipeline Management Page
