@@ -69,6 +69,21 @@ namespace Armada.Core.Database
         /// </summary>
         public ICredentialMethods Credentials { get; protected set; } = null!;
 
+        /// <summary>
+        /// Prompt template operations.
+        /// </summary>
+        public IPromptTemplateMethods PromptTemplates { get; protected set; } = null!;
+
+        /// <summary>
+        /// Persona operations.
+        /// </summary>
+        public IPersonaMethods Personas { get; protected set; } = null!;
+
+        /// <summary>
+        /// Pipeline operations.
+        /// </summary>
+        public IPipelineMethods Pipelines { get; protected set; } = null!;
+
         #endregion
 
         #region Constructors-and-Factories

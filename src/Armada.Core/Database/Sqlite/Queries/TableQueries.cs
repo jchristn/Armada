@@ -656,6 +656,83 @@ namespace Armada.Core.Database.Sqlite.Queries
                 ),
                 new SchemaMigration(18, "Add system_instructions to captains",
                     @"ALTER TABLE captains ADD COLUMN system_instructions TEXT;"
+                ),
+                new SchemaMigration(19, "Add prompt_templates table",
+                    @"CREATE TABLE IF NOT EXISTS prompt_templates (
+                        id TEXT PRIMARY KEY,
+                        tenant_id TEXT,
+                        name TEXT NOT NULL,
+                        description TEXT,
+                        category TEXT NOT NULL DEFAULT 'mission',
+                        content TEXT NOT NULL,
+                        is_built_in INTEGER NOT NULL DEFAULT 0,
+                        active INTEGER NOT NULL DEFAULT 1,
+                        created_utc TEXT NOT NULL,
+                        last_update_utc TEXT NOT NULL,
+                        FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+                    );",
+                    @"CREATE UNIQUE INDEX IF NOT EXISTS idx_prompt_templates_tenant_name ON prompt_templates(tenant_id, name);",
+                    @"CREATE INDEX IF NOT EXISTS idx_prompt_templates_category ON prompt_templates(category);",
+                    @"CREATE INDEX IF NOT EXISTS idx_prompt_templates_active ON prompt_templates(active);"
+                ),
+                new SchemaMigration(20, "Add personas table",
+                    @"CREATE TABLE IF NOT EXISTS personas (
+                        id TEXT PRIMARY KEY,
+                        tenant_id TEXT,
+                        name TEXT NOT NULL,
+                        description TEXT,
+                        prompt_template_name TEXT NOT NULL,
+                        is_built_in INTEGER NOT NULL DEFAULT 0,
+                        active INTEGER NOT NULL DEFAULT 1,
+                        created_utc TEXT NOT NULL,
+                        last_update_utc TEXT NOT NULL,
+                        FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+                    );",
+                    @"CREATE UNIQUE INDEX IF NOT EXISTS idx_personas_tenant_name ON personas(tenant_id, name);",
+                    @"CREATE INDEX IF NOT EXISTS idx_personas_active ON personas(active);",
+                    @"CREATE INDEX IF NOT EXISTS idx_personas_prompt_template ON personas(prompt_template_name);"
+                ),
+                new SchemaMigration(21, "Add captain persona fields",
+                    @"ALTER TABLE captains ADD COLUMN allowed_personas TEXT;",
+                    @"ALTER TABLE captains ADD COLUMN preferred_persona TEXT;",
+                    @"CREATE INDEX IF NOT EXISTS idx_captains_preferred_persona ON captains(preferred_persona);"
+                ),
+                new SchemaMigration(22, "Add mission persona and dependency fields",
+                    @"ALTER TABLE missions ADD COLUMN persona TEXT;",
+                    @"ALTER TABLE missions ADD COLUMN depends_on_mission_id TEXT;",
+                    @"CREATE INDEX IF NOT EXISTS idx_missions_persona ON missions(persona);",
+                    @"CREATE INDEX IF NOT EXISTS idx_missions_depends_on ON missions(depends_on_mission_id);"
+                ),
+                new SchemaMigration(23, "Add pipelines and pipeline_stages tables",
+                    @"CREATE TABLE IF NOT EXISTS pipelines (
+                        id TEXT PRIMARY KEY,
+                        tenant_id TEXT,
+                        name TEXT NOT NULL,
+                        description TEXT,
+                        is_built_in INTEGER NOT NULL DEFAULT 0,
+                        active INTEGER NOT NULL DEFAULT 1,
+                        created_utc TEXT NOT NULL,
+                        last_update_utc TEXT NOT NULL,
+                        FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS pipeline_stages (
+                        id TEXT PRIMARY KEY,
+                        pipeline_id TEXT NOT NULL,
+                        stage_order INTEGER NOT NULL,
+                        persona_name TEXT NOT NULL,
+                        is_optional INTEGER NOT NULL DEFAULT 0,
+                        description TEXT,
+                        FOREIGN KEY (pipeline_id) REFERENCES pipelines(id) ON DELETE CASCADE
+                    );",
+                    @"CREATE UNIQUE INDEX IF NOT EXISTS idx_pipelines_tenant_name ON pipelines(tenant_id, name);",
+                    @"CREATE INDEX IF NOT EXISTS idx_pipelines_active ON pipelines(active);",
+                    @"CREATE INDEX IF NOT EXISTS idx_pipeline_stages_pipeline ON pipeline_stages(pipeline_id);",
+                    @"CREATE UNIQUE INDEX IF NOT EXISTS idx_pipeline_stages_order ON pipeline_stages(pipeline_id, stage_order);",
+                    @"CREATE INDEX IF NOT EXISTS idx_pipeline_stages_persona ON pipeline_stages(persona_name);",
+                    @"ALTER TABLE fleets ADD COLUMN default_pipeline_id TEXT;",
+                    @"ALTER TABLE vessels ADD COLUMN default_pipeline_id TEXT;",
+                    @"CREATE INDEX IF NOT EXISTS idx_fleets_default_pipeline ON fleets(default_pipeline_id);",
+                    @"CREATE INDEX IF NOT EXISTS idx_vessels_default_pipeline ON vessels(default_pipeline_id);"
                 )
             };
         }

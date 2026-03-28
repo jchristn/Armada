@@ -62,6 +62,9 @@ namespace Armada.Core.Database.Mysql
             Tenants = new TenantMethods(_ConnectionString);
             Users = new UserMethods(_ConnectionString);
             Credentials = new CredentialMethods(_ConnectionString);
+            PromptTemplates = new PromptTemplateMethods(_ConnectionString);
+            Personas = new PersonaMethods(_ConnectionString);
+            Pipelines = new PipelineMethods(_ConnectionString);
         }
 
         #endregion
@@ -375,6 +378,31 @@ namespace Armada.Core.Database.Mysql
                     8,
                     "Add system_instructions to captains",
                     TableQueries.MigrationV8Statements
+                ),
+                new SchemaMigration(
+                    9,
+                    "Add prompt_templates table",
+                    TableQueries.MigrationV9Statements
+                ),
+                new SchemaMigration(
+                    10,
+                    "Add personas table",
+                    TableQueries.MigrationV10Statements
+                ),
+                new SchemaMigration(
+                    11,
+                    "Add captain persona fields",
+                    TableQueries.MigrationV11Statements
+                ),
+                new SchemaMigration(
+                    12,
+                    "Add mission persona and dependency fields",
+                    TableQueries.MigrationV12Statements
+                ),
+                new SchemaMigration(
+                    13,
+                    "Add pipelines and pipeline_stages tables",
+                    TableQueries.MigrationV13Statements
                 )
             };
         }
