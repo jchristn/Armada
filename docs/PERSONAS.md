@@ -654,7 +654,7 @@ CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);
 
 ### 9.2 REST_API.md
 
-- [ ] Add sections for prompt template, persona, and pipeline REST endpoints
+- [x] Add sections for prompt template, persona, and pipeline REST endpoints
 
 ### 9.3 README.md
 
