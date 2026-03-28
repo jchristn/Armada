@@ -60,6 +60,25 @@ namespace Armada.Core.Services.Interfaces
             CancellationToken token = default);
 
         /// <summary>
+        /// Dispatch a new voyage with pipeline support.
+        /// When a pipelineId is provided, each mission is wrapped in the pipeline's persona stages.
+        /// </summary>
+        /// <param name="title">Voyage title.</param>
+        /// <param name="description">Voyage description.</param>
+        /// <param name="vesselId">Target vessel identifier.</param>
+        /// <param name="missionDescriptions">List of mission title/description pairs.</param>
+        /// <param name="pipelineId">Optional pipeline ID. Resolved: explicit > vessel default > fleet default > WorkerOnly.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The created voyage.</returns>
+        Task<Voyage> DispatchVoyageAsync(
+            string title,
+            string description,
+            string vesselId,
+            List<MissionDescription> missionDescriptions,
+            string? pipelineId,
+            CancellationToken token = default);
+
+        /// <summary>
         /// Dispatch a single mission.
         /// </summary>
         /// <param name="mission">Mission to dispatch.</param>

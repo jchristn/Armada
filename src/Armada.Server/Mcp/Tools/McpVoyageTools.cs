@@ -67,9 +67,9 @@ namespace Armada.Server.Mcp.Tools
                     string vesselId = request.VesselId;
                     List<MissionDescription> missions = request.Missions;
 
-                    // TODO: DispatchVoyageAsync creates voyage/missions internally; tenant scoping
-                    // will require a tenantId parameter or overload in a future phase.
-                    Voyage voyage = await admiral.DispatchVoyageAsync(title, description, vesselId, missions).ConfigureAwait(false);
+                    // Use pipeline-aware dispatch if pipelineId is provided
+                    string? pipelineId = request.PipelineId;
+                    Voyage voyage = await admiral.DispatchVoyageAsync(title, description, vesselId, missions, pipelineId).ConfigureAwait(false);
                     return (object)voyage;
                 });
 

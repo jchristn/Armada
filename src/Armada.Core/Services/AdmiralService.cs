@@ -1,5 +1,6 @@
 namespace Armada.Core.Services
 {
+    using System.Linq;
     using SyslogLogging;
     using Armada.Core.Database;
     using Armada.Core.Enums;
@@ -144,6 +145,91 @@ namespace Armada.Core.Services
             }
 
             // Update voyage status - only transition to InProgress if at least one mission was assigned
+            List<Mission> voyageMissions = await _Database.Missions.EnumerateByVoyageAsync(voyage.Id, token).ConfigureAwait(false);
+            bool anyAssigned = voyageMissions.Any(m =>
+                m.Status == MissionStatusEnum.Assigned ||
+                m.Status == MissionStatusEnum.InProgress);
+
+            if (anyAssigned)
+            {
+                voyage.Status = VoyageStatusEnum.InProgress;
+            }
+
+            voyage.LastUpdateUtc = DateTime.UtcNow;
+            await _Database.Voyages.UpdateAsync(voyage, token).ConfigureAwait(false);
+
+            return voyage;
+        }
+
+        /// <inheritdoc />
+        public async Task<Voyage> DispatchVoyageAsync(
+            string title,
+            string description,
+            string vesselId,
+            List<MissionDescription> missionDescriptions,
+            string? pipelineId,
+            CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(title)) throw new ArgumentNullException(nameof(title));
+            if (String.IsNullOrEmpty(vesselId)) throw new ArgumentNullException(nameof(vesselId));
+            if (missionDescriptions == null || missionDescriptions.Count == 0)
+                throw new ArgumentException("At least one mission is required", nameof(missionDescriptions));
+
+            // Verify vessel exists
+            Vessel? vessel = await _Database.Vessels.ReadAsync(vesselId, token).ConfigureAwait(false);
+            if (vessel == null) throw new InvalidOperationException("Vessel not found: " + vesselId);
+
+            // Resolve pipeline: explicit > vessel default > fleet default > WorkerOnly
+            Pipeline? pipeline = await ResolvePipelineAsync(pipelineId, vessel, token).ConfigureAwait(false);
+
+            // If pipeline is single-stage Worker (or null), use the standard dispatch path
+            if (pipeline == null || (pipeline.Stages.Count == 1 && pipeline.Stages[0].PersonaName == "Worker"))
+            {
+                return await DispatchVoyageAsync(title, description, vesselId, missionDescriptions, token).ConfigureAwait(false);
+            }
+
+            // Multi-stage pipeline: create voyage, then for each mission create a chain of persona stages
+            Voyage voyage = new Voyage(title, description);
+            voyage.TenantId = vessel.TenantId;
+            voyage.UserId = vessel.UserId;
+            voyage.Status = VoyageStatusEnum.Open;
+            voyage = await _Database.Voyages.CreateAsync(voyage, token).ConfigureAwait(false);
+            _Logging.Info(_Header + "created pipeline voyage " + voyage.Id + ": " + title + " (pipeline: " + pipeline.Name + ")");
+
+            foreach (MissionDescription md in missionDescriptions)
+            {
+                string? previousMissionId = null;
+
+                foreach (PipelineStage stage in pipeline.Stages.OrderBy(s => s.Order))
+                {
+                    Mission mission = new Mission(
+                        md.Title + " [" + stage.PersonaName + "]",
+                        md.Description);
+                    mission.TenantId = vessel.TenantId;
+                    mission.UserId = vessel.UserId;
+                    mission.VoyageId = voyage.Id;
+                    mission.VesselId = vesselId;
+                    mission.Persona = stage.PersonaName;
+                    mission.DependsOnMissionId = previousMissionId;
+
+                    // Only the first stage starts as Pending; dependent stages also start as Pending
+                    // but won't be assigned until their dependency completes
+                    mission = await _Database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
+                    _Logging.Info(_Header + "created pipeline mission " + mission.Id + ": " + mission.Title +
+                        " (stage " + stage.Order + "/" + pipeline.Stages.Count + ", persona: " + stage.PersonaName +
+                        (previousMissionId != null ? ", depends on: " + previousMissionId : "") + ")");
+
+                    // Try to auto-assign only if no dependency (first stage)
+                    if (previousMissionId == null)
+                    {
+                        await _Missions.TryAssignAsync(mission, vessel, token).ConfigureAwait(false);
+                    }
+
+                    previousMissionId = mission.Id;
+                }
+            }
+
+            // Update voyage status
             List<Mission> voyageMissions = await _Database.Missions.EnumerateByVoyageAsync(voyage.Id, token).ConfigureAwait(false);
             bool anyAssigned = voyageMissions.Any(m =>
                 m.Status == MissionStatusEnum.Assigned ||
@@ -501,6 +587,44 @@ namespace Armada.Core.Services
         #endregion
 
         #region Private-Methods
+
+        /// <summary>
+        /// Resolve which pipeline to use for a dispatch.
+        /// Resolution order: explicit pipelineId > vessel default > fleet default > null (WorkerOnly).
+        /// </summary>
+        private async Task<Pipeline?> ResolvePipelineAsync(string? pipelineId, Vessel vessel, CancellationToken token)
+        {
+            // Explicit pipeline ID takes priority
+            if (!String.IsNullOrEmpty(pipelineId))
+            {
+                Pipeline? explicit_ = await _Database.Pipelines.ReadAsync(pipelineId, token).ConfigureAwait(false);
+                if (explicit_ != null) return explicit_;
+
+                // Try by name if not found by ID
+                explicit_ = await _Database.Pipelines.ReadByNameAsync(pipelineId, token).ConfigureAwait(false);
+                if (explicit_ != null) return explicit_;
+            }
+
+            // Vessel default
+            if (!String.IsNullOrEmpty(vessel.DefaultPipelineId))
+            {
+                Pipeline? vesselPipeline = await _Database.Pipelines.ReadAsync(vessel.DefaultPipelineId, token).ConfigureAwait(false);
+                if (vesselPipeline != null) return vesselPipeline;
+            }
+
+            // Fleet default
+            if (!String.IsNullOrEmpty(vessel.FleetId))
+            {
+                Fleet? fleet = await _Database.Fleets.ReadAsync(vessel.FleetId, token).ConfigureAwait(false);
+                if (fleet != null && !String.IsNullOrEmpty(fleet.DefaultPipelineId))
+                {
+                    Pipeline? fleetPipeline = await _Database.Pipelines.ReadAsync(fleet.DefaultPipelineId, token).ConfigureAwait(false);
+                    if (fleetPipeline != null) return fleetPipeline;
+                }
+            }
+
+            return null;
+        }
 
         /// <summary>
         /// Process health check for a single captain. Isolated so exceptions in one captain

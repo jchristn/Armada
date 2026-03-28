@@ -431,7 +431,7 @@ CREATE INDEX idx_vessels_default_pipeline ON vessels(default_pipeline_id);
 
 ### 4.1 Pipeline-Aware Dispatch
 
-- [ ] When `armada_dispatch` is called:
+- [x] When `armada_dispatch` is called:
   1. Resolve pipeline: explicit param > vessel default > fleet default > `WorkerOnly`
   2. For a single-stage pipeline (e.g. `WorkerOnly`), behave exactly as today
   3. For multi-stage pipelines, create a voyage containing one mission per stage
