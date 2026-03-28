@@ -66,7 +66,8 @@ namespace Armada.Helm.Commands
             IGitService gitService = git;
             IMergeQueueService mergeQueueService = new MergeQueueService(logging, database, armadaSettings, git);
             LandingService landingService = new LandingService(logging, database, armadaSettings, git);
-            McpToolRegistrar.RegisterAll(mcpServer.RegisterTool, database, admiral, armadaSettings, gitService, mergeQueueService, dockService, landingService);
+            IPromptTemplateService promptTemplateService = new PromptTemplateService(database, logging);
+            McpToolRegistrar.RegisterAll(mcpServer.RegisterTool, database, admiral, armadaSettings, gitService, mergeQueueService, dockService, landingService, templateService: promptTemplateService);
 
             // Run until stdin closes or process is killed
             using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

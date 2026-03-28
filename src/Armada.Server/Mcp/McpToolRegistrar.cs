@@ -44,6 +44,7 @@ namespace Armada.Server.Mcp
         /// <param name="landingService">Landing service for retry landing operations.</param>
         /// <param name="onStop">Callback to stop the server.</param>
         /// <param name="onStopCaptain">Callback to kill a captain's agent process by captain ID. Called before RecallCaptainAsync.</param>
+        /// <param name="templateService">Prompt template service for template operations.</param>
         public static void RegisterAll(
             RegisterToolDelegate register,
             DatabaseDriver database,
@@ -54,7 +55,8 @@ namespace Armada.Server.Mcp
             IDockService? dockService = null,
             ILandingService? landingService = null,
             Action? onStop = null,
-            Func<string, Task>? onStopCaptain = null)
+            Func<string, Task>? onStopCaptain = null,
+            IPromptTemplateService? templateService = null)
         {
             McpStatusTools.Register(register, admiral, onStop);
             McpEnumerateTools.Register(register, database, mergeQueue);
@@ -67,6 +69,9 @@ namespace Armada.Server.Mcp
             McpEventTools.Register(register, database);
             McpDockTools.Register(register, database, dockService);
             if (mergeQueue != null) McpMergeQueueTools.Register(register, mergeQueue);
+            if (templateService != null) McpPromptTemplateTools.Register(register, database, templateService);
+            McpPersonaTools.Register(register, database);
+            McpPipelineTools.Register(register, database);
             if (settings != null) McpBackupTools.Register(register, database, settings);
         }
     }

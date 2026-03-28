@@ -505,7 +505,8 @@ namespace Armada.Server
                     Captain? captain = await _Database.Captains.ReadAsync(captainId).ConfigureAwait(false);
                     if (captain != null)
                         await _AgentLifecycle.HandleStopAgentAsync(captain).ConfigureAwait(false);
-                });
+                },
+                _PromptTemplateService);
         }
 
         private async Task EmitEventAsync(string eventType, string message,
