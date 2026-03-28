@@ -134,6 +134,7 @@ export default function LoginFlow() {
               id="tenant-select"
               value={selectedTenant?.id ?? ''}
               onChange={e => handleTenantSelect(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && selectedTenant) { e.preventDefault(); handleTenantContinue(); } }}
               required
               autoFocus
             >
