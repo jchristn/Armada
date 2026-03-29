@@ -101,6 +101,30 @@ namespace Armada.Server
             runtime.OnOutputReceived += HandleAgentHeartbeat;
             runtime.OnProcessExited += HandleAgentProcessExited;
 
+            // Build persona preamble for the launch prompt
+            string personaPreamble = "";
+            if (!String.IsNullOrEmpty(mission.Persona))
+            {
+                switch (mission.Persona)
+                {
+                    case "Architect":
+                        personaPreamble = "You are an Architect agent. Analyze the codebase and decompose the goal into right-sized missions using [ARMADA:MISSION] markers.\n\n";
+                        break;
+                    case "Worker":
+                        personaPreamble = "You are a Worker agent. Implement the code changes described below.\n\n";
+                        break;
+                    case "TestEngineer":
+                        personaPreamble = "You are a TestEngineer agent. Write tests for the code changes described in the prior stage diff below.\n\n";
+                        break;
+                    case "Judge":
+                        personaPreamble = "You are a Judge agent. Review the diff below for correctness, completeness, and style. Produce a verdict: PASS, FAIL, or NEEDS_REVISION.\n\n";
+                        break;
+                    default:
+                        personaPreamble = "You are a " + mission.Persona + " agent.\n\n";
+                        break;
+                }
+            }
+
             // Resolve launch prompt from template service or use hardcoded default
             string prompt;
             if (_PromptTemplateService != null)
@@ -111,11 +135,11 @@ namespace Armada.Server
                     ["MissionDescription"] = mission.Description ?? ""
                 };
                 string rendered = await _PromptTemplateService.RenderAsync("agent.launch_prompt", promptParams).ConfigureAwait(false);
-                prompt = !String.IsNullOrEmpty(rendered) ? rendered : "Mission: " + mission.Title + "\n\n" + (mission.Description ?? "");
+                prompt = personaPreamble + (!String.IsNullOrEmpty(rendered) ? rendered : "Mission: " + mission.Title + "\n\n" + (mission.Description ?? ""));
             }
             else
             {
-                prompt = "Mission: " + mission.Title + "\n\n" + (mission.Description ?? "");
+                prompt = personaPreamble + "Mission: " + mission.Title + "\n\n" + (mission.Description ?? "");
             }
 
             if (_Settings.MessageTemplates.EnableCommitMetadata)
