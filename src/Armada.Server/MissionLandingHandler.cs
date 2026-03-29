@@ -319,6 +319,35 @@ namespace Armada.Server
                 }
                 else if (vessel != null && !String.IsNullOrEmpty(vessel.WorkingDirectory) && !String.IsNullOrEmpty(vessel.LocalPath))
                 {
+                    // Check if the mission actually produced mergeable changes.
+                    // Pipeline stages like Architect may complete without code changes (they output
+                    // mission markers to stdout instead). Skip merge if no changes were made.
+                    bool hasChanges = true;
+                    if (!String.IsNullOrEmpty(dock.BranchName) && !String.IsNullOrEmpty(vessel.LocalPath))
+                    {
+                        try
+                        {
+                            string diff = await _Git.DiffAsync(dock.WorktreePath ?? "", vessel.DefaultBranch).ConfigureAwait(false);
+                            if (String.IsNullOrEmpty(diff) || diff.Trim().Length == 0)
+                            {
+                                hasChanges = false;
+                                _Logging.Info(_Header + "mission " + mission.Id + " has no code changes to merge -- marking complete without merge");
+                            }
+                        }
+                        catch
+                        {
+                            // If diff check fails, proceed with merge attempt
+                        }
+                    }
+
+                    if (!hasChanges)
+                    {
+                        // No code changes -- skip merge and mark as complete
+                        landingAttempted = true;
+                        landingSucceeded = true;
+                    }
+                    else
+                    {
                     // Local merge flow: fetch captain's branch from bare repo and merge into user's working directory
                     landingAttempted = true;
                     try
@@ -392,6 +421,7 @@ namespace Armada.Server
                         landingSucceeded = false;
                         landingFailureReason = "Error merging locally: " + ex.Message;
                     }
+                    } // end hasChanges else
                 }
                 else if (landingModeIsMergeQueue)
                 {
