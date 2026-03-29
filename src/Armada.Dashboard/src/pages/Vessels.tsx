@@ -271,7 +271,7 @@ export default function Vessels() {
       {/* Create/Edit Modal */}
       {showForm && (
         <div className="modal-overlay" onClick={() => setShowForm(false)}>
-          <form className="modal" style={{ maxWidth: '95%', width: '95%', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()} onSubmit={handleSubmit}>
+          <form className="modal" style={{ width: '95vw', maxWidth: '95vw', height: '95vh', maxHeight: '95vh', overflowY: 'auto', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()} onSubmit={handleSubmit}>
             <h3>{editing ? 'Edit Vessel' : 'Create Vessel'}</h3>
 
             {/* Row 1: Name + Fleet + Repo URL (3 cols) */}
@@ -324,29 +324,29 @@ export default function Vessels() {
 
             {/* Checkboxes */}
             <div style={{ display: 'flex', gap: '2rem', marginBottom: '0.5rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 0 }} title="When enabled, multiple missions can run on this vessel at the same time.">
-                <input type="checkbox" checked={form.allowConcurrentMissions} onChange={e => setForm({ ...form, allowConcurrentMissions: e.target.checked })} style={{ width: 'auto' }} />
-                Allow Concurrent Missions
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', marginBottom: 0, lineHeight: 1, cursor: 'pointer' }} title="When enabled, multiple missions can run on this vessel at the same time.">
+                <input type="checkbox" checked={form.allowConcurrentMissions} onChange={e => setForm({ ...form, allowConcurrentMissions: e.target.checked })} style={{ width: 'auto', margin: 0, verticalAlign: 'middle' }} />
+                <span style={{ verticalAlign: 'middle' }}>Allow Concurrent Missions</span>
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 0 }} title="When enabled, AI agents accumulate key knowledge about this repository during missions.">
-                <input type="checkbox" checked={form.enableModelContext} onChange={e => setForm({ ...form, enableModelContext: e.target.checked })} style={{ width: 'auto' }} />
-                Enable Model Context
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', marginBottom: 0, lineHeight: 1, cursor: 'pointer' }} title="When enabled, AI agents accumulate key knowledge about this repository during missions.">
+                <input type="checkbox" checked={form.enableModelContext} onChange={e => setForm({ ...form, enableModelContext: e.target.checked })} style={{ width: 'auto', margin: 0, verticalAlign: 'middle' }} />
+                <span style={{ verticalAlign: 'middle' }}>Enable Model Context</span>
               </label>
             </div>
 
-            {/* Context textareas always 3 cols */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 1.5rem' }}>
-              <label>
+            {/* Context textareas always 3 cols -- fills remaining vertical space */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 1.5rem', flex: 1, minHeight: 0 }}>
+              <label style={{ display: 'flex', flexDirection: 'column' }}>
                 Project Context
-                <textarea value={form.projectContext} onChange={e => setForm({ ...form, projectContext: e.target.value })} rows={8} />
+                <textarea value={form.projectContext} onChange={e => setForm({ ...form, projectContext: e.target.value })} style={{ flex: 1, minHeight: '150px', resize: 'none' }} />
               </label>
-              <label>
+              <label style={{ display: 'flex', flexDirection: 'column' }}>
                 Style Guide
-                <textarea value={form.styleGuide} onChange={e => setForm({ ...form, styleGuide: e.target.value })} rows={8} />
+                <textarea value={form.styleGuide} onChange={e => setForm({ ...form, styleGuide: e.target.value })} style={{ flex: 1, minHeight: '150px', resize: 'none' }} />
               </label>
-              <label>
+              <label style={{ display: 'flex', flexDirection: 'column' }}>
                 Model Context
-                <textarea value={form.modelContext} onChange={e => setForm({ ...form, modelContext: e.target.value })} rows={8} placeholder={form.enableModelContext ? "Agent-accumulated context..." : "Enable Model Context to use"} disabled={!form.enableModelContext} style={!form.enableModelContext ? { opacity: 0.4 } : undefined} />
+                <textarea value={form.modelContext} onChange={e => setForm({ ...form, modelContext: e.target.value })} placeholder={form.enableModelContext ? "Agent-accumulated context..." : "Enable Model Context to use"} disabled={!form.enableModelContext} style={{ flex: 1, minHeight: '150px', resize: 'none', ...(form.enableModelContext ? {} : { opacity: 0.4 }) }} />
               </label>
             </div>
 
