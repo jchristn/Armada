@@ -136,6 +136,15 @@ namespace Armada.Server.Routes
                     }
                 }
 
+                // Resolve pipeline: explicit ID > name lookup > null (falls through to vessel/fleet default)
+                string? pipelineId = voyageReq.PipelineId;
+                if (String.IsNullOrEmpty(pipelineId) && !String.IsNullOrEmpty(voyageReq.Pipeline))
+                {
+                    Pipeline? namedPipeline = await _database.Pipelines.ReadByNameAsync(voyageReq.Pipeline).ConfigureAwait(false);
+                    if (namedPipeline != null) pipelineId = namedPipeline.Id;
+                    else { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Pipeline not found: " + voyageReq.Pipeline }; }
+                }
+
                 Voyage voyage;
                 if (String.IsNullOrEmpty(voyageReq.VesselId) || missions.Count == 0)
                 {
@@ -149,7 +158,7 @@ namespace Armada.Server.Routes
                 else
                 {
                     voyage = await _admiral.DispatchVoyageAsync(
-                        voyageReq.Title, voyageReq.Description, voyageReq.VesselId, missions).ConfigureAwait(false);
+                        voyageReq.Title, voyageReq.Description, voyageReq.VesselId, missions, pipelineId).ConfigureAwait(false);
                 }
 
                 req.Http.Response.StatusCode = 201;

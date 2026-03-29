@@ -45,6 +45,16 @@ namespace Armada.Server
         public string VesselId { get; set; } = "";
 
         /// <summary>
+        /// Pipeline ID to use for this voyage (overrides vessel/fleet default).
+        /// </summary>
+        public string? PipelineId { get; set; }
+
+        /// <summary>
+        /// Pipeline name to use (convenience alias for PipelineId -- resolves by name).
+        /// </summary>
+        public string? Pipeline { get; set; }
+
+        /// <summary>
         /// List of missions to create.
         /// </summary>
         public List<MissionRequest> Missions { get; set; } = new List<MissionRequest>();

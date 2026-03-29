@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { listVessels, listVoyages, createMission, createVoyage } from '../api/client';
-import type { Vessel, Voyage } from '../types/models';
+import { listVessels, listVoyages, listPipelines, createMission, createVoyage } from '../api/client';
+import type { Vessel, Voyage, Pipeline } from '../types/models';
 
 /**
  * Parse a natural-language prompt into discrete tasks.
@@ -59,6 +59,8 @@ export default function Dispatch() {
   // Shared data
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [voyages, setVoyages] = useState<Voyage[]>([]);
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
+  const [selectedPipeline, setSelectedPipeline] = useState('');
 
   // Quick mode state
   const [quick, setQuick] = useState<QuickDispatchState>({ vesselId: '', prompt: '' });
@@ -83,9 +85,11 @@ export default function Dispatch() {
     Promise.all([
       listVessels({ pageSize: 9999 }).catch(() => null),
       listVoyages({ pageSize: 9999 }).catch(() => null),
-    ]).then(([vRes, voyRes]) => {
+      listPipelines({ pageSize: 9999 }).catch(() => null),
+    ]).then(([vRes, voyRes, pRes]) => {
       if (vRes) setVessels(vRes.objects);
       if (voyRes) setVoyages(voyRes.objects.filter((v) => v.status === 'Open' || v.status === 'InProgress'));
+      if (pRes) setPipelines(pRes.objects);
     });
   }, []);
 
@@ -119,7 +123,7 @@ export default function Dispatch() {
         title: t,
         description: t,
       }));
-      const voyage = await createVoyage({ title, missions });
+      const voyage = await createVoyage({ title, missions, ...(selectedPipeline ? { pipeline: selectedPipeline } : {}) });
       setQuickResult({
         ok: true,
         message: `Dispatched 1 voyage with ${missions.length} mission${missions.length !== 1 ? 's' : ''}`,
@@ -216,6 +220,21 @@ export default function Dispatch() {
                 {vessels.map((v) => (
                   <option key={v.id} value={v.id}>
                     {v.name} ({v.id})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Pipeline</label>
+              <select
+                value={selectedPipeline}
+                onChange={(e) => setSelectedPipeline(e.target.value)}
+                title="Override the default pipeline for this dispatch"
+              >
+                <option value="">Default (vessel/fleet setting)</option>
+                {pipelines.map((p) => (
+                  <option key={p.id} value={p.name}>
+                    {p.name} ({p.stages.map((s) => s.personaName).join(' -> ')})
                   </option>
                 ))}
               </select>

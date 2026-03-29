@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { listVessels, listFleets, listMissions, updateVessel, deleteVessel } from '../api/client';
-import type { Fleet, Vessel, Mission } from '../types/models';
+import { listVessels, listFleets, listMissions, listPipelines, updateVessel, deleteVessel } from '../api/client';
+import type { Fleet, Vessel, Mission, Pipeline } from '../types/models';
 import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
@@ -45,6 +45,7 @@ export default function VesselDetail() {
   const [vessel, setVessel] = useState<Vessel | null>(null);
   const [fleets, setFleets] = useState<Fleet[]>([]);
   const [missions, setMissions] = useState<Mission[]>([]);
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -68,12 +69,13 @@ export default function VesselDetail() {
     if (!id) return;
     try {
       setLoading(true);
-      const [vResult, fResult, mResult] = await Promise.all([listVessels({ pageSize: 9999 }), listFleets({ pageSize: 9999 }), listMissions({ pageSize: 9999 })]);
+      const [vResult, fResult, mResult, pResult] = await Promise.all([listVessels({ pageSize: 9999 }), listFleets({ pageSize: 9999 }), listMissions({ pageSize: 9999 }), listPipelines({ pageSize: 9999 })]);
       const found = vResult.objects.find(v => v.id === id);
       if (!found) { setError('Vessel not found.'); setLoading(false); return; }
       setVessel(found);
       setFleets(fResult.objects);
       setMissions(mResult.objects.filter(m => m.vesselId === id));
+      setPipelines(pResult.objects);
       setError('');
     } catch {
       setError('Failed to load vessel.');
@@ -185,7 +187,14 @@ export default function VesselDetail() {
               <textarea value={form.styleGuide} onChange={e => setForm({ ...form, styleGuide: e.target.value })} rows={4} />
               <span className="text-dim" style={{ fontSize: '0.8em' }}>{form.styleGuide.length} characters</span>
             </label>
-            <label>Default Pipeline ID<input value={form.defaultPipelineId} onChange={e => setForm({ ...form, defaultPipelineId: e.target.value })} placeholder="e.g., pip_abc123" /></label>
+            <label>Default Pipeline
+              <select value={form.defaultPipelineId} onChange={e => setForm({ ...form, defaultPipelineId: e.target.value })}>
+                <option value="">None (WorkerOnly)</option>
+                {pipelines.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </label>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input type="checkbox" checked={form.enableModelContext} onChange={e => setForm({ ...form, enableModelContext: e.target.checked })} style={{ width: 'auto' }} />
               Enable Model Context
@@ -239,7 +248,7 @@ export default function VesselDetail() {
         <div className="detail-field"><span className="detail-label">Allow Concurrent Missions</span><span>{vessel.allowConcurrentMissions ? 'Yes' : 'No'}</span></div>
         <div className="detail-field">
           <span className="detail-label">Default Pipeline</span>
-          <span className="mono">{vessel.defaultPipelineId || <span className="text-dim">None (WorkerOnly)</span>}</span>
+          <span>{pipelines.find(p => p.id === vessel.defaultPipelineId)?.name || vessel.defaultPipelineId || <span className="text-dim">None (WorkerOnly)</span>}</span>
         </div>
         <div className="detail-field"><span className="detail-label">Active</span><span>{vessel.active !== false ? 'Yes' : 'No'}</span></div>
         <div className="detail-field">
