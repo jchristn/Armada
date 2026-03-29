@@ -144,7 +144,9 @@ export default function MissionDetail() {
 
   const handleLogRefresh = useCallback(() => {
     if (logModal.missionId) fetchLog(logModal.missionId, logModal.lineCount);
-  }, [logModal.missionId, logModal.lineCount, fetchLog]);
+    // Also refresh mission status so the log viewer detects completion
+    loadMission();
+  }, [logModal.missionId, logModal.lineCount, fetchLog, loadMission]);
 
   const handleLogLineCountChange = useCallback((lines: number) => {
     setLogModal(l => ({ ...l, lineCount: lines }));

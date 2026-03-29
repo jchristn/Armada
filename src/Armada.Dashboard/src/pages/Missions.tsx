@@ -412,11 +412,6 @@ export default function Missions() {
                     </td>
                     <td>
                       <StatusBadge status={m.status} />
-                      {(m.status === 'LandingFailed' || m.status === 'Failed') && m.failureReason && (
-                        <span className="text-dim" style={{ fontSize: '0.75em', display: 'block', marginTop: '2px' }} title={m.failureReason}>
-                          {m.failureReason.length > 60 ? m.failureReason.substring(0, 60) + '...' : m.failureReason}
-                        </span>
-                      )}
                     </td>
                     <td>{m.priority}</td>
                     <td onClick={e => e.stopPropagation()}>
