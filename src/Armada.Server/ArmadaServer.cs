@@ -348,7 +348,7 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Vessels
-            new VesselRoutes(_Database, EmitEventAsync, _JsonOptions)
+            new VesselRoutes(_Database, EmitEventAsync, _JsonOptions, _Docks)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Voyages

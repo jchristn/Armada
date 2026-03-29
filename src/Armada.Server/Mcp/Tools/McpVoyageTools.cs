@@ -2,6 +2,7 @@ namespace Armada.Server.Mcp.Tools
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Linq;
     using System.Text.Json;
     using System.Threading.Tasks;
@@ -11,6 +12,7 @@ namespace Armada.Server.Mcp.Tools
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services.Interfaces;
+    using Armada.Core.Settings;
 
     /// <summary>
     /// Registers MCP tools for voyage operations (dispatch, status, cancel, purge).
@@ -29,7 +31,8 @@ namespace Armada.Server.Mcp.Tools
         /// <param name="register">Delegate to register each tool.</param>
         /// <param name="database">Database driver for voyage data access.</param>
         /// <param name="admiral">Admiral service for voyage orchestration.</param>
-        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IAdmiralService admiral)
+        /// <param name="settings">Optional settings for log/diff cleanup during purge.</param>
+        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IAdmiralService admiral, ArmadaSettings? settings = null)
         {
             register(
                 "armada_dispatch",
@@ -232,6 +235,7 @@ namespace Armada.Server.Mcp.Tools
 
                     foreach (Mission m in missions)
                     {
+                        await CleanupMissionResourcesAsync(m, database, settings).ConfigureAwait(false);
                         await database.Missions.DeleteAsync(m.Id).ConfigureAwait(false);
                     }
 
@@ -285,6 +289,7 @@ namespace Armada.Server.Mcp.Tools
                         }
                         foreach (Mission m in missions)
                         {
+                            await CleanupMissionResourcesAsync(m, database, settings).ConfigureAwait(false);
                             await database.Missions.DeleteAsync(m.Id).ConfigureAwait(false);
                         }
                         await database.Voyages.DeleteAsync(id).ConfigureAwait(false);
@@ -293,6 +298,52 @@ namespace Armada.Server.Mcp.Tools
                     result.ResolveStatus();
                     return (object)result;
                 });
+        }
+
+        /// <summary>
+        /// Cleans up filesystem resources associated with a mission (dock/worktree, log files, diff files).
+        /// Cleanup failures are silently caught to avoid blocking the mission delete.
+        /// </summary>
+        /// <param name="mission">The mission being deleted.</param>
+        /// <param name="database">Database driver.</param>
+        /// <param name="settings">Optional settings for log/diff paths.</param>
+        private static async Task CleanupMissionResourcesAsync(Mission mission, DatabaseDriver database, ArmadaSettings? settings)
+        {
+            // Clean up associated dock/worktree
+            if (!String.IsNullOrEmpty(mission.DockId))
+            {
+                try
+                {
+                    Dock? dock = await database.Docks.ReadAsync(mission.DockId).ConfigureAwait(false);
+                    if (dock != null)
+                    {
+                        if (!String.IsNullOrEmpty(dock.WorktreePath) && Directory.Exists(dock.WorktreePath))
+                        {
+                            try { Directory.Delete(dock.WorktreePath, true); }
+                            catch { }
+                        }
+                        await database.Docks.DeleteAsync(dock.Id).ConfigureAwait(false);
+                    }
+                }
+                catch { }
+            }
+
+            // Clean up log and diff files
+            if (settings != null)
+            {
+                try
+                {
+                    string logPath = Path.Combine(settings.LogDirectory, "missions", mission.Id + ".log");
+                    if (File.Exists(logPath)) File.Delete(logPath);
+                }
+                catch { }
+                try
+                {
+                    string diffPath = Path.Combine(settings.LogDirectory, "diffs", mission.Id + ".diff");
+                    if (File.Exists(diffPath)) File.Delete(diffPath);
+                }
+                catch { }
+            }
         }
     }
 }

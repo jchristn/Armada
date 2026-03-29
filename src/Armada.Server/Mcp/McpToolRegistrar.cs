@@ -61,8 +61,8 @@ namespace Armada.Server.Mcp
             McpStatusTools.Register(register, admiral, onStop);
             McpEnumerateTools.Register(register, database, mergeQueue);
             McpFleetTools.Register(register, database);
-            McpVesselTools.Register(register, database);
-            McpVoyageTools.Register(register, database, admiral);
+            McpVesselTools.Register(register, database, dockService);
+            McpVoyageTools.Register(register, database, admiral, settings);
             McpMissionTools.Register(register, database, admiral, settings, git, landingService);
             McpCaptainTools.Register(register, database, admiral, settings, onStopCaptain);
             McpSignalTools.Register(register, database);

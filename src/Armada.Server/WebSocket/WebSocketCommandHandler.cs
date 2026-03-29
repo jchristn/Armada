@@ -221,9 +221,55 @@ namespace Armada.Server.WebSocket
                     }
 
                 case "delete_vessel":
+                {
                     string delVesselId = command.Id ?? "";
+                    Vessel? delVessel = await _Database.Vessels.ReadAsync(delVesselId).ConfigureAwait(false);
+                    if (delVessel == null)
+                        return new { type = "command.error", action = "delete_vessel", error = "Vessel not found" };
+
+                    // Cancel active missions on this vessel
+                    try
+                    {
+                        List<Mission> delVesselMissions = await _Database.Missions.EnumerateByVesselAsync(delVesselId).ConfigureAwait(false);
+                        foreach (Mission dvm in delVesselMissions)
+                        {
+                            if (dvm.Status == MissionStatusEnum.Pending || dvm.Status == MissionStatusEnum.Assigned || dvm.Status == MissionStatusEnum.InProgress)
+                            {
+                                dvm.Status = MissionStatusEnum.Cancelled;
+                                dvm.CompletedUtc = DateTime.UtcNow;
+                                dvm.LastUpdateUtc = DateTime.UtcNow;
+                                await _Database.Missions.UpdateAsync(dvm).ConfigureAwait(false);
+                            }
+                        }
+                    }
+                    catch { }
+
+                    // Clean up docks/worktrees for this vessel
+                    try
+                    {
+                        List<Dock> delVesselDocks = await _Database.Docks.EnumerateByVesselAsync(delVesselId).ConfigureAwait(false);
+                        foreach (Dock dvd in delVesselDocks)
+                        {
+                            if (!String.IsNullOrEmpty(dvd.WorktreePath) && System.IO.Directory.Exists(dvd.WorktreePath))
+                            {
+                                try { System.IO.Directory.Delete(dvd.WorktreePath, true); }
+                                catch { }
+                            }
+                            await _Database.Docks.DeleteAsync(dvd.Id).ConfigureAwait(false);
+                        }
+                    }
+                    catch { }
+
+                    // Clean up bare repo
+                    if (!String.IsNullOrEmpty(delVessel.LocalPath) && System.IO.Directory.Exists(delVessel.LocalPath))
+                    {
+                        try { System.IO.Directory.Delete(delVessel.LocalPath, true); }
+                        catch { }
+                    }
+
                     await _Database.Vessels.DeleteAsync(delVesselId).ConfigureAwait(false);
                     return new { type = "command.result", action = "delete_vessel", data = (object)new { status = "deleted" } };
+                }
 
                 // ── Voyage actions ─────────────────────────────────────────
 
@@ -338,7 +384,45 @@ namespace Armada.Server.WebSocket
                         else
                         {
                             foreach (Mission m in pvMissions)
+                            {
+                                // Clean up associated dock/worktree
+                                if (!String.IsNullOrEmpty(m.DockId))
+                                {
+                                    try
+                                    {
+                                        Dock? pvDock = await _Database.Docks.ReadAsync(m.DockId).ConfigureAwait(false);
+                                        if (pvDock != null)
+                                        {
+                                            if (!String.IsNullOrEmpty(pvDock.WorktreePath) && System.IO.Directory.Exists(pvDock.WorktreePath))
+                                            {
+                                                try { System.IO.Directory.Delete(pvDock.WorktreePath, true); }
+                                                catch { }
+                                            }
+                                            await _Database.Docks.DeleteAsync(pvDock.Id).ConfigureAwait(false);
+                                        }
+                                    }
+                                    catch { }
+                                }
+
+                                // Clean up log and diff files
+                                if (_Settings != null)
+                                {
+                                    try
+                                    {
+                                        string pvLogPath = System.IO.Path.Combine(_Settings.LogDirectory, "missions", m.Id + ".log");
+                                        if (System.IO.File.Exists(pvLogPath)) System.IO.File.Delete(pvLogPath);
+                                    }
+                                    catch { }
+                                    try
+                                    {
+                                        string pvDiffPath = System.IO.Path.Combine(_Settings.LogDirectory, "diffs", m.Id + ".diff");
+                                        if (System.IO.File.Exists(pvDiffPath)) System.IO.File.Delete(pvDiffPath);
+                                    }
+                                    catch { }
+                                }
+
                                 await _Database.Missions.DeleteAsync(m.Id).ConfigureAwait(false);
+                            }
                             await _Database.Voyages.DeleteAsync(pvId).ConfigureAwait(false);
                             return new { type = "command.result", action = "purge_voyage", data = (object)new { status = "deleted", voyageId = pvId, missionsDeleted = pvMissions.Count } };
                         }
@@ -468,6 +552,42 @@ namespace Armada.Server.WebSocket
                         return new { type = "command.error", action = "purge_mission", error = "Mission not found" };
                     else
                     {
+                        // Clean up associated dock/worktree
+                        if (!String.IsNullOrEmpty(pmMission.DockId))
+                        {
+                            try
+                            {
+                                Dock? pmDock = await _Database.Docks.ReadAsync(pmMission.DockId).ConfigureAwait(false);
+                                if (pmDock != null)
+                                {
+                                    if (!String.IsNullOrEmpty(pmDock.WorktreePath) && System.IO.Directory.Exists(pmDock.WorktreePath))
+                                    {
+                                        try { System.IO.Directory.Delete(pmDock.WorktreePath, true); }
+                                        catch { }
+                                    }
+                                    await _Database.Docks.DeleteAsync(pmDock.Id).ConfigureAwait(false);
+                                }
+                            }
+                            catch { }
+                        }
+
+                        // Clean up log and diff files
+                        if (_Settings != null)
+                        {
+                            try
+                            {
+                                string pmLogPath = System.IO.Path.Combine(_Settings.LogDirectory, "missions", pmId + ".log");
+                                if (System.IO.File.Exists(pmLogPath)) System.IO.File.Delete(pmLogPath);
+                            }
+                            catch { }
+                            try
+                            {
+                                string pmDiffPath = System.IO.Path.Combine(_Settings.LogDirectory, "diffs", pmId + ".diff");
+                                if (System.IO.File.Exists(pmDiffPath)) System.IO.File.Delete(pmDiffPath);
+                            }
+                            catch { }
+                        }
+
                         await _Database.Missions.DeleteAsync(pmId).ConfigureAwait(false);
                         return new { type = "command.result", action = "purge_mission", data = (object)new { status = "deleted", missionId = pmId } };
                     }

@@ -213,6 +213,42 @@ namespace Armada.Server.Mcp.Tools
                     Mission? mission = await database.Missions.ReadAsync(missionId).ConfigureAwait(false);
                     if (mission == null) return (object)new { Error = "Mission not found" };
 
+                    // Clean up associated dock/worktree if present
+                    if (!String.IsNullOrEmpty(mission.DockId))
+                    {
+                        try
+                        {
+                            Dock? dock = await database.Docks.ReadAsync(mission.DockId).ConfigureAwait(false);
+                            if (dock != null)
+                            {
+                                if (!String.IsNullOrEmpty(dock.WorktreePath) && Directory.Exists(dock.WorktreePath))
+                                {
+                                    try { Directory.Delete(dock.WorktreePath, true); }
+                                    catch { }
+                                }
+                                await database.Docks.DeleteAsync(dock.Id).ConfigureAwait(false);
+                            }
+                        }
+                        catch { }
+                    }
+
+                    // Clean up log files if settings are available
+                    if (settings != null)
+                    {
+                        try
+                        {
+                            string logPath = Path.Combine(settings.LogDirectory, "missions", missionId + ".log");
+                            if (File.Exists(logPath)) File.Delete(logPath);
+                        }
+                        catch { }
+                        try
+                        {
+                            string diffPath = Path.Combine(settings.LogDirectory, "diffs", missionId + ".diff");
+                            if (File.Exists(diffPath)) File.Delete(diffPath);
+                        }
+                        catch { }
+                    }
+
                     await database.Missions.DeleteAsync(missionId).ConfigureAwait(false);
                     return (object)new { Status = "deleted", MissionId = missionId };
                 });
@@ -249,6 +285,42 @@ namespace Armada.Server.Mcp.Tools
                             result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
                             continue;
                         }
+                        // Clean up associated dock/worktree if present
+                        if (!String.IsNullOrEmpty(mission.DockId))
+                        {
+                            try
+                            {
+                                Dock? dock = await database.Docks.ReadAsync(mission.DockId).ConfigureAwait(false);
+                                if (dock != null)
+                                {
+                                    if (!String.IsNullOrEmpty(dock.WorktreePath) && Directory.Exists(dock.WorktreePath))
+                                    {
+                                        try { Directory.Delete(dock.WorktreePath, true); }
+                                        catch { }
+                                    }
+                                    await database.Docks.DeleteAsync(dock.Id).ConfigureAwait(false);
+                                }
+                            }
+                            catch { }
+                        }
+
+                        // Clean up log files if settings are available
+                        if (settings != null)
+                        {
+                            try
+                            {
+                                string logPath = Path.Combine(settings.LogDirectory, "missions", id + ".log");
+                                if (File.Exists(logPath)) File.Delete(logPath);
+                            }
+                            catch { }
+                            try
+                            {
+                                string diffPath = Path.Combine(settings.LogDirectory, "diffs", id + ".diff");
+                                if (File.Exists(diffPath)) File.Delete(diffPath);
+                            }
+                            catch { }
+                        }
+
                         await database.Missions.DeleteAsync(id).ConfigureAwait(false);
                         result.Deleted++;
                     }

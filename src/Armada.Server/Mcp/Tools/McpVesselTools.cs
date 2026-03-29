@@ -2,12 +2,14 @@ namespace Armada.Server.Mcp.Tools
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Text.Json;
     using System.Threading.Tasks;
     using Armada.Core;
     using ArmadaConstants = Armada.Core.Constants;
     using Armada.Core.Database;
     using Armada.Core.Models;
+    using Armada.Core.Services.Interfaces;
 
     /// <summary>
     /// Registers MCP tools for vessel CRUD operations.
@@ -25,7 +27,8 @@ namespace Armada.Server.Mcp.Tools
         /// </summary>
         /// <param name="register">Delegate to register each tool.</param>
         /// <param name="database">Database driver for vessel data access.</param>
-        public static void Register(RegisterToolDelegate register, DatabaseDriver database)
+        /// <param name="dockService">Optional dock service for worktree cleanup during vessel deletion.</param>
+        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IDockService? dockService = null)
         {
             register(
                 "armada_get_vessel",
@@ -156,8 +159,11 @@ namespace Armada.Server.Mcp.Tools
                 {
                     VesselIdArgs request = JsonSerializer.Deserialize<VesselIdArgs>(args!.Value, _JsonOptions)!;
                     string vesselId = request.VesselId;
-                    bool exists = await database.Vessels.ExistsAsync(vesselId).ConfigureAwait(false);
-                    if (!exists) return (object)new { Error = "Vessel not found" };
+                    Vessel? vessel = await database.Vessels.ReadAsync(vesselId).ConfigureAwait(false);
+                    if (vessel == null) return (object)new { Error = "Vessel not found" };
+
+                    await CleanupVesselResourcesAsync(vessel, database, dockService).ConfigureAwait(false);
+
                     await database.Vessels.DeleteAsync(vesselId).ConfigureAwait(false);
                     return (object)new { Status = "deleted", VesselId = vesselId };
                 });
@@ -188,12 +194,15 @@ namespace Armada.Server.Mcp.Tools
                             result.Skipped.Add(new DeleteMultipleSkipped(id ?? "", "Empty ID"));
                             continue;
                         }
-                        bool exists = await database.Vessels.ExistsAsync(id).ConfigureAwait(false);
-                        if (!exists)
+                        Vessel? vessel = await database.Vessels.ReadAsync(id).ConfigureAwait(false);
+                        if (vessel == null)
                         {
                             result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
                             continue;
                         }
+
+                        await CleanupVesselResourcesAsync(vessel, database, dockService).ConfigureAwait(false);
+
                         await database.Vessels.DeleteAsync(id).ConfigureAwait(false);
                         result.Deleted++;
                     }
@@ -231,6 +240,68 @@ namespace Armada.Server.Mcp.Tools
                     vessel = await database.Vessels.UpdateAsync(vessel).ConfigureAwait(false);
                     return (object)vessel;
                 });
+        }
+
+        /// <summary>
+        /// Cleans up filesystem and database resources associated with a vessel before deletion.
+        /// Removes docks/worktrees, the bare repository, and cancels active missions.
+        /// Cleanup failures are silently caught to avoid blocking the vessel delete.
+        /// </summary>
+        /// <param name="vessel">The vessel being deleted.</param>
+        /// <param name="database">Database driver.</param>
+        /// <param name="dockService">Optional dock service for worktree cleanup.</param>
+        private static async Task CleanupVesselResourcesAsync(Vessel vessel, DatabaseDriver database, IDockService? dockService)
+        {
+            // Cancel active missions on this vessel
+            try
+            {
+                List<Mission> missions = await database.Missions.EnumerateByVesselAsync(vessel.Id).ConfigureAwait(false);
+                foreach (Mission mission in missions)
+                {
+                    if (mission.Status == Armada.Core.Enums.MissionStatusEnum.Pending
+                        || mission.Status == Armada.Core.Enums.MissionStatusEnum.Assigned
+                        || mission.Status == Armada.Core.Enums.MissionStatusEnum.InProgress)
+                    {
+                        mission.Status = Armada.Core.Enums.MissionStatusEnum.Cancelled;
+                        mission.CompletedUtc = DateTime.UtcNow;
+                        mission.LastUpdateUtc = DateTime.UtcNow;
+                        await database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                    }
+                }
+            }
+            catch { }
+
+            // Clean up docks/worktrees for this vessel
+            try
+            {
+                List<Dock> docks = await database.Docks.EnumerateByVesselAsync(vessel.Id).ConfigureAwait(false);
+                foreach (Dock dock in docks)
+                {
+                    if (dockService != null)
+                    {
+                        try { await dockService.PurgeAsync(dock.Id).ConfigureAwait(false); }
+                        catch { }
+                    }
+                    else
+                    {
+                        // Fallback: remove worktree directory and database record directly
+                        if (!String.IsNullOrEmpty(dock.WorktreePath) && Directory.Exists(dock.WorktreePath))
+                        {
+                            try { Directory.Delete(dock.WorktreePath, true); }
+                            catch { }
+                        }
+                        await database.Docks.DeleteAsync(dock.Id).ConfigureAwait(false);
+                    }
+                }
+            }
+            catch { }
+
+            // Clean up bare repo
+            if (!String.IsNullOrEmpty(vessel.LocalPath) && Directory.Exists(vessel.LocalPath))
+            {
+                try { Directory.Delete(vessel.LocalPath, true); }
+                catch { }
+            }
         }
     }
 }

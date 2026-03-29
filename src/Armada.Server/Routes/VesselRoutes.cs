@@ -19,6 +19,7 @@ namespace Armada.Server.Routes
         private readonly DatabaseDriver _database;
         private readonly Func<string, string, string?, string?, string?, string?, string?, string?, Task> _emitEvent;
         private readonly JsonSerializerOptions _jsonOptions;
+        private readonly IDockService? _dockService;
 
         /// <summary>
         /// Instantiate.
@@ -26,14 +27,17 @@ namespace Armada.Server.Routes
         /// <param name="database">Database driver.</param>
         /// <param name="emitEvent">Event broadcast callback.</param>
         /// <param name="jsonOptions">JSON serializer options.</param>
+        /// <param name="dockService">Optional dock service for worktree cleanup during vessel deletion.</param>
         public VesselRoutes(
             DatabaseDriver database,
             Func<string, string, string?, string?, string?, string?, string?, string?, Task> emitEvent,
-            JsonSerializerOptions jsonOptions)
+            JsonSerializerOptions jsonOptions,
+            IDockService? dockService = null)
         {
             _database = database;
             _emitEvent = emitEvent;
             _jsonOptions = jsonOptions;
+            _dockService = dockService;
         }
 
         /// <summary>
@@ -276,6 +280,15 @@ namespace Armada.Server.Routes
                     return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 string id = req.Parameters["id"];
+                Vessel? vessel = ctx.IsAdmin
+                    ? await _database.Vessels.ReadAsync(id).ConfigureAwait(false)
+                    : ctx.IsTenantAdmin
+                        ? await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
+                        : await _database.Vessels.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
+                if (vessel == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
+
+                await CleanupVesselResourcesAsync(vessel).ConfigureAwait(false);
+
                 if (ctx.IsAdmin)
                     await _database.Vessels.DeleteAsync(id).ConfigureAwait(false);
                 else if (ctx.IsTenantAdmin)
@@ -323,6 +336,9 @@ namespace Armada.Server.Routes
                         result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
                         continue;
                     }
+
+                    await CleanupVesselResourcesAsync(existing).ConfigureAwait(false);
+
                     if (ctx.IsAdmin)
                         await _database.Vessels.DeleteAsync(id).ConfigureAwait(false);
                     else if (ctx.IsTenantAdmin)
@@ -345,6 +361,64 @@ namespace Armada.Server.Routes
                 .WithRequestBody(OpenApiRequestBodyMetadata.Json<DeleteMultipleRequest>("List of vessel IDs to delete"))
                 .WithResponse(200, OpenApiResponseMetadata.Json<DeleteMultipleResult>("Delete result summary"))
                 .WithSecurity("ApiKey"));
+        }
+
+        /// <summary>
+        /// Cleans up filesystem and database resources associated with a vessel before deletion.
+        /// Removes docks/worktrees, the bare repository, and cancels active missions.
+        /// Cleanup failures are silently caught to avoid blocking the vessel delete.
+        /// </summary>
+        private async Task CleanupVesselResourcesAsync(Vessel vessel)
+        {
+            // Cancel active missions on this vessel
+            try
+            {
+                List<Mission> missions = await _database.Missions.EnumerateByVesselAsync(vessel.Id).ConfigureAwait(false);
+                foreach (Mission mission in missions)
+                {
+                    if (mission.Status == Armada.Core.Enums.MissionStatusEnum.Pending
+                        || mission.Status == Armada.Core.Enums.MissionStatusEnum.Assigned
+                        || mission.Status == Armada.Core.Enums.MissionStatusEnum.InProgress)
+                    {
+                        mission.Status = Armada.Core.Enums.MissionStatusEnum.Cancelled;
+                        mission.CompletedUtc = DateTime.UtcNow;
+                        mission.LastUpdateUtc = DateTime.UtcNow;
+                        await _database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                    }
+                }
+            }
+            catch { }
+
+            // Clean up docks/worktrees for this vessel
+            try
+            {
+                List<Dock> docks = await _database.Docks.EnumerateByVesselAsync(vessel.Id).ConfigureAwait(false);
+                foreach (Dock dock in docks)
+                {
+                    if (_dockService != null)
+                    {
+                        try { await _dockService.PurgeAsync(dock.Id).ConfigureAwait(false); }
+                        catch { }
+                    }
+                    else
+                    {
+                        if (!String.IsNullOrEmpty(dock.WorktreePath) && Directory.Exists(dock.WorktreePath))
+                        {
+                            try { Directory.Delete(dock.WorktreePath, true); }
+                            catch { }
+                        }
+                        await _database.Docks.DeleteAsync(dock.Id).ConfigureAwait(false);
+                    }
+                }
+            }
+            catch { }
+
+            // Clean up bare repo
+            if (!String.IsNullOrEmpty(vessel.LocalPath) && Directory.Exists(vessel.LocalPath))
+            {
+                try { Directory.Delete(vessel.LocalPath, true); }
+                catch { }
+            }
         }
 
         /// <summary>
