@@ -891,7 +891,6 @@ namespace Armada.Core.Services
 
                 // Inject context from the completed stage into the next stage's description
                 string handoffContext = "\n\n---\n" +
-                    personaPreamble +
                     "## Prior Stage Output\n" +
                     "The previous pipeline stage (" + (completedMission.Persona ?? "Worker") + ") " +
                     "completed mission \"" + completedMission.Title + "\" (" + completedMission.Id + ").\n" +
