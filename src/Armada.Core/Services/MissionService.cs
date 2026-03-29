@@ -357,10 +357,7 @@ namespace Armada.Core.Services
                 _Logging.Warn(_Header + "error emitting mission.work_produced event for " + mission.Id + ": " + evtEx.Message);
             }
 
-            // Pipeline handoff: if missions in the same voyage depend on this one, prepare them
-            await TryHandoffToNextStageAsync(mission, token).ConfigureAwait(false);
-
-            // Get dock for push/PR (prefer mission-level DockId, fall back to captain-level)
+            // Get dock for diff capture (prefer mission-level DockId, fall back to captain-level)
             Dock? dock = null;
             string? dockId = mission.DockId ?? captain.CurrentDockId;
             if (!String.IsNullOrEmpty(dockId))
@@ -370,18 +367,27 @@ namespace Armada.Core.Services
                     : await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
             }
 
-            // Capture diff synchronously before releasing the captain, to ensure the worktree is still available
+            // Capture diff BEFORE pipeline handoff so the next stage gets the actual diff
             if (dock != null && OnCaptureDiff != null)
             {
                 try
                 {
                     await OnCaptureDiff.Invoke(mission, dock).ConfigureAwait(false);
+                    // Re-read mission to get the persisted DiffSnapshot
+                    Mission? refreshed = await _Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);
+                    if (refreshed != null && !String.IsNullOrEmpty(refreshed.DiffSnapshot))
+                    {
+                        mission.DiffSnapshot = refreshed.DiffSnapshot;
+                    }
                 }
                 catch (Exception ex)
                 {
                     _Logging.Warn(_Header + "error capturing diff for mission " + mission.Id + ": " + ex.Message);
                 }
             }
+
+            // Pipeline handoff: if missions in the same voyage depend on this one, prepare them
+            await TryHandoffToNextStageAsync(mission, token).ConfigureAwait(false);
 
             // Invoke OnMissionComplete synchronously (Phase A: push branch, create PR, or enqueue).
             // Captain stays in Working state until the handoff completes, preventing the captain
@@ -860,8 +866,32 @@ namespace Armada.Core.Services
 
             foreach (Mission nextMission in dependentMissions)
             {
+                // Build persona-specific preamble for the next stage
+                string personaPreamble = "";
+                switch (nextMission.Persona)
+                {
+                    case "Worker":
+                        personaPreamble = "## Your Role: Worker (Implement)\n\n" +
+                            "You are implementing code changes based on the Architect's plan. " +
+                            "Review the prior stage output below and implement the described changes.\n\n";
+                        break;
+                    case "TestEngineer":
+                        personaPreamble = "## Your Role: TestEngineer (Write Tests)\n\n" +
+                            "You are writing tests for code changes made by the Worker. " +
+                            "Review the diff below and write unit tests, integration tests, or test harness updates " +
+                            "that cover the changes. Follow existing test patterns in the repository.\n\n";
+                        break;
+                    case "Judge":
+                        personaPreamble = "## Your Role: Judge (Review)\n\n" +
+                            "You are reviewing the completed work for correctness, completeness, scope compliance, " +
+                            "and style. Examine the diff below against the original mission description. " +
+                            "Produce a clear verdict: PASS, FAIL (with reasons), or NEEDS_REVISION (with feedback).\n\n";
+                        break;
+                }
+
                 // Inject context from the completed stage into the next stage's description
                 string handoffContext = "\n\n---\n" +
+                    personaPreamble +
                     "## Prior Stage Output\n" +
                     "The previous pipeline stage (" + (completedMission.Persona ?? "Worker") + ") " +
                     "completed mission \"" + completedMission.Title + "\" (" + completedMission.Id + ").\n" +
@@ -872,8 +902,14 @@ namespace Armada.Core.Services
                 {
                     handoffContext += "\n### Diff from prior stage\n```diff\n" + completedMission.DiffSnapshot + "\n```\n";
                 }
+                else
+                {
+                    handoffContext += "\n*No diff available from prior stage. The work is on the branch above.*\n";
+                }
 
-                nextMission.Description = (nextMission.Description ?? "") + handoffContext;
+                nextMission.Description = personaPreamble.Length > 0
+                    ? personaPreamble + (nextMission.Description ?? "") + handoffContext
+                    : (nextMission.Description ?? "") + handoffContext;
                 nextMission.BranchName = completedMission.BranchName;
                 nextMission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(nextMission, token).ConfigureAwait(false);
