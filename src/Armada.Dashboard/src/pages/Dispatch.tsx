@@ -131,13 +131,15 @@ export default function Dispatch() {
     setQuickDispatching(true);
     setQuickResult(null);
     try {
-      const title = tasks.length > 1 ? 'Multi-task voyage' : tasks[0].substring(0, 80);
+      // For multi-stage pipelines: short title, full prompt in description only
+      // For single tasks: title = first 80 chars, description = full text
+      const voyageTitle = tasks.length > 1 ? 'Multi-task voyage' : tasks[0].substring(0, 80);
       const missions = tasks.map((t) => ({
         vesselId: quick.vesselId,
-        title: t,
+        title: t.substring(0, 80),
         description: t,
       }));
-      const voyage = await createVoyage({ title, vesselId: quick.vesselId, missions, ...(selectedPipeline ? { pipeline: selectedPipeline } : {}) });
+      const voyage = await createVoyage({ title: voyageTitle, vesselId: quick.vesselId, missions, ...(selectedPipeline ? { pipeline: selectedPipeline } : {}) });
       const missionCount = isMultiStage
         ? `${selectedPipelineObj!.stages.length} pipeline stages`
         : `${missions.length} mission${missions.length !== 1 ? 's' : ''}`;

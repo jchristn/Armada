@@ -200,10 +200,22 @@ namespace Armada.Core.Services
             {
                 string? previousMissionId = null;
 
+                // Use a short base title (first 60 chars of the mission title)
+                string baseTitle = md.Title.Length > 60 ? md.Title.Substring(0, 60).TrimEnd() + "..." : md.Title;
+
                 foreach (PipelineStage stage in pipeline.Stages.OrderBy(s => s.Order))
                 {
+                    string roleLabel = stage.PersonaName;
+                    switch (stage.PersonaName)
+                    {
+                        case "Architect": roleLabel = "Plan"; break;
+                        case "Worker": roleLabel = "Implement"; break;
+                        case "TestEngineer": roleLabel = "Test"; break;
+                        case "Judge": roleLabel = "Review"; break;
+                    }
+
                     Mission mission = new Mission(
-                        md.Title + " [" + stage.PersonaName + "]",
+                        "[" + roleLabel + "] " + baseTitle,
                         md.Description);
                     mission.TenantId = vessel.TenantId;
                     mission.UserId = vessel.UserId;

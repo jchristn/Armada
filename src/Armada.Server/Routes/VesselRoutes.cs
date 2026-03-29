@@ -111,6 +111,11 @@ namespace Armada.Server.Routes
                 }
                 Vessel vessel = JsonSerializer.Deserialize<Vessel>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Vessel.");
+                if (String.IsNullOrEmpty(vessel.RepoUrl))
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "repoUrl is required when creating a vessel" };
+                }
                 vessel.TenantId = ctx.TenantId;
                 vessel.UserId = ctx.UserId;
                 vessel = await _database.Vessels.CreateAsync(vessel).ConfigureAwait(false);

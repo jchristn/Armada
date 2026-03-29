@@ -186,6 +186,8 @@ namespace Armada.Server.WebSocket
 
                 case "create_vessel":
                     Vessel newVessel = JsonSerializer.Deserialize<WebSocketDataCommand<Vessel>>(rawBody, _JsonOptions)?.Data!;
+                    if (String.IsNullOrEmpty(newVessel.RepoUrl))
+                        return new { type = "command.error", action = "create_vessel", error = "repoUrl is required when creating a vessel" };
                     newVessel = await _Database.Vessels.CreateAsync(newVessel).ConfigureAwait(false);
                     return new { type = "command.result", action = "create_vessel", data = (object)newVessel };
 

@@ -173,7 +173,7 @@ export default function VesselDetail() {
                 {fleets.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
             </label>
-            <label>Repo URL<input value={form.repoUrl} onChange={e => setForm({ ...form, repoUrl: e.target.value })} /></label>
+            <label>Repository URL<input value={form.repoUrl} onChange={e => setForm({ ...form, repoUrl: e.target.value })} required placeholder="https://github.com/org/repo.git" /></label>
             <label>Default Branch<input value={form.defaultBranch} onChange={e => setForm({ ...form, defaultBranch: e.target.value })} /></label>
             <label>Local Path<input value={form.localPath} onChange={e => setForm({ ...form, localPath: e.target.value })} /></label>
             <label>Working Directory<input value={form.workingDirectory} onChange={e => setForm({ ...form, workingDirectory: e.target.value })} /></label>
