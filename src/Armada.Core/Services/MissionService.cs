@@ -566,6 +566,25 @@ namespace Armada.Core.Services
             Directory.CreateDirectory(Path.GetDirectoryName(claudeMdPath)!);
             await File.WriteAllTextAsync(claudeMdPath, content).ConfigureAwait(false);
 
+            // Ensure CLAUDE.md is gitignored so agents don't commit it.
+            // It's mission-specific and causes merge conflicts during landing.
+            string gitignorePath = Path.Combine(worktreePath, ".gitignore");
+            try
+            {
+                string gitignoreContent = File.Exists(gitignorePath)
+                    ? await File.ReadAllTextAsync(gitignorePath).ConfigureAwait(false)
+                    : "";
+                if (!gitignoreContent.Contains("CLAUDE.md"))
+                {
+                    string entry = (gitignoreContent.Length > 0 && !gitignoreContent.EndsWith("\n") ? "\n" : "") + "CLAUDE.md\n";
+                    await File.AppendAllTextAsync(gitignorePath, entry).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "could not update .gitignore for CLAUDE.md: " + ex.Message);
+            }
+
             _Logging.Info(_Header + "generated mission CLAUDE.md at " + claudeMdPath);
         }
 
