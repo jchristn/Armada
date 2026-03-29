@@ -480,6 +480,9 @@ namespace Armada.Core.Database.Postgresql.Queries
                     @"ALTER TABLE vessels ADD COLUMN IF NOT EXISTS default_pipeline_id TEXT;",
                     @"CREATE INDEX IF NOT EXISTS idx_fleets_default_pipeline ON fleets(default_pipeline_id);",
                     @"CREATE INDEX IF NOT EXISTS idx_vessels_default_pipeline ON vessels(default_pipeline_id);"
+                ),
+                new SchemaMigration(12, "Add failure_reason to missions",
+                    @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS failure_reason TEXT;"
                 )
             };
         }

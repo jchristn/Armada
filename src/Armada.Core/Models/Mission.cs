@@ -125,6 +125,12 @@ namespace Armada.Core.Models
         public string? DependsOnMissionId { get; set; } = null;
 
         /// <summary>
+        /// Human-readable reason for failure or landing failure.
+        /// Set when a mission transitions to Failed or LandingFailed status.
+        /// </summary>
+        public string? FailureReason { get; set; } = null;
+
+        /// <summary>
         /// Creation timestamp in UTC.
         /// </summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;

@@ -247,6 +247,13 @@ namespace Armada.Core.Database.SqlServer.Queries
                         ALTER TABLE vessels ADD default_pipeline_id NVARCHAR(450);",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_fleets_default_pipeline') CREATE INDEX idx_fleets_default_pipeline ON fleets(default_pipeline_id);",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_vessels_default_pipeline') CREATE INDEX idx_vessels_default_pipeline ON vessels(default_pipeline_id);"
+                ),
+                new SchemaMigration(
+                    12,
+                    "Add failure_reason to missions",
+                    @"
+                    IF COL_LENGTH('missions', 'failure_reason') IS NULL
+                        ALTER TABLE missions ADD failure_reason NVARCHAR(MAX);"
                 )
             };
         }

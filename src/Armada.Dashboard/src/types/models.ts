@@ -158,6 +158,7 @@ export interface Mission {
   processId: number | null;
   prUrl: string | null;
   commitHash: string | null;
+  failureReason: string | null;
   diffSnapshot: string | null;
   createdUtc: string;
   startedUtc: string | null;

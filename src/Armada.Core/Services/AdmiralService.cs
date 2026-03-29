@@ -562,8 +562,9 @@ namespace Armada.Core.Services
                 }
                 else
                 {
-                    // Recovery exhausted — mark mission as failed
+                    // Recovery exhausted -- mark mission as failed
                     mission.Status = MissionStatusEnum.Failed;
+                    mission.FailureReason = "Agent process exited with code " + (exitCode?.ToString() ?? "unknown") + ", recovery exhausted";
                     mission.ProcessId = null;
                     mission.CompletedUtc = DateTime.UtcNow;
                     mission.LastUpdateUtc = DateTime.UtcNow;
@@ -752,6 +753,7 @@ namespace Armada.Core.Services
                         if (mission != null)
                         {
                             mission.Status = MissionStatusEnum.Failed;
+                            mission.FailureReason = "Captain recovery exhausted, exit code " + exitCode;
                             mission.ProcessId = null;
                             mission.CompletedUtc = DateTime.UtcNow;
                             mission.LastUpdateUtc = DateTime.UtcNow;
@@ -819,6 +821,7 @@ namespace Armada.Core.Services
                                 mission.Status != MissionStatusEnum.PullRequestOpen)
                             {
                                 mission.Status = MissionStatusEnum.Failed;
+                                mission.FailureReason = "Captain stalled, recovery exhausted";
                                 mission.ProcessId = null;
                                 mission.CompletedUtc = DateTime.UtcNow;
                                 mission.LastUpdateUtc = DateTime.UtcNow;

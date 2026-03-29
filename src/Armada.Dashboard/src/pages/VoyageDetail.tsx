@@ -335,7 +335,14 @@ export default function VoyageDetail() {
                     <button className="btn-sm" style={{ padding: '1px 4px', fontSize: 10 }} onClick={e => { e.stopPropagation(); copyToClipboard(m.id); }} title="Copy ID">&#x2398;</button>
                   </div>
                 </td>
-                <td><StatusBadge status={m.status} /></td>
+                <td>
+                  <StatusBadge status={m.status} />
+                  {(m.status === 'LandingFailed' || m.status === 'Failed') && m.failureReason && (
+                    <span className="text-muted" style={{ fontSize: '0.75em', display: 'block', marginTop: '2px' }} title={m.failureReason}>
+                      {m.failureReason.length > 60 ? m.failureReason.substring(0, 60) + '...' : m.failureReason}
+                    </span>
+                  )}
+                </td>
                 <td>{m.vesselId ? <Link to={`/vessels/${m.vesselId}`} onClick={e => e.stopPropagation()}>{vesselName(m.vesselId)}</Link> : '-'}</td>
                 <td>{m.captainId ? <Link to={`/captains/${m.captainId}`} onClick={e => e.stopPropagation()}>{captainName(m.captainId)}</Link> : '-'}</td>
                 <td className="mono text-muted" style={{ fontSize: 11 }}>{m.branchName || '-'}</td>

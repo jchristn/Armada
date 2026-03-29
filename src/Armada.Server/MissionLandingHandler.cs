@@ -202,6 +202,7 @@ namespace Armada.Server
 
             bool landingSucceeded = false;
             bool landingAttempted = false;
+            string? landingFailureReason = null;
 
             try
             {
@@ -313,6 +314,7 @@ namespace Armada.Server
                     {
                         _Logging.Warn(_Header + "error pushing/creating PR for mission " + mission.Id + ": " + ex.Message);
                         landingSucceeded = false;
+                        landingFailureReason = "Error pushing/creating PR: " + ex.Message;
                     }
                 }
                 else if (vessel != null && !String.IsNullOrEmpty(vessel.WorkingDirectory) && !String.IsNullOrEmpty(vessel.LocalPath))
@@ -344,6 +346,7 @@ namespace Armada.Server
                             {
                                 _Logging.Warn(_Header + "local merge succeeded but push failed for mission " + mission.Id + ": " + pushEx.Message);
                                 landingSucceeded = false;
+                                landingFailureReason = "Local merge succeeded but push failed: " + pushEx.Message;
                             }
                         }
 
@@ -385,8 +388,9 @@ namespace Armada.Server
                     }
                     catch (Exception ex)
                     {
-                        _Logging.Warn(_Header + "error merging locally for mission " + mission.Id + ": " + ex.Message + " — branch " + dock.BranchName + " is still available in the bare repo");
+                        _Logging.Warn(_Header + "error merging locally for mission " + mission.Id + ": " + ex.Message + " -- branch " + dock.BranchName + " is still available in the bare repo");
                         landingSucceeded = false;
+                        landingFailureReason = "Error merging locally: " + ex.Message;
                     }
                 }
                 else if (landingModeIsMergeQueue)
@@ -468,6 +472,7 @@ namespace Armada.Server
                 else
                 {
                     mission.Status = MissionStatusEnum.LandingFailed;
+                    mission.FailureReason = landingFailureReason;
                     mission.LastUpdateUtc = DateTime.UtcNow;
                     await _Database.Missions.UpdateAsync(mission).ConfigureAwait(false);
                     _Logging.Warn(_Header + "mission " + mission.Id + " landing failed, status set to LandingFailed");

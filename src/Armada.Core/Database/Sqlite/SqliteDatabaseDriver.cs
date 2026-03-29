@@ -483,6 +483,7 @@ namespace Armada.Core.Database.Sqlite
             mission.LastUpdateUtc = FromIso8601(reader["last_update_utc"].ToString()!);
             try { mission.Persona = NullableString(reader["persona"]); } catch { }
             try { mission.DependsOnMissionId = NullableString(reader["depends_on_mission_id"]); } catch { }
+            try { mission.FailureReason = NullableString(reader["failure_reason"]); } catch { }
             return mission;
         }
 

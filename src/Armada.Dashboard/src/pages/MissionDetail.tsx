@@ -348,6 +348,23 @@ export default function MissionDetail() {
           <span className="detail-label">Status</span>
           <StatusBadge status={mission.status} />
         </div>
+        {mission.failureReason && (
+          <div className="detail-field" style={{ gridColumn: '1 / -1' }}>
+            <span className="detail-label">Failure Reason</span>
+            <pre style={{
+              margin: 0,
+              padding: '0.75rem',
+              background: 'rgba(255, 80, 80, 0.08)',
+              border: '1px solid rgba(255, 80, 80, 0.2)',
+              borderRadius: '4px',
+              color: 'var(--text)',
+              fontSize: '0.85em',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              fontFamily: 'monospace'
+            }}>{mission.failureReason}</pre>
+          </div>
+        )}
         <div className="detail-field"><span className="detail-label">Priority</span><span>{mission.priority}</span></div>
         <div className="detail-field">
           <span className="detail-label">Voyage</span>
@@ -381,6 +398,12 @@ export default function MissionDetail() {
           <div className="detail-field">
             <span className="detail-label">Depends On</span>
             <Link to={`/missions/${mission.dependsOnMissionId}`} className="mono">{mission.dependsOnMissionId}</Link>
+          </div>
+        )}
+        {mission.status === 'WorkProduced' && mission.dependsOnMissionId === null && mission.persona && mission.persona !== 'Worker' && (
+          <div className="detail-field" style={{ gridColumn: '1 / -1' }}>
+            <span className="detail-label">Pipeline Status</span>
+            <span className="text-dim">Work complete -- handed off to the next pipeline stage</span>
           </div>
         )}
         <div className="detail-field"><span className="detail-label">Branch Name</span><span className="mono">{mission.branchName || '-'}</span></div>

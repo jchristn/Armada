@@ -403,6 +403,11 @@ namespace Armada.Core.Database.Mysql
                     13,
                     "Add pipelines and pipeline_stages tables",
                     TableQueries.MigrationV13Statements
+                ),
+                new SchemaMigration(
+                    14,
+                    "Add failure_reason to missions",
+                    TableQueries.MigrationV14Statements
                 )
             };
         }

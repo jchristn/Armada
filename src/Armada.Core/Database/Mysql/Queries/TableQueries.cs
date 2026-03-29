@@ -541,6 +541,14 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration v14 statements for adding failure_reason to missions.
+        /// </summary>
+        public static readonly string[] MigrationV14Statements = new string[]
+        {
+            @"ALTER TABLE missions ADD COLUMN failure_reason LONGTEXT;"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

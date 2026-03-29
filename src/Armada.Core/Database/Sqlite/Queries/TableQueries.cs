@@ -733,6 +733,9 @@ namespace Armada.Core.Database.Sqlite.Queries
                     @"ALTER TABLE vessels ADD COLUMN default_pipeline_id TEXT;",
                     @"CREATE INDEX IF NOT EXISTS idx_fleets_default_pipeline ON fleets(default_pipeline_id);",
                     @"CREATE INDEX IF NOT EXISTS idx_vessels_default_pipeline ON vessels(default_pipeline_id);"
+                ),
+                new SchemaMigration(24, "Add failure_reason to missions",
+                    @"ALTER TABLE missions ADD COLUMN failure_reason TEXT;"
                 )
             };
         }
