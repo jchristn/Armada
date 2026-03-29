@@ -126,7 +126,13 @@ export default function MissionDetail() {
       const result = await getMissionLog(missionId, lines);
       setLogModal(l => ({ ...l, content: result.log || 'No log output', totalLines: result.totalLines || 0 }));
     } catch (e: unknown) {
-      setLogModal(l => ({ ...l, content: 'Log unavailable: ' + (e instanceof Error ? e.message : String(e)) }));
+      // Don't replace existing log content on transient fetch failure
+      setLogModal(l => ({
+        ...l,
+        content: l.content && l.content !== 'Loading...'
+          ? l.content
+          : 'Log unavailable: ' + (e instanceof Error ? e.message : String(e))
+      }));
     }
   }, []);
 
