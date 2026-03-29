@@ -271,66 +271,91 @@ export default function Vessels() {
       {/* Create/Edit Modal */}
       {showForm && (
         <div className="modal-overlay" onClick={() => setShowForm(false)}>
-          <form className="modal modal-lg" onClick={e => e.stopPropagation()} onSubmit={handleSubmit}>
+          <form className="modal" style={{ maxWidth: '95vw', width: '1100px', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()} onSubmit={handleSubmit}>
             <h3>{editing ? 'Edit Vessel' : 'Create Vessel'}</h3>
-            <label>Name<input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required /></label>
-            <label>Fleet
-              <select value={form.fleetId} onChange={e => setForm({ ...form, fleetId: e.target.value })}>
-                <option value="">Select a fleet...</option>
-                {fleets.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-              </select>
-            </label>
-            <label>Repository URL<input value={form.repoUrl} onChange={e => setForm({ ...form, repoUrl: e.target.value })} required placeholder="https://github.com/org/repo.git" /></label>
-            <label>Default Branch<input value={form.defaultBranch} onChange={e => setForm({ ...form, defaultBranch: e.target.value })} /></label>
-            <label>Local Path<input value={form.localPath} onChange={e => setForm({ ...form, localPath: e.target.value })} /></label>
-            <label>Working Directory<input value={form.workingDirectory} onChange={e => setForm({ ...form, workingDirectory: e.target.value })} /></label>
-            <label>
-              Project Context
-              <textarea value={form.projectContext} onChange={e => setForm({ ...form, projectContext: e.target.value })} rows={4} />
-            </label>
-            <label>
-              Style Guide
-              <textarea value={form.styleGuide} onChange={e => setForm({ ...form, styleGuide: e.target.value })} rows={4} />
-            </label>
-            <label title="How completed mission work is integrated. LocalMerge merges into your local working directory. PullRequest creates a PR on the remote. MergeQueue enqueues for validated sequential merge. None leaves the branch for manual integration.">Landing Mode
-              <select value={form.landingMode} onChange={e => setForm({ ...form, landingMode: e.target.value })}>
-                <option value="">Default</option>
-                <option value="LocalMerge">Local Merge</option>
-                <option value="PullRequest">Pull Request</option>
-                <option value="MergeQueue">Merge Queue</option>
-                <option value="None">None</option>
-              </select>
-            </label>
-            <label title="When and how mission branches are deleted after successful landing. LocalOnly deletes from the local bare repo only. LocalAndRemote deletes from both local and remote. None retains branches for inspection.">Branch Cleanup Policy
-              <select value={form.branchCleanupPolicy} onChange={e => setForm({ ...form, branchCleanupPolicy: e.target.value })}>
-                <option value="">Default</option>
-                <option value="LocalOnly">Local Only</option>
-                <option value="LocalAndRemote">Local and Remote</option>
-                <option value="None">None</option>
-              </select>
-            </label>
-            <label>Default Pipeline
-              <select value={form.defaultPipelineId} onChange={e => setForm({ ...form, defaultPipelineId: e.target.value })}>
-                <option value="">None (WorkerOnly)</option>
-                {pipelines.map(p => (
-                  <option key={p.id} value={p.id}>{p.name} ({p.stages.map(s => s.personaName).join(' -> ')})</option>
-                ))}
-              </select>
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }} title="When enabled, multiple missions can run on this vessel at the same time. When disabled, only one mission may be active (Assigned, InProgress, WorkProduced, PullRequestOpen) at a time.">
-              <input type="checkbox" checked={form.allowConcurrentMissions} onChange={e => setForm({ ...form, allowConcurrentMissions: e.target.checked })} style={{ width: 'auto' }} />
-              Allow Concurrent Missions
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }} title="When enabled, AI agents are instructed to accumulate key knowledge about this repository during missions. This context is shared with future agents to improve efficiency.">
-              <input type="checkbox" checked={form.enableModelContext} onChange={e => setForm({ ...form, enableModelContext: e.target.checked })} style={{ width: 'auto' }} />
-              Enable Model Context
-            </label>
-            {form.enableModelContext && (
-              <label>
-                Model Context
-                <textarea value={form.modelContext} onChange={e => setForm({ ...form, modelContext: e.target.value })} rows={4} placeholder="Agent-accumulated context will appear here after missions run with model context enabled..." />
+
+            {/* Row 1: Name + Fleet */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 1.5rem' }}>
+              <label>Name<input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required /></label>
+              <label>Fleet
+                <select value={form.fleetId} onChange={e => setForm({ ...form, fleetId: e.target.value })}>
+                  <option value="">Select a fleet...</option>
+                  {fleets.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                </select>
               </label>
-            )}
+            </div>
+
+            {/* Row 2: Repo URL + Default Branch */}
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0 1.5rem' }}>
+              <label>Repository URL<input value={form.repoUrl} onChange={e => setForm({ ...form, repoUrl: e.target.value })} required placeholder="https://github.com/org/repo.git" /></label>
+              <label>Default Branch<input value={form.defaultBranch} onChange={e => setForm({ ...form, defaultBranch: e.target.value })} /></label>
+            </div>
+
+            {/* Row 3: Local Path + Working Directory */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 1.5rem' }}>
+              <label>Local Path<input value={form.localPath} onChange={e => setForm({ ...form, localPath: e.target.value })} /></label>
+              <label>Working Directory<input value={form.workingDirectory} onChange={e => setForm({ ...form, workingDirectory: e.target.value })} /></label>
+            </div>
+
+            {/* Row 4: Landing Mode + Branch Cleanup + Pipeline (3 cols) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 1.5rem' }}>
+              <label title="How completed mission work is integrated.">Landing Mode
+                <select value={form.landingMode} onChange={e => setForm({ ...form, landingMode: e.target.value })}>
+                  <option value="">Default</option>
+                  <option value="LocalMerge">Local Merge</option>
+                  <option value="PullRequest">Pull Request</option>
+                  <option value="MergeQueue">Merge Queue</option>
+                  <option value="None">None</option>
+                </select>
+              </label>
+              <label title="When and how mission branches are deleted after successful landing.">Branch Cleanup
+                <select value={form.branchCleanupPolicy} onChange={e => setForm({ ...form, branchCleanupPolicy: e.target.value })}>
+                  <option value="">Default</option>
+                  <option value="LocalOnly">Local Only</option>
+                  <option value="LocalAndRemote">Local and Remote</option>
+                  <option value="None">None</option>
+                </select>
+              </label>
+              <label>Default Pipeline
+                <select value={form.defaultPipelineId} onChange={e => setForm({ ...form, defaultPipelineId: e.target.value })}>
+                  <option value="">None (WorkerOnly)</option>
+                  {pipelines.map(p => (
+                    <option key={p.id} value={p.id}>{p.name} ({p.stages.map(s => s.personaName).join(' -> ')})</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            {/* Checkboxes */}
+            <div style={{ display: 'flex', gap: '2rem', marginBottom: '0.5rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 0 }} title="When enabled, multiple missions can run on this vessel at the same time.">
+                <input type="checkbox" checked={form.allowConcurrentMissions} onChange={e => setForm({ ...form, allowConcurrentMissions: e.target.checked })} style={{ width: 'auto' }} />
+                Allow Concurrent Missions
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 0 }} title="When enabled, AI agents accumulate key knowledge about this repository during missions.">
+                <input type="checkbox" checked={form.enableModelContext} onChange={e => setForm({ ...form, enableModelContext: e.target.checked })} style={{ width: 'auto' }} />
+                Enable Model Context
+              </label>
+            </div>
+
+            {/* Context textareas side by side */}
+            <div style={{ display: 'grid', gridTemplateColumns: form.enableModelContext ? '1fr 1fr 1fr' : '1fr 1fr', gap: '0 1.5rem' }}>
+              <label>
+                Project Context
+                <textarea value={form.projectContext} onChange={e => setForm({ ...form, projectContext: e.target.value })} rows={6} />
+              </label>
+              <label>
+                Style Guide
+                <textarea value={form.styleGuide} onChange={e => setForm({ ...form, styleGuide: e.target.value })} rows={6} />
+              </label>
+              {form.enableModelContext && (
+                <label>
+                  Model Context
+                  <textarea value={form.modelContext} onChange={e => setForm({ ...form, modelContext: e.target.value })} rows={6} placeholder="Agent-accumulated context..." />
+                </label>
+              )}
+            </div>
+
             <div className="modal-actions">
               <button type="submit" className="btn btn-primary">Save</button>
               <button type="button" className="btn" onClick={() => setShowForm(false)}>Cancel</button>
