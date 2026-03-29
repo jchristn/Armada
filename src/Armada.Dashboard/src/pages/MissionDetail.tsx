@@ -345,7 +345,7 @@ export default function MissionDetail() {
       )}
 
       {/* Mission Info */}
-      <div className="detail-grid">
+      <div className="detail-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
         <div className="detail-field">
           <span className="detail-label">ID</span>
           <span className="id-display">
