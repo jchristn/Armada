@@ -322,22 +322,27 @@ namespace Armada.Server
                     // Check if the mission actually produced mergeable changes.
                     // Pipeline stages like Architect may complete without code changes (they output
                     // mission markers to stdout instead). Skip merge if no changes were made.
+                    // Use the DiffSnapshot (captured before handoff) and the branch existence in
+                    // the bare repo as indicators -- the worktree may already be gone at this point.
                     bool hasChanges = true;
-                    if (!String.IsNullOrEmpty(dock.BranchName) && !String.IsNullOrEmpty(vessel.LocalPath))
+                    if (String.IsNullOrEmpty(mission.DiffSnapshot) || mission.DiffSnapshot.Trim().Length == 0)
                     {
+                        hasChanges = false;
+                        _Logging.Info(_Header + "mission " + mission.Id + " has no diff snapshot -- no code changes to merge");
+                    }
+                    else if (!String.IsNullOrEmpty(dock.BranchName) && !String.IsNullOrEmpty(vessel.LocalPath))
+                    {
+                        // Also check if the branch actually exists in the bare repo
                         try
                         {
-                            string diff = await _Git.DiffAsync(dock.WorktreePath ?? "", vessel.DefaultBranch).ConfigureAwait(false);
-                            if (String.IsNullOrEmpty(diff) || diff.Trim().Length == 0)
+                            bool branchExists = await _Git.BranchExistsAsync(vessel.LocalPath, dock.BranchName).ConfigureAwait(false);
+                            if (!branchExists)
                             {
                                 hasChanges = false;
-                                _Logging.Info(_Header + "mission " + mission.Id + " has no code changes to merge -- marking complete without merge");
+                                _Logging.Info(_Header + "mission " + mission.Id + " branch " + dock.BranchName + " not in bare repo -- no code changes to merge");
                             }
                         }
-                        catch
-                        {
-                            // If diff check fails, proceed with merge attempt
-                        }
+                        catch { }
                     }
 
                     if (!hasChanges)
