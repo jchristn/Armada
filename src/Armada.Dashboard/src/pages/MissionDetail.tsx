@@ -142,14 +142,16 @@ export default function MissionDetail() {
     fetchLog(id, 200);
   }
 
+  // Use a ref for loadMission so the log refresh callback identity stays stable
+  const loadMissionRef = useRef(loadMission);
+  loadMissionRef.current = loadMission;
   const logRefreshCountRef = useRef(0);
   const handleLogRefresh = useCallback(() => {
     if (logModal.missionId) fetchLog(logModal.missionId, logModal.lineCount);
     // Refresh mission status every 5th poll (~5 seconds) to detect completion
-    // without causing re-renders that break the follow timer
     logRefreshCountRef.current++;
-    if (logRefreshCountRef.current % 5 === 0) loadMission();
-  }, [logModal.missionId, logModal.lineCount, fetchLog, loadMission]);
+    if (logRefreshCountRef.current % 5 === 0) loadMissionRef.current();
+  }, [logModal.missionId, logModal.lineCount, fetchLog]);
 
   const handleLogLineCountChange = useCallback((lines: number) => {
     setLogModal(l => ({ ...l, lineCount: lines }));
