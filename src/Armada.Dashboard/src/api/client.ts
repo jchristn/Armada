@@ -224,7 +224,7 @@ export const listVoyages = (params?: { pageNumber?: number; pageSize?: number; f
 export const getVoyage = (id: string) => get<Voyage>(`/api/v1/voyages/${id}`);
 export const getVoyageStatus = (id: string) => get<Record<string, unknown>>(`/api/v1/voyages/${id}/status`);
 export const createVoyage = (data: VoyageCreateRequest) => post<Voyage>('/api/v1/voyages', data);
-export const cancelVoyage = (id: string) => post<void>(`/api/v1/voyages/${id}/cancel`);
+export const cancelVoyage = (id: string) => del<void>(`/api/v1/voyages/${id}`);
 export const purgeVoyage = (id: string) => del<void>(`/api/v1/voyages/${id}/purge`);
 
 // ==================== Events ====================
