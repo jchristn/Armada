@@ -93,13 +93,15 @@ export default function MissionDetail() {
   const loadMission = useCallback(async () => {
     if (!id) return;
     // Only show loading spinner on initial load, not background refreshes
-    if (!mission) setLoading(true);
+    const isInitialLoad = !mission;
+    if (isInitialLoad) setLoading(true);
     try {
       const m = await getMission(id);
       setMission(m);
-      setError('');
+      // Only clear error on initial load -- don't dismiss user-facing errors from actions
+      if (isInitialLoad) setError('');
     } catch (e: unknown) {
-      if (!mission) setError('Failed to load mission: ' + (e instanceof Error ? e.message : String(e)));
+      if (isInitialLoad) setError('Failed to load mission: ' + (e instanceof Error ? e.message : String(e)));
     } finally {
       setLoading(false);
     }
