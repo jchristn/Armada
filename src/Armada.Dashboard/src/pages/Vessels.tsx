@@ -271,11 +271,11 @@ export default function Vessels() {
       {/* Create/Edit Modal */}
       {showForm && (
         <div className="modal-overlay" onClick={() => setShowForm(false)}>
-          <form className="modal" style={{ maxWidth: '95vw', width: '1100px', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()} onSubmit={handleSubmit}>
+          <form className="modal" style={{ maxWidth: '95%', width: '95%', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()} onSubmit={handleSubmit}>
             <h3>{editing ? 'Edit Vessel' : 'Create Vessel'}</h3>
 
-            {/* Row 1: Name + Fleet */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 1.5rem' }}>
+            {/* Row 1: Name + Fleet + Repo URL (3 cols) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: '0 1.5rem' }}>
               <label>Name<input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required /></label>
               <label>Fleet
                 <select value={form.fleetId} onChange={e => setForm({ ...form, fleetId: e.target.value })}>
@@ -283,21 +283,17 @@ export default function Vessels() {
                   {fleets.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                 </select>
               </label>
-            </div>
-
-            {/* Row 2: Repo URL + Default Branch */}
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0 1.5rem' }}>
               <label>Repository URL<input value={form.repoUrl} onChange={e => setForm({ ...form, repoUrl: e.target.value })} required placeholder="https://github.com/org/repo.git" /></label>
-              <label>Default Branch<input value={form.defaultBranch} onChange={e => setForm({ ...form, defaultBranch: e.target.value })} /></label>
             </div>
 
-            {/* Row 3: Local Path + Working Directory */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 1.5rem' }}>
+            {/* Row 2: Default Branch + Local Path + Working Directory (3 cols) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 1.5rem' }}>
+              <label>Default Branch<input value={form.defaultBranch} onChange={e => setForm({ ...form, defaultBranch: e.target.value })} /></label>
               <label>Local Path<input value={form.localPath} onChange={e => setForm({ ...form, localPath: e.target.value })} /></label>
               <label>Working Directory<input value={form.workingDirectory} onChange={e => setForm({ ...form, workingDirectory: e.target.value })} /></label>
             </div>
 
-            {/* Row 4: Landing Mode + Branch Cleanup + Pipeline (3 cols) */}
+            {/* Row 3: Landing Mode + Branch Cleanup + Pipeline (3 cols) */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 1.5rem' }}>
               <label title="How completed mission work is integrated.">Landing Mode
                 <select value={form.landingMode} onChange={e => setForm({ ...form, landingMode: e.target.value })}>
@@ -338,22 +334,20 @@ export default function Vessels() {
               </label>
             </div>
 
-            {/* Context textareas side by side */}
-            <div style={{ display: 'grid', gridTemplateColumns: form.enableModelContext ? '1fr 1fr 1fr' : '1fr 1fr', gap: '0 1.5rem' }}>
+            {/* Context textareas always 3 cols */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 1.5rem' }}>
               <label>
                 Project Context
-                <textarea value={form.projectContext} onChange={e => setForm({ ...form, projectContext: e.target.value })} rows={6} />
+                <textarea value={form.projectContext} onChange={e => setForm({ ...form, projectContext: e.target.value })} rows={8} />
               </label>
               <label>
                 Style Guide
-                <textarea value={form.styleGuide} onChange={e => setForm({ ...form, styleGuide: e.target.value })} rows={6} />
+                <textarea value={form.styleGuide} onChange={e => setForm({ ...form, styleGuide: e.target.value })} rows={8} />
               </label>
-              {form.enableModelContext && (
-                <label>
-                  Model Context
-                  <textarea value={form.modelContext} onChange={e => setForm({ ...form, modelContext: e.target.value })} rows={6} placeholder="Agent-accumulated context..." />
-                </label>
-              )}
+              <label>
+                Model Context
+                <textarea value={form.modelContext} onChange={e => setForm({ ...form, modelContext: e.target.value })} rows={8} placeholder={form.enableModelContext ? "Agent-accumulated context..." : "Enable Model Context to use"} disabled={!form.enableModelContext} style={!form.enableModelContext ? { opacity: 0.4 } : undefined} />
+              </label>
             </div>
 
             <div className="modal-actions">
