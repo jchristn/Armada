@@ -92,17 +92,18 @@ export default function MissionDetail() {
 
   const loadMission = useCallback(async () => {
     if (!id) return;
-    setLoading(true);
+    // Only show loading spinner on initial load, not background refreshes
+    if (!mission) setLoading(true);
     try {
       const m = await getMission(id);
       setMission(m);
       setError('');
     } catch (e: unknown) {
-      setError('Failed to load mission: ' + (e instanceof Error ? e.message : String(e)));
+      if (!mission) setError('Failed to load mission: ' + (e instanceof Error ? e.message : String(e)));
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, mission]);
 
   useEffect(() => {
     loadMission();
