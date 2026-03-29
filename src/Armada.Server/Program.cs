@@ -22,6 +22,25 @@ namespace Armada.Server
 
         static async Task Main(string[] args)
         {
+            // Catch unhandled exceptions so the server doesn't silently die
+            AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+            {
+                Exception? ex = e.ExceptionObject as Exception;
+                string msg = "[Program] FATAL unhandled exception: " + (ex?.ToString() ?? e.ExceptionObject?.ToString() ?? "unknown");
+                try { _Logging?.Warn(msg); } catch { }
+                Console.Error.WriteLine(msg);
+                try { File.AppendAllText(Path.Combine(Constants.DefaultDataDirectory, "crash.log"), DateTime.UtcNow.ToString("o") + " " + msg + Environment.NewLine); } catch { }
+            };
+
+            TaskScheduler.UnobservedTaskException += (sender, e) =>
+            {
+                string msg = "[Program] unobserved task exception: " + e.Exception?.ToString();
+                try { _Logging?.Warn(msg); } catch { }
+                Console.Error.WriteLine(msg);
+                try { File.AppendAllText(Path.Combine(Constants.DefaultDataDirectory, "crash.log"), DateTime.UtcNow.ToString("o") + " " + msg + Environment.NewLine); } catch { }
+                e.SetObserved(); // Prevent process termination
+            };
+
             Console.WriteLine(@"                        _      ");
             Console.WriteLine(@" __ _ _ _ _ __  __ _ __| |__ _ ");
             Console.WriteLine(@"/ _` | '_| '  \/ _` / _` / _` |");
