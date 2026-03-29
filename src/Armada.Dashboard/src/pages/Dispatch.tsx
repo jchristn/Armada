@@ -102,21 +102,35 @@ export default function Dispatch() {
   );
 
   const handleQuickDispatch = async () => {
-    let tasks = parsedTasks;
-    if (!tasks.length) {
-      tasks = parseTasks(quick.prompt);
-      setParsedTasks(tasks);
-    }
-    if (!tasks.length) return;
+    if (!quick.prompt.trim()) return;
     if (!quick.vesselId) {
       setQuickResult({ ok: false, message: 'Please select a vessel.' });
       return;
     }
 
+    // Determine if the selected pipeline has multiple stages (Architect, Judge, etc.)
+    // If so, send the entire prompt as a single mission -- let the pipeline stages handle decomposition
+    const selectedPipelineObj = pipelines.find((p) => p.name === selectedPipeline);
+    const isMultiStage = selectedPipelineObj != null && selectedPipelineObj.stages.length > 1;
+
+    let tasks: string[];
+    if (isMultiStage) {
+      // Multi-stage pipeline: entire prompt is one mission
+      tasks = [quick.prompt.trim()];
+    } else {
+      // WorkerOnly or no pipeline: parse into discrete tasks
+      let parsed = parsedTasks;
+      if (!parsed.length) {
+        parsed = parseTasks(quick.prompt);
+        setParsedTasks(parsed);
+      }
+      tasks = parsed;
+    }
+    if (!tasks.length) return;
+
     setQuickDispatching(true);
     setQuickResult(null);
     try {
-      // Create voyage with missions via POST /api/v1/voyages
       const title = tasks.length > 1 ? 'Multi-task voyage' : tasks[0].substring(0, 80);
       const missions = tasks.map((t) => ({
         vesselId: quick.vesselId,
@@ -124,9 +138,12 @@ export default function Dispatch() {
         description: t,
       }));
       const voyage = await createVoyage({ title, vesselId: quick.vesselId, missions, ...(selectedPipeline ? { pipeline: selectedPipeline } : {}) });
+      const missionCount = isMultiStage
+        ? `${selectedPipelineObj!.stages.length} pipeline stages`
+        : `${missions.length} mission${missions.length !== 1 ? 's' : ''}`;
       setQuickResult({
         ok: true,
-        message: `Dispatched 1 voyage with ${missions.length} mission${missions.length !== 1 ? 's' : ''}`,
+        message: `Dispatched voyage with ${missionCount}`,
       });
       setQuick({ vesselId: quick.vesselId, prompt: '' });
       setParsedTasks([]);
