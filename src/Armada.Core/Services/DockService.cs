@@ -386,43 +386,42 @@ namespace Armada.Core.Services
             string tempPath = Path.Combine(Path.GetTempPath(), "armada_init_" + Guid.NewGuid().ToString("N"));
             try
             {
-                // Clone from the remote (or bare repo) into a temporary working directory
-                string cloneSource = !String.IsNullOrEmpty(vessel.RepoUrl) ? vessel.RepoUrl : repoPath;
-                System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo("git", "clone \"" + cloneSource + "\" \"" + tempPath + "\"")
-                {
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                };
-                System.Diagnostics.Process? cloneProc = System.Diagnostics.Process.Start(psi);
-                if (cloneProc != null)
-                {
-                    await cloneProc.WaitForExitAsync(token).ConfigureAwait(false);
-                }
+                // Use git init (not clone) because cloning an empty repo creates a broken state.
+                Directory.CreateDirectory(tempPath);
+                await RunGitInDirAsync(tempPath, "init", token).ConfigureAwait(false);
+                await RunGitInDirAsync(tempPath, "checkout -b " + vessel.DefaultBranch, token).ConfigureAwait(false);
 
                 // Create README.md
                 string readmePath = Path.Combine(tempPath, "README.md");
                 await File.WriteAllTextAsync(readmePath, "# " + vessel.Name + "\n", token).ConfigureAwait(false);
 
-                // Stage, commit, and push
+                // Commit
                 await RunGitInDirAsync(tempPath, "add README.md", token).ConfigureAwait(false);
                 await RunGitInDirAsync(tempPath, "commit -m \"Initial commit\"", token).ConfigureAwait(false);
-                await RunGitInDirAsync(tempPath, "branch -M " + vessel.DefaultBranch, token).ConfigureAwait(false);
-                await RunGitInDirAsync(tempPath, "push origin " + vessel.DefaultBranch, token).ConfigureAwait(false);
 
-                // Re-fetch into the bare repo so it picks up the new branch
-                try
+                // Push to the remote
+                if (!String.IsNullOrEmpty(vessel.RepoUrl))
                 {
-                    await _Git.FetchAsync(repoPath, token).ConfigureAwait(false);
+                    await RunGitInDirAsync(tempPath, "remote add origin " + vessel.RepoUrl, token).ConfigureAwait(false);
+                    await RunGitInDirAsync(tempPath, "push -u origin " + vessel.DefaultBranch, token).ConfigureAwait(false);
+                    _Logging.Info(_Header + "pushed initial commit to remote for " + vessel.Name);
                 }
-                catch { }
+
+                // Delete the stale bare repo (if it exists) and re-clone fresh
+                if (Directory.Exists(repoPath))
+                {
+                    await ForceRemoveDirectoryAsync(repoPath, token).ConfigureAwait(false);
+                }
+                await _Git.CloneBareAsync(vessel.RepoUrl ?? tempPath, repoPath, token).ConfigureAwait(false);
 
                 _Logging.Info(_Header + "seeded empty repo for " + vessel.Name + " with initial commit");
             }
             catch (Exception ex)
             {
                 _Logging.Warn(_Header + "failed to seed empty repo for " + vessel.Name + ": " + ex.Message);
+                // Clean up any debris
+                try { if (Directory.Exists(repoPath)) await ForceRemoveDirectoryAsync(repoPath, token).ConfigureAwait(false); }
+                catch { }
                 throw new InvalidOperationException("Repository " + vessel.Name + " is empty and could not be initialized: " + ex.Message);
             }
             finally
