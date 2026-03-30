@@ -287,7 +287,15 @@ namespace Armada.Server.Routes
                         : await _database.Vessels.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (vessel == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
 
-                await CleanupVesselResourcesAsync(vessel).ConfigureAwait(false);
+                try
+                {
+                    await CleanupVesselResourcesAsync(vessel).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    req.Http.Response.StatusCode = 500;
+                    return new ApiErrorResponse { Error = ApiResultEnum.InternalError, Message = "Vessel cleanup failed -- deletion aborted: " + ex.Message };
+                }
 
                 if (ctx.IsAdmin)
                     await _database.Vessels.DeleteAsync(id).ConfigureAwait(false);
@@ -368,57 +376,73 @@ namespace Armada.Server.Routes
         /// Removes docks/worktrees, the bare repository, and cancels active missions.
         /// Cleanup failures are silently caught to avoid blocking the vessel delete.
         /// </summary>
+        /// <summary>
+        /// Cleans up ALL resources associated with a vessel. Throws on failure.
+        /// </summary>
         private async Task CleanupVesselResourcesAsync(Vessel vessel)
         {
-            // Cancel active missions on this vessel
-            try
-            {
-                List<Mission> missions = await _database.Missions.EnumerateByVesselAsync(vessel.Id).ConfigureAwait(false);
-                foreach (Mission mission in missions)
-                {
-                    if (mission.Status == Armada.Core.Enums.MissionStatusEnum.Pending
-                        || mission.Status == Armada.Core.Enums.MissionStatusEnum.Assigned
-                        || mission.Status == Armada.Core.Enums.MissionStatusEnum.InProgress)
-                    {
-                        mission.Status = Armada.Core.Enums.MissionStatusEnum.Cancelled;
-                        mission.CompletedUtc = DateTime.UtcNow;
-                        mission.LastUpdateUtc = DateTime.UtcNow;
-                        await _database.Missions.UpdateAsync(mission).ConfigureAwait(false);
-                    }
-                }
-            }
-            catch { }
+            List<string> errors = new List<string>();
 
-            // Clean up docks/worktrees for this vessel
-            try
+            // Cancel and delete all missions
+            List<Mission> missions = await _database.Missions.EnumerateByVesselAsync(vessel.Id).ConfigureAwait(false);
+            foreach (Mission mission in missions)
             {
-                List<Dock> docks = await _database.Docks.EnumerateByVesselAsync(vessel.Id).ConfigureAwait(false);
-                foreach (Dock dock in docks)
+                if (mission.Status == Armada.Core.Enums.MissionStatusEnum.Pending
+                    || mission.Status == Armada.Core.Enums.MissionStatusEnum.Assigned
+                    || mission.Status == Armada.Core.Enums.MissionStatusEnum.InProgress
+                    || mission.Status == Armada.Core.Enums.MissionStatusEnum.Review
+                    || mission.Status == Armada.Core.Enums.MissionStatusEnum.Testing)
+                {
+                    mission.Status = Armada.Core.Enums.MissionStatusEnum.Cancelled;
+                    mission.FailureReason = "Vessel deleted";
+                    mission.CompletedUtc = DateTime.UtcNow;
+                    mission.LastUpdateUtc = DateTime.UtcNow;
+                    await _database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                }
+                try { await _database.Missions.DeleteAsync(mission.Id).ConfigureAwait(false); }
+                catch (Exception ex) { errors.Add("Mission " + mission.Id + ": " + ex.Message); }
+            }
+
+            // Purge docks
+            List<Dock> docks = await _database.Docks.EnumerateByVesselAsync(vessel.Id).ConfigureAwait(false);
+            foreach (Dock dock in docks)
+            {
+                try
                 {
                     if (_dockService != null)
-                    {
-                        try { await _dockService.PurgeAsync(dock.Id).ConfigureAwait(false); }
-                        catch { }
-                    }
+                        await _dockService.PurgeAsync(dock.Id).ConfigureAwait(false);
                     else
                     {
                         if (!String.IsNullOrEmpty(dock.WorktreePath) && Directory.Exists(dock.WorktreePath))
-                        {
-                            try { Directory.Delete(dock.WorktreePath, true); }
-                            catch { }
-                        }
+                            Directory.Delete(dock.WorktreePath, true);
                         await _database.Docks.DeleteAsync(dock.Id).ConfigureAwait(false);
                     }
                 }
+                catch (Exception ex) { errors.Add("Dock " + dock.Id + ": " + ex.Message); }
             }
-            catch { }
 
-            // Clean up bare repo
+            // Delete vessel dock directory
+            string vesselDockDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                ".armada", "docks", vessel.Name);
+            if (Directory.Exists(vesselDockDir))
+            {
+                try { Directory.Delete(vesselDockDir, true); }
+                catch (Exception ex) { errors.Add("Dock dir: " + ex.Message); }
+            }
+
+            // Delete bare repo
             if (!String.IsNullOrEmpty(vessel.LocalPath) && Directory.Exists(vessel.LocalPath))
             {
                 try { Directory.Delete(vessel.LocalPath, true); }
-                catch { }
+                catch (Exception ex) { errors.Add("Bare repo: " + ex.Message); }
             }
+
+            if (!String.IsNullOrEmpty(vessel.LocalPath) && Directory.Exists(vessel.LocalPath))
+                errors.Add("Bare repo still exists after deletion: " + vessel.LocalPath);
+
+            if (errors.Count > 0)
+                throw new InvalidOperationException(String.Join("; ", errors));
         }
 
         /// <summary>
