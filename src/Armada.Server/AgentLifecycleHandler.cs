@@ -105,6 +105,10 @@ namespace Armada.Server
             return null;
         }
 
+        /// <summary>
+        /// Set or update the WebSocket hub reference (created after this handler).
+        /// </summary>
+        /// <param name="hub">WebSocket hub instance, or null.</param>
         public void SetWebSocketHub(ArmadaWebSocketHub? hub)
         {
             _WebSocketHub = hub;
