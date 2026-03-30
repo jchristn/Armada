@@ -5,7 +5,7 @@
 <h1 align="center">Armada</h1>
 
 <p align="center">
-  <strong>Run a fleet of AI coding agents. Ship more code.</strong>
+  <strong>Reduce context switching across projects. Keep agent work in queryable memory.</strong>
   <br />
   <em>v0.4.0 alpha -- APIs and schemas may change</em>
 </p>
@@ -25,71 +25,67 @@
 
 ## Why Armada
 
-You juggle multiple projects. You context-switch between repos dozens of times a day. Every time you come back to a project you have to reconstruct where you left off -- what was done, what was planned next, what broke last time. You keep it all in your head, and your head is full.
+Armada is for people working across multiple repositories who are tired of paying the context-switching tax every time they come back to a project.
 
-AI coding agents help, but they create a different problem. Now you're managing agents on top of managing code. You babysit one agent while three others sit idle. You copy output between terminals. When something fails, you start over because there's no record of what happened.
+The first problem is operational: switching between projects means rebuilding context over and over. What was in flight, what already landed, what failed, what the agent was about to do next. That overhead adds up fast.
 
-Armada solves both problems:
+The second problem is memory. Most agent sessions disappear into terminal history and branch diffs. A week later, neither you nor the next agent has a clean way to ask "what happened here?" without manually piecing it back together.
 
-1. **Stop context-switching. Start dispatching.** Describe what you want built and move on to the next project. You don't need to write down where you left off or what comes next -- Armada tracks that. Come back in an hour or a day and pick up exactly where things stand.
+Armada is built around those two problems:
 
-2. **Query what happened instead of remembering it.** Every mission, every agent log, every diff, every status transition is preserved and searchable. "What did the agents do on the backend repo last Tuesday?" is a query, not a memory exercise. The state of your projects lives in a system you can search, not in your head.
+1. **Reduce context switching across projects.** Armada keeps the state of work outside your head. You can dispatch, leave, come back later, and see where things stand without reconstructing everything from scratch.
 
-Everything else follows from those two things:
+2. **Provide extended, queryable memory for both users and agents.** Missions, logs, diffs, status changes, and related work are preserved behind a searchable interface. You no longer have to remember what you were working on; you can ask. Agents can do the same.
+
+Armada gives models a place to maintain working context on a vessel over time. Agents can update vessel context with notes, hints, and project-specific guidance so the next dispatch does not have to rediscover the same facts from scratch. That reduces context load time for both humans and models.
+
+Everything else in Armada exists to support that: isolated worktrees, parallel dispatch, pipelines, retries, dashboards, API access, and MCP tools.
 
 ### What You Get
 
-- **Parallel execution across repos.** Dispatch work to multiple agents across multiple repositories at once. Five agents, five tasks, while you do something else.
-- **A complete record of everything.** Logs, diffs, status history, agent output -- all queryable from one dashboard. No more "what did I do in that repo last week?"
+- **Less project-switch overhead.** Leave one repo, work somewhere else, then come back to a current view of what happened.
+- **A queryable memory layer.** Logs, diffs, status history, and agent output stay available through the dashboard, API, and MCP instead of vanishing into scrollback.
+- **Persistent vessel context.** Models can maintain repository-specific context, hints, and working notes on each vessel to speed up future dispatches.
+- **Parallel execution across repos.** Dispatch work to multiple agents across multiple repositories at once.
 - **Quality gates that run automatically.** Every piece of work can flow through a pipeline: plan it, implement it, test it, review it. No manual intervention between steps.
 - **Git isolation by default.** Every agent works in its own worktree on its own branch. Agents can't step on each other. Your main branch stays clean until you merge.
-- **Every prompt is configurable.** Don't like how agents are instructed? Edit the prompt templates. Every instruction Armada sends to an agent is a template you can change.
+- **Configurable and extensible workflows.** Prompt templates, personas, and pipelines are user-controlled, so you can adapt the system to your project instead of fitting your project to the built-ins.
 - **Works with the agents you already have.** Claude Code, Codex, Gemini, Cursor -- pluggable runtime system.
 
 ### Who It's For
 
-- **Solo developers** who multitask across projects and want to stop losing context every time they switch repos.
-- **Tech leads** who need to know what AI agents did across the codebase without reading every diff by hand.
-- **Teams** who need shared visibility into AI-generated work across multiple repositories.
-- **Anyone** who has tried using AI coding agents and hit the wall of "I can't keep track of all of this."
+- **Solo developers** working across multiple repos.
+- **Tech leads** who want a record of what agents changed.
+- **Teams** that need shared visibility into agent-driven work.
+- **Anyone** who wants more structure than a single-agent terminal loop.
 
 ---
 
 ## How It Works
 
-```
-You: "Build a FastAPI backend with user auth and tests"
- |
- v
-+-----------------------------------------------------------------------+
-|                           ADMIRAL                                     |
-|                    (coordinator process)                              |
-+-----------------------------------------------------------------------+
- |
- |  Resolves pipeline --> creates missions --> assigns to captains
- |
- v
-+-----------------+      +-----------------+      +-----------------+      +-----------------+
-|   ARCHITECT     |      |    WORKER       |      | TEST ENGINEER   |      |     JUDGE       |
-|   (Plan)        | ---> |  (Implement)    | ---> | (Write Tests)   | ---> |  (Review)       |
-+-----------------+      +-----------------+      +-----------------+      +-----------------+
-| Reads codebase. |      | Writes code on  |      | Reads the diff. |      | Reads the diff. |
-| Decomposes the  |      | its own branch  |      | Writes tests    |      | Checks quality, |
-| goal into right-|      | in a dedicated  |      | covering the    |      | completeness,   |
-| sized missions. |      | git worktree.   |      | changes.        |      | scope, style.   |
-|                 |      |                 |      |                 |      |                 |
-| Produces:       |      | Produces:       |      | Produces:       |      | Produces:       |
-| mission list    |      | code + diff     |      | tests + diff    |      | PASS/FAIL       |
-+-----------------+      +-----------------+      +-----------------+      +-----------------+
+```mermaid
+flowchart TD
+    U["You: Build a FastAPI backend with user auth and tests"]
+    A["Admiral<br/>Coordinates work, resolves pipeline, assigns captains, tracks state"]
+    P["Architect<br/>Reads the codebase, breaks work into missions, identifies file boundaries"]
+    W["Worker<br/>Implements the mission in an isolated git worktree and produces a diff"]
+    T["TestEngineer<br/>Reads the worker diff and adds or updates tests"]
+    J["Judge<br/>Reviews correctness, completeness, scope, and style<br/>Produces PASS or FAIL"]
+
+    U --> A
+    A --> P
+    P --> W
+    W --> T
+    T --> J
 ```
 
-1. **You describe the goal.** One sentence or a detailed spec.
-2. **The Architect plans.** Analyzes the codebase, decomposes the work into missions, identifies which files each mission touches.
-3. **Workers implement in parallel.** Each agent gets its own git worktree. No interference. Clean branches.
-4. **TestEngineers write tests.** They see the diff from the Worker and add coverage.
-5. **Judges review.** They check correctness, completeness, scope, and style. Pass or fail.
+1. **You describe the goal.** This can be a short prompt or a longer spec.
+2. **The Architect plans.** It reads the codebase, breaks the work into missions, and identifies likely file boundaries.
+3. **Workers implement.** Each worker runs in its own git worktree on its own branch.
+4. **TestEngineers add tests.** They get the worker diff as input.
+5. **Judges review.** They check the result against the original task and return a pass/fail verdict.
 
-Each step is a **persona** -- a specialized role with its own instructions. The sequence of personas is a **pipeline**. You pick the pipeline that fits the work:
+Each step is a **persona** with its own prompt template. A sequence of personas is a **pipeline**. The built-ins are just defaults; pipelines are user-configurable and can be extended with whatever personas your project needs:
 
 | Pipeline | Stages | When to use |
 |----------|--------|------------|
@@ -98,11 +94,11 @@ Each step is a **persona** -- a specialized role with its own instructions. The 
 | **Tested** | Implement -> Test -> Review | When you need coverage |
 | **FullPipeline** | Plan -> Implement -> Test -> Review | Big features, unfamiliar codebases |
 
-Set a default pipeline on a repository and forget about it. Every dispatch flows through the stages automatically. Override per-dispatch when you need something different.
+You can set a default pipeline per repository and override it on a single dispatch when needed. If the built-in roles are not enough, define your own personas and compose them into custom pipelines for security review, documentation, migration planning, release checks, architecture review, or any other project-specific step.
 
 ### Parallel Tasks
 
-Semicolons or numbered lists split a prompt into separate missions, each assigned to a different agent:
+Semicolons or numbered lists split a prompt into separate missions. Armada can assign those to different agents:
 
 ```bash
 armada go "Add rate limiting; Add request logging; Add input validation"
@@ -112,7 +108,7 @@ armada go "1. Add auth middleware 2. Add login endpoint 3. Add token validation"
 
 ### Auto-Recovery
 
-If a captain crashes, the Admiral detects it, repairs the worktree, and relaunches the agent (up to `MaxRecoveryAttempts` times, default: 3).
+If a captain crashes, the Admiral can repair the worktree and relaunch the agent up to `MaxRecoveryAttempts` times (default: 3).
 
 ## Quick Start
 
@@ -143,7 +139,7 @@ armada go "Add input validation to the signup form"
 armada watch   # monitor progress in real time
 ```
 
-Armada detects your runtime, infers the repo, spins up an agent, and dispatches. No config files, no setup wizard.
+Armada detects the runtime, infers the current repository, provisions a worktree, and dispatches the task.
 
 ### Default Credentials
 
@@ -165,7 +161,7 @@ For a deeper walkthrough, see the [Getting Started Guide](GETTING_STARTED.md).
 
 ## Pipelines
 
-Pipelines are the core of Armada's workflow engine. Instead of throwing a prompt at an agent and hoping for the best, a pipeline moves each piece of work through defined stages with different specialists handling each phase.
+Pipelines are the workflow layer in Armada. They let you run work through explicit stages instead of treating every task as a single agent session.
 
 ### Built-in Personas
 
@@ -200,7 +196,9 @@ armada_create_persona name=SecurityAuditor promptTemplateName=persona.security_a
 armada_create_pipeline name=SecureRelease stages='[{"personaName":"Worker"},{"personaName":"SecurityAuditor"},{"personaName":"Judge"}]'
 ```
 
-Every prompt Armada sends to an agent is backed by an editable template. Change how agents behave without touching code. The dashboard includes a template editor with a parameter reference panel -- click a `{Placeholder}` to insert it.
+Every prompt Armada sends is backed by an editable template. You can change agent behavior without modifying code. The dashboard includes a template editor with a parameter reference panel.
+
+Pipelines are not limited to planning, implementation, testing, and review. If a project needs a SecurityAuditor, PerformanceAnalyst, MigrationPlanner, DocsWriter, ReleaseManager, or some internal role with custom instructions and handoff rules, Armada can support that by adding the persona and inserting it into the pipeline.
 
 For the full pipeline reference, see [docs/PIPELINES.md](docs/PIPELINES.md).
 
@@ -208,21 +206,21 @@ For the full pipeline reference, see [docs/PIPELINES.md](docs/PIPELINES.md).
 
 ### Solo Developer Multiplier
 
-You're working on a feature and realize three refactors need to happen first. Instead of doing them one at a time:
+If a feature depends on a few independent refactors, you can dispatch them together instead of working through them serially:
 
 ```bash
 armada go "1. Extract UserRepository from UserService 2. Add ILogger to all controllers 3. Migrate config to Options pattern"
 ```
 
-Three agents work in parallel while you keep going on your feature branch.
+That gives you three parallel branches to review instead of one long queue.
 
 ### Ship with Confidence
 
-Set `Tested` as your default pipeline. Every dispatch automatically gets implementation, test generation, and review -- no extra effort on your part.
+Set `Tested` as the default pipeline if you want implementation, test generation, and review on every dispatch.
 
 ### Code Review Prep
 
-Batch mechanical changes across a codebase before a review:
+Batch mechanical cleanup before opening a review:
 
 ```bash
 armada voyage create "Pre-review cleanup" --vessel my-api \
@@ -233,7 +231,7 @@ armada voyage create "Pre-review cleanup" --vessel my-api \
 
 ### Multi-Repo Coordination
 
-Dispatch related work across multiple repositories:
+Dispatch related changes across multiple repositories:
 
 ```bash
 armada go "Update the shared DTOs to include CreatedAt field" --vessel shared-models
@@ -243,7 +241,7 @@ armada go "Display CreatedAt in the user profile component" --vessel frontend-ap
 
 ### Prototyping and Exploration
 
-Explore multiple approaches to a problem simultaneously:
+Try a few approaches in parallel:
 
 ```bash
 armada voyage create "Auth approach comparison" --vessel my-api \
@@ -252,11 +250,11 @@ armada voyage create "Auth approach comparison" --vessel my-api \
   --mission "Implement OAuth2 with Google and GitHub providers"
 ```
 
-Review each branch, pick the winner, discard the rest.
+Review the branches, keep one, and drop the others.
 
 ### Bug Triage
 
-Fan out investigation and fixes across reported issues:
+Spread investigation and fixes across multiple reported issues:
 
 ```bash
 armada go "Fix: login fails when email contains a plus sign" --vessel auth-service
@@ -266,7 +264,7 @@ armada go "Fix: file upload silently fails for files over 10MB" --vessel upload-
 
 ### Let AI Manage AI
 
-Connect Claude Code to Armada's MCP server and it becomes the orchestrator -- it can decompose work into missions, dispatch them, and monitor progress without you in the loop. You describe the goal; the AI figures out the plan.
+If you connect Claude Code to Armada's MCP server, Claude can act as the orchestrator: decompose work into missions, dispatch them, and monitor progress.
 
 ```
 > "Refactor the authentication system. Decompose it into parallel missions
@@ -294,7 +292,7 @@ See [Claude Code as Orchestrator](docs/CLAUDE_CODE_AS_ORCHESTRATOR.md) for setup
 
 ## Architecture
 
-Armada is a C#/.NET solution with five projects:
+Armada is a C#/.NET solution with five main projects:
 
 | Project | Description |
 |---------|-------------|
@@ -324,9 +322,11 @@ For details on mission scheduling and assignment, see [docs/SCHEDULING.md](docs/
 
 ### Data Model
 
-```
+<table align="center">
+<tr><td>
+<pre>
 +-------------------------------------------------------------+
-|                            ADMIRAL                            |
+|                            Admiral                            |
 |                     (coordinator process)                     |
 +--------+--------------+--------------+--------------+---------+
          |              |              |              |
@@ -363,11 +363,15 @@ For details on mission scheduling and assignment, see [docs/SCHEDULING.md](docs/
     Mission *--1 Vessel       Each mission targets one vessel
     Mission *--1 Captain      Each mission is assigned to one captain
     Captain 1--1 Dock         A captain works in one dock at a time
-```
+</pre>
+</td></tr>
+</table>
 
 ### Data Flow
 
-```
+<table align="center">
+<tr><td>
+<pre>
 User Command (CLI / API / MCP)
     |
     v
@@ -386,7 +390,9 @@ Captain works autonomously
     +--> Admiral updates Mission status
     +--> On completion: push branch, create PR (optional)
     +--> Captain returns to idle pool
-```
+</pre>
+</td></tr>
+</table>
 
 ### Technology Stack
 
@@ -472,7 +478,7 @@ armada voyage retry "API Hardening"
 
 ## Configuration
 
-Settings live in `~/.armada/settings.json` and are auto-created with sensible defaults on first use.
+Settings live in `~/.armada/settings.json` and are created on first use.
 
 ```bash
 armada config show              # View current settings
@@ -505,7 +511,7 @@ As of v0.3.0, Armada supports multi-tenant authentication with three methods:
 | **Session Token** | `X-Token: <token>` | AES-256-CBC encrypted, 24-hour lifetime. Returned by `POST /api/v1/authenticate` |
 | **API Key** (deprecated) | `X-Api-Key: <key>` | Legacy. Maps to a synthetic admin identity. Migrate to bearer tokens |
 
-The default installation works with `Authorization: Bearer default` -- no additional setup needed for single-user use.
+The default installation works with `Authorization: Bearer default`.
 
 All operational data is tenant-scoped. The authorization model:
 
@@ -517,7 +523,7 @@ For full details, see [docs/REST_API.md](docs/REST_API.md#authentication).
 
 ## REST API
 
-The Admiral exposes a REST API on port 7890. All endpoints are under `/api/v1/` and require authentication (see above). All error responses use a standard format with `Error`, `Description`, `Message`, and `Data` fields -- see [REST_API.md](docs/REST_API.md#error-responses) for the full error code reference.
+The Admiral exposes a REST API on port 7890. Endpoints are under `/api/v1/` and require authentication unless noted otherwise. Error responses use a standard format with `Error`, `Description`, `Message`, and `Data` fields; see [REST_API.md](docs/REST_API.md#error-responses) for details.
 
 ```bash
 API="http://localhost:7890/api/v1"
@@ -541,7 +547,7 @@ armada server start
 
 ## MCP Integration
 
-Armada runs an MCP (Model Context Protocol) server, allowing Claude Code and other MCP-compatible clients to use Armada tools directly.
+Armada also exposes an MCP (Model Context Protocol) server so Claude Code and other MCP-compatible clients can call Armada tools directly.
 
 ```bash
 armada mcp install    # Configure Claude Code, Codex, Gemini, and Cursor for Armada MCP
@@ -550,11 +556,11 @@ armada mcp remove     # Remove those Armada MCP entries again
 
 If you are working from source, repo-root helpers are also available: `install-mcp.bat/.sh` and `remove-mcp.bat/.sh`.
 
-Once installed, your MCP client can call tools like `armada_status`, `armada_dispatch`, `armada_enumerate`, `armada_voyage_status`, `armada_cancel_voyage`, and more. Additional tool categories include persona management, pipeline management, and prompt template management.
+Once installed, your MCP client can call tools like `armada_status`, `armada_dispatch`, `armada_enumerate`, `armada_voyage_status`, and `armada_cancel_voyage`. There are also tool groups for persona, pipeline, and prompt-template management.
 
 ### AI-Powered Orchestration
 
-Connect Claude Code, Codex, or any MCP-capable AI to Armada's MCP server and it becomes an orchestrator. The AI decomposes work into missions, dispatches them, monitors progress, and handles failures. Armada handles the infrastructure -- worktrees, state machines, merge queues, health checks.
+If you connect Claude Code, Codex, or another MCP-capable client to Armada, that client can act as the orchestrator. Armada handles the worktrees, state, and process management underneath.
 
 ```
 Claude Code (orchestrator) --MCP--> Armada Server --spawns--> Captain agents (workers)
@@ -592,7 +598,7 @@ The server starts on the following ports:
 | 7891 | JSON-RPC | MCP server |
 | 7892 | WebSocket | Real-time event hub |
 
-Open `http://localhost:7890/dashboard` in your browser. Configuration is stored in `armada.json` in the working directory. On first run, Armada creates the SQLite database, applies migrations, and seeds default data automatically.
+Open `http://localhost:7890/dashboard` in your browser. Configuration is stored in `armada.json` in the working directory. On first run, Armada creates the SQLite database, applies migrations, and seeds default data.
 
 ### Install the CLI (optional)
 
@@ -613,7 +619,7 @@ dotnet run --project test/Armada.Test.Unit
 
 ## Running Locally (with Docker)
 
-Docker Compose runs the server and optional React dashboard in containers. No .NET SDK required on the host.
+Docker Compose can run the server and the optional React dashboard in containers, so the host does not need the .NET SDK.
 
 ### Prerequisites
 
@@ -633,7 +639,7 @@ docker compose up -d
 | `armada-server` | 7890 | `http://localhost:7890/dashboard` | REST API, MCP, WebSocket, embedded dashboard |
 | `armada-dashboard` | 3000 | `http://localhost:3000` | Standalone React dashboard |
 
-Both dashboards connect to the same server. The embedded dashboard at port 7890 is always available. The React dashboard at port 3000 is an additional option for production deployments.
+Both dashboards connect to the same server. The embedded dashboard at port 7890 is always available. The React dashboard at port 3000 is an optional separate frontend.
 
 ### Data Persistence
 
@@ -678,7 +684,7 @@ docker compose down
 
 ### Build Images Locally
 
-If you want to build the Docker images from source instead of pulling from Docker Hub:
+To build the Docker images from source instead of pulling from Docker Hub:
 
 ```bash
 # Build server image
