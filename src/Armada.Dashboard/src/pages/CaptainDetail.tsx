@@ -67,6 +67,7 @@ export default function CaptainDetail() {
     if (!id) return;
     try {
       setLoading(true);
+      const isInitialLoad = !captain;
       const cap = await getCaptain(id);
       setCaptain(cap);
       // Load current mission if set
@@ -83,7 +84,7 @@ export default function CaptainDetail() {
         const mResult = await listMissions({ pageSize: 100, filters: { captainId: id } });
         setMissions(mResult.objects || []);
       } catch { setMissions([]); }
-      setError('');
+      if (isInitialLoad) setError('');
     } catch {
       setError('Failed to load captain.');
     } finally {

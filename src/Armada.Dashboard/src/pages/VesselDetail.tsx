@@ -69,6 +69,7 @@ export default function VesselDetail() {
     if (!id) return;
     try {
       setLoading(true);
+      const isInitialLoad = !vessel;
       const [vResult, fResult, mResult, pResult] = await Promise.all([listVessels({ pageSize: 9999 }), listFleets({ pageSize: 9999 }), listMissions({ pageSize: 9999 }), listPipelines({ pageSize: 9999 })]);
       const found = vResult.objects.find(v => v.id === id);
       if (!found) { setError('Vessel not found.'); setLoading(false); return; }
@@ -76,7 +77,7 @@ export default function VesselDetail() {
       setFleets(fResult.objects);
       setMissions(mResult.objects.filter(m => m.vesselId === id));
       setPipelines(pResult.objects);
-      setError('');
+      if (isInitialLoad) setError('');
     } catch {
       setError('Failed to load vessel.');
     } finally {

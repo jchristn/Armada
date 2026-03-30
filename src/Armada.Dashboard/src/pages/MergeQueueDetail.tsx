@@ -55,10 +55,11 @@ export default function MergeQueueDetail() {
     if (!id) return;
     try {
       setLoading(true);
+      const isInitialLoad = !entry;
       const [e, vResult] = await Promise.all([getMergeEntry(id), listVessels({ pageSize: 1000 })]);
       setEntry(e);
       setVessels(vResult.objects);
-      setError('');
+      if (isInitialLoad) setError('');
     } catch {
       setError('Failed to load merge entry.');
     } finally {

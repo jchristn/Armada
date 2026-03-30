@@ -36,13 +36,14 @@ export default function FleetDetail() {
     if (!id) return;
     try {
       setLoading(true);
+      const isInitialLoad = !fleet;
       const [fResult, vResult, pResult] = await Promise.all([listFleets({ pageSize: 9999 }), listVessels({ pageSize: 9999 }), listPipelines({ pageSize: 9999 })]);
       const found = fResult.objects.find(f => f.id === id);
       if (!found) { setError('Fleet not found.'); setLoading(false); return; }
       setFleet(found);
       setVessels(vResult.objects.filter(v => v.fleetId === id));
       setPipelines(pResult.objects);
-      setError('');
+      if (isInitialLoad) setError('');
     } catch {
       setError('Failed to load fleet.');
     } finally {

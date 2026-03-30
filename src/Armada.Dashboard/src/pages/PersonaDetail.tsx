@@ -36,12 +36,13 @@ export default function PersonaDetail() {
     if (!name) return;
     try {
       setLoading(true);
+      const isInitialLoad = !persona;
       const found = await getPersona(name);
       if (!found) { setError('Persona not found.'); setLoading(false); return; }
       setPersona(found);
       const templateResult = await listPromptTemplates({ pageSize: 9999 });
       setTemplateNames(templateResult.objects.map(t => t.name));
-      setError('');
+      if (isInitialLoad) setError('');
     } catch {
       setError('Failed to load persona.');
     } finally {

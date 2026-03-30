@@ -96,12 +96,13 @@ export default function PromptTemplateDetail() {
     if (!name) return;
     try {
       setLoading(true);
+      const isInitialLoad = !template;
       const result = await getPromptTemplate(name);
       setTemplate(result);
       setContent(result.content);
       setDescription(result.description ?? '');
       setDirty(false);
-      setError('');
+      if (isInitialLoad) setError('');
     } catch {
       setError('Failed to load prompt template.');
     } finally {

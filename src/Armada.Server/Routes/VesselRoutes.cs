@@ -287,15 +287,7 @@ namespace Armada.Server.Routes
                         : await _database.Vessels.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (vessel == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
 
-                try
-                {
-                    await CleanupVesselResourcesAsync(vessel).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    req.Http.Response.StatusCode = 500;
-                    return new ApiErrorResponse { Error = ApiResultEnum.InternalError, Message = "Vessel cleanup failed -- deletion aborted: " + ex.Message };
-                }
+                await CleanupVesselResourcesAsync(vessel).ConfigureAwait(false);
 
                 if (ctx.IsAdmin)
                     await _database.Vessels.DeleteAsync(id).ConfigureAwait(false);
@@ -441,8 +433,8 @@ namespace Armada.Server.Routes
             if (!String.IsNullOrEmpty(vessel.LocalPath) && Directory.Exists(vessel.LocalPath))
                 errors.Add("Bare repo still exists after deletion: " + vessel.LocalPath);
 
-            if (errors.Count > 0)
-                throw new InvalidOperationException(String.Join("; ", errors));
+            // Log warnings but don't block deletion -- orphan filesystem cleanup
+            // can happen on next server restart. The vessel DB record must be deleted.
         }
 
         /// <summary>

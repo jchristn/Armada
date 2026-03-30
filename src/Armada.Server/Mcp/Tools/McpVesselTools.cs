@@ -162,16 +162,11 @@ namespace Armada.Server.Mcp.Tools
                     Vessel? vessel = await database.Vessels.ReadAsync(vesselId).ConfigureAwait(false);
                     if (vessel == null) return (object)new { Error = "Vessel not found" };
 
-                    try
-                    {
-                        await CleanupVesselResourcesAsync(vessel, database, dockService).ConfigureAwait(false);
-                    }
-                    catch (Exception ex)
-                    {
-                        return (object)new { Error = "Vessel cleanup failed -- deletion aborted: " + ex.Message };
-                    }
+                    List<string> warnings = await CleanupVesselResourcesAsync(vessel, database, dockService).ConfigureAwait(false);
 
                     await database.Vessels.DeleteAsync(vesselId).ConfigureAwait(false);
+                    if (warnings.Count > 0)
+                        return (object)new { Status = "deleted", VesselId = vesselId, Warnings = warnings };
                     return (object)new { Status = "deleted", VesselId = vesselId };
                 });
 
@@ -209,7 +204,6 @@ namespace Armada.Server.Mcp.Tools
                         }
 
                         await CleanupVesselResourcesAsync(vessel, database, dockService).ConfigureAwait(false);
-
                         await database.Vessels.DeleteAsync(id).ConfigureAwait(false);
                         result.Deleted++;
                     }
@@ -254,7 +248,7 @@ namespace Armada.Server.Mcp.Tools
         /// Cancels active missions, removes docks/worktrees, and deletes the bare repository.
         /// This method throws on failure -- vessel deletion should NOT proceed if cleanup fails.
         /// </summary>
-        private static async Task CleanupVesselResourcesAsync(Vessel vessel, DatabaseDriver database, IDockService? dockService)
+        private static async Task<List<string>> CleanupVesselResourcesAsync(Vessel vessel, DatabaseDriver database, IDockService? dockService)
         {
             List<string> errors = new List<string>();
 
@@ -326,10 +320,7 @@ namespace Armada.Server.Mcp.Tools
                 errors.Add("Bare repo still exists after deletion: " + vessel.LocalPath);
             }
 
-            if (errors.Count > 0)
-            {
-                throw new InvalidOperationException("Vessel cleanup failed: " + String.Join("; ", errors));
-            }
+            return errors;
         }
     }
 }

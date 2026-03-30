@@ -41,11 +41,12 @@ export default function PipelineDetail() {
     if (!name) return;
     try {
       setLoading(true);
+      const isInitialLoad = !pipeline;
       const found = await getPipeline(name);
       setPipeline(found);
       const personaResult = await listPersonas({ pageSize: 9999 });
       setPersonaNames(personaResult.objects.map(p => p.name));
-      setError('');
+      if (isInitialLoad) setError('');
     } catch {
       setError('Failed to load pipeline.');
     } finally {
