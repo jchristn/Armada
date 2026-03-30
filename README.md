@@ -32,21 +32,35 @@ Armada fixes this. You describe what you want. Armada plans it, assigns it to ag
 ## How Armada Works
 
 ```
-You: "Build a FastAPI backend with user auth and tests"
-                    |
-                    v
-             +-----------+
-             |  Admiral   |  <-- coordinator process
-             +-----------+
-              /    |    \
-             v     v     v
-        [Plan]  [Implement]  [Test]  [Review]
-          |         |           |        |
-      Architect   Worker   TestEngineer  Judge
-          |         |           |        |
-          v         v           v        v
-     Decomposes   Writes     Writes   Reviews
-     into tasks    code      tests    the diff
+  You: "Build a FastAPI backend with user auth and tests"
+   |
+   v
++-------------------------------------------------------------------------+
+|                            ADMIRAL                                      |
+|                     (coordinator process)                               |
++-------------------------------------------------------------------------+
+   |
+   |  Pipeline: FullPipeline
+   |
+   v
++------------------+     +------------------+     +------------------+     +------------------+
+|    ARCHITECT     |     |     WORKER       |     |  TEST ENGINEER   |     |      JUDGE       |
+|    (Plan)        | --> |  (Implement)     | --> |  (Write Tests)   | --> |  (Review)        |
++------------------+     +------------------+     +------------------+     +------------------+
+|                  |     |                  |     |                  |     |                  |
+| Reads codebase,  |     | Writes code on   |     | Reads the diff,  |     | Reads the diff,  |
+| decomposes goal   |     | its own branch.  |     | writes tests     |     | checks quality,  |
+| into missions,   |     | Each mission     |     | covering the     |     | completeness,    |
+| identifies files  |     | gets a dedicated |     | changes. Commits |     | scope, and       |
+| and dependencies. |     | git worktree.    |     | to same branch.  |     | style. Produces  |
+|                  |     |                  |     |                  |     | PASS/FAIL        |
+| Output: mission  |     | Output: code     |     | Output: test     |     | verdict.         |
+| definitions      |     | changes + diff   |     | files + diff     |     |                  |
++------------------+     +------------------+     +------------------+     +------------------+
+         |                        |                        |                        |
+         v                        v                        v                        v
+   No code changes          Merged into             Merged into              Merged into
+   (planning only)        working directory       working directory        working directory
 ```
 
 1. **You describe the goal.** One sentence or a detailed spec -- your call.
