@@ -63,7 +63,7 @@ namespace Armada.Core.Services
                 if (Directory.Exists(repoPath) && !await _Git.IsRepositoryAsync(repoPath, token).ConfigureAwait(false))
                 {
                     _Logging.Warn(_Header + "removing corrupt/incomplete repo directory: " + repoPath);
-                    try { Directory.Delete(repoPath, true); } catch { }
+                    await ForceRemoveDirectoryAsync(repoPath, token).ConfigureAwait(false);
                 }
 
                 if (!await _Git.IsRepositoryAsync(repoPath, token).ConfigureAwait(false))
