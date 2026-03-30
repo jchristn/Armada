@@ -915,23 +915,56 @@ namespace Armada.Core.Services
                     "completed mission \"" + completedMission.Title + "\" (" + completedMission.Id + ").\n" +
                     "Branch: " + (completedMission.BranchName ?? "unknown") + "\n";
 
-                // Include the agent's stdout output (from mission log) for context
+                // Include the agent's actual output (from mission log), stripping the
+                // launch preamble (command line, original prompt, commit trailers) to avoid
+                // repeating what the next agent already has in its own description.
                 string missionLogPath = Path.Combine(_Settings.LogDirectory, "missions", completedMission.Id + ".log");
                 if (File.Exists(missionLogPath))
                 {
                     try
                     {
-                        string logContent = await File.ReadAllTextAsync(missionLogPath).ConfigureAwait(false);
-                        if (!String.IsNullOrEmpty(logContent))
+                        string[] logLines = await File.ReadAllLinesAsync(missionLogPath).ConfigureAwait(false);
+
+                        // Find where the agent's actual output starts -- after the launch preamble.
+                        // The preamble ends after the last "IMPORTANT:" trailer instruction line
+                        // or after the blank line following the prompt.
+                        int outputStart = 0;
+                        for (int i = 0; i < logLines.Length; i++)
                         {
-                            // Truncate to avoid overwhelming the next agent's context
-                            int maxLogChars = 8000;
-                            if (logContent.Length > maxLogChars)
+                            string trimmed = logLines[i].Trim();
+                            // Skip past "IMPORTANT: For every git commit" and the trailer lines
+                            if (trimmed.StartsWith("Armada-Vessel-Id:") ||
+                                trimmed.StartsWith("Armada-Captain-Id:") ||
+                                trimmed.StartsWith("Armada-Mission-Id:") ||
+                                trimmed.StartsWith("Armada-Voyage-Id:"))
                             {
-                                logContent = logContent.Substring(logContent.Length - maxLogChars);
-                                logContent = "...(truncated)\n" + logContent;
+                                outputStart = i + 1;
                             }
-                            handoffContext += "\n### Agent Output (from " + completedMission.Persona + " stage)\n```\n" + logContent.Trim() + "\n```\n";
+                            // Also skip past the "[Agent exited" line at the end
+                        }
+                        // Skip any blank lines after the preamble
+                        while (outputStart < logLines.Length && String.IsNullOrWhiteSpace(logLines[outputStart]))
+                            outputStart++;
+
+                        // Collect agent output lines, excluding the final exit line
+                        List<string> outputLines = new List<string>();
+                        for (int i = outputStart; i < logLines.Length; i++)
+                        {
+                            if (logLines[i].Contains("] Agent exited with code"))
+                                continue;
+                            outputLines.Add(logLines[i]);
+                        }
+
+                        string agentOutput = String.Join("\n", outputLines).Trim();
+                        if (!String.IsNullOrEmpty(agentOutput))
+                        {
+                            int maxLogChars = 8000;
+                            if (agentOutput.Length > maxLogChars)
+                            {
+                                agentOutput = agentOutput.Substring(agentOutput.Length - maxLogChars);
+                                agentOutput = "...(truncated)\n" + agentOutput;
+                            }
+                            handoffContext += "\n### Agent Output (from " + completedMission.Persona + " stage)\n```\n" + agentOutput + "\n```\n";
                         }
                     }
                     catch { }
