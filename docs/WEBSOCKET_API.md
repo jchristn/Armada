@@ -321,6 +321,16 @@ Commands are sent via the `command` route. Each command returns a `command.resul
 | | `enqueue_merge` | Enqueue branch for merge | `data` |
 | | `cancel_merge` | Cancel merge entry | `id` |
 | | `process_merge_queue` | Process the merge queue | — |
+| **Persona** | `get_persona` | Get a persona by name | `id` (persona name) |
+| | `create_persona` | Create a persona | `data` (Persona object) |
+| | `update_persona` | Update persona properties | `id` (persona name), `data` (partial Persona) |
+| | `delete_persona` | Delete a custom persona (blocked for built-in) | `id` (persona name) |
+| **Pipeline** | `get_pipeline` | Get a pipeline by name | `id` (pipeline name) |
+| | `create_pipeline` | Create a pipeline with stages | `data` (Pipeline object with Stages) |
+| | `update_pipeline` | Update pipeline and stages | `id` (pipeline name), `data` (partial Pipeline) |
+| | `delete_pipeline` | Delete a custom pipeline (blocked for built-in) | `id` (pipeline name) |
+| **Prompt Template** | `get_prompt_template` | Get a prompt template by name | `id` (template name) |
+| | `update_prompt_template` | Update template content | `id` (template name), `data` (partial PromptTemplate) |
 
 ---
 

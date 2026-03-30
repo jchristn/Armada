@@ -49,5 +49,10 @@ namespace Armada.Server.Mcp
         /// Whether to enable model context accumulation on this vessel. Default false.
         /// </summary>
         public bool? EnableModelContext { get; set; }
+
+        /// <summary>
+        /// Default pipeline ID for dispatches to this vessel (ppl_ prefix).
+        /// </summary>
+        public string? DefaultPipelineId { get; set; }
     }
 }

@@ -1,12 +1,12 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { listVessels, listFleets, listMissions, updateVessel, deleteVessel } from '../api/client';
-import type { Fleet, Vessel, Mission } from '../types/models';
+import { listVessels, listFleets, listMissions, listPipelines, updateVessel, deleteVessel } from '../api/client';
+import type { Fleet, Vessel, Mission, Pipeline } from '../types/models';
 import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
 import StatusBadge from '../components/shared/StatusBadge';
-import { copyToClipboard } from '../components/shared/CopyButton';
+import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 
 function formatTimeAbsolute(utc: string | null): string {
@@ -36,6 +36,7 @@ interface VesselForm {
   styleGuide: string;
   enableModelContext: boolean;
   modelContext: string;
+  defaultPipelineId: string;
 }
 
 export default function VesselDetail() {
@@ -44,12 +45,13 @@ export default function VesselDetail() {
   const [vessel, setVessel] = useState<Vessel | null>(null);
   const [fleets, setFleets] = useState<Fleet[]>([]);
   const [missions, setMissions] = useState<Mission[]>([]);
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   // Edit modal
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<VesselForm>({ name: '', fleetId: '', repoUrl: '', defaultBranch: 'main', localPath: '', workingDirectory: '', projectContext: '', styleGuide: '', enableModelContext: true, modelContext: '' });
+  const [form, setForm] = useState<VesselForm>({ name: '', fleetId: '', repoUrl: '', defaultBranch: 'main', localPath: '', workingDirectory: '', projectContext: '', styleGuide: '', enableModelContext: true, modelContext: '', defaultPipelineId: '' });
 
   // JSON viewer
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
@@ -67,13 +69,15 @@ export default function VesselDetail() {
     if (!id) return;
     try {
       setLoading(true);
-      const [vResult, fResult, mResult] = await Promise.all([listVessels({ pageSize: 9999 }), listFleets({ pageSize: 9999 }), listMissions({ pageSize: 9999 })]);
+      const isInitialLoad = !vessel;
+      const [vResult, fResult, mResult, pResult] = await Promise.all([listVessels({ pageSize: 9999 }), listFleets({ pageSize: 9999 }), listMissions({ pageSize: 9999 }), listPipelines({ pageSize: 9999 })]);
       const found = vResult.objects.find(v => v.id === id);
       if (!found) { setError('Vessel not found.'); setLoading(false); return; }
       setVessel(found);
       setFleets(fResult.objects);
       setMissions(mResult.objects.filter(m => m.vesselId === id));
-      setError('');
+      setPipelines(pResult.objects);
+      if (isInitialLoad) setError('');
     } catch {
       setError('Failed to load vessel.');
     } finally {
@@ -96,6 +100,7 @@ export default function VesselDetail() {
       styleGuide: vessel.styleGuide ?? '',
       enableModelContext: vessel.enableModelContext,
       modelContext: vessel.modelContext ?? '',
+      defaultPipelineId: vessel.defaultPipelineId ?? '',
     });
     setShowForm(true);
   }
@@ -110,6 +115,7 @@ export default function VesselDetail() {
       if (!payload.projectContext) delete payload.projectContext;
       if (!payload.styleGuide) delete payload.styleGuide;
       if (!payload.modelContext) delete payload.modelContext;
+      if (!payload.defaultPipelineId) delete payload.defaultPipelineId;
       await updateVessel(vessel.id, payload);
       setShowForm(false);
       load();
@@ -168,7 +174,7 @@ export default function VesselDetail() {
                 {fleets.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
             </label>
-            <label>Repo URL<input value={form.repoUrl} onChange={e => setForm({ ...form, repoUrl: e.target.value })} /></label>
+            <label>Repository URL<input value={form.repoUrl} onChange={e => setForm({ ...form, repoUrl: e.target.value })} required placeholder="https://github.com/org/repo.git" /></label>
             <label>Default Branch<input value={form.defaultBranch} onChange={e => setForm({ ...form, defaultBranch: e.target.value })} /></label>
             <label>Local Path<input value={form.localPath} onChange={e => setForm({ ...form, localPath: e.target.value })} /></label>
             <label>Working Directory<input value={form.workingDirectory} onChange={e => setForm({ ...form, workingDirectory: e.target.value })} /></label>
@@ -181,6 +187,14 @@ export default function VesselDetail() {
               Style Guide
               <textarea value={form.styleGuide} onChange={e => setForm({ ...form, styleGuide: e.target.value })} rows={4} />
               <span className="text-dim" style={{ fontSize: '0.8em' }}>{form.styleGuide.length} characters</span>
+            </label>
+            <label>Default Pipeline
+              <select value={form.defaultPipelineId} onChange={e => setForm({ ...form, defaultPipelineId: e.target.value })}>
+                <option value="">None (WorkerOnly)</option>
+                {pipelines.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
             </label>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input type="checkbox" checked={form.enableModelContext} onChange={e => setForm({ ...form, enableModelContext: e.target.checked })} style={{ width: 'auto' }} />
@@ -211,7 +225,7 @@ export default function VesselDetail() {
           <span className="detail-label">ID</span>
           <span className="id-display">
             <span className="mono">{vessel.id}</span>
-            <button className="copy-btn" onClick={() => copyToClipboard(vessel.id)} title="Copy ID" />
+            <CopyButton text={vessel.id} />
           </span>
         </div>
         <div className="detail-field"><span className="detail-label">Name</span><span>{vessel.name}</span></div>
@@ -233,6 +247,10 @@ export default function VesselDetail() {
         <div className="detail-field"><span className="detail-label">Landing Mode</span><span>{vessel.landingMode || '-'}</span></div>
         <div className="detail-field"><span className="detail-label">Branch Cleanup Policy</span><span>{vessel.branchCleanupPolicy || '-'}</span></div>
         <div className="detail-field"><span className="detail-label">Allow Concurrent Missions</span><span>{vessel.allowConcurrentMissions ? 'Yes' : 'No'}</span></div>
+        <div className="detail-field">
+          <span className="detail-label">Default Pipeline</span>
+          <span>{pipelines.find(p => p.id === vessel.defaultPipelineId)?.name || vessel.defaultPipelineId || <span className="text-dim">None (WorkerOnly)</span>}</span>
+        </div>
         <div className="detail-field"><span className="detail-label">Active</span><span>{vessel.active !== false ? 'Yes' : 'No'}</span></div>
         <div className="detail-field">
           <span className="detail-label">Created</span>
@@ -295,7 +313,7 @@ export default function VesselDetail() {
                       <strong>{m.title}</strong>
                       <div className="text-dim id-display">
                         <span className="mono">{m.id}</span>
-                        <button className="copy-btn" onClick={e => { e.stopPropagation(); copyToClipboard(m.id); }} title="Copy ID" />
+                        <CopyButton text={m.id} />
                       </div>
                     </td>
                     <td><StatusBadge status={m.status} /></td>

@@ -235,6 +235,9 @@ namespace Armada.Core.Database.Postgresql
             Tenants = new TenantMethods(this, _Settings, _Logging);
             Users = new UserMethods(this, _Settings, _Logging);
             Credentials = new CredentialMethods(this, _Settings, _Logging);
+            PromptTemplates = new PromptTemplateMethods(this, _Settings, _Logging);
+            Personas = new PersonaMethods(this, _Settings, _Logging);
+            Pipelines = new PipelineMethods(this, _Settings, _Logging);
         }
 
         #endregion

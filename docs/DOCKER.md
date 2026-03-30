@@ -70,7 +70,7 @@ The default `docker/compose.yaml`:
 ```yaml
 services:
   armada-server:
-    image: jchristn77/armada-server:v0.3.0
+    image: jchristn77/armada-server:v0.4.0
     ports:
       - "7890:7890"
       - "7891:7891"
@@ -81,7 +81,7 @@ services:
       - ./armada/logs:/app/data/logs
 
   armada-dashboard:
-    image: jchristn77/armada-dashboard:v0.3.0
+    image: jchristn77/armada-dashboard:v0.4.0
     ports:
       - "3000:80"
     environment:
@@ -197,17 +197,17 @@ build-dashboard.bat
 
 ```bash
 # Server
-./build-server.sh v0.3.0
+./build-server.sh v0.4.0
 # or on Windows
-build-server.bat v0.3.0
+build-server.bat v0.4.0
 
 # Dashboard
-./build-dashboard.sh v0.3.0
+./build-dashboard.sh v0.4.0
 # or on Windows
-build-dashboard.bat v0.3.0
+build-dashboard.bat v0.4.0
 ```
 
-This produces both `jchristn77/armada-server:latest` and `jchristn77/armada-server:v0.3.0` (and the same for the dashboard).
+This produces both `jchristn77/armada-server:latest` and `jchristn77/armada-server:v0.4.0` (and the same for the dashboard).
 
 ### Building locally (no push)
 

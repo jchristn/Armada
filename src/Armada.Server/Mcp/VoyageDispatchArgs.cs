@@ -27,5 +27,15 @@ namespace Armada.Server.Mcp
         /// List of missions to create.
         /// </summary>
         public List<MissionDescription> Missions { get; set; } = new List<MissionDescription>();
+
+        /// <summary>
+        /// Pipeline ID to use for this dispatch (overrides vessel/fleet default).
+        /// </summary>
+        public string? PipelineId { get; set; }
+
+        /// <summary>
+        /// Pipeline name to use (convenience alias for pipelineId -- resolves by name).
+        /// </summary>
+        public string? Pipeline { get; set; }
     }
 }

@@ -1,11 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { listFleets, listVessels, updateFleet, deleteFleet } from '../api/client';
-import type { Fleet, Vessel } from '../types/models';
+import { listFleets, listVessels, listPipelines, updateFleet, deleteFleet } from '../api/client';
+import type { Fleet, Vessel, Pipeline } from '../types/models';
 import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
-import CopyButton, { copyToClipboard } from '../components/shared/CopyButton';
+import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 
 function formatTimeAbsolute(utc: string | null): string {
@@ -18,12 +18,13 @@ export default function FleetDetail() {
   const navigate = useNavigate();
   const [fleet, setFleet] = useState<Fleet | null>(null);
   const [vessels, setVessels] = useState<Vessel[]>([]);
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   // Edit modal
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', description: '' });
+  const [form, setForm] = useState({ name: '', description: '', defaultPipelineId: '' });
 
   // JSON viewer
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
@@ -35,12 +36,14 @@ export default function FleetDetail() {
     if (!id) return;
     try {
       setLoading(true);
-      const [fResult, vResult] = await Promise.all([listFleets({ pageSize: 9999 }), listVessels({ pageSize: 9999 })]);
+      const isInitialLoad = !fleet;
+      const [fResult, vResult, pResult] = await Promise.all([listFleets({ pageSize: 9999 }), listVessels({ pageSize: 9999 }), listPipelines({ pageSize: 9999 })]);
       const found = fResult.objects.find(f => f.id === id);
       if (!found) { setError('Fleet not found.'); setLoading(false); return; }
       setFleet(found);
       setVessels(vResult.objects.filter(v => v.fleetId === id));
-      setError('');
+      setPipelines(pResult.objects);
+      if (isInitialLoad) setError('');
     } catch {
       setError('Failed to load fleet.');
     } finally {
@@ -52,7 +55,7 @@ export default function FleetDetail() {
 
   function openEdit() {
     if (!fleet) return;
-    setForm({ name: fleet.name, description: fleet.description ?? '' });
+    setForm({ name: fleet.name, description: fleet.description ?? '', defaultPipelineId: fleet.defaultPipelineId ?? '' });
     setShowForm(true);
   }
 
@@ -113,6 +116,14 @@ export default function FleetDetail() {
             <h3>Edit Fleet</h3>
             <label>Name<input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required /></label>
             <label>Description<input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></label>
+            <label>Default Pipeline
+              <select value={form.defaultPipelineId} onChange={e => setForm({ ...form, defaultPipelineId: e.target.value })}>
+                <option value="">None (WorkerOnly)</option>
+                {pipelines.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.stages.map(s => s.personaName).join(' -> ')})</option>
+                ))}
+              </select>
+            </label>
             <div className="modal-actions">
               <button type="submit" className="btn btn-primary">Save</button>
               <button type="button" className="btn" onClick={() => setShowForm(false)}>Cancel</button>
@@ -131,11 +142,12 @@ export default function FleetDetail() {
           <span className="detail-label">ID</span>
           <span className="id-display">
             <span className="mono">{fleet.id}</span>
-            <button className="copy-btn" onClick={() => copyToClipboard(fleet.id)} title="Copy ID" />
+            <CopyButton text={fleet.id} />
           </span>
         </div>
         <div className="detail-field"><span className="detail-label">Name</span><span>{fleet.name}</span></div>
         <div className="detail-field"><span className="detail-label">Description</span><span>{fleet.description || '-'}</span></div>
+        <div className="detail-field"><span className="detail-label">Default Pipeline</span><span>{pipelines.find(p => p.id === fleet.defaultPipelineId)?.name || fleet.defaultPipelineId || <span className="text-dim">None (WorkerOnly)</span>}</span></div>
         <div className="detail-field"><span className="detail-label">Active</span><span>{fleet.active !== false ? 'Yes' : 'No'}</span></div>
         <div className="detail-field"><span className="detail-label">Created</span><span title={fleet.createdUtc}>{formatTimeAbsolute(fleet.createdUtc)}</span></div>
         <div className="detail-field"><span className="detail-label">Last Updated</span><span>{formatTimeAbsolute(fleet.lastUpdateUtc)}</span></div>
@@ -161,7 +173,7 @@ export default function FleetDetail() {
                       <strong>{v.name}</strong>
                       <div className="text-dim id-display">
                         <span className="mono">{v.id}</span>
-                        <button className="copy-btn" onClick={e => { e.stopPropagation(); copyToClipboard(v.id); }} title="Copy ID" />
+                        <CopyButton text={v.id} />
                       </div>
                     </td>
                     <td className="text-dim vessel-repo-cell table-url-cell">

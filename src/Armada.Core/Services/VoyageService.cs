@@ -51,10 +51,17 @@ namespace Armada.Core.Services
                 List<Mission> missions = await _Database.Missions.EnumerateByVoyageAsync(voyage.Id, token).ConfigureAwait(false);
                 if (missions.Count == 0) continue;
 
+                // A mission is "done" if it's in a terminal state or if it's an
+                // intermediate pipeline stage (WorkProduced) that has already handed
+                // off to a downstream mission. PullRequestOpen missions are also
+                // considered done for voyage completion purposes (PR is open, work is out).
                 bool allDone = missions.All(m =>
                     m.Status == MissionStatusEnum.Complete ||
                     m.Status == MissionStatusEnum.Failed ||
-                    m.Status == MissionStatusEnum.Cancelled);
+                    m.Status == MissionStatusEnum.Cancelled ||
+                    m.Status == MissionStatusEnum.LandingFailed ||
+                    m.Status == MissionStatusEnum.WorkProduced ||
+                    m.Status == MissionStatusEnum.PullRequestOpen);
 
                 if (allDone)
                 {

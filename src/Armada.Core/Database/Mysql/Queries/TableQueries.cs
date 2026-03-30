@@ -419,6 +419,136 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// DDL for the prompt_templates table.
+        /// </summary>
+        public static readonly string PromptTemplates = @"CREATE TABLE IF NOT EXISTS prompt_templates (
+            id VARCHAR(450) NOT NULL PRIMARY KEY,
+            tenant_id VARCHAR(450),
+            name VARCHAR(450) NOT NULL,
+            description LONGTEXT,
+            category VARCHAR(450) NOT NULL DEFAULT 'mission',
+            content LONGTEXT NOT NULL,
+            is_built_in TINYINT(1) NOT NULL DEFAULT 0,
+            active TINYINT(1) NOT NULL DEFAULT 1,
+            created_utc DATETIME(6) NOT NULL,
+            last_update_utc DATETIME(6) NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+        );";
+
+        /// <summary>
+        /// DDL for the personas table.
+        /// </summary>
+        public static readonly string Personas = @"CREATE TABLE IF NOT EXISTS personas (
+            id VARCHAR(450) NOT NULL PRIMARY KEY,
+            tenant_id VARCHAR(450),
+            name VARCHAR(450) NOT NULL,
+            description LONGTEXT,
+            prompt_template_name VARCHAR(450) NOT NULL,
+            is_built_in TINYINT(1) NOT NULL DEFAULT 0,
+            active TINYINT(1) NOT NULL DEFAULT 1,
+            created_utc DATETIME(6) NOT NULL,
+            last_update_utc DATETIME(6) NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+        );";
+
+        /// <summary>
+        /// DDL for the pipelines table.
+        /// </summary>
+        public static readonly string Pipelines = @"CREATE TABLE IF NOT EXISTS pipelines (
+            id VARCHAR(450) NOT NULL PRIMARY KEY,
+            tenant_id VARCHAR(450),
+            name VARCHAR(450) NOT NULL,
+            description LONGTEXT,
+            is_built_in TINYINT(1) NOT NULL DEFAULT 0,
+            active TINYINT(1) NOT NULL DEFAULT 1,
+            created_utc DATETIME(6) NOT NULL,
+            last_update_utc DATETIME(6) NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+        );";
+
+        /// <summary>
+        /// DDL for the pipeline_stages table.
+        /// </summary>
+        public static readonly string PipelineStages = @"CREATE TABLE IF NOT EXISTS pipeline_stages (
+            id VARCHAR(450) NOT NULL PRIMARY KEY,
+            pipeline_id VARCHAR(450) NOT NULL,
+            stage_order INT NOT NULL,
+            persona_name VARCHAR(450) NOT NULL,
+            is_optional TINYINT(1) NOT NULL DEFAULT 0,
+            description LONGTEXT,
+            FOREIGN KEY (pipeline_id) REFERENCES pipelines(id) ON DELETE CASCADE
+        );";
+
+        /// <summary>
+        /// Migration v9 statements for adding the prompt_templates table.
+        /// </summary>
+        public static readonly string[] MigrationV9Statements = new string[]
+        {
+            PromptTemplates,
+            @"CREATE UNIQUE INDEX idx_prompt_templates_tenant_name ON prompt_templates(tenant_id, name);",
+            @"CREATE INDEX idx_prompt_templates_category ON prompt_templates(category);",
+            @"CREATE INDEX idx_prompt_templates_active ON prompt_templates(active);"
+        };
+
+        /// <summary>
+        /// Migration v10 statements for adding the personas table.
+        /// </summary>
+        public static readonly string[] MigrationV10Statements = new string[]
+        {
+            Personas,
+            @"CREATE UNIQUE INDEX idx_personas_tenant_name ON personas(tenant_id, name);",
+            @"CREATE INDEX idx_personas_active ON personas(active);",
+            @"CREATE INDEX idx_personas_prompt_template ON personas(prompt_template_name);"
+        };
+
+        /// <summary>
+        /// Migration v11 statements for adding captain persona fields.
+        /// </summary>
+        public static readonly string[] MigrationV11Statements = new string[]
+        {
+            @"ALTER TABLE captains ADD COLUMN allowed_personas LONGTEXT;",
+            @"ALTER TABLE captains ADD COLUMN preferred_persona VARCHAR(450);",
+            @"CREATE INDEX idx_captains_preferred_persona ON captains(preferred_persona);"
+        };
+
+        /// <summary>
+        /// Migration v12 statements for adding mission persona and dependency fields.
+        /// </summary>
+        public static readonly string[] MigrationV12Statements = new string[]
+        {
+            @"ALTER TABLE missions ADD COLUMN persona VARCHAR(450);",
+            @"ALTER TABLE missions ADD COLUMN depends_on_mission_id VARCHAR(450);",
+            @"CREATE INDEX idx_missions_persona ON missions(persona);",
+            @"CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);"
+        };
+
+        /// <summary>
+        /// Migration v13 statements for adding pipelines and pipeline_stages tables.
+        /// </summary>
+        public static readonly string[] MigrationV13Statements = new string[]
+        {
+            Pipelines,
+            PipelineStages,
+            @"CREATE UNIQUE INDEX idx_pipelines_tenant_name ON pipelines(tenant_id, name);",
+            @"CREATE INDEX idx_pipelines_active ON pipelines(active);",
+            @"CREATE INDEX idx_pipeline_stages_pipeline ON pipeline_stages(pipeline_id);",
+            @"CREATE UNIQUE INDEX idx_pipeline_stages_order ON pipeline_stages(pipeline_id, stage_order);",
+            @"CREATE INDEX idx_pipeline_stages_persona ON pipeline_stages(persona_name);",
+            @"ALTER TABLE fleets ADD COLUMN default_pipeline_id VARCHAR(450);",
+            @"ALTER TABLE vessels ADD COLUMN default_pipeline_id VARCHAR(450);",
+            @"CREATE INDEX idx_fleets_default_pipeline ON fleets(default_pipeline_id);",
+            @"CREATE INDEX idx_vessels_default_pipeline ON vessels(default_pipeline_id);"
+        };
+
+        /// <summary>
+        /// Migration v14 statements for adding failure_reason to missions.
+        /// </summary>
+        public static readonly string[] MigrationV14Statements = new string[]
+        {
+            @"ALTER TABLE missions ADD COLUMN failure_reason LONGTEXT;"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

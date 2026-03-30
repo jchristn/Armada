@@ -19,5 +19,10 @@ namespace Armada.Server.Mcp
         /// New fleet description.
         /// </summary>
         public string? Description { get; set; }
+
+        /// <summary>
+        /// Default pipeline ID for dispatches to vessels in this fleet (ppl_ prefix).
+        /// </summary>
+        public string? DefaultPipelineId { get; set; }
     }
 }

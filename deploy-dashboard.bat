@@ -16,8 +16,7 @@ if not exist "%DASHBOARD_DIR%\package.json" (
 
 pushd "%DASHBOARD_DIR%"
 if not exist "node_modules" (
-    echo [deploy-dashboard] Installing dashboard dependencies...
-    echo Installing dashboard dependencies...
+    echo [deploy-dashboard] Installing dependencies...
     call npm.cmd install
     if errorlevel 1 (
         popd
@@ -25,8 +24,7 @@ if not exist "node_modules" (
     )
 )
 
-echo [deploy-dashboard] Building dashboard...
-echo Building dashboard...
+echo [deploy-dashboard] Building...
 call npm.cmd run build
 if errorlevel 1 (
     popd

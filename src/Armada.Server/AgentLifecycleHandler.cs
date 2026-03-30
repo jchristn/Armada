@@ -26,8 +26,14 @@ namespace Armada.Server
         private AgentRuntimeFactory _RuntimeFactory;
         private IAdmiralService _Admiral;
         private IMessageTemplateService _TemplateService;
+        private IPromptTemplateService? _PromptTemplateService;
         private ArmadaWebSocketHub? _WebSocketHub;
         private Func<string, string, string?, string?, string?, string?, string?, string?, Task> _EmitEventAsync;
+
+        /// <summary>
+        /// Accumulates agent stdout per mission for pipeline handoff.
+        /// </summary>
+        private System.Collections.Concurrent.ConcurrentDictionary<string, System.Text.StringBuilder> _MissionOutput = new System.Collections.Concurrent.ConcurrentDictionary<string, System.Text.StringBuilder>();
 
         /// <summary>
         /// Maps process IDs to captain IDs for progress tracking.
@@ -52,6 +58,7 @@ namespace Armada.Server
         /// <param name="runtimeFactory">Agent runtime factory.</param>
         /// <param name="admiral">Admiral service.</param>
         /// <param name="templateService">Message template service.</param>
+        /// <param name="promptTemplateService">Prompt template service (optional).</param>
         /// <param name="webSocketHub">WebSocket hub (nullable).</param>
         /// <param name="emitEventAsync">Delegate to emit events.</param>
         public AgentLifecycleHandler(
@@ -61,6 +68,7 @@ namespace Armada.Server
             AgentRuntimeFactory runtimeFactory,
             IAdmiralService admiral,
             IMessageTemplateService templateService,
+            IPromptTemplateService? promptTemplateService,
             ArmadaWebSocketHub? webSocketHub,
             Func<string, string, string?, string?, string?, string?, string?, string?, Task> emitEventAsync)
         {
@@ -70,6 +78,7 @@ namespace Armada.Server
             _RuntimeFactory = runtimeFactory ?? throw new ArgumentNullException(nameof(runtimeFactory));
             _Admiral = admiral ?? throw new ArgumentNullException(nameof(admiral));
             _TemplateService = templateService ?? throw new ArgumentNullException(nameof(templateService));
+            _PromptTemplateService = promptTemplateService;
             _WebSocketHub = webSocketHub;
             _EmitEventAsync = emitEventAsync ?? throw new ArgumentNullException(nameof(emitEventAsync));
         }
@@ -81,6 +90,25 @@ namespace Armada.Server
         /// <summary>
         /// Set or update the WebSocket hub reference (created after this handler).
         /// </summary>
+        /// <summary>
+        /// Retrieve and clear accumulated stdout output for a mission.
+        /// Used by pipeline handoff to pass agent output to the next stage.
+        /// </summary>
+        public string? GetAndClearMissionOutput(string missionId)
+        {
+            if (String.IsNullOrEmpty(missionId)) return null;
+            if (_MissionOutput.TryRemove(missionId, out System.Text.StringBuilder? sb))
+            {
+                string output = sb.ToString().Trim();
+                return String.IsNullOrEmpty(output) ? null : output;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Set or update the WebSocket hub reference (created after this handler).
+        /// </summary>
+        /// <param name="hub">WebSocket hub instance, or null.</param>
         public void SetWebSocketHub(ArmadaWebSocketHub? hub)
         {
             _WebSocketHub = hub;
@@ -97,7 +125,47 @@ namespace Armada.Server
             runtime.OnOutputReceived += HandleAgentHeartbeat;
             runtime.OnProcessExited += HandleAgentProcessExited;
 
-            string prompt = "Mission: " + mission.Title + "\n\n" + (mission.Description ?? "");
+            // Build persona preamble for the launch prompt
+            string personaPreamble = "";
+            if (!String.IsNullOrEmpty(mission.Persona))
+            {
+                switch (mission.Persona)
+                {
+                    case "Architect":
+                        personaPreamble = "You are an Architect agent. Analyze the codebase and decompose the goal into right-sized missions using [ARMADA:MISSION] markers.\n\n";
+                        break;
+                    case "Worker":
+                        personaPreamble = "You are a Worker agent. Implement the code changes described below.\n\n";
+                        break;
+                    case "TestEngineer":
+                        personaPreamble = "You are a TestEngineer agent. Write tests for the code changes described in the prior stage diff below.\n\n";
+                        break;
+                    case "Judge":
+                        personaPreamble = "You are a Judge agent. Review the diff below for correctness, completeness, and style. Produce a verdict: PASS, FAIL, or NEEDS_REVISION.\n\n";
+                        break;
+                    default:
+                        personaPreamble = "You are a " + mission.Persona + " agent.\n\n";
+                        break;
+                }
+            }
+
+            // Resolve launch prompt from template service or use hardcoded default
+            string prompt;
+            if (_PromptTemplateService != null)
+            {
+                Dictionary<string, string> promptParams = new Dictionary<string, string>
+                {
+                    ["MissionTitle"] = mission.Title,
+                    ["MissionDescription"] = mission.Description ?? ""
+                };
+                string rendered = await _PromptTemplateService.RenderAsync("agent.launch_prompt", promptParams).ConfigureAwait(false);
+                prompt = personaPreamble + (!String.IsNullOrEmpty(rendered) ? rendered : "Mission: " + mission.Title + "\n\n" + (mission.Description ?? ""));
+            }
+            else
+            {
+                prompt = personaPreamble + "Mission: " + mission.Title + "\n\n" + (mission.Description ?? "");
+            }
+
             if (_Settings.MessageTemplates.EnableCommitMetadata)
             {
                 Dictionary<string, string> templateContext = _TemplateService.BuildContext(mission, captain, null, null, dock);
@@ -162,6 +230,18 @@ namespace Armada.Server
         /// </summary>
         public void HandleAgentOutput(int processId, string line)
         {
+            // Accumulate stdout for pipeline handoff
+            string? outputMissionId = null;
+            lock (_ProcessToCaptain)
+            {
+                _ProcessToMission.TryGetValue(processId, out outputMissionId);
+            }
+            if (!String.IsNullOrEmpty(outputMissionId))
+            {
+                System.Text.StringBuilder sb = _MissionOutput.GetOrAdd(outputMissionId, _ => new System.Text.StringBuilder());
+                sb.AppendLine(line);
+            }
+
             ProgressParser.ProgressSignal? signal = ProgressParser.TryParse(line);
             if (signal == null) return;
 

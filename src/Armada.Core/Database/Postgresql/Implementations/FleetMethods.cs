@@ -63,13 +63,14 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = @"INSERT INTO fleets (id, tenant_id, user_id, name, description, active, created_utc, last_update_utc)
-                        VALUES (@id, @tenant_id, @user_id, @name, @description, @active, @created_utc, @last_update_utc);";
+                    cmd.CommandText = @"INSERT INTO fleets (id, tenant_id, user_id, name, description, default_pipeline_id, active, created_utc, last_update_utc)
+                        VALUES (@id, @tenant_id, @user_id, @name, @description, @default_pipeline_id, @active, @created_utc, @last_update_utc);";
                     cmd.Parameters.AddWithValue("@id", fleet.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)fleet.TenantId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@user_id", (object?)fleet.UserId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@name", fleet.Name);
                     cmd.Parameters.AddWithValue("@description", (object?)fleet.Description ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@default_pipeline_id", (object?)fleet.DefaultPipelineId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@active", fleet.Active);
                     cmd.Parameters.AddWithValue("@created_utc", fleet.CreatedUtc);
                     cmd.Parameters.AddWithValue("@last_update_utc", fleet.LastUpdateUtc);
@@ -160,6 +161,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                             user_id = @user_id,
                         name = @name,
                         description = @description,
+                        default_pipeline_id = @default_pipeline_id,
                         active = @active,
                         last_update_utc = @last_update_utc
                         WHERE id = @id;";
@@ -168,6 +170,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@user_id", (object?)fleet.UserId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@name", fleet.Name);
                     cmd.Parameters.AddWithValue("@description", (object?)fleet.Description ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@default_pipeline_id", (object?)fleet.DefaultPipelineId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@active", fleet.Active);
                     cmd.Parameters.AddWithValue("@last_update_utc", fleet.LastUpdateUtc);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
@@ -597,6 +600,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             fleet.TenantId = NullableString(reader["tenant_id"]);
             fleet.Name = reader["name"].ToString()!;
             fleet.Description = NullableString(reader["description"]);
+            try { fleet.DefaultPipelineId = NullableString(reader["default_pipeline_id"]); } catch { }
             fleet.Active = (bool)reader["active"];
             fleet.CreatedUtc = ((DateTime)reader["created_utc"]).ToUniversalTime();
             fleet.LastUpdateUtc = ((DateTime)reader["last_update_utc"]).ToUniversalTime();

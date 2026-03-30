@@ -132,7 +132,8 @@ namespace Armada.Runtimes
                 if (!String.IsNullOrEmpty(e.Data))
                 {
                     _Logging.Debug(_Header + "[stdout] " + e.Data);
-                    logWriter?.WriteLine(e.Data);
+                    try { logWriter?.WriteLine(e.Data); }
+                    catch (ObjectDisposedException) { }
 
                     try { OnOutputReceived?.Invoke(process.Id, e.Data); }
                     catch { }
@@ -144,20 +145,30 @@ namespace Armada.Runtimes
                 if (!String.IsNullOrEmpty(e.Data))
                 {
                     _Logging.Debug(_Header + "[stderr] " + e.Data);
-                    logWriter?.WriteLine("[stderr] " + e.Data);
+                    try { logWriter?.WriteLine("[stderr] " + e.Data); }
+                    catch (ObjectDisposedException) { }
                 }
             };
 
             process.Exited += (sender, e) =>
             {
                 int? code = null;
+                int processId = 0;
+                try { processId = process.Id; } catch { }
                 try { code = ((Process?)sender)?.ExitCode; } catch { }
-                logWriter?.WriteLine("[" + DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss") + "] Agent exited with code " + (code?.ToString() ?? "unknown"));
+                try { logWriter?.WriteLine("[" + DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss") + "] Agent exited with code " + (code?.ToString() ?? "unknown")); }
+                catch (ObjectDisposedException) { }
                 logWriter?.Dispose();
 
+                // Dispose the Process object to release the working directory handle.
+                // On Windows, undisposed Process objects hold handles on the WorkingDirectory
+                // which prevents dock worktree directories from being deleted.
+                try { process.Dispose(); }
+                catch { }
+
                 // Notify subscribers that the process has exited
-                try { OnProcessExited?.Invoke(process.Id, code); }
-                catch (Exception ex) { _Logging.Warn(_Header + "error in OnProcessExited handler for process " + process.Id + ": " + ex.Message); }
+                try { OnProcessExited?.Invoke(processId, code); }
+                catch (Exception ex) { _Logging.Warn(_Header + "error in OnProcessExited handler for process " + processId + ": " + ex.Message); }
             };
             process.EnableRaisingEvents = true;
 

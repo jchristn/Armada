@@ -8,7 +8,7 @@ import JsonViewer from '../components/shared/JsonViewer';
 import DiffViewer from '../components/shared/DiffViewer';
 import LogViewer from '../components/shared/LogViewer';
 import StatusBadge from '../components/shared/StatusBadge';
-import { copyToClipboard } from '../components/shared/CopyButton';
+import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 
 function formatTimeAbsolute(utc: string | null): string {
@@ -55,10 +55,11 @@ export default function MergeQueueDetail() {
     if (!id) return;
     try {
       setLoading(true);
+      const isInitialLoad = !entry;
       const [e, vResult] = await Promise.all([getMergeEntry(id), listVessels({ pageSize: 1000 })]);
       setEntry(e);
       setVessels(vResult.objects);
-      setError('');
+      if (isInitialLoad) setError('');
     } catch {
       setError('Failed to load merge entry.');
     } finally {
@@ -216,7 +217,7 @@ export default function MergeQueueDetail() {
           <span className="detail-label">ID</span>
           <span className="id-display">
             <span className="mono">{entry.id}</span>
-            <button className="copy-btn" onClick={() => copyToClipboard(entry.id)} title="Copy ID" />
+            <CopyButton text={entry.id} />
           </span>
         </div>
         <div className="detail-field"><span className="detail-label">Status</span><StatusBadge status={entry.status} /></div>

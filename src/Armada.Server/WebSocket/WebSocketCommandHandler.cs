@@ -186,6 +186,8 @@ namespace Armada.Server.WebSocket
 
                 case "create_vessel":
                     Vessel newVessel = JsonSerializer.Deserialize<WebSocketDataCommand<Vessel>>(rawBody, _JsonOptions)?.Data!;
+                    if (String.IsNullOrEmpty(newVessel.RepoUrl))
+                        return new { type = "command.error", action = "create_vessel", error = "repoUrl is required when creating a vessel" };
                     newVessel = await _Database.Vessels.CreateAsync(newVessel).ConfigureAwait(false);
                     return new { type = "command.result", action = "create_vessel", data = (object)newVessel };
 
@@ -219,9 +221,55 @@ namespace Armada.Server.WebSocket
                     }
 
                 case "delete_vessel":
+                {
                     string delVesselId = command.Id ?? "";
+                    Vessel? delVessel = await _Database.Vessels.ReadAsync(delVesselId).ConfigureAwait(false);
+                    if (delVessel == null)
+                        return new { type = "command.error", action = "delete_vessel", error = "Vessel not found" };
+
+                    // Cancel active missions on this vessel
+                    try
+                    {
+                        List<Mission> delVesselMissions = await _Database.Missions.EnumerateByVesselAsync(delVesselId).ConfigureAwait(false);
+                        foreach (Mission dvm in delVesselMissions)
+                        {
+                            if (dvm.Status == MissionStatusEnum.Pending || dvm.Status == MissionStatusEnum.Assigned || dvm.Status == MissionStatusEnum.InProgress)
+                            {
+                                dvm.Status = MissionStatusEnum.Cancelled;
+                                dvm.CompletedUtc = DateTime.UtcNow;
+                                dvm.LastUpdateUtc = DateTime.UtcNow;
+                                await _Database.Missions.UpdateAsync(dvm).ConfigureAwait(false);
+                            }
+                        }
+                    }
+                    catch { }
+
+                    // Clean up docks/worktrees for this vessel
+                    try
+                    {
+                        List<Dock> delVesselDocks = await _Database.Docks.EnumerateByVesselAsync(delVesselId).ConfigureAwait(false);
+                        foreach (Dock dvd in delVesselDocks)
+                        {
+                            if (!String.IsNullOrEmpty(dvd.WorktreePath) && System.IO.Directory.Exists(dvd.WorktreePath))
+                            {
+                                try { System.IO.Directory.Delete(dvd.WorktreePath, true); }
+                                catch { }
+                            }
+                            await _Database.Docks.DeleteAsync(dvd.Id).ConfigureAwait(false);
+                        }
+                    }
+                    catch { }
+
+                    // Clean up bare repo
+                    if (!String.IsNullOrEmpty(delVessel.LocalPath) && System.IO.Directory.Exists(delVessel.LocalPath))
+                    {
+                        try { System.IO.Directory.Delete(delVessel.LocalPath, true); }
+                        catch { }
+                    }
+
                     await _Database.Vessels.DeleteAsync(delVesselId).ConfigureAwait(false);
                     return new { type = "command.result", action = "delete_vessel", data = (object)new { status = "deleted" } };
+                }
 
                 // ── Voyage actions ─────────────────────────────────────────
 
@@ -336,7 +384,45 @@ namespace Armada.Server.WebSocket
                         else
                         {
                             foreach (Mission m in pvMissions)
+                            {
+                                // Clean up associated dock/worktree
+                                if (!String.IsNullOrEmpty(m.DockId))
+                                {
+                                    try
+                                    {
+                                        Dock? pvDock = await _Database.Docks.ReadAsync(m.DockId).ConfigureAwait(false);
+                                        if (pvDock != null)
+                                        {
+                                            if (!String.IsNullOrEmpty(pvDock.WorktreePath) && System.IO.Directory.Exists(pvDock.WorktreePath))
+                                            {
+                                                try { System.IO.Directory.Delete(pvDock.WorktreePath, true); }
+                                                catch { }
+                                            }
+                                            await _Database.Docks.DeleteAsync(pvDock.Id).ConfigureAwait(false);
+                                        }
+                                    }
+                                    catch { }
+                                }
+
+                                // Clean up log and diff files
+                                if (_Settings != null)
+                                {
+                                    try
+                                    {
+                                        string pvLogPath = System.IO.Path.Combine(_Settings.LogDirectory, "missions", m.Id + ".log");
+                                        if (System.IO.File.Exists(pvLogPath)) System.IO.File.Delete(pvLogPath);
+                                    }
+                                    catch { }
+                                    try
+                                    {
+                                        string pvDiffPath = System.IO.Path.Combine(_Settings.LogDirectory, "diffs", m.Id + ".diff");
+                                        if (System.IO.File.Exists(pvDiffPath)) System.IO.File.Delete(pvDiffPath);
+                                    }
+                                    catch { }
+                                }
+
                                 await _Database.Missions.DeleteAsync(m.Id).ConfigureAwait(false);
+                            }
                             await _Database.Voyages.DeleteAsync(pvId).ConfigureAwait(false);
                             return new { type = "command.result", action = "purge_voyage", data = (object)new { status = "deleted", voyageId = pvId, missionsDeleted = pvMissions.Count } };
                         }
@@ -466,6 +552,42 @@ namespace Armada.Server.WebSocket
                         return new { type = "command.error", action = "purge_mission", error = "Mission not found" };
                     else
                     {
+                        // Clean up associated dock/worktree
+                        if (!String.IsNullOrEmpty(pmMission.DockId))
+                        {
+                            try
+                            {
+                                Dock? pmDock = await _Database.Docks.ReadAsync(pmMission.DockId).ConfigureAwait(false);
+                                if (pmDock != null)
+                                {
+                                    if (!String.IsNullOrEmpty(pmDock.WorktreePath) && System.IO.Directory.Exists(pmDock.WorktreePath))
+                                    {
+                                        try { System.IO.Directory.Delete(pmDock.WorktreePath, true); }
+                                        catch { }
+                                    }
+                                    await _Database.Docks.DeleteAsync(pmDock.Id).ConfigureAwait(false);
+                                }
+                            }
+                            catch { }
+                        }
+
+                        // Clean up log and diff files
+                        if (_Settings != null)
+                        {
+                            try
+                            {
+                                string pmLogPath = System.IO.Path.Combine(_Settings.LogDirectory, "missions", pmId + ".log");
+                                if (System.IO.File.Exists(pmLogPath)) System.IO.File.Delete(pmLogPath);
+                            }
+                            catch { }
+                            try
+                            {
+                                string pmDiffPath = System.IO.Path.Combine(_Settings.LogDirectory, "diffs", pmId + ".diff");
+                                if (System.IO.File.Exists(pmDiffPath)) System.IO.File.Delete(pmDiffPath);
+                            }
+                            catch { }
+                        }
+
                         await _Database.Missions.DeleteAsync(pmId).ConfigureAwait(false);
                         return new { type = "command.result", action = "purge_mission", data = (object)new { status = "deleted", missionId = pmId } };
                     }
@@ -850,6 +972,110 @@ namespace Armada.Server.WebSocket
                     object restoreData = await Mcp.Tools.McpToolHelpers.PerformRestoreAsync(_Database, _Settings!, restoreFilePath).ConfigureAwait(false);
                     return new { type = "command.result", action = "restore", data = restoreData };
                 }
+
+                // ── Personas ──────────────────────────────────────────────
+
+                case "get_persona":
+                    string getPersonaName = command.Id ?? "";
+                    Persona? foundPersona = await _Database.Personas.ReadByNameAsync(getPersonaName).ConfigureAwait(false);
+                    if (foundPersona == null)
+                        return new { type = "command.error", action = "get_persona", error = "Persona not found" };
+                    return new { type = "command.result", action = "get_persona", data = (object)foundPersona };
+
+                case "create_persona":
+                    Persona newPersona = JsonSerializer.Deserialize<WebSocketDataCommand<Persona>>(rawBody, _JsonOptions)?.Data!;
+                    newPersona = await _Database.Personas.CreateAsync(newPersona).ConfigureAwait(false);
+                    return new { type = "command.result", action = "create_persona", data = (object)newPersona };
+
+                case "update_persona":
+                    string updPersonaName = command.Id ?? "";
+                    Persona? existPersona = await _Database.Personas.ReadByNameAsync(updPersonaName).ConfigureAwait(false);
+                    if (existPersona == null)
+                        return new { type = "command.error", action = "update_persona", error = "Persona not found" };
+                    else
+                    {
+                        Persona patchPersona = JsonSerializer.Deserialize<WebSocketDataCommand<Persona>>(rawBody, _JsonOptions)?.Data!;
+                        if (patchPersona.Description != null) existPersona.Description = patchPersona.Description;
+                        if (patchPersona.PromptTemplateName != null) existPersona.PromptTemplateName = patchPersona.PromptTemplateName;
+                        existPersona = await _Database.Personas.UpdateAsync(existPersona).ConfigureAwait(false);
+                        return new { type = "command.result", action = "update_persona", data = (object)existPersona };
+                    }
+
+                case "delete_persona":
+                    string delPersonaName = command.Id ?? "";
+                    Persona? delPersona = await _Database.Personas.ReadByNameAsync(delPersonaName).ConfigureAwait(false);
+                    if (delPersona == null)
+                        return new { type = "command.error", action = "delete_persona", error = "Persona not found" };
+                    if (delPersona.IsBuiltIn)
+                        return new { type = "command.error", action = "delete_persona", error = "Cannot delete built-in persona" };
+                    await _Database.Personas.DeleteAsync(delPersona.Id).ConfigureAwait(false);
+                    return new { type = "command.result", action = "delete_persona", data = (object)new { Status = "deleted", Name = delPersonaName } };
+
+                // ── Prompt Templates ─────────────────────────────────────────
+
+                case "get_prompt_template":
+                    string getTemplateName = command.Id ?? "";
+                    PromptTemplate? foundTemplate = await _Database.PromptTemplates.ReadByNameAsync(getTemplateName).ConfigureAwait(false);
+                    if (foundTemplate == null)
+                        return new { type = "command.error", action = "get_prompt_template", error = "Prompt template not found" };
+                    return new { type = "command.result", action = "get_prompt_template", data = (object)foundTemplate };
+
+                case "update_prompt_template":
+                    string updTemplateName = command.Id ?? "";
+                    PromptTemplate? existTemplate = await _Database.PromptTemplates.ReadByNameAsync(updTemplateName).ConfigureAwait(false);
+                    if (existTemplate == null)
+                        return new { type = "command.error", action = "update_prompt_template", error = "Prompt template not found" };
+                    else
+                    {
+                        PromptTemplate patchTemplate = JsonSerializer.Deserialize<WebSocketDataCommand<PromptTemplate>>(rawBody, _JsonOptions)?.Data!;
+                        if (patchTemplate.Content != null) existTemplate.Content = patchTemplate.Content;
+                        if (patchTemplate.Description != null) existTemplate.Description = patchTemplate.Description;
+                        existTemplate = await _Database.PromptTemplates.UpdateAsync(existTemplate).ConfigureAwait(false);
+                        return new { type = "command.result", action = "update_prompt_template", data = (object)existTemplate };
+                    }
+
+                // ── Pipelines ────────────────────────────────────────────────
+
+                case "get_pipeline":
+                    string getPipelineName = command.Id ?? "";
+                    Pipeline? foundPipeline = await _Database.Pipelines.ReadByNameAsync(getPipelineName).ConfigureAwait(false);
+                    if (foundPipeline == null)
+                        return new { type = "command.error", action = "get_pipeline", error = "Pipeline not found" };
+                    return new { type = "command.result", action = "get_pipeline", data = (object)foundPipeline };
+
+                case "create_pipeline":
+                    Pipeline newPipeline = JsonSerializer.Deserialize<WebSocketDataCommand<Pipeline>>(rawBody, _JsonOptions)?.Data!;
+                    newPipeline = await _Database.Pipelines.CreateAsync(newPipeline).ConfigureAwait(false);
+                    return new { type = "command.result", action = "create_pipeline", data = (object)newPipeline };
+
+                case "update_pipeline":
+                    string updPipelineName = command.Id ?? "";
+                    Pipeline? existPipeline = await _Database.Pipelines.ReadByNameAsync(updPipelineName).ConfigureAwait(false);
+                    if (existPipeline == null)
+                        return new { type = "command.error", action = "update_pipeline", error = "Pipeline not found" };
+                    else
+                    {
+                        Pipeline patchPipeline = JsonSerializer.Deserialize<WebSocketDataCommand<Pipeline>>(rawBody, _JsonOptions)?.Data!;
+                        if (patchPipeline.Description != null) existPipeline.Description = patchPipeline.Description;
+                        if (patchPipeline.Stages != null && patchPipeline.Stages.Count > 0)
+                        {
+                            existPipeline.Stages = patchPipeline.Stages;
+                            foreach (PipelineStage stage in existPipeline.Stages)
+                                stage.PipelineId = existPipeline.Id;
+                        }
+                        existPipeline = await _Database.Pipelines.UpdateAsync(existPipeline).ConfigureAwait(false);
+                        return new { type = "command.result", action = "update_pipeline", data = (object)existPipeline };
+                    }
+
+                case "delete_pipeline":
+                    string delPipelineName = command.Id ?? "";
+                    Pipeline? delPipeline = await _Database.Pipelines.ReadByNameAsync(delPipelineName).ConfigureAwait(false);
+                    if (delPipeline == null)
+                        return new { type = "command.error", action = "delete_pipeline", error = "Pipeline not found" };
+                    if (delPipeline.IsBuiltIn)
+                        return new { type = "command.error", action = "delete_pipeline", error = "Cannot delete built-in pipeline" };
+                    await _Database.Pipelines.DeleteAsync(delPipeline.Id).ConfigureAwait(false);
+                    return new { type = "command.result", action = "delete_pipeline", data = (object)new { Status = "deleted", Name = delPipelineName } };
 
                 // ── Default ────────────────────────────────────────────────
 

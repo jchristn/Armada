@@ -53,7 +53,8 @@ namespace Armada.Helm.Commands
             IGitService git = new GitService(logging);
             IDockService dockService = new DockService(logging, database, armadaSettings, git);
             ICaptainService captainService = new CaptainService(logging, database, armadaSettings, git, dockService);
-            IMissionService missionService = new MissionService(logging, database, armadaSettings, dockService, captainService);
+            IPromptTemplateService promptTemplateService = new PromptTemplateService(database, logging);
+            IMissionService missionService = new MissionService(logging, database, armadaSettings, dockService, captainService, promptTemplateService);
             IVoyageService voyageService = new VoyageService(logging, database);
             IAdmiralService admiral = new AdmiralService(logging, database, armadaSettings, captainService, missionService, voyageService, dockService);
 
@@ -66,7 +67,7 @@ namespace Armada.Helm.Commands
             IGitService gitService = git;
             IMergeQueueService mergeQueueService = new MergeQueueService(logging, database, armadaSettings, git);
             LandingService landingService = new LandingService(logging, database, armadaSettings, git);
-            McpToolRegistrar.RegisterAll(mcpServer.RegisterTool, database, admiral, armadaSettings, gitService, mergeQueueService, dockService, landingService);
+            McpToolRegistrar.RegisterAll(mcpServer.RegisterTool, database, admiral, armadaSettings, gitService, mergeQueueService, dockService, landingService, templateService: promptTemplateService);
 
             // Run until stdin closes or process is killed
             using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

@@ -57,6 +57,8 @@ namespace Armada.Server
         private IMergeQueueService _MergeQueue = null!;
         private LandingService _LandingService = null!;
         private IMessageTemplateService _TemplateService = null!;
+        private IPromptTemplateService _PromptTemplateService = null!;
+        private PersonaSeedService _PersonaSeedService = null!;
         private LogRotationService _LogRotation = null!;
         private DataExpiryService _DataExpiry = null!;
 
@@ -114,14 +116,25 @@ namespace Armada.Server
             IDockService dockService = new DockService(_Logging, _Database, _Settings, _Git);
             _Docks = dockService;
             ICaptainService captainService = new CaptainService(_Logging, _Database, _Settings, _Git, dockService);
-            IMissionService missionService = new MissionService(_Logging, _Database, _Settings, dockService, captainService);
+            // Prompt template service must be created before MissionService so it can resolve templates
+            _PromptTemplateService = new PromptTemplateService(_Database, _Logging);
+
+            IMissionService missionService = new MissionService(_Logging, _Database, _Settings, dockService, captainService, _PromptTemplateService);
             IVoyageService voyageService = new VoyageService(_Logging, _Database);
             IEscalationService escalationService = new EscalationService(_Logging, _Database, _Settings);
             _Admiral = new AdmiralService(_Logging, _Database, _Settings, captainService, missionService, voyageService, dockService, escalationService);
             _MergeQueue = new MergeQueueService(_Logging, _Database, _Settings, _Git);
             _LandingService = new LandingService(_Logging, _Database, _Settings, _Git);
-            _TemplateService = new MessageTemplateService(_Logging);
+            _TemplateService = new MessageTemplateService(_Logging, _PromptTemplateService);
             _RuntimeFactory = new AgentRuntimeFactory(_Logging);
+
+            // Seed built-in prompt templates, personas, and pipelines
+            await _PromptTemplateService.SeedDefaultsAsync().ConfigureAwait(false);
+            _Logging.Info(_Header + "prompt template seeding completed");
+
+            _PersonaSeedService = new PersonaSeedService(_Database, _Logging);
+            await _PersonaSeedService.SeedAsync().ConfigureAwait(false);
+            _Logging.Info(_Header + "persona and pipeline seeding completed");
 
             // Initialize authentication services
             _SessionTokenService = new SessionTokenService(_Settings.SessionTokenEncryptionKey);
@@ -145,10 +158,10 @@ namespace Armada.Server
 
             // Initialize handler classes (WebSocketHub is created later, so pass null initially)
             _MissionLanding = new MissionLandingHandler(
-                _Logging, _Database, _Settings, _Git, _MergeQueue, _TemplateService, _Docks, null);
+                _Logging, _Database, _Settings, _Git, _MergeQueue, _TemplateService, _PromptTemplateService, _Docks, null);
 
             _AgentLifecycle = new AgentLifecycleHandler(
-                _Logging, _Database, _Settings, _RuntimeFactory, _Admiral, _TemplateService, null, EmitEventAsync);
+                _Logging, _Database, _Settings, _RuntimeFactory, _Admiral, _TemplateService, _PromptTemplateService, null, EmitEventAsync);
 
             // Wire up agent lifecycle events
             _Admiral.OnLaunchAgent = _AgentLifecycle.HandleLaunchAgentAsync;
@@ -335,7 +348,7 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Vessels
-            new VesselRoutes(_Database, EmitEventAsync, _JsonOptions)
+            new VesselRoutes(_Database, EmitEventAsync, _JsonOptions, _Docks)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Voyages
@@ -364,6 +377,18 @@ namespace Armada.Server
 
             // Merge queue
             new MergeQueueRoutes(_Database, _MergeQueue, EmitEventAsync, _JsonOptions)
+                .Register(_App, authenticate, _AuthorizationService);
+
+            // Prompt templates
+            new PromptTemplateRoutes(_Database, _PromptTemplateService, _JsonOptions)
+                .Register(_App, authenticate, _AuthorizationService);
+
+            // Personas
+            new PersonaRoutes(_Database, _JsonOptions)
+                .Register(_App, authenticate, _AuthorizationService);
+
+            // Pipelines
+            new PipelineRoutes(_Database, _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Backup & restore
@@ -494,7 +519,8 @@ namespace Armada.Server
                     Captain? captain = await _Database.Captains.ReadAsync(captainId).ConfigureAwait(false);
                     if (captain != null)
                         await _AgentLifecycle.HandleStopAgentAsync(captain).ConfigureAwait(false);
-                });
+                },
+                _PromptTemplateService);
         }
 
         private async Task EmitEventAsync(string eventType, string message,

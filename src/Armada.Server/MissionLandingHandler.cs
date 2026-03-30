@@ -25,6 +25,7 @@ namespace Armada.Server
         private IGitService _Git;
         private IMergeQueueService _MergeQueue;
         private IMessageTemplateService _TemplateService;
+        private IPromptTemplateService? _PromptTemplateService;
         private IDockService _Docks;
         private ArmadaWebSocketHub? _WebSocketHub;
 
@@ -46,6 +47,7 @@ namespace Armada.Server
         /// <param name="git">Git service.</param>
         /// <param name="mergeQueue">Merge queue service.</param>
         /// <param name="templateService">Message template service.</param>
+        /// <param name="promptTemplateService">Prompt template service (optional).</param>
         /// <param name="docks">Dock service.</param>
         /// <param name="webSocketHub">WebSocket hub (nullable).</param>
         public MissionLandingHandler(
@@ -55,6 +57,7 @@ namespace Armada.Server
             IGitService git,
             IMergeQueueService mergeQueue,
             IMessageTemplateService templateService,
+            IPromptTemplateService? promptTemplateService,
             IDockService docks,
             ArmadaWebSocketHub? webSocketHub)
         {
@@ -64,6 +67,7 @@ namespace Armada.Server
             _Git = git ?? throw new ArgumentNullException(nameof(git));
             _MergeQueue = mergeQueue ?? throw new ArgumentNullException(nameof(mergeQueue));
             _TemplateService = templateService ?? throw new ArgumentNullException(nameof(templateService));
+            _PromptTemplateService = promptTemplateService;
             _Docks = docks ?? throw new ArgumentNullException(nameof(docks));
             _WebSocketHub = webSocketHub;
         }
@@ -198,6 +202,7 @@ namespace Armada.Server
 
             bool landingSucceeded = false;
             bool landingAttempted = false;
+            string? landingFailureReason = null;
 
             try
             {
@@ -212,9 +217,21 @@ namespace Armada.Server
                         await _Git.PushBranchAsync(dock.WorktreePath).ConfigureAwait(false);
                         _Logging.Info(_Header + "pushed branch " + dock.BranchName);
 
-                        string prBody = "## Mission\n" +
-                            "**" + mission.Title + "**\n\n" +
-                            (mission.Description ?? "");
+                        string prBody;
+                        if (_PromptTemplateService != null)
+                        {
+                            Dictionary<string, string> prTemplateParams = new Dictionary<string, string>
+                            {
+                                ["MissionTitle"] = mission.Title,
+                                ["MissionDescription"] = mission.Description ?? ""
+                            };
+                            string rendered = await _PromptTemplateService.RenderAsync("landing.pr_body", prTemplateParams).ConfigureAwait(false);
+                            prBody = !String.IsNullOrEmpty(rendered) ? rendered : "## Mission\n**" + mission.Title + "**\n\n" + (mission.Description ?? "");
+                        }
+                        else
+                        {
+                            prBody = "## Mission\n**" + mission.Title + "**\n\n" + (mission.Description ?? "");
+                        }
 
                         // Append PR metadata template
                         Dictionary<string, string> prContext = _TemplateService.BuildContext(mission, null, vessel, voyage, dock);
@@ -297,10 +314,45 @@ namespace Armada.Server
                     {
                         _Logging.Warn(_Header + "error pushing/creating PR for mission " + mission.Id + ": " + ex.Message);
                         landingSucceeded = false;
+                        landingFailureReason = "Error pushing/creating PR: " + ex.Message;
                     }
                 }
                 else if (vessel != null && !String.IsNullOrEmpty(vessel.WorkingDirectory) && !String.IsNullOrEmpty(vessel.LocalPath))
                 {
+                    // Check if the mission actually produced mergeable changes.
+                    // Pipeline stages like Architect may complete without code changes (they output
+                    // mission markers to stdout instead). Skip merge if no changes were made.
+                    // Use the DiffSnapshot (captured before handoff) and the branch existence in
+                    // the bare repo as indicators -- the worktree may already be gone at this point.
+                    bool hasChanges = true;
+                    if (String.IsNullOrEmpty(mission.DiffSnapshot) || mission.DiffSnapshot.Trim().Length == 0)
+                    {
+                        hasChanges = false;
+                        _Logging.Info(_Header + "mission " + mission.Id + " has no diff snapshot -- no code changes to merge");
+                    }
+                    else if (!String.IsNullOrEmpty(dock.BranchName) && !String.IsNullOrEmpty(vessel.LocalPath))
+                    {
+                        // Also check if the branch actually exists in the bare repo
+                        try
+                        {
+                            bool branchExists = await _Git.BranchExistsAsync(vessel.LocalPath, dock.BranchName).ConfigureAwait(false);
+                            if (!branchExists)
+                            {
+                                hasChanges = false;
+                                _Logging.Info(_Header + "mission " + mission.Id + " branch " + dock.BranchName + " not in bare repo -- no code changes to merge");
+                            }
+                        }
+                        catch { }
+                    }
+
+                    if (!hasChanges)
+                    {
+                        // No code changes -- skip merge and mark as complete
+                        landingAttempted = true;
+                        landingSucceeded = true;
+                    }
+                    else
+                    {
                     // Local merge flow: fetch captain's branch from bare repo and merge into user's working directory
                     landingAttempted = true;
                     try
@@ -328,6 +380,7 @@ namespace Armada.Server
                             {
                                 _Logging.Warn(_Header + "local merge succeeded but push failed for mission " + mission.Id + ": " + pushEx.Message);
                                 landingSucceeded = false;
+                                landingFailureReason = "Local merge succeeded but push failed: " + pushEx.Message;
                             }
                         }
 
@@ -369,9 +422,11 @@ namespace Armada.Server
                     }
                     catch (Exception ex)
                     {
-                        _Logging.Warn(_Header + "error merging locally for mission " + mission.Id + ": " + ex.Message + " — branch " + dock.BranchName + " is still available in the bare repo");
+                        _Logging.Warn(_Header + "error merging locally for mission " + mission.Id + ": " + ex.Message + " -- branch " + dock.BranchName + " is still available in the bare repo");
                         landingSucceeded = false;
+                        landingFailureReason = "Error merging locally: " + ex.Message;
                     }
+                    } // end hasChanges else
                 }
                 else if (landingModeIsMergeQueue)
                 {
@@ -452,6 +507,7 @@ namespace Armada.Server
                 else
                 {
                     mission.Status = MissionStatusEnum.LandingFailed;
+                    mission.FailureReason = landingFailureReason;
                     mission.LastUpdateUtc = DateTime.UtcNow;
                     await _Database.Missions.UpdateAsync(mission).ConfigureAwait(false);
                     _Logging.Warn(_Header + "mission " + mission.Id + " landing failed, status set to LandingFailed");

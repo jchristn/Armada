@@ -54,5 +54,10 @@ namespace Armada.Server.Mcp
         /// Agent-accumulated context about this repository.
         /// </summary>
         public string? ModelContext { get; set; }
+
+        /// <summary>
+        /// Default pipeline ID for dispatches to this vessel (ppl_ prefix).
+        /// </summary>
+        public string? DefaultPipelineId { get; set; }
     }
 }

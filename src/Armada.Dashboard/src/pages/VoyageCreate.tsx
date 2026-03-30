@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { listVessels, createVoyage } from '../api/client';
-import type { Vessel } from '../types/models';
+import { listVessels, listPipelines, createVoyage } from '../api/client';
+import type { Vessel, Pipeline } from '../types/models';
 import ErrorModal from '../components/shared/ErrorModal';
 
 interface MissionRow {
@@ -13,6 +13,8 @@ interface MissionRow {
 export default function VoyageCreate() {
   const navigate = useNavigate();
   const [vessels, setVessels] = useState<Vessel[]>([]);
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
+  const [selectedPipeline, setSelectedPipeline] = useState('');
 
   // Form state
   const [title, setTitle] = useState('');
@@ -32,6 +34,7 @@ export default function VoyageCreate() {
 
   useEffect(() => {
     listVessels({ pageSize: 1000 }).then(r => setVessels(r.objects || [])).catch(() => {});
+    listPipelines({ pageSize: 1000 }).then(r => setPipelines(r.objects || [])).catch(() => {});
   }, []);
 
   function addMission() {
@@ -71,8 +74,9 @@ export default function VoyageCreate() {
         title: title.trim(),
         description: description.trim() || undefined,
         vesselId,
+        ...(selectedPipeline ? { pipeline: selectedPipeline } : {}),
         missions: missionPayloads,
-      } as any);
+      });
 
       navigate(`/voyages/${voyage.id}`);
     } catch (err: unknown) {
@@ -117,6 +121,18 @@ export default function VoyageCreate() {
             <select value={vesselId} onChange={e => setVesselId(e.target.value)} required style={{ marginTop: 4 }}>
               <option value="">Select a vessel...</option>
               {vessels.map(v => <option key={v.id} value={v.id}>{v.name} ({v.id})</option>)}
+            </select>
+          </label>
+
+          <label style={{ display: 'block', marginBottom: 14 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)' }}>Pipeline</span>
+            <select value={selectedPipeline} onChange={e => setSelectedPipeline(e.target.value)} style={{ marginTop: 4 }}>
+              <option value="">Inherit (vessel, then fleet, then WorkerOnly)</option>
+              {pipelines.map(p => (
+                <option key={p.id} value={p.name}>
+                  {p.name} ({p.stages.map(s => s.personaName).join(' -> ')})
+                </option>
+              ))}
             </select>
           </label>
 

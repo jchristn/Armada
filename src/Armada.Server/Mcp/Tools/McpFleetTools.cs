@@ -83,7 +83,8 @@ namespace Armada.Server.Mcp.Tools
                     {
                         fleetId = new { type = "string", description = "Fleet ID (flt_ prefix)" },
                         name = new { type = "string", description = "New fleet name" },
-                        description = new { type = "string", description = "New fleet description" }
+                        description = new { type = "string", description = "New fleet description" },
+                        defaultPipelineId = new { type = "string", description = "Default pipeline ID for dispatches to vessels in this fleet (ppl_ prefix)" }
                     },
                     required = new[] { "fleetId" }
                 },
@@ -97,6 +98,8 @@ namespace Armada.Server.Mcp.Tools
                         fleet.Name = request.Name;
                     if (request.Description != null)
                         fleet.Description = request.Description;
+                    if (request.DefaultPipelineId != null)
+                        fleet.DefaultPipelineId = request.DefaultPipelineId;
                     fleet = await database.Fleets.UpdateAsync(fleet).ConfigureAwait(false);
                     return (object)fleet;
                 });

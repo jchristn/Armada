@@ -59,6 +59,19 @@ namespace Armada.Core.Models
         public string? SystemInstructions { get; set; } = null;
 
         /// <summary>
+        /// JSON array of persona names this captain is allowed to fill.
+        /// Null means the captain can take on any persona.
+        /// Example: ["Worker", "Judge"]
+        /// </summary>
+        public string? AllowedPersonas { get; set; } = null;
+
+        /// <summary>
+        /// Preferred persona for dispatch routing priority.
+        /// The Admiral prefers to assign work matching this persona to this captain.
+        /// </summary>
+        public string? PreferredPersona { get; set; } = null;
+
+        /// <summary>
         /// Current state of the captain.
         /// </summary>
         public CaptainStateEnum State { get; set; } = CaptainStateEnum.Idle;

@@ -24,5 +24,10 @@ namespace Armada.Server.Mcp
         /// Optional voyage ID to associate with (vyg_ prefix).
         /// </summary>
         public string? VoyageId { get; set; }
+
+        /// <summary>
+        /// Persona for this mission (e.g. Worker, Architect, Judge, TestEngineer).
+        /// </summary>
+        public string? Persona { get; set; }
     }
 }

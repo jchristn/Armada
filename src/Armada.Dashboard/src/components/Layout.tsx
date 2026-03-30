@@ -169,8 +169,44 @@ const navSections: NavSection[] = [
   {
     key: 'system',
     label: 'SYSTEM',
-    matchers: ['/server', '/doctor', '/settings'],
+    matchers: ['/server', '/doctor', '/settings', '/personas', '/pipelines', '/prompt-templates'],
     items: [
+      {
+        to: '/personas',
+        label: 'Personas',
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+        ),
+      },
+      {
+        to: '/pipelines',
+        label: 'Pipelines',
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="16 3 21 3 21 8" />
+            <line x1="4" y1="20" x2="21" y2="3" />
+            <polyline points="21 16 21 21 16 21" />
+            <line x1="15" y1="15" x2="21" y2="21" />
+            <line x1="4" y1="4" x2="9" y2="9" />
+          </svg>
+        ),
+      },
+      {
+        to: '/prompt-templates',
+        label: 'Templates',
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <line x1="10" y1="9" x2="8" y2="9" />
+          </svg>
+        ),
+      },
       {
         to: '/server',
         label: 'Server',
@@ -408,9 +444,12 @@ export default function Layout() {
             <span aria-hidden="true">{collapsed ? '\u25B6' : '\u25C0'}</span>
           </button>
           {!collapsed && (
-            <button className="btn btn-sm" onClick={logout} title="Sign out">
-              Logout
-            </button>
+            <>
+              <button className="btn btn-sm" onClick={logout} title="Sign out">
+                Logout
+              </button>
+              <span style={{ fontSize: '0.7em', color: 'var(--text-dim)', opacity: 0.5 }}>v{__APP_VERSION__}</span>
+            </>
           )}
         </div>
       </aside>

@@ -118,7 +118,7 @@ namespace Armada.Server.Routes
                     return (object)new { Error = "Email is required" };
                 }
 
-                List<UserMaster> users = await _database.Users.ReadByEmailAnyTenantAsync(lookupReq.Email).ConfigureAwait(false);
+                List<UserMaster> users = await _database.Users.ReadByEmailAnyTenantAsync(lookupReq.Email.ToLowerInvariant()).ConfigureAwait(false);
                 TenantLookupResult result = new TenantLookupResult();
                 foreach (UserMaster u in users)
                 {

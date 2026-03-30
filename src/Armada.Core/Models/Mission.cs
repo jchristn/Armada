@@ -112,6 +112,25 @@ namespace Armada.Core.Models
         public string? DiffSnapshot { get; set; } = null;
 
         /// <summary>
+        /// Persona assigned to this mission (e.g. "Worker", "Architect", "Judge").
+        /// Null defaults to "Worker" for backward compatibility.
+        /// </summary>
+        public string? Persona { get; set; } = null;
+
+        /// <summary>
+        /// Mission ID that this mission depends on.
+        /// When set, this mission cannot be assigned until the dependency completes successfully.
+        /// Used by pipelines to chain persona stages.
+        /// </summary>
+        public string? DependsOnMissionId { get; set; } = null;
+
+        /// <summary>
+        /// Human-readable reason for failure or landing failure.
+        /// Set when a mission transitions to Failed or LandingFailed status.
+        /// </summary>
+        public string? FailureReason { get; set; } = null;
+
+        /// <summary>
         /// Creation timestamp in UTC.
         /// </summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;

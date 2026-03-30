@@ -121,6 +121,12 @@ namespace Armada.Core.Models
         public bool AllowConcurrentMissions { get; set; } = false;
 
         /// <summary>
+        /// Default pipeline to use for dispatches to this vessel.
+        /// Vessel setting overrides fleet setting. Null uses WorkerOnly pipeline.
+        /// </summary>
+        public string? DefaultPipelineId { get; set; } = null;
+
+        /// <summary>
         /// Whether the vessel is active.
         /// </summary>
         public bool Active { get; set; } = true;

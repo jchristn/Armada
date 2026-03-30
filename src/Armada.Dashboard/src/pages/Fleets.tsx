@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { listFleets, listVessels, createFleet, updateFleet, deleteFleet } from '../api/client';
-import type { Fleet, Vessel } from '../types/models';
+import { listFleets, listVessels, listPipelines, createFleet, updateFleet, deleteFleet } from '../api/client';
+import type { Fleet, Vessel, Pipeline } from '../types/models';
 import Pagination from '../components/shared/Pagination';
 import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
@@ -40,7 +40,8 @@ export default function Fleets() {
   // Modal state
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Fleet | null>(null);
-  const [form, setForm] = useState({ name: '', description: '' });
+  const [form, setForm] = useState({ name: '', description: '', defaultPipelineId: '' });
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
 
   // JSON viewer
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
@@ -65,7 +66,8 @@ export default function Fleets() {
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const [fResult, vResult] = await Promise.all([listFleets({ pageSize: 9999 }), listVessels({ pageSize: 9999 })]);
+      const [fResult, vResult, pResult] = await Promise.all([listFleets({ pageSize: 9999 }), listVessels({ pageSize: 9999 }), listPipelines({ pageSize: 9999 })]);
+      setPipelines(pResult.objects);
       const vesselsByFleet = new Map<string, Vessel[]>();
       for (const v of vResult.objects) {
         if (v.fleetId) {
@@ -142,14 +144,16 @@ export default function Fleets() {
   function clearSelection() { setSelected([]); }
 
   // CRUD
-  function openCreate() { setForm({ name: '', description: '' }); setEditing(null); setShowForm(true); }
-  function openEdit(f: Fleet) { setForm({ name: f.name, description: f.description ?? '' }); setEditing(f); setShowForm(true); }
+  function openCreate() { setForm({ name: '', description: '', defaultPipelineId: '' }); setEditing(null); setShowForm(true); }
+  function openEdit(f: Fleet) { setForm({ name: f.name, description: f.description ?? '', defaultPipelineId: f.defaultPipelineId ?? '' }); setEditing(f); setShowForm(true); }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     try {
-      if (editing) await updateFleet(editing.id, form);
-      else await createFleet(form);
+      const payload: Record<string, unknown> = { ...form };
+      if (!payload.defaultPipelineId) delete payload.defaultPipelineId;
+      if (editing) await updateFleet(editing.id, payload);
+      else await createFleet(payload);
       setShowForm(false);
       load();
     } catch { setError('Save failed.'); }
@@ -213,6 +217,14 @@ export default function Fleets() {
             <h3>{editing ? 'Edit Fleet' : 'Create Fleet'}</h3>
             <label>Name<input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required /></label>
             <label>Description<input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></label>
+            <label>Default Pipeline
+              <select value={form.defaultPipelineId} onChange={e => setForm({ ...form, defaultPipelineId: e.target.value })}>
+                <option value="">None (WorkerOnly)</option>
+                {pipelines.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.stages.map(s => s.personaName).join(' -> ')})</option>
+                ))}
+              </select>
+            </label>
             <div className="modal-actions">
               <button type="submit" className="btn btn-primary">Save</button>
               <button type="button" className="btn" onClick={() => setShowForm(false)}>Cancel</button>

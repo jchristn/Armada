@@ -94,6 +94,7 @@ export interface Fleet {
   name: string;
   tenantId: string | null;
   description: string | null;
+  defaultPipelineId: string | null;
   active: boolean;
   createdUtc: string;
   lastUpdateUtc: string;
@@ -115,6 +116,7 @@ export interface Vessel {
   landingMode: string | null;
   branchCleanupPolicy: string | null;
   allowConcurrentMissions: boolean;
+  defaultPipelineId: string | null;
   active: boolean;
   createdUtc: string;
   lastUpdateUtc: string;
@@ -126,6 +128,8 @@ export interface Captain {
   name: string;
   runtime: string;
   systemInstructions: string | null;
+  allowedPersonas: string | null;
+  preferredPersona: string | null;
   state: string;
   currentMissionId: string | null;
   currentDockId: string | null;
@@ -147,11 +151,14 @@ export interface Mission {
   status: string;
   priority: number;
   parentMissionId: string | null;
+  persona: string | null;
+  dependsOnMissionId: string | null;
   branchName: string | null;
   dockId: string | null;
   processId: number | null;
   prUrl: string | null;
   commitHash: string | null;
+  failureReason: string | null;
   diffSnapshot: string | null;
   createdUtc: string;
   startedUtc: string | null;
@@ -270,6 +277,9 @@ export interface DispatchRequest {
 export interface VoyageCreateRequest {
   title: string;
   description?: string;
+  vesselId?: string;
+  pipelineId?: string;
+  pipeline?: string;
   missions: DispatchRequest[];
 }
 
@@ -309,4 +319,50 @@ export interface WebSocketMessage {
   data?: Record<string, unknown>;
 }
 
-export type EntityType = 'fleets' | 'vessels' | 'captains' | 'missions' | 'voyages' | 'signals' | 'events' | 'docks' | 'merge-queue';
+export interface PromptTemplate {
+  id: string;
+  tenantId: string | null;
+  name: string;
+  description: string | null;
+  category: string;
+  content: string;
+  isBuiltIn: boolean;
+  active: boolean;
+  createdUtc: string;
+  lastUpdateUtc: string;
+}
+
+export interface Persona {
+  id: string;
+  tenantId: string | null;
+  name: string;
+  description: string | null;
+  promptTemplateName: string;
+  isBuiltIn: boolean;
+  active: boolean;
+  createdUtc: string;
+  lastUpdateUtc: string;
+}
+
+export interface Pipeline {
+  id: string;
+  tenantId: string | null;
+  name: string;
+  description: string | null;
+  stages: PipelineStage[];
+  isBuiltIn: boolean;
+  active: boolean;
+  createdUtc: string;
+  lastUpdateUtc: string;
+}
+
+export interface PipelineStage {
+  id: string;
+  pipelineId: string | null;
+  order: number;
+  personaName: string;
+  isOptional: boolean;
+  description: string | null;
+}
+
+export type EntityType = 'fleets' | 'vessels' | 'captains' | 'missions' | 'voyages' | 'signals' | 'events' | 'docks' | 'merge-queue' | 'personas' | 'prompt-templates' | 'pipelines';

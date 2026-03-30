@@ -53,14 +53,16 @@ namespace Armada.Core.Database.Mysql.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (MySqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = @"INSERT INTO captains (id, tenant_id, user_id, name, runtime, system_instructions, state, current_mission_id, current_dock_id, process_id, recovery_attempts, last_heartbeat_utc, created_utc, last_update_utc)
-                        VALUES (@id, @tenant_id, @user_id, @name, @runtime, @system_instructions, @state, @current_mission_id, @current_dock_id, @process_id, @recovery_attempts, @last_heartbeat_utc, @created_utc, @last_update_utc);";
+                    cmd.CommandText = @"INSERT INTO captains (id, tenant_id, user_id, name, runtime, system_instructions, allowed_personas, preferred_persona, state, current_mission_id, current_dock_id, process_id, recovery_attempts, last_heartbeat_utc, created_utc, last_update_utc)
+                        VALUES (@id, @tenant_id, @user_id, @name, @runtime, @system_instructions, @allowed_personas, @preferred_persona, @state, @current_mission_id, @current_dock_id, @process_id, @recovery_attempts, @last_heartbeat_utc, @created_utc, @last_update_utc);";
                     cmd.Parameters.AddWithValue("@id", captain.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)captain.TenantId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@user_id", (object?)captain.UserId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@name", captain.Name);
                     cmd.Parameters.AddWithValue("@runtime", captain.Runtime.ToString());
                     cmd.Parameters.AddWithValue("@system_instructions", (object?)captain.SystemInstructions ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@allowed_personas", (object?)captain.AllowedPersonas ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@preferred_persona", (object?)captain.PreferredPersona ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@state", captain.State.ToString());
                     cmd.Parameters.AddWithValue("@current_mission_id", (object?)captain.CurrentMissionId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@current_dock_id", (object?)captain.CurrentDockId ?? DBNull.Value);
@@ -154,6 +156,8 @@ namespace Armada.Core.Database.Mysql.Implementations
                         name = @name,
                         runtime = @runtime,
                         system_instructions = @system_instructions,
+                        allowed_personas = @allowed_personas,
+                        preferred_persona = @preferred_persona,
                         state = @state,
                         current_mission_id = @current_mission_id,
                         current_dock_id = @current_dock_id,
@@ -168,6 +172,8 @@ namespace Armada.Core.Database.Mysql.Implementations
                     cmd.Parameters.AddWithValue("@name", captain.Name);
                     cmd.Parameters.AddWithValue("@runtime", captain.Runtime.ToString());
                     cmd.Parameters.AddWithValue("@system_instructions", (object?)captain.SystemInstructions ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@allowed_personas", (object?)captain.AllowedPersonas ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@preferred_persona", (object?)captain.PreferredPersona ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@state", captain.State.ToString());
                     cmd.Parameters.AddWithValue("@current_mission_id", (object?)captain.CurrentMissionId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@current_dock_id", (object?)captain.CurrentDockId ?? DBNull.Value);
@@ -909,6 +915,8 @@ namespace Armada.Core.Database.Mysql.Implementations
             captain.LastHeartbeatUtc = FromIso8601Nullable(reader["last_heartbeat_utc"]);
             captain.CreatedUtc = FromIso8601(reader["created_utc"].ToString()!);
             captain.LastUpdateUtc = FromIso8601(reader["last_update_utc"].ToString()!);
+            try { captain.AllowedPersonas = NullableString(reader["allowed_personas"]); } catch { }
+            try { captain.PreferredPersona = NullableString(reader["preferred_persona"]); } catch { }
             return captain;
         }
 

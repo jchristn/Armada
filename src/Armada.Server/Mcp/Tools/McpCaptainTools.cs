@@ -66,7 +66,9 @@ namespace Armada.Server.Mcp.Tools
                     {
                         name = new { type = "string", description = "Captain display name" },
                         runtime = new { type = "string", description = "Agent runtime: ClaudeCode, Codex" },
-                        systemInstructions = new { type = "string", description = "System instructions for this captain -- injected into every mission prompt to specialize behavior" }
+                        systemInstructions = new { type = "string", description = "System instructions for this captain -- injected into every mission prompt to specialize behavior" },
+                        allowedPersonas = new { type = "string", description = "JSON array of persona names this captain can fill, e.g. [\"Worker\",\"Judge\"]. Null means any persona." },
+                        preferredPersona = new { type = "string", description = "Preferred persona for dispatch routing priority" }
                     },
                     required = new[] { "name" }
                 },
@@ -79,6 +81,8 @@ namespace Armada.Server.Mcp.Tools
                     if (!String.IsNullOrEmpty(request.Runtime) && Enum.TryParse<AgentRuntimeEnum>(request.Runtime, true, out AgentRuntimeEnum rt))
                         captain.Runtime = rt;
                     captain.SystemInstructions = request.SystemInstructions;
+                    captain.AllowedPersonas = request.AllowedPersonas;
+                    captain.PreferredPersona = request.PreferredPersona;
                     captain = await database.Captains.CreateAsync(captain).ConfigureAwait(false);
                     return (object)captain;
                 });
@@ -94,7 +98,9 @@ namespace Armada.Server.Mcp.Tools
                         captainId = new { type = "string", description = "Captain ID (cpt_ prefix)" },
                         name = new { type = "string", description = "New display name" },
                         runtime = new { type = "string", description = "New agent runtime: ClaudeCode, Codex" },
-                        systemInstructions = new { type = "string", description = "New system instructions for this captain" }
+                        systemInstructions = new { type = "string", description = "New system instructions for this captain" },
+                        allowedPersonas = new { type = "string", description = "JSON array of persona names this captain can fill, e.g. [\"Worker\",\"Judge\"]. Null means any persona." },
+                        preferredPersona = new { type = "string", description = "Preferred persona for dispatch routing priority" }
                     },
                     required = new[] { "captainId" }
                 },
@@ -110,6 +116,10 @@ namespace Armada.Server.Mcp.Tools
                         captain.Runtime = rt;
                     if (request.SystemInstructions != null)
                         captain.SystemInstructions = request.SystemInstructions;
+                    if (request.AllowedPersonas != null)
+                        captain.AllowedPersonas = request.AllowedPersonas;
+                    if (request.PreferredPersona != null)
+                        captain.PreferredPersona = request.PreferredPersona;
                     captain.LastUpdateUtc = DateTime.UtcNow;
                     captain = await database.Captains.UpdateAsync(captain).ConfigureAwait(false);
                     return (object)captain;

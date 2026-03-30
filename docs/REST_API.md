@@ -1,6 +1,6 @@
 # Armada REST API Reference
 
-**Version:** 0.3.0
+**Version:** 0.4.0
 **Base URL:** `http://localhost:7890`
 **Content-Type:** `application/json`
 
@@ -31,6 +31,9 @@
   - [Events](#events)
   - [Docks](#docks)
   - [Merge Queue](#merge-queue)
+  - [Prompt Templates](#prompt-templates)
+  - [Personas](#personas)
+  - [Pipelines](#pipelines)
   - [Backup and Restore](#backup-and-restore)
 - [Data Types](#data-types)
   - [Models](#models)
@@ -110,6 +113,9 @@ Operational entities persist both `TenantId` and `UserId`. Those ownership colum
 | `/api/v1/signals` | ALL | Authenticated | Tenant-scoped |
 | `/api/v1/events` | ALL | Authenticated | Tenant-scoped |
 | `/api/v1/merge-queue` | ALL | Authenticated | Tenant-scoped |
+| `/api/v1/prompt-templates` | ALL | Authenticated | Tenant-scoped |
+| `/api/v1/personas` | ALL | Authenticated | Tenant-scoped |
+| `/api/v1/pipelines` | ALL | Authenticated | Tenant-scoped |
 | `/api/v1/tenants` | GET (list) | AdminOnly | Global admin only |
 | `/api/v1/tenants` | POST | AdminOnly | Global admin only |
 | `/api/v1/tenants/{id}` | GET | Authenticated | Global admin: any; tenant admin or regular user: own tenant only |
@@ -1048,6 +1054,8 @@ Create a new voyage with optional missions. Missions are automatically dispatche
 | `Description` | string | no | Voyage description |
 | `VesselId` | string | yes | Target vessel ID |
 | `Missions` | array | no | List of [MissionRequest](#missionrequest) objects |
+| `PipelineId` | string | no | Pipeline ID to use for this voyage (overrides vessel/fleet default) |
+| `Pipeline` | string | no | Pipeline name to use for this voyage (alternative to `PipelineId`) |
 
 **Response:** `201 Created` - [Voyage](#voyage)
 
@@ -2103,6 +2111,351 @@ Batch purge multiple terminal merge queue entries from the database by ID. Retur
 ```
 
 Skipped entries include the entry ID and the reason (e.g., "Not found" or "Not in terminal state").
+
+---
+
+### Prompt Templates
+
+Prompt templates define the instruction text used when generating captain mission briefs. Armada ships with built-in templates that can be customized. Custom templates can also be created per tenant.
+
+#### GET /api/v1/prompt-templates
+
+List all prompt templates with pagination.
+
+**Query Parameters:** [Pagination parameters](#pagination-parameters)
+
+**Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<PromptTemplate\>
+
+```bash
+curl http://localhost:7890/api/v1/prompt-templates
+```
+
+---
+
+#### POST /api/v1/prompt-templates/enumerate
+
+Paginated enumeration of prompt templates with optional filtering and sorting.
+
+**Request Body:** [EnumerationQuery](#enumerationquery) (optional)
+
+**Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<PromptTemplate\>
+
+```bash
+curl -X POST http://localhost:7890/api/v1/prompt-templates/enumerate \
+  -H "Content-Type: application/json" \
+  -d '{"PageSize": 10}'
+```
+
+---
+
+#### GET /api/v1/prompt-templates/{name}
+
+Get a prompt template by name.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `name` | Template name |
+
+**Response:** `200 OK` - PromptTemplate
+**Error:** `404` - Template not found
+
+```bash
+curl http://localhost:7890/api/v1/prompt-templates/default
+```
+
+---
+
+#### PUT /api/v1/prompt-templates/{name}
+
+Update a prompt template's content. Built-in templates can be customized by updating their content.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `name` | Template name |
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `Content` | string | yes | Template content text |
+| `Description` | string | no | Template description |
+
+**Response:** `200 OK` - PromptTemplate
+**Error:** `404` - Template not found
+
+```bash
+curl -X PUT http://localhost:7890/api/v1/prompt-templates/default \
+  -H "Content-Type: application/json" \
+  -d '{"Content": "You are a captain. Follow these instructions...", "Description": "Custom default template"}'
+```
+
+---
+
+#### POST /api/v1/prompt-templates/{name}/reset
+
+Reset a prompt template to its built-in default content. Only applicable to built-in templates that have been customized.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `name` | Template name |
+
+**Response:** `200 OK` - PromptTemplate
+**Error:** `404` - Template not found
+
+```bash
+curl -X POST http://localhost:7890/api/v1/prompt-templates/default/reset
+```
+
+---
+
+### Personas
+
+A persona associates a name and description with a prompt template. Personas are used to configure the behavior of captains within a pipeline. Armada ships with built-in personas that cannot be deleted.
+
+#### GET /api/v1/personas
+
+List all personas with pagination.
+
+**Query Parameters:** [Pagination parameters](#pagination-parameters)
+
+**Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<Persona\>
+
+```bash
+curl http://localhost:7890/api/v1/personas
+```
+
+---
+
+#### POST /api/v1/personas/enumerate
+
+Paginated enumeration of personas with optional filtering and sorting.
+
+**Request Body:** [EnumerationQuery](#enumerationquery) (optional)
+
+**Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<Persona\>
+
+```bash
+curl -X POST http://localhost:7890/api/v1/personas/enumerate \
+  -H "Content-Type: application/json" \
+  -d '{"PageSize": 10}'
+```
+
+---
+
+#### GET /api/v1/personas/{name}
+
+Get a persona by name.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `name` | Persona name |
+
+**Response:** `200 OK` - Persona
+**Error:** `404` - Persona not found
+
+```bash
+curl http://localhost:7890/api/v1/personas/default
+```
+
+---
+
+#### POST /api/v1/personas
+
+Create a new persona.
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `Name` | string | yes | Persona name |
+| `Description` | string | no | Persona description |
+| `PromptTemplateName` | string | yes | Name of the prompt template to use |
+
+**Response:** `201 Created` - Persona
+
+```bash
+curl -X POST http://localhost:7890/api/v1/personas \
+  -H "Content-Type: application/json" \
+  -d '{"Name": "reviewer", "Description": "Code review specialist", "PromptTemplateName": "default"}'
+```
+
+---
+
+#### PUT /api/v1/personas/{name}
+
+Update an existing persona.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `name` | Persona name |
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `Description` | string | no | Updated description |
+| `PromptTemplateName` | string | no | Updated prompt template name |
+
+**Response:** `200 OK` - Persona
+**Error:** `404` - Persona not found
+
+```bash
+curl -X PUT http://localhost:7890/api/v1/personas/reviewer \
+  -H "Content-Type: application/json" \
+  -d '{"Description": "Updated reviewer persona", "PromptTemplateName": "review-template"}'
+```
+
+---
+
+#### DELETE /api/v1/personas/{name}
+
+Delete a persona. Built-in personas cannot be deleted.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `name` | Persona name |
+
+**Response:** `204 No Content`
+**Error:** `404` - Persona not found
+**Error:** `403` - Built-in persona cannot be deleted
+
+```bash
+curl -X DELETE http://localhost:7890/api/v1/personas/reviewer
+```
+
+---
+
+### Pipelines
+
+A pipeline defines an ordered sequence of stages, each associated with a persona. Pipelines control the multi-stage workflow that missions progress through. Armada ships with built-in pipelines that cannot be deleted.
+
+#### GET /api/v1/pipelines
+
+List all pipelines with pagination. Response includes the stages for each pipeline.
+
+**Query Parameters:** [Pagination parameters](#pagination-parameters)
+
+**Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<Pipeline\>
+
+```bash
+curl http://localhost:7890/api/v1/pipelines
+```
+
+---
+
+#### POST /api/v1/pipelines/enumerate
+
+Paginated enumeration of pipelines with optional filtering and sorting.
+
+**Request Body:** [EnumerationQuery](#enumerationquery) (optional)
+
+**Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<Pipeline\>
+
+```bash
+curl -X POST http://localhost:7890/api/v1/pipelines/enumerate \
+  -H "Content-Type: application/json" \
+  -d '{"PageSize": 10}'
+```
+
+---
+
+#### GET /api/v1/pipelines/{name}
+
+Get a pipeline by name, including its stages.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `name` | Pipeline name |
+
+**Response:** `200 OK` - Pipeline
+**Error:** `404` - Pipeline not found
+
+```bash
+curl http://localhost:7890/api/v1/pipelines/default
+```
+
+---
+
+#### POST /api/v1/pipelines
+
+Create a new pipeline with stages.
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `Name` | string | yes | Pipeline name |
+| `Description` | string | no | Pipeline description |
+| `Stages` | array | yes | Ordered list of pipeline stages |
+
+**Stage fields:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `PersonaName` | string | yes | Name of the persona for this stage |
+| `IsOptional` | bool | no | Whether this stage can be skipped (default: false) |
+| `Description` | string | no | Stage description |
+
+**Response:** `201 Created` - Pipeline
+
+```bash
+curl -X POST http://localhost:7890/api/v1/pipelines \
+  -H "Content-Type: application/json" \
+  -d '{"Name": "review-pipeline", "Description": "Code with review", "Stages": [{"PersonaName": "default", "Description": "Implementation"}, {"PersonaName": "reviewer", "IsOptional": false, "Description": "Code review"}]}'
+```
+
+---
+
+#### PUT /api/v1/pipelines/{name}
+
+Update an existing pipeline.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `name` | Pipeline name |
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `Description` | string | no | Updated description |
+| `Stages` | array | no | Updated ordered list of pipeline stages (replaces all existing stages) |
+
+**Response:** `200 OK` - Pipeline
+**Error:** `404` - Pipeline not found
+
+```bash
+curl -X PUT http://localhost:7890/api/v1/pipelines/review-pipeline \
+  -H "Content-Type: application/json" \
+  -d '{"Description": "Updated pipeline", "Stages": [{"PersonaName": "default"}, {"PersonaName": "reviewer"}]}'
+```
+
+---
+
+#### DELETE /api/v1/pipelines/{name}
+
+Delete a pipeline. Built-in pipelines cannot be deleted.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `name` | Pipeline name |
+
+**Response:** `204 No Content`
+**Error:** `404` - Pipeline not found
+**Error:** `403` - Built-in pipeline cannot be deleted
+
+```bash
+curl -X DELETE http://localhost:7890/api/v1/pipelines/review-pipeline
+```
 
 ---
 

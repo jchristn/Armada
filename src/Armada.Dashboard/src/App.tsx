@@ -37,6 +37,12 @@ import SignalDetail from './pages/SignalDetail';
 import EventDetail from './pages/EventDetail';
 import DockDetail from './pages/DockDetail';
 import MergeQueueDetail from './pages/MergeQueueDetail';
+import Personas from './pages/Personas';
+import PersonaDetail from './pages/PersonaDetail';
+import Pipelines from './pages/Pipelines';
+import PipelineDetail from './pages/PipelineDetail';
+import PromptTemplates from './pages/PromptTemplates';
+import PromptTemplateDetail from './pages/PromptTemplateDetail';
 
 export default function App() {
   return (
@@ -83,6 +89,13 @@ export default function App() {
 
                 <Route path="merge-queue" element={<MergeQueue />} />
                 <Route path="merge-queue/:id" element={<MergeQueueDetail />} />
+
+                <Route path="personas" element={<Personas />} />
+                <Route path="personas/:name" element={<PersonaDetail />} />
+                <Route path="pipelines" element={<Pipelines />} />
+                <Route path="pipelines/:name" element={<PipelineDetail />} />
+                <Route path="prompt-templates" element={<PromptTemplates />} />
+                <Route path="prompt-templates/:name" element={<PromptTemplateDetail />} />
 
                 <Route path="notifications" element={<Notifications />} />
 

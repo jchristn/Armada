@@ -49,5 +49,10 @@ namespace Armada.Server.Mcp
         /// Parent mission ID for sub-tasks (msn_ prefix).
         /// </summary>
         public string? ParentMissionId { get; set; }
+
+        /// <summary>
+        /// Persona for this mission (e.g. Worker, Architect, Judge, TestEngineer).
+        /// </summary>
+        public string? Persona { get; set; }
     }
 }

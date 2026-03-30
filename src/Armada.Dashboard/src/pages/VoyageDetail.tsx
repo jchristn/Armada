@@ -18,7 +18,7 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
 import DiffViewer from '../components/shared/DiffViewer';
 import LogViewer from '../components/shared/LogViewer';
-import { copyToClipboard } from '../components/shared/CopyButton';
+import CopyButton from '../components/shared/CopyButton';
 
 // ── Helper utilities ──
 
@@ -220,7 +220,7 @@ export default function VoyageDetail() {
   }, [logModal.missionId, fetchLog]);
 
   if (loading) return <p className="text-muted">Loading...</p>;
-  if (!voyage) return <ErrorModal error={error || 'Voyage not found.'} onClose={() => setError('')} />;
+  if (!voyage) return <ErrorModal error={error || 'Voyage not found.'} onClose={() => nav('/voyages')} />;
 
   return (
     <div>
@@ -265,7 +265,7 @@ export default function VoyageDetail() {
             <div><span className="text-muted" style={{ fontSize: 12 }}>ID</span>
               <div className="mono" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
                 {voyage.id}
-                <button className="btn-sm" style={{ padding: '1px 4px', fontSize: 10 }} onClick={() => copyToClipboard(voyage.id)} title="Copy ID">&#x2398;</button>
+                <CopyButton text={voyage.id} />
               </div>
             </div>
             <div><span className="text-muted" style={{ fontSize: 12 }}>Description</span><div>{voyage.description || '-'}</div></div>
@@ -332,10 +332,12 @@ export default function VoyageDetail() {
                   <strong>{m.title}</strong>
                   <div className="text-muted mono" style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
                     {m.id}
-                    <button className="btn-sm" style={{ padding: '1px 4px', fontSize: 10 }} onClick={e => { e.stopPropagation(); copyToClipboard(m.id); }} title="Copy ID">&#x2398;</button>
+                    <CopyButton text={m.id} onClick={e => e.stopPropagation()} />
                   </div>
                 </td>
-                <td><StatusBadge status={m.status} /></td>
+                <td>
+                  <StatusBadge status={m.status} />
+                </td>
                 <td>{m.vesselId ? <Link to={`/vessels/${m.vesselId}`} onClick={e => e.stopPropagation()}>{vesselName(m.vesselId)}</Link> : '-'}</td>
                 <td>{m.captainId ? <Link to={`/captains/${m.captainId}`} onClick={e => e.stopPropagation()}>{captainName(m.captainId)}</Link> : '-'}</td>
                 <td className="mono text-muted" style={{ fontSize: 11 }}>{m.branchName || '-'}</td>

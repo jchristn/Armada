@@ -134,70 +134,109 @@ namespace Armada.Core.Services
         {
             if (captain == null) throw new ArgumentNullException(nameof(captain));
 
-            captain.RecoveryAttempts++;
-            _Logging.Info(_Header + "auto-recovery attempt " + captain.RecoveryAttempts + "/" + _Settings.MaxRecoveryAttempts + " for captain " + captain.Id);
-
-            // Reload mission and dock info
-            Mission? mission = !String.IsNullOrEmpty(captain.CurrentMissionId)
-                ? await _Database.Missions.ReadAsync(captain.CurrentMissionId, token).ConfigureAwait(false)
-                : null;
-
-            Dock? dock = !String.IsNullOrEmpty(captain.CurrentDockId)
-                ? await _Database.Docks.ReadAsync(captain.CurrentDockId, token).ConfigureAwait(false)
-                : null;
-
-            if (mission == null || dock == null)
-            {
-                _Logging.Warn(_Header + "cannot recover captain " + captain.Id + ": mission or dock not found");
-                await _Database.Captains.UpdateStateAsync(captain.Id, CaptainStateEnum.Stalled, token).ConfigureAwait(false);
-                return;
-            }
-
-            // Repair the worktree if needed
             try
             {
-                await _Git.RepairWorktreeAsync(dock.WorktreePath!, token).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _Logging.Warn(_Header + "worktree repair failed for captain " + captain.Id + ": " + ex.Message);
-            }
+                captain.RecoveryAttempts++;
+                _Logging.Info(_Header + "auto-recovery attempt " + captain.RecoveryAttempts + "/" + _Settings.MaxRecoveryAttempts + " for captain " + captain.Id);
 
-            // Get vessel for context regeneration
-            Vessel? vessel = !String.IsNullOrEmpty(mission.VesselId)
-                ? await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false)
-                : null;
+                // Reload mission and dock info
+                Mission? mission = !String.IsNullOrEmpty(captain.CurrentMissionId)
+                    ? await _Database.Missions.ReadAsync(captain.CurrentMissionId, token).ConfigureAwait(false)
+                    : null;
 
-            // Update captain state for re-launch
-            captain.State = CaptainStateEnum.Working;
-            captain.LastHeartbeatUtc = DateTime.UtcNow;
-            captain.LastUpdateUtc = DateTime.UtcNow;
-            await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
+                Dock? dock = !String.IsNullOrEmpty(captain.CurrentDockId)
+                    ? await _Database.Docks.ReadAsync(captain.CurrentDockId, token).ConfigureAwait(false)
+                    : null;
 
-            // Re-launch agent process
-            if (OnLaunchAgent != null)
-            {
+                if (mission == null || dock == null)
+                {
+                    _Logging.Warn(_Header + "cannot recover captain " + captain.Id + ": mission or dock not found -- releasing to idle");
+                    captain.CurrentMissionId = null;
+                    captain.CurrentDockId = null;
+                    captain.ProcessId = null;
+                    captain.State = CaptainStateEnum.Idle;
+                    captain.LastUpdateUtc = DateTime.UtcNow;
+                    await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
+                    return;
+                }
+
+                if (String.IsNullOrEmpty(dock.WorktreePath))
+                {
+                    _Logging.Warn(_Header + "cannot recover captain " + captain.Id + ": dock " + dock.Id + " has no worktree path -- releasing to idle");
+                    captain.CurrentMissionId = null;
+                    captain.CurrentDockId = null;
+                    captain.ProcessId = null;
+                    captain.State = CaptainStateEnum.Idle;
+                    captain.LastUpdateUtc = DateTime.UtcNow;
+                    await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
+                    return;
+                }
+
+                // Repair the worktree if needed
                 try
                 {
-                    int processId = await OnLaunchAgent.Invoke(captain, mission, dock).ConfigureAwait(false);
-                    captain.ProcessId = processId;
-                    await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
-
-                    mission.ProcessId = processId;
-                    mission.LastUpdateUtc = DateTime.UtcNow;
-                    await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
-
-                    Signal signal = new Signal(SignalTypeEnum.Assignment, "Auto-recovery attempt " + captain.RecoveryAttempts + " for mission: " + mission.Title);
-                    signal.ToCaptainId = captain.Id;
-                    await _Database.Signals.CreateAsync(signal, token).ConfigureAwait(false);
-
-                    _Logging.Info(_Header + "recovered captain " + captain.Id + " with process " + processId);
+                    await _Git.RepairWorktreeAsync(dock.WorktreePath, token).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "recovery launch failed for captain " + captain.Id + ": " + ex.Message);
-                    await _Database.Captains.UpdateStateAsync(captain.Id, CaptainStateEnum.Stalled, token).ConfigureAwait(false);
+                    _Logging.Warn(_Header + "worktree repair failed for captain " + captain.Id + ": " + ex.Message);
                 }
+
+                // Get vessel for context regeneration
+                Vessel? vessel = !String.IsNullOrEmpty(mission.VesselId)
+                    ? await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false)
+                    : null;
+
+                // Update captain state for re-launch
+                captain.State = CaptainStateEnum.Working;
+                captain.LastHeartbeatUtc = DateTime.UtcNow;
+                captain.LastUpdateUtc = DateTime.UtcNow;
+                await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
+
+                // Re-launch agent process
+                if (OnLaunchAgent != null)
+                {
+                    try
+                    {
+                        int processId = await OnLaunchAgent.Invoke(captain, mission, dock).ConfigureAwait(false);
+                        captain.ProcessId = processId;
+                        await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
+
+                        mission.ProcessId = processId;
+                        mission.LastUpdateUtc = DateTime.UtcNow;
+                        await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+
+                        Signal signal = new Signal(SignalTypeEnum.Assignment, "Auto-recovery attempt " + captain.RecoveryAttempts + " for mission: " + mission.Title);
+                        signal.ToCaptainId = captain.Id;
+                        await _Database.Signals.CreateAsync(signal, token).ConfigureAwait(false);
+
+                        _Logging.Info(_Header + "recovered captain " + captain.Id + " with process " + processId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _Logging.Warn(_Header + "recovery launch failed for captain " + captain.Id + ": " + ex.Message);
+                        captain.CurrentMissionId = null;
+                        captain.CurrentDockId = null;
+                        captain.ProcessId = null;
+                        captain.State = CaptainStateEnum.Idle;
+                        captain.LastUpdateUtc = DateTime.UtcNow;
+                        await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "unhandled error in TryRecoverAsync for captain " + captain.Id + ": " + ex.Message);
+                try
+                {
+                    captain.CurrentMissionId = null;
+                    captain.CurrentDockId = null;
+                    captain.ProcessId = null;
+                    captain.State = CaptainStateEnum.Idle;
+                    captain.LastUpdateUtc = DateTime.UtcNow;
+                    await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
+                }
+                catch { }
             }
         }
 

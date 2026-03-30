@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useNotifications } from '../context/NotificationContext';
 import {
   listMissions, createMission, updateMission, deleteMission, purgeMission,
   restartMission, retryMissionLanding, transitionMission, getMissionDiff, getMissionLog,
@@ -41,7 +42,7 @@ export default function Missions() {
   const [voyages, setVoyages] = useState<Voyage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
+  const { pushToast } = useNotifications();
 
   // Pagination (server-side)
   const [pageNumber, setPageNumber] = useState(1);
@@ -232,8 +233,7 @@ export default function Missions() {
   async function handleRetryLanding(m: Mission) {
     try {
       await retryMissionLanding(m.id);
-      setSuccessMsg('Landing succeeded for "' + m.title + '"');
-      setTimeout(() => setSuccessMsg(''), 4000);
+      pushToast('success', 'Landing succeeded for "' + m.title + '"');
       load();
     } catch (e) { setError(e instanceof Error ? e.message : 'Retry landing failed.'); }
   }
@@ -290,11 +290,6 @@ export default function Missions() {
       </div>
 
       <ErrorModal error={error} onClose={() => setError('')} />
-      {successMsg && (
-        <div className="success-banner" onClick={() => setSuccessMsg('')}>
-          {successMsg}
-        </div>
-      )}
 
       {/* Create Modal */}
       {showForm && (
@@ -415,7 +410,9 @@ export default function Missions() {
                         <CopyButton text={m.id} onClick={e => e.stopPropagation()} />
                       </span>
                     </td>
-                    <td><StatusBadge status={m.status} /></td>
+                    <td>
+                      <StatusBadge status={m.status} />
+                    </td>
                     <td>{m.priority}</td>
                     <td onClick={e => e.stopPropagation()}>
                       {m.vesselId ? (

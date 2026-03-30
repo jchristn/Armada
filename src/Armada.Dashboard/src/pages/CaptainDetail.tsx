@@ -16,7 +16,7 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import StatusBadge from '../components/shared/StatusBadge';
-import { copyToClipboard } from '../components/shared/CopyButton';
+import CopyButton from '../components/shared/CopyButton';
 
 const RUNTIMES = ['ClaudeCode', 'Codex', 'Gemini', 'Cursor', 'Custom'];
 
@@ -49,7 +49,7 @@ export default function CaptainDetail() {
 
   // Edit
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', runtime: 'ClaudeCode', systemInstructions: '' });
+  const [form, setForm] = useState({ name: '', runtime: 'ClaudeCode', systemInstructions: '', allowedPersonas: '', preferredPersona: '' });
 
   // Log viewer
   const [logText, setLogText] = useState<string | null>(null);
@@ -67,6 +67,7 @@ export default function CaptainDetail() {
     if (!id) return;
     try {
       setLoading(true);
+      const isInitialLoad = !captain;
       const cap = await getCaptain(id);
       setCaptain(cap);
       // Load current mission if set
@@ -83,7 +84,7 @@ export default function CaptainDetail() {
         const mResult = await listMissions({ pageSize: 100, filters: { captainId: id } });
         setMissions(mResult.objects || []);
       } catch { setMissions([]); }
-      setError('');
+      if (isInitialLoad) setError('');
     } catch {
       setError('Failed to load captain.');
     } finally {
@@ -95,7 +96,7 @@ export default function CaptainDetail() {
 
   function openEdit() {
     if (!captain) return;
-    setForm({ name: captain.name, runtime: captain.runtime || 'ClaudeCode', systemInstructions: captain.systemInstructions ?? '' });
+    setForm({ name: captain.name, runtime: captain.runtime || 'ClaudeCode', systemInstructions: captain.systemInstructions ?? '', allowedPersonas: captain.allowedPersonas ?? '', preferredPersona: captain.preferredPersona ?? '' });
     setShowForm(true);
   }
 
@@ -105,6 +106,8 @@ export default function CaptainDetail() {
     try {
       const payload = { ...form } as Record<string, unknown>;
       if (!payload.systemInstructions) delete payload.systemInstructions;
+      if (!payload.allowedPersonas) delete payload.allowedPersonas;
+      if (!payload.preferredPersona) delete payload.preferredPersona;
       await updateCaptain(captain.id, payload);
       setShowForm(false);
       load();
@@ -225,6 +228,14 @@ export default function CaptainDetail() {
               System Instructions
               <textarea value={form.systemInstructions} onChange={e => setForm({ ...form, systemInstructions: e.target.value })} rows={4} placeholder="e.g., You are a testing specialist. Always run tests before committing..." />
             </label>
+            <label>
+              Allowed Personas (JSON array)
+              <textarea value={form.allowedPersonas} onChange={e => setForm({ ...form, allowedPersonas: e.target.value })} rows={2} placeholder='["Worker", "Judge"]' />
+            </label>
+            <label>
+              Preferred Persona
+              <input value={form.preferredPersona} onChange={e => setForm({ ...form, preferredPersona: e.target.value })} placeholder="e.g., Worker" />
+            </label>
             <div className="modal-actions">
               <button type="submit" className="btn btn-primary">Save</button>
               <button type="button" className="btn" onClick={() => setShowForm(false)}>Cancel</button>
@@ -243,7 +254,7 @@ export default function CaptainDetail() {
           <span className="detail-label">ID</span>
           <span className="id-display">
             <span className="mono">{captain.id}</span>
-            <button className="copy-btn" onClick={() => copyToClipboard(captain.id)} title="Copy ID" />
+            <CopyButton text={captain.id} />
           </span>
         </div>
         <div className="detail-field"><span className="detail-label">Name</span><span>{captain.name}</span></div>
@@ -258,6 +269,14 @@ export default function CaptainDetail() {
       )}
       <div className="detail-grid">
         <div className="detail-field">
+          <span className="detail-label">Allowed Personas</span>
+          <span>{captain.allowedPersonas || <span className="text-dim">Any (no restriction)</span>}</span>
+        </div>
+        <div className="detail-field">
+          <span className="detail-label">Preferred Persona</span>
+          <span>{captain.preferredPersona || <span className="text-dim">None</span>}</span>
+        </div>
+        <div className="detail-field">
           <span className="detail-label">State</span>
           <StatusBadge status={captain.state} />
         </div>
@@ -266,7 +285,7 @@ export default function CaptainDetail() {
           {captain.currentMissionId ? (
             <span className="id-display">
               <Link className="mono" to={`/missions/${captain.currentMissionId}`}>{captain.currentMissionId}</Link>
-              <button className="copy-btn" onClick={() => copyToClipboard(captain.currentMissionId!)} title="Copy ID" />
+              <CopyButton text={captain.currentMissionId!} />
             </span>
           ) : <span>-</span>}
         </div>
@@ -275,7 +294,7 @@ export default function CaptainDetail() {
           {captain.currentDockId ? (
             <span className="id-display">
               <Link className="mono" to={`/docks/${captain.currentDockId}`}>{captain.currentDockId}</Link>
-              <button className="copy-btn" onClick={() => copyToClipboard(captain.currentDockId!)} title="Copy ID" />
+              <CopyButton text={captain.currentDockId!} />
             </span>
           ) : <span>-</span>}
         </div>
@@ -374,7 +393,7 @@ export default function CaptainDetail() {
                       <strong>{m.title}</strong>
                       <div className="text-dim id-display">
                         <span className="mono">{m.id}</span>
-                        <button className="copy-btn" onClick={e => { e.stopPropagation(); copyToClipboard(m.id); }} title="Copy ID" />
+                        <CopyButton text={m.id} />
                       </div>
                     </td>
                     <td><StatusBadge status={m.status} /></td>

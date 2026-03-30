@@ -140,6 +140,120 @@ namespace Armada.Core.Database.SqlServer.Queries
                     @"
                     IF COL_LENGTH('captains', 'system_instructions') IS NULL
                         ALTER TABLE captains ADD system_instructions NVARCHAR(MAX);"
+                ),
+                new SchemaMigration(
+                    7,
+                    "Add prompt_templates table",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'prompt_templates')
+                    CREATE TABLE prompt_templates (
+                        id NVARCHAR(450) NOT NULL PRIMARY KEY,
+                        tenant_id NVARCHAR(450),
+                        name NVARCHAR(450) NOT NULL,
+                        description NVARCHAR(MAX),
+                        category NVARCHAR(450) NOT NULL DEFAULT 'mission',
+                        content NVARCHAR(MAX) NOT NULL,
+                        is_built_in BIT NOT NULL DEFAULT 0,
+                        active BIT NOT NULL DEFAULT 1,
+                        created_utc NVARCHAR(450) NOT NULL,
+                        last_update_utc NVARCHAR(450) NOT NULL,
+                        CONSTRAINT FK_prompt_templates_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_prompt_templates_tenant_name') CREATE UNIQUE INDEX idx_prompt_templates_tenant_name ON prompt_templates(tenant_id, name);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_prompt_templates_category') CREATE INDEX idx_prompt_templates_category ON prompt_templates(category);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_prompt_templates_active') CREATE INDEX idx_prompt_templates_active ON prompt_templates(active);"
+                ),
+                new SchemaMigration(
+                    8,
+                    "Add personas table",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'personas')
+                    CREATE TABLE personas (
+                        id NVARCHAR(450) NOT NULL PRIMARY KEY,
+                        tenant_id NVARCHAR(450),
+                        name NVARCHAR(450) NOT NULL,
+                        description NVARCHAR(MAX),
+                        prompt_template_name NVARCHAR(450) NOT NULL,
+                        is_built_in BIT NOT NULL DEFAULT 0,
+                        active BIT NOT NULL DEFAULT 1,
+                        created_utc NVARCHAR(450) NOT NULL,
+                        last_update_utc NVARCHAR(450) NOT NULL,
+                        CONSTRAINT FK_personas_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_personas_tenant_name') CREATE UNIQUE INDEX idx_personas_tenant_name ON personas(tenant_id, name);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_personas_active') CREATE INDEX idx_personas_active ON personas(active);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_personas_prompt_template') CREATE INDEX idx_personas_prompt_template ON personas(prompt_template_name);"
+                ),
+                new SchemaMigration(
+                    9,
+                    "Add captain persona fields",
+                    @"
+                    IF COL_LENGTH('captains', 'allowed_personas') IS NULL
+                        ALTER TABLE captains ADD allowed_personas NVARCHAR(MAX);",
+                    @"
+                    IF COL_LENGTH('captains', 'preferred_persona') IS NULL
+                        ALTER TABLE captains ADD preferred_persona NVARCHAR(450);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_captains_preferred_persona') CREATE INDEX idx_captains_preferred_persona ON captains(preferred_persona);"
+                ),
+                new SchemaMigration(
+                    10,
+                    "Add mission persona and dependency fields",
+                    @"
+                    IF COL_LENGTH('missions', 'persona') IS NULL
+                        ALTER TABLE missions ADD persona NVARCHAR(450);",
+                    @"
+                    IF COL_LENGTH('missions', 'depends_on_mission_id') IS NULL
+                        ALTER TABLE missions ADD depends_on_mission_id NVARCHAR(450);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_missions_persona') CREATE INDEX idx_missions_persona ON missions(persona);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_missions_depends_on') CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);"
+                ),
+                new SchemaMigration(
+                    11,
+                    "Add pipelines and pipeline_stages tables",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'pipelines')
+                    CREATE TABLE pipelines (
+                        id NVARCHAR(450) NOT NULL PRIMARY KEY,
+                        tenant_id NVARCHAR(450),
+                        name NVARCHAR(450) NOT NULL,
+                        description NVARCHAR(MAX),
+                        is_built_in BIT NOT NULL DEFAULT 0,
+                        active BIT NOT NULL DEFAULT 1,
+                        created_utc NVARCHAR(450) NOT NULL,
+                        last_update_utc NVARCHAR(450) NOT NULL,
+                        CONSTRAINT FK_pipelines_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+                    );",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'pipeline_stages')
+                    CREATE TABLE pipeline_stages (
+                        id NVARCHAR(450) NOT NULL PRIMARY KEY,
+                        pipeline_id NVARCHAR(450) NOT NULL,
+                        stage_order INT NOT NULL,
+                        persona_name NVARCHAR(450) NOT NULL,
+                        is_optional BIT NOT NULL DEFAULT 0,
+                        description NVARCHAR(MAX),
+                        CONSTRAINT FK_pipeline_stages_pipeline FOREIGN KEY (pipeline_id) REFERENCES pipelines(id) ON DELETE CASCADE
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_pipelines_tenant_name') CREATE UNIQUE INDEX idx_pipelines_tenant_name ON pipelines(tenant_id, name);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_pipelines_active') CREATE INDEX idx_pipelines_active ON pipelines(active);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_pipeline_stages_pipeline') CREATE INDEX idx_pipeline_stages_pipeline ON pipeline_stages(pipeline_id);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_pipeline_stages_order') CREATE UNIQUE INDEX idx_pipeline_stages_order ON pipeline_stages(pipeline_id, stage_order);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_pipeline_stages_persona') CREATE INDEX idx_pipeline_stages_persona ON pipeline_stages(persona_name);",
+                    @"
+                    IF COL_LENGTH('fleets', 'default_pipeline_id') IS NULL
+                        ALTER TABLE fleets ADD default_pipeline_id NVARCHAR(450);",
+                    @"
+                    IF COL_LENGTH('vessels', 'default_pipeline_id') IS NULL
+                        ALTER TABLE vessels ADD default_pipeline_id NVARCHAR(450);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_fleets_default_pipeline') CREATE INDEX idx_fleets_default_pipeline ON fleets(default_pipeline_id);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_vessels_default_pipeline') CREATE INDEX idx_vessels_default_pipeline ON vessels(default_pipeline_id);"
+                ),
+                new SchemaMigration(
+                    12,
+                    "Add failure_reason to missions",
+                    @"
+                    IF COL_LENGTH('missions', 'failure_reason') IS NULL
+                        ALTER TABLE missions ADD failure_reason NVARCHAR(MAX);"
                 )
             };
         }

@@ -51,6 +51,12 @@ namespace Armada.Core.Models
         public string? Description { get; set; } = null;
 
         /// <summary>
+        /// Default pipeline to use for dispatches to this fleet.
+        /// Vessel setting overrides fleet setting. Null uses WorkerOnly pipeline.
+        /// </summary>
+        public string? DefaultPipelineId { get; set; } = null;
+
+        /// <summary>
         /// Whether the fleet is active.
         /// </summary>
         public bool Active { get; set; } = true;

@@ -25,5 +25,15 @@ namespace Armada.Server.Mcp
         /// </summary>
         public string? SystemInstructions { get; set; }
 
+        /// <summary>
+        /// JSON array of persona names this captain can fill. Null means any persona.
+        /// </summary>
+        public string? AllowedPersonas { get; set; }
+
+        /// <summary>
+        /// Preferred persona for dispatch routing priority.
+        /// </summary>
+        public string? PreferredPersona { get; set; }
+
     }
 }

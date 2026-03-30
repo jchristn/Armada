@@ -1,6 +1,6 @@
 # Armada MCP API Reference
 
-**Version:** 0.3.0
+**Version:** 0.4.0
 **Default URL:** `http://localhost:7891`
 **Protocol:** [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) over HTTP
 **Server Library:** Voltaic (McpHttpServer)
@@ -82,6 +82,20 @@
     - [armada_purge_merge_queue](#armada_purge_merge_queue)
     - [armada_purge_merge_entry](#armada_purge_merge_entry)
     - [armada_purge_merge_entries](#armada_purge_merge_entries)
+  - **Prompt Template Management**
+    - [armada_get_prompt_template](#armada_get_prompt_template)
+    - [armada_update_prompt_template](#armada_update_prompt_template)
+    - [armada_reset_prompt_template](#armada_reset_prompt_template)
+  - **Persona Management**
+    - [armada_create_persona](#armada_create_persona)
+    - [armada_get_persona](#armada_get_persona)
+    - [armada_update_persona](#armada_update_persona)
+    - [armada_delete_persona](#armada_delete_persona)
+  - **Pipeline Management**
+    - [armada_create_pipeline](#armada_create_pipeline)
+    - [armada_get_pipeline](#armada_get_pipeline)
+    - [armada_update_pipeline](#armada_update_pipeline)
+    - [armada_delete_pipeline](#armada_delete_pipeline)
   - **Backup and Restore**
     - [armada_backup](#armada_backup)
     - [armada_restore](#armada_restore)
@@ -259,7 +273,7 @@ No parameters required.
 
 ### armada_enumerate
 
-Paginated enumeration of any entity type with filtering and sorting. This is the MCP equivalent of the `POST /api/v1/{entity}/enumerate` REST endpoints. Returns paginated results with total counts, page metadata, and query timing. Supports: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue.
+Paginated enumeration of any entity type with filtering and sorting. This is the MCP equivalent of the `POST /api/v1/{entity}/enumerate` REST endpoints. Returns paginated results with total counts, page metadata, and query timing. Supports: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines.
 
 **Input Schema:**
 
@@ -267,7 +281,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 {
   "type": "object",
   "properties": {
-    "entityType": { "type": "string", "description": "Entity type to enumerate (fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue)" },
+    "entityType": { "type": "string", "description": "Entity type to enumerate (fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines)" },
     "pageNumber": { "type": "integer", "description": "Page number (1-based, default 1)" },
     "pageSize": { "type": "integer", "description": "Results per page (default 10, max 1000)" },
     "order": { "type": "string", "description": "Sort order: CreatedAscending, CreatedDescending" },
@@ -304,6 +318,9 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 | `signals` | `signalType`, `captainId`, `toCaptainId`, `unreadOnly`, `createdAfter`, `createdBefore` |
 | `events` | `eventType`, `captainId`, `missionId`, `vesselId`, `voyageId`, `createdAfter`, `createdBefore` |
 | `merge_queue` | `status` (Queued/Testing/Passed/Failed/Landed/Cancelled), `createdAfter`, `createdBefore` |
+| `personas` | `createdAfter`, `createdBefore` |
+| `prompt_templates` | `createdAfter`, `createdBefore` |
+| `pipelines` | `createdAfter`, `createdBefore` |
 
 | Include flag | Applies to | Default | Description |
 |---|---|---|---|
@@ -373,6 +390,14 @@ Dispatch a new voyage with missions to a vessel. This is the primary way to assi
           "description": { "type": "string" }
         }
       }
+    },
+    "pipelineId": {
+      "type": "string",
+      "description": "Optional pipeline ID to use for this voyage (overrides vessel/fleet default)"
+    },
+    "pipeline": {
+      "type": "string",
+      "description": "Optional pipeline name to use for this voyage (convenience alias for pipelineId -- resolves by name)"
     }
   },
   "required": ["title", "vesselId", "missions"]
@@ -385,6 +410,8 @@ Dispatch a new voyage with missions to a vessel. This is the primary way to assi
 | `description` | string | No | Voyage description |
 | `vesselId` | string | Yes | Target vessel ID (prefix `vsl_`) |
 | `missions` | array | Yes | Array of mission objects with `title` and optional `description` |
+| `pipelineId` | string | No | Pipeline ID to use for this voyage (overrides vessel/fleet default) |
+| `pipeline` | string | No | Pipeline name to use (convenience alias for `pipelineId` -- resolves by name) |
 
 **Example Input:**
 
@@ -643,6 +670,10 @@ Register a new vessel (git repository) in a fleet.
     "enableModelContext": {
       "type": "boolean",
       "description": "Enable model context accumulation -- agents will update context with key information discovered during missions (default false)"
+    },
+    "defaultPipelineId": {
+      "type": "string",
+      "description": "Default pipeline ID for voyages dispatched to this vessel"
     }
   },
   "required": ["name", "repoUrl", "fleetId"]
@@ -659,6 +690,7 @@ Register a new vessel (git repository) in a fleet.
 | `styleGuide` | string | No | Style guide describing naming conventions, patterns, and library preferences |
 | `workingDirectory` | string | No | Optional local directory where completed mission changes will be pulled after merge |
 | `enableModelContext` | boolean | No | Enable model context accumulation (default false) |
+| `defaultPipelineId` | string | No | Default pipeline ID for voyages dispatched to this vessel |
 
 **Example Input:**
 
@@ -1083,7 +1115,8 @@ Update an existing fleet's name or description.
   "properties": {
     "fleetId": { "type": "string", "description": "Fleet ID (flt_ prefix)" },
     "name": { "type": "string", "description": "New fleet name" },
-    "description": { "type": "string", "description": "New fleet description" }
+    "description": { "type": "string", "description": "New fleet description" },
+    "defaultPipelineId": { "type": "string", "description": "Default pipeline ID for voyages dispatched to vessels in this fleet" }
   },
   "required": ["fleetId"]
 }
@@ -1191,7 +1224,8 @@ Update an existing vessel's properties.
     "styleGuide": { "type": "string", "description": "New style guide" },
     "workingDirectory": { "type": "string", "description": "New local directory where completed mission changes will be pulled after merge" },
     "enableModelContext": { "type": "boolean", "description": "Enable or disable model context accumulation" },
-    "modelContext": { "type": "string", "description": "Agent-accumulated context about this repository" }
+    "modelContext": { "type": "string", "description": "Agent-accumulated context about this repository" },
+    "defaultPipelineId": { "type": "string", "description": "Default pipeline ID for voyages dispatched to this vessel" }
   },
   "required": ["vesselId"]
 }
@@ -1525,7 +1559,9 @@ Register a new captain (AI agent).
   "properties": {
     "name": { "type": "string", "description": "Captain display name" },
     "runtime": { "type": "string", "description": "Agent runtime: ClaudeCode, Codex, Gemini, Cursor" },
-    "systemInstructions": { "type": "string", "description": "System instructions for this captain -- injected into every mission prompt to specialize behavior" }
+    "systemInstructions": { "type": "string", "description": "System instructions for this captain -- injected into every mission prompt to specialize behavior" },
+    "allowedPersonas": { "type": "array", "items": { "type": "string" }, "description": "List of persona names this captain is allowed to use" },
+    "preferredPersona": { "type": "string", "description": "Preferred persona name for this captain" }
   },
   "required": ["name"]
 }
@@ -1536,6 +1572,8 @@ Register a new captain (AI agent).
 | `name` | string | Yes | Captain display name |
 | `runtime` | string | No | Agent runtime: `ClaudeCode`, `Codex`, `Gemini`, `Cursor` |
 | `systemInstructions` | string | No | System instructions injected into every mission prompt for this captain |
+| `allowedPersonas` | string[] | No | List of persona names this captain is allowed to use |
+| `preferredPersona` | string | No | Preferred persona name for this captain |
 
 **Response:** [Captain](#captain) object.
 
@@ -1574,7 +1612,9 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
     "captainId": { "type": "string", "description": "Captain ID (cpt_ prefix)" },
     "name": { "type": "string", "description": "New display name" },
     "runtime": { "type": "string", "description": "New agent runtime: ClaudeCode, Codex, Gemini, Cursor" },
-    "systemInstructions": { "type": "string", "description": "New system instructions for this captain" }
+    "systemInstructions": { "type": "string", "description": "New system instructions for this captain" },
+    "allowedPersonas": { "type": "array", "items": { "type": "string" }, "description": "New list of persona names this captain is allowed to use" },
+    "preferredPersona": { "type": "string", "description": "New preferred persona name for this captain" }
   },
   "required": ["captainId"]
 }
@@ -1586,6 +1626,8 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
 | `name` | string | No | New display name |
 | `runtime` | string | No | New agent runtime: `ClaudeCode`, `Codex`, `Gemini`, `Cursor` |
 | `systemInstructions` | string | No | New system instructions for this captain |
+| `allowedPersonas` | string[] | No | New list of persona names this captain is allowed to use |
+| `preferredPersona` | string | No | New preferred persona name for this captain |
 
 **Response:** Updated [Captain](#captain) object, or `{ "Error": "Captain not found" }`.
 
@@ -2022,6 +2064,342 @@ Returns `{ "Error": "entryIds is required and must not be empty" }` if no IDs ar
 
 ---
 
+### armada_get_prompt_template
+
+Get a prompt template by name.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": { "type": "string", "description": "Template name (e.g. 'mission.rules', 'persona.worker')" }
+  },
+  "required": ["name"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Template name (e.g. `"mission.rules"`, `"persona.worker"`) |
+
+**Response:** [PromptTemplate](#prompttemplate) object, or `{ "Error": "Prompt template not found" }`.
+
+---
+
+### armada_update_prompt_template
+
+Update a prompt template's content.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": { "type": "string", "description": "Template name" },
+    "content": { "type": "string", "description": "New template content" },
+    "description": { "type": "string", "description": "New template description" }
+  },
+  "required": ["name", "content"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Template name |
+| `content` | string | Yes | New template content |
+| `description` | string | No | New template description |
+
+**Response:** Updated [PromptTemplate](#prompttemplate) object, or `{ "Error": "Prompt template not found" }`.
+
+---
+
+### armada_reset_prompt_template
+
+Reset a prompt template to its built-in default content.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": { "type": "string", "description": "Template name" }
+  },
+  "required": ["name"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Template name to reset |
+
+**Response:** Reset [PromptTemplate](#prompttemplate) object with default content restored, or `{ "Error": "No built-in default exists for this template" }`.
+
+---
+
+### armada_create_persona
+
+Create a custom persona.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": { "type": "string", "description": "Persona name" },
+    "description": { "type": "string", "description": "Persona description" },
+    "promptTemplateName": { "type": "string", "description": "Name of the prompt template to use for this persona" }
+  },
+  "required": ["name", "promptTemplateName"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Persona name |
+| `description` | string | No | Persona description |
+| `promptTemplateName` | string | Yes | Name of the prompt template to use for this persona |
+
+**Response:** The newly created [Persona](#persona) object.
+
+---
+
+### armada_get_persona
+
+Get a persona by name.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": { "type": "string", "description": "Persona name" }
+  },
+  "required": ["name"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Persona name |
+
+**Response:** [Persona](#persona) object, or `{ "Error": "Persona not found" }`.
+
+---
+
+### armada_update_persona
+
+Update persona properties.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": { "type": "string", "description": "Persona name" },
+    "description": { "type": "string", "description": "New persona description" },
+    "promptTemplateName": { "type": "string", "description": "New prompt template name" }
+  },
+  "required": ["name"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Persona name |
+| `description` | string | No | New persona description |
+| `promptTemplateName` | string | No | New prompt template name |
+
+**Response:** Updated [Persona](#persona) object, or `{ "Error": "Persona not found" }`.
+
+---
+
+### armada_delete_persona
+
+Delete a custom persona. Built-in personas cannot be deleted.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": { "type": "string", "description": "Persona name" }
+  },
+  "required": ["name"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Persona name to delete |
+
+**Response:**
+
+```json
+{ "Status": "deleted", "Name": "my-custom-persona" }
+```
+
+Returns `{ "Error": "Persona not found" }` if the name does not exist.
+Returns `{ "Error": "Cannot delete built-in persona" }` if the persona is built-in.
+
+---
+
+### armada_create_pipeline
+
+Create a custom pipeline with stages.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": { "type": "string", "description": "Pipeline name" },
+    "description": { "type": "string", "description": "Pipeline description" },
+    "stages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "personaName": { "type": "string", "description": "Persona name for this stage" },
+          "isOptional": { "type": "boolean", "description": "Whether this stage is optional (default false)" },
+          "description": { "type": "string", "description": "Stage description" }
+        },
+        "required": ["personaName"]
+      },
+      "description": "Ordered list of pipeline stages"
+    }
+  },
+  "required": ["name", "stages"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Pipeline name |
+| `description` | string | No | Pipeline description |
+| `stages` | array | Yes | Ordered list of pipeline stages, each with `personaName` (required), `isOptional` (optional, default false), and `description` (optional) |
+
+**Example Input:**
+
+```json
+{
+  "name": "code-review-pipeline",
+  "description": "Implement, test, and review",
+  "stages": [
+    { "personaName": "worker", "description": "Implement the feature" },
+    { "personaName": "tester", "description": "Write and run tests", "isOptional": true },
+    { "personaName": "reviewer", "description": "Code review" }
+  ]
+}
+```
+
+**Response:** The newly created [Pipeline](#pipeline) object with stages.
+
+---
+
+### armada_get_pipeline
+
+Get a pipeline by name.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": { "type": "string", "description": "Pipeline name" }
+  },
+  "required": ["name"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Pipeline name |
+
+**Response:** [Pipeline](#pipeline) object with stages, or `{ "Error": "Pipeline not found" }`.
+
+---
+
+### armada_update_pipeline
+
+Update pipeline properties and stages. If `stages` is provided, it replaces all existing stages.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": { "type": "string", "description": "Pipeline name" },
+    "description": { "type": "string", "description": "New pipeline description" },
+    "stages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "personaName": { "type": "string", "description": "Persona name for this stage" },
+          "isOptional": { "type": "boolean", "description": "Whether this stage is optional (default false)" },
+          "description": { "type": "string", "description": "Stage description" }
+        },
+        "required": ["personaName"]
+      },
+      "description": "New ordered list of pipeline stages (replaces all existing stages)"
+    }
+  },
+  "required": ["name"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Pipeline name |
+| `description` | string | No | New pipeline description |
+| `stages` | array | No | New ordered list of pipeline stages (replaces all existing stages if provided) |
+
+**Response:** Updated [Pipeline](#pipeline) object with stages, or `{ "Error": "Pipeline not found" }`.
+
+---
+
+### armada_delete_pipeline
+
+Delete a custom pipeline. Built-in pipelines cannot be deleted.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": { "type": "string", "description": "Pipeline name" }
+  },
+  "required": ["name"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Pipeline name to delete |
+
+**Response:**
+
+```json
+{ "Status": "deleted", "Name": "my-custom-pipeline" }
+```
+
+Returns `{ "Error": "Pipeline not found" }` if the name does not exist.
+Returns `{ "Error": "Cannot delete built-in pipeline" }` if the pipeline is built-in.
+
+---
+
 ### armada_backup
 
 Create a backup of the Armada database and settings as a ZIP archive.
@@ -2281,6 +2659,48 @@ Paginated result wrapper returned by `armada_enumerate`.
 | `lastUpdateUtc` | string | ISO 8601 last update timestamp |
 | `testStartedUtc` | string \| null | ISO 8601 test start timestamp |
 | `completedUtc` | string \| null | ISO 8601 completion timestamp |
+
+#### PromptTemplate
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Prompt template ID |
+| `name` | string | Template name (e.g. `"mission.rules"`, `"persona.worker"`) |
+| `description` | string \| null | Template description |
+| `category` | string \| null | Template category |
+| `content` | string | Template content |
+| `isBuiltIn` | bool | Whether this is a built-in template |
+| `active` | bool | Whether the template is active |
+
+#### Persona
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Persona ID |
+| `name` | string | Persona name |
+| `description` | string \| null | Persona description |
+| `promptTemplateName` | string | Name of the prompt template used by this persona |
+| `isBuiltIn` | bool | Whether this is a built-in persona |
+| `active` | bool | Whether the persona is active |
+
+#### Pipeline
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Pipeline ID |
+| `name` | string | Pipeline name |
+| `description` | string \| null | Pipeline description |
+| `stages` | array | Ordered list of [PipelineStage](#pipelinestage) objects |
+| `isBuiltIn` | bool | Whether this is a built-in pipeline |
+| `active` | bool | Whether the pipeline is active |
+
+#### PipelineStage
+
+| Field | Type | Description |
+|---|---|---|
+| `personaName` | string | Persona name for this stage |
+| `isOptional` | bool | Whether this stage is optional |
+| `description` | string \| null | Stage description |
 
 ---
 

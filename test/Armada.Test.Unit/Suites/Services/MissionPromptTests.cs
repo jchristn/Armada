@@ -35,6 +35,14 @@ namespace Armada.Test.Unit.Suites.Services
             return new MissionService(logging, db, settings, dockService, captainService);
         }
 
+        private MissionService CreateMissionServiceWithTemplates(LoggingModule logging, SqliteDatabaseDriver db, ArmadaSettings settings, StubGitService git, out IPromptTemplateService templateService)
+        {
+            IDockService dockService = new DockService(logging, db, settings, git);
+            ICaptainService captainService = new CaptainService(logging, db, settings, git, dockService);
+            templateService = new PromptTemplateService(db, logging);
+            return new MissionService(logging, db, settings, dockService, captainService, templateService);
+        }
+
         protected override async Task RunTestsAsync()
         {
             await RunTest("GenerateClaudeMdAsync includes ProjectContext when set", async () =>
@@ -355,6 +363,152 @@ namespace Armada.Test.Unit.Suites.Services
                         AssertFalse(content.Contains("## Model Context\n"), "Should not contain Model Context section when null");
                         AssertContains("## Model Context Updates", content);
                         AssertContains("armada_update_vessel_context", content);
+                    }
+                    finally
+                    {
+                        try { Directory.Delete(tempDir, true); } catch { }
+                    }
+                }
+            });
+
+            await RunTest("Template-resolved CLAUDE.md contains mission rules", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    StubGitService git = new StubGitService();
+                    IPromptTemplateService templateService;
+                    MissionService service = CreateMissionServiceWithTemplates(logging, testDb.Driver, settings, git, out templateService);
+                    await templateService.SeedDefaultsAsync();
+
+                    string tempDir = Path.Combine(Path.GetTempPath(), "armada_prompt_test_" + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(tempDir);
+
+                    try
+                    {
+                        Vessel vessel = new Vessel("TemplateRulesVessel", "https://github.com/test/repo");
+
+                        Mission mission = new Mission();
+                        mission.Title = "Template rules test";
+                        mission.Description = "Verify rules section from templates.";
+
+                        await service.GenerateClaudeMdAsync(tempDir, mission, vessel);
+
+                        string content = await File.ReadAllTextAsync(Path.Combine(tempDir, "CLAUDE.md"));
+                        AssertContains("## Rules", content);
+                    }
+                    finally
+                    {
+                        try { Directory.Delete(tempDir, true); } catch { }
+                    }
+                }
+            });
+
+            await RunTest("Template-resolved CLAUDE.md contains persona prompt", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    StubGitService git = new StubGitService();
+                    IPromptTemplateService templateService;
+                    MissionService service = CreateMissionServiceWithTemplates(logging, testDb.Driver, settings, git, out templateService);
+                    await templateService.SeedDefaultsAsync();
+
+                    string tempDir = Path.Combine(Path.GetTempPath(), "armada_prompt_test_" + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(tempDir);
+
+                    try
+                    {
+                        Vessel vessel = new Vessel("PersonaVessel", "https://github.com/test/repo");
+
+                        Mission mission = new Mission();
+                        mission.Title = "Architect persona test";
+                        mission.Description = "Verify architect persona prompt.";
+                        mission.Persona = "Architect";
+
+                        await service.GenerateClaudeMdAsync(tempDir, mission, vessel);
+
+                        string content = await File.ReadAllTextAsync(Path.Combine(tempDir, "CLAUDE.md"));
+                        AssertTrue(
+                            content.Contains("decompose") || content.Contains("analyze"),
+                            "Architect persona should contain 'decompose' or 'analyze'");
+                    }
+                    finally
+                    {
+                        try { Directory.Delete(tempDir, true); } catch { }
+                    }
+                }
+            });
+
+            await RunTest("Template-resolved CLAUDE.md contains model context updates when enabled", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    StubGitService git = new StubGitService();
+                    IPromptTemplateService templateService;
+                    MissionService service = CreateMissionServiceWithTemplates(logging, testDb.Driver, settings, git, out templateService);
+                    await templateService.SeedDefaultsAsync();
+
+                    string tempDir = Path.Combine(Path.GetTempPath(), "armada_prompt_test_" + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(tempDir);
+
+                    try
+                    {
+                        Vessel vessel = new Vessel("TemplateModelContextVessel", "https://github.com/test/repo");
+                        vessel.EnableModelContext = true;
+                        vessel.ModelContext = "The auth module was recently refactored to use JWT tokens.";
+
+                        Mission mission = new Mission();
+                        mission.Title = "Model context test";
+                        mission.Description = "Verify model context section from templates.";
+
+                        await service.GenerateClaudeMdAsync(tempDir, mission, vessel);
+
+                        string content = await File.ReadAllTextAsync(Path.Combine(tempDir, "CLAUDE.md"));
+                        AssertContains("## Model Context Updates", content);
+                        AssertContains("armada_update_vessel_context", content);
+                        AssertContains("The auth module was recently refactored to use JWT tokens.", content);
+                    }
+                    finally
+                    {
+                        try { Directory.Delete(tempDir, true); } catch { }
+                    }
+                }
+            });
+
+            await RunTest("Template-resolved CLAUDE.md substitutes placeholders", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    StubGitService git = new StubGitService();
+                    IPromptTemplateService templateService;
+                    MissionService service = CreateMissionServiceWithTemplates(logging, testDb.Driver, settings, git, out templateService);
+                    await templateService.SeedDefaultsAsync();
+
+                    string tempDir = Path.Combine(Path.GetTempPath(), "armada_prompt_test_" + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(tempDir);
+
+                    try
+                    {
+                        Vessel vessel = new Vessel("PlaceholderTestVessel", "https://github.com/test/repo");
+
+                        Mission mission = new Mission();
+                        mission.Title = "Implement user authentication";
+                        mission.Description = "Add OAuth2 login flow.";
+
+                        await service.GenerateClaudeMdAsync(tempDir, mission, vessel);
+
+                        string content = await File.ReadAllTextAsync(Path.Combine(tempDir, "CLAUDE.md"));
+                        AssertContains("Implement user authentication", content);
+                        AssertContains("PlaceholderTestVessel", content);
+                        AssertFalse(content.Contains("{MissionTitle}"), "Should not contain literal {MissionTitle} placeholder");
+                        AssertFalse(content.Contains("{VesselName}"), "Should not contain literal {VesselName} placeholder");
                     }
                     finally
                     {

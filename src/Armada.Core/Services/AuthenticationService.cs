@@ -102,6 +102,9 @@ namespace Armada.Core.Services
             if (string.IsNullOrEmpty(tenantId) || string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
                 return new AuthContext();
 
+            // Email comparison is case-insensitive
+            email = email.ToLowerInvariant();
+
             try
             {
                 UserMaster? user = await _Database.Users.ReadByEmailAsync(tenantId, email, token).ConfigureAwait(false);

@@ -1,4 +1,5 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { useNotifications } from '../context/NotificationContext';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   getMission,
@@ -51,7 +52,7 @@ export default function MissionDetail() {
   const [captains, setCaptains] = useState<Captain[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
+  const { pushToast } = useNotifications();
 
   // Diff viewer (shared modal)
   const [diffModal, setDiffModal] = useState<{ open: boolean; title: string; rawDiff: string; loading: boolean }>({ open: false, title: '', rawDiff: '', loading: false });
@@ -91,17 +92,20 @@ export default function MissionDetail() {
 
   const loadMission = useCallback(async () => {
     if (!id) return;
-    setLoading(true);
+    // Only show loading spinner on initial load, not background refreshes
+    const isInitialLoad = !mission;
+    if (isInitialLoad) setLoading(true);
     try {
       const m = await getMission(id);
       setMission(m);
-      setError('');
+      // Only clear error on initial load -- don't dismiss user-facing errors from actions
+      if (isInitialLoad) setError('');
     } catch (e: unknown) {
-      setError('Failed to load mission: ' + (e instanceof Error ? e.message : String(e)));
+      if (isInitialLoad) setError('Failed to load mission: ' + (e instanceof Error ? e.message : String(e)));
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, mission]);
 
   useEffect(() => {
     loadMission();
@@ -125,7 +129,13 @@ export default function MissionDetail() {
       const result = await getMissionLog(missionId, lines);
       setLogModal(l => ({ ...l, content: result.log || 'No log output', totalLines: result.totalLines || 0 }));
     } catch (e: unknown) {
-      setLogModal(l => ({ ...l, content: 'Log unavailable: ' + (e instanceof Error ? e.message : String(e)) }));
+      // Don't replace existing log content on transient fetch failure
+      setLogModal(l => ({
+        ...l,
+        content: l.content && l.content !== 'Loading...'
+          ? l.content
+          : 'Log unavailable: ' + (e instanceof Error ? e.message : String(e))
+      }));
     }
   }, []);
 
@@ -135,8 +145,15 @@ export default function MissionDetail() {
     fetchLog(id, 200);
   }
 
+  // Use a ref for loadMission so the log refresh callback identity stays stable
+  const loadMissionRef = useRef(loadMission);
+  loadMissionRef.current = loadMission;
+  const logRefreshCountRef = useRef(0);
   const handleLogRefresh = useCallback(() => {
     if (logModal.missionId) fetchLog(logModal.missionId, logModal.lineCount);
+    // Refresh mission status every 5th poll (~5 seconds) to detect completion
+    logRefreshCountRef.current++;
+    if (logRefreshCountRef.current % 5 === 0) loadMissionRef.current();
   }, [logModal.missionId, logModal.lineCount, fetchLog]);
 
   const handleLogLineCountChange = useCallback((lines: number) => {
@@ -234,7 +251,7 @@ export default function MissionDetail() {
   }
 
   if (loading) return <p className="text-dim">Loading...</p>;
-  if (!mission) return <ErrorModal error={error || 'Mission not found.'} onClose={() => setError('')} />;
+  if (!mission) return <ErrorModal error={error || 'Mission not found.'} onClose={() => navigate('/missions')} />;
 
   return (
     <div>
@@ -249,7 +266,7 @@ export default function MissionDetail() {
           <button className="btn btn-sm" onClick={handleViewDiff} title="View mission diff">Diff</button>
           <button className="btn btn-sm" onClick={handleViewLog} title="View mission log">Log</button>
           {(mission.status === 'WorkProduced' || mission.status === 'LandingFailed') && (
-            <button className="btn btn-sm btn-primary" onClick={async () => { try { await retryMissionLanding(mission.id); setSuccessMsg('Landing succeeded! Mission status updated.'); setTimeout(() => setSuccessMsg(''), 4000); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : 'Retry landing failed.'); } }} title="Rebase the mission branch and re-attempt merge into the target branch">Retry Landing</button>
+            <button className="btn btn-sm btn-primary" onClick={async () => { try { await retryMissionLanding(mission.id); pushToast('success', 'Landing succeeded! Mission status updated.'); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : 'Retry landing failed.'); } }} title="Rebase the mission branch and re-attempt merge into the target branch">Retry Landing</button>
           )}
           <ActionMenu id={`mission-action-${mission.id}`} items={[
             { label: 'Edit', onClick: openEdit },
@@ -258,7 +275,7 @@ export default function MissionDetail() {
             { label: 'Transition Status', onClick: () => setShowTransition(true) },
             { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `Mission: ${mission.title}`, data: mission }) },
             { label: 'Restart', onClick: handleRestart },
-            ...((mission.status === 'WorkProduced' || mission.status === 'LandingFailed') ? [{ label: 'Retry Landing', onClick: async () => { try { await retryMissionLanding(mission.id); setSuccessMsg('Landing succeeded! Mission status updated.'); setTimeout(() => setSuccessMsg(''), 4000); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : 'Retry landing failed.'); } } }] : []),
+            ...((mission.status === 'WorkProduced' || mission.status === 'LandingFailed') ? [{ label: 'Retry Landing', onClick: async () => { try { await retryMissionLanding(mission.id); pushToast('success', 'Landing succeeded! Mission status updated.'); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : 'Retry landing failed.'); } } }] : []),
             { label: 'Purge', danger: true, onClick: handlePurge },
             { label: 'Delete', danger: true, onClick: handleDelete },
           ]} />
@@ -266,11 +283,6 @@ export default function MissionDetail() {
       </div>
 
       <ErrorModal error={error} onClose={() => setError('')} />
-      {successMsg && (
-        <div className="success-banner" onClick={() => setSuccessMsg('')}>
-          {successMsg}
-        </div>
-      )}
 
       <JsonViewer open={jsonData.open} title={jsonData.title} data={jsonData.data} onClose={() => setJsonData({ open: false, title: '', data: null })} />
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
@@ -287,6 +299,7 @@ export default function MissionDetail() {
         title={logModal.title}
         content={logModal.content}
         totalLines={logModal.totalLines}
+        completed={mission != null && ['Complete', 'Failed', 'Cancelled', 'WorkProduced', 'LandingFailed'].includes(mission.status)}
         onClose={() => setLogModal({ open: false, title: '', missionId: '', content: '', totalLines: 0, lineCount: 200 })}
         onRefresh={handleLogRefresh}
         onLineCountChange={handleLogLineCountChange}
@@ -332,7 +345,7 @@ export default function MissionDetail() {
       )}
 
       {/* Mission Info */}
-      <div className="detail-grid">
+      <div className="detail-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
         <div className="detail-field">
           <span className="detail-label">ID</span>
           <span className="id-display">
@@ -345,6 +358,23 @@ export default function MissionDetail() {
           <span className="detail-label">Status</span>
           <StatusBadge status={mission.status} />
         </div>
+        {mission.failureReason && (
+          <div className="detail-field" style={{ gridColumn: '1 / -1' }}>
+            <span className="detail-label">Failure Reason</span>
+            <pre style={{
+              margin: 0,
+              padding: '0.75rem',
+              background: 'rgba(255, 80, 80, 0.08)',
+              border: '1px solid rgba(255, 80, 80, 0.2)',
+              borderRadius: '4px',
+              color: 'var(--text)',
+              fontSize: '0.85em',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              fontFamily: 'monospace'
+            }}>{mission.failureReason}</pre>
+          </div>
+        )}
         <div className="detail-field"><span className="detail-label">Priority</span><span>{mission.priority}</span></div>
         <div className="detail-field">
           <span className="detail-label">Voyage</span>
@@ -370,6 +400,22 @@ export default function MissionDetail() {
             ? <Link to={`/missions/${mission.parentMissionId}`} className="mono">{mission.parentMissionId}</Link>
             : <span>-</span>}
         </div>
+        <div className="detail-field">
+          <span className="detail-label">Persona</span>
+          <span>{mission.persona || <span className="text-dim">Worker</span>}</span>
+        </div>
+        {mission.dependsOnMissionId && (
+          <div className="detail-field">
+            <span className="detail-label">Depends On</span>
+            <Link to={`/missions/${mission.dependsOnMissionId}`} className="mono">{mission.dependsOnMissionId}</Link>
+          </div>
+        )}
+        {mission.status === 'WorkProduced' && mission.dependsOnMissionId === null && mission.persona && mission.persona !== 'Worker' && (
+          <div className="detail-field" style={{ gridColumn: '1 / -1' }}>
+            <span className="detail-label">Pipeline Status</span>
+            <span className="text-dim">Work complete -- handed off to the next pipeline stage</span>
+          </div>
+        )}
         <div className="detail-field"><span className="detail-label">Branch Name</span><span className="mono">{mission.branchName || '-'}</span></div>
         <div className="detail-field">
           <span className="detail-label">Dock</span>

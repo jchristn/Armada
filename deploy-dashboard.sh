@@ -16,13 +16,11 @@ fi
 
 cd "${DASHBOARD_DIR}"
 if [ ! -d "node_modules" ]; then
-    echo "[deploy-dashboard] Installing dashboard dependencies..."
-    echo "Installing dashboard dependencies..."
+    echo "[deploy-dashboard] Installing dependencies..."
     npm install
 fi
 
-echo "[deploy-dashboard] Building dashboard..."
-echo "Building dashboard..."
+echo "[deploy-dashboard] Building..."
 npm run build
 
 if [ ! -f "${DIST_DIR}/index.html" ]; then

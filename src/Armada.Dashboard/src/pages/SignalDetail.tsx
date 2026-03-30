@@ -9,7 +9,7 @@ import {
 import type { Signal, Captain } from '../types/models';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
-import { copyToClipboard } from '../components/shared/CopyButton';
+import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 
 // The API may return missionId on signals even though the base type doesn't include it
@@ -130,7 +130,7 @@ export default function SignalDetail() {
             <div className="text-muted" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>ID</div>
             <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               {signal.id}
-              <button className="btn-sm" style={{ padding: '1px 4px', fontSize: 10 }} onClick={() => copyToClipboard(signal.id)} title="Copy ID">&#x2398;</button>
+              <CopyButton text={signal.id} />
             </div>
           </div>
           <div>

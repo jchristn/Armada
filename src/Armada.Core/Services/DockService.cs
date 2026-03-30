@@ -58,7 +58,14 @@ namespace Armada.Core.Services
 
             try
             {
-                // Ensure bare clone exists
+                // Ensure bare clone exists. If the directory exists but isn't a valid repo
+                // (e.g. leftover from a failed clone/seed), remove it and re-clone.
+                if (Directory.Exists(repoPath) && !await _Git.IsRepositoryAsync(repoPath, token).ConfigureAwait(false))
+                {
+                    _Logging.Warn(_Header + "removing corrupt/incomplete repo directory: " + repoPath);
+                    await ForceRemoveDirectoryAsync(repoPath, token).ConfigureAwait(false);
+                }
+
                 if (!await _Git.IsRepositoryAsync(repoPath, token).ConfigureAwait(false))
                 {
                     if (String.IsNullOrEmpty(vessel.RepoUrl))
@@ -66,6 +73,15 @@ namespace Armada.Core.Services
                     await _Git.CloneBareAsync(vessel.RepoUrl, repoPath, token).ConfigureAwait(false);
                     vessel.LocalPath = repoPath;
                     await _Database.Vessels.UpdateAsync(vessel, token).ConfigureAwait(false);
+                }
+
+                // Handle empty repos (no commits, no branches) by seeding an initial commit.
+                // Without at least one commit, git worktree add fails with "invalid reference".
+                bool hasDefaultBranch = await _Git.BranchExistsAsync(repoPath, vessel.DefaultBranch, token).ConfigureAwait(false);
+                if (!hasDefaultBranch)
+                {
+                    _Logging.Info(_Header + "bare repo for " + vessel.Name + " has no " + vessel.DefaultBranch + " branch -- seeding initial commit");
+                    await SeedEmptyRepoAsync(vessel, repoPath, token).ConfigureAwait(false);
                 }
                 else if (String.IsNullOrEmpty(vessel.LocalPath))
                 {
@@ -361,6 +377,83 @@ namespace Armada.Core.Services
         /// cause Directory.Delete to fail. This method retries with increasing delays
         /// to give the OS time to release handles.
         /// </summary>
+        /// <summary>
+        /// Seed an empty bare repo with an initial commit containing a README.md.
+        /// Uses a temporary clone to create the commit, then pushes to both the bare repo and the remote.
+        /// </summary>
+        private async Task SeedEmptyRepoAsync(Vessel vessel, string repoPath, CancellationToken token)
+        {
+            string tempPath = Path.Combine(Path.GetTempPath(), "armada_init_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                // Use git init (not clone) because cloning an empty repo creates a broken state.
+                Directory.CreateDirectory(tempPath);
+                await RunGitInDirAsync(tempPath, "init", token).ConfigureAwait(false);
+                await RunGitInDirAsync(tempPath, "checkout -b " + vessel.DefaultBranch, token).ConfigureAwait(false);
+
+                // Create README.md
+                string readmePath = Path.Combine(tempPath, "README.md");
+                await File.WriteAllTextAsync(readmePath, "# " + vessel.Name + "\n", token).ConfigureAwait(false);
+
+                // Commit
+                await RunGitInDirAsync(tempPath, "add README.md", token).ConfigureAwait(false);
+                await RunGitInDirAsync(tempPath, "commit -m \"Initial commit\"", token).ConfigureAwait(false);
+
+                // Push to the remote
+                if (!String.IsNullOrEmpty(vessel.RepoUrl))
+                {
+                    await RunGitInDirAsync(tempPath, "remote add origin " + vessel.RepoUrl, token).ConfigureAwait(false);
+                    await RunGitInDirAsync(tempPath, "push -u origin " + vessel.DefaultBranch, token).ConfigureAwait(false);
+                    _Logging.Info(_Header + "pushed initial commit to remote for " + vessel.Name);
+                }
+
+                // Delete the stale bare repo (if it exists) and re-clone fresh
+                if (Directory.Exists(repoPath))
+                {
+                    await ForceRemoveDirectoryAsync(repoPath, token).ConfigureAwait(false);
+                }
+                await _Git.CloneBareAsync(vessel.RepoUrl ?? tempPath, repoPath, token).ConfigureAwait(false);
+
+                _Logging.Info(_Header + "seeded empty repo for " + vessel.Name + " with initial commit");
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "failed to seed empty repo for " + vessel.Name + ": " + ex.Message);
+                // Clean up any debris
+                try { if (Directory.Exists(repoPath)) await ForceRemoveDirectoryAsync(repoPath, token).ConfigureAwait(false); }
+                catch { }
+                throw new InvalidOperationException("Repository " + vessel.Name + " is empty and could not be initialized: " + ex.Message);
+            }
+            finally
+            {
+                try { if (Directory.Exists(tempPath)) Directory.Delete(tempPath, true); }
+                catch { }
+            }
+        }
+
+        /// <summary>
+        /// Run a git command in a specific directory.
+        /// </summary>
+        private async Task RunGitInDirAsync(string workDir, string arguments, CancellationToken token)
+        {
+            System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo("git", arguments)
+            {
+                WorkingDirectory = workDir,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            System.Diagnostics.Process? proc = System.Diagnostics.Process.Start(psi);
+            if (proc == null) throw new InvalidOperationException("Failed to start git " + arguments);
+            await proc.WaitForExitAsync(token).ConfigureAwait(false);
+            if (proc.ExitCode != 0)
+            {
+                string stderr = await proc.StandardError.ReadToEndAsync(token).ConfigureAwait(false);
+                throw new InvalidOperationException("git " + arguments + " failed (exit " + proc.ExitCode + "): " + stderr.Trim());
+            }
+        }
+
         private async Task ForceRemoveDirectoryAsync(string path, CancellationToken token)
         {
             const int maxAttempts = 5;

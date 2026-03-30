@@ -27,6 +27,9 @@ import type {
   BatchDeleteResult,
   DoctorCheck,
   StatusSnapshot,
+  PromptTemplate,
+  Persona,
+  Pipeline,
 } from '../types/models';
 
 const BASE_URL = import.meta.env.VITE_ARMADA_SERVER_URL || '';
@@ -221,7 +224,7 @@ export const listVoyages = (params?: { pageNumber?: number; pageSize?: number; f
 export const getVoyage = (id: string) => get<Voyage>(`/api/v1/voyages/${id}`);
 export const getVoyageStatus = (id: string) => get<Record<string, unknown>>(`/api/v1/voyages/${id}/status`);
 export const createVoyage = (data: VoyageCreateRequest) => post<Voyage>('/api/v1/voyages', data);
-export const cancelVoyage = (id: string) => post<void>(`/api/v1/voyages/${id}/cancel`);
+export const cancelVoyage = (id: string) => del<void>(`/api/v1/voyages/${id}`);
 export const purgeVoyage = (id: string) => del<void>(`/api/v1/voyages/${id}/purge`);
 
 // ==================== Events ====================
@@ -239,6 +242,29 @@ export const deleteMergeEntry = (id: string) => del<void>(`/api/v1/merge-queue/$
 export const processMergeEntry = (id: string) => post<void>(`/api/v1/merge-queue/${id}/process`);
 export const processAllMergeQueue = () => post<void>('/api/v1/merge-queue/process-all');
 export const cancelMergeEntry = (id: string) => post<void>(`/api/v1/merge-queue/${id}/cancel`);
+
+// ==================== Prompt Templates ====================
+export const listPromptTemplates = (params?: { pageNumber?: number; pageSize?: number; filters?: Record<string, string> }) =>
+  get<EnumerationResult<PromptTemplate>>(`/api/v1/prompt-templates${buildQuery(params)}`);
+export const getPromptTemplate = (name: string) => get<PromptTemplate>(`/api/v1/prompt-templates/${encodeURIComponent(name)}`);
+export const updatePromptTemplate = (name: string, data: { content: string; description?: string }) => put<PromptTemplate>(`/api/v1/prompt-templates/${encodeURIComponent(name)}`, data);
+export const resetPromptTemplate = (name: string) => post<PromptTemplate>(`/api/v1/prompt-templates/${encodeURIComponent(name)}/reset`);
+
+// ==================== Personas ====================
+export const listPersonas = (params?: { pageNumber?: number; pageSize?: number; filters?: Record<string, string> }) =>
+  get<EnumerationResult<Persona>>(`/api/v1/personas${buildQuery(params)}`);
+export const getPersona = (name: string) => get<Persona>(`/api/v1/personas/${encodeURIComponent(name)}`);
+export const createPersona = (data: Partial<Persona>) => post<Persona>('/api/v1/personas', data);
+export const updatePersona = (name: string, data: Partial<Persona>) => put<Persona>(`/api/v1/personas/${encodeURIComponent(name)}`, data);
+export const deletePersona = (name: string) => del<void>(`/api/v1/personas/${encodeURIComponent(name)}`);
+
+// ==================== Pipelines ====================
+export const listPipelines = (params?: { pageNumber?: number; pageSize?: number; filters?: Record<string, string> }) =>
+  get<EnumerationResult<Pipeline>>(`/api/v1/pipelines${buildQuery(params)}`);
+export const getPipeline = (name: string) => get<Pipeline>(`/api/v1/pipelines/${encodeURIComponent(name)}`);
+export const createPipeline = (data: Partial<Pipeline>) => post<Pipeline>('/api/v1/pipelines', data);
+export const updatePipeline = (name: string, data: Partial<Pipeline>) => put<Pipeline>(`/api/v1/pipelines/${encodeURIComponent(name)}`, data);
+export const deletePipeline = (name: string) => del<void>(`/api/v1/pipelines/${encodeURIComponent(name)}`);
 
 // ==================== Docks ====================
 export const listDocks = (params?: { pageNumber?: number; pageSize?: number; filters?: Record<string, string> }) =>

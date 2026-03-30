@@ -5,82 +5,242 @@
 <h1 align="center">Armada</h1>
 
 <p align="center">
-  <strong>Multi-agent orchestration for scaling human developers with AI</strong>
+  <strong>Run a fleet of AI coding agents. Ship more code.</strong>
   <br />
-  <strong>⚠️ ALPHA v0.3.0 - APIs, schemas, and behavior may change without notice</strong>
+  <em>v0.4.0 alpha -- APIs and schemas may change</em>
 </p>
 
 <p align="center">
+  <a href="#the-problem">The Problem</a> |
+  <a href="#how-armada-works">How It Works</a> |
   <a href="#quick-start">Quick Start</a> |
-  <a href="#how-it-works">How It Works</a> |
+  <a href="#pipelines">Pipelines</a> |
   <a href="#architecture">Architecture</a> |
-  <a href="#cli-reference">CLI Reference</a> |
-  <a href="#upgrading">Upgrading</a> |
-  <a href="#rest-api">REST API</a> |
-  <a href="#mcp-integration">MCP Integration</a> |
-  <a href="#contributing">Contributing</a>
+  <a href="#cli-reference">CLI</a> |
+  <a href="#rest-api">API</a> |
+  <a href="#mcp-integration">MCP</a>
 </p>
 
 ---
 
-Armada coordinates multiple AI coding agents working in parallel on your codebase. Each agent operates in an isolated git worktree, producing clean branches and pull requests. One command gets you from zero to dispatching work -- no configuration required.
+## The Problem
+
+You have AI coding agents. They're fast. But you're still the bottleneck -- scoping work, reviewing output, juggling terminal windows, copy-pasting between repos. One agent finishes while you're babysitting another. Three are idle because you forgot about them. The code they produce goes unreviewed because you ran out of hours in the day.
+
+Armada fixes this. You describe what you want. Armada plans it, assigns it to agents, runs them in parallel on isolated branches, tests their output, reviews it, and merges the results. You go from managing agents to managing outcomes.
+
+## How Armada Works
+
+```
+You: "Build a FastAPI backend with user auth and tests"
+                    |
+                    v
+             +-----------+
+             |  Admiral   |  <-- coordinator process
+             +-----------+
+              /    |    \
+             v     v     v
+        [Plan]  [Implement]  [Test]  [Review]
+          |         |           |        |
+      Architect   Worker   TestEngineer  Judge
+          |         |           |        |
+          v         v           v        v
+     Decomposes   Writes     Writes   Reviews
+     into tasks    code      tests    the diff
+```
+
+1. **You describe the goal.** One sentence or a detailed spec -- your call.
+2. **The Architect plans.** Analyzes the codebase, decomposes the work into right-sized missions, identifies which files each mission should touch.
+3. **Workers implement in parallel.** Each agent gets its own git worktree. No interference. Clean branches.
+4. **TestEngineers write tests.** They see the diff from the Worker and add coverage.
+5. **Judges review.** They check correctness, completeness, scope, and style. Pass or fail.
+
+Each step is a **persona** -- a specialized role with its own instructions. The sequence of personas is a **pipeline**. You pick the pipeline that fits the work:
+
+| Pipeline | Stages | When to use |
+|----------|--------|------------|
+| **WorkerOnly** | Implement | Quick fixes, one-liners |
+| **Reviewed** | Implement -> Review | Normal development |
+| **Tested** | Implement -> Test -> Review | When you need coverage |
+| **FullPipeline** | Plan -> Implement -> Test -> Review | Big features, unfamiliar codebases |
+
+Set a default pipeline on a repository and forget about it. Every dispatch flows through the stages automatically. Override per-dispatch when you need something different.
+
+## Quick Start
+
+### Prerequisites
+
+- [.NET 8.0+ SDK](https://dot.net/download)
+- At least one AI agent runtime on your PATH:
+  - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (`claude`)
+  - [Codex](https://github.com/openai/codex) (`codex`)
+  - [Gemini CLI](https://github.com/google-gemini/gemini-cli) (`gemini`)
+  - [Cursor](https://docs.cursor.com/cli) (`cursor`)
+
+### Install
+
+```bash
+git clone https://github.com/jchristn/armada.git
+cd armada
+./install.sh    # or install.bat on Windows
+```
+
+### Your First Dispatch
 
 ```bash
 cd your-project
 armada go "Add input validation to the signup form"
+armada watch   # monitor progress in real time
 ```
 
-That's it. Armada auto-initializes, detects your installed agent runtime (Claude Code, Codex, Gemini, Cursor), infers the repo from your current directory, provisions a worker agent, and dispatches your task.
+That's it. Armada detects your runtime, infers the repo, spins up an agent, and dispatches. No config files, no setup wizard.
 
-> **⚠️ Security Note:** Armada runs AI agents with auto-approve flags enabled by default — Claude Code uses `--dangerously-skip-permissions`, Codex uses `--approval-mode full-auto`, and Gemini uses `--sandbox none`. This means agents can read, write, and execute code in their worktrees without user confirmation. Review the [configuration](#configuration) options and understand the implications before running Armada in sensitive environments.
+### Default Credentials
 
-## New in v0.3.0
+| Item | Value |
+|------|-------|
+| Email | `admin@armada` |
+| Password | `password` |
+| Bearer Token | `default` |
 
-- **Multi-tenant support** -- tenant isolation, user management, bearer token and session token authentication with role-based access (admin, tenant admin, user)
-- **Per-captain system instructions** -- customize each captain's behavior with persistent instructions injected into every mission prompt (e.g., "You are a testing specialist")
-- **Model context accumulation** -- agents discover and record key information about repositories during missions, building a shared knowledge base for future agents (enabled by default)
-- **Mission history chart** -- SVG bar chart on the Dashboard tab showing missions over time with fleet/vessel filters and time range tabs
-- **Dashboard alert banners** -- proactive warnings when captains are stalled, missions have failed, or dispatch is blocked
-- **Vessel git sync status** -- GitHub-style "ahead/behind" badges on the Vessels page showing commits that need to be pushed or pulled
-- **Captain no longer stalls on failure** -- recovery exhaustion releases captains to Idle instead of Stalled, so they pick up new work immediately
-- **WorkProduced missions no longer block dispatch** -- post-agent states don't prevent new missions on the same vessel
-- **Dock preservation on crash** -- when a captain's process dies, the worktree and branch are preserved so the next captain can continue from partial work
-- **Error modals** -- all data loading errors are shown in dismissable modals instead of inline text
-- **Improved deserialization** -- all REST routes use explicit JSON deserialization with case-insensitive options, fixing camelCase request bodies from the dashboard
-- **Default vessel settings** -- new vessels default to LocalMerge landing mode and LocalAndRemote branch cleanup
-- **Dependency updates** -- SqlClient 7.0.0, Sqlite 10.0.5, MySqlConnector 2.5.0, Npgsql 10.0.2, SwiftStack 0.4.8, Spectre.Console 0.54.0
-- **Copy button fix** -- clipboard icons use CSS pseudo-elements with green checkmark on copy instead of "Copied!" text
-- **Status tooltips with guidance** -- every status badge tooltip now includes a "Next:" action telling users what to do
+Dashboard at `http://localhost:7890/dashboard`. API access with `Authorization: Bearer default`.
 
-## Features
+> **Security:** Armada runs agents with auto-approve flags by default (Claude Code: `--dangerously-skip-permissions`, Codex: `--full-auto`, Gemini: `--sandbox none`). Agents can read, write, and execute in their worktrees without confirmation. Review the [configuration](#configuration) section before running in sensitive environments.
 
-- **Zero-config startup** -- sensible defaults, auto-detection of runtimes and repositories
-- **Parallel agents** -- dispatch multiple tasks across multiple AI agents simultaneously
-- **Git worktree isolation** -- each agent works on its own branch, no interference between agents
-- **Multi-runtime support** -- Claude Code, Codex, Gemini, Cursor, and extensible to other agent runtimes via `IAgentRuntime`
-- **Auto-recovery** -- crashed agents are automatically detected, repaired, and relaunched
-- **Broad-scope detection** -- prevents concurrent mutations to the same files across agents
-- **Multi-tenant** -- tenant isolation, user management, bearer token and session token authentication
-- **REST API + WebSocket** -- programmatic access and real-time status updates
-- **MCP server** -- 18 tools let Claude Code, Codex, or any MCP client orchestrate Armada (see [AI-powered orchestration](#ai-powered-orchestration))
-- **React dashboard** -- optional standalone React dashboard for Docker/production deployments
-- **Model context** -- agents accumulate key knowledge about repositories across missions, so future agents start with institutional memory
-- **Cross-platform** -- Windows, macOS, Linux (C#/.NET)
+For a deeper walkthrough, see the [Getting Started Guide](GETTING_STARTED.md).
 
-## Benefits
+## Pipelines
 
-- **Single pane of glass** -- Monitor and manage all AI agent work across every project from one unified dashboard, eliminating the need to juggle multiple terminals and windows.
-- **Reduced context-switching** -- Full mission history, logs, diffs, and signals are preserved, so you can pick up exactly where you left off without losing your train of thought.
-- **Scale across more projects** -- Dispatch parallel missions across multiple repositories simultaneously, letting you take on more work than a single developer normally could.
-- **Project management meets conversational AI** -- Integrate task tracking, prioritization, and workflow orchestration directly into AI coding agents like Claude Code, bridging the gap between planning and execution.
-- **Safe isolated worktrees** -- Every agent operates in its own git worktree, so parallel work never collides and your main branch stays clean until you're ready to merge.
-- **Model context accumulation** -- Agents discover and record key information about each repository during missions, building a shared knowledge base that makes future missions faster and more effective.
-- **Automated merge queues** -- Completed missions are queued for merge automatically, reducing manual branch management and keeping your integration pipeline flowing.
-- **Auditable event trails** -- Every mission dispatch, status transition, completion, and failure is recorded in a structured event log you can query at any time.
-- **Reproducible workflows** -- Voyages capture a batch of missions as a reusable unit; retry a failed voyage or re-dispatch it against a new branch with a single command.
-- **Team visibility** -- Real-time WebSocket updates and a REST API keep everyone informed of agent progress without polling or asking around.
+Pipelines are the core of Armada's workflow engine. Instead of throwing a prompt at an agent and hoping for the best, a pipeline moves each piece of work through defined stages with different specialists handling each phase.
+
+### Built-in Personas
+
+| Persona | Role | What it does |
+|---------|------|-------------|
+| **Architect** | Plan | Reads the codebase, decomposes a high-level goal into concrete missions with file lists and dependency ordering |
+| **Worker** | Implement | Writes code. The default -- this is what you get without pipelines. |
+| **TestEngineer** | Test | Receives the Worker's diff, identifies gaps in coverage, writes tests |
+| **Judge** | Review | Examines the diff against the original mission description. Checks completeness, correctness, scope violations, style. Produces a verdict. |
+
+### Pipeline Resolution
+
+When you dispatch, Armada picks the pipeline in this order:
+
+| Priority | Source | How to set |
+|----------|--------|-----------|
+| 1 (highest) | Dispatch parameter | `--pipeline FullPipeline` on the CLI or `pipeline` in the API |
+| 2 | Vessel default | Set on the repository in the dashboard or via API |
+| 3 | Fleet default | Set on the fleet -- applies to all repos in the fleet unless overridden |
+| 4 (lowest) | System fallback | WorkerOnly |
+
+### Custom Personas and Pipelines
+
+The four built-in personas are starting points. You can create your own:
+
+```bash
+# Create a security auditor persona with custom instructions
+armada_update_prompt_template name=persona.security_auditor content="Review for OWASP vulnerabilities..."
+armada_create_persona name=SecurityAuditor promptTemplateName=persona.security_auditor
+
+# Build a pipeline that includes security review
+armada_create_pipeline name=SecureRelease stages='[{"personaName":"Worker"},{"personaName":"SecurityAuditor"},{"personaName":"Judge"}]'
+```
+
+Every prompt Armada sends to an agent is backed by an editable template. Change how agents behave without touching code. The dashboard includes a template editor with a parameter reference panel -- click a `{Placeholder}` to insert it.
+
+For the full pipeline reference, see [docs/PIPELINES.md](docs/PIPELINES.md).
+
+## What You Can Do With This
+
+### Parallelize your backlog
+
+You're working on a feature and realize three refactors need to happen first. Instead of doing them one at a time:
+
+```bash
+armada go "1. Extract UserRepository from UserService 2. Add ILogger to all controllers 3. Migrate config to Options pattern"
+```
+
+Three agents work simultaneously while you keep going on your feature branch.
+
+### Ship with confidence
+
+Set `Tested` as your default pipeline. Every dispatch automatically gets implementation, test generation, and review -- no extra effort on your part.
+
+### Coordinate across repos
+
+```bash
+armada go "Update the shared DTOs to include CreatedAt field" --vessel shared-models
+armada go "Add CreatedAt to the API response serialization" --vessel backend-api
+armada go "Display CreatedAt in the user profile component" --vessel frontend-app
+```
+
+### Explore approaches in parallel
+
+```bash
+armada voyage create "Auth comparison" --vessel my-api \
+  --mission "Implement JWT auth with refresh tokens" \
+  --mission "Implement session auth with Redis" \
+  --mission "Implement OAuth2 with Google and GitHub"
+```
+
+Review each branch, pick the winner, discard the rest.
+
+### Let AI manage AI
+
+Connect Claude Code to Armada's MCP server and it becomes the orchestrator -- it reasons about objectives, decomposes work, dispatches voyages, monitors progress, and handles failures. You describe the goal; the AI figures out the plan.
+
+```
+> "Refactor the authentication system. Decompose it into parallel missions
+   and dispatch them via Armada. Monitor progress and redispatch failures."
+```
+
+See [Claude Code as Orchestrator](docs/CLAUDE_CODE_AS_ORCHESTRATOR.md) for setup.
 
 ## Screenshots
+
+<details>
+<summary>Click to expand</summary>
+
+<br />
+
+![Screenshot 1](assets/screenshot-1.png)
+
+![Screenshot 2](assets/screenshot-2.png)
+
+![Screenshot 3](assets/screenshot-3.png)
+
+![Screenshot 4](assets/screenshot-4.png)
+
+</details>
+
+## Architecture
+
+Armada is a C#/.NET solution with five projects:
+
+| Project | Description |
+|---------|-------------|
+| **Armada.Core** | Domain models, database interfaces, services, settings |
+| **Armada.Runtimes** | Agent runtime adapters (Claude Code, Codex, Gemini, Cursor, extensible via `IAgentRuntime`) |
+| **Armada.Server** | Admiral process: REST API, MCP server, WebSocket hub, embedded dashboard |
+| **Armada.Dashboard** | Standalone React dashboard for Docker/production |
+| **Armada.Helm** | CLI, thin HTTP client to Admiral |
+
+### Key Concepts
+
+| Term | What it is |
+|------|-----------|
+| **Admiral** | The coordinator process. Manages everything. Auto-starts when needed. |
+| **Captain** | An AI agent instance. Claude Code, Codex, Gemini, or Cursor. |
+| **Fleet** | A group of repositories. |
+| **Vessel** | A git repository registered with Armada. |
+| **Mission** | One task for one agent. The atomic unit of work. |
+| **Voyage** | A batch of related missions dispatched together. |
+| **Dock** | A git worktree where a captain does its work. |
+| **Persona** | A specialized agent role (Worker, Architect, Judge, TestEngineer). |
+| **Pipeline** | An ordered sequence of persona stages that a dispatch flows through. |
+| **Prompt Template** | An editable template controlling what instructions agents receive. |
+
+For scheduling details, see [docs/SCHEDULING.md](docs/SCHEDULING.md).
 
 <details>
 <summary>Click to expand screenshots</summary>
@@ -232,6 +392,9 @@ The authorization model is:
 | **Voyage** | Batch | A group of related missions dispatched together. |
 | **Dock** | Worktree | A git worktree provisioned for a captain's isolated work. |
 | **Signal** | Message | Communication between the Admiral and captains. |
+| **Persona** | Agent role | A named agent role (Worker, Architect, Judge, TestEngineer) that determines what a captain does during a mission. Personas are extensible -- users can create custom personas with custom prompt templates. |
+| **Pipeline** | Workflow | An ordered sequence of persona stages that a dispatch goes through (e.g. Architect -> Worker -> TestEngineer -> Judge). Configured at fleet/vessel level with per-dispatch override. |
+| **Prompt Template** | Instructions | A user-editable template that controls the instructions given to agents. Every prompt in the system is template-driven with `{Placeholder}` parameters. |
 
 For details on how the Admiral decides which mission to assign to which captain and in what order, see [Mission Scheduling](docs/SCHEDULING.md).
 
@@ -567,7 +730,7 @@ armada mcp remove     # Remove those Armada MCP entries again
 If you are working from source, repo-root helpers are also available:
 `install-mcp.bat/.sh` and `remove-mcp.bat/.sh`.
 
-Once installed, your MCP client can call tools like `armada_status`, `armada_dispatch`, `armada_enumerate`, `armada_voyage_status`, `armada_cancel_voyage`, and more.
+Once installed, your MCP client can call tools like `armada_status`, `armada_dispatch`, `armada_enumerate`, `armada_voyage_status`, `armada_cancel_voyage`, and more. Additional tool categories include persona management, pipeline management, and prompt template management.
 
 ### AI-Powered Orchestration
 
@@ -846,6 +1009,16 @@ v0.3.0 introduces multi-tenant support. The database schema is automatically mig
 - **New settings:** `AllowSelfRegistration` (default: `true`), `RequireAuthForShutdown` (default: `false`), `SessionTokenEncryptionKey` (auto-generated)
 
 No manual changes to `settings.json` are required. Existing `ApiKey` settings continue to work.
+
+### v0.3.0 to v0.4.0
+
+v0.4.0 adds personas, pipelines, and prompt templates. The database schema is automatically migrated on first startup (migrations 19-23). Key changes:
+
+- New tables: `prompt_templates`, `personas`, `pipelines`, `pipeline_stages`
+- New columns: `captains.allowed_personas`, `captains.preferred_persona`, `missions.persona`, `missions.depends_on_mission_id`, `fleets.default_pipeline_id`, `vessels.default_pipeline_id`
+- Built-in personas (Worker, Architect, Judge, TestEngineer) and pipelines (WorkerOnly, Reviewed, Tested, FullPipeline) are seeded automatically
+- 18 built-in prompt templates are seeded automatically
+- Standalone migration scripts available in `migrations/` for manual execution
 
 ## Issues and Discussions
 

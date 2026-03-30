@@ -18,6 +18,7 @@ namespace Armada.Core.Services
 
         private string _Header = "[MessageTemplateService] ";
         private LoggingModule _Logging;
+        private IPromptTemplateService? _PromptTemplates;
 
         #endregion
 
@@ -27,9 +28,11 @@ namespace Armada.Core.Services
         /// Instantiate.
         /// </summary>
         /// <param name="logging">Logging module.</param>
-        public MessageTemplateService(LoggingModule logging)
+        /// <param name="promptTemplates">Optional prompt template service for resolving preamble text.</param>
+        public MessageTemplateService(LoggingModule logging, IPromptTemplateService? promptTemplates = null)
         {
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
+            _PromptTemplates = promptTemplates;
         }
 
         #endregion
@@ -128,10 +131,20 @@ namespace Armada.Core.Services
             string rendered = RenderTemplate(settings.CommitMessageTemplate, context);
             if (String.IsNullOrWhiteSpace(rendered)) return "";
 
-            string instructions =
-                "IMPORTANT: For every git commit you create, append the following trailers " +
-                "at the end of your commit message (after a blank line):" +
-                rendered;
+            string preamble;
+            if (_PromptTemplates != null)
+            {
+                string? resolved = _PromptTemplates.GetEmbeddedDefault("commit.instructions_preamble");
+                preamble = !String.IsNullOrEmpty(resolved)
+                    ? resolved
+                    : "IMPORTANT: For every git commit you create, append the following trailers at the end of your commit message (after a blank line):";
+            }
+            else
+            {
+                preamble = "IMPORTANT: For every git commit you create, append the following trailers at the end of your commit message (after a blank line):";
+            }
+
+            string instructions = preamble + rendered;
 
             _Logging.Debug(_Header + "rendered commit instructions for agent prompt");
             return instructions;

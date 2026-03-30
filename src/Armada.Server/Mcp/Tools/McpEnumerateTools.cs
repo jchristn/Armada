@@ -33,13 +33,13 @@ namespace Armada.Server.Mcp.Tools
         {
             register(
                 "armada_enumerate",
-                "Find and browse entities with paginated, filtered, sorted access to: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue. Returns paginated results with total counts. Filter by vesselId, fleetId, captainId, voyageId, status, date range, and more.",
+                "Find and browse entities with paginated, filtered, sorted access to: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines. Returns paginated results with total counts. Filter by vesselId, fleetId, captainId, voyageId, status, date range, and more.",
                 new
                 {
                     type = "object",
                     properties = new
                     {
-                        entityType = new { type = "string", description = "Entity type to enumerate: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue" },
+                        entityType = new { type = "string", description = "Entity type to enumerate: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines" },
                         pageNumber = new { type = "integer", description = "Page number (1-based, default 1)" },
                         pageSize = new { type = "integer", description = "Results per page (default 10, max 1000)" },
                         order = new { type = "string", description = "Sort order: CreatedAscending, CreatedDescending (default)" },
@@ -247,8 +247,41 @@ namespace Armada.Server.Mcp.Tools
                                 return (object)projectedMerge;
                             }
                             return (object)mqResult;
+                        case "personas":
+                        case "persona":
+                            EnumerationResult<Persona> personas = await database.Personas.EnumerateAsync(query).ConfigureAwait(false);
+                            return (object)personas;
+                        case "prompt_templates":
+                        case "prompt_template":
+                        case "templates":
+                        case "template":
+                            EnumerationResult<PromptTemplate> templates = await database.PromptTemplates.EnumerateAsync(query).ConfigureAwait(false);
+                            if (request.IncludeDescription != true)
+                            {
+                                object projectedTemplates = new
+                                {
+                                    templates.Success,
+                                    templates.PageNumber,
+                                    templates.PageSize,
+                                    templates.TotalPages,
+                                    templates.TotalRecords,
+                                    Objects = templates.Objects.Select(t => new
+                                    {
+                                        t.Id, t.Name, t.Description, t.Category, t.IsBuiltIn, t.Active,
+                                        t.CreatedUtc, t.LastUpdateUtc,
+                                        ContentLength = t.Content?.Length ?? 0
+                                    }).ToList(),
+                                    templates.TotalMs
+                                };
+                                return (object)projectedTemplates;
+                            }
+                            return (object)templates;
+                        case "pipelines":
+                        case "pipeline":
+                            EnumerationResult<Pipeline> pipelines = await database.Pipelines.EnumerateAsync(query).ConfigureAwait(false);
+                            return (object)pipelines;
                         default:
-                            return (object)new { Error = "Unknown entity type: " + entityType + ". Valid types: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue" };
+                            return (object)new { Error = "Unknown entity type: " + entityType + ". Valid types: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines" };
                     }
                 });
         }

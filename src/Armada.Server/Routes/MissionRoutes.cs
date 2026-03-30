@@ -773,24 +773,32 @@ namespace Armada.Server.Routes
                 if (!File.Exists(logPath))
                     return (object)new { MissionId = id, Log = "", Lines = 0, TotalLines = 0 };
 
-                string[] allLines = await ReadLinesSharedAsync(logPath).ConfigureAwait(false);
-                int totalLines = allLines.Length;
+                try
+                {
+                    string[] allLines = await ReadLinesSharedAsync(logPath).ConfigureAwait(false);
+                    int totalLines = allLines.Length;
 
-                int offset = 0;
-                int lineCount = 200;
+                    int offset = 0;
+                    int lineCount = 200;
 
-                string? offsetParam = req.Query.GetValueOrDefault("offset");
-                if (!String.IsNullOrEmpty(offsetParam) && Int32.TryParse(offsetParam, out int parsedOffset))
-                    offset = Math.Max(0, parsedOffset);
+                    string? offsetParam = req.Query.GetValueOrDefault("offset");
+                    if (!String.IsNullOrEmpty(offsetParam) && Int32.TryParse(offsetParam, out int parsedOffset))
+                        offset = Math.Max(0, parsedOffset);
 
-                string? linesParam = req.Query.GetValueOrDefault("lines");
-                if (!String.IsNullOrEmpty(linesParam) && Int32.TryParse(linesParam, out int parsedLines))
-                    lineCount = Math.Max(1, parsedLines);
+                    string? linesParam = req.Query.GetValueOrDefault("lines");
+                    if (!String.IsNullOrEmpty(linesParam) && Int32.TryParse(linesParam, out int parsedLines))
+                        lineCount = Math.Max(1, parsedLines);
 
-                string[] slice = allLines.Skip(offset).Take(lineCount).ToArray();
-                string log = String.Join("\n", slice);
+                    string[] slice = allLines.Skip(offset).Take(lineCount).ToArray();
+                    string log = String.Join("\n", slice);
 
-                return (object)new { MissionId = id, Log = log, Lines = slice.Length, TotalLines = totalLines };
+                    return (object)new { MissionId = id, Log = log, Lines = slice.Length, TotalLines = totalLines };
+                }
+                catch (IOException)
+                {
+                    // File may be locked, deleted, or in use -- return empty rather than 500
+                    return (object)new { MissionId = id, Log = "", Lines = 0, TotalLines = 0 };
+                }
             },
             api => api
                 .WithTag("Missions")
