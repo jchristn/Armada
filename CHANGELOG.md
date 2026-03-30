@@ -4,6 +4,62 @@ All notable changes to Armada are documented in this file.
 
 ---
 
+## v0.4.0
+
+### Personas and Pipelines
+- Added personas: named agent roles (Worker, Architect, Judge, TestEngineer) with custom persona support
+- Added pipelines: ordered sequences of persona stages (WorkerOnly, Reviewed, Tested, FullPipeline) with custom pipeline support
+- Pipeline resolution: dispatch param > vessel default > fleet default > WorkerOnly
+- Architect stage special handling: parses [ARMADA:MISSION] markers to create multiple Worker missions
+- Stage handoff: injects prior stage output (agent stdout + diff) into next stage description
+- Persona-aware captain routing: AllowedPersonas and PreferredPersona on captains
+- Mission dependency chain: DependsOnMissionId gates assignment until predecessor completes
+
+### Prompt Templates
+- Every prompt is now template-driven and user-editable (18 built-in templates)
+- Categories: mission, persona, structure, commit, landing, agent
+- Dashboard two-column editor with parameter reference panel
+- MCP tools: armada_get/update/reset_prompt_template
+- REST endpoints: /api/v1/prompt-templates CRUD
+
+### Dashboard
+- Personas, Pipelines, Prompt Templates pages
+- Pipeline dropdown on Dispatch, Voyage Create, Vessel, Fleet
+- Mission detail: persona badge, depends-on link, failure reason display
+- Captain detail: AllowedPersonas, PreferredPersona fields
+- Vessel edit: 95% width, 3-column layout
+- Log viewer: LIVE/DONE indicators, follow mode
+- Toast notifications instead of layout-shifting banners
+- Consistent CopyButton component across all pages
+- Version display on login and sidebar
+
+### Infrastructure
+- Schema migrations 19-23 across SQLite, MySQL, PostgreSQL, SQL Server
+- FailureReason field on missions (surfaced in dashboard)
+- Vessel deletion cleanup: cancels missions, deletes docks, bare repo
+- Empty repo auto-seed: creates README.md on first dispatch to empty GitHub repo
+- Process.Dispose on agent exit to release Windows directory handles
+- Crash logging: AppDomain.UnhandledException + TaskScheduler.UnobservedTaskException
+- Case-insensitive email login
+- CLAUDE.md auto-gitignored in worktrees
+
+### API
+- 11 new MCP tools (persona, pipeline, prompt template CRUD)
+- 17 new REST endpoints
+- 12 new WebSocket commands
+- armada_enumerate supports personas, prompt_templates, pipelines
+- armada_dispatch accepts pipelineId and pipeline (name) parameters
+- Voyage status considers LandingFailed, WorkProduced, PullRequestOpen as terminal
+
+### Documentation
+- PIPELINES.md: complete implementation reference
+- PERSONAS_GUIDE.md: user-facing guide
+- TESTING_PIPELINES.md: 6 end-to-end test examples
+- OLLAMA_AS_CAPTAIN.md: implementation plan for Ollama runtime
+- VLLM_AS_CAPTAIN.md: implementation plan for vLLM runtime
+
+---
+
 ## v0.3.0
 
 ### Added

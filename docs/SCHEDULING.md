@@ -109,6 +109,16 @@ armada go "Add XML doc comments to all public methods" --priority 200
 
 These missions will sit in the queue and only be assigned when no higher-priority missions are pending.
 
+## Persona-Aware Routing (v0.4.0)
+
+When a mission has a `Persona` field set (from a pipeline stage), the Admiral considers captain persona capabilities during assignment:
+
+1. **Filter by AllowedPersonas:** If a captain has `AllowedPersonas` set (JSON array), only assign if the mission's persona is in the list. If `AllowedPersonas` is null, the captain can fill any role.
+2. **Prefer PreferredPersona:** Among eligible captains, prefer one whose `PreferredPersona` matches the mission's persona.
+3. **Fallback:** If no persona-matching captain is available, assign to any idle captain (soft constraint).
+
+This allows dedicating specific captains to specific roles (e.g., an Opus-backed captain for Architect work, Sonnet-backed captains for Worker tasks).
+
 ### Full Scheduling Scenario
 
 Suppose you have two captains and dispatch the following work:
