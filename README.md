@@ -65,18 +65,30 @@ Everything else in Armada exists to support that: isolated worktrees, parallel d
 
 ```mermaid
 flowchart TD
-    U["You: Build a FastAPI backend with user auth and tests"]
-    A["Admiral<br/>Coordinates work, resolves pipeline, assigns captains, tracks state"]
-    P["Architect<br/>Reads the codebase, breaks work into missions, identifies file boundaries"]
-    W["Worker<br/>Implements the mission in an isolated git worktree and produces a diff"]
-    T["TestEngineer<br/>Reads the worker diff and adds or updates tests"]
-    J["Judge<br/>Reviews correctness, completeness, scope, and style<br/>Produces PASS or FAIL"]
+    classDef input fill:#f8fafc,stroke:#64748b,color:#0f172a,stroke-width:1.5px;
+    classDef control fill:#eef4ff,stroke:#3159a6,color:#0f172a,stroke-width:2px;
+    classDef stage fill:#fcfcfd,stroke:#475569,color:#0f172a,stroke-width:1.5px;
+    classDef output fill:#eefbf3,stroke:#2f7a4b,color:#0f172a,stroke-width:1.5px;
 
-    U --> A
-    A --> P
-    P --> W
-    W --> T
-    T --> J
+    U["You<br/>Build a FastAPI backend with user auth and tests"]
+    A["Admiral<br/>Resolve pipeline<br/>Assign captains<br/>Track state"]
+
+    subgraph Pipeline["Configured Pipeline"]
+        direction TD
+        P["Architect<br/>Read codebase<br/>Break work into missions"]
+        W["Worker<br/>Implement in isolated worktree<br/>Produce diff"]
+        T["TestEngineer<br/>Review worker diff<br/>Add or update tests"]
+        J["Judge<br/>Review correctness, scope, and style"]
+        R["Result<br/>PASS / FAIL"]
+        P --> W --> T --> J --> R
+    end
+
+    U --> A --> P
+
+    class U input
+    class A control
+    class P,W,T,J stage
+    class R output
 ```
 
 1. **You describe the goal.** This can be a short prompt or a longer spec.
