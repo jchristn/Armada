@@ -63,33 +63,49 @@ Everything else in Armada exists to support that: isolated worktrees, parallel d
 
 ## How It Works
 
-```mermaid
-flowchart TD
-    classDef input fill:#f8fafc,stroke:#64748b,color:#0f172a,stroke-width:1.5px;
-    classDef control fill:#eaf1fb,stroke:#2b4c7e,color:#0f172a,stroke-width:2px;
-    classDef stage fill:#fcfcfd,stroke:#475569,color:#0f172a,stroke-width:1.5px;
-    classDef output fill:#f1f5f9,stroke:#516274,color:#0f172a,stroke-width:1.5px;
-
-    U["You<br/>Build a FastAPI backend with user auth and tests"]
-    A["Admiral<br/>Resolve pipeline<br/>Assign captains<br/>Track state"]
-
-    subgraph Pipeline["Configured Pipeline"]
-        direction TD
-        P["Architect<br/>Read codebase<br/>Break work into missions"]
-        W["Worker<br/>Implement in isolated worktree<br/>Produce diff"]
-        T["TestEngineer<br/>Review worker diff<br/>Add or update tests"]
-        J["Judge<br/>Review correctness, scope, and style"]
-        R["Result<br/>PASS / FAIL"]
-        P --> W --> T --> J --> R
-    end
-
-    U --> A --> P
-
-    class U input
-    class A control
-    class P,W,T,J stage
-    class R output
-```
+<table align="center">
+<tr><td>
+<pre>
++-----------------------------------------------------------+
+| You: "Build a FastAPI backend with user auth and tests"   |
++-----------------------------------------------------------+
+                              |
+                              v
++-----------------------------------------------------------+
+| Admiral                                                   |
+| Coordinates work, resolves pipeline, assigns captains,    |
+| provisions worktrees, and tracks mission state            |
++-----------------------------------------------------------+
+                              |
+                              v
++-----------------------------------------------------------+
+| Architect                                                 |
+| Reads the codebase, breaks work into missions, and        |
+| identifies file boundaries                                |
++-----------------------------------------------------------+
+                              |
+                              v
++-----------------------------------------------------------+
+| Worker                                                    |
+| Implements the mission in an isolated git worktree        |
+| and produces a diff                                       |
++-----------------------------------------------------------+
+                              |
+                              v
++-----------------------------------------------------------+
+| TestEngineer                                              |
+| Reviews the worker diff and adds or updates tests         |
++-----------------------------------------------------------+
+                              |
+                              v
++-----------------------------------------------------------+
+| Judge                                                     |
+| Reviews correctness, completeness, scope, and style       |
+| Produces PASS or FAIL                                     |
++-----------------------------------------------------------+
+</pre>
+</td></tr>
+</table>
 
 1. **You describe the goal.** This can be a short prompt or a longer spec.
 2. **The Architect plans.** It reads the codebase, breaks the work into missions, and identifies likely file boundaries.
