@@ -66,11 +66,18 @@ namespace Armada.Runtimes
         /// <summary>
         /// Build Cursor agent CLI arguments.
         /// </summary>
-        protected override List<string> BuildArguments(string prompt)
+        protected override List<string> BuildArguments(string prompt, string? model = null)
         {
             List<string> args = new List<string>();
 
             args.Add("--agent");
+
+            if (!String.IsNullOrEmpty(model))
+            {
+                args.Add("--model");
+                args.Add(model);
+            }
+
             args.Add("--prompt");
             args.Add(prompt);
 

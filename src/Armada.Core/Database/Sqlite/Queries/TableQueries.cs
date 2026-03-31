@@ -736,6 +736,9 @@ namespace Armada.Core.Database.Sqlite.Queries
                 ),
                 new SchemaMigration(24, "Add failure_reason to missions",
                     @"ALTER TABLE missions ADD COLUMN failure_reason TEXT;"
+                ),
+                new SchemaMigration(25, "Add model to captains for per-captain model selection",
+                    @"ALTER TABLE captains ADD COLUMN model TEXT;"
                 )
             };
         }

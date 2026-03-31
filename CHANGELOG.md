@@ -4,6 +4,22 @@ All notable changes to Armada are documented in this file.
 
 ---
 
+## v0.11.0
+
+### Per-Captain Model Selection
+- Added `Model` property to Captain: nullable string specifying which model the agent runtime should use
+- Model is passed to runtimes via `--model` CLI flag (Claude Code, Codex, Gemini, Cursor)
+- Model validation on create/update: briefly invokes the runtime to verify the model is usable
+- MCP tools: `armada_create_captain` and `armada_update_captain` accept optional `model` parameter
+- REST API: POST/PUT `/api/v1/captains` accepts `Model` field
+- Dashboard: improved error messages on captain save failures
+
+### Infrastructure
+- Schema migration 25 (SQLite), 13 (SQL Server, PostgreSQL), 15 (MySQL): adds `model` column to captains table
+- Version bump to 0.11.0 across all projects, Docker images, and documentation
+
+---
+
 ## v0.4.0
 
 ### Personas and Pipelines

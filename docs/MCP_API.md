@@ -1,6 +1,6 @@
 # Armada MCP API Reference
 
-**Version:** 0.4.0
+**Version:** 0.11.0
 **Default URL:** `http://localhost:7891`
 **Protocol:** [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) over HTTP
 **Server Library:** Voltaic (McpHttpServer)
@@ -1561,7 +1561,8 @@ Register a new captain (AI agent).
     "runtime": { "type": "string", "description": "Agent runtime: ClaudeCode, Codex, Gemini, Cursor" },
     "systemInstructions": { "type": "string", "description": "System instructions for this captain -- injected into every mission prompt to specialize behavior" },
     "allowedPersonas": { "type": "array", "items": { "type": "string" }, "description": "List of persona names this captain is allowed to use" },
-    "preferredPersona": { "type": "string", "description": "Preferred persona name for this captain" }
+    "preferredPersona": { "type": "string", "description": "Preferred persona name for this captain" },
+    "model": { "type": "string", "description": "Model identifier for the captain's agent runtime" }
   },
   "required": ["name"]
 }
@@ -1574,6 +1575,7 @@ Register a new captain (AI agent).
 | `systemInstructions` | string | No | System instructions injected into every mission prompt for this captain |
 | `allowedPersonas` | string[] | No | List of persona names this captain is allowed to use |
 | `preferredPersona` | string | No | Preferred persona name for this captain |
+| `model` | string | No | Model identifier for the captain's agent runtime |
 
 **Response:** [Captain](#captain) object.
 
@@ -1614,7 +1616,8 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
     "runtime": { "type": "string", "description": "New agent runtime: ClaudeCode, Codex, Gemini, Cursor" },
     "systemInstructions": { "type": "string", "description": "New system instructions for this captain" },
     "allowedPersonas": { "type": "array", "items": { "type": "string" }, "description": "New list of persona names this captain is allowed to use" },
-    "preferredPersona": { "type": "string", "description": "New preferred persona name for this captain" }
+    "preferredPersona": { "type": "string", "description": "New preferred persona name for this captain" },
+    "model": { "type": "string", "description": "Model identifier for the captain's agent runtime" }
   },
   "required": ["captainId"]
 }
@@ -1627,6 +1630,7 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
 | `runtime` | string | No | New agent runtime: `ClaudeCode`, `Codex`, `Gemini`, `Cursor` |
 | `systemInstructions` | string | No | New system instructions for this captain |
 | `allowedPersonas` | string[] | No | New list of persona names this captain is allowed to use |
+| `model` | string | No | Model identifier for the captain's agent runtime |
 | `preferredPersona` | string | No | New preferred persona name for this captain |
 
 **Response:** Updated [Captain](#captain) object, or `{ "Error": "Captain not found" }`.
@@ -2590,6 +2594,7 @@ Paginated result wrapper returned by `armada_enumerate`.
 | `id` | string | Captain ID (prefix `cpt_`) |
 | `name` | string | Display name |
 | `runtime` | string | [AgentRuntimeEnum](#agentruntimeenum) value |
+| `model` | string \| null | Model identifier for the agent runtime |
 | `state` | string | [CaptainStateEnum](#captainstateenum) value |
 | `currentMissionId` | string \| null | Currently assigned mission ID |
 | `currentDockId` | string \| null | Currently assigned dock (worktree) ID |

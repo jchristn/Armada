@@ -72,6 +72,13 @@ namespace Armada.Core.Models
         public string? PreferredPersona { get; set; } = null;
 
         /// <summary>
+        /// Model identifier for this captain's agent runtime.
+        /// When specified, this model is passed to the runtime on invocation.
+        /// When null, the runtime selects its default model automatically.
+        /// </summary>
+        public string? Model { get; set; } = null;
+
+        /// <summary>
         /// Current state of the captain.
         /// </summary>
         public CaptainStateEnum State { get; set; } = CaptainStateEnum.Idle;

@@ -1,6 +1,6 @@
 # Armada REST API Reference
 
-**Version:** 0.4.0
+**Version:** 0.11.0
 **Base URL:** `http://localhost:7890`
 **Content-Type:** `application/json`
 
@@ -1497,6 +1497,7 @@ Register a new captain (AI agent).
 |---|---|---|---|
 | `Name` | string | yes | Captain name |
 | `Runtime` | string | no | Agent runtime type (default: `ClaudeCode`) |
+| `Model` | string | no | Model identifier for the captain's agent runtime |
 
 **Response:** `201 Created` - [Captain](#captain)
 
@@ -2927,6 +2928,7 @@ A worker AI agent instance executing missions.
 | `Name` | string | `"Captain"` | Captain name |
 | `Runtime` | [AgentRuntimeEnum](#agentruntimeenum) | `ClaudeCode` | Agent runtime type |
 | `SystemInstructions` | string? | null | Per-captain system instructions injected into every mission prompt |
+| `Model` | string? | null | Model identifier for the captain's agent runtime |
 | `State` | [CaptainStateEnum](#captainstateenum) | `Idle` | Current state |
 | `CurrentMissionId` | string? | null | Currently assigned mission ID |
 | `CurrentDockId` | string? | null | Currently assigned dock (worktree) ID |

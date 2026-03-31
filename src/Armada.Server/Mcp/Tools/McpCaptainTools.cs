@@ -13,6 +13,7 @@ namespace Armada.Server.Mcp.Tools
     using Armada.Core.Models;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
+    using Armada.Runtimes;
 
     /// <summary>
     /// Registers MCP tools for captain operations (get, create, update, stop, delete, log).
@@ -33,7 +34,8 @@ namespace Armada.Server.Mcp.Tools
         /// <param name="admiral">Admiral service for captain orchestration.</param>
         /// <param name="settings">Armada settings, or null if unavailable.</param>
         /// <param name="onStopCaptain">Optional callback invoked when a captain is stopped.</param>
-        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IAdmiralService admiral, ArmadaSettings? settings, Func<string, Task>? onStopCaptain = null)
+        /// <param name="runtimeFactory">Agent runtime factory for model validation.</param>
+        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IAdmiralService admiral, ArmadaSettings? settings, Func<string, Task>? onStopCaptain = null, AgentRuntimeFactory? runtimeFactory = null)
         {
             register(
                 "armada_get_captain",
@@ -68,7 +70,8 @@ namespace Armada.Server.Mcp.Tools
                         runtime = new { type = "string", description = "Agent runtime: ClaudeCode, Codex" },
                         systemInstructions = new { type = "string", description = "System instructions for this captain -- injected into every mission prompt to specialize behavior" },
                         allowedPersonas = new { type = "string", description = "JSON array of persona names this captain can fill, e.g. [\"Worker\",\"Judge\"]. Null means any persona." },
-                        preferredPersona = new { type = "string", description = "Preferred persona for dispatch routing priority" }
+                        preferredPersona = new { type = "string", description = "Preferred persona for dispatch routing priority" },
+                        model = new { type = "string", description = "Model identifier for the captain's agent runtime" }
                     },
                     required = new[] { "name" }
                 },
@@ -83,6 +86,12 @@ namespace Armada.Server.Mcp.Tools
                     captain.SystemInstructions = request.SystemInstructions;
                     captain.AllowedPersonas = request.AllowedPersonas;
                     captain.PreferredPersona = request.PreferredPersona;
+                    captain.Model = request.Model;
+                    if (runtimeFactory != null && !String.IsNullOrEmpty(request.Model))
+                    {
+                        string? validationError = await runtimeFactory.ValidateModelAsync(captain.Runtime, request.Model).ConfigureAwait(false);
+                        if (validationError != null) return (object)new { Error = "Invalid model: " + validationError };
+                    }
                     captain = await database.Captains.CreateAsync(captain).ConfigureAwait(false);
                     return (object)captain;
                 });
@@ -100,7 +109,8 @@ namespace Armada.Server.Mcp.Tools
                         runtime = new { type = "string", description = "New agent runtime: ClaudeCode, Codex" },
                         systemInstructions = new { type = "string", description = "New system instructions for this captain" },
                         allowedPersonas = new { type = "string", description = "JSON array of persona names this captain can fill, e.g. [\"Worker\",\"Judge\"]. Null means any persona." },
-                        preferredPersona = new { type = "string", description = "Preferred persona for dispatch routing priority" }
+                        preferredPersona = new { type = "string", description = "Preferred persona for dispatch routing priority" },
+                        model = new { type = "string", description = "Model identifier for the captain's agent runtime" }
                     },
                     required = new[] { "captainId" }
                 },
@@ -120,6 +130,14 @@ namespace Armada.Server.Mcp.Tools
                         captain.AllowedPersonas = request.AllowedPersonas;
                     if (request.PreferredPersona != null)
                         captain.PreferredPersona = request.PreferredPersona;
+                    string? existingModel = captain.Model;
+                    if (request.Model != null)
+                        captain.Model = request.Model;
+                    if (runtimeFactory != null && request.Model != null && request.Model != existingModel && !String.IsNullOrEmpty(request.Model))
+                    {
+                        string? validationError = await runtimeFactory.ValidateModelAsync(captain.Runtime, request.Model).ConfigureAwait(false);
+                        if (validationError != null) return (object)new { Error = "Invalid model: " + validationError };
+                    }
                     captain.LastUpdateUtc = DateTime.UtcNow;
                     captain = await database.Captains.UpdateAsync(captain).ConfigureAwait(false);
                     return (object)captain;

@@ -483,6 +483,9 @@ namespace Armada.Core.Database.Postgresql.Queries
                 ),
                 new SchemaMigration(12, "Add failure_reason to missions",
                     @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS failure_reason TEXT;"
+                ),
+                new SchemaMigration(13, "Add model to captains for per-captain model selection",
+                    @"ALTER TABLE captains ADD COLUMN IF NOT EXISTS model TEXT;"
                 )
             };
         }

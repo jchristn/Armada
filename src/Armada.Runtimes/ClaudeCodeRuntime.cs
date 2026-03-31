@@ -71,7 +71,7 @@ namespace Armada.Runtimes
         /// <summary>
         /// Build Claude Code CLI arguments.
         /// </summary>
-        protected override List<string> BuildArguments(string prompt)
+        protected override List<string> BuildArguments(string prompt, string? model = null)
         {
             List<string> args = new List<string>();
 
@@ -81,6 +81,12 @@ namespace Armada.Runtimes
             if (SkipPermissions)
             {
                 args.Add("--dangerously-skip-permissions");
+            }
+
+            if (!String.IsNullOrEmpty(model))
+            {
+                args.Add("--model");
+                args.Add(model);
             }
 
             args.Add(prompt);

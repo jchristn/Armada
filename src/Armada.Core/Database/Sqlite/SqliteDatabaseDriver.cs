@@ -449,6 +449,7 @@ namespace Armada.Core.Database.Sqlite
             captain.LastUpdateUtc = FromIso8601(reader["last_update_utc"].ToString()!);
             try { captain.AllowedPersonas = NullableString(reader["allowed_personas"]); } catch { }
             try { captain.PreferredPersona = NullableString(reader["preferred_persona"]); } catch { }
+            try { captain.Model = NullableString(reader["model"]); } catch { }
             return captain;
         }
 

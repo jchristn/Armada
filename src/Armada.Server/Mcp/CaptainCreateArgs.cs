@@ -30,5 +30,10 @@ namespace Armada.Server.Mcp
         /// </summary>
         public string? PreferredPersona { get; set; }
 
+        /// <summary>
+        /// Model identifier for this captain's agent runtime.
+        /// </summary>
+        public string? Model { get; set; }
+
     }
 }

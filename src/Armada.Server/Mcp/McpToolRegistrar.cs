@@ -8,6 +8,7 @@ namespace Armada.Server.Mcp
     using Armada.Core.Database;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
+    using Armada.Runtimes;
     using Armada.Server.Mcp.Tools;
 
     /// <summary>
@@ -45,6 +46,7 @@ namespace Armada.Server.Mcp
         /// <param name="onStop">Callback to stop the server.</param>
         /// <param name="onStopCaptain">Callback to kill a captain's agent process by captain ID. Called before RecallCaptainAsync.</param>
         /// <param name="templateService">Prompt template service for template operations.</param>
+        /// <param name="runtimeFactory">Agent runtime factory for model validation.</param>
         public static void RegisterAll(
             RegisterToolDelegate register,
             DatabaseDriver database,
@@ -56,7 +58,8 @@ namespace Armada.Server.Mcp
             ILandingService? landingService = null,
             Action? onStop = null,
             Func<string, Task>? onStopCaptain = null,
-            IPromptTemplateService? templateService = null)
+            IPromptTemplateService? templateService = null,
+            AgentRuntimeFactory? runtimeFactory = null)
         {
             McpStatusTools.Register(register, admiral, onStop);
             McpEnumerateTools.Register(register, database, mergeQueue);
@@ -64,7 +67,7 @@ namespace Armada.Server.Mcp
             McpVesselTools.Register(register, database, dockService);
             McpVoyageTools.Register(register, database, admiral, settings);
             McpMissionTools.Register(register, database, admiral, settings, git, landingService);
-            McpCaptainTools.Register(register, database, admiral, settings, onStopCaptain);
+            McpCaptainTools.Register(register, database, admiral, settings, onStopCaptain, runtimeFactory);
             McpSignalTools.Register(register, database);
             McpEventTools.Register(register, database);
             McpDockTools.Register(register, database, dockService);

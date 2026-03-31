@@ -139,7 +139,7 @@ export default function Captains() {
       else await createCaptain(payload);
       setShowForm(false);
       load();
-    } catch { setError('Save failed.'); }
+    } catch (e) { setError(e instanceof Error ? e.message : 'Save failed.'); }
   }
 
   function handleDelete(id: string, name: string) {

@@ -71,13 +71,20 @@ namespace Armada.Runtimes
         /// <summary>
         /// Build Codex CLI arguments.
         /// </summary>
-        protected override List<string> BuildArguments(string prompt)
+        protected override List<string> BuildArguments(string prompt, string? model = null)
         {
             List<string> args = new List<string>();
 
             args.Add("--approval-mode");
             args.Add(ApprovalMode);
             args.Add("--quiet");
+
+            if (!String.IsNullOrEmpty(model))
+            {
+                args.Add("--model");
+                args.Add(model);
+            }
+
             args.Add(prompt);
 
             return args;

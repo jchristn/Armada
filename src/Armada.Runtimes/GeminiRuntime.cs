@@ -72,12 +72,19 @@ namespace Armada.Runtimes
         /// <summary>
         /// Build Gemini CLI arguments.
         /// </summary>
-        protected override List<string> BuildArguments(string prompt)
+        protected override List<string> BuildArguments(string prompt, string? model = null)
         {
             List<string> args = new List<string>();
 
             args.Add("--sandbox");
             args.Add(SandboxMode);
+
+            if (!String.IsNullOrEmpty(model))
+            {
+                args.Add("--model");
+                args.Add(model);
+            }
+
             args.Add("-p");
             args.Add(prompt);
 

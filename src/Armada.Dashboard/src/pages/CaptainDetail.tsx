@@ -112,7 +112,7 @@ export default function CaptainDetail() {
       await updateCaptain(captain.id, payload);
       setShowForm(false);
       load();
-    } catch { setError('Save failed.'); }
+    } catch (e) { setError(e instanceof Error ? e.message : 'Save failed.'); }
   }
 
   async function handleViewLog() {

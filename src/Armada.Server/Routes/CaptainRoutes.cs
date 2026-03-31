@@ -147,6 +147,15 @@ namespace Armada.Server.Routes
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Captain.");
                 captain.TenantId = ctx.TenantId;
                 captain.UserId = ctx.UserId;
+                if (!String.IsNullOrEmpty(captain.Model))
+                {
+                    string? validationError = await _runtimeFactory.ValidateModelAsync(captain.Runtime, captain.Model).ConfigureAwait(false);
+                    if (validationError != null)
+                    {
+                        req.Http.Response.StatusCode = 400;
+                        return (object)new { Error = "Invalid model", Message = validationError };
+                    }
+                }
                 captain = await _database.Captains.CreateAsync(captain).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 201;
                 return captain;
@@ -211,6 +220,15 @@ namespace Armada.Server.Routes
                 updated.LastHeartbeatUtc = existing.LastHeartbeatUtc;
                 updated.CreatedUtc = existing.CreatedUtc;
                 updated.LastUpdateUtc = DateTime.UtcNow;
+                if (!String.IsNullOrEmpty(updated.Model) && updated.Model != existing.Model)
+                {
+                    string? validationError = await _runtimeFactory.ValidateModelAsync(updated.Runtime, updated.Model).ConfigureAwait(false);
+                    if (validationError != null)
+                    {
+                        req.Http.Response.StatusCode = 400;
+                        return (object)new { Error = "Invalid model", Message = validationError };
+                    }
+                }
                 updated = await _database.Captains.UpdateAsync(updated).ConfigureAwait(false);
                 return (object)updated;
             },

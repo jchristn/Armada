@@ -520,7 +520,8 @@ namespace Armada.Server
                     if (captain != null)
                         await _AgentLifecycle.HandleStopAgentAsync(captain).ConfigureAwait(false);
                 },
-                _PromptTemplateService);
+                _PromptTemplateService,
+                _RuntimeFactory);
         }
 
         private async Task EmitEventAsync(string eventType, string message,

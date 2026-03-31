@@ -7,7 +7,7 @@
 <p align="center">
   <strong>Reduce context switching across projects. Keep agent work in queryable memory.</strong>
   <br />
-  <em>v0.4.0 alpha -- APIs and schemas may change</em>
+  <em>v0.11.0 alpha -- APIs and schemas may change</em>
 </p>
 
 <p align="center">
@@ -494,6 +494,10 @@ armada captain add claude-2 --runtime claude
 armada captain add codex-1 --runtime codex
 armada captain add gemini-1 --runtime gemini
 
+# Per-captain model selection (optional -- overrides runtime default)
+# Set via MCP: armada_create_captain or armada_update_captain with model param
+# Set via REST: POST/PUT /api/v1/captains with "Model" field
+
 # Emergency stop all agents
 armada captain stop-all
 
@@ -886,6 +890,13 @@ v0.4.0 adds personas, pipelines, and prompt templates. The database schema is au
 - Built-in personas (Worker, Architect, Judge, TestEngineer) and pipelines (WorkerOnly, Reviewed, Tested, FullPipeline) are seeded automatically
 - 18 built-in prompt templates are seeded automatically
 - Standalone migration scripts available in `migrations/` for manual execution
+
+### v0.4.0 to v0.11.0
+
+v0.11.0 adds per-captain model selection. The database schema is automatically migrated on first startup (migration 25 for SQLite, 13 for SQL Server/PostgreSQL, 15 for MySQL). Key changes:
+
+- New column: `captains.model` (nullable text)
+- Standalone migration script: `migrations/migrate_add_captain_model.sh` / `.bat`
 
 ## Issues and Discussions
 

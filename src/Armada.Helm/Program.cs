@@ -62,7 +62,7 @@ namespace Armada.Helm
             app.Configure(config =>
             {
                 config.SetApplicationName("armada");
-                config.SetApplicationVersion("0.3.0");
+                config.SetApplicationVersion("0.11.0");
 
                 // --- Common commands (top-level, used most often) ---
                 config.AddCommand<GoCommand>("go")

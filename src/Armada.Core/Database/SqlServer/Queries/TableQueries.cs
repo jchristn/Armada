@@ -254,6 +254,13 @@ namespace Armada.Core.Database.SqlServer.Queries
                     @"
                     IF COL_LENGTH('missions', 'failure_reason') IS NULL
                         ALTER TABLE missions ADD failure_reason NVARCHAR(MAX);"
+                ),
+                new SchemaMigration(
+                    13,
+                    "Add model to captains for per-captain model selection",
+                    @"
+                    IF COL_LENGTH('captains', 'model') IS NULL
+                        ALTER TABLE captains ADD model NVARCHAR(450) NULL;"
                 )
             };
         }

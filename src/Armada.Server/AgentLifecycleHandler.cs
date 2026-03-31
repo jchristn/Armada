@@ -184,7 +184,8 @@ namespace Armada.Server
             int processId = await runtime.StartAsync(
                 dock.WorktreePath ?? throw new InvalidOperationException("Dock worktree path is null"),
                 prompt,
-                logFilePath: logFilePath).ConfigureAwait(false);
+                logFilePath: logFilePath,
+                model: captain.Model).ConfigureAwait(false);
 
             lock (_ProcessToCaptain)
             {

@@ -1,5 +1,6 @@
 namespace Armada.Runtimes
 {
+    using System.Diagnostics;
     using SyslogLogging;
     using Armada.Core.Enums;
     using Armada.Runtimes.Interfaces;
@@ -89,6 +90,98 @@ namespace Armada.Runtimes
 
             _CustomRuntimes[name] = factory;
             _Logging.Info(_Header + "registered custom runtime: " + name);
+        }
+
+        /// <summary>
+        /// Validate that a model identifier is usable by the given runtime.
+        /// </summary>
+        public async Task<string?> ValidateModelAsync(AgentRuntimeEnum runtimeType, string model, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(model)) return null;
+
+            string command;
+            List<string> args = new List<string>();
+
+            switch (runtimeType)
+            {
+                case AgentRuntimeEnum.ClaudeCode:
+                    command = "claude";
+                    args.Add("--model");
+                    args.Add(model);
+                    args.Add("--print");
+                    args.Add("respond with OK");
+                    break;
+                case AgentRuntimeEnum.Codex:
+                    command = "codex";
+                    args.Add("--model");
+                    args.Add(model);
+                    args.Add("--quiet");
+                    args.Add("respond with OK");
+                    break;
+                default:
+                    return null;
+            }
+
+            try
+            {
+                string tempDir = Path.Combine(Path.GetTempPath(), "armada-validate-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+                Directory.CreateDirectory(tempDir);
+
+                try
+                {
+                    ProcessStartInfo startInfo = new ProcessStartInfo
+                    {
+                        FileName = command,
+                        WorkingDirectory = tempDir,
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        RedirectStandardInput = true,
+                        CreateNoWindow = true
+                    };
+
+                    foreach (string arg in args)
+                        startInfo.ArgumentList.Add(arg);
+
+                    if (runtimeType == AgentRuntimeEnum.ClaudeCode)
+                    {
+                        startInfo.Environment["CLAUDE_CODE_DISABLE_NONINTERACTIVE_HINT"] = "1";
+                        startInfo.Environment.Remove("CLAUDECODE");
+                        startInfo.Environment.Remove("CLAUDE_CODE_ENTRYPOINT");
+                    }
+
+                    Process process = new Process { StartInfo = startInfo };
+                    System.Text.StringBuilder stderr = new System.Text.StringBuilder();
+                    process.ErrorDataReceived += (s, e) => { if (e.Data != null) stderr.AppendLine(e.Data); };
+
+                    process.Start();
+                    process.StandardInput.Close();
+                    process.BeginErrorReadLine();
+
+                    bool exited = process.WaitForExit(30000);
+                    if (!exited)
+                    {
+                        try { process.Kill(entireProcessTree: true); } catch { }
+                        return null;
+                    }
+
+                    if (process.ExitCode == 0)
+                        return null;
+
+                    string errorOutput = stderr.ToString().Trim();
+                    if (String.IsNullOrEmpty(errorOutput))
+                        errorOutput = "Model validation failed with exit code " + process.ExitCode;
+                    return errorOutput;
+                }
+                finally
+                {
+                    try { Directory.Delete(tempDir, true); } catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                return "Model validation error: " + ex.Message;
+            }
         }
 
         #endregion

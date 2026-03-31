@@ -549,6 +549,14 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration v15 statements for adding model to captains.
+        /// </summary>
+        public static readonly string[] MigrationV15Statements = new string[]
+        {
+            @"ALTER TABLE captains ADD COLUMN model VARCHAR(450);"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]
