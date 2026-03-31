@@ -127,6 +127,7 @@ export interface Captain {
   tenantId: string | null;
   name: string;
   runtime: string;
+  model: string | null;
   systemInstructions: string | null;
   allowedPersonas: string | null;
   preferredPersona: string | null;

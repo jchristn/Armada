@@ -34,7 +34,7 @@ export default function Captains() {
   // Modal state
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Captain | null>(null);
-  const [form, setForm] = useState({ name: '', runtime: '', systemInstructions: '' });
+  const [form, setForm] = useState({ name: '', runtime: '', model: '', systemInstructions: '' });
 
   // JSON viewer
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
@@ -126,13 +126,14 @@ export default function Captains() {
   function clearSelection() { setSelected([]); }
 
   // CRUD
-  function openCreate() { setForm({ name: '', runtime: '', systemInstructions: '' }); setEditing(null); setShowForm(true); }
-  function openEdit(c: Captain) { setForm({ name: c.name, runtime: c.runtime, systemInstructions: c.systemInstructions ?? '' }); setEditing(c); setShowForm(true); }
+  function openCreate() { setForm({ name: '', runtime: '', model: '', systemInstructions: '' }); setEditing(null); setShowForm(true); }
+  function openEdit(c: Captain) { setForm({ name: c.name, runtime: c.runtime, model: c.model ?? '', systemInstructions: c.systemInstructions ?? '' }); setEditing(c); setShowForm(true); }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     try {
       const payload = { ...form } as Record<string, unknown>;
+      if (!payload.model) delete payload.model;
       if (!payload.systemInstructions) delete payload.systemInstructions;
       if (editing) await updateCaptain(editing.id, payload);
       else await createCaptain(payload);
@@ -256,6 +257,9 @@ export default function Captains() {
                 <option value="Cursor">Cursor</option>
               </select>
             </label>
+            <label title="Optional model override. Leave blank for the runtime default.">Model
+              <input value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} placeholder="e.g. claude-sonnet-4-5-20250514 (auto if blank)" />
+            </label>
             <label title="Optional instructions injected into every mission prompt for this captain. Use this to specialize behavior, add guardrails, or provide persistent context.">
               System Instructions
               <textarea value={form.systemInstructions} onChange={e => setForm({ ...form, systemInstructions: e.target.value })} rows={4} placeholder="e.g., You are a testing specialist. Always run tests before committing..." />
@@ -298,6 +302,7 @@ export default function Captains() {
                   <th className="sortable" onClick={() => handleSort('runtime')} title="Runtime -- click to sort">
                     Runtime{sortIcon('runtime')}
                   </th>
+                  <th>Model</th>
                   <th className="sortable" onClick={() => handleSort('state')} title="State -- click to sort">
                     State{sortIcon('state')}
                   </th>
@@ -313,6 +318,7 @@ export default function Captains() {
                   <td><input type="text" className="col-filter" value={colFilters.name} onChange={e => { setColFilters(f => ({ ...f, name: e.target.value })); setPageNumber(1); }} placeholder="Filter..." /></td>
                   <td></td>
                   <td><input type="text" className="col-filter" value={colFilters.runtime} onChange={e => { setColFilters(f => ({ ...f, runtime: e.target.value })); setPageNumber(1); }} placeholder="Filter..." /></td>
+                  <td></td>
                   <td><input type="text" className="col-filter" value={colFilters.state} onChange={e => { setColFilters(f => ({ ...f, state: e.target.value })); setPageNumber(1); }} placeholder="Filter..." /></td>
                   <td></td>
                   <td></td>
@@ -334,6 +340,7 @@ export default function Captains() {
                       </span>
                     </td>
                     <td className="text-dim">{c.runtime}</td>
+                    <td className="text-dim">{c.model || 'auto'}</td>
                     <td><StatusBadge status={c.state} /></td>
                     <td className="mono text-dim" onClick={e => e.stopPropagation()}>
                       {c.currentMissionId ? (
@@ -358,7 +365,7 @@ export default function Captains() {
                   </tr>
                 ))}
                 {paginated.length === 0 && (
-                  <tr><td colSpan={9} className="text-dim">No captains match the current filters.</td></tr>
+                  <tr><td colSpan={10} className="text-dim">No captains match the current filters.</td></tr>
                 )}
               </tbody>
             </table>
