@@ -254,6 +254,13 @@ namespace Armada.Core.Database.SqlServer.Queries
                     @"
                     IF COL_LENGTH('missions', 'failure_reason') IS NULL
                         ALTER TABLE missions ADD failure_reason NVARCHAR(MAX);"
+                ),
+                new SchemaMigration(
+                    13,
+                    "Add agent_output to missions",
+                    @"
+                    IF COL_LENGTH('missions', 'agent_output') IS NULL
+                        ALTER TABLE missions ADD agent_output NVARCHAR(MAX);"
                 )
             };
         }
@@ -421,6 +428,7 @@ namespace Armada.Core.Database.SqlServer.Queries
                 pr_url NVARCHAR(450),
                 commit_hash NVARCHAR(450),
                 diff_snapshot NVARCHAR(MAX),
+                agent_output NVARCHAR(MAX),
                 created_utc NVARCHAR(450) NOT NULL,
                 started_utc NVARCHAR(450),
                 completed_utc NVARCHAR(450),

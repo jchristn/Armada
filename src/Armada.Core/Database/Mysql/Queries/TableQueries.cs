@@ -108,6 +108,7 @@ namespace Armada.Core.Database.Mysql.Queries
             pr_url LONGTEXT,
             commit_hash VARCHAR(450),
             diff_snapshot LONGTEXT,
+            agent_output LONGTEXT,
             created_utc DATETIME(6) NOT NULL,
             started_utc DATETIME(6),
             completed_utc DATETIME(6),
@@ -546,6 +547,14 @@ namespace Armada.Core.Database.Mysql.Queries
         public static readonly string[] MigrationV14Statements = new string[]
         {
             @"ALTER TABLE missions ADD COLUMN failure_reason LONGTEXT;"
+        };
+
+        /// <summary>
+        /// Migration v15 statements for adding agent_output to missions.
+        /// </summary>
+        public static readonly string[] MigrationV15Statements = new string[]
+        {
+            @"ALTER TABLE missions ADD COLUMN agent_output LONGTEXT;"
         };
 
         /// <summary>

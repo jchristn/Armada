@@ -167,6 +167,8 @@ namespace Armada.Server
             _Admiral.OnLaunchAgent = _AgentLifecycle.HandleLaunchAgentAsync;
             _Admiral.OnStopAgent = _AgentLifecycle.HandleStopAgentAsync;
             _Admiral.OnCaptureDiff = _MissionLanding.HandleCaptureDiffAsync;
+            _Admiral.OnIsProcessExitHandled = _AgentLifecycle.IsProcessExitHandled;
+            missionService.OnGetMissionOutput = _AgentLifecycle.GetAndClearMissionOutput;
             _Admiral.OnMissionComplete = _MissionLanding.HandleMissionCompleteAsync;
             _Admiral.OnVoyageComplete = _MissionLanding.HandleVoyageCompleteAsync;
             _Admiral.OnReconcilePullRequest = _MissionLanding.HandleReconcilePullRequestAsync;

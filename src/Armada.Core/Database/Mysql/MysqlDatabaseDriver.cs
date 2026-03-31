@@ -408,6 +408,11 @@ namespace Armada.Core.Database.Mysql
                     14,
                     "Add failure_reason to missions",
                     TableQueries.MigrationV14Statements
+                ),
+                new SchemaMigration(
+                    15,
+                    "Add agent_output to missions",
+                    TableQueries.MigrationV15Statements
                 )
             };
         }

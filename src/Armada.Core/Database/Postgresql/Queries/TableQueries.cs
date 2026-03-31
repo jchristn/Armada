@@ -167,6 +167,7 @@ namespace Armada.Core.Database.Postgresql.Queries
                         pr_url TEXT,
                         commit_hash TEXT,
                         diff_snapshot TEXT,
+                        agent_output TEXT,
                         created_utc TIMESTAMP NOT NULL,
                         started_utc TIMESTAMP,
                         completed_utc TIMESTAMP,
@@ -483,6 +484,9 @@ namespace Armada.Core.Database.Postgresql.Queries
                 ),
                 new SchemaMigration(12, "Add failure_reason to missions",
                     @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS failure_reason TEXT;"
+                ),
+                new SchemaMigration(13, "Add agent_output to missions",
+                    @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS agent_output TEXT;"
                 )
             };
         }

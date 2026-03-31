@@ -43,6 +43,13 @@ namespace Armada.Core.Services.Interfaces
         Func<Mission, Task<bool>>? OnReconcilePullRequest { get; set; }
 
         /// <summary>
+        /// Delegate that checks whether a process exit has already been received and is being
+        /// handled by the async exit callback. The health check uses this to avoid triggering
+        /// recovery for a process whose exit handler is still in progress.
+        /// </summary>
+        Func<int, bool>? OnIsProcessExitHandled { get; set; }
+
+        /// <summary>
         /// Dispatch a voyage with one or more missions.
         /// Creates the voyage, creates missions, and auto-assigns available captains.
         /// </summary>

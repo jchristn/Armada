@@ -457,6 +457,7 @@ namespace Armada.Core.Database.Sqlite.Queries
                         process_id INTEGER,
                         commit_hash TEXT,
                         diff_snapshot TEXT,
+                        agent_output TEXT,
                         FOREIGN KEY (tenant_id) REFERENCES tenants(id),
                         FOREIGN KEY (user_id) REFERENCES users(id),
                         FOREIGN KEY (voyage_id) REFERENCES voyages(id) ON DELETE SET NULL,
@@ -736,6 +737,9 @@ namespace Armada.Core.Database.Sqlite.Queries
                 ),
                 new SchemaMigration(24, "Add failure_reason to missions",
                     @"ALTER TABLE missions ADD COLUMN failure_reason TEXT;"
+                ),
+                new SchemaMigration(25, "Add agent_output to missions for capturing stdout",
+                    @"ALTER TABLE missions ADD COLUMN agent_output TEXT;"
                 )
             };
         }

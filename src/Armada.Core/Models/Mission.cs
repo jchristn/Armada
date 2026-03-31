@@ -112,6 +112,13 @@ namespace Armada.Core.Models
         public string? DiffSnapshot { get; set; } = null;
 
         /// <summary>
+        /// Accumulated agent stdout output captured during mission execution.
+        /// Used by architect missions for [ARMADA:MISSION] marker parsing
+        /// and by pipeline handoff to pass context to the next stage.
+        /// </summary>
+        public string? AgentOutput { get; set; } = null;
+
+        /// <summary>
         /// Persona assigned to this mission (e.g. "Worker", "Architect", "Judge").
         /// Null defaults to "Worker" for backward compatibility.
         /// </summary>

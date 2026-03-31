@@ -45,6 +45,13 @@ namespace Armada.Server
         /// </summary>
         private Dictionary<int, string> _ProcessToMission = new Dictionary<int, string>();
 
+        /// <summary>
+        /// Tracks process IDs whose exit has been received via the OnProcessExited callback.
+        /// Used by the health check to avoid racing with the async exit handler.
+        /// Entries are pruned after 5 minutes.
+        /// </summary>
+        private System.Collections.Concurrent.ConcurrentDictionary<int, DateTime> _HandledProcessExits = new System.Collections.Concurrent.ConcurrentDictionary<int, DateTime>();
+
         #endregion
 
         #region Constructors-and-Factories
@@ -103,6 +110,26 @@ namespace Armada.Server
                 return String.IsNullOrEmpty(output) ? null : output;
             }
             return null;
+        }
+
+        /// <summary>
+        /// Check whether a process exit has already been received for the given PID.
+        /// The health check uses this to avoid triggering recovery for a process
+        /// whose exit is already being handled by the async exit callback.
+        /// </summary>
+        /// <param name="processId">OS process ID to check.</param>
+        /// <returns>True if the exit callback has already fired for this PID.</returns>
+        public bool IsProcessExitHandled(int processId)
+        {
+            // Prune stale entries older than 5 minutes
+            DateTime cutoff = DateTime.UtcNow.AddMinutes(-5);
+            foreach (System.Collections.Generic.KeyValuePair<int, DateTime> kvp in _HandledProcessExits)
+            {
+                if (kvp.Value < cutoff)
+                    _HandledProcessExits.TryRemove(kvp.Key, out _);
+            }
+
+            return _HandledProcessExits.ContainsKey(processId);
         }
 
         /// <summary>
@@ -321,6 +348,12 @@ namespace Armada.Server
                 _ProcessToCaptain.Remove(processId);
                 _ProcessToMission.Remove(processId);
             }
+
+            // Track this PID as handled BEFORE the async work begins.
+            // The health check consults this set to avoid racing with the async exit handler
+            // (e.g. triggering recovery for a process that exited cleanly but whose completion
+            // handler hasn't finished yet).
+            _HandledProcessExits[processId] = DateTime.UtcNow;
 
             string capturedCaptainId = captainId;
             string capturedMissionId = missionId;

@@ -160,15 +160,17 @@ namespace Armada.Runtimes
                 catch (ObjectDisposedException) { }
                 logWriter?.Dispose();
 
+                // Notify subscribers that the process has exited BEFORE disposing.
+                // Disposing first invalidates the PID, which can cause the health check
+                // to race with the exit handler and trigger spurious recovery.
+                try { OnProcessExited?.Invoke(processId, code); }
+                catch (Exception ex) { _Logging.Warn(_Header + "error in OnProcessExited handler for process " + processId + ": " + ex.Message); }
+
                 // Dispose the Process object to release the working directory handle.
                 // On Windows, undisposed Process objects hold handles on the WorkingDirectory
                 // which prevents dock worktree directories from being deleted.
                 try { process.Dispose(); }
                 catch { }
-
-                // Notify subscribers that the process has exited
-                try { OnProcessExited?.Invoke(processId, code); }
-                catch (Exception ex) { _Logging.Warn(_Header + "error in OnProcessExited handler for process " + processId + ": " + ex.Message); }
             };
             process.EnableRaisingEvents = true;
 

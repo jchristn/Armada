@@ -20,6 +20,9 @@ namespace Armada.Core.Services
         /// <inheritdoc />
         public Func<Mission, Dock, Task>? OnMissionComplete { get; set; }
 
+        /// <inheritdoc />
+        public Func<string, string?>? OnGetMissionOutput { get; set; }
+
         #endregion
 
         #region Private-Members
@@ -326,10 +329,29 @@ namespace Armada.Core.Services
             if (captain == null) throw new ArgumentNullException(nameof(captain));
             if (String.IsNullOrEmpty(missionId)) return;
 
-            Mission? mission = !String.IsNullOrEmpty(captain.TenantId)
-                ? await _Database.Missions.ReadAsync(captain.TenantId, missionId, token).ConfigureAwait(false)
-                : await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
+            Mission? mission = null;
+            if (!String.IsNullOrEmpty(captain.TenantId))
+            {
+                mission = await _Database.Missions.ReadAsync(captain.TenantId, missionId, token).ConfigureAwait(false);
+            }
+            if (mission == null)
+            {
+                mission = await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
+            }
             if (mission == null) return;
+
+            // Idempotency guard: if the mission has already been processed (e.g. by a concurrent
+            // health check or process exit handler), skip to avoid double-processing.
+            if (mission.Status == MissionStatusEnum.WorkProduced ||
+                mission.Status == MissionStatusEnum.Complete ||
+                mission.Status == MissionStatusEnum.Failed ||
+                mission.Status == MissionStatusEnum.Cancelled ||
+                mission.Status == MissionStatusEnum.LandingFailed ||
+                mission.Status == MissionStatusEnum.PullRequestOpen)
+            {
+                _Logging.Debug(_Header + "mission " + missionId + " already in post-work state " + mission.Status + " — skipping completion handler");
+                return;
+            }
 
             // Mark mission as work produced (agent finished, landing not yet attempted)
             mission.Status = MissionStatusEnum.WorkProduced;
@@ -383,6 +405,17 @@ namespace Armada.Core.Services
                 catch (Exception ex)
                 {
                     _Logging.Warn(_Header + "error capturing diff for mission " + mission.Id + ": " + ex.Message);
+                }
+            }
+
+            // Capture accumulated agent stdout output before pipeline handoff
+            if (OnGetMissionOutput != null)
+            {
+                string? agentOutput = OnGetMissionOutput(mission.Id);
+                if (!String.IsNullOrEmpty(agentOutput))
+                {
+                    mission.AgentOutput = agentOutput;
+                    await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
                 }
             }
 
@@ -880,7 +913,17 @@ namespace Armada.Core.Services
 
                     return; // Architect special handling complete, skip normal handoff
                 }
-                // If no [ARMADA:MISSION] markers found, fall through to normal handoff
+
+                // Architect produced no [ARMADA:MISSION] markers -- mark as failed so it can be
+                // retried rather than handing off empty context to downstream Worker missions.
+                _Logging.Warn(_Header + "architect mission " + completedMission.Id +
+                    " produced no [ARMADA:MISSION] markers -- marking as failed");
+                completedMission.Status = MissionStatusEnum.Failed;
+                completedMission.FailureReason = "Architect produced no [ARMADA:MISSION] markers in output";
+                completedMission.CompletedUtc = DateTime.UtcNow;
+                completedMission.LastUpdateUtc = DateTime.UtcNow;
+                await _Database.Missions.UpdateAsync(completedMission, token).ConfigureAwait(false);
+                return;
             }
 
             foreach (Mission nextMission in dependentMissions)
@@ -1011,7 +1054,9 @@ namespace Armada.Core.Services
         {
             List<ParsedArchitectMission> results = new List<ParsedArchitectMission>();
 
-            // Look in diff snapshot first, then description
+            // Look in diff snapshot first, then description, then the mission log file.
+            // Architect agents typically output [ARMADA:MISSION] markers to stdout (captured
+            // in the mission log) rather than making file changes (which would appear in DiffSnapshot).
             string? source = null;
             if (!String.IsNullOrEmpty(architectMission.DiffSnapshot) &&
                 architectMission.DiffSnapshot.Contains("[ARMADA:MISSION]"))
@@ -1022,6 +1067,11 @@ namespace Armada.Core.Services
                      architectMission.Description.Contains("[ARMADA:MISSION]"))
             {
                 source = architectMission.Description;
+            }
+            else if (!String.IsNullOrEmpty(architectMission.AgentOutput) &&
+                     architectMission.AgentOutput.Contains("[ARMADA:MISSION]"))
+            {
+                source = architectMission.AgentOutput;
             }
 
             if (source == null) return results;

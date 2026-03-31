@@ -18,6 +18,12 @@ namespace Armada.Core.Services.Interfaces
         Func<Mission, Dock, Task>? OnMissionComplete { get; set; }
 
         /// <summary>
+        /// Delegate that retrieves and clears accumulated agent stdout output for a mission.
+        /// Wired to AgentLifecycleHandler.GetAndClearMissionOutput at startup.
+        /// </summary>
+        Func<string, string?>? OnGetMissionOutput { get; set; }
+
+        /// <summary>
         /// Try to assign a mission to an available captain.
         /// </summary>
         /// <param name="mission">Mission to assign.</param>

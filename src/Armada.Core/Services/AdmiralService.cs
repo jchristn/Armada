@@ -50,6 +50,9 @@ namespace Armada.Core.Services
         /// <inheritdoc />
         public Func<Mission, Task<bool>>? OnReconcilePullRequest { get; set; }
 
+        /// <inheritdoc />
+        public Func<int, bool>? OnIsProcessExitHandled { get; set; }
+
         #endregion
 
         #region Private-Members
@@ -500,10 +503,17 @@ namespace Armada.Core.Services
                 return;
             }
 
-            // Use captain's tenant to scope the mission read when available
-            Mission? mission = !String.IsNullOrEmpty(captain.TenantId)
-                ? await _Database.Missions.ReadAsync(captain.TenantId, missionId, token).ConfigureAwait(false)
-                : await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
+            // Use captain's tenant to scope the mission read when available.
+            // Fall back to unscoped read if tenant-scoped read fails (tenant mismatch).
+            Mission? mission = null;
+            if (!String.IsNullOrEmpty(captain.TenantId))
+            {
+                mission = await _Database.Missions.ReadAsync(captain.TenantId, missionId, token).ConfigureAwait(false);
+            }
+            if (mission == null)
+            {
+                mission = await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
+            }
             if (mission == null)
             {
                 _Logging.Warn(_Header + "mission " + missionId + " not found during process exit handling");
@@ -703,7 +713,16 @@ namespace Armada.Core.Services
             }
             catch (ArgumentException)
             {
-                // Process no longer exists in process table — treat as unknown failure, not success.
+                // Process no longer exists in process table.
+                // Check if the process exit callback already fired — if so, the async
+                // completion handler is in progress and we should not race it with recovery.
+                if (OnIsProcessExitHandled != null && OnIsProcessExitHandled(processId.Value))
+                {
+                    _Logging.Debug(_Header + "captain " + captain.Id + " process " + processId +
+                        " no longer exists but exit callback already fired — skipping health check to avoid race");
+                    return;
+                }
+
                 // A missing PID could mean the agent crashed, was killed externally, or the OS
                 // recycled the PID. Only a confirmed clean exit should be treated as success.
                 isAlive = false;
