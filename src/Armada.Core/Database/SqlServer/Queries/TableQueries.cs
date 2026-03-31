@@ -261,6 +261,20 @@ namespace Armada.Core.Database.SqlServer.Queries
                     @"
                     IF COL_LENGTH('missions', 'agent_output') IS NULL
                         ALTER TABLE missions ADD agent_output NVARCHAR(MAX);"
+                ),
+                new SchemaMigration(
+                    14,
+                    "Add model to captains for per-captain model selection",
+                    @"
+                    IF COL_LENGTH('captains', 'model') IS NULL
+                        ALTER TABLE captains ADD model NVARCHAR(MAX);"
+                ),
+                new SchemaMigration(
+                    15,
+                    "Add total_runtime_seconds to missions",
+                    @"
+                    IF COL_LENGTH('missions', 'total_runtime_seconds') IS NULL
+                        ALTER TABLE missions ADD total_runtime_seconds FLOAT;"
                 )
             };
         }

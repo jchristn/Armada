@@ -30,5 +30,10 @@ namespace Armada.Server.Mcp
         /// </summary>
         public string? PreferredPersona { get; set; }
 
+        /// <summary>
+        /// AI model to use for this captain. When null, the runtime selects its default model.
+        /// </summary>
+        public string? Model { get; set; }
+
     }
 }

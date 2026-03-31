@@ -83,6 +83,12 @@ namespace Armada.Runtimes
                 args.Add("--dangerously-skip-permissions");
             }
 
+            if (!String.IsNullOrEmpty(Model))
+            {
+                args.Add("--model");
+                args.Add(Model);
+            }
+
             args.Add(prompt);
 
             return args;

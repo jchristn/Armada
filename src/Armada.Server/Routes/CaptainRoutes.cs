@@ -147,6 +147,15 @@ namespace Armada.Server.Routes
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Captain.");
                 captain.TenantId = ctx.TenantId;
                 captain.UserId = ctx.UserId;
+                if (!String.IsNullOrEmpty(captain.Model))
+                {
+                    string? validationError = await ValidateModelAsync(captain.Runtime, captain.Model).ConfigureAwait(false);
+                    if (validationError != null)
+                    {
+                        req.Http.Response.StatusCode = 400;
+                        return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = validationError };
+                    }
+                }
                 captain = await _database.Captains.CreateAsync(captain).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 201;
                 return captain;
@@ -211,6 +220,15 @@ namespace Armada.Server.Routes
                 updated.LastHeartbeatUtc = existing.LastHeartbeatUtc;
                 updated.CreatedUtc = existing.CreatedUtc;
                 updated.LastUpdateUtc = DateTime.UtcNow;
+                if (!String.IsNullOrEmpty(updated.Model))
+                {
+                    string? validationError = await ValidateModelAsync(updated.Runtime, updated.Model).ConfigureAwait(false);
+                    if (validationError != null)
+                    {
+                        req.Http.Response.StatusCode = 400;
+                        return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = validationError };
+                    }
+                }
                 updated = await _database.Captains.UpdateAsync(updated).ConfigureAwait(false);
                 return (object)updated;
             },
@@ -457,6 +475,75 @@ namespace Armada.Server.Routes
                 .WithRequestBody(OpenApiRequestBodyMetadata.Json<DeleteMultipleRequest>("List of captain IDs to delete"))
                 .WithResponse(200, OpenApiResponseMetadata.Json<DeleteMultipleResult>("Delete result summary"))
                 .WithSecurity("ApiKey"));
+        }
+
+        /// <summary>
+        /// Validate a model by briefly starting the agent to check if the model exists.
+        /// Only implemented for ClaudeCode runtime.
+        /// </summary>
+        /// <param name="runtime">Agent runtime type.</param>
+        /// <param name="model">Model identifier to validate.</param>
+        /// <returns>Error message if invalid, null if valid.</returns>
+        private static async Task<string?> ValidateModelAsync(AgentRuntimeEnum runtime, string model)
+        {
+            if (runtime != AgentRuntimeEnum.ClaudeCode)
+                return null;
+
+            try
+            {
+                string command = "claude";
+                if (OperatingSystem.IsWindows())
+                {
+                    string appDataNpm = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                        "npm",
+                        "claude.cmd");
+                    if (File.Exists(appDataNpm))
+                        command = appDataNpm;
+                }
+
+                ProcessStartInfo startInfo = new ProcessStartInfo
+                {
+                    FileName = command,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+                startInfo.ArgumentList.Add("--model");
+                startInfo.ArgumentList.Add(model);
+                startInfo.ArgumentList.Add("--print");
+                startInfo.ArgumentList.Add("Say OK");
+
+                using (Process process = new Process { StartInfo = startInfo })
+                {
+                    process.Start();
+                    using (CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
+                    {
+                        try
+                        {
+                            await process.WaitForExitAsync(cts.Token).ConfigureAwait(false);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            try { process.Kill(entireProcessTree: true); } catch { }
+                            return null; // Timed out but do not block -- assume valid
+                        }
+                    }
+
+                    if (process.ExitCode != 0)
+                    {
+                        string stderr = await process.StandardError.ReadToEndAsync().ConfigureAwait(false);
+                        return "Model validation failed for '" + model + "': " + (String.IsNullOrEmpty(stderr) ? "exit code " + process.ExitCode : stderr.Trim());
+                    }
+                }
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                return "Model validation error: " + ex.Message;
+            }
         }
     }
 }

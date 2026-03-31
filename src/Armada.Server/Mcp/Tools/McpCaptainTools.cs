@@ -68,7 +68,8 @@ namespace Armada.Server.Mcp.Tools
                         runtime = new { type = "string", description = "Agent runtime: ClaudeCode, Codex, Gemini, Cursor, or Custom" },
                         systemInstructions = new { type = "string", description = "System instructions for this captain -- injected into every mission prompt to specialize behavior" },
                         allowedPersonas = new { type = "string", description = "JSON array of persona names this captain can fill, e.g. [\"Worker\",\"Judge\"]. Null means any persona." },
-                        preferredPersona = new { type = "string", description = "Preferred persona for dispatch routing priority" }
+                        preferredPersona = new { type = "string", description = "Preferred persona for dispatch routing priority" },
+                        model = new { type = "string", description = "AI model to use (e.g. claude-sonnet-4-5-20250514). Null means the runtime picks its default." }
                     },
                     required = new[] { "name" }
                 },
@@ -83,6 +84,13 @@ namespace Armada.Server.Mcp.Tools
                     captain.SystemInstructions = request.SystemInstructions;
                     captain.AllowedPersonas = request.AllowedPersonas;
                     captain.PreferredPersona = request.PreferredPersona;
+                    captain.Model = request.Model;
+                    if (!String.IsNullOrEmpty(captain.Model))
+                    {
+                        string? validationError = await ValidateModelAsync(captain.Runtime, captain.Model).ConfigureAwait(false);
+                        if (validationError != null)
+                            return (object)new { Error = validationError };
+                    }
                     captain = await database.Captains.CreateAsync(captain).ConfigureAwait(false);
                     return (object)captain;
                 });
@@ -100,7 +108,8 @@ namespace Armada.Server.Mcp.Tools
                         runtime = new { type = "string", description = "New agent runtime: ClaudeCode, Codex, Gemini, Cursor, or Custom" },
                         systemInstructions = new { type = "string", description = "New system instructions for this captain" },
                         allowedPersonas = new { type = "string", description = "JSON array of persona names this captain can fill, e.g. [\"Worker\",\"Judge\"]. Null means any persona." },
-                        preferredPersona = new { type = "string", description = "Preferred persona for dispatch routing priority" }
+                        preferredPersona = new { type = "string", description = "Preferred persona for dispatch routing priority" },
+                        model = new { type = "string", description = "AI model to use (e.g. claude-sonnet-4-5-20250514). Empty string clears the model." }
                     },
                     required = new[] { "captainId" }
                 },
@@ -120,6 +129,16 @@ namespace Armada.Server.Mcp.Tools
                         captain.AllowedPersonas = request.AllowedPersonas;
                     if (request.PreferredPersona != null)
                         captain.PreferredPersona = request.PreferredPersona;
+                    if (request.Model != null)
+                    {
+                        captain.Model = String.IsNullOrEmpty(request.Model) ? null : request.Model;
+                        if (!String.IsNullOrEmpty(captain.Model))
+                        {
+                            string? validationError = await ValidateModelAsync(captain.Runtime, captain.Model).ConfigureAwait(false);
+                            if (validationError != null)
+                                return (object)new { Error = validationError };
+                        }
+                    }
                     captain.LastUpdateUtc = DateTime.UtcNow;
                     captain = await database.Captains.UpdateAsync(captain).ConfigureAwait(false);
                     return (object)captain;
@@ -288,6 +307,75 @@ namespace Armada.Server.Mcp.Tools
                         string log = String.Join("\n", slice);
                         return (object)new { CaptainId = captainId, Log = log, Lines = slice.Length, TotalLines = totalLines };
                     });
+            }
+        }
+
+        /// <summary>
+        /// Validate a model by briefly starting the agent to check if the model exists.
+        /// Only implemented for ClaudeCode runtime.
+        /// </summary>
+        /// <param name="runtime">Agent runtime type.</param>
+        /// <param name="model">Model identifier to validate.</param>
+        /// <returns>Error message if invalid, null if valid.</returns>
+        private static async Task<string?> ValidateModelAsync(AgentRuntimeEnum runtime, string model)
+        {
+            if (runtime != AgentRuntimeEnum.ClaudeCode)
+                return null;
+
+            try
+            {
+                string command = "claude";
+                if (OperatingSystem.IsWindows())
+                {
+                    string appDataNpm = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                        "npm",
+                        "claude.cmd");
+                    if (File.Exists(appDataNpm))
+                        command = appDataNpm;
+                }
+
+                System.Diagnostics.ProcessStartInfo startInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = command,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+                startInfo.ArgumentList.Add("--model");
+                startInfo.ArgumentList.Add(model);
+                startInfo.ArgumentList.Add("--print");
+                startInfo.ArgumentList.Add("Say OK");
+
+                using (System.Diagnostics.Process process = new System.Diagnostics.Process { StartInfo = startInfo })
+                {
+                    process.Start();
+                    using (CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
+                    {
+                        try
+                        {
+                            await process.WaitForExitAsync(cts.Token).ConfigureAwait(false);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            try { process.Kill(entireProcessTree: true); } catch { }
+                            return null; // Timed out but do not block -- assume valid
+                        }
+                    }
+
+                    if (process.ExitCode != 0)
+                    {
+                        string stderr = await process.StandardError.ReadToEndAsync().ConfigureAwait(false);
+                        return "Model validation failed for '" + model + "': " + (String.IsNullOrEmpty(stderr) ? "exit code " + process.ExitCode : stderr.Trim());
+                    }
+                }
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                return "Model validation error: " + ex.Message;
             }
         }
     }

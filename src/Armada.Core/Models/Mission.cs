@@ -138,6 +138,12 @@ namespace Armada.Core.Models
         public string? FailureReason { get; set; } = null;
 
         /// <summary>
+        /// Total wall-clock runtime in seconds from start to completion.
+        /// Calculated as CompletedUtc - StartedUtc when the mission finishes.
+        /// </summary>
+        public double? TotalRuntimeSeconds { get; set; } = null;
+
+        /// <summary>
         /// Creation timestamp in UTC.
         /// </summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;

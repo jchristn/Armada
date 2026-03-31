@@ -483,6 +483,8 @@ namespace Armada.Server
                 {
                     mission.Status = MissionStatusEnum.Complete;
                     mission.CompletedUtc = DateTime.UtcNow;
+                    if (mission.StartedUtc.HasValue)
+                        mission.TotalRuntimeSeconds = (mission.CompletedUtc.Value - mission.StartedUtc.Value).TotalSeconds;
                     mission.LastUpdateUtc = DateTime.UtcNow;
                     await _Database.Missions.UpdateAsync(mission).ConfigureAwait(false);
                     _Logging.Info(_Header + "mission " + mission.Id + " landed successfully, status set to Complete");
@@ -618,6 +620,8 @@ namespace Armada.Server
                 {
                     mission.Status = MissionStatusEnum.Complete;
                     mission.CompletedUtc = DateTime.UtcNow;
+                    if (mission.StartedUtc.HasValue)
+                        mission.TotalRuntimeSeconds = (mission.CompletedUtc.Value - mission.StartedUtc.Value).TotalSeconds;
                     mission.LastUpdateUtc = DateTime.UtcNow;
                     await _Database.Missions.UpdateAsync(mission).ConfigureAwait(false);
                     _Logging.Info(_Header + "PR reconciler: mission " + mission.Id + " PR merged, status set to Complete");
@@ -675,6 +679,8 @@ namespace Armada.Server
                             {
                                 mission.Status = MissionStatusEnum.Complete;
                                 mission.CompletedUtc = DateTime.UtcNow;
+                                if (mission.StartedUtc.HasValue)
+                                    mission.TotalRuntimeSeconds = (mission.CompletedUtc.Value - mission.StartedUtc.Value).TotalSeconds;
                                 mission.LastUpdateUtc = DateTime.UtcNow;
                                 await _Database.Missions.UpdateAsync(mission).ConfigureAwait(false);
                                 _Logging.Info(_Header + "mission " + missionId + " PR merged, status set to Complete");

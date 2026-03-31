@@ -7,7 +7,7 @@
 <p align="center">
   <strong>Reduce context switching across projects. Keep agent work in queryable memory.</strong>
   <br />
-  <em>v0.4.0 alpha -- APIs and schemas may change</em>
+  <em>v0.5.0 alpha -- APIs and schemas may change</em>
 </p>
 
 <p align="center">
@@ -876,6 +876,14 @@ v0.3.0 introduces multi-tenant support. The database schema is automatically mig
 - **New settings:** `AllowSelfRegistration` (default: `true`), `RequireAuthForShutdown` (default: `false`), `SessionTokenEncryptionKey` (auto-generated)
 
 No manual changes to `settings.json` are required. Existing `ApiKey` settings continue to work.
+
+### v0.4.0 to v0.5.0
+
+v0.5.0 adds per-captain model selection and mission total runtime tracking. The database schema is automatically migrated on first startup. Key changes:
+
+- New columns: `captains.model`, `missions.total_runtime_seconds`
+- Captain model is validated on create/update by briefly starting the agent
+- Standalone migration scripts available in `migrations/` for manual execution
 
 ### v0.3.0 to v0.4.0
 

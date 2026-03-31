@@ -413,6 +413,16 @@ namespace Armada.Core.Database.Mysql
                     15,
                     "Add agent_output to missions",
                     TableQueries.MigrationV15Statements
+                ),
+                new SchemaMigration(
+                    16,
+                    "Add model to captains for per-captain model selection",
+                    TableQueries.MigrationV16Statements
+                ),
+                new SchemaMigration(
+                    17,
+                    "Add total_runtime_seconds to missions",
+                    TableQueries.MigrationV17Statements
                 )
             };
         }
@@ -555,6 +565,7 @@ namespace Armada.Core.Database.Mysql
             captain.LastHeartbeatUtc = FromIso8601Nullable(reader["last_heartbeat_utc"]);
             captain.CreatedUtc = FromIso8601(reader["created_utc"].ToString()!);
             captain.LastUpdateUtc = FromIso8601(reader["last_update_utc"].ToString()!);
+            try { captain.Model = NullableString(reader["model"]); } catch { }
             return captain;
         }
 

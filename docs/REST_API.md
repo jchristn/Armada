@@ -1,6 +1,6 @@
 # Armada REST API Reference
 
-**Version:** 0.4.0
+**Version:** 0.5.0
 **Base URL:** `http://localhost:7890`
 **Content-Type:** `application/json`
 
@@ -1497,6 +1497,7 @@ Register a new captain (AI agent).
 |---|---|---|---|
 | `Name` | string | yes | Captain name |
 | `Runtime` | string | no | Agent runtime type (default: `ClaudeCode`) |
+| `Model` | string | no | AI model to use (null = runtime default) |
 
 **Response:** `201 Created` - [Captain](#captain)
 
@@ -2872,6 +2873,7 @@ An atomic unit of work assigned to a captain.
   "CreatedUtc": "2026-03-07T12:00:00Z",
   "StartedUtc": "2026-03-07T12:05:00Z",
   "CompletedUtc": null,
+  "TotalRuntimeSeconds": null,
   "LastUpdateUtc": "2026-03-07T12:10:00Z"
 }
 ```
@@ -2896,6 +2898,7 @@ An atomic unit of work assigned to a captain.
 | `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
 | `StartedUtc` | datetime? | null | Work start timestamp (UTC) |
 | `CompletedUtc` | datetime? | null | Completion timestamp (UTC) |
+| `TotalRuntimeSeconds` | double? | null | Total runtime in seconds (calculated at completion) |
 | `LastUpdateUtc` | datetime | now | Last update timestamp (UTC) |
 
 ---
@@ -2909,6 +2912,7 @@ A worker AI agent instance executing missions.
   "Id": "cpt_abc123",
   "Name": "captain-1",
   "Runtime": "ClaudeCode",
+  "Model": null,
   "SystemInstructions": null,
   "State": "Idle",
   "CurrentMissionId": null,
@@ -2926,6 +2930,7 @@ A worker AI agent instance executing missions.
 | `Id` | string | auto-generated | Unique ID with `cpt_` prefix |
 | `Name` | string | `"Captain"` | Captain name |
 | `Runtime` | [AgentRuntimeEnum](#agentruntimeenum) | `ClaudeCode` | Agent runtime type |
+| `Model` | string? | null | AI model to use (null = runtime default). Validated on create/update. |
 | `SystemInstructions` | string? | null | Per-captain system instructions injected into every mission prompt |
 | `State` | [CaptainStateEnum](#captainstateenum) | `Idle` | Current state |
 | `CurrentMissionId` | string? | null | Currently assigned mission ID |

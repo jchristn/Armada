@@ -22,6 +22,12 @@ namespace Armada.Runtimes
         public abstract bool SupportsResume { get; }
 
         /// <summary>
+        /// AI model override. When set, passed to the runtime CLI via --model flag.
+        /// When null, the runtime uses its default model.
+        /// </summary>
+        public string? Model { get; set; } = null;
+
+        /// <summary>
         /// Event raised when the agent writes a line to stdout.
         /// </summary>
         public event Action<int, string>? OnOutputReceived;

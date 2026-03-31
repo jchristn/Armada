@@ -16,6 +16,12 @@ namespace Armada.Runtimes.Interfaces
         bool SupportsResume { get; }
 
         /// <summary>
+        /// AI model override. When set, passed to the runtime CLI via --model flag.
+        /// When null, the runtime uses its default model.
+        /// </summary>
+        string? Model { get; set; }
+
+        /// <summary>
         /// Event raised when the agent writes a line to stdout.
         /// The int parameter is the process ID, the string is the output line.
         /// </summary>

@@ -154,6 +154,7 @@ namespace Armada.Server
         {
             _Logging.Info(_Header + "launching " + captain.Runtime + " agent for captain " + captain.Id);
             Armada.Runtimes.Interfaces.IAgentRuntime runtime = _RuntimeFactory.Create(captain.Runtime);
+            runtime.Model = captain.Model;
             string launchKey = captain.Id + ":" + mission.Id;
             _PendingLaunches[launchKey] = (captain.Id, mission.Id);
             runtime.OnProcessStarted += processId => HandleProcessStarted(processId, launchKey);

@@ -4,6 +4,23 @@ All notable changes to Armada are documented in this file.
 
 ---
 
+## v0.5.0
+
+### Added
+- Per-captain model selection: captains can now specify an AI model that overrides the runtime default
+- Model validation on create/update: Armada briefly starts the agent to verify the model exists
+- Mission total runtime tracking: totalRuntimeSeconds field calculated at mission completion
+- Database migrations for captains.model and missions.total_runtime_seconds across all four backends
+- Migration script: migrate_v0.4.0_to_v0.5.0.sh / .bat
+
+### Changed
+- Dashboard: Captain detail page shows and edits Model field
+- Dashboard: Mission detail page shows Total Runtime
+- Dashboard: Removed duplicate task preview from dispatch page
+- Bumped version to 0.5.0 across all components
+
+---
+
 ## v0.4.0
 
 ### Personas and Pipelines

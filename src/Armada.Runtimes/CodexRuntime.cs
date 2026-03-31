@@ -86,6 +86,12 @@ namespace Armada.Runtimes
                 args.Add("--dangerously-bypass-approvals-and-sandbox");
             }
 
+            if (!String.IsNullOrEmpty(Model))
+            {
+                args.Add("--model");
+                args.Add(Model);
+            }
+
             args.Add(prompt);
 
             return args;

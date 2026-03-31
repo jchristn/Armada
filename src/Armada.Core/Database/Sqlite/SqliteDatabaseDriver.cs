@@ -368,6 +368,12 @@ namespace Armada.Core.Database.Sqlite
             return Convert.ToInt32(value);
         }
 
+        internal static double? NullableDouble(object value)
+        {
+            if (value == null || value == DBNull.Value) return null;
+            return Convert.ToDouble(value);
+        }
+
         /// <summary>
         /// Convert a SqliteDataReader row to a Fleet model.
         /// </summary>
@@ -449,6 +455,7 @@ namespace Armada.Core.Database.Sqlite
             captain.LastUpdateUtc = FromIso8601(reader["last_update_utc"].ToString()!);
             try { captain.AllowedPersonas = NullableString(reader["allowed_personas"]); } catch { }
             try { captain.PreferredPersona = NullableString(reader["preferred_persona"]); } catch { }
+            try { captain.Model = NullableString(reader["model"]); } catch { }
             return captain;
         }
 
@@ -485,6 +492,7 @@ namespace Armada.Core.Database.Sqlite
             try { mission.Persona = NullableString(reader["persona"]); } catch { }
             try { mission.DependsOnMissionId = NullableString(reader["depends_on_mission_id"]); } catch { }
             try { mission.FailureReason = NullableString(reader["failure_reason"]); } catch { }
+            try { mission.TotalRuntimeSeconds = NullableDouble(reader["total_runtime_seconds"]); } catch { }
             return mission;
         }
 

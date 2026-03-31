@@ -568,6 +568,8 @@ namespace Armada.Core.Services
                     mission.FailureReason = "Agent process exited with code " + (exitCode?.ToString() ?? "unknown") + ", recovery exhausted";
                     mission.ProcessId = null;
                     mission.CompletedUtc = DateTime.UtcNow;
+                    if (mission.StartedUtc.HasValue)
+                        mission.TotalRuntimeSeconds = (mission.CompletedUtc.Value - mission.StartedUtc.Value).TotalSeconds;
                     mission.LastUpdateUtc = DateTime.UtcNow;
                     await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
                     _Logging.Warn(_Header + "mission " + missionId + " marked failed (process exit code " + (exitCode?.ToString() ?? "unknown") + ", recovery exhausted)");
