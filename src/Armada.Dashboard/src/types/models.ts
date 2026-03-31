@@ -127,6 +127,7 @@ export interface Captain {
   tenantId: string | null;
   name: string;
   runtime: string;
+  model?: string;
   systemInstructions: string | null;
   allowedPersonas: string | null;
   preferredPersona: string | null;
@@ -159,6 +160,7 @@ export interface Mission {
   prUrl: string | null;
   commitHash: string | null;
   failureReason: string | null;
+  totalRuntimeSeconds?: number;
   diffSnapshot: string | null;
   createdUtc: string;
   startedUtc: string | null;

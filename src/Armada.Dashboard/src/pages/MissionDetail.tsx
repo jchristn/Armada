@@ -458,6 +458,14 @@ export default function MissionDetail() {
           </span>
         </div>
         <div className="detail-field">
+          <span className="detail-label">Total Runtime</span>
+          <span>{mission.totalRuntimeSeconds != null
+            ? (mission.totalRuntimeSeconds >= 60
+              ? `${Math.floor(mission.totalRuntimeSeconds / 60)}m ${Math.round(mission.totalRuntimeSeconds % 60)}s`
+              : `${Math.round(mission.totalRuntimeSeconds)}s`)
+            : '-'}</span>
+        </div>
+        <div className="detail-field">
           <span className="detail-label">Last Updated</span>
           <span title={mission.lastUpdateUtc}>
             {formatTimeRelative(mission.lastUpdateUtc)}
