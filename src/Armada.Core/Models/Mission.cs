@@ -153,6 +153,12 @@ namespace Armada.Core.Models
         public DateTime? CompletedUtc { get; set; } = null;
 
         /// <summary>
+        /// Total runtime in seconds from mission start to completion.
+        /// Null when the mission has not yet completed.
+        /// </summary>
+        public double? TotalRuntimeSeconds { get; set; } = null;
+
+        /// <summary>
         /// Last update timestamp in UTC.
         /// </summary>
         public DateTime LastUpdateUtc { get; set; } = DateTime.UtcNow;
