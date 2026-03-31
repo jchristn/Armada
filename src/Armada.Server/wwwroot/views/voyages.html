@@ -1,0 +1,93 @@
+            <div class="view-header">
+                <div>
+                    <h2>Voyages</h2>
+                    <p class="text-dim view-subtitle">Track batches of related missions. Voyages group work into coordinated efforts with progress tracking.</p>
+                </div>
+                <div class="view-actions">
+                    <select class="filter-select" x-model="voyageFilters.status" @change="voyagePaging.pageNumber = 1; loadVoyages()" title="Filter voyages by lifecycle status">
+                        <option value="">All Statuses</option>
+                        <option value="Open">Open</option>
+                        <option value="InProgress">InProgress</option>
+                        <option value="Complete">Complete</option>
+                        <option value="Cancelled">Cancelled</option>
+                    </select>
+                    <select class="filter-select" x-model="voyageVesselFilter" title="Filter voyages by target vessel">
+                        <option value="">All Vessels</option>
+                        <template x-for="v in allVessels" :key="v.id">
+                            <option :value="v.id" x-text="v.name"></option>
+                        </template>
+                    </select>
+                    <input type="text" class="filter-input" x-model="listSearch" placeholder="Search..." title="Search voyages by title or ID">
+                    <button class="btn btn-sm btn-danger" x-show="selectedVoyages.length > 0" @click="deleteSelectedVoyages()" title="Delete all selected voyages">Delete Selected (<span x-text="selectedVoyages.length"></span>)</button>
+                    <button class="btn btn-primary btn-sm" @click="openCreateVoyage()" title="Create a new voyage with multiple missions">+ Voyage</button>
+                </div>
+            </div>
+            <!-- Voyages Pagination -->
+            <div class="pagination-bar" x-show="voyagePaging.totalPages > 0">
+                <div class="pagination-info">
+                    <span class="pagination-records" x-text="voyagePaging.totalRecords + ' records'"></span>
+                    <span class="pagination-timing" x-text="voyagePaging.totalMs.toFixed(1) + 'ms'"></span>
+                    <select class="page-size-select" title="Number of records per page" :value="voyagePaging.pageSize" @change="changePageSize(voyagePaging, $event.target.value, loadVoyages)">
+                        <option value="10">10 / page</option>
+                        <option value="25">25 / page</option>
+                        <option value="50">50 / page</option>
+                        <option value="100">100 / page</option>
+                        <option value="250">250 / page</option>
+                        <option value="500">500 / page</option>
+                        <option value="1000">1000 / page</option>
+                    </select>
+                </div>
+                <div class="pagination-controls">
+                    <button class="btn btn-sm" @click="prevPage(voyagePaging, loadVoyages)" :disabled="voyagePaging.pageNumber <= 1">&larr; Prev</button>
+                    <span class="pagination-page">
+                        Page <input type="number" class="page-input" :value="voyagePaging.pageNumber" min="1" :max="voyagePaging.totalPages"
+                            @change="goToPage(voyagePaging, parseInt($event.target.value), loadVoyages)">
+                        of <span x-text="voyagePaging.totalPages"></span>
+                    </span>
+                    <button class="btn btn-sm" @click="nextPage(voyagePaging, loadVoyages)" :disabled="voyagePaging.pageNumber >= voyagePaging.totalPages">Next &rarr;</button>
+                    <button class="btn btn-sm" @click="loadVoyages()" title="Refresh">&#x21bb;</button>
+                </div>
+            </div>
+            <p class="text-dim" x-show="filteredVoyages().length === 0">No voyages found.</p>
+            <div class="table-wrap" x-show="filteredVoyages().length > 0">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="col-checkbox"><input type="checkbox" @change="$event.target.checked ? selectAllVoyages() : clearVoyageSelection()" :checked="selectedVoyages.length > 0 && selectedVoyages.length === columnFilteredVoyages().length" title="Select all voyages"></th>
+                            <th class="sortable" @click="sortBy('title', voyages)" title="Voyage title -- click to sort">Title<span x-text="sortIcon('title')"></span></th>
+                            <th>ID</th>
+                            <th class="sortable" @click="sortBy('status', voyages)" title="Status -- click to sort">Status<span x-text="sortIcon('status')"></span></th>
+                            <th class="sortable" @click="sortBy('createdUtc', voyages)" title="Created -- click to sort">Created<span x-text="sortIcon('createdUtc')"></span></th>
+                            <th class="text-right">Actions</th>
+                        </tr>
+                        <tr class="column-filter-row">
+                            <td></td>
+                            <td><input type="text" class="col-filter" x-model="voyageColFilters.title" placeholder="Filter..."></td>
+                            <td></td>
+                            <td><input type="text" class="col-filter" x-model="voyageColFilters.status" placeholder="Filter..."></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="voyage in sortedRows(columnFilteredVoyages())" :key="voyage.id">
+                            <tr class="clickable" @click="navigate('voyages', 'voyage-detail', voyage.id)">
+                                <td class="col-checkbox" @click.stop><input type="checkbox" :checked="selectedVoyages.includes(voyage.id)" @change.stop="toggleVoyageSelection(voyage.id)" title="Select this voyage"></td>
+                                <td class="truncate-cell" :title="voyage.title || voyage.id"><strong x-text="voyage.title || voyage.id"></strong></td>
+                                <td class="mono text-dim"><span class="id-display"><span x-text="voyage.id"></span><button class="copy-btn" @click.stop="copyId(voyage.id, $event)" title="Copy ID"></button></span></td>
+                                <td><span class="tag" :class="(voyage.status || '').toLowerCase()" x-text="voyage.status" :title="statusTooltip(voyage.status)"></span></td>
+                                <td class="text-dim" x-text="formatTime(voyage.createdUtc)" :title="formatTimeAbsolute(voyage.createdUtc)" style="white-space:nowrap"></td>
+                                <td class="text-right" @click.stop>
+                                    <div class="action-menu-wrap">
+                                        <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'vyg-' + voyage.id)" title="Actions">&#8942;</button>
+                                        <div class="action-menu-dropdown" x-show="openActionMenu === 'vyg-' + voyage.id" x-cloak>
+                                            <button class="action-menu-item" @click="showJson('Voyage: ' + (voyage.title || voyage.id), voyage.id, voyage); closeActionMenu()">View JSON</button>
+                                            <button class="action-menu-item danger" x-show="voyage.status !== 'Open' && voyage.status !== 'InProgress'" @click="deleteVoyage(voyage.id); closeActionMenu()">Delete</button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>

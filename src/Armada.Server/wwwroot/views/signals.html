@@ -1,0 +1,123 @@
+            <div x-show="!detailView">
+            <div class="view-header">
+                <div>
+                    <h2>Signals</h2>
+                    <p class="text-dim view-subtitle">Messages exchanged between the admiral and captains. View signal payloads and delivery status.</p>
+                </div>
+                <div class="view-actions">
+                    <input type="text" class="filter-input" x-model="listSearch" placeholder="Search..." title="Search signals by type, payload, or ID">
+                    <button class="btn btn-sm btn-danger" x-show="selectedSignals.length > 0" @click="deleteSelectedSignals()" title="Delete all selected signals">Delete Selected (<span x-text="selectedSignals.length"></span>)</button>
+                    <button class="btn btn-primary btn-sm" @click="openSendSignal()" title="Send a new signal to a captain or the admiral">+ Signal</button>
+                </div>
+            </div>
+            <!-- Signals Pagination -->
+            <div class="pagination-bar" x-show="signalPaging.totalPages > 0">
+                <div class="pagination-info">
+                    <span class="pagination-records" x-text="signalPaging.totalRecords + ' records'"></span>
+                    <span class="pagination-timing" x-text="signalPaging.totalMs.toFixed(1) + 'ms'"></span>
+                    <select class="page-size-select" title="Number of records per page" :value="signalPaging.pageSize" @change="changePageSize(signalPaging, $event.target.value, loadSignals)">
+                        <option value="10">10 / page</option>
+                        <option value="25">25 / page</option>
+                        <option value="50">50 / page</option>
+                        <option value="100">100 / page</option>
+                        <option value="250">250 / page</option>
+                        <option value="500">500 / page</option>
+                        <option value="1000">1000 / page</option>
+                    </select>
+                </div>
+                <div class="pagination-controls">
+                    <button class="btn btn-sm" @click="prevPage(signalPaging, loadSignals)" :disabled="signalPaging.pageNumber <= 1">&larr; Prev</button>
+                    <span class="pagination-page">
+                        Page <input type="number" class="page-input" :value="signalPaging.pageNumber" min="1" :max="signalPaging.totalPages"
+                            @change="goToPage(signalPaging, parseInt($event.target.value), loadSignals)">
+                        of <span x-text="signalPaging.totalPages"></span>
+                    </span>
+                    <button class="btn btn-sm" @click="nextPage(signalPaging, loadSignals)" :disabled="signalPaging.pageNumber >= signalPaging.totalPages">Next &rarr;</button>
+                    <button class="btn btn-sm" @click="loadSignals()" title="Refresh">&#x21bb;</button>
+                </div>
+            </div>
+            <div class="table-wrap" x-show="signals.length > 0">
+                <table>
+                    <thead>
+                        <tr><th class="col-checkbox"><input type="checkbox" @change="$event.target.checked ? selectAllSignals() : clearSignalSelection()" :checked="selectedSignals.length > 0 && selectedSignals.length === signals.length" title="Select all signals"></th><th title="Unique signal identifier">ID</th><th title="Signal type (Nudge, Mail, Assignment, Progress, Completion, Error)">Type</th><th title="Sender -- captain or Admiral">From</th><th title="Recipient -- captain or Admiral">To</th><th title="Signal message content">Payload</th><th title="When the signal was created">Time</th><th>Action</th></tr>
+                        <tr class="column-filter-row">
+                            <td></td>
+                            <td></td>
+                            <td><input type="text" class="col-filter" x-model="signalColFilters.type" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="signalColFilters.from" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="signalColFilters.to" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="signalColFilters.payload" placeholder="Filter..."></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="sig in columnFilteredSignals()" :key="sig.id">
+                            <tr>
+                                <td class="col-checkbox"><input type="checkbox" :checked="selectedSignals.includes(sig.id)" @change="toggleSignalSelection(sig.id)" title="Select this signal"></td>
+                                <td class="mono text-dim"><span class="id-display"><span x-text="sig.id"></span><button class="copy-btn" @click.stop="copyId(sig.id, $event)" title="Copy ID"></button></span></td>
+                                <td><span class="tag" :class="(sig.type || '').toLowerCase()" x-text="sig.type" :title="statusTooltip(sig.type)"></span></td>
+                                <td><span x-show="sig.fromCaptainId" class="id-display"><span class="mono" x-text="sig.fromCaptainId"></span><button class="copy-btn" @click.stop="copyId(sig.fromCaptainId, $event)" title="Copy ID"></button></span><span x-show="!sig.fromCaptainId">Admiral</span></td>
+                                <td><span x-show="sig.toCaptainId" class="id-display"><span class="mono" x-text="sig.toCaptainId"></span><button class="copy-btn" @click.stop="copyId(sig.toCaptainId, $event)" title="Copy ID"></button></span><span x-show="!sig.toCaptainId">Admiral</span></td>
+                                <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="sig.payload || '-'"></td>
+                                <td class="text-dim" x-text="formatTime(sig.createdUtc)" :title="formatTimeAbsolute(sig.createdUtc)"></td>
+                                <td>
+                                    <div class="action-menu-wrap">
+                                        <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'sig-' + sig.id)" title="Actions">&#8942;</button>
+                                        <div class="action-menu-dropdown" x-show="openActionMenu === 'sig-' + sig.id" x-cloak>
+                                            <button class="action-menu-item" @click="navigate('signals', 'signal-detail', sig.id); closeActionMenu()">Show Details</button>
+                                            <button class="action-menu-item" @click="showJson('Signal: ' + sig.id, sig.id, sig); closeActionMenu()">View JSON</button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-dim" x-show="signals.length === 0">No signals found.</p>
+        </div>
+
+        <!-- Signal Detail -->
+            <div x-show="detailView === 'signal-detail'">
+            <button class="btn btn-sm" @click="goBack()" title="Return to signals list">&larr; Back</button>
+            <template x-if="detail">
+                <div>
+                    <div class="detail-header">
+                        <h2>Signal Details</h2>
+                    </div>
+                    <div class="detail-grid">
+                        <div class="detail-field"><span class="detail-label">ID</span><span class="id-display"><span class="mono" x-text="detail.id"></span><button class="copy-btn" @click.stop="copyId(detail.id, $event)" title="Copy ID"></button></span></div>
+                        <div class="detail-field"><span class="detail-label">Type</span><span class="tag" :class="(detail.type || '').toLowerCase()" x-text="detail.type" :title="statusTooltip(detail.type)"></span></div>
+                        <div class="detail-field"><span class="detail-label">Read</span><span x-text="detail.read ? 'Yes' : 'No'"></span></div>
+                        <div class="detail-field">
+                            <span class="detail-label">From</span>
+                            <template x-if="detail.fromCaptainId">
+                                <a href="#" @click.prevent="navigate('captains', 'captain-detail', detail.fromCaptainId)" x-text="captainName(detail.fromCaptainId)"></a>
+                            </template>
+                            <template x-if="!detail.fromCaptainId">
+                                <span>Admiral</span>
+                            </template>
+                        </div>
+                        <div class="detail-field">
+                            <span class="detail-label">To</span>
+                            <template x-if="detail.toCaptainId">
+                                <a href="#" @click.prevent="navigate('captains', 'captain-detail', detail.toCaptainId)" x-text="captainName(detail.toCaptainId)"></a>
+                            </template>
+                            <template x-if="!detail.toCaptainId">
+                                <span>Admiral</span>
+                            </template>
+                        </div>
+                        <div class="detail-field" x-show="detail.missionId">
+                            <span class="detail-label">Mission</span>
+                            <span class="id-display"><a class="mono" href="#" @click.prevent="navigate('missions', 'mission-detail', detail.missionId)" x-text="detail.missionId"></a><button class="copy-btn" @click.stop="copyId(detail.missionId, $event)" title="Copy ID"></button></span>
+                        </div>
+                        <div class="detail-field"><span class="detail-label">Created</span><span x-text="formatTimeAbsolute(detail.createdUtc)"></span></div>
+                    </div>
+                    <div style="margin-top:1rem">
+                        <h3>Payload</h3>
+                        <pre class="detail-payload" x-text="detail.payload || '(empty)'"></pre>
+                    </div>
+                </div>
+            </template>
+        </div>

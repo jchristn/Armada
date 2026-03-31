@@ -1,0 +1,478 @@
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { useNotifications } from '../context/NotificationContext';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import {
+  getMission,
+  updateMission,
+  deleteMission,
+  purgeMission,
+  getMissionDiff,
+  getMissionLog,
+  restartMission,
+  retryMissionLanding,
+  transitionMission,
+  listVessels,
+  listCaptains,
+} from '../api/client';
+import type { Mission, Vessel, Captain } from '../types/models';
+import ErrorModal from '../components/shared/ErrorModal';
+import StatusBadge from '../components/shared/StatusBadge';
+import ActionMenu from '../components/shared/ActionMenu';
+import ConfirmDialog from '../components/shared/ConfirmDialog';
+import JsonViewer from '../components/shared/JsonViewer';
+import DiffViewer from '../components/shared/DiffViewer';
+import LogViewer from '../components/shared/LogViewer';
+import CopyButton from '../components/shared/CopyButton';
+
+const MISSION_STATUSES = [
+  'Pending', 'Assigned', 'InProgress', 'WorkProduced', 'Testing', 'Review', 'Complete', 'Failed', 'LandingFailed', 'Cancelled',
+];
+
+function formatTimeAbsolute(utc: string | null | undefined): string {
+  if (!utc) return '-';
+  return new Date(utc).toLocaleString();
+}
+
+function formatTimeRelative(utc: string | null | undefined): string {
+  if (!utc) return '';
+  const d = new Date(utc);
+  const diff = Date.now() - d.getTime();
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+  if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+  return Math.floor(diff / 86400000) + 'd ago';
+}
+
+export default function MissionDetail() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+
+  const [mission, setMission] = useState<Mission | null>(null);
+  const [vessels, setVessels] = useState<Vessel[]>([]);
+  const [captains, setCaptains] = useState<Captain[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const { pushToast } = useNotifications();
+
+  // Diff viewer (shared modal)
+  const [diffModal, setDiffModal] = useState<{ open: boolean; title: string; rawDiff: string; loading: boolean }>({ open: false, title: '', rawDiff: '', loading: false });
+
+  // Log viewer (shared modal)
+  const [logModal, setLogModal] = useState<{ open: boolean; title: string; missionId: string; content: string; totalLines: number; lineCount: number }>({ open: false, title: '', missionId: '', content: '', totalLines: 0, lineCount: 200 });
+  const missionLoadedRef = useRef(false);
+
+  // Transition
+  const [showTransition, setShowTransition] = useState(false);
+  const [transitionStatus, setTransitionStatus] = useState('');
+
+  // Edit form
+  const [editModal, setEditModal] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editPriority, setEditPriority] = useState(100);
+  const [editSaving, setEditSaving] = useState(false);
+
+  // JSON viewer
+  const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
+
+  // Confirm
+  const [confirm, setConfirm] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: '', message: '', onConfirm: () => {} });
+
+  // Lookup maps
+  const vesselName = useMemo(() => {
+    const m = new Map<string, string>();
+    vessels.forEach(v => m.set(v.id, v.name));
+    return (vid: string | null | undefined) => vid ? m.get(vid) || vid : '-';
+  }, [vessels]);
+
+  const captainName = useMemo(() => {
+    const m = new Map<string, string>();
+    captains.forEach(c => m.set(c.id, c.name));
+    return (cid: string | null | undefined) => cid ? m.get(cid) || cid : '-';
+  }, [captains]);
+
+  const loadMission = useCallback(async () => {
+    if (!id) return;
+    // Only show loading spinner on initial load, not background refreshes
+    const isInitialLoad = !missionLoadedRef.current;
+    if (isInitialLoad) setLoading(true);
+    try {
+      const m = await getMission(id);
+      setMission(m);
+      missionLoadedRef.current = true;
+      // Only clear error on initial load -- don't dismiss user-facing errors from actions
+      if (isInitialLoad) setError('');
+    } catch (e: unknown) {
+      if (isInitialLoad) setError('Failed to load mission: ' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    loadMission();
+  }, [loadMission]);
+
+  useEffect(() => {
+    listVessels({ pageSize: 1000 }).then(r => setVessels(r.objects || [])).catch(() => {});
+    listCaptains({ pageSize: 1000 }).then(r => setCaptains(r.objects || [])).catch(() => {});
+  }, []);
+
+  async function handleViewDiff() {
+    if (!id) return;
+    setDiffModal({ open: true, title: `Diff: ${mission?.title || id}`, rawDiff: '', loading: true });
+    try {
+      const result = await getMissionDiff(id);
+      setDiffModal(d => ({ ...d, rawDiff: result?.diff || '', loading: false }));
+    } catch {
+      setDiffModal(d => ({ ...d, rawDiff: '', loading: false }));
+    }
+  }
+
+  const fetchLog = useCallback(async (missionId: string, lines: number) => {
+    try {
+      const result = await getMissionLog(missionId, lines);
+      setLogModal(l => ({ ...l, content: result.log || 'No log output', totalLines: result.totalLines || 0 }));
+    } catch (e: unknown) {
+      // Don't replace existing log content on transient fetch failure
+      setLogModal(l => ({
+        ...l,
+        content: l.content && l.content !== 'Loading...'
+          ? l.content
+          : 'Log unavailable: ' + (e instanceof Error ? e.message : String(e))
+      }));
+    }
+  }, []);
+
+  function handleViewLog() {
+    if (!id) return;
+    setLogModal({ open: true, title: `Log: ${mission?.title || id}`, missionId: id, content: 'Loading...', totalLines: 0, lineCount: 200 });
+    fetchLog(id, 200);
+  }
+
+  // Use a ref for loadMission so the log refresh callback identity stays stable
+  const loadMissionRef = useRef(loadMission);
+  loadMissionRef.current = loadMission;
+  const logRefreshCountRef = useRef(0);
+  const handleLogRefresh = useCallback(() => {
+    if (logModal.missionId) fetchLog(logModal.missionId, logModal.lineCount);
+    // Refresh mission status every 5th poll (~5 seconds) to detect completion
+    logRefreshCountRef.current++;
+    if (logRefreshCountRef.current % 5 === 0) loadMissionRef.current();
+  }, [logModal.missionId, logModal.lineCount, fetchLog]);
+
+  const handleLogLineCountChange = useCallback((lines: number) => {
+    setLogModal(l => ({ ...l, lineCount: lines }));
+    if (logModal.missionId) fetchLog(logModal.missionId, lines);
+  }, [logModal.missionId, fetchLog]);
+
+  function openEdit() {
+    if (!mission) return;
+    setEditTitle(mission.title);
+    setEditDescription(mission.description || '');
+    setEditPriority(mission.priority);
+    setEditModal(true);
+  }
+
+  async function handleSaveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!mission) return;
+    setEditSaving(true);
+    try {
+      await updateMission(mission.id, { title: editTitle, description: editDescription, priority: editPriority });
+      setEditModal(false);
+      loadMission();
+    } catch (e: unknown) {
+      setError('Save failed: ' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  async function handleTransition() {
+    if (!mission || !transitionStatus) return;
+    try {
+      await transitionMission(mission.id, { status: transitionStatus });
+      setShowTransition(false);
+      setTransitionStatus('');
+      loadMission();
+    } catch (e: unknown) {
+      setError('Transition failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+
+  function handleRestart() {
+    if (!mission) return;
+    setConfirm({
+      open: true,
+      title: 'Restart Mission',
+      message: `Restart mission "${mission.title}"? This will reset the mission to Pending status.`,
+      onConfirm: async () => {
+        setConfirm(c => ({ ...c, open: false }));
+        try {
+          await restartMission(mission.id);
+          loadMission();
+        } catch (e: unknown) {
+          setError('Restart failed: ' + (e instanceof Error ? e.message : String(e)));
+        }
+      },
+    });
+  }
+
+  function handlePurge() {
+    if (!mission) return;
+    setConfirm({
+      open: true,
+      title: 'Purge Mission',
+      message: `Purge mission "${mission.title}"? This will clean up all associated resources (branches, worktrees, etc.) and cannot be undone.`,
+      onConfirm: async () => {
+        setConfirm(c => ({ ...c, open: false }));
+        try {
+          await purgeMission(mission.id);
+          loadMission();
+        } catch (e: unknown) {
+          setError('Purge failed: ' + (e instanceof Error ? e.message : String(e)));
+        }
+      },
+    });
+  }
+
+  function handleDelete() {
+    if (!mission) return;
+    setConfirm({
+      open: true,
+      title: 'Delete Mission',
+      message: `Permanently delete mission "${mission.title}"? This cannot be undone.`,
+      onConfirm: async () => {
+        setConfirm(c => ({ ...c, open: false }));
+        try {
+          await deleteMission(mission.id);
+          navigate('/missions');
+        } catch (e: unknown) {
+          setError('Delete failed: ' + (e instanceof Error ? e.message : String(e)));
+        }
+      },
+    });
+  }
+
+  if (loading) return <p className="text-dim">Loading...</p>;
+  if (!mission) return <ErrorModal error={error || 'Mission not found.'} onClose={() => navigate('/missions')} />;
+
+  return (
+    <div>
+      {/* Breadcrumb */}
+      <div className="breadcrumb">
+        <Link to="/missions">Missions</Link> <span className="breadcrumb-sep">&gt;</span> <span>{mission.title}</span>
+      </div>
+
+      <div className="detail-header">
+        <h2>{mission.title}</h2>
+        <div className="inline-actions">
+          <button className="btn btn-sm" onClick={handleViewDiff} title="View mission diff">Diff</button>
+          <button className="btn btn-sm" onClick={handleViewLog} title="View mission log">Log</button>
+          {(mission.status === 'WorkProduced' || mission.status === 'LandingFailed') && (
+            <button className="btn btn-sm btn-primary" onClick={async () => { try { await retryMissionLanding(mission.id); pushToast('success', 'Landing succeeded! Mission status updated.'); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : 'Retry landing failed.'); } }} title="Rebase the mission branch and re-attempt merge into the target branch">Retry Landing</button>
+          )}
+          <ActionMenu id={`mission-action-${mission.id}`} items={[
+            { label: 'Edit', onClick: openEdit },
+            { label: 'View Diff', onClick: handleViewDiff },
+            { label: 'View Log', onClick: handleViewLog },
+            { label: 'Transition Status', onClick: () => setShowTransition(true) },
+            { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `Mission: ${mission.title}`, data: mission }) },
+            { label: 'Restart', onClick: handleRestart },
+            ...((mission.status === 'WorkProduced' || mission.status === 'LandingFailed') ? [{ label: 'Retry Landing', onClick: async () => { try { await retryMissionLanding(mission.id); pushToast('success', 'Landing succeeded! Mission status updated.'); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : 'Retry landing failed.'); } } }] : []),
+            { label: 'Purge', danger: true, onClick: handlePurge },
+            { label: 'Delete', danger: true, onClick: handleDelete },
+          ]} />
+        </div>
+      </div>
+
+      <ErrorModal error={error} onClose={() => setError('')} />
+
+      <JsonViewer open={jsonData.open} title={jsonData.title} data={jsonData.data} onClose={() => setJsonData({ open: false, title: '', data: null })} />
+      <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
+        onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
+      <DiffViewer
+        open={diffModal.open}
+        title={diffModal.title}
+        rawDiff={diffModal.rawDiff}
+        loading={diffModal.loading}
+        onClose={() => setDiffModal({ open: false, title: '', rawDiff: '', loading: false })}
+      />
+      <LogViewer
+        open={logModal.open}
+        title={logModal.title}
+        content={logModal.content}
+        totalLines={logModal.totalLines}
+        completed={mission != null && ['Complete', 'Failed', 'Cancelled', 'WorkProduced', 'LandingFailed'].includes(mission.status)}
+        onClose={() => setLogModal({ open: false, title: '', missionId: '', content: '', totalLines: 0, lineCount: 200 })}
+        onRefresh={handleLogRefresh}
+        onLineCountChange={handleLogLineCountChange}
+      />
+
+      {/* Edit Modal */}
+      {editModal && (
+        <div className="modal-overlay" onClick={() => setEditModal(false)}>
+          <form className="modal" onClick={e => e.stopPropagation()} onSubmit={handleSaveEdit}>
+            <h3>Edit Mission</h3>
+            <label>Title<input value={editTitle} onChange={e => setEditTitle(e.target.value)} required /></label>
+            <label>Description<textarea value={editDescription} onChange={e => setEditDescription(e.target.value)} rows={3} /></label>
+            <label>Priority<input type="number" value={editPriority} onChange={e => setEditPriority(Number(e.target.value))} min={0} max={1000} /></label>
+            <div className="modal-actions">
+              <button type="submit" className="btn btn-primary" disabled={editSaving}>{editSaving ? 'Saving...' : 'Save'}</button>
+              <button type="button" className="btn" onClick={() => setEditModal(false)}>Cancel</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Transition Modal */}
+      {showTransition && (
+        <div className="modal-overlay" onClick={() => setShowTransition(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>Transition Mission Status</h3>
+            <p className="text-dim">Current status: <StatusBadge status={mission.status} /></p>
+            <label style={{ marginTop: 12 }}>
+              New Status
+              <select value={transitionStatus} onChange={e => setTransitionStatus(e.target.value)}>
+                <option value="">Select status...</option>
+                {MISSION_STATUSES.map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </label>
+            <div className="modal-actions">
+              <button className="btn btn-primary" onClick={handleTransition} disabled={!transitionStatus}>Transition</button>
+              <button className="btn" onClick={() => setShowTransition(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mission Info */}
+      <div className="detail-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+        <div className="detail-field">
+          <span className="detail-label">ID</span>
+          <span className="id-display">
+            <span className="mono">{mission.id}</span>
+            <CopyButton text={mission.id} />
+          </span>
+        </div>
+        <div className="detail-field"><span className="detail-label">Tenant ID</span><span className="mono">{mission.tenantId || '-'}</span></div>
+        <div className="detail-field">
+          <span className="detail-label">Status</span>
+          <StatusBadge status={mission.status} />
+        </div>
+        {mission.failureReason && (
+          <div className="detail-field" style={{ gridColumn: '1 / -1' }}>
+            <span className="detail-label">Failure Reason</span>
+            <pre style={{
+              margin: 0,
+              padding: '0.75rem',
+              background: 'rgba(255, 80, 80, 0.08)',
+              border: '1px solid rgba(255, 80, 80, 0.2)',
+              borderRadius: '4px',
+              color: 'var(--text)',
+              fontSize: '0.85em',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              fontFamily: 'monospace'
+            }}>{mission.failureReason}</pre>
+          </div>
+        )}
+        <div className="detail-field"><span className="detail-label">Priority</span><span>{mission.priority}</span></div>
+        <div className="detail-field">
+          <span className="detail-label">Voyage</span>
+          {mission.voyageId
+            ? <Link to={`/voyages/${mission.voyageId}`} className="mono">{mission.voyageId}</Link>
+            : <span>-</span>}
+        </div>
+        <div className="detail-field">
+          <span className="detail-label">Vessel</span>
+          {mission.vesselId
+            ? <Link to={`/vessels/${mission.vesselId}`}>{vesselName(mission.vesselId)}</Link>
+            : <span>-</span>}
+        </div>
+        <div className="detail-field">
+          <span className="detail-label">Captain</span>
+          {mission.captainId
+            ? <Link to={`/captains/${mission.captainId}`}>{captainName(mission.captainId)}</Link>
+            : <span>-</span>}
+        </div>
+        <div className="detail-field">
+          <span className="detail-label">Parent Mission</span>
+          {mission.parentMissionId
+            ? <Link to={`/missions/${mission.parentMissionId}`} className="mono">{mission.parentMissionId}</Link>
+            : <span>-</span>}
+        </div>
+        <div className="detail-field">
+          <span className="detail-label">Persona</span>
+          <span>{mission.persona || <span className="text-dim">Worker</span>}</span>
+        </div>
+        {mission.dependsOnMissionId && (
+          <div className="detail-field">
+            <span className="detail-label">Depends On</span>
+            <Link to={`/missions/${mission.dependsOnMissionId}`} className="mono">{mission.dependsOnMissionId}</Link>
+          </div>
+        )}
+        {mission.status === 'WorkProduced' && mission.dependsOnMissionId === null && mission.persona && mission.persona !== 'Worker' && (
+          <div className="detail-field" style={{ gridColumn: '1 / -1' }}>
+            <span className="detail-label">Pipeline Status</span>
+            <span className="text-dim">Work complete -- handed off to the next pipeline stage</span>
+          </div>
+        )}
+        <div className="detail-field"><span className="detail-label">Branch Name</span><span className="mono">{mission.branchName || '-'}</span></div>
+        <div className="detail-field">
+          <span className="detail-label">Dock</span>
+          {mission.dockId
+            ? <Link to={`/docks/${mission.dockId}`} className="mono">{mission.dockId}</Link>
+            : <span>-</span>}
+        </div>
+        <div className="detail-field"><span className="detail-label">Process ID</span><span>{mission.processId ?? '-'}</span></div>
+        <div className="detail-field">
+          <span className="detail-label">PR URL</span>
+          {mission.prUrl
+            ? <a href={mission.prUrl} target="_blank" rel="noopener noreferrer">{mission.prUrl}</a>
+            : <span>-</span>}
+        </div>
+        <div className="detail-field"><span className="detail-label">Commit Hash</span><span className="mono">{mission.commitHash || '-'}</span></div>
+        <div className="detail-field">
+          <span className="detail-label">Created</span>
+          <span title={mission.createdUtc}>
+            {formatTimeRelative(mission.createdUtc)}
+            <span className="text-dim"> ({formatTimeAbsolute(mission.createdUtc)})</span>
+          </span>
+        </div>
+        <div className="detail-field">
+          <span className="detail-label">Started</span>
+          <span title={formatTimeAbsolute(mission.startedUtc)}>
+            {formatTimeRelative(mission.startedUtc) || '-'}
+            {mission.startedUtc && <span className="text-dim"> ({formatTimeAbsolute(mission.startedUtc)})</span>}
+          </span>
+        </div>
+        <div className="detail-field">
+          <span className="detail-label">Completed</span>
+          <span title={formatTimeAbsolute(mission.completedUtc)}>
+            {formatTimeRelative(mission.completedUtc) || '-'}
+            {mission.completedUtc && <span className="text-dim"> ({formatTimeAbsolute(mission.completedUtc)})</span>}
+          </span>
+        </div>
+        <div className="detail-field">
+          <span className="detail-label">Last Updated</span>
+          <span title={mission.lastUpdateUtc}>
+            {formatTimeRelative(mission.lastUpdateUtc)}
+            <span className="text-dim"> ({formatTimeAbsolute(mission.lastUpdateUtc)})</span>
+          </span>
+        </div>
+      </div>
+
+      {/* Description */}
+      {mission.description && (
+        <div style={{ marginTop: '1rem' }}>
+          <h3>Description</h3>
+          <div className="card" style={{ padding: '1rem', whiteSpace: 'pre-wrap' }}>{mission.description}</div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,139 @@
+            <div x-show="!detailView">
+            <div class="view-header">
+                <div>
+                    <h2>Docks</h2>
+                    <p class="text-dim view-subtitle">Git worktrees provisioned for captains. Monitor worktree status, assignments, and branch activity.</p>
+                </div>
+                <div class="view-actions">
+                    <input type="text" class="filter-input" x-model="listSearch" placeholder="Search..." title="Search docks by ID, branch, or vessel">
+                    <select class="filter-select" x-model="dockFilters.status" @change="dockPaging.pageNumber = 1; loadDocks()" title="Filter by dock status">
+                        <option value="">All Status</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                    <button class="btn btn-sm btn-danger" x-show="selectedDocks.length > 0" @click="deleteSelectedDocks()" title="Delete all selected docks">Delete Selected (<span x-text="selectedDocks.length"></span>)</button>
+                </div>
+            </div>
+            <template x-if="docks.length === 0">
+                <p class="text-dim">No docks found.</p>
+            </template>
+            <!-- Docks Pagination -->
+            <div class="pagination-bar" x-show="dockPaging.totalPages > 0">
+                <div class="pagination-info">
+                    <span class="pagination-records" x-text="dockPaging.totalRecords + ' records'"></span>
+                    <span class="pagination-timing" x-text="dockPaging.totalMs.toFixed(1) + 'ms'"></span>
+                    <select class="page-size-select" title="Number of records per page" :value="dockPaging.pageSize" @change="changePageSize(dockPaging, $event.target.value, loadDocks)">
+                        <option value="10">10 / page</option>
+                        <option value="25">25 / page</option>
+                        <option value="50">50 / page</option>
+                        <option value="100">100 / page</option>
+                        <option value="250">250 / page</option>
+                        <option value="500">500 / page</option>
+                        <option value="1000">1000 / page</option>
+                    </select>
+                </div>
+                <div class="pagination-controls">
+                    <button class="btn btn-sm" @click="prevPage(dockPaging, loadDocks)" :disabled="dockPaging.pageNumber <= 1">&larr; Prev</button>
+                    <span class="pagination-page">
+                        Page <input type="number" class="page-input" :value="dockPaging.pageNumber" min="1" :max="dockPaging.totalPages"
+                            @change="goToPage(dockPaging, parseInt($event.target.value), loadDocks)">
+                        of <span x-text="dockPaging.totalPages"></span>
+                    </span>
+                    <button class="btn btn-sm" @click="nextPage(dockPaging, loadDocks)" :disabled="dockPaging.pageNumber >= dockPaging.totalPages">Next &rarr;</button>
+                    <button class="btn btn-sm" @click="loadDocks()" title="Refresh">&#x21bb;</button>
+                </div>
+            </div>
+            <div class="table-wrap" x-show="docks.length > 0">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="col-checkbox"><input type="checkbox" @change="$event.target.checked ? selectAllDocks() : clearDockSelection()" :checked="selectedDocks.length > 0 && selectedDocks.length === docks.length" title="Select all docks"></th>
+                            <th class="sortable" @click="sortBy('id', docks)" title="Unique dock identifier -- click to sort">ID<span x-text="sortIcon('id')"></span></th>
+                            <th class="sortable" @click="sortBy('vesselId', docks)" title="Vessel this dock belongs to -- click to sort">Vessel<span x-text="sortIcon('vesselId')"></span></th>
+                            <th title="Captain currently using this dock">Captain</th>
+                            <th class="sortable" @click="sortBy('branchName', docks)" title="Git branch checked out -- click to sort">Branch<span x-text="sortIcon('branchName')"></span></th>
+                            <th class="sortable" @click="sortBy('active', docks)" title="Whether the dock is active -- click to sort">Status<span x-text="sortIcon('active')"></span></th>
+                            <th class="sortable" @click="sortBy('createdUtc', docks)" title="When the dock was created -- click to sort">Created<span x-text="sortIcon('createdUtc')"></span></th>
+                            <th>Actions</th>
+                        </tr>
+                        <tr class="column-filter-row">
+                            <td></td>
+                            <td></td>
+                            <td><input type="text" class="col-filter" x-model="dockColFilters.vessel" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="dockColFilters.captain" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="dockColFilters.branch" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="dockColFilters.status" placeholder="Filter..."></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="dock in sortedRows(columnFilteredDocks())" :key="dock.id">
+                            <tr>
+                                <td class="col-checkbox"><input type="checkbox" :checked="selectedDocks.includes(dock.id)" @change="toggleDockSelection(dock.id)" title="Select this dock"></td>
+                                <td class="clickable" @click="navigate('docks', 'dock-detail', dock.id)">
+                                    <div class="text-dim id-display"><span class="mono" x-text="dock.id"></span><button class="copy-btn" @click.stop="copyId(dock.id, $event)" title="Copy ID"></button></div>
+                                </td>
+                                <td>
+                                    <span x-show="dock.vesselId" class="id-display"><a class="mono" href="#" @click.prevent="navigate('fleets', 'vessel-detail', dock.vesselId)" x-text="vesselName(dock.vesselId)"></a><button class="copy-btn" @click.stop="copyId(dock.vesselId, $event)" title="Copy ID"></button></span>
+                                    <span x-show="!dock.vesselId">-</span>
+                                </td>
+                                <td>
+                                    <span x-show="dock.captainId" class="id-display"><a class="mono" href="#" @click.prevent="navigate('captains', 'captain-detail', dock.captainId)" x-text="captainName(dock.captainId)"></a><button class="copy-btn" @click.stop="copyId(dock.captainId, $event)" title="Copy ID"></button></span>
+                                    <span x-show="!dock.captainId">-</span>
+                                </td>
+                                <td class="mono text-dim" x-text="dock.branchName || '-'"></td>
+                                <td><span class="tag" :class="dock.active ? 'active' : 'inactive'" x-text="dock.active ? 'Active' : 'Inactive'" :title="statusTooltip(dock.active ? 'Active' : 'Inactive')"></span></td>
+                                <td class="text-dim" x-text="formatTime(dock.createdUtc)" :title="formatTimeAbsolute(dock.createdUtc)"></td>
+                                <td>
+                                    <div class="action-menu-wrap">
+                                        <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'dock-' + dock.id)" title="Actions">&#8942;</button>
+                                        <div class="action-menu-dropdown" x-show="openActionMenu === 'dock-' + dock.id" x-cloak>
+                                            <button class="action-menu-item" @click="showJson('Dock: ' + dock.id, dock.id, dock); closeActionMenu()">View JSON</button>
+                                            <button class="action-menu-item danger" @click="deleteDock(dock.id); closeActionMenu()">Delete</button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Dock Detail -->
+            <div x-show="detailView === 'dock-detail'">
+            <button class="btn btn-sm" @click="goBack()" title="Return to docks list">&larr; Back</button>
+            <template x-if="detail">
+                <div>
+                    <div class="detail-header">
+                        <h2>Dock Details</h2>
+                        <div class="inline-actions">
+                            <div class="action-menu-wrap">
+                                <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'dock-detail-' + detail.id)" title="Actions">&#8942;</button>
+                                <div class="action-menu-dropdown" x-show="openActionMenu === 'dock-detail-' + detail.id" x-cloak>
+                                    <button class="action-menu-item" @click="showJson('Dock: ' + detail.id, detail.id, detail); closeActionMenu()">View JSON</button>
+                                    <button class="action-menu-item danger" @click="deleteDock(detail.id); closeActionMenu()">Delete</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="detail-grid">
+                        <div class="detail-field"><span class="detail-label">ID</span><span class="id-display"><span class="mono" x-text="detail.id"></span><button class="copy-btn" @click.stop="copyId(detail.id, $event)" title="Copy ID"></button></span></div>
+                        <div class="detail-field"><span class="detail-label">Status</span><span class="tag" :class="detail.active ? 'active' : 'inactive'" x-text="detail.active ? 'Active' : 'Inactive'" :title="statusTooltip(detail.active ? 'Active' : 'Inactive')"></span></div>
+                        <div class="detail-field"><span class="detail-label">Vessel</span>
+                            <span x-show="detail.vesselId" class="id-display"><a class="mono" href="#" @click.prevent="navigate('fleets', 'vessel-detail', detail.vesselId)" x-text="vesselName(detail.vesselId)"></a><button class="copy-btn" @click.stop="copyId(detail.vesselId, $event)" title="Copy ID"></button></span>
+                            <span x-show="!detail.vesselId">-</span>
+                        </div>
+                        <div class="detail-field"><span class="detail-label">Captain</span>
+                            <span x-show="detail.captainId" class="id-display"><a class="mono" href="#" @click.prevent="navigate('captains', 'captain-detail', detail.captainId)" x-text="captainName(detail.captainId)"></a><button class="copy-btn" @click.stop="copyId(detail.captainId, $event)" title="Copy ID"></button></span>
+                            <span x-show="!detail.captainId">-</span>
+                        </div>
+                        <div class="detail-field"><span class="detail-label">Branch</span><span class="mono" x-text="detail.branchName || '-'"></span></div>
+                        <div class="detail-field"><span class="detail-label">Worktree Path</span><span class="mono" x-text="detail.worktreePath || '-'" style="word-break:break-all"></span></div>
+                        <div class="detail-field"><span class="detail-label">Created</span><span x-text="formatTimeAbsolute(detail.createdUtc)"></span></div>
+                        <div class="detail-field"><span class="detail-label">Last Updated</span><span x-text="formatTimeAbsolute(detail.lastUpdateUtc)"></span></div>
+                    </div>
+                </div>
+            </template>
+        </div>

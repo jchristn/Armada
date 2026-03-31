@@ -1,0 +1,106 @@
+/* Armada Dashboard - Base Styles & Theme Variables */
+
+/* ==================== Light Theme (default) ==================== */
+:root, [data-theme="light"] {
+  --bg: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-hover: #f1f5f9;
+  --border: #e2e8f0;
+  --text: #1e293b;
+  --text-dim: #64748b;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --green: #22c55e;
+  --yellow: #f59e0b;
+  --red: #ef4444;
+  --orange: #f59e0b;
+  --sidebar-bg: #1e293b;
+  --sidebar-text: #94a3b8;
+  --input-bg: #ffffff;
+  --input-border: #cbd5e1;
+  --tag-idle-bg: #e2e8f0; --tag-idle-fg: #475569;
+  --tag-working-bg: #dbeafe; --tag-working-fg: #1d4ed8;
+  --tag-complete-bg: #dcfce7; --tag-complete-fg: #166534;
+  --tag-failed-bg: #fee2e2; --tag-failed-fg: #991b1b;
+  --tag-review-bg: #fef3c7; --tag-review-fg: #92400e;
+  --tag-cancelled-bg: #f3f4f6; --tag-cancelled-fg: #6b7280;
+  --diff-bg: #f8fafc;
+  --modal-overlay: rgba(0, 0, 0, 0.3);
+  --radius: 8px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --mono: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
+}
+
+/* ==================== Dark Theme ==================== */
+[data-theme="dark"] {
+  --bg: #080d1a;
+  --bg-card: #111827;
+  --bg-hover: #1e293b;
+  --border: #1e293b;
+  --text: #f1f5f9;
+  --text-dim: #94a3b8;
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+  --green: #22c55e;
+  --yellow: #fbbf24;
+  --red: #f87171;
+  --orange: #fbbf24;
+  --sidebar-bg: #060a14;
+  --sidebar-text: #94a3b8;
+  --input-bg: #111827;
+  --input-border: #334155;
+  --tag-idle-bg: #1e293b; --tag-idle-fg: #94a3b8;
+  --tag-working-bg: #172554; --tag-working-fg: #60a5fa;
+  --tag-complete-bg: #052e16; --tag-complete-fg: #4ade80;
+  --tag-failed-bg: #450a0a; --tag-failed-fg: #fca5a5;
+  --tag-review-bg: #422006; --tag-review-fg: #fbbf24;
+  --tag-cancelled-bg: #1c1917; --tag-cancelled-fg: #a8a29e;
+  --diff-bg: #0d1117;
+  --modal-overlay: rgba(0, 0, 0, 0.6);
+}
+
+/* ==================== Reset & Base ==================== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+  font-family: var(--font);
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+  line-height: 1.5;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+input, select, textarea {
+  font-family: var(--font);
+  font-size: 0.9rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius);
+  color: var(--text);
+  width: 100%;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent);
+}
+
+button {
+  font-family: var(--font);
+  font-size: 14px;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius);
+  padding: 8px 16px;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s;
+}

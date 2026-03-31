@@ -1,0 +1,6 @@
+# Ignore all runtime data (database, config, logs, etc.)
+*
+# But keep this .gitignore and the directory structure
+!.gitignore
+!.gitkeep
+!logs/

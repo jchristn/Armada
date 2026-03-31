@@ -1,0 +1,208 @@
+            <div class="view-header">
+                <div>
+                    <h2>Missions</h2>
+                    <p class="text-dim view-subtitle">Individual work units assigned to AI captains. Create, monitor, and manage mission execution.</p>
+                </div>
+                <div class="view-actions filter-bar">
+                    <button class="btn btn-primary btn-sm" @click="showDispatchForm = !showDispatchForm; quickDispatchResult = null; dispatchResult = null" title="Create and dispatch missions">+ Dispatch</button>
+                    <select class="filter-select" x-model="missionFilters.status" @change="missionPaging.pageNumber = 1; loadMissions()" title="Filter missions by lifecycle status">
+                        <option value="">All Statuses</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Assigned">Assigned</option>
+                        <option value="InProgress">InProgress</option>
+                        <option value="Testing">Testing</option>
+                        <option value="Review">Review</option>
+                        <option value="Complete">Complete</option>
+                        <option value="Failed">Failed</option>
+                        <option value="Cancelled">Cancelled</option>
+                    </select>
+                    <select class="filter-select" x-model="missionFilters.vesselId" @change="missionPaging.pageNumber = 1; loadMissions()" title="Filter missions by target vessel">
+                        <option value="">All Vessels</option>
+                        <template x-for="v in allVessels" :key="v.id">
+                            <option :value="v.id" x-text="v.name"></option>
+                        </template>
+                    </select>
+                    <select class="filter-select" x-model="missionFilters.captainId" @change="missionPaging.pageNumber = 1; loadMissions()" title="Filter missions by assigned captain">
+                        <option value="">All Captains</option>
+                        <template x-for="c in captains" :key="c.id">
+                            <option :value="c.id" x-text="c.name"></option>
+                        </template>
+                    </select>
+                    <input type="text" class="filter-input" x-model="listSearch" placeholder="Search..." title="Search missions by title or ID">
+                    <button class="btn btn-sm btn-danger" x-show="selectedMissions.length > 0" @click="deleteSelectedMissions()" title="Delete all selected missions">Delete Selected (<span x-text="selectedMissions.length"></span>)</button>
+                </div>
+            </div>
+            <!-- Inline Dispatch Form (two-mode) -->
+            <div class="card" x-show="showDispatchForm" x-transition style="margin-bottom:1rem">
+                <!-- Mode tabs -->
+                <div class="dispatch-tabs">
+                    <button class="dispatch-tab" :class="dispatchMode === 'quick' ? 'active' : ''" @click="dispatchMode = 'quick'" title="Natural language task input with smart splitting">Quick</button>
+                    <button class="dispatch-tab" :class="dispatchMode === 'advanced' ? 'active' : ''" @click="dispatchMode = 'advanced'" title="Manual mission fields with full control">Advanced</button>
+                </div>
+
+                <!-- Quick Mode -->
+                <div x-show="dispatchMode === 'quick'" class="dispatch-form">
+                    <div class="form-group">
+                        <label>Vessel</label>
+                        <select x-model="quickDispatch.vesselId" required title="The repository where missions will be executed">
+                            <option value="">Select a vessel...</option>
+                            <template x-for="v in allVessels" :key="v.id">
+                                <option :value="v.id" x-text="v.name + ' (' + v.id + ')'"></option>
+                            </template>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Tasks</label>
+                        <textarea x-model="quickDispatch.prompt" rows="5" placeholder="Describe your tasks in natural language.&#10;&#10;Use numbered lists, semicolons, or just describe a single task:&#10;1. Add user authentication&#10;2. Create dashboard page&#10;3. Write unit tests" @input="previewQuickTasks()" title="Enter tasks as a numbered list, semicolon-separated, or as a single task"></textarea>
+                    </div>
+                    <!-- Task preview -->
+                    <div x-show="quickParsedTasks.length > 0" class="dispatch-preview">
+                        <div class="dispatch-preview-header">
+                            <span x-text="quickParsedTasks.length + ' task' + (quickParsedTasks.length !== 1 ? 's' : '') + ' detected'"></span>
+                        </div>
+                        <ol class="dispatch-preview-list">
+                            <template x-for="(task, i) in quickParsedTasks" :key="i">
+                                <li x-text="task"></li>
+                            </template>
+                        </ol>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-primary" :disabled="quickDispatching || !quickDispatch.vesselId || !quickDispatch.prompt.trim()" @click="quickDispatchVoyage()" title="Create a voyage with the parsed tasks">
+                            <span x-show="!quickDispatching">Dispatch</span>
+                            <span x-show="quickDispatching">Dispatching...</span>
+                        </button>
+                        <button type="button" class="btn btn-sm" @click="showDispatchForm = false" title="Close">Cancel</button>
+                    </div>
+                    <template x-if="quickDispatchResult">
+                        <div class="alert" :class="quickDispatchResult.ok ? 'alert-success' : 'alert-error'" x-text="quickDispatchResult.message"></div>
+                    </template>
+                </div>
+
+                <!-- Advanced Mode (existing single-mission dispatch) -->
+                <div x-show="dispatchMode === 'advanced'">
+                    <form @submit.prevent="dispatchMission().then(() => { if(dispatchResult?.ok) { showDispatchForm = false; loadMissions(); } })" class="dispatch-form">
+                        <div class="form-group">
+                            <label>Title</label>
+                            <input type="text" x-model="dispatch.title" placeholder="What needs to be done?" required title="Short summary of what the mission should accomplish">
+                        </div>
+                        <div class="form-group">
+                            <label>Description</label>
+                            <textarea x-model="dispatch.description" rows="3" placeholder="Detailed instructions for the AI captain..." title="Detailed instructions and context for the AI captain"></textarea>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group" style="flex:2">
+                                <label>Vessel</label>
+                                <select x-model="dispatch.vesselId" required title="The repository where the mission will be executed">
+                                    <option value="">Select a vessel...</option>
+                                    <template x-for="v in allVessels" :key="v.id">
+                                        <option :value="v.id" x-text="v.name + ' (' + v.id + ')'"></option>
+                                    </template>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex:1">
+                                <label>Priority</label>
+                                <input type="number" x-model="dispatch.priority" min="0" max="1000" placeholder="100" title="Higher priority missions are assigned first (default 100)">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Voyage (optional)</label>
+                            <select x-model="dispatch.voyageId" title="Optionally group this mission into an existing voyage">
+                                <option value="">No voyage</option>
+                                <template x-for="v in voyages.filter(v => v.status === 'Open' || v.status === 'InProgress')" :key="v.id">
+                                    <option :value="v.id" x-text="v.title + ' (' + v.id + ')'"></option>
+                                </template>
+                            </select>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary" :disabled="dispatching" title="Create the mission and assign it to an available captain">
+                                <span x-show="!dispatching">Dispatch Mission</span>
+                                <span x-show="dispatching">Dispatching...</span>
+                            </button>
+                            <button type="button" class="btn btn-sm" @click="showDispatchForm = false" title="Close the dispatch form without creating a mission">Cancel</button>
+                        </div>
+                        <template x-if="dispatchResult">
+                            <div class="alert" :class="dispatchResult.ok ? 'alert-success' : 'alert-error'" x-text="dispatchResult.message"></div>
+                        </template>
+                    </form>
+                </div>
+            </div>
+            <!-- Missions Pagination -->
+            <div class="pagination-bar" x-show="missionPaging.totalPages > 0">
+                <div class="pagination-info">
+                    <span class="pagination-records" x-text="missionPaging.totalRecords + ' records'"></span>
+                    <span class="pagination-timing" x-text="missionPaging.totalMs.toFixed(1) + 'ms'"></span>
+                    <select class="page-size-select" title="Number of records per page" :value="missionPaging.pageSize" @change="changePageSize(missionPaging, $event.target.value, loadMissions)">
+                        <option value="10">10 / page</option>
+                        <option value="25">25 / page</option>
+                        <option value="50">50 / page</option>
+                        <option value="100">100 / page</option>
+                        <option value="250">250 / page</option>
+                        <option value="500">500 / page</option>
+                        <option value="1000">1000 / page</option>
+                    </select>
+                </div>
+                <div class="pagination-controls">
+                    <button class="btn btn-sm" @click="prevPage(missionPaging, loadMissions)" :disabled="missionPaging.pageNumber <= 1">&larr; Prev</button>
+                    <span class="pagination-page">
+                        Page <input type="number" class="page-input" :value="missionPaging.pageNumber" min="1" :max="missionPaging.totalPages"
+                            @change="goToPage(missionPaging, parseInt($event.target.value), loadMissions)">
+                        of <span x-text="missionPaging.totalPages"></span>
+                    </span>
+                    <button class="btn btn-sm" @click="nextPage(missionPaging, loadMissions)" :disabled="missionPaging.pageNumber >= missionPaging.totalPages">Next &rarr;</button>
+                    <button class="btn btn-sm" @click="loadMissions()" title="Refresh">&#x21bb;</button>
+                </div>
+            </div>
+            <div class="table-wrap" x-show="allMissions.length > 0">
+                <table class="mission-table">
+                    <thead>
+                        <tr>
+                            <th class="col-checkbox"><input type="checkbox" @change="$event.target.checked ? selectAllMissions() : clearMissionSelection()" :checked="selectedMissions.length > 0 && selectedMissions.length === allMissions.length" title="Select all missions"></th>
+                            <th class="col-title sortable" @click="sortBy('title', allMissions)" title="Mission title -- click to sort">Mission<span x-text="sortIcon('title')"></span></th>
+                            <th class="col-id">ID</th>
+                            <th class="col-status sortable" @click="sortBy('status', allMissions)" title="Current mission lifecycle state -- click to sort">Status<span x-text="sortIcon('status')"></span></th>
+                            <th class="col-vessel" title="Target repository for this mission">Vessel</th>
+                            <th class="col-captain" title="AI captain assigned to execute this mission">Captain</th>
+                            <th class="col-branch" title="Git branch for this mission's work">Branch</th>
+                            <th class="col-date sortable" @click="sortBy('createdUtc', allMissions)" title="When this mission was created -- click to sort">Created<span x-text="sortIcon('createdUtc')"></span></th>
+                            <th class="col-actions"></th>
+                        </tr>
+                        <tr class="column-filter-row">
+                            <td></td>
+                            <td><input type="text" class="col-filter" x-model="missionColFilters.title" placeholder="Filter..."></td>
+                            <td></td>
+                            <td><input type="text" class="col-filter" x-model="missionColFilters.status" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="missionColFilters.vessel" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="missionColFilters.captain" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="missionColFilters.branch" placeholder="Filter..."></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="m in sortedRows(columnFilteredMissions())" :key="m.id">
+                            <tr class="clickable" @click="navigate('missions', 'mission-detail', m.id)">
+                                <td class="col-checkbox" @click.stop><input type="checkbox" :checked="selectedMissions.includes(m.id)" @change="toggleMissionSelection(m.id)" title="Select this mission"></td>
+                                <td @click.stop class="clickable truncate-cell" @click="openEditMission(m)" :title="m.title"><strong x-text="m.title"></strong></td>
+                                <td class="mono text-dim"><span class="id-display"><span x-text="m.id"></span><button class="copy-btn" @click.stop="copyId(m.id, $event)" title="Copy ID"></button></span></td>
+                                <td><span class="tag" :class="(m.status || '').toLowerCase()" x-text="m.status" :title="statusTooltip(m.status)"></span></td>
+                                <td x-text="vesselName(m.vesselId)"></td>
+                                <td x-text="captainName(m.captainId)"></td>
+                                <td class="text-dim truncate-cell mono" style="font-size:0.8rem" x-text="m.branchName || '-'" :title="m.branchName"></td>
+                                <td class="text-dim" x-text="formatTime(m.createdUtc)" :title="formatTimeAbsolute(m.createdUtc)"></td>
+                                <td @click.stop>
+                                    <div class="action-menu-wrap">
+                                        <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'msn-' + m.id)" title="Actions">&#8942;</button>
+                                        <div class="action-menu-dropdown" x-show="openActionMenu === 'msn-' + m.id" x-cloak>
+                                            <button class="action-menu-item" @click="viewMissionDiff(m.id); closeActionMenu()">Diff</button>
+                                            <button class="action-menu-item" @click="viewMissionLog(m.id); closeActionMenu()">Log</button>
+                                            <button class="action-menu-item" @click="showJson('Mission: ' + m.title, m.id, m); closeActionMenu()">View JSON</button>
+                                            <button class="action-menu-item danger" @click="deleteMission(m.id); closeActionMenu()">Delete</button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-dim" x-show="allMissions.length === 0">No missions found.</p>

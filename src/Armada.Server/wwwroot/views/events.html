@@ -1,0 +1,137 @@
+            <div x-show="!detailView">
+            <div class="view-header">
+                <div>
+                    <h2>Events</h2>
+                    <p class="text-dim view-subtitle">System event log capturing state changes, completions, failures, and other notable occurrences.</p>
+                </div>
+                <div class="view-actions filter-bar">
+                    <input type="text" class="filter-input" x-model="eventFilters.type" @change="eventPaging.pageNumber = 1; loadEvents()" placeholder="Event type..." title="Filter by event type (e.g. mission.completed, captain.started)">
+                    <input type="text" class="filter-input" x-model="eventFilters.captainId" @change="eventPaging.pageNumber = 1; loadEvents()" placeholder="Captain ID..." title="Filter events by captain ID (cpt_...)">
+                    <input type="text" class="filter-input" x-model="eventFilters.missionId" @change="eventPaging.pageNumber = 1; loadEvents()" placeholder="Mission ID..." title="Filter events by mission ID (msn_...)">
+                    <select class="filter-select" x-model="eventFilters.limit" @change="eventPaging.pageNumber = 1; loadEvents()" title="Number of events to load per page">
+                        <option value="25">25</option>
+                        <option value="50" selected>50</option>
+                        <option value="100">100</option>
+                        <option value="200">200</option>
+                    </select>
+                    <button class="btn btn-sm btn-danger" x-show="selectedEvents.length > 0" @click="deleteSelectedEvents()" title="Delete all selected events">Delete Selected (<span x-text="selectedEvents.length"></span>)</button>
+                </div>
+            </div>
+            <!-- Events Pagination -->
+            <div class="pagination-bar" x-show="eventPaging.totalPages > 0">
+                <div class="pagination-info">
+                    <span class="pagination-records" x-text="eventPaging.totalRecords + ' records'"></span>
+                    <span class="pagination-timing" x-text="eventPaging.totalMs.toFixed(1) + 'ms'"></span>
+                    <select class="page-size-select" title="Number of records per page" :value="eventPaging.pageSize" @change="changePageSize(eventPaging, $event.target.value, loadEvents)">
+                        <option value="10">10 / page</option>
+                        <option value="25">25 / page</option>
+                        <option value="50">50 / page</option>
+                        <option value="100">100 / page</option>
+                        <option value="250">250 / page</option>
+                        <option value="500">500 / page</option>
+                        <option value="1000">1000 / page</option>
+                    </select>
+                </div>
+                <div class="pagination-controls">
+                    <button class="btn btn-sm" @click="prevPage(eventPaging, loadEvents)" :disabled="eventPaging.pageNumber <= 1">&larr; Prev</button>
+                    <span class="pagination-page">
+                        Page <input type="number" class="page-input" :value="eventPaging.pageNumber" min="1" :max="eventPaging.totalPages"
+                            @change="goToPage(eventPaging, parseInt($event.target.value), loadEvents)">
+                        of <span x-text="eventPaging.totalPages"></span>
+                    </span>
+                    <button class="btn btn-sm" @click="nextPage(eventPaging, loadEvents)" :disabled="eventPaging.pageNumber >= eventPaging.totalPages">Next &rarr;</button>
+                    <button class="btn btn-sm" @click="loadEvents()" title="Refresh">&#x21bb;</button>
+                </div>
+            </div>
+            <div class="table-wrap" x-show="events.length > 0">
+                <table>
+                    <thead>
+                        <tr><th class="col-checkbox"><input type="checkbox" @change="$event.target.checked ? selectAllEvents() : clearEventSelection()" :checked="selectedEvents.length > 0 && selectedEvents.length === columnFilteredEvents().length" title="Select all events"></th><th title="When the event occurred">Time</th><th title="Event type category">Type</th><th title="Human-readable event description">Message</th><th title="Related entity ID (fleet, vessel, voyage, etc.)">Entity</th><th title="Captain involved in this event">Captain</th><th title="Mission related to this event">Mission</th><th>Action</th></tr>
+                        <tr class="column-filter-row">
+                            <td></td>
+                            <td></td>
+                            <td><input type="text" class="col-filter" x-model="eventColFilters.type" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="eventColFilters.message" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="eventColFilters.entity" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="eventColFilters.captain" placeholder="Filter..."></td>
+                            <td><input type="text" class="col-filter" x-model="eventColFilters.mission" placeholder="Filter..."></td>
+                            <td></td>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="evt in columnFilteredEvents()" :key="evt.id">
+                            <tr>
+                                <td class="col-checkbox"><input type="checkbox" :checked="selectedEvents.includes(evt.id)" @change="toggleEventSelection(evt.id)" title="Select this event"></td>
+                                <td class="text-dim" style="white-space:nowrap" x-text="formatTime(evt.createdUtc)" :title="formatTimeAbsolute(evt.createdUtc)"></td>
+                                <td style="white-space:nowrap"><span class="tag" x-text="evt.eventType"></span></td>
+                                <td x-text="evt.message"></td>
+                                <td class="mono text-dim" style="white-space:nowrap"><span x-show="evt.entityId" class="id-display"><span x-text="evt.entityId"></span><button class="copy-btn" @click.stop="copyId(evt.entityId, $event)" title="Copy ID"></button></span><span x-show="!evt.entityId">-</span></td>
+                                <td class="text-dim" style="white-space:nowrap"><span x-show="evt.captainId" class="id-display"><span class="mono" x-text="evt.captainId"></span><button class="copy-btn" @click.stop="copyId(evt.captainId, $event)" title="Copy ID"></button></span><span x-show="!evt.captainId">-</span></td>
+                                <td class="text-dim" style="white-space:nowrap"><span x-show="evt.missionId" class="id-display"><span class="mono" x-text="evt.missionId"></span><button class="copy-btn" @click.stop="copyId(evt.missionId, $event)" title="Copy ID"></button></span><span x-show="!evt.missionId">-</span></td>
+                                <td>
+                                    <div class="action-menu-wrap">
+                                        <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'evt-' + evt.id)" title="Actions">&#8942;</button>
+                                        <div class="action-menu-dropdown" x-show="openActionMenu === 'evt-' + evt.id" x-cloak>
+                                            <button class="action-menu-item" @click="navigate('events', 'event-detail', evt.id); closeActionMenu()">View Details</button>
+                                            <button class="action-menu-item" @click="showJson('Event: ' + evt.id, evt.id, evt); closeActionMenu()">View JSON</button>
+                                            <button class="action-menu-item danger" @click="deleteEvent(evt.id); closeActionMenu()">Delete</button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-dim" x-show="events.length === 0">No events found.</p>
+        </div>
+
+        <!-- Event Detail -->
+            <div x-show="detailView === 'event-detail'">
+            <button class="btn btn-sm" @click="goBack()" title="Return to events list">&larr; Back</button>
+            <template x-if="detail">
+                <div>
+                    <div class="detail-header">
+                        <h2>Event Details</h2>
+                    </div>
+                    <div class="detail-grid">
+                        <div class="detail-field"><span class="detail-label">ID</span><span class="id-display"><span class="mono" x-text="detail.id"></span><button class="copy-btn" @click.stop="copyId(detail.id, $event)" title="Copy ID"></button></span></div>
+                        <div class="detail-field"><span class="detail-label">Event Type</span><span class="tag" x-text="detail.eventType"></span></div>
+                        <div class="detail-field"><span class="detail-label">Message</span><span x-text="detail.message || '-'" style="white-space:pre-wrap"></span></div>
+                        <div class="detail-field" x-show="detail.entityType">
+                            <span class="detail-label">Entity Type</span><span x-text="detail.entityType"></span>
+                        </div>
+                        <div class="detail-field" x-show="detail.entityId">
+                            <span class="detail-label">Entity ID</span>
+                            <template x-if="entityNav(detail.entityId)">
+                                <span class="id-display"><a class="mono" href="#" @click.prevent="navigate(entityNav(detail.entityId).view, entityNav(detail.entityId).detail, detail.entityId)" x-text="detail.entityId"></a><button class="copy-btn" @click.stop="copyId(detail.entityId, $event)" title="Copy ID"></button></span>
+                            </template>
+                            <template x-if="!entityNav(detail.entityId)">
+                                <span class="id-display"><span class="mono" x-text="detail.entityId"></span><button class="copy-btn" @click.stop="copyId(detail.entityId, $event)" title="Copy ID"></button></span>
+                            </template>
+                        </div>
+                        <div class="detail-field" x-show="detail.captainId">
+                            <span class="detail-label">Captain</span>
+                            <span class="id-display"><a href="#" @click.prevent="navigate('captains', 'captain-detail', detail.captainId)" x-text="captainName(detail.captainId)"></a><button class="copy-btn" @click.stop="copyId(detail.captainId, $event)" title="Copy ID"></button></span>
+                        </div>
+                        <div class="detail-field" x-show="detail.missionId">
+                            <span class="detail-label">Mission</span>
+                            <span class="id-display"><a class="mono" href="#" @click.prevent="navigate('missions', 'mission-detail', detail.missionId)" x-text="detail.missionId"></a><button class="copy-btn" @click.stop="copyId(detail.missionId, $event)" title="Copy ID"></button></span>
+                        </div>
+                        <div class="detail-field" x-show="detail.vesselId">
+                            <span class="detail-label">Vessel</span>
+                            <span class="id-display"><a href="#" @click.prevent="navigate('vessels', 'vessel-detail', detail.vesselId)" x-text="vesselName(detail.vesselId)"></a><button class="copy-btn" @click.stop="copyId(detail.vesselId, $event)" title="Copy ID"></button></span>
+                        </div>
+                        <div class="detail-field" x-show="detail.voyageId">
+                            <span class="detail-label">Voyage</span>
+                            <span class="id-display"><a class="mono" href="#" @click.prevent="navigate('voyages', 'voyage-detail', detail.voyageId)" x-text="detail.voyageId"></a><button class="copy-btn" @click.stop="copyId(detail.voyageId, $event)" title="Copy ID"></button></span>
+                        </div>
+                        <div class="detail-field"><span class="detail-label">Created</span><span x-text="formatTimeAbsolute(detail.createdUtc)"></span></div>
+                    </div>
+                    <div style="margin-top:1rem" x-show="detail.payload">
+                        <h3>Payload</h3>
+                        <pre class="detail-payload" x-text="typeof detail.payload === 'object' ? JSON.stringify(detail.payload, null, 2) : detail.payload"></pre>
+                    </div>
+                </div>
+            </template>
+        </div>

@@ -1,0 +1,102 @@
+            <div x-show="!detailView">
+            <div class="view-header">
+                <div>
+                    <h2>Merge Queue</h2>
+                    <p class="text-dim view-subtitle">Completed missions awaiting merge. Review diffs, approve or reject changes, and manage the merge pipeline.</p>
+                </div>
+                <div class="view-actions">
+                    <input type="text" class="filter-input" x-model="listSearch" placeholder="Search..." title="Search merge queue entries by branch or ID">
+                    <select class="filter-select" x-model="mergeQueueStatusFilter" @change="loadMergeQueue()" title="Filter by status">
+                        <option value="">All Statuses</option>
+                        <option value="Queued">Queued</option>
+                        <option value="Testing">Testing</option>
+                        <option value="Passed">Passed</option>
+                        <option value="Failed">Failed</option>
+                        <option value="Landed">Landed</option>
+                        <option value="Cancelled">Cancelled</option>
+                    </select>
+                    <select class="filter-select" x-model="mergeQueueVoyageFilter" title="Filter by voyage">
+                        <option value="">All Voyages</option>
+                        <template x-for="v in mergeQueueVoyages" :key="v.id">
+                            <option :value="v.id" x-text="v.name"></option>
+                        </template>
+                    </select>
+                    <button class="btn btn-sm btn-danger" x-show="selectedMergeQueue.length > 0" @click="deleteSelectedMergeQueue()" title="Delete all selected merge queue entries">Delete Selected (<span x-text="selectedMergeQueue.length"></span>)</button>
+                    <button class="btn btn-primary btn-sm" @click="openEnqueueMerge()" title="Add a branch to the merge queue">+ Enqueue</button>
+                    <button class="btn btn-sm" @click="processMergeQueue()" title="Process all queued entries and merge branches">Process Queue</button>
+                </div>
+            </div>
+            <!-- Merge Queue Pagination -->
+            <div class="pagination-bar" x-show="mergeQueuePaging.totalPages > 0">
+                <div class="pagination-info">
+                    <span class="pagination-records" x-text="mergeQueuePaging.totalRecords + ' records'"></span>
+                    <span class="pagination-timing" x-text="mergeQueuePaging.totalMs.toFixed(1) + 'ms'"></span>
+                    <select class="page-size-select" title="Number of records per page" :value="mergeQueuePaging.pageSize" @change="changePageSize(mergeQueuePaging, $event.target.value, loadMergeQueue)">
+                        <option value="10">10 / page</option>
+                        <option value="25">25 / page</option>
+                        <option value="50">50 / page</option>
+                        <option value="100">100 / page</option>
+                        <option value="250">250 / page</option>
+                        <option value="500">500 / page</option>
+                        <option value="1000">1000 / page</option>
+                    </select>
+                </div>
+                <div class="pagination-controls">
+                    <button class="btn btn-sm" @click="prevPage(mergeQueuePaging, loadMergeQueue)" :disabled="mergeQueuePaging.pageNumber <= 1">&larr; Prev</button>
+                    <span class="pagination-page">
+                        Page <input type="number" class="page-input" :value="mergeQueuePaging.pageNumber" min="1" :max="mergeQueuePaging.totalPages"
+                            @change="goToPage(mergeQueuePaging, parseInt($event.target.value), loadMergeQueue)">
+                        of <span x-text="mergeQueuePaging.totalPages"></span>
+                    </span>
+                    <button class="btn btn-sm" @click="nextPage(mergeQueuePaging, loadMergeQueue)" :disabled="mergeQueuePaging.pageNumber >= mergeQueuePaging.totalPages">Next &rarr;</button>
+                    <button class="btn btn-sm" @click="loadMergeQueue()" title="Refresh">&#x21bb;</button>
+                </div>
+            </div>
+            <div class="table-wrap" x-show="mergeQueue.length > 0">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="col-checkbox"><input type="checkbox" @change="$event.target.checked ? selectAllMergeQueue() : clearMergeQueueSelection()" :checked="selectedMergeQueue.length > 0 && selectedMergeQueue.length === filteredMergeQueue().length" title="Select all"></th>
+                            <th class="sortable" @click="sortBy('status', mergeQueue)" title="Entry status -- click to sort">Status<span x-text="sortIcon('status')"></span></th>
+                            <th class="sortable" @click="sortBy('priority', mergeQueue)" title="Priority -- click to sort">Pri<span x-text="sortIcon('priority')"></span></th>
+                            <th>Mission</th>
+                            <th>Branch</th>
+                            <th>Target</th>
+                            <th class="sortable" @click="sortBy('createdUtc', mergeQueue)" title="Created -- click to sort">Created<span x-text="sortIcon('createdUtc')"></span></th>
+                            <th class="text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="entry in sortedRows(filteredMergeQueue())" :key="entry.id">
+                            <tr>
+                                <td class="col-checkbox"><input type="checkbox" :checked="selectedMergeQueue.includes(entry.id)" @change.stop="toggleMergeQueueSelection(entry.id)" @click.stop title="Select this entry"></td>
+                                <td><span class="tag" :class="(entry.status || '').toLowerCase()" x-text="entry.status" :title="statusTooltip(entry.status)"></span></td>
+                                <td x-text="entry.priority"></td>
+                                <td>
+                                    <span x-show="entry._missionTitle" x-text="entry._missionTitle"></span>
+                                    <span x-show="!entry._missionTitle" class="text-dim" style="font-style:italic">--</span>
+                                    <div x-show="entry._voyageName" class="text-dim" style="font-size:0.75rem" x-text="entry._voyageName"></div>
+                                </td>
+                                <td class="mono text-dim" style="font-size:0.8rem" x-text="entry.branchName"></td>
+                                <td class="mono text-dim" style="font-size:0.8rem" x-text="entry.targetBranch"></td>
+                                <td class="text-dim" x-text="formatTime(entry.createdUtc)" :title="formatTimeAbsolute(entry.createdUtc)" style="white-space:nowrap"></td>
+                                <td class="text-right">
+                                    <div class="action-menu-wrap">
+                                        <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'mq-' + entry.id)" title="Actions">&#8942;</button>
+                                        <div class="action-menu-dropdown" x-show="openActionMenu === 'mq-' + entry.id" x-cloak>
+                                            <button class="action-menu-item" x-show="entry.missionId" @click="viewMissionLog(entry.missionId); closeActionMenu()">Log</button>
+                                            <button class="action-menu-item" x-show="entry.missionId" @click="viewMissionDiff(entry.missionId); closeActionMenu()">Diff</button>
+                                            <button class="action-menu-item" @click="showJson('Merge Entry: ' + entry.id, entry.id, entry); closeActionMenu()">View JSON</button>
+                                            <button class="action-menu-item" x-show="entry.status === 'Queued'" @click="mergeSingleEntry(entry.id); closeActionMenu()">Process</button>
+                                            <button class="action-menu-item danger" x-show="entry.status === 'Queued' || entry.status === 'Testing'" @click="cancelMergeEntry(entry.id); closeActionMenu()">Cancel</button>
+                                            <button class="action-menu-item danger" x-show="entry.status === 'Cancelled' || entry.status === 'Landed' || entry.status === 'Failed'" @click="deleteMergeEntry(entry); closeActionMenu()">Delete</button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-dim" x-show="mergeQueue.length === 0">Merge queue is empty.</p>
+        </div>

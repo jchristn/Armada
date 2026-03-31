@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Armada Dashboard</title>
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <script src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js" defer></script>
+    <link rel="icon" type="image/x-icon" href="/dashboard/img/logo.ico">
+    <link rel="stylesheet" href="/dashboard/css/dashboard.css">
+</head>
+<body x-data="dashboard()" x-init="init()" @keydown.window="handleKeyboard($event)">
+
+    <!-- Toast Notifications -->
+    <div class="toast-container">
+        <template x-for="t in toasts" :key="t.id">
+            <div class="toast" :class="['toast-' + t.type, t.onClick ? 'toast-clickable' : '']"
+                 x-transition:enter="toast-enter" x-transition:leave="toast-leave">
+                <span class="toast-body" @click="if (t.onClick) { t.onClick(); dismissToast(t.id); }" x-text="t.message"></span>
+                <button class="toast-close" @click.stop="dismissToast(t.id)">&times;</button>
+            </div>
+        </template>
+    </div>
+
+    <!-- Login Overlay -->
+    <div class="login-overlay" x-show="authRequired && !authenticated" x-cloak>
+        <div class="login-box">
+            <img :src="darkMode ? '/dashboard/img/logo-light-grey.png' : '/dashboard/img/logo-dark-grey.png'" alt="Armada" class="login-logo">
+            <h2>Armada</h2>
+
+            <!-- Step 1: Email entry -->
+            <template x-if="loginStep === 'email'">
+                <div>
+                    <p>Enter your email to continue.</p>
+                    <form @submit.prevent="lookupTenants()">
+                        <input type="email" x-model="loginEmail" placeholder="Email address" required autofocus title="Enter your email address">
+                        <template x-if="authError">
+                            <div class="alert alert-error" x-text="authError"></div>
+                        </template>
+                        <button type="submit" class="btn btn-primary" style="width:100%" :disabled="loginLoading" title="Look up tenants for this email">
+                            <span x-show="!loginLoading">Continue</span>
+                            <span x-show="loginLoading">Looking up...</span>
+                        </button>
+                    </form>
+                </div>
+            </template>
+
+            <!-- Step 2: Tenant selection (only if multiple tenants) -->
+            <template x-if="loginStep === 'tenant'">
+                <div>
+                    <p>Select a tenant to sign in to.</p>
+                    <div class="login-tenant-list">
+                        <template x-for="t in loginTenants" :key="t.id || t.tenantId">
+                            <button class="login-tenant-item" @click="selectTenant(t)" :title="t.name || t.tenantName || t.id || t.tenantId">
+                                <span class="login-tenant-name" x-text="t.name || t.tenantName || t.id || t.tenantId"></span>
+                                <span class="login-tenant-id text-dim mono" x-text="t.id || t.tenantId" x-show="t.name || t.tenantName"></span>
+                            </button>
+                        </template>
+                    </div>
+                    <button class="btn btn-sm" style="width:100%; margin-top:0.75rem" @click="loginStep = 'email'; authError = null" title="Go back to email entry">&larr; Back</button>
+                </div>
+            </template>
+
+            <!-- Step 3: Password entry -->
+            <template x-if="loginStep === 'password'">
+                <div>
+                    <p>
+                        <span x-text="loginEmail"></span>
+                        <template x-if="loginSelectedTenant">
+                            <span class="text-dim" x-text="' @ ' + (loginSelectedTenant.name || loginSelectedTenant.tenantName || loginSelectedTenant.id || loginSelectedTenant.tenantId)"></span>
+                        </template>
+                    </p>
+                    <form @submit.prevent="authenticate()">
+                        <input type="password" x-model="loginPassword" placeholder="Password" required autofocus title="Enter your password">
+                        <template x-if="authError">
+                            <div class="alert alert-error" x-text="authError"></div>
+                        </template>
+                        <button type="submit" class="btn btn-primary" style="width:100%" :disabled="loginLoading" title="Sign in with your credentials">
+                            <span x-show="!loginLoading">Sign In</span>
+                            <span x-show="loginLoading">Signing in...</span>
+                        </button>
+                    </form>
+                    <button class="btn btn-sm" style="width:100%; margin-top:0.75rem" @click="loginStep = 'email'; authError = null; loginPassword = ''" title="Go back to email entry">&larr; Back</button>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- App Layout -->
+    <div class="app-layout" x-show="!authRequired || authenticated" :style="'grid-template-columns: ' + (sidebarCollapsed ? '56px' : '180px') + ' 1fr'">
+
+        <!-- Sidebar -->
+        <aside class="sidebar" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
+            <div class="sidebar-brand">
+                <img src="/dashboard/img/logo-light-grey.png" alt="Armada" class="sidebar-logo">
+                <h1 class="sidebar-label">Armada</h1>
+            </div>
+            <nav class="sidebar-nav">
+                <!-- Dashboard -->
+                <button class="sidebar-nav-item" :class="{ active: view === 'home' }" @click="navigate('home')" :title="sidebarCollapsed ? 'Dashboard' : 'System overview with voyage progress, recent missions, and signals'">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                    <span class="sidebar-label">Dashboard</span>
+                </button>
+
+                <!-- OPERATIONS -->
+                <div class="sidebar-section" :class="{ 'section-active': ['voyages','missions','merge-queue'].includes(view), collapsed: isSectionCollapsed('operations') }">
+                    <button class="sidebar-section-header" x-show="!sidebarCollapsed" @click="toggleSection('operations')">
+                        OPERATIONS
+                        <span class="sidebar-section-chevron"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
+                    </button>
+                    <div class="sidebar-section-items" x-show="sidebarCollapsed || sidebarSections.operations">
+                        <button class="sidebar-nav-item" :class="{ active: view === 'voyages' }" @click="navigate('voyages')" :title="sidebarCollapsed ? 'Voyages' : 'Batches of related missions with progress tracking'">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            <span class="sidebar-label">Voyages</span>
+                        </button>
+                        <button class="sidebar-nav-item" :class="{ active: view === 'missions' }" @click="navigate('missions'); loadMissions()" :title="sidebarCollapsed ? 'Missions' : 'Individual work units assigned to captains'">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                            <span class="sidebar-label">Missions</span>
+                        </button>
+                        <button class="sidebar-nav-item" :class="{ active: view === 'merge-queue' }" @click="navigate('merge-queue')" :title="sidebarCollapsed ? 'Merge Queue' : 'Completed mission branches awaiting merge into main'">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
+                            <span class="sidebar-label">Merge Queue</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- FLEET -->
+                <div class="sidebar-section" :class="{ 'section-active': ['fleets-list','fleets','captains','docks'].includes(view), collapsed: isSectionCollapsed('fleet') }">
+                    <button class="sidebar-section-header" x-show="!sidebarCollapsed" @click="toggleSection('fleet')">
+                        FLEET
+                        <span class="sidebar-section-chevron"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
+                    </button>
+                    <div class="sidebar-section-items" x-show="sidebarCollapsed || sidebarSections.fleet">
+                        <button class="sidebar-nav-item" :class="{ active: view === 'fleets-list' }" @click="navigate('fleets-list')" :title="sidebarCollapsed ? 'Fleets' : 'Fleet groups for organizing repositories'">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/></svg>
+                            <span class="sidebar-label">Fleets</span>
+                        </button>
+                        <button class="sidebar-nav-item" :class="{ active: view === 'fleets' }" @click="navigate('fleets')" :title="sidebarCollapsed ? 'Vessels' : 'Git repositories organized by fleet'">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                            <span class="sidebar-label">Vessels</span>
+                        </button>
+                        <button class="sidebar-nav-item" :class="{ active: view === 'captains' }" @click="navigate('captains')" :title="sidebarCollapsed ? 'Captains' : 'AI worker agents that execute missions'">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            <span class="sidebar-label">Captains</span>
+                        </button>
+                        <button class="sidebar-nav-item" :class="{ active: view === 'docks' }" @click="navigate('docks')" :title="sidebarCollapsed ? 'Docks' : 'Git worktrees used by captains'">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                            <span class="sidebar-label">Docks</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ACTIVITY -->
+                <div class="sidebar-section" :class="{ 'section-active': ['signals','events','notifications'].includes(view), collapsed: isSectionCollapsed('activity') }">
+                    <button class="sidebar-section-header" x-show="!sidebarCollapsed" @click="toggleSection('activity')">
+                        ACTIVITY
+                        <span class="sidebar-section-chevron"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
+                    </button>
+                    <div class="sidebar-section-items" x-show="sidebarCollapsed || sidebarSections.activity">
+                        <button class="sidebar-nav-item" :class="{ active: view === 'signals' }" @click="navigate('signals')" :title="sidebarCollapsed ? 'Signals' : 'Messages exchanged between the admiral and captains'">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                            <span class="sidebar-label">Signals</span>
+                        </button>
+                        <button class="sidebar-nav-item" :class="{ active: view === 'events' }" @click="navigate('events')" :title="sidebarCollapsed ? 'Events' : 'System event log of state changes and activity'">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                            <span class="sidebar-label">Events</span>
+                        </button>
+                        <button class="sidebar-nav-item" :class="{ active: view === 'notifications' }" @click="navigate('notifications')" :title="sidebarCollapsed ? 'Notifications' : 'Notification history for state changes'">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                            <span class="sidebar-label">Notifications</span>
+                            <span x-show="unreadNotificationCount > 0" class="notif-badge" x-text="unreadNotificationCount"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- SYSTEM -->
+                <div class="sidebar-section" :class="{ 'section-active': ['server','doctor'].includes(view), collapsed: isSectionCollapsed('system') }">
+                    <button class="sidebar-section-header" x-show="!sidebarCollapsed" @click="toggleSection('system')">
+                        SYSTEM
+                        <span class="sidebar-section-chevron"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
+                    </button>
+                    <div class="sidebar-section-items" x-show="sidebarCollapsed || sidebarSections.system">
+                        <button class="sidebar-nav-item" :class="{ active: view === 'server' }" @click="navigate('server')" :title="sidebarCollapsed ? 'Server' : 'Admiral server health, configuration, and controls'">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+                            <span class="sidebar-label">Server</span>
+                        </button>
+                        <button class="sidebar-nav-item" :class="{ active: view === 'doctor' }" @click="navigate('doctor')" :title="sidebarCollapsed ? 'Doctor' : 'System health diagnostics and checks'">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                            <span class="sidebar-label">Doctor</span>
+                        </button>
+                    </div>
+                </div>
+            </nav>
+
+            <!-- Sidebar footer -->
+            <div class="sidebar-footer">
+                <button class="sidebar-toggle-btn" @click="toggleSidebar()" :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'">
+                    <svg x-show="sidebarCollapsed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                    <svg x-show="!sidebarCollapsed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+                <button class="btn btn-sm" x-show="authenticated && !sidebarCollapsed" @click="logout()" title="Sign out and clear API key">Logout</button>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <div class="main-content-area">
+            <!-- Top Bar -->
+            <div class="top-bar">
+                <a href="#" class="top-bar-health" @click.prevent="navigate('doctor')" :title="doctorStatusTooltip" x-show="doctorOverallStatus !== 'unknown'">
+                    <span class="status-dot" :class="doctorOverallStatus"></span>
+                    <span class="top-bar-status-label" x-text="doctorStatusLabel"></span>
+                </a>
+                <span class="top-bar-status" :title="wsConnected ? 'Live: WebSocket real-time updates' : (apiConnected ? 'Online: HTTP polling' : 'Disconnected: no connection')">
+                    <span class="status-dot" :class="connected ? 'connected' : 'disconnected'"></span>
+                    <span class="top-bar-status-label" x-text="wsConnected ? 'Live' : (apiConnected ? 'Online' : 'Offline')"></span>
+                </span>
+                <template x-if="whoami && whoami.tenantName">
+                    <span class="auth-badge auth-badge-tenant" x-text="whoami.tenantName" title="Current tenant"></span>
+                </template>
+                <template x-if="whoami && whoami.email">
+                    <span class="auth-badge auth-badge-user" x-text="whoami.email" title="Signed-in user"></span>
+                </template>
+                <button class="btn btn-sm" x-show="authenticated" @click="logout()" title="Sign out">Logout</button>
+                <button class="theme-toggle" @click="toggleTheme()" x-text="darkMode ? '&#9728;' : '&#9790;'" title="Toggle theme"></button>
+                <a href="https://github.com/jchristn/Armada" target="_blank" rel="noopener noreferrer" class="github-link" title="View on GitHub">
+                    <svg height="18" width="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+                </a>
+            </div>
+
+            <!-- Main Content -->
+            <main class="main">
+
+        <!-- Breadcrumbs -->
+        <div class="breadcrumbs" x-show="breadcrumbs.length > 1">
+            <template x-for="(bc, i) in breadcrumbs" :key="i">
+                <span>
+                    <template x-if="i > 0"> <span class="bc-sep">/</span> </template>
+                    <template x-if="bc.view && i < breadcrumbs.length - 1">
+                        <a href="#" @click.prevent="goBack()" x-text="bc.label"></a>
+                    </template>
+                    <template x-if="!bc.view || i === breadcrumbs.length - 1">
+                        <span x-text="bc.label"></span>
+                    </template>
+                    <template x-if="bc.id">
+                        <button class="copy-btn bc-copy-btn" @click.stop="copyId(bc.id, $event)" title="Copy ID"></button>
+                    </template>
+                </span>
+            </template>
+        </div>
+
+        <!-- ========== Dashboard Home (loaded as partial) ========== -->
+        <div x-show="view === 'home' && !detailView" class="view" id="view-container"></div>
+
+        <!-- ========== Fleets List View (loaded as partial) ========== -->
+        <div x-show="view === 'fleets-list'" class="view" id="view-fleets-list"></div>
+
+        <!-- ========== Vessels View (loaded as partial) ========== -->
+        <div x-show="view === 'fleets'" class="view" id="view-fleets"></div>
+
+        <!-- ========== Voyages View (loaded as partial) ========== -->
+        <div x-show="view === 'voyages' && !detailView" class="view" id="view-voyages"></div>
+
+        <!-- Voyage Detail -->
+        <div x-show="view === 'voyages' && detailView === 'voyage-detail'" class="view">
+            <button class="btn btn-sm" @click="goBack()" title="Return to voyages list">&larr; Back</button>
+            <template x-if="detail">
+                <div>
+                    <div class="detail-header">
+                        <h2 x-text="detail.title || detail.id"></h2>
+                        <div class="inline-actions">
+                            <div class="action-menu-wrap">
+                                <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'vyg-detail-' + detail.id)" title="Actions">&#8942;</button>
+                                <div class="action-menu-dropdown" x-show="openActionMenu === 'vyg-detail-' + detail.id" x-cloak>
+                                    <button class="action-menu-item" @click="retryVoyageMissions(detail.id); closeActionMenu()">Retry Failed</button>
+                                    <button class="action-menu-item" @click="showJson('Voyage: ' + (detail.title || detail.id), detail.id, detail); closeActionMenu()">View JSON</button>
+                                    <button class="action-menu-item danger" x-show="detail.status === 'Open' || detail.status === 'InProgress'" @click="cancelVoyage(detail.id); closeActionMenu()">Cancel Voyage</button>
+                                    <button class="action-menu-item danger" x-show="detail.status !== 'Open' && detail.status !== 'InProgress'" @click="deleteVoyage(detail.id); closeActionMenu()">Delete Voyage</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="detail-grid">
+                        <div class="detail-field"><span class="detail-label">ID</span><span class="id-display"><span class="mono" x-text="detail.id"></span><button class="copy-btn" @click.stop="copyId(detail.id, $event)" title="Copy ID"></button></span></div>
+                        <div class="detail-field"><span class="detail-label">Status</span><span class="tag" :class="(detail.status || '').toLowerCase()" x-text="detail.status" :title="statusTooltip(detail.status)"></span></div>
+                        <div class="detail-field"><span class="detail-label">Description</span><span x-text="detail.description || '-'"></span></div>
+                        <div class="detail-field"><span class="detail-label">Created</span><span x-text="formatTimeAbsolute(detail.createdUtc)"></span></div>
+                        <div class="detail-field" x-show="detail.completedUtc"><span class="detail-label">Completed</span><span x-text="formatTimeAbsolute(detail.completedUtc)"></span></div>
+                    </div>
+                    <!-- Progress bar -->
+                    <template x-if="detailMissions.length > 0">
+                        <div style="margin:1rem 0">
+                            <div class="progress-bar" style="height:10px">
+                                <div class="progress-fill"
+                                     :style="'width:' + Math.round(detailMissions.filter(m => m.status === 'Complete').length / detailMissions.length * 100) + '%'"></div>
+                            </div>
+                            <span class="text-dim" x-text="detailMissions.filter(m => m.status === 'Complete').length + '/' + detailMissions.length + ' complete, ' + detailMissions.filter(m => m.status === 'Failed').length + ' failed'"></span>
+                        </div>
+                    </template>
+                    <h3>Missions</h3>
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th title="Mission name and unique identifier">Mission</th><th title="Current mission lifecycle state">Status</th><th title="AI captain assigned to this mission">Captain</th><th title="Git branch for this mission's work">Branch</th></tr></thead>
+                            <tbody>
+                                <template x-for="m in detailMissions" :key="m.id">
+                                    <tr class="clickable" @click="navigate('voyages', 'mission-detail', m.id)">
+                                        <td><strong x-text="m.title"></strong><div class="text-dim id-display"><span class="mono" x-text="m.id"></span><button class="copy-btn" @click.stop="copyId(m.id, $event)" title="Copy ID"></button></div></td>
+                                        <td><span class="tag" :class="(m.status || '').toLowerCase()" x-text="m.status" :title="statusTooltip(m.status)"></span></td>
+                                        <td><a href="#" @click.stop.prevent="navigate('captains', 'captain-detail', m.captainId)" x-text="captainName(m.captainId)"></a></td>
+                                        <td class="text-dim" x-text="m.branchName || '-'"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- ========== Missions View (loaded as partial) ========== -->
+        <div x-show="view === 'missions' && !detailView" class="view" id="view-missions"></div>
+
+        <!-- ========== Dispatch View (loaded as partial) ========== -->
+        <div x-show="view === 'dispatch' && !detailView" class="view" id="view-dispatch"></div>
+
+        <!-- Mission Detail -->
+        <div x-show="detailView === 'mission-detail'" class="view">
+            <div style="display:flex; gap:0.5rem; align-items:center; margin-bottom:0.5rem">
+                <button class="btn btn-sm" @click="goBack()" title="Return to previous view">&larr; Back</button>
+                <button class="btn btn-sm" @click="viewMissionDiff(detail?.id)" x-show="detail" title="View git diff of changes">Diff</button>
+                <button class="btn btn-sm" @click="viewMissionLog(detail?.id)" x-show="detail" title="View captain session log">Log</button>
+            </div>
+            <template x-if="detail">
+                <div>
+                    <div class="detail-header">
+                        <h2 x-text="detail.title"></h2>
+                        <div class="inline-actions">
+                            <div class="action-menu-wrap">
+                                <button class="action-menu-btn" @click.stop="toggleActionMenu($event,'msn-detail-' + detail.id)" title="Actions">&#8942;</button>
+                                <div class="action-menu-dropdown" x-show="openActionMenu === 'msn-detail-' + detail.id" x-cloak>
+                                    <button class="action-menu-item" @click="openEditMission(detail); closeActionMenu()">Edit</button>
+                                    <button class="action-menu-item" @click="viewMissionDiff(detail.id); closeActionMenu()">Diff</button>
+                                    <button class="action-menu-item" @click="viewMissionLog(detail.id); closeActionMenu()">Log</button>
+                                    <button class="action-menu-item" x-show="detail.status === 'Failed' || detail.status === 'Cancelled'" @click="restartMissionPrompt(detail); closeActionMenu()">Restart</button>
+                                    <button class="action-menu-item" @click="showJson('Mission: ' + detail.title, detail.id, detail); closeActionMenu()">View JSON</button>
+                                    <button class="action-menu-item danger" x-show="detail.status !== 'Complete' && detail.status !== 'Cancelled'" @click="cancelMission(detail.id); closeActionMenu()">Cancel</button>
+                                    <button class="action-menu-item danger" @click="deleteMission(detail.id); closeActionMenu()">Delete</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="detail-grid">
+                        <div class="detail-field"><span class="detail-label">ID</span><span class="id-display"><span class="mono" x-text="detail.id"></span><button class="copy-btn" @click.stop="copyId(detail.id, $event)" title="Copy ID"></button></span></div>
+                        <div class="detail-field"><span class="detail-label">Status</span><span class="tag" :class="(detail.status || '').toLowerCase()" x-text="detail.status" :title="statusTooltip(detail.status)"></span></div>
+                        <div class="detail-field"><span class="detail-label">Priority</span><span x-text="detail.priority"></span></div>
+                        <div class="detail-field"><span class="detail-label">Description</span><span x-text="detail.description || '-'" style="white-space:pre-wrap"></span></div>
+                        <div class="detail-field"><span class="detail-label">Vessel</span><a href="#" @click.prevent="navigate(view, 'vessel-detail', detail.vesselId)" x-text="vesselName(detail.vesselId)"></a></div>
+                        <div class="detail-field"><span class="detail-label">Captain</span><a href="#" @click.prevent="navigate('captains', 'captain-detail', detail.captainId)" x-text="captainName(detail.captainId)"></a></div>
+                        <div class="detail-field" x-show="detail.voyageId"><span class="detail-label">Voyage</span><span class="id-display"><a class="mono" href="#" @click.prevent="navigate('voyages', 'voyage-detail', detail.voyageId)" x-text="detail.voyageId"></a><button class="copy-btn" @click.stop="copyId(detail.voyageId, $event)" title="Copy ID"></button></span></div>
+                        <div class="detail-field"><span class="detail-label">Branch</span><span class="mono" x-text="detail.branchName || '-'"></span></div>
+                        <div class="detail-field" x-show="detail.prUrl"><span class="detail-label">PR</span><span class="mono" x-text="detail.prUrl"></span></div>
+                        <div class="detail-field" x-show="detail.commitHash"><span class="detail-label">Commit</span><span class="mono" x-text="detail.commitHash ? detail.commitHash.substring(0, 12) : ''" :title="detail.commitHash"></span></div>
+                        <div class="detail-field"><span class="detail-label">Created</span><span x-text="formatTimeAbsolute(detail.createdUtc)"></span></div>
+                        <div class="detail-field" x-show="detail.startedUtc"><span class="detail-label">Started</span><span x-text="formatTimeAbsolute(detail.startedUtc)"></span></div>
+                        <div class="detail-field" x-show="detail.completedUtc"><span class="detail-label">Completed</span><span x-text="formatTimeAbsolute(detail.completedUtc)"></span></div>
+                    </div>
+
+                    <!-- Status transitions -->
+                    <div class="status-transitions" x-show="['Pending','Assigned','InProgress','Testing','Review','WorkProduced','LandingFailed'].includes(detail.status)" title="Manually transition this mission to a different status">
+                        <span class="detail-label">Transition to:</span>
+                        <template x-if="detail.status === 'Pending'">
+                            <button class="btn btn-sm" @click="transitionMissionStatus(detail.id, 'Assigned')" title="Mark as assigned to a captain">Assigned</button>
+                        </template>
+                        <template x-if="detail.status === 'Assigned'">
+                            <button class="btn btn-sm" @click="transitionMissionStatus(detail.id, 'InProgress')" title="Mark as actively being worked on">InProgress</button>
+                        </template>
+                        <template x-if="detail.status === 'InProgress'">
+                            <span>
+                                <button class="btn btn-sm" @click="transitionMissionStatus(detail.id, 'Testing')" title="Move to testing phase">Testing</button>
+                                <button class="btn btn-sm" @click="transitionMissionStatus(detail.id, 'Review')" title="Move to code review phase">Review</button>
+                                <button class="btn btn-sm" @click="transitionMissionStatus(detail.id, 'Complete')" title="Mark as successfully completed">Complete</button>
+                                <button class="btn btn-sm btn-danger" @click="transitionMissionStatus(detail.id, 'Failed')" title="Mark as failed">Failed</button>
+                            </span>
+                        </template>
+                        <template x-if="detail.status === 'Testing'">
+                            <span>
+                                <button class="btn btn-sm" @click="transitionMissionStatus(detail.id, 'Review')" title="Move to code review phase">Review</button>
+                                <button class="btn btn-sm" @click="transitionMissionStatus(detail.id, 'Complete')" title="Mark as successfully completed">Complete</button>
+                                <button class="btn btn-sm" @click="transitionMissionStatus(detail.id, 'InProgress')" title="Send back to active work">InProgress</button>
+                                <button class="btn btn-sm btn-danger" @click="transitionMissionStatus(detail.id, 'Failed')" title="Mark as failed">Failed</button>
+                            </span>
+                        </template>
+                        <template x-if="detail.status === 'Review'">
+                            <span>
+                                <button class="btn btn-sm" @click="transitionMissionStatus(detail.id, 'Complete')" title="Mark as successfully completed">Complete</button>
+                                <button class="btn btn-sm" @click="transitionMissionStatus(detail.id, 'InProgress')" title="Send back to active work">InProgress</button>
+                                <button class="btn btn-sm btn-danger" @click="transitionMissionStatus(detail.id, 'Failed')" title="Mark as failed">Failed</button>
+                            </span>
+                        </template>
+                        <template x-if="detail.status === 'WorkProduced'">
+                            <span>
+                                <button class="btn btn-sm" @click="transitionMissionStatus(detail.id, 'Complete')" title="Mark as successfully completed">Complete</button>
+                                <button class="btn btn-sm btn-danger" @click="transitionMissionStatus(detail.id, 'Cancelled')" title="Cancel this mission">Cancelled</button>
+                            </span>
+                        </template>
+                        <template x-if="detail.status === 'LandingFailed'">
+                            <span>
+                                <button class="btn btn-sm" @click="transitionMissionStatus(detail.id, 'WorkProduced')" title="Retry landing">WorkProduced</button>
+                                <button class="btn btn-sm btn-danger" @click="transitionMissionStatus(detail.id, 'Failed')" title="Mark as failed">Failed</button>
+                                <button class="btn btn-sm btn-danger" @click="transitionMissionStatus(detail.id, 'Cancelled')" title="Cancel this mission">Cancelled</button>
+                            </span>
+                        </template>
+                    </div>
+
+                </div>
+            </template>
+        </div>
+
+        <!-- ========== Captains View (loaded as partial) ========== -->
+        <div x-show="view === 'captains'" class="view" id="view-captains"></div>
+
+        <!-- ========== Docks View (loaded as partial) ========== -->
+        <div x-show="view === 'docks'" class="view" id="view-docks"></div>
+
+        <!-- ========== Signals View (loaded as partial) ========== -->
+        <div x-show="view === 'signals'" class="view" id="view-signals"></div>
+
+        <!-- ========== Events View (loaded as partial) ========== -->
+        <div x-show="view === 'events'" class="view" id="view-events"></div>
+
+        <!-- ========== Merge Queue View (loaded as partial) ========== -->
+        <div x-show="view === 'merge-queue'" class="view" id="view-merge-queue"></div>
+
+        <!-- ========== Notifications View ========== -->
+        <div x-show="view === 'notifications' && !detailView" class="view">
+            <div class="view-header">
+                <div>
+                    <h2>Notifications</h2>
+                    <p class="text-dim view-subtitle">History of state change notifications for missions, voyages, and captains.</p>
+                </div>
+                <div class="view-actions">
+                    <button class="btn btn-sm" @click="markAllNotificationsRead()" :disabled="unreadNotificationCount === 0" title="Mark all notifications as read">Mark All Read</button>
+                    <button class="btn btn-sm btn-danger" @click="clearNotificationHistory()" :disabled="notificationHistory.length === 0" title="Clear all notification history">Clear History</button>
+                </div>
+            </div>
+            <div x-show="notificationHistory.length > 0" class="table-wrap">
+                <table>
+                    <thead><tr><th style="width: 1.5rem; padding: 0.25rem;"></th><th>Title</th><th>Message</th><th>Time</th></tr></thead>
+                    <tbody>
+                        <template x-for="ntf in notificationHistory" :key="ntf.id">
+                            <tr class="clickable" :class="{ 'notif-unread': !ntf.read }" @click="markNotificationRead(ntf)">
+                                <td>
+                                    <span class="notif-severity-dot" :class="'notif-' + ntf.severity"></span>
+                                </td>
+                                <td :style="!ntf.read ? 'font-weight: 600;' : ''" x-text="ntf.title"></td>
+                                <td x-text="ntf.message"></td>
+                                <td class="text-dim" x-text="formatTime(ntf.timestampUtc)" :title="formatTimeAbsolute(ntf.timestampUtc)" style="white-space: nowrap;"></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-dim" x-show="notificationHistory.length === 0">No notifications yet. State changes for missions, voyages, and captains will appear here.</p>
+        </div>
+
+        <!-- ========== Server View (loaded as partial) ========== -->
+        <div x-show="view === 'server'" class="view" id="view-server"></div>
+
+        <!-- ========== Doctor View (loaded as partial) ========== -->
+        <div x-show="view === 'doctor'" class="view" id="view-doctor"></div>
+
+    </main>
+        </div><!-- /main-content-area -->
+    </div><!-- /app-layout -->
+
+    <!-- Modals container (loaded as partial at init) -->
+    <div id="modals-container"></div>
+
+
+    <!-- ========== Viewer Modal (full-screen, reusable for diff/log/text) ========== -->
+    <div class="viewer-overlay" x-show="viewer.open" @click.self="closeViewer()" x-cloak
+         x-transition:enter="viewer-enter" x-transition:leave="viewer-leave">
+        <div class="viewer-modal">
+            <div class="viewer-header">
+                <h3 class="viewer-title" x-text="viewer.title"></h3>
+                <div class="viewer-actions">
+                    <button class="btn btn-sm btn-primary" @click="copyViewerContent($el)"
+                            title="Copy full content to clipboard">Copy to Clipboard</button>
+                    <button class="btn btn-sm" @click="closeViewer()" title="Close viewer (Esc)">Close</button>
+                </div>
+            </div>
+            <pre class="viewer-body" x-text="viewer.content"></pre>
+        </div>
+    </div>
+
+    <!-- ========== Log Viewer Modal (live follow mode) ========== -->
+    <div class="viewer-overlay" x-show="logViewer.open" @click.self="closeLogViewer()" x-cloak
+         x-transition:enter="viewer-enter" x-transition:leave="viewer-leave">
+        <div class="viewer-modal">
+            <div class="viewer-header">
+                <h3 class="viewer-title">
+                    <span x-text="logViewer.title"></span>
+                    <span class="log-live-badge" x-show="logViewer.following" title="Log is being followed in real-time">LIVE</span>
+                </h3>
+                <div class="viewer-actions">
+                    <select class="log-line-select" :value="logViewer.lineCount" @change="changeLogLineCount($event.target.value)" title="Number of lines to show">
+                        <option value="50">50 lines</option>
+                        <option value="100">100 lines</option>
+                        <option value="200">200 lines</option>
+                        <option value="500">500 lines</option>
+                        <option value="1000">1000 lines</option>
+                    </select>
+                    <button class="btn btn-sm" :class="logViewer.following ? 'btn-follow-active' : 'btn-follow-inactive'" @click="toggleLogFollow()" :title="logViewer.following ? 'Stop following' : 'Start following (auto-refresh)'">
+                        <span class="follow-dot" :class="{ 'follow-dot-active': logViewer.following }"></span>
+                        <span x-text="logViewer.following ? 'Following' : 'Follow'"></span>
+                    </button>
+                    <button class="btn btn-sm btn-primary" @click="copyLogContent($el)"
+                            title="Copy log content to clipboard">Copy</button>
+                    <button class="btn btn-sm" @click="closeLogViewer()" title="Close log viewer (Esc)">Close</button>
+                </div>
+            </div>
+            <pre class="viewer-body" :class="{ 'log-paused': !logViewer.following }" id="log-viewer-content" x-text="logViewer.content"></pre>
+        </div>
+    </div>
+
+    <!-- ========== Diff Viewer Modal (GitHub-style two-pane diff) ========== -->
+    <div class="diff-modal-overlay" x-show="diffViewerOpen" @click.self="closeDiffViewer()" x-cloak
+         x-transition:enter="viewer-enter" x-transition:leave="viewer-leave">
+        <div class="diff-modal">
+            <div class="diff-modal-header">
+                <h3 class="viewer-title" x-text="diffViewerTitle"></h3>
+                <div class="diff-modal-stats" x-show="diffViewerFiles.length > 0">
+                    <span class="diff-stat-files" x-text="diffViewerFiles.length + ' file' + (diffViewerFiles.length !== 1 ? 's' : '') + ' changed'"></span>
+                    <span class="diff-stat-add" x-text="'+' + diffViewerFiles.reduce((s, f) => s + f.additions, 0)"></span>
+                    <span class="diff-stat-del" x-text="'-' + diffViewerFiles.reduce((s, f) => s + f.deletions, 0)"></span>
+                </div>
+                <div class="viewer-actions">
+                    <button class="btn btn-sm" @click="copyDiffRaw($el)"
+                            title="Copy raw diff to clipboard">Copy Raw</button>
+                    <button class="btn btn-sm" @click="closeDiffViewer()" title="Close diff viewer (Esc)">Close</button>
+                </div>
+            </div>
+            <div class="diff-modal-body">
+                <!-- File navigator sidebar -->
+                <div class="diff-file-nav" x-show="diffViewerFiles.length > 0">
+                    <div class="diff-file-nav-header">Files</div>
+                    <template x-for="f in diffViewerFiles" :key="f.name">
+                        <div class="diff-file-nav-item" :class="{ active: diffViewerSelectedFile === f.name }"
+                             @click="selectDiffFile(f.name)" :title="f.name">
+                            <span class="diff-file-nav-name" x-text="f.name.split('/').pop()"></span>
+                            <span class="diff-file-nav-path" x-text="f.name.includes('/') ? f.name.substring(0, f.name.lastIndexOf('/') + 1) : ''"></span>
+                            <span class="diff-file-nav-counts">
+                                <span class="diff-file-nav-add" x-show="f.additions > 0" x-text="'+' + f.additions"></span>
+                                <span class="diff-file-nav-del" x-show="f.deletions > 0" x-text="'-' + f.deletions"></span>
+                            </span>
+                        </div>
+                    </template>
+                </div>
+                <!-- Diff content area -->
+                <div class="diff-content-wrap">
+                    <template x-if="diffViewerLoading">
+                        <div style="display:flex;align-items:center;gap:0.5rem;padding:1.5rem">
+                            <span class="spinner" style="width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;display:inline-block;animation:spin 0.8s linear infinite"></span>
+                            <span class="text-dim">Loading diff...</span>
+                        </div>
+                    </template>
+                    <div id="diff-content-area" class="diff-content-area" x-show="!diffViewerLoading" x-html="diffViewerContentHtml"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== JSON Viewer Modal ========== -->
+    <div class="json-viewer-overlay" x-show="jsonViewer.open" @click.self="closeJsonViewer()" x-cloak
+         x-transition:enter="viewer-enter" x-transition:leave="viewer-leave">
+        <div class="json-viewer-modal">
+            <div class="json-viewer-header">
+                <h3 x-text="jsonViewer.title"></h3>
+                <button class="json-viewer-close" @click="closeJsonViewer()" title="Close (Esc)">&times;</button>
+            </div>
+            <div class="json-viewer-sub">
+                <span class="mono" x-text="jsonViewer.id"></span>
+                <button class="copy-btn" @click.stop="copyId(jsonViewer.id, $event)" title="Copy ID"></button>
+            </div>
+            <div class="json-viewer-body">
+                <button class="json-viewer-copy copy-btn" @click="copyJsonContent($el)" title="Copy JSON to clipboard"></button>
+                <pre x-text="jsonViewer.content"></pre>
+            </div>
+        </div>
+    </div>
+
+    <script src="/dashboard/js/modules/status.js"></script>
+    <script src="/dashboard/js/modules/pagination.js"></script>
+    <script src="/dashboard/js/modules/sorting.js"></script>
+    <script src="/dashboard/js/modules/filtering.js"></script>
+    <script src="/dashboard/js/modules/selection.js"></script>
+    <script src="/dashboard/js/modules/action-menu.js"></script>
+    <script src="/dashboard/js/modules/viewers.js"></script>
+    <script src="/dashboard/js/modules/data-loaders.js"></script>
+    <script src="/dashboard/js/modules/navigation.js"></script>
+    <script src="/dashboard/js/modules/websocket.js"></script>
+    <script src="/dashboard/js/modules/partial-loader.js"></script>
+    <script src="/dashboard/js/dashboard.js"></script>
+</body>
+</html>

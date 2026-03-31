@@ -1,0 +1,9 @@
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.DotSettings.user
+*.db
+*.log
+*.nupkg
