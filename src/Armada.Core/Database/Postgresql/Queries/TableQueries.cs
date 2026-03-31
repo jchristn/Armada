@@ -487,6 +487,12 @@ namespace Armada.Core.Database.Postgresql.Queries
                 ),
                 new SchemaMigration(13, "Add agent_output to missions",
                     @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS agent_output TEXT;"
+                ),
+                new SchemaMigration(14, "Add model to captains for specifying AI model",
+                    @"ALTER TABLE captains ADD COLUMN IF NOT EXISTS model TEXT;"
+                ),
+                new SchemaMigration(15, "Add total_runtime_seconds to missions",
+                    @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS total_runtime_seconds DOUBLE PRECISION;"
                 )
             };
         }

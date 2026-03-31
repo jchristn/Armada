@@ -78,6 +78,13 @@ namespace Armada.Runtimes
             args.Add("--approval-mode");
             args.Add(ApprovalMode);
             args.Add("--quiet");
+
+            if (!String.IsNullOrEmpty(Model))
+            {
+                args.Add("--model");
+                args.Add(Model);
+            }
+
             args.Add(prompt);
 
             return args;

@@ -394,6 +394,7 @@ namespace Armada.Core.Database.SqlServer
             captain.LastUpdateUtc = FromIso8601(reader["last_update_utc"].ToString()!);
             try { captain.AllowedPersonas = NullableString(reader["allowed_personas"]); } catch { }
             try { captain.PreferredPersona = NullableString(reader["preferred_persona"]); } catch { }
+            try { captain.Model = NullableString(reader["model"]); } catch { }
             return captain;
         }
 
@@ -430,6 +431,7 @@ namespace Armada.Core.Database.SqlServer
             try { mission.Persona = NullableString(reader["persona"]); } catch { }
             try { mission.DependsOnMissionId = NullableString(reader["depends_on_mission_id"]); } catch { }
             try { mission.FailureReason = NullableString(reader["failure_reason"]); } catch { }
+            try { object rtVal = reader["total_runtime_seconds"]; if (rtVal != null && rtVal != DBNull.Value) mission.TotalRuntimeSeconds = Convert.ToDouble(rtVal); } catch { }
             return mission;
         }
 

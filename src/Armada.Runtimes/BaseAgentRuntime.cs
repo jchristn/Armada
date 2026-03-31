@@ -22,6 +22,11 @@ namespace Armada.Runtimes
         public abstract bool SupportsResume { get; }
 
         /// <summary>
+        /// AI model to use for this agent. Null for automatic selection by the runtime.
+        /// </summary>
+        public string? Model { get; set; } = null;
+
+        /// <summary>
         /// Event raised when the agent writes a line to stdout.
         /// </summary>
         public event Action<int, string>? OnOutputReceived;

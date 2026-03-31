@@ -130,6 +130,7 @@ export interface Captain {
   systemInstructions: string | null;
   allowedPersonas: string | null;
   preferredPersona: string | null;
+  model: string | null;
   state: string;
   currentMissionId: string | null;
   currentDockId: string | null;
@@ -159,6 +160,7 @@ export interface Mission {
   prUrl: string | null;
   commitHash: string | null;
   failureReason: string | null;
+  totalRuntimeSeconds: number | null;
   diffSnapshot: string | null;
   createdUtc: string;
   startedUtc: string | null;

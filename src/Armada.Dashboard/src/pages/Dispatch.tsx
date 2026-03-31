@@ -193,22 +193,6 @@ export default function Dispatch() {
             />
           </div>
 
-          {/* Task Preview */}
-          {parsedTasks.length > 0 && (
-            <div className="dispatch-preview">
-              <div className="dispatch-preview-header">
-                <span>
-                  {parsedTasks.length} task{parsedTasks.length !== 1 ? 's' : ''} detected
-                </span>
-              </div>
-              <ol className="dispatch-preview-list">
-                {parsedTasks.map((task, i) => (
-                  <li key={i}>{task}</li>
-                ))}
-              </ol>
-            </div>
-          )}
-
           <div className="form-actions">
             <button
               type="button"

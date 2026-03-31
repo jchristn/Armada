@@ -30,5 +30,10 @@ namespace Armada.Server.Mcp
         /// </summary>
         public string? PreferredPersona { get; set; }
 
+        /// <summary>
+        /// AI model to use for this captain (e.g. claude-sonnet-4-6). Null for automatic selection.
+        /// </summary>
+        public string? Model { get; set; }
+
     }
 }

@@ -72,6 +72,12 @@ namespace Armada.Core.Models
         public string? PreferredPersona { get; set; } = null;
 
         /// <summary>
+        /// AI model to use for this captain (e.g. "claude-sonnet-4-6", "claude-opus-4-6").
+        /// When null, the agent runtime selects its default model automatically.
+        /// </summary>
+        public string? Model { get; set; } = null;
+
+        /// <summary>
         /// Current state of the captain.
         /// </summary>
         public CaptainStateEnum State { get; set; } = CaptainStateEnum.Idle;

@@ -921,6 +921,8 @@ namespace Armada.Core.Services
                 completedMission.Status = MissionStatusEnum.Failed;
                 completedMission.FailureReason = "Architect produced no [ARMADA:MISSION] markers in output";
                 completedMission.CompletedUtc = DateTime.UtcNow;
+                if (completedMission.StartedUtc.HasValue)
+                    completedMission.TotalRuntimeSeconds = (completedMission.CompletedUtc.Value - completedMission.StartedUtc.Value).TotalSeconds;
                 completedMission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(completedMission, token).ConfigureAwait(false);
                 return;

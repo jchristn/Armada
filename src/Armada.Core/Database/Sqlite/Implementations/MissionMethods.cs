@@ -57,8 +57,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = @"INSERT INTO missions (id, tenant_id, user_id, voyage_id, vessel_id, captain_id, title, description, status, priority, parent_mission_id, branch_name, dock_id, process_id, pr_url, commit_hash, diff_snapshot, agent_output, persona, depends_on_mission_id, failure_reason, created_utc, started_utc, completed_utc, last_update_utc)
-                            VALUES (@id, @tenant_id, @user_id, @voyage_id, @vessel_id, @captain_id, @title, @description, @status, @priority, @parent_mission_id, @branch_name, @dock_id, @process_id, @pr_url, @commit_hash, @diff_snapshot, @agent_output, @persona, @depends_on_mission_id, @failure_reason, @created_utc, @started_utc, @completed_utc, @last_update_utc);";
+                    cmd.CommandText = @"INSERT INTO missions (id, tenant_id, user_id, voyage_id, vessel_id, captain_id, title, description, status, priority, parent_mission_id, branch_name, dock_id, process_id, pr_url, commit_hash, diff_snapshot, agent_output, persona, depends_on_mission_id, failure_reason, total_runtime_seconds, created_utc, started_utc, completed_utc, last_update_utc)
+                            VALUES (@id, @tenant_id, @user_id, @voyage_id, @vessel_id, @captain_id, @title, @description, @status, @priority, @parent_mission_id, @branch_name, @dock_id, @process_id, @pr_url, @commit_hash, @diff_snapshot, @agent_output, @persona, @depends_on_mission_id, @failure_reason, @total_runtime_seconds, @created_utc, @started_utc, @completed_utc, @last_update_utc);";
                     cmd.Parameters.AddWithValue("@id", mission.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)mission.TenantId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@user_id", (object?)mission.UserId ?? DBNull.Value);
@@ -80,6 +80,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     cmd.Parameters.AddWithValue("@persona", (object?)mission.Persona ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@depends_on_mission_id", (object?)mission.DependsOnMissionId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@failure_reason", (object?)mission.FailureReason ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@total_runtime_seconds", mission.TotalRuntimeSeconds.HasValue ? (object)mission.TotalRuntimeSeconds.Value : DBNull.Value);
                     cmd.Parameters.AddWithValue("@created_utc", SqliteDatabaseDriver.ToIso8601(mission.CreatedUtc));
                     cmd.Parameters.AddWithValue("@started_utc", mission.StartedUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(mission.StartedUtc.Value) : DBNull.Value);
                     cmd.Parameters.AddWithValue("@completed_utc", mission.CompletedUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(mission.CompletedUtc.Value) : DBNull.Value);
@@ -146,6 +147,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                             persona = @persona,
                             depends_on_mission_id = @depends_on_mission_id,
                             failure_reason = @failure_reason,
+                            total_runtime_seconds = @total_runtime_seconds,
                             started_utc = @started_utc,
                             completed_utc = @completed_utc,
                             last_update_utc = @last_update_utc
@@ -171,6 +173,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     cmd.Parameters.AddWithValue("@persona", (object?)mission.Persona ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@depends_on_mission_id", (object?)mission.DependsOnMissionId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@failure_reason", (object?)mission.FailureReason ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@total_runtime_seconds", mission.TotalRuntimeSeconds.HasValue ? (object)mission.TotalRuntimeSeconds.Value : DBNull.Value);
                     cmd.Parameters.AddWithValue("@started_utc", mission.StartedUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(mission.StartedUtc.Value) : DBNull.Value);
                     cmd.Parameters.AddWithValue("@completed_utc", mission.CompletedUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(mission.CompletedUtc.Value) : DBNull.Value);
                     cmd.Parameters.AddWithValue("@last_update_utc", SqliteDatabaseDriver.ToIso8601(mission.LastUpdateUtc));

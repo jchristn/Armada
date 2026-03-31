@@ -432,6 +432,10 @@ export default function MissionDetail() {
         </div>
         <div className="detail-field"><span className="detail-label">Commit Hash</span><span className="mono">{mission.commitHash || '-'}</span></div>
         <div className="detail-field">
+          <span className="detail-label">Total Runtime</span>
+          <span>{mission.totalRuntimeSeconds != null ? (mission.totalRuntimeSeconds < 60 ? mission.totalRuntimeSeconds.toFixed(1) + 's' : (mission.totalRuntimeSeconds / 60).toFixed(1) + 'm') : '-'}</span>
+        </div>
+        <div className="detail-field">
           <span className="detail-label">Created</span>
           <span title={mission.createdUtc}>
             {formatTimeRelative(mission.createdUtc)}

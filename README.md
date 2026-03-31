@@ -7,7 +7,7 @@
 <p align="center">
   <strong>Reduce context switching across projects. Keep agent work in queryable memory.</strong>
   <br />
-  <em>v0.4.0 alpha -- APIs and schemas may change</em>
+  <em>v0.5.0 alpha -- APIs and schemas may change</em>
 </p>
 
 <p align="center">
@@ -50,6 +50,7 @@ Everything else in Armada exists to support that: isolated worktrees, parallel d
 - **Quality gates that run automatically.** Every piece of work can flow through a pipeline: plan it, implement it, test it, review it. No manual intervention between steps.
 - **Git isolation by default.** Every agent works in its own worktree on its own branch. Agents can't step on each other. Your main branch stays clean until you merge.
 - **Configurable and extensible workflows.** Prompt templates, personas, and pipelines are user-controlled, so you can adapt the system to your project instead of fitting your project to the built-ins.
+- **Per-captain model selection.** Assign specific AI models to individual captains, or let the runtime choose automatically. Model validation ensures the specified model is available before the captain begins work.
 - **Works with the agents you already have.** Claude Code, Codex, Gemini, Cursor -- pluggable runtime system.
 
 ### Who It's For

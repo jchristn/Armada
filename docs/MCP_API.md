@@ -1560,6 +1560,7 @@ Register a new captain (AI agent).
     "name": { "type": "string", "description": "Captain display name" },
     "runtime": { "type": "string", "description": "Agent runtime: ClaudeCode, Codex, Gemini, Cursor" },
     "systemInstructions": { "type": "string", "description": "System instructions for this captain -- injected into every mission prompt to specialize behavior" },
+    "model": { "type": "string", "description": "AI model to use (e.g. claude-sonnet-4-6, claude-opus-4-6). Null for automatic selection." },
     "allowedPersonas": { "type": "array", "items": { "type": "string" }, "description": "List of persona names this captain is allowed to use" },
     "preferredPersona": { "type": "string", "description": "Preferred persona name for this captain" }
   },
@@ -1571,6 +1572,7 @@ Register a new captain (AI agent).
 |---|---|---|---|
 | `name` | string | Yes | Captain display name |
 | `runtime` | string | No | Agent runtime: `ClaudeCode`, `Codex`, `Gemini`, `Cursor` |
+| `model` | string | No | AI model to use (e.g. `claude-sonnet-4-6`, `claude-opus-4-6`). Null for automatic selection. |
 | `systemInstructions` | string | No | System instructions injected into every mission prompt for this captain |
 | `allowedPersonas` | string[] | No | List of persona names this captain is allowed to use |
 | `preferredPersona` | string | No | Preferred persona name for this captain |
@@ -1612,6 +1614,7 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
     "captainId": { "type": "string", "description": "Captain ID (cpt_ prefix)" },
     "name": { "type": "string", "description": "New display name" },
     "runtime": { "type": "string", "description": "New agent runtime: ClaudeCode, Codex, Gemini, Cursor" },
+    "model": { "type": "string", "description": "AI model to use (e.g. claude-sonnet-4-6, claude-opus-4-6). Null for automatic selection." },
     "systemInstructions": { "type": "string", "description": "New system instructions for this captain" },
     "allowedPersonas": { "type": "array", "items": { "type": "string" }, "description": "New list of persona names this captain is allowed to use" },
     "preferredPersona": { "type": "string", "description": "New preferred persona name for this captain" }
@@ -1625,6 +1628,7 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
 | `captainId` | string | Yes | Captain ID (prefix `cpt_`) |
 | `name` | string | No | New display name |
 | `runtime` | string | No | New agent runtime: `ClaudeCode`, `Codex`, `Gemini`, `Cursor` |
+| `model` | string | No | AI model to use (e.g. `claude-sonnet-4-6`, `claude-opus-4-6`). Null for automatic selection. |
 | `systemInstructions` | string | No | New system instructions for this captain |
 | `allowedPersonas` | string[] | No | New list of persona names this captain is allowed to use |
 | `preferredPersona` | string | No | New preferred persona name for this captain |
@@ -2578,6 +2582,7 @@ Paginated result wrapper returned by `armada_enumerate`.
 | `prUrl` | string \| null | Pull request URL |
 | `commitHash` | string \| null | Git commit hash (HEAD) captured at mission completion |
 | `diffSnapshot` | string \| null | Always `null` in list/status responses. Use `armada_get_mission_diff` to retrieve the full diff. |
+| `totalRuntimeSeconds` | number \| null | Total runtime in seconds from start to completion |
 | `createdUtc` | string | ISO 8601 creation timestamp |
 | `startedUtc` | string \| null | ISO 8601 start timestamp |
 | `completedUtc` | string \| null | ISO 8601 completion timestamp |
@@ -2590,6 +2595,7 @@ Paginated result wrapper returned by `armada_enumerate`.
 | `id` | string | Captain ID (prefix `cpt_`) |
 | `name` | string | Display name |
 | `runtime` | string | [AgentRuntimeEnum](#agentruntimeenum) value |
+| `model` | string \| null | AI model specified for this captain. Null for automatic selection. |
 | `state` | string | [CaptainStateEnum](#captainstateenum) value |
 | `currentMissionId` | string \| null | Currently assigned mission ID |
 | `currentDockId` | string \| null | Currently assigned dock (worktree) ID |

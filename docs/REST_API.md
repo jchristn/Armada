@@ -1497,13 +1497,14 @@ Register a new captain (AI agent).
 |---|---|---|---|
 | `Name` | string | yes | Captain name |
 | `Runtime` | string | no | Agent runtime type (default: `ClaudeCode`) |
+| `Model` | string | no | AI model to use for this captain (e.g. `"claude-sonnet-4-6"`). Null for automatic selection. |
 
 **Response:** `201 Created` - [Captain](#captain)
 
 ```bash
 curl -X POST http://localhost:7890/api/v1/captains \
   -H "Content-Type: application/json" \
-  -d '{"Name": "captain-1", "Runtime": "ClaudeCode", "SystemInstructions": "You are a testing specialist. Always run tests before committing."}'
+  -d '{"Name": "captain-1", "Runtime": "ClaudeCode", "Model": "claude-sonnet-4-6", "SystemInstructions": "You are a testing specialist. Always run tests before committing."}'
 ```
 
 ---
@@ -1536,6 +1537,7 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
 {
   "name": "captain-bravo",
   "runtime": "Codex",
+  "model": "claude-opus-4-6",
   "systemInstructions": "Focus on code quality and always run linting before commits."
 }
 ```
@@ -1547,7 +1549,7 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
 curl -X PUT http://localhost:7890/api/v1/captains/cpt_abc123 \
   -H "Content-Type: application/json" \
   -H "x-api-key: YOUR_KEY" \
-  -d '{"name": "captain-bravo", "runtime": "Codex"}'
+  -d '{"name": "captain-bravo", "runtime": "Codex", "model": "claude-opus-4-6"}'
 ```
 
 ---
@@ -2871,6 +2873,7 @@ An atomic unit of work assigned to a captain.
   "DiffSnapshot": null,
   "CreatedUtc": "2026-03-07T12:00:00Z",
   "StartedUtc": "2026-03-07T12:05:00Z",
+  "TotalRuntimeSeconds": null,
   "CompletedUtc": null,
   "LastUpdateUtc": "2026-03-07T12:10:00Z"
 }
@@ -2893,6 +2896,7 @@ An atomic unit of work assigned to a captain.
 | `PrUrl` | string? | null | Pull request URL if created |
 | `CommitHash` | string? | null | Git commit hash captured on completion |
 | `DiffSnapshot` | string? | null | Always `null` in list/status responses to keep payloads compact. Use `GET /api/v1/missions/{id}/diff` to retrieve the full diff. |
+| `TotalRuntimeSeconds` | number? | null | Total runtime in seconds from start to completion |
 | `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
 | `StartedUtc` | datetime? | null | Work start timestamp (UTC) |
 | `CompletedUtc` | datetime? | null | Completion timestamp (UTC) |
@@ -2909,6 +2913,7 @@ A worker AI agent instance executing missions.
   "Id": "cpt_abc123",
   "Name": "captain-1",
   "Runtime": "ClaudeCode",
+  "Model": null,
   "SystemInstructions": null,
   "State": "Idle",
   "CurrentMissionId": null,
@@ -2926,6 +2931,7 @@ A worker AI agent instance executing missions.
 | `Id` | string | auto-generated | Unique ID with `cpt_` prefix |
 | `Name` | string | `"Captain"` | Captain name |
 | `Runtime` | [AgentRuntimeEnum](#agentruntimeenum) | `ClaudeCode` | Agent runtime type |
+| `Model` | string? | null | AI model to use for this captain (e.g. `"claude-sonnet-4-6"`). Null for automatic selection. |
 | `SystemInstructions` | string? | null | Per-captain system instructions injected into every mission prompt |
 | `State` | [CaptainStateEnum](#captainstateenum) | `Idle` | Current state |
 | `CurrentMissionId` | string? | null | Currently assigned mission ID |

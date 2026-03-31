@@ -49,7 +49,7 @@ export default function CaptainDetail() {
 
   // Edit
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', runtime: 'ClaudeCode', systemInstructions: '', allowedPersonas: '', preferredPersona: '' });
+  const [form, setForm] = useState({ name: '', runtime: 'ClaudeCode', systemInstructions: '', allowedPersonas: '', preferredPersona: '', model: '' });
 
   // Log viewer
   const [logText, setLogText] = useState<string | null>(null);
@@ -96,7 +96,7 @@ export default function CaptainDetail() {
 
   function openEdit() {
     if (!captain) return;
-    setForm({ name: captain.name, runtime: captain.runtime || 'ClaudeCode', systemInstructions: captain.systemInstructions ?? '', allowedPersonas: captain.allowedPersonas ?? '', preferredPersona: captain.preferredPersona ?? '' });
+    setForm({ name: captain.name, runtime: captain.runtime || 'ClaudeCode', systemInstructions: captain.systemInstructions ?? '', allowedPersonas: captain.allowedPersonas ?? '', preferredPersona: captain.preferredPersona ?? '', model: captain.model ?? '' });
     setShowForm(true);
   }
 
@@ -108,10 +108,14 @@ export default function CaptainDetail() {
       if (!payload.systemInstructions) delete payload.systemInstructions;
       if (!payload.allowedPersonas) delete payload.allowedPersonas;
       if (!payload.preferredPersona) delete payload.preferredPersona;
+      if (!payload.model) delete payload.model;
       await updateCaptain(captain.id, payload);
       setShowForm(false);
       load();
-    } catch { setError('Save failed.'); }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Save failed.';
+      setError(msg.includes('Invalid model') ? msg : 'Save failed: ' + msg);
+    }
   }
 
   async function handleViewLog() {
@@ -236,6 +240,10 @@ export default function CaptainDetail() {
               Preferred Persona
               <input value={form.preferredPersona} onChange={e => setForm({ ...form, preferredPersona: e.target.value })} placeholder="e.g., Worker" />
             </label>
+            <label title="AI model to use for this captain. Leave blank for automatic selection by the agent runtime.">
+              Model
+              <input value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} placeholder="e.g., claude-sonnet-4-6" />
+            </label>
             <div className="modal-actions">
               <button type="submit" className="btn btn-primary">Save</button>
               <button type="button" className="btn" onClick={() => setShowForm(false)}>Cancel</button>
@@ -260,6 +268,7 @@ export default function CaptainDetail() {
         <div className="detail-field"><span className="detail-label">Name</span><span>{captain.name}</span></div>
         <div className="detail-field"><span className="detail-label">Tenant ID</span><span className="mono">{captain.tenantId || '-'}</span></div>
         <div className="detail-field"><span className="detail-label">Runtime</span><span>{captain.runtime || 'ClaudeCode'}</span></div>
+        <div className="detail-field"><span className="detail-label">Model</span><span>{captain.model || <span className="text-dim">Automatic</span>}</span></div>
       </div>
       {captain.systemInstructions && (
         <div className="detail-context-section">

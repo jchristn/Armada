@@ -4,6 +4,39 @@ All notable changes to Armada are documented in this file.
 
 ---
 
+## v0.5.0
+
+### Captain Model Selection
+- Captains can now specify an AI model (e.g. `claude-sonnet-4-6`, `claude-opus-4-6`) via the `Model` property
+- Model is passed to the agent runtime on launch via `--model` flag for Claude Code and Codex
+- When no model is specified, the agent runtime selects its default model automatically
+- Model validation on create/update -- Armada briefly starts the agent to verify the model is valid and available
+- Invalid model errors are surfaced through REST API, MCP tools, and dashboard error modals
+
+### Mission Total Runtime
+- Missions now track `TotalRuntimeSeconds` from start to completion
+- Total runtime is displayed in the mission detail view in the dashboard
+
+### Dashboard
+- Captain detail page now shows and allows editing the Model field
+- Mission detail page shows total runtime (formatted as seconds or minutes)
+- Removed "task detected" preview and duplicate description textbox from the Dispatch page
+
+### Infrastructure
+- Database migrations for all four supported databases (SQLite, PostgreSQL, MySQL, SQL Server)
+- Migration script: `migrations/migrate_v0.4.0_to_v0.5.0.sh` and `.bat`
+- Docker Compose image tags updated to v0.5.0
+
+### API
+- `armada_create_captain` and `armada_update_captain` MCP tools accept optional `model` parameter
+- REST `POST /api/v1/captains` and `PUT /api/v1/captains/{id}` accept `Model` field
+- Postman collection updated with `Model` field
+
+### Documentation
+- REST_API.md and MCP_API.md updated with captain Model and mission TotalRuntimeSeconds fields
+
+---
+
 ## v0.4.0
 
 ### Personas and Pipelines

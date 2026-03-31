@@ -148,6 +148,7 @@ namespace Armada.Server
         {
             _Logging.Info(_Header + "launching " + captain.Runtime + " agent for captain " + captain.Id);
             Armada.Runtimes.Interfaces.IAgentRuntime runtime = _RuntimeFactory.Create(captain.Runtime);
+            runtime.Model = captain.Model;
             runtime.OnOutputReceived += HandleAgentOutput;
             runtime.OnOutputReceived += HandleAgentHeartbeat;
             runtime.OnProcessExited += HandleAgentProcessExited;

@@ -16,6 +16,11 @@ namespace Armada.Runtimes.Interfaces
         bool SupportsResume { get; }
 
         /// <summary>
+        /// AI model to use for this agent. Null for automatic selection by the runtime.
+        /// </summary>
+        string? Model { get; set; }
+
+        /// <summary>
         /// Event raised when the agent writes a line to stdout.
         /// The int parameter is the process ID, the string is the output line.
         /// </summary>

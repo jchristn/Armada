@@ -3,6 +3,7 @@ namespace Armada.Server.Routes
     using System.Diagnostics;
     using System.IO;
     using System.Text.Json;
+    using System.Threading;
     using SwiftStack;
     using SwiftStack.Rest;
     using SwiftStack.Rest.OpenApi;
@@ -211,6 +212,15 @@ namespace Armada.Server.Routes
                 updated.LastHeartbeatUtc = existing.LastHeartbeatUtc;
                 updated.CreatedUtc = existing.CreatedUtc;
                 updated.LastUpdateUtc = DateTime.UtcNow;
+                if (!String.IsNullOrEmpty(updated.Model) && updated.Model != existing.Model)
+                {
+                    string? validationError = await ValidateModelAsync(updated.Runtime, updated.Model).ConfigureAwait(false);
+                    if (validationError != null)
+                    {
+                        req.Http.Response.StatusCode = 400;
+                        return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid model: " + validationError };
+                    }
+                }
                 updated = await _database.Captains.UpdateAsync(updated).ConfigureAwait(false);
                 return (object)updated;
             },
@@ -457,6 +467,64 @@ namespace Armada.Server.Routes
                 .WithRequestBody(OpenApiRequestBodyMetadata.Json<DeleteMultipleRequest>("List of captain IDs to delete"))
                 .WithResponse(200, OpenApiResponseMetadata.Json<DeleteMultipleResult>("Delete result summary"))
                 .WithSecurity("ApiKey"));
+        }
+
+        /// <summary>
+        /// Validate a model by briefly starting the agent runtime to check if the model is available.
+        /// Returns null on success, or an error message on failure.
+        /// </summary>
+        private static async Task<string?> ValidateModelAsync(AgentRuntimeEnum runtime, string model)
+        {
+            if (runtime != AgentRuntimeEnum.ClaudeCode)
+                return null;
+
+            try
+            {
+                ProcessStartInfo startInfo = new ProcessStartInfo
+                {
+                    FileName = "claude",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+                startInfo.ArgumentList.Add("--model");
+                startInfo.ArgumentList.Add(model);
+                startInfo.ArgumentList.Add("--print");
+                startInfo.ArgumentList.Add("--dangerously-skip-permissions");
+                startInfo.ArgumentList.Add("Say OK");
+
+                using (Process? proc = Process.Start(startInfo))
+                {
+                    if (proc == null)
+                        return "Failed to start validation process";
+
+                    using (CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
+                    {
+                        try
+                        {
+                            await proc.WaitForExitAsync(cts.Token).ConfigureAwait(false);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            try { proc.Kill(true); } catch { }
+                            return null;
+                        }
+                    }
+
+                    if (proc.ExitCode != 0)
+                    {
+                        string stderr = await proc.StandardError.ReadToEndAsync().ConfigureAwait(false);
+                        return !String.IsNullOrEmpty(stderr) ? stderr.Trim() : "Model validation failed with exit code " + proc.ExitCode;
+                    }
+                }
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                return "Model validation error: " + ex.Message;
+            }
         }
     }
 }
