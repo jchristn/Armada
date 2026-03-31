@@ -416,6 +416,45 @@ namespace Armada.Test.Unit.Suites.Services
                 }
             });
 
+            await RunTest("OrphanCompletion_DoesNotReleaseCaptainWorkingOnNewMission", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    SqliteDatabaseDriver db = testDb.Driver;
+                    StubGitService git = new StubGitService();
+                    ArmadaSettings settings = CreateSettings();
+                    LoggingModule logging = CreateLogging();
+                    ServiceSet services = CreateServices(logging, db, settings, git);
+                    MissionService missionService = services.Missions;
+
+                    TestFixture fixture = await SetupFixtureAsync(db, captainCount: 1, missionCount: 2);
+                    Captain captain = fixture.Captains[0];
+                    Vessel vessel = fixture.Vessel;
+
+                    await missionService.TryAssignAsync(fixture.Missions[0], vessel);
+
+                    Mission? oldMission = await db.Missions.ReadAsync(fixture.Missions[0].Id);
+                    AssertEqual(MissionStatusEnum.InProgress, oldMission!.Status, "Mission 1 should be InProgress");
+
+                    // Simulate the captain having already moved on to mission 2 before orphan recovery finalizes mission 1.
+                    await missionService.TryAssignAsync(fixture.Missions[1], vessel);
+                    Mission? newMission = await db.Missions.ReadAsync(fixture.Missions[1].Id);
+
+                    Captain? movedCaptain = await db.Captains.ReadAsync(captain.Id);
+                    movedCaptain!.CurrentMissionId = fixture.Missions[1].Id;
+                    movedCaptain.CurrentDockId = newMission!.DockId;
+                    movedCaptain.ProcessId = newMission.ProcessId;
+                    movedCaptain.State = CaptainStateEnum.Working;
+                    await db.Captains.UpdateAsync(movedCaptain);
+
+                    await missionService.HandleCompletionAsync(movedCaptain, fixture.Missions[0].Id);
+
+                    Captain? finalCaptain = await db.Captains.ReadAsync(captain.Id);
+                    AssertEqual(CaptainStateEnum.Working, finalCaptain!.State, "Captain should remain Working on the newer mission");
+                    AssertEqual(fixture.Missions[1].Id, finalCaptain.CurrentMissionId, "Captain should still track the newer mission");
+                }
+            });
+
             await RunTest("NoPendingMissions_CaptainReleasedToIdle", async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())

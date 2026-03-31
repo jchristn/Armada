@@ -27,6 +27,11 @@ namespace Armada.Runtimes
         public event Action<int, string>? OnOutputReceived;
 
         /// <summary>
+        /// Event raised immediately after the agent process starts and a PID is available.
+        /// </summary>
+        public event Action<int>? OnProcessStarted;
+
+        /// <summary>
         /// Event raised when the agent process exits.
         /// Parameters: processId, exitCode (null if unavailable).
         /// </summary>
@@ -147,6 +152,11 @@ namespace Armada.Runtimes
                     _Logging.Debug(_Header + "[stderr] " + e.Data);
                     try { logWriter?.WriteLine("[stderr] " + e.Data); }
                     catch (ObjectDisposedException) { }
+
+                    // Treat stderr as runtime output for heartbeat/progress/output capture.
+                    // Some agent CLIs emit useful diagnostics or status lines on stderr.
+                    try { OnOutputReceived?.Invoke(process.Id, e.Data); }
+                    catch { }
                 }
             };
 
@@ -177,6 +187,9 @@ namespace Armada.Runtimes
             bool started = process.Start();
             if (!started)
                 throw new InvalidOperationException("Failed to start agent process: " + command);
+
+            try { OnProcessStarted?.Invoke(process.Id); }
+            catch (Exception ex) { _Logging.Warn(_Header + "error in OnProcessStarted handler for process " + process.Id + ": " + ex.Message); }
 
             // Close stdin immediately so the agent doesn't block waiting for piped input
             process.StandardInput.Close();
@@ -265,6 +278,32 @@ namespace Armada.Runtimes
         /// </summary>
         protected virtual void ApplyEnvironment(ProcessStartInfo startInfo)
         {
+        }
+
+        /// <summary>
+        /// Resolve a PATH-based executable name to a concrete Windows-friendly launcher when needed.
+        /// npm-installed CLIs on Windows often expose .cmd wrappers that must be launched directly
+        /// when UseShellExecute=false.
+        /// </summary>
+        protected string ResolveExecutable(string command)
+        {
+            if (String.IsNullOrEmpty(command)) throw new ArgumentNullException(nameof(command));
+
+            if (!OperatingSystem.IsWindows())
+                return command;
+
+            if (command.Contains(Path.DirectorySeparatorChar) || command.Contains(Path.AltDirectorySeparatorChar))
+                return command;
+
+            string appDataNpm = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "npm",
+                command + ".cmd");
+
+            if (File.Exists(appDataNpm))
+                return appDataNpm;
+
+            return command;
         }
 
         #endregion

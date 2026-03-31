@@ -221,8 +221,8 @@ namespace Armada.Server.Routes
                 }
 
                 // 7. Agent Runtimes
-                string[] runtimeCommands = new string[] { "claude", "codex" };
-                string[] runtimeNames = new string[] { "Claude Code", "Codex" };
+                string[] runtimeCommands = new string[] { "claude", "codex", "gemini", "cursor-agent" };
+                string[] runtimeNames = new string[] { "Claude Code", "Codex", "Gemini CLI", "Cursor" };
                 bool isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
                 for (int i = 0; i < runtimeCommands.Length; i++)
                 {

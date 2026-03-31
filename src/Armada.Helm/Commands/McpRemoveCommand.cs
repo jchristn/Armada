@@ -70,7 +70,7 @@ namespace Armada.Helm.Commands
 
             AnsiConsole.MarkupLine("[bold]What You Need To Do[/]");
             AnsiConsole.MarkupLine("[green]1.[/] Restart the MCP client after removal so it forgets the Armada entry.");
-            AnsiConsole.MarkupLine("[green]2.[/] If a file was skipped or could not be changed automatically, use the path shown above and remove the `mcpServers.armada` object manually.");
+            AnsiConsole.MarkupLine("[green]2.[/] If automatic removal was skipped or blocked, use the command or file path shown above to remove the Armada entry manually.");
             AnsiConsole.MarkupLine($"[green]3.[/] Cursor removal is project-scoped. The command targets [green]{Markup.Escape(McpConfigHelper.GetCursorConfigPath())}[/] for the current working directory.");
 
             return 0;
@@ -88,7 +88,15 @@ namespace Armada.Helm.Commands
         {
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine($"[bold]{target.ClientName} manual cleanup[/] -> [green]{Markup.Escape(target.FilePath)}[/]");
-            AnsiConsole.MarkupLine("[dim]Remove the `armada` object from the `mcpServers` section. If it becomes empty, you can remove `mcpServers` entirely.[/]");
+            if (!String.IsNullOrEmpty(target.ManualRemoveCommand))
+            {
+                AnsiConsole.MarkupLine("[dim]Run this command:[/]");
+                AnsiConsole.MarkupLine($"[green]  {Markup.Escape(McpConfigHelper.BuildManualRemoveSnippet(target))}[/]");
+            }
+            else
+            {
+                AnsiConsole.MarkupLine("[dim]Remove the `armada` object from the `mcpServers` section. If it becomes empty, you can remove `mcpServers` entirely.[/]");
+            }
             if (target.ClientName == "Claude Code")
             {
                 AnsiConsole.MarkupLine($"[dim]Claude agent file:[/] [green]{Markup.Escape(McpConfigHelper.GetClaudeAgentPath())}[/]");

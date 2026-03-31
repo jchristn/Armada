@@ -1,5 +1,6 @@
 namespace Armada.Helm.Commands
 {
+    using System.Diagnostics;
     using System.Text.Json;
     using System.Text.Json.Nodes;
 
@@ -8,9 +9,14 @@ namespace Armada.Helm.Commands
         internal sealed record ConfigTarget(
             string ClientName,
             string FilePath,
-            JsonObject ArmadaConfig,
+            JsonObject? ArmadaConfig = null,
             bool IsProjectScoped = false,
-            bool InstallAgent = false);
+            bool InstallAgent = false,
+            string? CliCommand = null,
+            string[]? InstallArgs = null,
+            string[]? RemoveArgs = null,
+            string? ManualInstallCommand = null,
+            string? ManualRemoveCommand = null);
 
         internal sealed record ApplyResult(string ClientName, string FilePath, bool Changed, string Message, bool IsProjectScoped = false);
 
@@ -33,7 +39,7 @@ namespace Armada.Helm.Commands
 
         internal static string GetCodexConfigPath()
         {
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex", "config.json");
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex", "config.toml");
         }
 
         internal static string GetGeminiConfigPath()
@@ -49,6 +55,8 @@ namespace Armada.Helm.Commands
         internal static List<ConfigTarget> BuildTargets(int mcpPort)
         {
             string mcpRpcUrl = GetMcpRpcUrl(mcpPort);
+            string codexCommand = ResolveCliCommand("codex");
+            string geminiCommand = ResolveCliCommand("gemini");
 
             return new List<ConfigTarget>
             {
@@ -60,22 +68,24 @@ namespace Armada.Helm.Commands
                         ["type"] = "http",
                         ["url"] = mcpRpcUrl,
                     },
-                    InstallAgent: true),
+                    InstallAgent: true,
+                    ManualInstallCommand: BuildClaudeCliCommand(mcpPort)),
                 new(
                     "Codex",
                     GetCodexConfigPath(),
-                    new JsonObject
-                    {
-                        ["type"] = "http",
-                        ["url"] = mcpRpcUrl,
-                    }),
+                    CliCommand: codexCommand,
+                    InstallArgs: new[] { "mcp", "add", "armada", "--url", mcpRpcUrl },
+                    RemoveArgs: new[] { "mcp", "remove", "armada" },
+                    ManualInstallCommand: codexCommand + " mcp add armada --url " + mcpRpcUrl,
+                    ManualRemoveCommand: codexCommand + " mcp remove armada"),
                 new(
                     "Gemini CLI",
                     GetGeminiConfigPath(),
-                    new JsonObject
-                    {
-                        ["httpUrl"] = mcpRpcUrl,
-                    }),
+                    CliCommand: geminiCommand,
+                    InstallArgs: new[] { "mcp", "add", "--scope", "user", "--transport", "http", "armada", mcpRpcUrl },
+                    RemoveArgs: new[] { "mcp", "remove", "armada" },
+                    ManualInstallCommand: geminiCommand + " mcp add --scope user --transport http armada " + mcpRpcUrl,
+                    ManualRemoveCommand: geminiCommand + " mcp remove armada"),
                 new(
                     "Cursor",
                     GetCursorConfigPath(),
@@ -90,6 +100,25 @@ namespace Armada.Helm.Commands
 
         internal static async Task<ApplyResult> InstallTargetAsync(ConfigTarget target)
         {
+            if (!String.IsNullOrEmpty(target.CliCommand) && target.InstallArgs != null)
+            {
+                if (target.RemoveArgs != null)
+                    await RunCliCommandAsync(target.CliCommand, target.RemoveArgs).ConfigureAwait(false);
+
+                bool success = await RunCliCommandAsync(target.CliCommand, target.InstallArgs).ConfigureAwait(false);
+                return new ApplyResult(
+                    target.ClientName,
+                    target.FilePath,
+                    success,
+                    success
+                        ? "Configured Armada MCP entry via native CLI."
+                        : "Failed to configure Armada MCP entry via native CLI.",
+                    target.IsProjectScoped);
+            }
+
+            if (target.ArmadaConfig == null)
+                throw new InvalidOperationException("Config target does not define ArmadaConfig for file-based installation.");
+
             JsonObject root = await ReadOrCreateRootAsync(target.FilePath).ConfigureAwait(false);
             if (root["mcpServers"] is not JsonObject)
             {
@@ -114,6 +143,19 @@ namespace Armada.Helm.Commands
 
         internal static async Task<ApplyResult> RemoveTargetAsync(ConfigTarget target)
         {
+            if (!String.IsNullOrEmpty(target.CliCommand) && target.RemoveArgs != null)
+            {
+                bool success = await RunCliCommandAsync(target.CliCommand, target.RemoveArgs).ConfigureAwait(false);
+                return new ApplyResult(
+                    target.ClientName,
+                    target.FilePath,
+                    success,
+                    success
+                        ? "Removed Armada MCP entry via native CLI."
+                        : "No Armada MCP entry was present or the native CLI is unavailable.",
+                    target.IsProjectScoped);
+            }
+
             if (!File.Exists(target.FilePath))
             {
                 return new ApplyResult(
@@ -176,6 +218,12 @@ namespace Armada.Helm.Commands
 
         internal static string BuildManualSnippet(ConfigTarget target)
         {
+            if (!String.IsNullOrEmpty(target.ManualInstallCommand))
+                return target.ManualInstallCommand;
+
+            if (target.ArmadaConfig == null)
+                return "";
+
             JsonObject root = new JsonObject
             {
                 ["mcpServers"] = new JsonObject
@@ -184,6 +232,14 @@ namespace Armada.Helm.Commands
                 },
             };
             return root.ToJsonString(JsonOptions);
+        }
+
+        internal static string BuildManualRemoveSnippet(ConfigTarget target)
+        {
+            if (!String.IsNullOrEmpty(target.ManualRemoveCommand))
+                return target.ManualRemoveCommand;
+
+            return "Remove the `armada` object from the `mcpServers` section.";
         }
 
         internal static string BuildClaudeCliCommand(int mcpPort)
@@ -211,6 +267,48 @@ namespace Armada.Helm.Commands
 
             JsonNode? node = JsonNode.Parse(text);
             return node as JsonObject ?? new JsonObject();
+        }
+
+        private static string ResolveCliCommand(string baseName)
+        {
+            if (!OperatingSystem.IsWindows())
+                return baseName;
+
+            string candidate = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "npm",
+                baseName + ".cmd");
+
+            return File.Exists(candidate) ? candidate : baseName;
+        }
+
+        private static async Task<bool> RunCliCommandAsync(string command, IEnumerable<string> args)
+        {
+            try
+            {
+                ProcessStartInfo startInfo = new ProcessStartInfo
+                {
+                    FileName = command,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+
+                foreach (string arg in args)
+                    startInfo.ArgumentList.Add(arg);
+
+                using Process? process = Process.Start(startInfo);
+                if (process == null)
+                    return false;
+
+                await process.WaitForExitAsync().ConfigureAwait(false);
+                return process.ExitCode == 0;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         /// <summary>

@@ -12,7 +12,7 @@ namespace Armada.Core.Services
 
         /// <summary>
         /// Detect the first available agent runtime on the system PATH.
-        /// Checks in order: claude, codex.
+        /// Checks in order: claude, codex, gemini, cursor-agent.
         /// </summary>
         /// <returns>The detected runtime type, or null if none found.</returns>
         public static AgentRuntimeEnum? DetectDefaultRuntime()
@@ -20,7 +20,7 @@ namespace Armada.Core.Services
             if (IsCommandAvailable("claude")) return AgentRuntimeEnum.ClaudeCode;
             if (IsCommandAvailable("codex")) return AgentRuntimeEnum.Codex;
             if (IsCommandAvailable("gemini")) return AgentRuntimeEnum.Gemini;
-            if (IsCommandAvailable("cursor")) return AgentRuntimeEnum.Cursor;
+            if (IsCommandAvailable("cursor-agent")) return AgentRuntimeEnum.Cursor;
             return null;
         }
 
@@ -34,7 +34,7 @@ namespace Armada.Core.Services
             if (IsCommandAvailable("claude")) runtimes.Add(AgentRuntimeEnum.ClaudeCode);
             if (IsCommandAvailable("codex")) runtimes.Add(AgentRuntimeEnum.Codex);
             if (IsCommandAvailable("gemini")) runtimes.Add(AgentRuntimeEnum.Gemini);
-            if (IsCommandAvailable("cursor")) runtimes.Add(AgentRuntimeEnum.Cursor);
+            if (IsCommandAvailable("cursor-agent")) runtimes.Add(AgentRuntimeEnum.Cursor);
             return runtimes;
         }
 
@@ -79,7 +79,7 @@ namespace Armada.Core.Services
             {
                 AgentRuntimeEnum.ClaudeCode => "npm install -g @anthropic-ai/claude-code",
                 AgentRuntimeEnum.Codex => "npm install -g @openai/codex",
-                AgentRuntimeEnum.Gemini => "npm install -g @anthropic-ai/gemini-cli (or see https://github.com/google-gemini/gemini-cli)",
+                AgentRuntimeEnum.Gemini => "npm install -g @google/gemini-cli",
                 AgentRuntimeEnum.Cursor => "See https://docs.cursor.com/cli",
                 _ => "(see runtime documentation)"
             };

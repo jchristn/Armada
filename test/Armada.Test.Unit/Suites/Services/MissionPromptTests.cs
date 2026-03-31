@@ -516,6 +516,42 @@ namespace Armada.Test.Unit.Suites.Services
                     }
                 }
             });
+
+            await RunTest("Shared launch prompt builder includes persona and vessel context", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    IPromptTemplateService templateService = new PromptTemplateService(testDb.Driver, logging);
+                    await templateService.SeedDefaultsAsync();
+
+                    Vessel vessel = new Vessel("LaunchPromptVessel", "https://github.com/test/repo");
+                    vessel.ProjectContext = "Service-oriented C# backend.";
+                    vessel.StyleGuide = "Prefer explicit types.";
+                    vessel.EnableModelContext = true;
+                    vessel.ModelContext = "Background jobs are scheduled from ArmadaServer.";
+
+                    Captain captain = new Captain("prompt-captain");
+                    captain.SystemInstructions = "Be concise and careful.";
+
+                    Mission mission = new Mission("Write tests", "Add unit tests for the service layer.");
+                    mission.Persona = "TestEngineer";
+                    mission.BranchName = "armada/prompt-captain/msn_test";
+
+                    Dock dock = new Dock(vessel.Id);
+                    dock.BranchName = mission.BranchName;
+
+                    string prompt = await MissionPromptBuilder.BuildLaunchPromptAsync(
+                        mission, vessel, captain, dock, templateService).ConfigureAwait(false);
+
+                    AssertContains("test engineer", prompt.ToLowerInvariant());
+                    AssertContains("Service-oriented C# backend.", prompt);
+                    AssertContains("Prefer explicit types.", prompt);
+                    AssertContains("Background jobs are scheduled from ArmadaServer.", prompt);
+                    AssertContains("Be concise and careful.", prompt);
+                    AssertContains("Write tests", prompt);
+                }
+            });
         }
     }
 }

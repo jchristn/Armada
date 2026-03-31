@@ -36,6 +36,12 @@ namespace Armada.Server
         private System.Collections.Concurrent.ConcurrentDictionary<string, System.Text.StringBuilder> _MissionOutput = new System.Collections.Concurrent.ConcurrentDictionary<string, System.Text.StringBuilder>();
 
         /// <summary>
+        /// Tracks launches that have started but have not yet completed HandleLaunchAgentAsync registration.
+        /// This closes the race where a fast process can emit output or exit before the PID mapping is written.
+        /// </summary>
+        private System.Collections.Concurrent.ConcurrentDictionary<string, (string CaptainId, string MissionId)> _PendingLaunches = new System.Collections.Concurrent.ConcurrentDictionary<string, (string CaptainId, string MissionId)>();
+
+        /// <summary>
         /// Maps process IDs to captain IDs for progress tracking.
         /// </summary>
         private Dictionary<int, string> _ProcessToCaptain = new Dictionary<int, string>();
@@ -148,50 +154,29 @@ namespace Armada.Server
         {
             _Logging.Info(_Header + "launching " + captain.Runtime + " agent for captain " + captain.Id);
             Armada.Runtimes.Interfaces.IAgentRuntime runtime = _RuntimeFactory.Create(captain.Runtime);
+            string launchKey = captain.Id + ":" + mission.Id;
+            _PendingLaunches[launchKey] = (captain.Id, mission.Id);
+            runtime.OnProcessStarted += processId => HandleProcessStarted(processId, launchKey);
             runtime.OnOutputReceived += HandleAgentOutput;
             runtime.OnOutputReceived += HandleAgentHeartbeat;
             runtime.OnProcessExited += HandleAgentProcessExited;
 
-            // Build persona preamble for the launch prompt
-            string personaPreamble = "";
-            if (!String.IsNullOrEmpty(mission.Persona))
+            Vessel? vessel = null;
+            if (!String.IsNullOrEmpty(mission.VesselId))
             {
-                switch (mission.Persona)
-                {
-                    case "Architect":
-                        personaPreamble = "You are an Architect agent. Analyze the codebase and decompose the goal into right-sized missions using [ARMADA:MISSION] markers.\n\n";
-                        break;
-                    case "Worker":
-                        personaPreamble = "You are a Worker agent. Implement the code changes described below.\n\n";
-                        break;
-                    case "TestEngineer":
-                        personaPreamble = "You are a TestEngineer agent. Write tests for the code changes described in the prior stage diff below.\n\n";
-                        break;
-                    case "Judge":
-                        personaPreamble = "You are a Judge agent. Review the diff below for correctness, completeness, and style. Produce a verdict: PASS, FAIL, or NEEDS_REVISION.\n\n";
-                        break;
-                    default:
-                        personaPreamble = "You are a " + mission.Persona + " agent.\n\n";
-                        break;
-                }
+                vessel = await _Database.Vessels.ReadAsync(mission.VesselId).ConfigureAwait(false);
             }
-
-            // Resolve launch prompt from template service or use hardcoded default
-            string prompt;
-            if (_PromptTemplateService != null)
+            Vessel launchVessel = vessel ?? new Vessel
             {
-                Dictionary<string, string> promptParams = new Dictionary<string, string>
-                {
-                    ["MissionTitle"] = mission.Title,
-                    ["MissionDescription"] = mission.Description ?? ""
-                };
-                string rendered = await _PromptTemplateService.RenderAsync("agent.launch_prompt", promptParams).ConfigureAwait(false);
-                prompt = personaPreamble + (!String.IsNullOrEmpty(rendered) ? rendered : "Mission: " + mission.Title + "\n\n" + (mission.Description ?? ""));
-            }
-            else
-            {
-                prompt = personaPreamble + "Mission: " + mission.Title + "\n\n" + (mission.Description ?? "");
-            }
+                Name = "Unknown Vessel",
+                DefaultBranch = dock.BranchName ?? mission.BranchName ?? "main"
+            };
+            string prompt = await MissionPromptBuilder.BuildLaunchPromptAsync(
+                mission,
+                launchVessel,
+                captain,
+                dock,
+                _PromptTemplateService).ConfigureAwait(false);
 
             if (_Settings.MessageTemplates.EnableCommitMetadata)
             {
@@ -208,16 +193,26 @@ namespace Armada.Server
             string captainLogPointer = Path.Combine(captainLogDir, captain.Id + ".current");
             File.WriteAllText(captainLogPointer, logFilePath);
 
-            int processId = await runtime.StartAsync(
-                dock.WorktreePath ?? throw new InvalidOperationException("Dock worktree path is null"),
-                prompt,
-                logFilePath: logFilePath).ConfigureAwait(false);
+            int processId;
+            try
+            {
+                processId = await runtime.StartAsync(
+                    dock.WorktreePath ?? throw new InvalidOperationException("Dock worktree path is null"),
+                    prompt,
+                    logFilePath: logFilePath).ConfigureAwait(false);
+            }
+            catch
+            {
+                _PendingLaunches.TryRemove(launchKey, out _);
+                throw;
+            }
 
             lock (_ProcessToCaptain)
             {
                 _ProcessToCaptain[processId] = captain.Id;
                 _ProcessToMission[processId] = mission.Id;
             }
+            _PendingLaunches.TryRemove(launchKey, out _);
 
             _Logging.Info(_Header + "agent process " + processId + " started for captain " + captain.Id + " (log: " + logFilePath + ")");
 
@@ -232,6 +227,21 @@ namespace Armada.Server
             }
 
             return processId;
+        }
+
+        /// <summary>
+        /// Register PID-to-captain/mission mapping as soon as a launched process exposes a PID.
+        /// </summary>
+        private void HandleProcessStarted(int processId, string launchKey)
+        {
+            if (!_PendingLaunches.TryGetValue(launchKey, out (string CaptainId, string MissionId) launch))
+                return;
+
+            lock (_ProcessToCaptain)
+            {
+                _ProcessToCaptain[processId] = launch.CaptainId;
+                _ProcessToMission[processId] = launch.MissionId;
+            }
         }
 
         /// <summary>

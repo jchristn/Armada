@@ -8,11 +8,22 @@ namespace Armada.Test.Runtimes.Suites
     {
         public override string Name => "Codex Runtime Tests";
 
-        private CodexRuntime CreateRuntime()
+        private sealed class InspectableCodexRuntime : CodexRuntime
+        {
+            public InspectableCodexRuntime(LoggingModule logging) : base(logging)
+            {
+            }
+
+            public string Command() => GetCommand();
+
+            public List<string> Args(string prompt) => BuildArguments(prompt);
+        }
+
+        private InspectableCodexRuntime CreateRuntime()
         {
             LoggingModule logging = new LoggingModule();
             logging.Settings.EnableConsole = false;
-            return new CodexRuntime(logging);
+            return new InspectableCodexRuntime(logging);
         }
 
         protected override async Task RunTestsAsync()
@@ -37,8 +48,28 @@ namespace Armada.Test.Runtimes.Suites
 
             await RunTest("ApprovalMode Default Is FullAuto", () =>
             {
-                CodexRuntime runtime = CreateRuntime();
+                InspectableCodexRuntime runtime = CreateRuntime();
                 AssertEqual("full-auto", runtime.ApprovalMode);
+            });
+
+            await RunTest("BuildArguments Uses Exec FullAuto", () =>
+            {
+                InspectableCodexRuntime runtime = CreateRuntime();
+                List<string> args = runtime.Args("test prompt");
+                AssertEqual("exec", args[0]);
+                AssertTrue(args.Contains("--full-auto"));
+                AssertEqual("test prompt", args[args.Count - 1]);
+            });
+
+            await RunTest("Windows Command Resolves Cmd Wrapper", () =>
+            {
+                InspectableCodexRuntime runtime = CreateRuntime();
+                string command = runtime.Command();
+
+                if (OperatingSystem.IsWindows())
+                    AssertTrue(command.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase) || command.Equals("codex", StringComparison.OrdinalIgnoreCase), "Expected codex command to resolve to .cmd or codex");
+                else
+                    AssertEqual("codex", command);
             });
 
             await RunTest("ExecutablePath Set Null Throws", () =>

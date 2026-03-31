@@ -22,6 +22,11 @@ namespace Armada.Runtimes.Interfaces
         event Action<int, string>? OnOutputReceived;
 
         /// <summary>
+        /// Event raised immediately after the agent process starts and a PID is available.
+        /// </summary>
+        event Action<int>? OnProcessStarted;
+
+        /// <summary>
         /// Event raised when the agent process exits.
         /// Parameters: processId, exitCode (null if unavailable).
         /// </summary>

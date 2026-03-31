@@ -654,7 +654,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             vessel.ProjectContext = NullableString(reader["project_context"]);
             vessel.StyleGuide = NullableString(reader["style_guide"]);
             try { vessel.EnableModelContext = Convert.ToBoolean(reader["enable_model_context"]); }
-            catch { vessel.EnableModelContext = false; }
+            catch { vessel.EnableModelContext = true; }
             vessel.ModelContext = NullableString(reader["model_context"]);
             string? landingModeStr = NullableString(reader["landing_mode"]);
             if (!String.IsNullOrEmpty(landingModeStr) && Enum.TryParse<LandingModeEnum>(landingModeStr, out LandingModeEnum lm))

@@ -216,6 +216,63 @@ namespace Armada.Test.Unit.Suites.Services
                 }
             });
 
+            await RunTest("Dependent mission waits for pipeline handoff when dependency is WorkProduced", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    DirCreatingGitStub git = new DirCreatingGitStub();
+                    IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
+                    ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
+                    MissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService);
+                    captainService.OnLaunchAgent = (Captain c, Mission m, Dock d) => Task.FromResult(12345);
+
+                    // Create vessel
+                    Vessel vessel = new Vessel("handoff-vessel", "https://github.com/test/repo.git");
+                    vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
+                    vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
+                    vessel.DefaultBranch = "main";
+                    await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    // Create an idle captain
+                    Captain captain = new Captain("handoff-captain");
+                    captain.State = CaptainStateEnum.Idle;
+                    await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+
+                    // Upstream mission has finished but downstream handoff has not stamped the branch yet
+                    Mission architectMission = new Mission("[Architect] Plan work");
+                    architectMission.VesselId = vessel.Id;
+                    architectMission.Persona = "Architect";
+                    architectMission.Status = MissionStatusEnum.WorkProduced;
+                    architectMission.BranchName = "armada/handoff-captain/msn_architect";
+                    architectMission = await testDb.Driver.Missions.CreateAsync(architectMission).ConfigureAwait(false);
+
+                    Mission workerMission = new Mission("[Worker] Implement work", "Original dispatch description");
+                    workerMission.VesselId = vessel.Id;
+                    workerMission.Persona = "Worker";
+                    workerMission.Status = MissionStatusEnum.Pending;
+                    workerMission.DependsOnMissionId = architectMission.Id;
+                    workerMission = await testDb.Driver.Missions.CreateAsync(workerMission).ConfigureAwait(false);
+
+                    try
+                    {
+                        bool assignedBeforeHandoff = await missionService.TryAssignAsync(workerMission, vessel).ConfigureAwait(false);
+                        AssertFalse(assignedBeforeHandoff, "Worker mission should not be assigned before handoff stamps the branch");
+
+                        workerMission.BranchName = architectMission.BranchName;
+                        await testDb.Driver.Missions.UpdateAsync(workerMission).ConfigureAwait(false);
+
+                        bool assignedAfterHandoff = await missionService.TryAssignAsync(workerMission, vessel).ConfigureAwait(false);
+                        AssertTrue(assignedAfterHandoff, "Worker mission should assign after handoff stamps the branch");
+                    }
+                    finally
+                    {
+                        try { Directory.Delete(settings.DocksDirectory, true); } catch { }
+                    }
+                }
+            });
+
             await RunTest("Persona-aware captain routing prefers matching captain", async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())

@@ -122,6 +122,22 @@ namespace Armada.Test.Runtimes.Suites
 
                 AssertTrue(outputLines.Count > 0, "Expected at least one output line");
             });
+
+            await RunTest("OnProcessStarted Fires WithPid", async () =>
+            {
+                TestAgentRuntime runtime = new TestAgentRuntime(CreateLogging());
+                string tempDir = Path.GetTempPath();
+
+                int startedPid = 0;
+                runtime.OnProcessStarted += pid => startedPid = pid;
+
+                int pid = await runtime.StartAsync(tempDir, "test prompt");
+
+                AssertTrue(pid > 0, "Expected a valid PID");
+                AssertEqual(pid, startedPid, "OnProcessStarted should fire with the launched process PID");
+
+                await Task.Delay(1000);
+            });
         }
     }
 }

@@ -65,7 +65,7 @@ namespace Armada.Runtimes
         /// </summary>
         protected override string GetCommand()
         {
-            return _ExecutablePath;
+            return ResolveExecutable(_ExecutablePath);
         }
 
         /// <summary>
@@ -75,9 +75,17 @@ namespace Armada.Runtimes
         {
             List<string> args = new List<string>();
 
-            args.Add("--approval-mode");
-            args.Add(ApprovalMode);
-            args.Add("--quiet");
+            args.Add("exec");
+
+            if (String.Equals(ApprovalMode, "full-auto", StringComparison.OrdinalIgnoreCase))
+            {
+                args.Add("--full-auto");
+            }
+            else if (String.Equals(ApprovalMode, "dangerous", StringComparison.OrdinalIgnoreCase))
+            {
+                args.Add("--dangerously-bypass-approvals-and-sandbox");
+            }
+
             args.Add(prompt);
 
             return args;

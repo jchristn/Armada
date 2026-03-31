@@ -16,7 +16,7 @@ namespace Armada.Server.Mcp
         public string? Name { get; set; }
 
         /// <summary>
-        /// New agent runtime: ClaudeCode, Codex.
+        /// New agent runtime: ClaudeCode, Codex, Gemini, Cursor, or Custom.
         /// </summary>
         public string? Runtime { get; set; }
 

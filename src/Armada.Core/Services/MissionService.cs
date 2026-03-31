@@ -96,6 +96,7 @@ namespace Armada.Core.Services
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
 
             // Check pipeline dependency -- skip if the mission depends on another that hasn't completed
+            // or if the downstream handoff has not yet populated the mission's branch/context.
             if (!String.IsNullOrEmpty(mission.DependsOnMissionId))
             {
                 Mission? dependency = await _Database.Missions.ReadAsync(mission.DependsOnMissionId, token).ConfigureAwait(false);
@@ -109,6 +110,19 @@ namespace Armada.Core.Services
                     dependency.Status != MissionStatusEnum.WorkProduced)
                 {
                     // Dependency not yet satisfied -- don't assign
+                    return false;
+                }
+
+                // A dependency in WorkProduced means the upstream agent finished, but the
+                // synchronous completion flow may still be preparing the downstream mission.
+                // Do not launch the next stage until it has been explicitly handed the same
+                // branch as the dependency. This prevents workers from starting with the
+                // original top-level dispatch prompt before architect/test/judge handoff runs.
+                if (dependency.Status == MissionStatusEnum.WorkProduced &&
+                    !IsPipelineHandoffPrepared(mission, dependency))
+                {
+                    _Logging.Info(_Header + "mission " + mission.Id + " depends on " + dependency.Id +
+                        " which is WorkProduced, but handoff is not prepared yet -- deferring assignment");
                     return false;
                 }
             }
@@ -489,8 +503,19 @@ namespace Armada.Core.Services
             signal.FromCaptainId = captain.Id;
             await _Database.Signals.CreateAsync(signal, token).ConfigureAwait(false);
 
-            // Release the captain to idle only AFTER the handoff and dock reclaim are done
-            await _Captains.ReleaseAsync(captain, token).ConfigureAwait(false);
+            // Release the captain to idle only AFTER the handoff and dock reclaim are done,
+            // and only if the captain is still assigned to this mission. Orphan recovery can
+            // finalize an older mission using a captain record that has already moved on.
+            Captain? latestCaptain = await _Database.Captains.ReadAsync(captain.Id, token).ConfigureAwait(false);
+            if (latestCaptain != null && latestCaptain.CurrentMissionId == mission.Id)
+            {
+                await _Captains.ReleaseAsync(latestCaptain, token).ConfigureAwait(false);
+            }
+            else
+            {
+                _Logging.Info(_Header + "skipping captain release for mission " + mission.Id +
+                    " because captain " + captain.Id + " is now assigned to " + (latestCaptain?.CurrentMissionId ?? "nothing"));
+            }
 
             // Try to pick up next pending mission
             List<Mission> pendingMissions = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending, token).ConfigureAwait(false);
@@ -548,27 +573,7 @@ namespace Armada.Core.Services
 
             string claudeMdPath = Path.Combine(worktreePath, "CLAUDE.md");
 
-            // Build placeholder context for template rendering
-            Dictionary<string, string> templateParams = new Dictionary<string, string>
-            {
-                ["MissionId"] = mission.Id,
-                ["MissionTitle"] = mission.Title,
-                ["MissionDescription"] = mission.Description ?? "No additional description provided.",
-                ["MissionPersona"] = mission.Persona ?? "Worker",
-                ["VoyageId"] = mission.VoyageId ?? "",
-                ["VesselId"] = vessel.Id,
-                ["VesselName"] = vessel.Name,
-                ["DefaultBranch"] = vessel.DefaultBranch,
-                ["BranchName"] = mission.BranchName ?? "unknown",
-                ["FleetId"] = vessel.FleetId ?? "",
-                ["ProjectContext"] = vessel.ProjectContext ?? "",
-                ["StyleGuide"] = vessel.StyleGuide ?? "",
-                ["ModelContext"] = vessel.ModelContext ?? "",
-                ["CaptainId"] = captain?.Id ?? "",
-                ["CaptainName"] = captain?.Name ?? "",
-                ["CaptainInstructions"] = captain?.SystemInstructions ?? "",
-                ["Timestamp"] = DateTime.UtcNow.ToString("o")
-            };
+            Dictionary<string, string> templateParams = MissionPromptBuilder.BuildTemplateParams(mission, vessel, captain);
 
             string content = "";
 
@@ -658,24 +663,7 @@ namespace Armada.Core.Services
         /// </summary>
         private async Task<string> ResolvePersonaPromptAsync(string? persona, Dictionary<string, string> templateParams, CancellationToken token)
         {
-            string templateName = "persona.worker";
-            if (!String.IsNullOrEmpty(persona))
-            {
-                // Convert PascalCase persona names to snake_case for template lookup.
-                // e.g. "TestEngineer" -> "persona.test_engineer", "Worker" -> "persona.worker"
-                string normalized = System.Text.RegularExpressions.Regex.Replace(persona, "(?<!^)([A-Z])", "_$1").ToLowerInvariant();
-                templateName = "persona." + normalized;
-            }
-
-            if (_PromptTemplates != null)
-            {
-                string rendered = await _PromptTemplates.RenderAsync(templateName, templateParams, token).ConfigureAwait(false);
-                if (!String.IsNullOrEmpty(rendered))
-                    return rendered;
-            }
-
-            // Fallback for backward compatibility
-            return "You are an Armada captain executing a mission. Follow these instructions carefully.";
+            return await MissionPromptBuilder.ResolvePersonaPromptAsync(persona, templateParams, _PromptTemplates, token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -1160,6 +1148,23 @@ namespace Armada.Core.Services
 
             // No preferred match -- return first eligible
             return eligible[0];
+        }
+
+        /// <summary>
+        /// Determine whether a dependent pipeline mission has had upstream handoff context applied.
+        /// The handoff path stamps the downstream mission with the dependency's branch name,
+        /// so branch equality is used as the minimum readiness signal before launch.
+        /// </summary>
+        private static bool IsPipelineHandoffPrepared(Mission mission, Mission dependency)
+        {
+            if (mission == null || dependency == null) return false;
+            if (String.IsNullOrEmpty(mission.DependsOnMissionId)) return true;
+
+            // If the dependency never had a branch, there is no stronger handoff signal
+            // available here; fall back to allowing assignment.
+            if (String.IsNullOrEmpty(dependency.BranchName)) return true;
+
+            return String.Equals(mission.BranchName, dependency.BranchName, StringComparison.Ordinal);
         }
 
         #endregion

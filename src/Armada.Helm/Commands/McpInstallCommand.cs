@@ -95,7 +95,15 @@ namespace Armada.Helm.Commands
         {
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine($"[bold]{target.ClientName} manual snippet[/] -> [green]{Markup.Escape(target.FilePath)}[/]");
-            Console.WriteLine(McpConfigHelper.BuildManualSnippet(target));
+            if (!String.IsNullOrEmpty(target.ManualInstallCommand))
+            {
+                AnsiConsole.MarkupLine("[dim]Run this command:[/]");
+                AnsiConsole.MarkupLine($"[green]  {Markup.Escape(McpConfigHelper.BuildManualSnippet(target))}[/]");
+            }
+            else
+            {
+                Console.WriteLine(McpConfigHelper.BuildManualSnippet(target));
+            }
             if (target.ClientName == "Claude Code")
             {
                 AnsiConsole.MarkupLine("[dim]Claude CLI helper:[/]");

@@ -37,7 +37,7 @@ namespace Armada.Runtimes
 
         #region Private-Members
 
-        private string _ExecutablePath = "cursor";
+        private string _ExecutablePath = "cursor-agent";
 
         #endregion
 
@@ -60,7 +60,7 @@ namespace Armada.Runtimes
         /// </summary>
         protected override string GetCommand()
         {
-            return _ExecutablePath;
+            return ResolveExecutable(_ExecutablePath);
         }
 
         /// <summary>
@@ -70,9 +70,11 @@ namespace Armada.Runtimes
         {
             List<string> args = new List<string>();
 
-            args.Add("--agent");
-            args.Add("--prompt");
+            args.Add("-p");
             args.Add(prompt);
+            args.Add("--force");
+            args.Add("--output-format");
+            args.Add("text");
 
             return args;
         }

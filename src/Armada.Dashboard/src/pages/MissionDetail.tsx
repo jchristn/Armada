@@ -59,6 +59,7 @@ export default function MissionDetail() {
 
   // Log viewer (shared modal)
   const [logModal, setLogModal] = useState<{ open: boolean; title: string; missionId: string; content: string; totalLines: number; lineCount: number }>({ open: false, title: '', missionId: '', content: '', totalLines: 0, lineCount: 200 });
+  const missionLoadedRef = useRef(false);
 
   // Transition
   const [showTransition, setShowTransition] = useState(false);
@@ -93,11 +94,12 @@ export default function MissionDetail() {
   const loadMission = useCallback(async () => {
     if (!id) return;
     // Only show loading spinner on initial load, not background refreshes
-    const isInitialLoad = !mission;
+    const isInitialLoad = !missionLoadedRef.current;
     if (isInitialLoad) setLoading(true);
     try {
       const m = await getMission(id);
       setMission(m);
+      missionLoadedRef.current = true;
       // Only clear error on initial load -- don't dismiss user-facing errors from actions
       if (isInitialLoad) setError('');
     } catch (e: unknown) {
@@ -105,13 +107,16 @@ export default function MissionDetail() {
     } finally {
       setLoading(false);
     }
-  }, [id, mission]);
+  }, [id]);
 
   useEffect(() => {
     loadMission();
+  }, [loadMission]);
+
+  useEffect(() => {
     listVessels({ pageSize: 1000 }).then(r => setVessels(r.objects || [])).catch(() => {});
     listCaptains({ pageSize: 1000 }).then(r => setCaptains(r.objects || [])).catch(() => {});
-  }, [loadMission]);
+  }, []);
 
   async function handleViewDiff() {
     if (!id) return;

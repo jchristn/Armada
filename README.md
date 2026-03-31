@@ -147,7 +147,7 @@ If a captain crashes, the Admiral can repair the worktree and relaunch the agent
   - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (`claude`)
   - [Codex](https://github.com/openai/codex) (`codex`)
   - [Gemini CLI](https://github.com/google-gemini/gemini-cli) (`gemini`)
-  - [Cursor](https://docs.cursor.com/cli) (`cursor`)
+  - [Cursor](https://docs.cursor.com/cli) (`cursor-agent`)
 
 ### Install
 
@@ -181,7 +181,7 @@ On first boot, Armada seeds a default tenant, user, and credential:
 
 Dashboard at `http://localhost:7890/dashboard`. API access with `Authorization: Bearer default`.
 
-> **Security:** Armada runs agents with auto-approve flags by default (Claude Code: `--dangerously-skip-permissions`, Codex: `--full-auto`, Gemini: `--sandbox none`). Agents can read, write, and execute in their worktrees without confirmation. Review the [configuration](#configuration) section before running in sensitive environments.
+> **Security:** Armada runs agents with auto-approve flags by default (Claude Code: `--dangerously-skip-permissions`, Codex: `--full-auto`, Gemini: `--approval-mode yolo`). Agents can read, write, and execute in their worktrees without confirmation. Review the [configuration](#configuration) section before running in sensitive environments.
 
 > **Important:** Change the default password in production environments.
 

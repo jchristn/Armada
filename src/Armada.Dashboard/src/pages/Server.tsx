@@ -453,7 +453,7 @@ export default function Server() {
         <div className="settings-section" style={{ marginTop: '1.5rem' }}>
           <h3>MCP Configuration</h3>
           <p className="text-muted" style={{ marginBottom: '0.75rem' }}>
-            Add to <span className="mono">~/.claude/settings.json</span> under{' '}
+            Add to <span className="mono">~/.claude.json</span> under{' '}
             <span className="mono">mcpServers.armada</span>
           </p>
           <div className="settings-config-block">

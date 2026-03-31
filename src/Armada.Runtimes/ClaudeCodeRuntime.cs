@@ -65,7 +65,7 @@ namespace Armada.Runtimes
         /// </summary>
         protected override string GetCommand()
         {
-            return _ExecutablePath;
+            return ResolveExecutable(_ExecutablePath);
         }
 
         /// <summary>
