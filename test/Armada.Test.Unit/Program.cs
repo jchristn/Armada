@@ -18,8 +18,10 @@ namespace Armada.Test.Unit
             runner.AddSuite(new VesselDatabaseTests());
             runner.AddSuite(new VesselTests());
             runner.AddSuite(new CaptainDatabaseTests());
+            runner.AddSuite(new CaptainExtendedDatabaseTests());
             runner.AddSuite(new CaptainTests());
             runner.AddSuite(new MissionDatabaseTests());
+            runner.AddSuite(new MissionExtendedDatabaseTests());
             runner.AddSuite(new VoyageDatabaseTests());
             runner.AddSuite(new DockDatabaseTests());
             runner.AddSuite(new SignalDatabaseTests());
@@ -45,7 +47,9 @@ namespace Armada.Test.Unit
             runner.AddSuite(new FleetModelTests());
             runner.AddSuite(new VesselModelTests());
             runner.AddSuite(new CaptainModelTests());
+            runner.AddSuite(new CaptainExtendedModelTests());
             runner.AddSuite(new MissionModelTests());
+            runner.AddSuite(new MissionExtendedModelTests());
             runner.AddSuite(new VoyageModelTests());
             runner.AddSuite(new DockModelTests());
             runner.AddSuite(new SignalModelTests());
