@@ -82,6 +82,7 @@ namespace Armada.Helm.Commands
                     new JsonObject
                     {
                         ["url"] = mcpRpcUrl,
+                        ["transport"] = "http",
                     },
                     IsProjectScoped: true),
             };
