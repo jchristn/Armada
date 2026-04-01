@@ -177,8 +177,9 @@ namespace Armada.Core.Services
 
             // Downstream pipeline stages continue on the upstream branch prepared during handoff.
             // Standalone missions still get a fresh captain/mission branch.
-            string branchName = !String.IsNullOrEmpty(mission.DependsOnMissionId) && !String.IsNullOrEmpty(mission.BranchName)
-                ? mission.BranchName
+            bool preserveInheritedBranch = !String.IsNullOrEmpty(mission.DependsOnMissionId) && !String.IsNullOrEmpty(mission.BranchName);
+            string branchName = preserveInheritedBranch
+                ? mission.BranchName!
                 : Constants.BranchPrefix + captain.Name.ToLowerInvariant() + "/" + mission.Id;
             mission.BranchName = branchName;
             mission.CaptainId = captain.Id;
@@ -200,7 +201,9 @@ namespace Armada.Core.Services
                 // Revert mission to Pending
                 mission.Status = MissionStatusEnum.Pending;
                 mission.CaptainId = null;
-                mission.BranchName = null;
+                if (!preserveInheritedBranch)
+                    if (!preserveInheritedBranch)
+                        mission.BranchName = null;
                 mission.DockId = null;
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
@@ -217,7 +220,8 @@ namespace Armada.Core.Services
                 _Logging.Warn(_Header + "dock provisioning failed for captain " + captain.Id + " vessel " + vessel.Id + " mission " + mission.Id + " — reverting to Pending");
                 mission.Status = MissionStatusEnum.Pending;
                 mission.CaptainId = null;
-                mission.BranchName = null;
+                if (!preserveInheritedBranch)
+                    mission.BranchName = null;
                 mission.DockId = null;
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
@@ -238,7 +242,8 @@ namespace Armada.Core.Services
 
                 mission.Status = MissionStatusEnum.Pending;
                 mission.CaptainId = null;
-                mission.BranchName = null;
+                if (!preserveInheritedBranch)
+                    mission.BranchName = null;
                 mission.DockId = null;
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
@@ -318,7 +323,8 @@ namespace Armada.Core.Services
 
                 mission.Status = MissionStatusEnum.Pending;
                 mission.CaptainId = null;
-                mission.BranchName = null;
+                if (!preserveInheritedBranch)
+                    mission.BranchName = null;
                 mission.DockId = null;
                 mission.ProcessId = null;
                 mission.LastUpdateUtc = DateTime.UtcNow;
@@ -438,6 +444,15 @@ namespace Armada.Core.Services
                     : await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
             }
 
+            if (dock != null && String.IsNullOrEmpty(mission.BranchName) && !String.IsNullOrEmpty(dock.BranchName))
+            {
+                mission.BranchName = dock.BranchName;
+                mission.LastUpdateUtc = DateTime.UtcNow;
+                await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                _Logging.Info(_Header + "backfilled branch " + dock.BranchName + " onto mission " + mission.Id +
+                    " from dock " + dock.Id + " before pipeline handoff");
+            }
+
             // Capture diff BEFORE pipeline handoff so the next stage gets the actual diff
             if (dock != null && OnCaptureDiff != null)
             {
@@ -469,7 +484,7 @@ namespace Armada.Core.Services
             }
 
             // Pipeline handoff: if missions in the same voyage depend on this one, prepare them
-            await TryHandoffToNextStageAsync(mission, token).ConfigureAwait(false);
+            bool preparedDownstreamStages = await TryHandoffToNextStageAsync(mission, token).ConfigureAwait(false);
 
             Mission? missionAfterHandoff = await _Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);
             if (missionAfterHandoff != null)
@@ -477,13 +492,17 @@ namespace Armada.Core.Services
                 mission = missionAfterHandoff;
             }
 
-            bool shouldAttemptLanding = mission.Status == MissionStatusEnum.WorkProduced ||
-                mission.Status == MissionStatusEnum.PullRequestOpen;
+            bool hasDependentPipelineStages = await HasDependentPipelineStages(mission.VoyageId, mission.Id, token).ConfigureAwait(false);
+            bool shouldAttemptLanding =
+                !preparedDownstreamStages &&
+                !hasDependentPipelineStages &&
+                (mission.Status == MissionStatusEnum.WorkProduced ||
+                mission.Status == MissionStatusEnum.PullRequestOpen);
 
             if (!shouldAttemptLanding)
             {
                 _Logging.Info(_Header + "skipping landing for mission " + mission.Id +
-                    " because handoff changed status to " + mission.Status);
+                    " because it is not a terminal landed stage yet (status: " + mission.Status + ")");
             }
 
             // Invoke OnMissionComplete synchronously (Phase A: push branch, create PR, or enqueue).
@@ -888,9 +907,9 @@ namespace Armada.Core.Services
         /// After a mission produces work, check if any missions in the same voyage depend on it
         /// and prepare them for assignment (inject prior stage context into description).
         /// </summary>
-        private async Task TryHandoffToNextStageAsync(Mission completedMission, CancellationToken token)
+        private async Task<bool> TryHandoffToNextStageAsync(Mission completedMission, CancellationToken token)
         {
-            if (String.IsNullOrEmpty(completedMission.VoyageId)) return;
+            if (String.IsNullOrEmpty(completedMission.VoyageId)) return false;
 
             // Find missions that depend on this completed mission
             List<Mission> voyageMissions = await _Database.Missions.EnumerateByVoyageAsync(completedMission.VoyageId, token).ConfigureAwait(false);
@@ -898,7 +917,7 @@ namespace Armada.Core.Services
                 m.DependsOnMissionId == completedMission.Id &&
                 m.Status == MissionStatusEnum.Pending).ToList();
 
-            if (dependentMissions.Count == 0) return;
+            if (dependentMissions.Count == 0) return false;
 
             // Special handling for Architect stage: parse output into new missions
             if (String.Equals(completedMission.Persona, "Architect", StringComparison.OrdinalIgnoreCase))
@@ -922,9 +941,6 @@ namespace Armada.Core.Services
                             await _Database.Missions.UpdateAsync(nextMission, token).ConfigureAwait(false);
 
                             // Find what depends on this worker mission (Judge, TestEngineer stages)
-                            List<Mission> postWorkerStages = voyageMissions.Where(m =>
-                                m.DependsOnMissionId == nextMission.Id).ToList();
-
                             // Create additional worker missions for remaining parsed items
                             for (int i = 1; i < parsed.Count; i++)
                             {
@@ -939,37 +955,12 @@ namespace Armada.Core.Services
                                 additionalWorker = await _Database.Missions.CreateAsync(additionalWorker, token).ConfigureAwait(false);
                                 _Logging.Info(_Header + "architect created additional worker mission " + additionalWorker.Id + ": " + parsed[i].Title);
 
-                                // Clone the post-worker stages (Judge, TestEngineer) for each additional worker
-                                foreach (Mission postWorkerStage in postWorkerStages)
-                                {
-                                    Mission clonedStage = new Mission(
-                                        parsed[i].Title + " [" + postWorkerStage.Persona + "]",
-                                        postWorkerStage.Description);
-                                    clonedStage.TenantId = completedMission.TenantId;
-                                    clonedStage.UserId = completedMission.UserId;
-                                    clonedStage.VoyageId = completedMission.VoyageId;
-                                    clonedStage.VesselId = completedMission.VesselId;
-                                    clonedStage.Persona = postWorkerStage.Persona;
-                                    clonedStage.DependsOnMissionId = additionalWorker.Id;
-                                    clonedStage = await _Database.Missions.CreateAsync(clonedStage, token).ConfigureAwait(false);
-                                    _Logging.Info(_Header + "architect created chained stage " + clonedStage.Id +
-                                        " (" + clonedStage.Persona + ") depending on " + additionalWorker.Id);
-                                }
-                            }
-
-                            // Try to assign the first worker mission
-                            if (!String.IsNullOrEmpty(nextMission.VesselId))
-                            {
-                                Vessel? vessel = await _Database.Vessels.ReadAsync(nextMission.VesselId, token).ConfigureAwait(false);
-                                if (vessel != null)
-                                {
-                                    await TryAssignAsync(nextMission, vessel, token).ConfigureAwait(false);
-                                }
+                                await CloneDependentChainAsync(voyageMissions, nextMission, additionalWorker, parsed[i].Title, token).ConfigureAwait(false);
                             }
                         }
                     }
 
-                    return; // Architect special handling complete, skip normal handoff
+                    return true; // Architect special handling complete, skip normal handoff
                 }
 
                 // Architect produced no [ARMADA:MISSION] markers -- mark as failed so it can be
@@ -981,7 +972,7 @@ namespace Armada.Core.Services
                 completedMission.CompletedUtc = DateTime.UtcNow;
                 completedMission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(completedMission, token).ConfigureAwait(false);
-                return;
+                return false;
             }
 
             foreach (Mission nextMission in dependentMissions)
@@ -1053,16 +1044,48 @@ namespace Armada.Core.Services
                     " (" + nextMission.Persona + ") with context from " + completedMission.Id +
                     " (" + completedMission.Persona + ")");
 
-                // Try to assign the next stage (dependency check in TryAssignAsync will now pass)
-                if (!String.IsNullOrEmpty(nextMission.VesselId))
-                {
-                    Vessel? vessel = await _Database.Vessels.ReadAsync(nextMission.VesselId, token).ConfigureAwait(false);
-                    if (vessel != null)
-                    {
-                        await TryAssignAsync(nextMission, vessel, token).ConfigureAwait(false);
-                    }
-                }
             }
+
+            return true;
+        }
+
+        private async Task CloneDependentChainAsync(
+            List<Mission> voyageMissions,
+            Mission templateMission,
+            Mission newDependency,
+            string parsedTitle,
+            CancellationToken token)
+        {
+            List<Mission> directDependents = voyageMissions
+                .Where(m => m.DependsOnMissionId == templateMission.Id)
+                .OrderBy(m => m.CreatedUtc)
+                .ToList();
+
+            foreach (Mission templateChild in directDependents)
+            {
+                Mission clonedStage = new Mission(
+                    parsedTitle + " [" + templateChild.Persona + "]",
+                    templateChild.Description);
+                clonedStage.TenantId = templateChild.TenantId;
+                clonedStage.UserId = templateChild.UserId;
+                clonedStage.VoyageId = templateChild.VoyageId;
+                clonedStage.VesselId = templateChild.VesselId;
+                clonedStage.Persona = templateChild.Persona;
+                clonedStage.DependsOnMissionId = newDependency.Id;
+                clonedStage.BranchName = newDependency.BranchName;
+                clonedStage = await _Database.Missions.CreateAsync(clonedStage, token).ConfigureAwait(false);
+                _Logging.Info(_Header + "architect created chained stage " + clonedStage.Id +
+                    " (" + clonedStage.Persona + ") depending on " + newDependency.Id);
+                await CloneDependentChainAsync(voyageMissions, templateChild, clonedStage, parsedTitle, token).ConfigureAwait(false);
+            }
+        }
+
+        private async Task<bool> HasDependentPipelineStages(string? voyageId, string missionId, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(voyageId)) return false;
+
+            List<Mission> voyageMissions = await _Database.Missions.EnumerateByVoyageAsync(voyageId, token).ConfigureAwait(false);
+            return voyageMissions.Any(m => m.DependsOnMissionId == missionId);
         }
 
         /// <summary>

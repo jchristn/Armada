@@ -426,6 +426,47 @@ namespace Armada.Test.Unit.Suites.Services
                 }
             });
 
+            await RunTest("HealthCheckAsync AssignedOrphanWithoutStartedProcess RevertsToPending", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    SqliteDatabaseDriver db = testDb.Driver;
+                    StubGitService git = new StubGitService();
+                    ArmadaSettings settings = CreateSettings();
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), db, settings, git);
+
+                    Vessel vessel = new Vessel("orphan-vessel", "https://github.com/test/repo.git");
+                    await db.Vessels.CreateAsync(vessel);
+
+                    Captain originalCaptain = new Captain("original");
+                    originalCaptain.State = CaptainStateEnum.Idle;
+                    await db.Captains.CreateAsync(originalCaptain);
+
+                    Captain movedCaptain = new Captain("moved");
+                    movedCaptain.State = CaptainStateEnum.Working;
+                    await db.Captains.CreateAsync(movedCaptain);
+
+                    Mission mission = new Mission("Assigned orphan");
+                    mission.VesselId = vessel.Id;
+                    mission.CaptainId = originalCaptain.Id;
+                    mission.Status = MissionStatusEnum.Assigned;
+                    mission.BranchName = "armada/test/orphan";
+                    mission = await db.Missions.CreateAsync(mission);
+
+                    originalCaptain.State = CaptainStateEnum.Working;
+                    originalCaptain.CurrentMissionId = "different-mission";
+                    await db.Captains.UpdateAsync(originalCaptain);
+
+                    await service.HealthCheckAsync();
+
+                    Mission? updatedMission = await db.Missions.ReadAsync(mission.Id);
+                    AssertNotNull(updatedMission, "Mission should still exist");
+                    AssertEqual(MissionStatusEnum.Pending, updatedMission!.Status, "Assigned orphan that never started should return to Pending");
+                    AssertNull(updatedMission.CaptainId, "Pending orphan should be unassigned");
+                    AssertNull(updatedMission.DockId, "Pending orphan should clear dock");
+                }
+            });
+
             await RunTest("HealthCheckAsync ChecksVoyageCompletions", async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())

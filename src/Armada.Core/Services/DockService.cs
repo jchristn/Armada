@@ -250,8 +250,20 @@ namespace Armada.Core.Services
             {
                 try
                 {
-                    await _Git.RemoveWorktreeAsync(dock.WorktreePath, token).ConfigureAwait(false);
-                    _Logging.Info(_Header + "reclaimed dock " + dockId + " at " + dock.WorktreePath);
+                    Vessel? vessel = await _Database.Vessels.ReadAsync(dock.VesselId, token).ConfigureAwait(false);
+                    bool isRegistered = !String.IsNullOrEmpty(vessel?.LocalPath) &&
+                        await _Git.IsWorktreeRegisteredAsync(vessel.LocalPath, dock.WorktreePath, token).ConfigureAwait(false);
+
+                    if (isRegistered)
+                    {
+                        await _Git.RemoveWorktreeAsync(dock.WorktreePath, token).ConfigureAwait(false);
+                        _Logging.Info(_Header + "reclaimed dock " + dockId + " at " + dock.WorktreePath);
+                    }
+                    else
+                    {
+                        _Logging.Debug(_Header + "dock " + dockId + " worktree " + dock.WorktreePath +
+                            " is not registered -- removing directory directly");
+                    }
                 }
                 catch (Exception ex)
                 {
