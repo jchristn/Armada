@@ -5,6 +5,7 @@ namespace Armada.Test.Automated.Suites
     using System.Linq;
     using System.Net;
     using System.Net.Http;
+    using System.Text.Json;
     using System.Threading.Tasks;
     using Armada.Core.Models;
     using Armada.Test.Common;
@@ -196,6 +197,49 @@ namespace Armada.Test.Automated.Suites
                 AssertEqual(0, fetched.RecoveryAttempts);
             });
 
+            await RunTest("Create Captain With Model Payload RoundTrips When Supported", async () =>
+            {
+                bool captainSupportsModel = typeof(Captain).GetProperty("Model") != null;
+                string captainName = "model-create-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                const string expectedModel = "gpt-5.4";
+
+                HttpResponseMessage response = await _Client.PostAsync("/api/v1/captains",
+                    JsonHelper.ToJsonContent(new { Name = captainName, Runtime = "Codex", Model = expectedModel }));
+                AssertEqual(HttpStatusCode.Created, response.StatusCode);
+
+                string createBody = await response.Content.ReadAsStringAsync();
+                Captain created = JsonHelper.Deserialize<Captain>(createBody);
+                JsonElement createdJson = JsonSerializer.Deserialize<JsonElement>(createBody);
+                _CreatedCaptainIds.Add(created.Id);
+
+                AssertEqual(captainName, created.Name);
+                AssertEqual("Codex", created.Runtime.ToString());
+
+                if (captainSupportsModel)
+                {
+                    JsonElement createdModel;
+                    bool createdHasModel = createdJson.TryGetProperty("model", out createdModel)
+                        || createdJson.TryGetProperty("Model", out createdModel);
+                    Assert(createdHasModel, "Created captain should include model when Captain.Model is available");
+                    AssertEqual(expectedModel, createdModel.GetString());
+                }
+
+                HttpResponseMessage getResponse = await _Client.GetAsync("/api/v1/captains/" + created.Id);
+                AssertEqual(HttpStatusCode.OK, getResponse.StatusCode);
+
+                string getBody = await getResponse.Content.ReadAsStringAsync();
+                JsonElement fetchedJson = JsonSerializer.Deserialize<JsonElement>(getBody);
+
+                if (captainSupportsModel)
+                {
+                    JsonElement fetchedModel;
+                    bool fetchedHasModel = fetchedJson.TryGetProperty("model", out fetchedModel)
+                        || fetchedJson.TryGetProperty("Model", out fetchedModel);
+                    Assert(fetchedHasModel, "Fetched captain should include model when Captain.Model is available");
+                    AssertEqual(expectedModel, fetchedModel.GetString());
+                }
+            });
+
             await RunTest("Get Captain Not Found Returns Error", async () =>
             {
                 HttpResponseMessage response = await _Client.GetAsync("/api/v1/captains/cpt_nonexistent");
@@ -265,6 +309,49 @@ namespace Armada.Test.Automated.Suites
 
                 Captain updated = await JsonHelper.DeserializeAsync<Captain>(response);
                 AssertEqual("Codex", updated.Runtime.ToString());
+            });
+
+            await RunTest("Update Captain With Model Payload RoundTrips When Supported", async () =>
+            {
+                bool captainSupportsModel = typeof(Captain).GetProperty("Model") != null;
+                Captain created = await CreateCaptainAsync("model-update", "Codex");
+                string updatedName = "model-update-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                const string expectedModel = "gpt-5.5";
+
+                HttpResponseMessage response = await _Client.PutAsync("/api/v1/captains/" + created.Id,
+                    JsonHelper.ToJsonContent(new { Name = updatedName, Runtime = "Codex", Model = expectedModel }));
+                AssertEqual(HttpStatusCode.OK, response.StatusCode);
+
+                string updateBody = await response.Content.ReadAsStringAsync();
+                Captain updated = JsonHelper.Deserialize<Captain>(updateBody);
+                JsonElement updatedJson = JsonSerializer.Deserialize<JsonElement>(updateBody);
+
+                AssertEqual(updatedName, updated.Name);
+                AssertEqual("Codex", updated.Runtime.ToString());
+
+                if (captainSupportsModel)
+                {
+                    JsonElement updatedModel;
+                    bool updatedHasModel = updatedJson.TryGetProperty("model", out updatedModel)
+                        || updatedJson.TryGetProperty("Model", out updatedModel);
+                    Assert(updatedHasModel, "Updated captain should include model when Captain.Model is available");
+                    AssertEqual(expectedModel, updatedModel.GetString());
+                }
+
+                HttpResponseMessage getResponse = await _Client.GetAsync("/api/v1/captains/" + created.Id);
+                AssertEqual(HttpStatusCode.OK, getResponse.StatusCode);
+
+                string getBody = await getResponse.Content.ReadAsStringAsync();
+                JsonElement fetchedJson = JsonSerializer.Deserialize<JsonElement>(getBody);
+
+                if (captainSupportsModel)
+                {
+                    JsonElement fetchedModel;
+                    bool fetchedHasModel = fetchedJson.TryGetProperty("model", out fetchedModel)
+                        || fetchedJson.TryGetProperty("Model", out fetchedModel);
+                    Assert(fetchedHasModel, "Fetched captain should keep model when Captain.Model is available");
+                    AssertEqual(expectedModel, fetchedModel.GetString());
+                }
             });
 
             await RunTest("Update Captain Preserves State", async () =>

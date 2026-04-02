@@ -155,6 +155,30 @@ namespace Armada.Test.Automated.Suites
                 }
             }).ConfigureAwait(false);
 
+            await RunTest("ToolsList_CreateCaptainSchemaIncludesModel", async () =>
+            {
+                JsonElement result = await SendMcpRequestAsync("tools/list", new { }).ConfigureAwait(false);
+                JsonElement tool = GetToolDefinition(result.GetProperty("tools"), "armada_create_captain");
+                JsonElement properties = tool.GetProperty("inputSchema").GetProperty("properties");
+
+                Assert(properties.TryGetProperty("model", out JsonElement modelProperty), "armada_create_captain should expose a model argument");
+                AssertEqual("string", modelProperty.GetProperty("type").GetString());
+                Assert(modelProperty.GetProperty("description").GetString()!.Contains("model", StringComparison.OrdinalIgnoreCase),
+                    "armada_create_captain model argument should describe the runtime model override");
+            }).ConfigureAwait(false);
+
+            await RunTest("ToolsList_UpdateCaptainSchemaIncludesModel", async () =>
+            {
+                JsonElement result = await SendMcpRequestAsync("tools/list", new { }).ConfigureAwait(false);
+                JsonElement tool = GetToolDefinition(result.GetProperty("tools"), "armada_update_captain");
+                JsonElement properties = tool.GetProperty("inputSchema").GetProperty("properties");
+
+                Assert(properties.TryGetProperty("model", out JsonElement modelProperty), "armada_update_captain should expose a model argument");
+                AssertEqual("string", modelProperty.GetProperty("type").GetString());
+                Assert(modelProperty.GetProperty("description").GetString()!.Contains("model", StringComparison.OrdinalIgnoreCase),
+                    "armada_update_captain model argument should describe the runtime model override");
+            }).ConfigureAwait(false);
+
             await RunTest("ToolsList_NoDuplicateToolNames", async () =>
             {
                 JsonElement result = await SendMcpRequestAsync("tools/list", new { }).ConfigureAwait(false);
@@ -283,6 +307,41 @@ namespace Armada.Test.Automated.Suites
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
                 Assert(text.Contains("not found", StringComparison.OrdinalIgnoreCase), "Should contain 'not found'");
+            }).ConfigureAwait(false);
+
+            await RunTest("ArmadaMissionStatus_CompletedMissionIncludesTotalRuntimeWhenSupported", async () =>
+            {
+                bool missionSupportsTotalRuntime = typeof(Mission).GetProperty("TotalRuntimeMs") != null;
+                string missionId = await RestCreateMissionAsync("RuntimeMission").ConfigureAwait(false);
+
+                foreach (string status in new[] { "Assigned", "InProgress", "Testing", "Review", "Complete" })
+                {
+                    JsonElement transitionResult = await CallToolAsync("armada_transition_mission_status", new
+                    {
+                        missionId = missionId,
+                        status = status
+                    }).ConfigureAwait(false);
+                    AssertToolResultValid(transitionResult);
+                }
+
+                JsonElement statusResult = await CallToolAsync("armada_mission_status", new
+                {
+                    missionId = missionId
+                }).ConfigureAwait(false);
+                AssertToolResultValid(statusResult);
+
+                JsonElement missionJson = ParseToolResultJson(statusResult);
+                Assert(TryGetJsonProperty(missionJson, "Status", out JsonElement statusElement), "Mission status should include Status");
+                AssertEqual("Complete", statusElement.GetString());
+                Assert(TryGetJsonProperty(missionJson, "CompletedUtc", out JsonElement completedUtcElement), "Completed mission should include CompletedUtc");
+                Assert(completedUtcElement.ValueKind != JsonValueKind.Null, "Completed mission CompletedUtc should not be null");
+
+                if (missionSupportsTotalRuntime)
+                {
+                    Assert(TryGetJsonProperty(missionJson, "TotalRuntimeMs", out JsonElement totalRuntimeElement), "Completed mission should include TotalRuntimeMs when Mission.TotalRuntimeMs is available");
+                    Assert(totalRuntimeElement.ValueKind != JsonValueKind.Null, "Completed mission TotalRuntimeMs should not be null");
+                    AssertTrue(totalRuntimeElement.GetInt64() >= 0, "Completed mission TotalRuntimeMs should be non-negative");
+                }
             }).ConfigureAwait(false);
 
             await RunTest("ArmadaMissionStatus_ReturnsCorrectStatus", async () =>
@@ -945,6 +1004,48 @@ namespace Armada.Test.Automated.Suites
                 AssertContains("ClaudeCode", text);
             }).ConfigureAwait(false);
 
+            await RunTest("ArmadaCreateCaptain_WithModel_RoundTripsWhenSupported", async () =>
+            {
+                bool captainSupportsModel = typeof(Captain).GetProperty("Model") != null;
+                string captainName = "model-captain-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                const string expectedModel = "gpt-5.4";
+
+                JsonElement createResult = await CallToolAsync("armada_create_captain", new
+                {
+                    name = captainName,
+                    runtime = "Codex",
+                    model = expectedModel
+                }).ConfigureAwait(false);
+                AssertToolResultValid(createResult);
+
+                JsonElement createdJson = ParseToolResultJson(createResult);
+                Assert(TryGetJsonProperty(createdJson, "Id", out JsonElement captainIdElement), "Created captain should include an ID");
+                Assert(TryGetJsonProperty(createdJson, "Name", out JsonElement createdNameElement), "Created captain should include a name");
+                AssertEqual(captainName, createdNameElement.GetString());
+
+                string captainId = captainIdElement.GetString()!;
+
+                if (captainSupportsModel)
+                {
+                    Assert(TryGetJsonProperty(createdJson, "Model", out JsonElement createdModelElement), "Created captain should include Model when Captain.Model is available");
+                    AssertEqual(expectedModel, createdModelElement.GetString());
+                }
+
+                JsonElement getResult = await CallToolAsync("armada_get_captain", new
+                {
+                    captainId = captainId
+                }).ConfigureAwait(false);
+                AssertToolResultValid(getResult);
+
+                JsonElement fetchedJson = ParseToolResultJson(getResult);
+
+                if (captainSupportsModel)
+                {
+                    Assert(TryGetJsonProperty(fetchedJson, "Model", out JsonElement fetchedModelElement), "Fetched captain should include Model when Captain.Model is available");
+                    AssertEqual(expectedModel, fetchedModelElement.GetString());
+                }
+            }).ConfigureAwait(false);
+
             await RunTest("ArmadaCreateCaptain_VisibleViaEnumerate", async () =>
             {
                 JsonElement createResult = await CallToolAsync("armada_create_captain", new
@@ -1001,6 +1102,45 @@ namespace Armada.Test.Automated.Suites
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
                 AssertContains("updated-captain", text);
+            }).ConfigureAwait(false);
+
+            await RunTest("ArmadaUpdateCaptain_WithModel_RoundTripsWhenSupported", async () =>
+            {
+                bool captainSupportsModel = typeof(Captain).GetProperty("Model") != null;
+                string captainId = await RestCreateCaptainAsync("update-model-captain").ConfigureAwait(false);
+                const string expectedModel = "gpt-5.5";
+
+                JsonElement updateResult = await CallToolAsync("armada_update_captain", new
+                {
+                    captainId = captainId,
+                    name = "updated-model-captain",
+                    model = expectedModel
+                }).ConfigureAwait(false);
+                AssertToolResultValid(updateResult);
+
+                JsonElement updatedJson = ParseToolResultJson(updateResult);
+                Assert(TryGetJsonProperty(updatedJson, "Name", out JsonElement updatedNameElement), "Updated captain should include Name");
+                AssertEqual("updated-model-captain", updatedNameElement.GetString());
+
+                if (captainSupportsModel)
+                {
+                    Assert(TryGetJsonProperty(updatedJson, "Model", out JsonElement updatedModelElement), "Updated captain should include Model when Captain.Model is available");
+                    AssertEqual(expectedModel, updatedModelElement.GetString());
+                }
+
+                JsonElement getResult = await CallToolAsync("armada_get_captain", new
+                {
+                    captainId = captainId
+                }).ConfigureAwait(false);
+                AssertToolResultValid(getResult);
+
+                JsonElement fetchedJson = ParseToolResultJson(getResult);
+
+                if (captainSupportsModel)
+                {
+                    Assert(TryGetJsonProperty(fetchedJson, "Model", out JsonElement fetchedModelElement), "Fetched captain should retain Model when Captain.Model is available");
+                    AssertEqual(expectedModel, fetchedModelElement.GetString());
+                }
             }).ConfigureAwait(false);
 
             await RunTest("ArmadaUpdateCaptain_NotFound_ReturnsError", async () =>
@@ -1855,6 +1995,29 @@ namespace Armada.Test.Automated.Suites
         {
             string text = GetToolResultText(result);
             return JsonSerializer.Deserialize<JsonElement>(text);
+        }
+
+        private JsonElement GetToolDefinition(JsonElement tools, string toolName)
+        {
+            foreach (JsonElement tool in tools.EnumerateArray())
+            {
+                if (String.Equals(tool.GetProperty("name").GetString(), toolName, StringComparison.Ordinal))
+                    return tool;
+            }
+
+            throw new InvalidOperationException("Tool definition not found: " + toolName);
+        }
+
+        private bool TryGetJsonProperty(JsonElement element, string propertyName, out JsonElement value)
+        {
+            if (element.TryGetProperty(propertyName, out value))
+                return true;
+
+            string alternate = Char.IsUpper(propertyName[0])
+                ? Char.ToLowerInvariant(propertyName[0]) + propertyName.Substring(1)
+                : Char.ToUpperInvariant(propertyName[0]) + propertyName.Substring(1);
+
+            return element.TryGetProperty(alternate, out value);
         }
 
         /// <summary>

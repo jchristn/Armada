@@ -5,6 +5,7 @@ namespace Armada.Test.Automated.Suites
     using System.Linq;
     using System.Net;
     using System.Net.Http;
+    using System.Text.Json;
     using System.Threading.Tasks;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -225,6 +226,40 @@ namespace Armada.Test.Automated.Suites
                 AssertEqual(MissionStatusEnum.Pending, fetched.Status);
             });
 
+            await RunTest("GetMission_CompletedMissionIncludesTotalRuntimeWhenSupported", async () =>
+            {
+                bool missionSupportsTotalRuntime = typeof(Mission).GetProperty("TotalRuntimeMs") != null;
+                string vesselId = await SetupVesselAsync();
+                Mission created = await CreateMissionAsync(vesselId, "Completed Runtime");
+                string missionId = created.Id;
+
+                await TransitionAndAssertAsync(missionId, "Assigned");
+                await TransitionAndAssertAsync(missionId, "InProgress");
+                await TransitionAndAssertAsync(missionId, "Testing");
+                await TransitionAndAssertAsync(missionId, "Review");
+                await TransitionAndAssertAsync(missionId, "Complete");
+
+                HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/missions/" + missionId);
+                AssertEqual(HttpStatusCode.OK, response.StatusCode);
+
+                string body = await response.Content.ReadAsStringAsync();
+                Mission fetched = JsonHelper.Deserialize<Mission>(body);
+                JsonElement fetchedJson = JsonSerializer.Deserialize<JsonElement>(body);
+
+                AssertEqual(MissionStatusEnum.Complete, fetched.Status);
+                AssertTrue(fetched.CompletedUtc != null);
+
+                if (missionSupportsTotalRuntime)
+                {
+                    JsonElement runtimeElement;
+                    bool hasRuntime = fetchedJson.TryGetProperty("totalRuntimeMs", out runtimeElement)
+                        || fetchedJson.TryGetProperty("TotalRuntimeMs", out runtimeElement);
+                    Assert(hasRuntime, "Completed mission should include totalRuntimeMs when Mission.TotalRuntimeMs is available");
+                    Assert(runtimeElement.ValueKind != JsonValueKind.Null, "Completed mission totalRuntimeMs should not be null");
+                    AssertTrue(runtimeElement.GetInt64() >= 0, "Completed mission totalRuntimeMs should be non-negative");
+                }
+            });
+
             #endregion
 
             #region CRUD-Update
@@ -305,6 +340,63 @@ namespace Armada.Test.Automated.Suites
                 HttpResponseMessage response = await _AuthClient.PutAsync("/api/v1/missions/" + missionId, updateContent);
                 Mission updated = await JsonHelper.DeserializeAsync<Mission>(response);
                 AssertEqual(missionId, updated.Id);
+            });
+
+            await RunTest("UpdateMission_PreservesTotalRuntimeWhenSupported", async () =>
+            {
+                bool missionSupportsTotalRuntime = typeof(Mission).GetProperty("TotalRuntimeMs") != null;
+                string vesselId = await SetupVesselAsync();
+                Mission created = await CreateMissionAsync(vesselId, "Runtime Preserve");
+                string missionId = created.Id;
+
+                await TransitionAndAssertAsync(missionId, "Assigned");
+                await TransitionAndAssertAsync(missionId, "InProgress");
+                await TransitionAndAssertAsync(missionId, "Testing");
+                await TransitionAndAssertAsync(missionId, "Review");
+                await TransitionAndAssertAsync(missionId, "Complete");
+
+                HttpResponseMessage beforeResponse = await _AuthClient.GetAsync("/api/v1/missions/" + missionId);
+                AssertEqual(HttpStatusCode.OK, beforeResponse.StatusCode);
+
+                string beforeBody = await beforeResponse.Content.ReadAsStringAsync();
+                JsonElement beforeJson = JsonSerializer.Deserialize<JsonElement>(beforeBody);
+                long? originalTotalRuntime = null;
+
+                if (missionSupportsTotalRuntime)
+                {
+                    JsonElement originalRuntimeElement;
+                    bool hasOriginalRuntime = beforeJson.TryGetProperty("totalRuntimeMs", out originalRuntimeElement)
+                        || beforeJson.TryGetProperty("TotalRuntimeMs", out originalRuntimeElement);
+                    Assert(hasOriginalRuntime, "Completed mission should expose totalRuntimeMs before metadata updates");
+                    Assert(originalRuntimeElement.ValueKind != JsonValueKind.Null, "Completed mission totalRuntimeMs should not be null before metadata updates");
+                    originalTotalRuntime = originalRuntimeElement.GetInt64();
+                }
+
+                StringContent updateContent = JsonHelper.ToJsonContent(new
+                {
+                    Title = "Completed Mission Updated",
+                    TotalRuntimeMs = 999999999L
+                });
+                HttpResponseMessage updateResponse = await _AuthClient.PutAsync("/api/v1/missions/" + missionId, updateContent);
+                AssertEqual(HttpStatusCode.OK, updateResponse.StatusCode);
+
+                string updateBody = await updateResponse.Content.ReadAsStringAsync();
+                Mission updated = JsonHelper.Deserialize<Mission>(updateBody);
+                JsonElement updatedJson = JsonSerializer.Deserialize<JsonElement>(updateBody);
+
+                AssertEqual("Completed Mission Updated", updated.Title);
+                AssertEqual(MissionStatusEnum.Complete, updated.Status);
+                AssertTrue(updated.CompletedUtc != null);
+
+                if (missionSupportsTotalRuntime)
+                {
+                    JsonElement updatedRuntimeElement;
+                    bool hasUpdatedRuntime = updatedJson.TryGetProperty("totalRuntimeMs", out updatedRuntimeElement)
+                        || updatedJson.TryGetProperty("TotalRuntimeMs", out updatedRuntimeElement);
+                    Assert(hasUpdatedRuntime, "Updated mission should keep totalRuntimeMs when Mission.TotalRuntimeMs is available");
+                    Assert(updatedRuntimeElement.ValueKind != JsonValueKind.Null, "Updated mission totalRuntimeMs should not be null");
+                    AssertEqual(originalTotalRuntime!.Value, updatedRuntimeElement.GetInt64());
+                }
             });
 
             #endregion
