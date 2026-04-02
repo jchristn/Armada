@@ -119,6 +119,11 @@ namespace Armada.Core.Models
         public string? AgentOutput { get; set; } = null;
 
         /// <summary>
+        /// Total runtime in milliseconds, computed from CompletedUtc minus StartedUtc on mission completion.
+        /// </summary>
+        public long? TotalRuntimeMs { get; set; } = null;
+
+        /// <summary>
         /// Persona assigned to this mission (e.g. "Worker", "Architect", "Judge").
         /// Null defaults to "Worker" for backward compatibility.
         /// </summary>
