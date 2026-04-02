@@ -87,6 +87,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     cmd.Parameters.AddWithValue("@last_update_utc", SqliteDatabaseDriver.ToIso8601(mission.LastUpdateUtc));
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
+
+                await TouchVoyageAsync(conn, mission.VoyageId, mission.LastUpdateUtc, token).ConfigureAwait(false);
             }
 
             return mission;
@@ -179,6 +181,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     cmd.Parameters.AddWithValue("@last_update_utc", SqliteDatabaseDriver.ToIso8601(mission.LastUpdateUtc));
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
+
+                await TouchVoyageAsync(conn, mission.VoyageId, mission.LastUpdateUtc, token).ConfigureAwait(false);
             }
 
             return mission;
@@ -269,6 +273,19 @@ namespace Armada.Core.Database.Sqlite.Implementations
             }
 
             return results;
+        }
+
+        private static async Task TouchVoyageAsync(SqliteConnection conn, string? voyageId, DateTime lastUpdateUtc, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(voyageId)) return;
+
+            using (SqliteCommand cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = "UPDATE voyages SET last_update_utc = @last_update_utc WHERE id = @voyage_id;";
+                cmd.Parameters.AddWithValue("@voyage_id", voyageId);
+                cmd.Parameters.AddWithValue("@last_update_utc", SqliteDatabaseDriver.ToIso8601(lastUpdateUtc));
+                await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+            }
         }
 
         /// <inheritdoc />

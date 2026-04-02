@@ -49,7 +49,7 @@ export default function CaptainDetail() {
 
   // Edit
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', runtime: 'ClaudeCode', systemInstructions: '', allowedPersonas: '', preferredPersona: '' });
+  const [form, setForm] = useState({ name: '', runtime: 'ClaudeCode', systemInstructions: '', model: '', allowedPersonas: '', preferredPersona: '' });
 
   // Log viewer
   const [logText, setLogText] = useState<string | null>(null);
@@ -96,7 +96,7 @@ export default function CaptainDetail() {
 
   function openEdit() {
     if (!captain) return;
-    setForm({ name: captain.name, runtime: captain.runtime || 'ClaudeCode', systemInstructions: captain.systemInstructions ?? '', allowedPersonas: captain.allowedPersonas ?? '', preferredPersona: captain.preferredPersona ?? '' });
+    setForm({ name: captain.name, runtime: captain.runtime || 'ClaudeCode', systemInstructions: captain.systemInstructions ?? '', model: captain.model ?? '', allowedPersonas: captain.allowedPersonas ?? '', preferredPersona: captain.preferredPersona ?? '' });
     setShowForm(true);
   }
 
@@ -106,12 +106,15 @@ export default function CaptainDetail() {
     try {
       const payload = { ...form } as Record<string, unknown>;
       if (!payload.systemInstructions) delete payload.systemInstructions;
+      payload.model = form.model.trim() ? form.model.trim() : null;
       if (!payload.allowedPersonas) delete payload.allowedPersonas;
       if (!payload.preferredPersona) delete payload.preferredPersona;
       await updateCaptain(captain.id, payload);
       setShowForm(false);
       load();
-    } catch { setError('Save failed.'); }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Save failed.');
+    }
   }
 
   async function handleViewLog() {
@@ -228,6 +231,10 @@ export default function CaptainDetail() {
               System Instructions
               <textarea value={form.systemInstructions} onChange={e => setForm({ ...form, systemInstructions: e.target.value })} rows={4} placeholder="e.g., You are a testing specialist. Always run tests before committing..." />
             </label>
+            <label title="Optional AI model identifier. Leave blank to let the runtime choose its default model.">
+              Model
+              <input value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} placeholder="e.g., gpt-5.4-mini" />
+            </label>
             <label>
               Allowed Personas (JSON array)
               <textarea value={form.allowedPersonas} onChange={e => setForm({ ...form, allowedPersonas: e.target.value })} rows={2} placeholder='["Worker", "Judge"]' />
@@ -271,6 +278,10 @@ export default function CaptainDetail() {
         <div className="detail-field">
           <span className="detail-label">Allowed Personas</span>
           <span>{captain.allowedPersonas || <span className="text-dim">Any (no restriction)</span>}</span>
+        </div>
+        <div className="detail-field">
+          <span className="detail-label">Model</span>
+          <span>{captain.model || <span className="text-dim">Runtime default</span>}</span>
         </div>
         <div className="detail-field">
           <span className="detail-label">Preferred Persona</span>

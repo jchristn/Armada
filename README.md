@@ -7,7 +7,7 @@
 <p align="center">
   <strong>Reduce context switching across projects. Keep agent work in queryable memory.</strong>
   <br />
-  <em>v0.4.0 alpha -- APIs and schemas may change</em>
+  <em>v0.5.0 alpha -- APIs and schemas may change</em>
 </p>
 
 <p align="center">
@@ -886,6 +886,17 @@ v0.4.0 adds personas, pipelines, and prompt templates. The database schema is au
 - Built-in personas (Worker, Architect, Judge, TestEngineer) and pipelines (WorkerOnly, Reviewed, Tested, FullPipeline) are seeded automatically
 - 18 built-in prompt templates are seeded automatically
 - Standalone migration scripts available in `migrations/` for manual execution
+
+### v0.4.0 to v0.5.0
+
+v0.5.0 adds captain model selection, startup model validation, and mission runtime tracking. The database schema is automatically migrated on first startup (migrations 24-27). Key changes:
+
+- New columns: `captains.model`, `missions.total_runtime_ms`
+- Captain model overrides are persisted across SQLite, MySQL, PostgreSQL, and SQL Server
+- REST and MCP captain create/update operations validate configured models before saving
+- React dashboard captain detail now exposes the captain model field and shows validation errors in a modal
+- Mission detail now shows total runtime, and dispatch cleanup removes the redundant parsed-task UI
+- Docker image tags, release metadata, and API documentation are updated for `v0.5.0`
 
 ## Issues and Discussions
 

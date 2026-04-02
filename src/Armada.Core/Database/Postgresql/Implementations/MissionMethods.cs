@@ -72,6 +72,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     AddMissionParameters(cmd, mission);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
+
+                await TouchVoyageAsync(conn, mission.VoyageId, mission.LastUpdateUtc, token).ConfigureAwait(false);
             }
 
             return mission;
@@ -140,6 +142,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     AddMissionParameters(cmd, mission);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
+
+                await TouchVoyageAsync(conn, mission.VoyageId, mission.LastUpdateUtc, token).ConfigureAwait(false);
             }
 
             return mission;
@@ -664,6 +668,20 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@started_utc", mission.StartedUtc.HasValue ? (object)mission.StartedUtc.Value : DBNull.Value);
             cmd.Parameters.AddWithValue("@completed_utc", mission.CompletedUtc.HasValue ? (object)mission.CompletedUtc.Value : DBNull.Value);
             cmd.Parameters.AddWithValue("@last_update_utc", mission.LastUpdateUtc);
+        }
+
+        private static async Task TouchVoyageAsync(NpgsqlConnection conn, string? voyageId, DateTime lastUpdateUtc, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(voyageId)) return;
+
+            using (NpgsqlCommand cmd = new NpgsqlCommand())
+            {
+                cmd.Connection = conn;
+                cmd.CommandText = "UPDATE voyages SET last_update_utc = @last_update_utc WHERE id = @voyage_id;";
+                cmd.Parameters.AddWithValue("@voyage_id", voyageId);
+                cmd.Parameters.AddWithValue("@last_update_utc", lastUpdateUtc);
+                await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+            }
         }
 
         private async Task<List<Mission>> EnumerateByColumnAsync(string column, string value, CancellationToken token)

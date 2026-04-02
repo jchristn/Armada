@@ -50,6 +50,8 @@ namespace Armada.Test.Unit.Suites.Database
             await Mission_Delete();
             await Mission_ReadNotFound();
             await Mission_ExistsNotFound();
+            await Mission_Create_TouchesParentVoyageLastUpdateUtc();
+            await Mission_Update_TouchesParentVoyageLastUpdateUtc();
         }
 
         #endregion
@@ -562,6 +564,67 @@ namespace Armada.Test.Unit.Suites.Database
 
                     bool exists = await db.Missions.ExistsAsync("msn_nonexistent_id_12345");
                     AssertFalse(exists);
+                }
+            });
+        }
+
+        private async Task Mission_Create_TouchesParentVoyageLastUpdateUtc()
+        {
+            await RunTest("Mission_Create_TouchesParentVoyageLastUpdateUtc", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    SqliteDatabaseDriver db = testDb.Driver;
+                    MissionTestPrerequisites prereqs = await CreatePrerequisitesAsync(db);
+                    Vessel vessel = prereqs.Vessel;
+                    Voyage voyage = prereqs.Voyage;
+
+                    Voyage? beforeCreate = await db.Voyages.ReadAsync(voyage.Id).ConfigureAwait(false);
+                    AssertNotNull(beforeCreate);
+                    DateTime originalLastUpdateUtc = beforeCreate!.LastUpdateUtc;
+
+                    await Task.Delay(25).ConfigureAwait(false);
+
+                    Mission mission = new Mission("Create Touch Test");
+                    mission.VesselId = vessel.Id;
+                    mission.VoyageId = voyage.Id;
+                    await db.Missions.CreateAsync(mission).ConfigureAwait(false);
+
+                    Voyage? afterCreate = await db.Voyages.ReadAsync(voyage.Id).ConfigureAwait(false);
+                    AssertNotNull(afterCreate);
+                    AssertTrue(afterCreate!.LastUpdateUtc > originalLastUpdateUtc, "Voyage.LastUpdateUtc should advance when a mission is created");
+                }
+            });
+        }
+
+        private async Task Mission_Update_TouchesParentVoyageLastUpdateUtc()
+        {
+            await RunTest("Mission_Update_TouchesParentVoyageLastUpdateUtc", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    SqliteDatabaseDriver db = testDb.Driver;
+                    MissionTestPrerequisites prereqs = await CreatePrerequisitesAsync(db);
+                    Vessel vessel = prereqs.Vessel;
+                    Voyage voyage = prereqs.Voyage;
+
+                    Mission mission = new Mission("Update Touch Test");
+                    mission.VesselId = vessel.Id;
+                    mission.VoyageId = voyage.Id;
+                    mission = await db.Missions.CreateAsync(mission).ConfigureAwait(false);
+
+                    Voyage? beforeUpdate = await db.Voyages.ReadAsync(voyage.Id).ConfigureAwait(false);
+                    AssertNotNull(beforeUpdate);
+                    DateTime originalLastUpdateUtc = beforeUpdate!.LastUpdateUtc;
+
+                    await Task.Delay(25).ConfigureAwait(false);
+
+                    mission.Status = MissionStatusEnum.InProgress;
+                    await db.Missions.UpdateAsync(mission).ConfigureAwait(false);
+
+                    Voyage? afterUpdate = await db.Voyages.ReadAsync(voyage.Id).ConfigureAwait(false);
+                    AssertNotNull(afterUpdate);
+                    AssertTrue(afterUpdate!.LastUpdateUtc > originalLastUpdateUtc, "Voyage.LastUpdateUtc should advance when a mission is updated");
                 }
             });
         }

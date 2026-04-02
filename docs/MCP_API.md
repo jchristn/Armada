@@ -1,6 +1,6 @@
 # Armada MCP API Reference
 
-**Version:** 0.4.0
+**Version:** 0.5.0
 **Default URL:** `http://localhost:7891`
 **Protocol:** [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) over HTTP
 **Server Library:** Voltaic (McpHttpServer)
@@ -1559,6 +1559,7 @@ Register a new captain (AI agent).
   "properties": {
     "name": { "type": "string", "description": "Captain display name" },
     "runtime": { "type": "string", "description": "Agent runtime: ClaudeCode, Codex, Gemini, Cursor" },
+    "model": { "type": "string", "description": "Optional model override for this captain. When omitted, the runtime chooses automatically" },
     "systemInstructions": { "type": "string", "description": "System instructions for this captain -- injected into every mission prompt to specialize behavior" },
     "allowedPersonas": { "type": "array", "items": { "type": "string" }, "description": "List of persona names this captain is allowed to use" },
     "preferredPersona": { "type": "string", "description": "Preferred persona name for this captain" }
@@ -1571,11 +1572,12 @@ Register a new captain (AI agent).
 |---|---|---|---|
 | `name` | string | Yes | Captain display name |
 | `runtime` | string | No | Agent runtime: `ClaudeCode`, `Codex`, `Gemini`, `Cursor` |
+| `model` | string | No | Optional model override. When omitted, the runtime chooses automatically |
 | `systemInstructions` | string | No | System instructions injected into every mission prompt for this captain |
 | `allowedPersonas` | string[] | No | List of persona names this captain is allowed to use |
 | `preferredPersona` | string | No | Preferred persona name for this captain |
 
-**Response:** [Captain](#captain) object.
+**Response:** [Captain](#captain) object. Invalid or unavailable models are returned as MCP tool errors.
 
 ---
 
@@ -1612,6 +1614,7 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
     "captainId": { "type": "string", "description": "Captain ID (cpt_ prefix)" },
     "name": { "type": "string", "description": "New display name" },
     "runtime": { "type": "string", "description": "New agent runtime: ClaudeCode, Codex, Gemini, Cursor" },
+    "model": { "type": "string", "description": "New optional model override for this captain" },
     "systemInstructions": { "type": "string", "description": "New system instructions for this captain" },
     "allowedPersonas": { "type": "array", "items": { "type": "string" }, "description": "New list of persona names this captain is allowed to use" },
     "preferredPersona": { "type": "string", "description": "New preferred persona name for this captain" }
@@ -1625,11 +1628,12 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
 | `captainId` | string | Yes | Captain ID (prefix `cpt_`) |
 | `name` | string | No | New display name |
 | `runtime` | string | No | New agent runtime: `ClaudeCode`, `Codex`, `Gemini`, `Cursor` |
+| `model` | string | No | New optional model override. When omitted, the existing value is preserved |
 | `systemInstructions` | string | No | New system instructions for this captain |
 | `allowedPersonas` | string[] | No | New list of persona names this captain is allowed to use |
 | `preferredPersona` | string | No | New preferred persona name for this captain |
 
-**Response:** Updated [Captain](#captain) object, or `{ "Error": "Captain not found" }`.
+**Response:** Updated [Captain](#captain) object, or `{ "Error": "Captain not found" }`. Invalid or unavailable models are returned as MCP tool errors.
 
 ---
 
@@ -2581,6 +2585,7 @@ Paginated result wrapper returned by `armada_enumerate`.
 | `createdUtc` | string | ISO 8601 creation timestamp |
 | `startedUtc` | string \| null | ISO 8601 start timestamp |
 | `completedUtc` | string \| null | ISO 8601 completion timestamp |
+| `totalRuntimeMs` | long \| null | Total execution runtime in milliseconds |
 | `lastUpdateUtc` | string | ISO 8601 last update timestamp |
 
 #### Captain
@@ -2590,6 +2595,7 @@ Paginated result wrapper returned by `armada_enumerate`.
 | `id` | string | Captain ID (prefix `cpt_`) |
 | `name` | string | Display name |
 | `runtime` | string | [AgentRuntimeEnum](#agentruntimeenum) value |
+| `model` | string \| null | Optional model override for this captain |
 | `state` | string | [CaptainStateEnum](#captainstateenum) value |
 | `currentMissionId` | string \| null | Currently assigned mission ID |
 | `currentDockId` | string \| null | Currently assigned dock (worktree) ID |

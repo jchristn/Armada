@@ -1,32 +1,7 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { listVessels, listPipelines, createVoyage } from '../api/client';
 import type { Vessel, Pipeline } from '../types/models';
-
-/**
- * Parse a natural-language prompt into discrete tasks.
- * Only splits on explicit delimiters: numbered lists ("1. foo\n2. bar")
- * or semicolons ("foo; bar; baz"). Does NOT split on bare newlines
- * or bullet points -- those are part of a single task description.
- */
-function parseTasks(prompt: string): string[] {
-  if (!prompt || !prompt.trim()) return [];
-
-  const numbered: string[] = [];
-  const re = /(?:^|\n)\s*(\d+)\.\s+(.+?)(?=\n\s*\d+\.\s|$)/gs;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(prompt)) !== null) {
-    numbered.push(m[2].trim());
-  }
-  if (numbered.length >= 2) return numbered;
-
-  if (prompt.includes(';')) {
-    const parts = prompt.split(';').map((s) => s.trim()).filter(Boolean);
-    if (parts.length >= 2) return parts;
-  }
-
-  return [prompt.trim()];
-}
 
 export default function Dispatch() {
   const navigate = useNavigate();
@@ -38,7 +13,6 @@ export default function Dispatch() {
   const [vesselId, setVesselId] = useState('');
   const [prompt, setPrompt] = useState('');
   const [priority, setPriority] = useState(100);
-  const [parsedTasks, setParsedTasks] = useState<string[]>([]);
   const [dispatching, setDispatching] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
 
@@ -52,23 +26,6 @@ export default function Dispatch() {
     });
   }, []);
 
-  const handlePromptChange = useCallback(
-    (value: string) => {
-      setPrompt(value);
-      const pipelineObj = pipelines.find((p) => p.name === selectedPipeline);
-      const isMultiStage = pipelineObj != null && pipelineObj.stages.length > 1;
-      if (isMultiStage) {
-        setParsedTasks([]);
-      } else {
-        const parsed = parseTasks(value);
-        const hasNumberedList = /(?:^|\n)\s*\d+\.\s+/.test(value);
-        const hasSemicolons = value.includes(';');
-        setParsedTasks((hasNumberedList || hasSemicolons) && parsed.length > 1 ? parsed : []);
-      }
-    },
-    [pipelines, selectedPipeline],
-  );
-
   const handleDispatch = async () => {
     if (!prompt.trim()) return;
     if (!vesselId) {
@@ -79,17 +36,7 @@ export default function Dispatch() {
     const selectedPipelineObj = pipelines.find((p) => p.name === selectedPipeline);
     const isMultiStage = selectedPipelineObj != null && selectedPipelineObj.stages.length > 1;
 
-    let tasks: string[];
-    if (isMultiStage) {
-      tasks = [prompt.trim()];
-    } else {
-      let parsed = parsedTasks;
-      if (!parsed.length) {
-        parsed = parseTasks(prompt);
-        setParsedTasks(parsed);
-      }
-      tasks = parsed;
-    }
+    const tasks = [prompt.trim()];
     if (!tasks.length) return;
 
     setDispatching(true);
@@ -113,7 +60,6 @@ export default function Dispatch() {
         : `${missions.length} mission${missions.length !== 1 ? 's' : ''}`;
       setResult({ ok: true, message: `Dispatched voyage with ${missionCount}` });
       setPrompt('');
-      setParsedTasks([]);
       setTimeout(() => {
         navigate(`/voyages/${voyage.id}`);
       }, 1500);
@@ -131,7 +77,7 @@ export default function Dispatch() {
         <div>
           <h2>Dispatch</h2>
           <p className="text-muted">
-            Describe what you need done. Use numbered lists or semicolons for multiple tasks.
+            Describe the work you want Armada to dispatch through the selected vessel and pipeline.
           </p>
         </div>
       </div>
@@ -187,9 +133,9 @@ export default function Dispatch() {
             <label>Description</label>
             <textarea
               value={prompt}
-              onChange={(e) => handlePromptChange(e.target.value)}
+              onChange={(e) => setPrompt(e.target.value)}
               rows={12}
-              placeholder={'Describe what you need done.\n\nFor multiple tasks, use numbered lists or semicolons:\n1. Add user authentication\n2. Create dashboard page\n3. Write unit tests'}
+              placeholder={'Describe what you need done.\n\nArmada will dispatch this request as a voyage on the selected vessel.'}
             />
           </div>
 

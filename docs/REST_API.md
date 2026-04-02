@@ -1,6 +1,6 @@
 # Armada REST API Reference
 
-**Version:** 0.4.0
+**Version:** 0.5.0
 **Base URL:** `http://localhost:7890`
 **Content-Type:** `application/json`
 
@@ -1497,13 +1497,15 @@ Register a new captain (AI agent).
 |---|---|---|---|
 | `Name` | string | yes | Captain name |
 | `Runtime` | string | no | Agent runtime type (default: `ClaudeCode`) |
+| `Model` | string | no | Optional model override for this captain. When omitted, the runtime selects its default model |
 
 **Response:** `201 Created` - [Captain](#captain)
+**Error:** `400 Bad Request` - Invalid or unavailable model
 
 ```bash
 curl -X POST http://localhost:7890/api/v1/captains \
   -H "Content-Type: application/json" \
-  -d '{"Name": "captain-1", "Runtime": "ClaudeCode", "SystemInstructions": "You are a testing specialist. Always run tests before committing."}'
+  -d '{"Name": "captain-1", "Runtime": "ClaudeCode", "Model": "claude-sonnet-4-20250514", "SystemInstructions": "You are a testing specialist. Always run tests before committing."}'
 ```
 
 ---
@@ -1524,7 +1526,7 @@ Get a single captain by ID.
 
 #### PUT /api/v1/captains/{id}
 
-Update a captain's name or runtime. Operational fields (state, process, mission) are preserved.
+Update a captain's name, runtime, or model. Operational fields (state, process, mission) are preserved.
 
 **Path Parameters:**
 | Parameter | Description |
@@ -1536,9 +1538,13 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
 {
   "name": "captain-bravo",
   "runtime": "Codex",
+  "model": "gpt-5.4",
   "systemInstructions": "Focus on code quality and always run linting before commits."
 }
 ```
+
+**Response:** `200 OK` - [Captain](#captain)
+**Error:** `400 Bad Request` - Invalid or unavailable model
 
 **Response:** `200 OK` - [Captain](#captain)
 **Error:** `404` - Captain not found
@@ -2896,6 +2902,7 @@ An atomic unit of work assigned to a captain.
 | `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
 | `StartedUtc` | datetime? | null | Work start timestamp (UTC) |
 | `CompletedUtc` | datetime? | null | Completion timestamp (UTC) |
+| `TotalRuntimeMs` | long? | null | Total execution runtime in milliseconds |
 | `LastUpdateUtc` | datetime | now | Last update timestamp (UTC) |
 
 ---
@@ -2909,6 +2916,7 @@ A worker AI agent instance executing missions.
   "Id": "cpt_abc123",
   "Name": "captain-1",
   "Runtime": "ClaudeCode",
+  "Model": null,
   "SystemInstructions": null,
   "State": "Idle",
   "CurrentMissionId": null,
@@ -2926,6 +2934,7 @@ A worker AI agent instance executing missions.
 | `Id` | string | auto-generated | Unique ID with `cpt_` prefix |
 | `Name` | string | `"Captain"` | Captain name |
 | `Runtime` | [AgentRuntimeEnum](#agentruntimeenum) | `ClaudeCode` | Agent runtime type |
+| `Model` | string? | null | Optional model override for this captain. When null, the runtime chooses its default model |
 | `SystemInstructions` | string? | null | Per-captain system instructions injected into every mission prompt |
 | `State` | [CaptainStateEnum](#captainstateenum) | `Idle` | Current state |
 | `CurrentMissionId` | string? | null | Currently assigned mission ID |

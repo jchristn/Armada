@@ -362,7 +362,7 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Captains
-            new CaptainRoutes(_Database, _Admiral, _Settings, _RuntimeFactory, EmitEventAsync, _JsonOptions)
+            new CaptainRoutes(_Database, _Admiral, _Settings, _RuntimeFactory, _AgentLifecycle, EmitEventAsync, _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Docks
@@ -522,6 +522,7 @@ namespace Armada.Server
                     if (captain != null)
                         await _AgentLifecycle.HandleStopAgentAsync(captain).ConfigureAwait(false);
                 },
+                _AgentLifecycle,
                 _PromptTemplateService);
         }
 

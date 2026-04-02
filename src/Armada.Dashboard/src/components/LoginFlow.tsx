@@ -6,6 +6,7 @@ import type { TenantListEntry } from '../types/models';
 
 type Step = 'email' | 'tenant' | 'password';
 type LoginMode = 'email' | 'apikey';
+type RevealField = 'password' | 'apikey';
 
 export default function LoginFlow() {
   const { login } = useAuth();
@@ -19,6 +20,15 @@ export default function LoginFlow() {
   const [selectedTenant, setSelectedTenant] = useState<TenantListEntry | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [revealedField, setRevealedField] = useState<RevealField | null>(null);
+
+  function beginReveal(field: RevealField) {
+    setRevealedField(field);
+  }
+
+  function endReveal() {
+    setRevealedField(null);
+  }
 
   async function handleEmailSubmit(e: FormEvent) {
     e.preventDefault();
@@ -113,7 +123,33 @@ export default function LoginFlow() {
         {mode === 'apikey' && (
           <form onSubmit={handleApiKeySubmit}>
             <label htmlFor="apikey">API Key / Bearer Token</label>
-            <input id="apikey" type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="Paste your API key" required autoFocus />
+            <div className="login-secret-field">
+              <input
+                id="apikey"
+                type={revealedField === 'apikey' ? 'text' : 'password'}
+                value={apiKey}
+                onChange={e => setApiKey(e.target.value)}
+                placeholder="Paste your API key"
+                required
+                autoFocus
+              />
+              <button
+                type="button"
+                className="login-secret-toggle"
+                aria-label={revealedField === 'apikey' ? 'Hide API key' : 'Show API key'}
+                title={revealedField === 'apikey' ? 'Hide API key' : 'Show API key'}
+                onPointerDown={(e) => { e.preventDefault(); beginReveal('apikey'); }}
+                onPointerUp={endReveal}
+                onPointerLeave={endReveal}
+                onPointerCancel={endReveal}
+                onBlur={endReveal}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </button>
+            </div>
             <button type="submit" disabled={busy}>{busy ? 'Connecting...' : 'Connect'}</button>
           </form>
         )}
@@ -160,7 +196,33 @@ export default function LoginFlow() {
               Signing in as <strong>{email}</strong> to <strong>{selectedTenant?.name}</strong>
             </div>
             <label htmlFor="password">Password</label>
-            <input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" required autoFocus />
+            <div className="login-secret-field">
+              <input
+                id="password"
+                type={revealedField === 'password' ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="Password"
+                required
+                autoFocus
+              />
+              <button
+                type="button"
+                className="login-secret-toggle"
+                aria-label={revealedField === 'password' ? 'Hide password' : 'Show password'}
+                title={revealedField === 'password' ? 'Hide password' : 'Show password'}
+                onPointerDown={(e) => { e.preventDefault(); beginReveal('password'); }}
+                onPointerUp={endReveal}
+                onPointerLeave={endReveal}
+                onPointerCancel={endReveal}
+                onBlur={endReveal}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </button>
+            </div>
             <button type="submit" disabled={busy}>{busy ? 'Signing in...' : 'Sign In'}</button>
             <button type="button" className="link-btn" onClick={() => { setStep('email'); setPassword(''); }}>Back</button>
           </form>

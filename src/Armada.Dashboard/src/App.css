@@ -2233,6 +2233,40 @@ thead tr.column-filter-row td input.col-filter::placeholder {
 .login-card label { display: block; font-size: 13px; font-weight: 600; color: var(--text-dim); margin-bottom: 14px; }
 .login-card label input,
 .login-card label select { margin-top: 4px; }
+.login-secret-field {
+    position: relative;
+    margin-top: 4px;
+    margin-bottom: 16px;
+}
+.login-secret-field input {
+    margin: 0;
+    padding-right: 44px;
+}
+.login-secret-toggle {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+}
+.login-secret-toggle:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+}
+.login-secret-toggle:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
 .login-select {
     width: 100%;
     padding: 10px 12px;

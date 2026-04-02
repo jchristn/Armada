@@ -4,6 +4,36 @@ All notable changes to Armada are documented in this file.
 
 ---
 
+## v0.5.0
+
+### Captains and Runtime Selection
+- Added optional `Model` on captains across SQLite, MySQL, PostgreSQL, and SQL Server
+- Captain model selection is exposed through dashboard, REST, MCP, and Postman examples
+- Runtime launches now pass the configured model where supported, otherwise the runtime chooses its default
+- Captain create/update now validates configured models before saving and returns a user-facing error when the model is invalid or unavailable
+
+### Missions and Pipeline Reliability
+- Added `TotalRuntimeMs` on missions, surfaced in API responses and the mission detail dashboard
+- Mission create/update now touch parent voyage `LastUpdateUtc` so active voyages report fresh status
+- Architect handoff text now strips trailing `[ARMADA:*]` control markers before passing instructions downstream
+- Worktree creation now fails fast if a fresh dock is dirty, preventing unrelated tracked-file contamination
+- Dock and mission branch cleanup was hardened across no-op landing and published-server worktree reclamation paths
+
+### Git and Landing
+- Worktree branch creation now creates the branch ref before attaching the worktree and keeps existing-branch docks on the named branch
+- Merge handling now retries with `--allow-unrelated-histories` when needed
+- Diff capture now falls back cleanly when there is no merge base instead of producing an empty snapshot
+- Architect-only branches are cleaned up after successful fan-out instead of lingering indefinitely
+
+### Dashboard and Docs
+- Captain detail now supports editing and displaying the configured model
+- Mission detail now uses a four-column layout and shows total runtime
+- Login secret inputs now support a press-and-hold reveal control
+- Dispatch page no longer shows the redundant detected-task UI or stale task-splitting guidance
+- README, REST API, MCP API, compose.yaml, and release metadata are updated for `v0.5.0`
+
+---
+
 ## v0.4.0
 
 ### Personas and Pipelines

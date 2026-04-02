@@ -1,6 +1,6 @@
 # Pipelines -- Implementation Reference
 
-This document covers the complete pipeline implementation in Armada v0.4.0: data model, dispatch flow, execution lifecycle, stage handoff, architect special handling, captain routing, and extensibility.
+This document covers the complete pipeline implementation in Armada v0.5.0: data model, dispatch flow, execution lifecycle, stage handoff, architect special handling, captain routing, and extensibility.
 
 ---
 

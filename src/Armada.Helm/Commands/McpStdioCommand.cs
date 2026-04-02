@@ -46,9 +46,21 @@ namespace Armada.Helm.Commands
             IDockService dockService = new DockService(logging, database, armadaSettings, git);
             ICaptainService captainService = new CaptainService(logging, database, armadaSettings, git, dockService);
             IPromptTemplateService promptTemplateService = new PromptTemplateService(database, logging);
+            IMessageTemplateService messageTemplateService = new MessageTemplateService(logging, promptTemplateService);
             IMissionService missionService = new MissionService(logging, database, armadaSettings, dockService, captainService, promptTemplateService, git);
             IVoyageService voyageService = new VoyageService(logging, database);
             IAdmiralService admiral = new AdmiralService(logging, database, armadaSettings, captainService, missionService, voyageService, dockService);
+            AgentRuntimeFactory runtimeFactory = new AgentRuntimeFactory(logging);
+            AgentLifecycleHandler agentLifecycle = new AgentLifecycleHandler(
+                logging,
+                database,
+                armadaSettings,
+                runtimeFactory,
+                admiral,
+                messageTemplateService,
+                promptTemplateService,
+                null,
+                (_, _, _, _, _, _, _, _) => Task.CompletedTask);
 
             // Create stdio MCP server
             McpServer mcpServer = new McpServer();
@@ -59,7 +71,7 @@ namespace Armada.Helm.Commands
             IGitService gitService = git;
             IMergeQueueService mergeQueueService = new MergeQueueService(logging, database, armadaSettings, git);
             LandingService landingService = new LandingService(logging, database, armadaSettings, git);
-            McpToolRegistrar.RegisterAll(mcpServer.RegisterTool, database, admiral, armadaSettings, gitService, mergeQueueService, dockService, landingService, templateService: promptTemplateService);
+            McpToolRegistrar.RegisterAll(mcpServer.RegisterTool, database, admiral, armadaSettings, gitService, mergeQueueService, dockService, landingService, agentLifecycle: agentLifecycle, templateService: promptTemplateService);
 
             // Run until stdin closes or process is killed
             using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

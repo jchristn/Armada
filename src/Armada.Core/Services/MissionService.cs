@@ -1954,6 +1954,8 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(line)) return true;
 
             string trimmed = line.Trim();
+            if (ProgressParser.TryParse(trimmed) != null) return true;
+
             return trimmed.Equals("tokens used", StringComparison.OrdinalIgnoreCase) ||
                 System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^[\d,]+$");
         }

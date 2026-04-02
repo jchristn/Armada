@@ -109,7 +109,7 @@ armada go "Add XML doc comments to all public methods" --priority 200
 
 These missions will sit in the queue and only be assigned when no higher-priority missions are pending.
 
-## Persona-Aware Routing (v0.4.0)
+## Persona-Aware Routing
 
 When a mission has a `Persona` field set (from a pipeline stage), the Admiral considers captain persona capabilities during assignment:
 
