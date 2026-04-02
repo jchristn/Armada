@@ -164,9 +164,10 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Captains")
                 .WithSummary("Create a captain")
-                .WithDescription("Registers a new captain (AI agent).")
+                .WithDescription("Registers a new captain (AI agent) from the request body, validates the Runtime/Model combination, and assigns tenant, user, and operational state fields server-side.")
                 .WithRequestBody(OpenApiRequestBodyMetadata.Json<Captain>("Captain data", true))
                 .WithResponse(201, OpenApiResponseMetadata.Json<Captain>("Created captain"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Rest.Get("/api/v1/captains/{id}", async (AppRequest req) =>
@@ -232,11 +233,12 @@ namespace Armada.Server.Routes
             },
             api => api
                 .WithTag("Captains")
-                .WithSummary("Update a captain")
-                .WithDescription("Updates a captain's name, runtime, or max parallelism. Operational fields (state, process, mission) are preserved.")
+                .WithSummary("Update captain configuration")
+                .WithDescription("Updates captain configuration from the request body while preserving the path ID, current state and assignments, process and recovery fields, LastHeartbeatUtc, and CreatedUtc. LastUpdateUtc is refreshed server-side, and invalid Runtime/Model combinations return 400.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Captain ID (cpt_ prefix)"))
                 .WithRequestBody(OpenApiRequestBodyMetadata.Json<Captain>("Updated captain data", true))
                 .WithResponse(200, OpenApiResponseMetadata.Json<Captain>("Updated captain"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 

@@ -1213,7 +1213,7 @@ curl -X POST http://localhost:7890/api/v1/missions/enumerate \
 
 #### POST /api/v1/missions
 
-Create and dispatch a new mission. If a `VesselId` is provided, the Admiral will assign a captain and set up a worktree.
+Create and dispatch a new mission. The response uses the [Mission](#mission) contract: `StartedUtc`, `CompletedUtc`, and `TotalRuntimeMs` are server-managed runtime fields that remain `null` until work starts or completes. Mission payloads keep `DiffSnapshot` compact; use `GET /api/v1/missions/{id}/diff` when you need diff content.
 
 **Request Body:** [Mission](#mission)
 
@@ -1227,6 +1227,26 @@ Create and dispatch a new mission. If a `VesselId` is provided, the Admiral will
 
 **Response:** `201 Created` - [Mission](#mission)
 
+```json
+{
+  "Id": "msn_abc123",
+  "VoyageId": null,
+  "VesselId": "vsl_abc123",
+  "CaptainId": "cpt_abc123",
+  "Title": "Fix login bug",
+  "Description": "The login form does not validate email addresses.",
+  "Status": "Assigned",
+  "Priority": 100,
+  "BranchName": "armada/msn_abc123",
+  "DiffSnapshot": null,
+  "CreatedUtc": "2026-03-07T12:00:00Z",
+  "StartedUtc": null,
+  "CompletedUtc": null,
+  "TotalRuntimeMs": null,
+  "LastUpdateUtc": "2026-03-07T12:01:00Z"
+}
+```
+
 ```bash
 curl -X POST http://localhost:7890/api/v1/missions \
   -H "Content-Type: application/json" \
@@ -1237,7 +1257,7 @@ curl -X POST http://localhost:7890/api/v1/missions \
 
 #### GET /api/v1/missions/{id}
 
-Get a single mission by ID.
+Get a single mission by ID. The compact response includes runtime progress fields (`StartedUtc`, `CompletedUtc`, and `TotalRuntimeMs`) but returns `DiffSnapshot` as `null`; use `GET /api/v1/missions/{id}/diff` for the full diff.
 
 **Path Parameters:**
 | Parameter | Description |
@@ -1246,6 +1266,28 @@ Get a single mission by ID.
 
 **Response:** `200 OK` - [Mission](#mission)
 **Error:** `404` - Mission not found
+
+```json
+{
+  "Id": "msn_abc123",
+  "VoyageId": null,
+  "VesselId": "vsl_abc123",
+  "CaptainId": "cpt_abc123",
+  "Title": "Fix login bug",
+  "Description": "The login form does not validate email addresses.",
+  "Status": "Complete",
+  "Priority": 100,
+  "BranchName": "armada/msn_abc123",
+  "PrUrl": "https://github.com/example/repo/pull/42",
+  "CommitHash": "abc123def456",
+  "DiffSnapshot": null,
+  "CreatedUtc": "2026-03-07T12:00:00Z",
+  "StartedUtc": "2026-03-07T12:05:00Z",
+  "CompletedUtc": "2026-03-07T12:10:30Z",
+  "TotalRuntimeMs": 330000,
+  "LastUpdateUtc": "2026-03-07T12:10:30Z"
+}
+```
 
 > **Note:** The `DiffSnapshot` field is excluded from responses to keep payloads compact. Use `GET /api/v1/missions/{id}/diff` to retrieve the full diff.
 
@@ -1489,7 +1531,7 @@ Paginated enumeration of captains with optional filtering and sorting.
 
 #### POST /api/v1/captains
 
-Register a new captain (AI agent).
+Register a new captain (AI agent). The server validates the `Runtime` and `Model` combination before creation, and server-managed ownership, assignment, process, and timestamp fields are populated automatically.
 
 **Request Body:** [Captain](#captain)
 
@@ -1498,9 +1540,17 @@ Register a new captain (AI agent).
 | `Name` | string | yes | Captain name |
 | `Runtime` | string | no | Agent runtime type (default: `ClaudeCode`) |
 | `Model` | string | no | Optional model override for this captain. When omitted, the runtime selects its default model |
+| `SystemInstructions` | string | no | Optional per-captain instructions injected into every mission prompt |
 
 **Response:** `201 Created` - [Captain](#captain)
 **Error:** `400 Bad Request` - Invalid or unavailable model
+
+```json
+{
+  "Error": "BadRequest",
+  "Message": "Invalid runtime/model combination."
+}
+```
 
 ```bash
 curl -X POST http://localhost:7890/api/v1/captains \
@@ -1526,34 +1576,40 @@ Get a single captain by ID.
 
 #### PUT /api/v1/captains/{id}
 
-Update a captain's name, runtime, or model. Operational fields (state, process, mission) are preserved.
+Update captain configuration. The path ID, current assignments, process and recovery fields, `LastHeartbeatUtc`, and `CreatedUtc` are preserved. `LastUpdateUtc` is refreshed by the server, and invalid `Runtime`/`Model` combinations return `400 Bad Request`.
 
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
 | `id` | Captain ID (`cpt_` prefix) |
 
-**Request Body:**
+**Request Body:** [Captain](#captain)
+
 ```json
 {
-  "name": "captain-bravo",
-  "runtime": "Codex",
-  "model": "gpt-5.4",
-  "systemInstructions": "Focus on code quality and always run linting before commits."
+  "Name": "captain-bravo",
+  "Runtime": "Codex",
+  "Model": "gpt-5.4",
+  "SystemInstructions": "Focus on code quality and always run linting before commits."
 }
 ```
 
 **Response:** `200 OK` - [Captain](#captain)
 **Error:** `400 Bad Request` - Invalid or unavailable model
-
-**Response:** `200 OK` - [Captain](#captain)
 **Error:** `404` - Captain not found
+
+```json
+{
+  "Error": "BadRequest",
+  "Message": "Invalid runtime/model combination."
+}
+```
 
 ```bash
 curl -X PUT http://localhost:7890/api/v1/captains/cpt_abc123 \
   -H "Content-Type: application/json" \
   -H "x-api-key: YOUR_KEY" \
-  -d '{"name": "captain-bravo", "runtime": "Codex"}'
+  -d '{"Name": "captain-bravo", "Runtime": "Codex"}'
 ```
 
 ---
@@ -2878,6 +2934,7 @@ An atomic unit of work assigned to a captain.
   "CreatedUtc": "2026-03-07T12:00:00Z",
   "StartedUtc": "2026-03-07T12:05:00Z",
   "CompletedUtc": null,
+  "TotalRuntimeMs": null,
   "LastUpdateUtc": "2026-03-07T12:10:00Z"
 }
 ```

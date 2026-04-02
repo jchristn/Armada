@@ -265,7 +265,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Missions")
                 .WithSummary("Create a mission")
-                .WithDescription("Creates and dispatches a new mission. If a vesselId is provided, the Admiral will assign a captain and set up a worktree.")
+                .WithDescription("Creates and dispatches a new mission. Mission payloads expose StartedUtc, CompletedUtc, and TotalRuntimeMs as runtime fields, which remain null until work starts or finishes. Use GET /api/v1/missions/{id}/diff for diff content instead of relying on compact DiffSnapshot payloads.")
                 .WithRequestBody(OpenApiRequestBodyMetadata.Json<Mission>("Mission data", true))
                 .WithResponse(201, OpenApiResponseMetadata.Json<Mission>("Created mission"))
                 .WithSecurity("ApiKey"));
@@ -291,7 +291,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Missions")
                 .WithSummary("Get a mission")
-                .WithDescription("Returns a single mission by ID.")
+                .WithDescription("Returns a single mission by ID. StartedUtc, CompletedUtc, and TotalRuntimeMs show runtime progress, while DiffSnapshot is returned as null in this response to keep the payload compact. Use GET /api/v1/missions/{id}/diff for the full diff.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
                 .WithResponse(200, OpenApiResponseMetadata.Json<Mission>("Mission details"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
