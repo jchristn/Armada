@@ -70,6 +70,7 @@ namespace Armada.Test.Unit
             runner.AddSuite(new NotificationServiceTests());
             runner.AddSuite(new RuntimeDetectionServiceTests());
             runner.AddSuite(new CaptainServiceTests());
+            runner.AddSuite(new AgentLifecycleHandlerTests());
             runner.AddSuite(new MissionPromptTests());
             runner.AddSuite(new SequentialDispatchTests());
             runner.AddSuite(new MissionStatusTransitionTests());

@@ -46,6 +46,18 @@ namespace Armada.Test.Runtimes.Suites
                 await AssertThrowsAsync<ArgumentNullException>(() => runtime.StartAsync("/tmp", ""));
             });
 
+            await RunTest("StartAsync Whitespace Model Throws", async () =>
+            {
+                TestAgentRuntime runtime = new TestAgentRuntime(CreateLogging());
+                await AssertThrowsAsync<ArgumentException>(() => runtime.StartAsync(Path.GetTempPath(), "prompt", model: "   "));
+            });
+
+            await RunTest("StartAsync Explicit Model On Unsupported Runtime Throws", async () =>
+            {
+                TestAgentRuntime runtime = new TestAgentRuntime(CreateLogging());
+                await AssertThrowsAsync<InvalidOperationException>(() => runtime.StartAsync(Path.GetTempPath(), "prompt", model: "gpt-test"));
+            });
+
             await RunTest("IsRunningAsync Invalid ProcessId Returns False", async () =>
             {
                 TestAgentRuntime runtime = new TestAgentRuntime(CreateLogging());
