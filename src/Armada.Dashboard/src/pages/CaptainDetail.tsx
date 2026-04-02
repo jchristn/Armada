@@ -38,6 +38,31 @@ function formatTimeRelative(utc: string | null): string {
   return d.toLocaleDateString();
 }
 
+function getErrorMessage(error: unknown): string | null {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'string' && error) return error;
+  if (!error || typeof error !== 'object') return null;
+
+  const errorObject = error as {
+    message?: unknown;
+    data?: { message?: unknown; error?: unknown };
+    response?: { data?: { message?: unknown; error?: unknown } };
+  };
+
+  const errorMessage = errorObject.message;
+  const dataMessage = errorObject.data?.message;
+  const dataError = errorObject.data?.error;
+  const responseMessage = errorObject.response?.data?.message;
+  const responseError = errorObject.response?.data?.error;
+
+  if (typeof errorMessage === 'string' && errorMessage) return errorMessage;
+  if (typeof dataMessage === 'string' && dataMessage) return dataMessage;
+  if (typeof dataError === 'string' && dataError) return dataError;
+  if (typeof responseMessage === 'string' && responseMessage) return responseMessage;
+  if (typeof responseError === 'string' && responseError) return responseError;
+  return null;
+}
+
 export default function CaptainDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -49,7 +74,7 @@ export default function CaptainDetail() {
 
   // Edit
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', runtime: 'ClaudeCode', systemInstructions: '', allowedPersonas: '', preferredPersona: '' });
+  const [form, setForm] = useState({ name: '', runtime: 'ClaudeCode', model: '', systemInstructions: '', allowedPersonas: '', preferredPersona: '' });
 
   // Log viewer
   const [logText, setLogText] = useState<string | null>(null);
@@ -96,7 +121,15 @@ export default function CaptainDetail() {
 
   function openEdit() {
     if (!captain) return;
-    setForm({ name: captain.name, runtime: captain.runtime || 'ClaudeCode', systemInstructions: captain.systemInstructions ?? '', allowedPersonas: captain.allowedPersonas ?? '', preferredPersona: captain.preferredPersona ?? '' });
+    setError('');
+    setForm({
+      name: captain.name,
+      runtime: captain.runtime || 'ClaudeCode',
+      model: captain.model ?? '',
+      systemInstructions: captain.systemInstructions ?? '',
+      allowedPersonas: captain.allowedPersonas ?? '',
+      preferredPersona: captain.preferredPersona ?? '',
+    });
     setShowForm(true);
   }
 
@@ -104,14 +137,17 @@ export default function CaptainDetail() {
     e.preventDefault();
     if (!captain) return;
     try {
-      const payload = { ...form } as Record<string, unknown>;
+      setError('');
+      const payload = { ...form, model: form.model.trim() || null } as Record<string, unknown>;
       if (!payload.systemInstructions) delete payload.systemInstructions;
       if (!payload.allowedPersonas) delete payload.allowedPersonas;
       if (!payload.preferredPersona) delete payload.preferredPersona;
       await updateCaptain(captain.id, payload);
       setShowForm(false);
       load();
-    } catch { setError('Save failed.'); }
+    } catch (saveError) {
+      setError(getErrorMessage(saveError) || 'Save failed.');
+    }
   }
 
   async function handleViewLog() {
@@ -224,6 +260,10 @@ export default function CaptainDetail() {
                 {RUNTIMES.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
             </label>
+            <label>
+              Model
+              <input value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} placeholder="(runtime default)" />
+            </label>
             <label title="Optional instructions injected into every mission prompt for this captain. Use this to specialize behavior, add guardrails, or provide persistent context.">
               System Instructions
               <textarea value={form.systemInstructions} onChange={e => setForm({ ...form, systemInstructions: e.target.value })} rows={4} placeholder="e.g., You are a testing specialist. Always run tests before committing..." />
@@ -260,6 +300,10 @@ export default function CaptainDetail() {
         <div className="detail-field"><span className="detail-label">Name</span><span>{captain.name}</span></div>
         <div className="detail-field"><span className="detail-label">Tenant ID</span><span className="mono">{captain.tenantId || '-'}</span></div>
         <div className="detail-field"><span className="detail-label">Runtime</span><span>{captain.runtime || 'ClaudeCode'}</span></div>
+        <div className="detail-field">
+          <span className="detail-label">Model</span>
+          <span>{captain.model || <span className="text-dim">(runtime default)</span>}</span>
+        </div>
       </div>
       {captain.systemInstructions && (
         <div className="detail-context-section">
