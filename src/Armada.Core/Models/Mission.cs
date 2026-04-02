@@ -138,6 +138,12 @@ namespace Armada.Core.Models
         public string? FailureReason { get; set; } = null;
 
         /// <summary>
+        /// Total mission runtime in milliseconds.
+        /// Typically computed from CompletedUtc - StartedUtc when a mission completes.
+        /// </summary>
+        public long? TotalRuntimeMs { get; set; } = null;
+
+        /// <summary>
         /// Creation timestamp in UTC.
         /// </summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;

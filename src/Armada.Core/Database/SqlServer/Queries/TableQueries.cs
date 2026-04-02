@@ -261,6 +261,20 @@ namespace Armada.Core.Database.SqlServer.Queries
                     @"
                     IF COL_LENGTH('missions', 'agent_output') IS NULL
                         ALTER TABLE missions ADD agent_output NVARCHAR(MAX);"
+                ),
+                new SchemaMigration(
+                    26,
+                    "Add model to captains",
+                    @"
+                    IF COL_LENGTH('captains', 'model') IS NULL
+                        ALTER TABLE captains ADD model NVARCHAR(450) NULL;"
+                ),
+                new SchemaMigration(
+                    27,
+                    "Add total_runtime_ms to missions",
+                    @"
+                    IF COL_LENGTH('missions', 'total_runtime_ms') IS NULL
+                        ALTER TABLE missions ADD total_runtime_ms BIGINT NULL;"
                 )
             };
         }
@@ -377,6 +391,7 @@ namespace Armada.Core.Database.SqlServer.Queries
                 tenant_id NVARCHAR(450),
                 name NVARCHAR(450) NOT NULL,
                 runtime NVARCHAR(450) NOT NULL DEFAULT 'ClaudeCode',
+                model NVARCHAR(450),
                 system_instructions NVARCHAR(MAX),
                 state NVARCHAR(450) NOT NULL DEFAULT 'Idle',
                 current_mission_id NVARCHAR(450),
@@ -432,6 +447,7 @@ namespace Armada.Core.Database.SqlServer.Queries
                 created_utc NVARCHAR(450) NOT NULL,
                 started_utc NVARCHAR(450),
                 completed_utc NVARCHAR(450),
+                total_runtime_ms BIGINT,
                 last_update_utc NVARCHAR(450) NOT NULL,
                 CONSTRAINT FK_missions_voyage FOREIGN KEY (voyage_id) REFERENCES voyages(id) ON DELETE SET NULL,
                 CONSTRAINT FK_missions_vessel FOREIGN KEY (vessel_id) REFERENCES vessels(id) ON DELETE SET NULL,

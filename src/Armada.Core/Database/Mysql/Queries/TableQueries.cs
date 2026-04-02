@@ -61,6 +61,7 @@ namespace Armada.Core.Database.Mysql.Queries
             id VARCHAR(450) NOT NULL PRIMARY KEY,
             name VARCHAR(450) NOT NULL UNIQUE,
             runtime VARCHAR(450) NOT NULL DEFAULT 'ClaudeCode',
+            model VARCHAR(450),
             system_instructions LONGTEXT,
             state VARCHAR(450) NOT NULL DEFAULT 'Idle',
             current_mission_id VARCHAR(450),
@@ -112,6 +113,7 @@ namespace Armada.Core.Database.Mysql.Queries
             created_utc DATETIME(6) NOT NULL,
             started_utc DATETIME(6),
             completed_utc DATETIME(6),
+            total_runtime_ms BIGINT,
             last_update_utc DATETIME(6) NOT NULL,
             FOREIGN KEY (voyage_id) REFERENCES voyages(id) ON DELETE SET NULL,
             FOREIGN KEY (vessel_id) REFERENCES vessels(id) ON DELETE SET NULL,
@@ -555,6 +557,22 @@ namespace Armada.Core.Database.Mysql.Queries
         public static readonly string[] MigrationV15Statements = new string[]
         {
             @"ALTER TABLE missions ADD COLUMN agent_output LONGTEXT;"
+        };
+
+        /// <summary>
+        /// Migration v26 statements for adding model to captains.
+        /// </summary>
+        public static readonly string[] MigrationV26Statements = new string[]
+        {
+            @"ALTER TABLE captains ADD COLUMN model VARCHAR(450);"
+        };
+
+        /// <summary>
+        /// Migration v27 statements for adding total_runtime_ms to missions.
+        /// </summary>
+        public static readonly string[] MigrationV27Statements = new string[]
+        {
+            @"ALTER TABLE missions ADD COLUMN total_runtime_ms BIGINT;"
         };
 
         /// <summary>

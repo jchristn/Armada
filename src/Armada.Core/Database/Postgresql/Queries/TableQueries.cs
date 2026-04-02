@@ -114,6 +114,7 @@ namespace Armada.Core.Database.Postgresql.Queries
                         tenant_id TEXT,
                         name TEXT NOT NULL,
                         runtime TEXT NOT NULL DEFAULT 'ClaudeCode',
+                        model TEXT,
                         system_instructions TEXT,
                         state TEXT NOT NULL DEFAULT 'Idle',
                         current_mission_id TEXT,
@@ -171,6 +172,7 @@ namespace Armada.Core.Database.Postgresql.Queries
                         created_utc TIMESTAMP NOT NULL,
                         started_utc TIMESTAMP,
                         completed_utc TIMESTAMP,
+                        total_runtime_ms BIGINT,
                         last_update_utc TIMESTAMP NOT NULL,
                         FOREIGN KEY (voyage_id) REFERENCES voyages(id) ON DELETE SET NULL,
                         FOREIGN KEY (vessel_id) REFERENCES vessels(id) ON DELETE SET NULL,
@@ -487,6 +489,12 @@ namespace Armada.Core.Database.Postgresql.Queries
                 ),
                 new SchemaMigration(13, "Add agent_output to missions",
                     @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS agent_output TEXT;"
+                ),
+                new SchemaMigration(26, "Add model to captains",
+                    @"ALTER TABLE captains ADD COLUMN IF NOT EXISTS model TEXT;"
+                ),
+                new SchemaMigration(27, "Add total_runtime_ms to missions",
+                    @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS total_runtime_ms BIGINT;"
                 )
             };
         }

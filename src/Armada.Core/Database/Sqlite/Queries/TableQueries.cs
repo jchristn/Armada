@@ -407,6 +407,7 @@ namespace Armada.Core.Database.Sqlite.Queries
                         user_id TEXT,
                         name TEXT NOT NULL UNIQUE,
                         runtime TEXT NOT NULL DEFAULT 'ClaudeCode',
+                        model TEXT,
                         state TEXT NOT NULL DEFAULT 'Idle',
                         current_mission_id TEXT,
                         current_dock_id TEXT,
@@ -452,6 +453,7 @@ namespace Armada.Core.Database.Sqlite.Queries
                         created_utc TEXT NOT NULL,
                         started_utc TEXT,
                         completed_utc TEXT,
+                        total_runtime_ms INTEGER,
                         last_update_utc TEXT NOT NULL,
                         dock_id TEXT,
                         process_id INTEGER,
@@ -740,6 +742,12 @@ namespace Armada.Core.Database.Sqlite.Queries
                 ),
                 new SchemaMigration(25, "Add agent_output to missions for capturing stdout",
                     @"ALTER TABLE missions ADD COLUMN agent_output TEXT;"
+                ),
+                new SchemaMigration(26, "Add model to captains",
+                    @"ALTER TABLE captains ADD COLUMN model TEXT;"
+                ),
+                new SchemaMigration(27, "Add total_runtime_ms to missions",
+                    @"ALTER TABLE missions ADD COLUMN total_runtime_ms INTEGER;"
                 )
             };
         }
