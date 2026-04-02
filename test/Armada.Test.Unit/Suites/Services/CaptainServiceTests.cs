@@ -35,7 +35,7 @@ namespace Armada.Test.Unit.Suites.Services
                 {
                     LoggingModule logging = CreateLogging();
                     ArmadaSettings settings = CreateSettings();
-                    StubGitService git = new StubGitService();
+                    StubGitService git = new StubGitService { IsRepositoryResult = true };
                     StubDockService docks = new StubDockService();
                     CaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, docks);
                     captainService.OnLaunchAgent = (Captain captain, Mission mission, Dock dock) =>
@@ -183,6 +183,62 @@ namespace Armada.Test.Unit.Suites.Services
                     AssertEqual(1, docks.ReclaimCalls, "Dock should be reclaimed when recovery is skipped");
                 }
             });
+
+            await RunTest("Healthy recovery worktree relaunch skips destructive repair", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    StubGitService git = new StubGitService { IsRepositoryResult = true };
+                    StubDockService docks = new StubDockService();
+                    CaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, docks);
+
+                    captainService.OnLaunchAgent = (Captain captain, Mission mission, Dock dock) =>
+                    {
+                        return Task.FromResult(12345);
+                    };
+
+                    Vessel vessel = new Vessel("recover-healthy-vessel", "https://github.com/test/repo.git");
+                    vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    Captain captain = new Captain("recover-healthy-captain");
+                    captain.State = CaptainStateEnum.Working;
+                    captain.CurrentMissionId = "msn_recover_healthy";
+                    captain.CurrentDockId = "dck_recover_healthy";
+                    captain = await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+
+                    Mission mission = new Mission("Healthy Recovery Mission");
+                    mission.Id = "msn_recover_healthy";
+                    mission.VesselId = vessel.Id;
+                    mission.CaptainId = captain.Id;
+                    mission.DockId = "dck_recover_healthy";
+                    mission.Status = MissionStatusEnum.InProgress;
+                    mission.ProcessId = 2222;
+                    mission = await testDb.Driver.Missions.CreateAsync(mission).ConfigureAwait(false);
+
+                    Dock dock = new Dock(vessel.Id);
+                    dock.Id = "dck_recover_healthy";
+                    dock.CaptainId = captain.Id;
+                    dock.WorktreePath = Path.Combine(Path.GetTempPath(), "armada_test_recover_healthy_" + Guid.NewGuid().ToString("N"));
+                    dock.Active = true;
+                    await testDb.Driver.Docks.CreateAsync(dock).ConfigureAwait(false);
+
+                    await captainService.TryRecoverAsync(captain).ConfigureAwait(false);
+
+                    Mission? updatedMission = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    Captain? updatedCaptain = await testDb.Driver.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
+
+                    AssertNotNull(updatedMission, "Mission should still exist");
+                    AssertNotNull(updatedCaptain, "Captain should still exist");
+                    AssertEqual(MissionStatusEnum.InProgress, updatedMission!.Status, "Mission should remain in progress after successful recovery");
+                    AssertEqual(12345, updatedMission.ProcessId, "Mission should capture the relaunched process id");
+                    AssertEqual(CaptainStateEnum.Working, updatedCaptain!.State, "Captain should remain working after successful recovery");
+                    AssertEqual(12345, updatedCaptain.ProcessId, "Captain should capture the relaunched process id");
+                    AssertEqual(1, git.IsRepositoryCalls, "Recovery should check whether the dock worktree is usable");
+                    AssertEqual(0, git.RepairWorktreeCalls, "Recovery should not destructively repair a healthy worktree");
+                }
+            });
         }
 
         private LoggingModule CreateLogging()
@@ -234,14 +290,26 @@ namespace Armada.Test.Unit.Suites.Services
 
         private class StubGitService : IGitService
         {
+            public bool IsRepositoryResult { get; set; }
+            public int IsRepositoryCalls { get; private set; }
+            public int RepairWorktreeCalls { get; private set; }
+
             public Task CloneBareAsync(string repoUrl, string localPath, CancellationToken token = default) { throw new NotImplementedException(); }
             public Task CreateWorktreeAsync(string repoPath, string worktreePath, string branchName, string baseBranch = "main", CancellationToken token = default) { throw new NotImplementedException(); }
             public Task RemoveWorktreeAsync(string worktreePath, CancellationToken token = default) { throw new NotImplementedException(); }
             public Task FetchAsync(string repoPath, CancellationToken token = default) { throw new NotImplementedException(); }
             public Task PushBranchAsync(string worktreePath, string remoteName = "origin", CancellationToken token = default) { throw new NotImplementedException(); }
             public Task<string> CreatePullRequestAsync(string worktreePath, string title, string body, CancellationToken token = default) { throw new NotImplementedException(); }
-            public Task RepairWorktreeAsync(string worktreePath, CancellationToken token = default) { return Task.CompletedTask; }
-            public Task<bool> IsRepositoryAsync(string path, CancellationToken token = default) { throw new NotImplementedException(); }
+            public Task RepairWorktreeAsync(string worktreePath, CancellationToken token = default)
+            {
+                RepairWorktreeCalls++;
+                return Task.CompletedTask;
+            }
+            public Task<bool> IsRepositoryAsync(string path, CancellationToken token = default)
+            {
+                IsRepositoryCalls++;
+                return Task.FromResult(IsRepositoryResult);
+            }
             public Task DeleteLocalBranchAsync(string repoPath, string branchName, CancellationToken token = default) { throw new NotImplementedException(); }
             public Task DeleteRemoteBranchAsync(string repoPath, string branchName, CancellationToken token = default) { throw new NotImplementedException(); }
             public Task PruneWorktreesAsync(string repoPath, CancellationToken token = default) { throw new NotImplementedException(); }

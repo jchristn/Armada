@@ -203,14 +203,37 @@ namespace Armada.Core.Services
                     return;
                 }
 
-                // Repair the worktree if needed
+                bool worktreeAccessible = false;
                 try
                 {
-                    await _Git.RepairWorktreeAsync(dock.WorktreePath, token).ConfigureAwait(false);
+                    worktreeAccessible = await _Git.IsRepositoryAsync(dock.WorktreePath, token).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "worktree repair failed for captain " + captain.Id + ": " + ex.Message);
+                    _Logging.Warn(_Header + "worktree accessibility check failed for captain " + captain.Id + ": " + ex.Message);
+                }
+
+                // Only attempt destructive repair when the worktree is no longer usable.
+                // Normal agent recovery must preserve the mission's uncommitted changes.
+                if (!worktreeAccessible)
+                {
+                    try
+                    {
+                        await _Git.RepairWorktreeAsync(dock.WorktreePath, token).ConfigureAwait(false);
+                        worktreeAccessible = await _Git.IsRepositoryAsync(dock.WorktreePath, token).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _Logging.Warn(_Header + "worktree repair failed for captain " + captain.Id + ": " + ex.Message);
+                    }
+                }
+
+                if (!worktreeAccessible)
+                {
+                    string inaccessibleReason = "Auto-recovery failed because dock " + dock.Id + " is not a usable git worktree.";
+                    _Logging.Warn(_Header + "cannot recover captain " + captain.Id + ": dock " + dock.Id + " is not a usable git worktree -- failing mission and releasing to idle");
+                    await FinalizeRecoveryFailureAsync(captain, mission, inaccessibleReason, token).ConfigureAwait(false);
+                    return;
                 }
 
                 // Get vessel for context regeneration
