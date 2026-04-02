@@ -227,7 +227,20 @@ namespace Armada.Runtimes
                     if (!exited)
                     {
                         _Logging.Warn(_Header + "process " + processId + " did not exit gracefully, killing");
-                        process.Kill(entireProcessTree: true);
+                        try
+                        {
+                            process.Kill(entireProcessTree: true);
+                        }
+                        catch (Exception killEx)
+                        {
+                            _Logging.Warn(_Header + "process " + processId + " kill failed: " + killEx.Message);
+                        }
+
+                        exited = process.WaitForExit(5000);
+                        if (!exited && OperatingSystem.IsWindows())
+                        {
+                            await ForceTerminateProcessTreeWindowsAsync(processId, token).ConfigureAwait(false);
+                        }
                     }
                 }
 
@@ -241,6 +254,37 @@ namespace Armada.Runtimes
             {
                 _Logging.Warn(_Header + "error stopping process " + processId + ": " + ex.Message);
             }
+        }
+
+        private async Task ForceTerminateProcessTreeWindowsAsync(int processId, CancellationToken token)
+        {
+            ProcessStartInfo startInfo = new ProcessStartInfo
+            {
+                FileName = "taskkill",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+            startInfo.ArgumentList.Add("/PID");
+            startInfo.ArgumentList.Add(processId.ToString());
+            startInfo.ArgumentList.Add("/T");
+            startInfo.ArgumentList.Add("/F");
+
+            using Process process = new Process { StartInfo = startInfo };
+            process.Start();
+            string stdout = await process.StandardOutput.ReadToEndAsync(token).ConfigureAwait(false);
+            string stderr = await process.StandardError.ReadToEndAsync(token).ConfigureAwait(false);
+            await process.WaitForExitAsync(token).ConfigureAwait(false);
+
+            if (process.ExitCode != 0)
+            {
+                _Logging.Warn(_Header + "taskkill failed for process " + processId + ": " + stderr.Trim());
+                return;
+            }
+
+            if (!String.IsNullOrWhiteSpace(stdout))
+                _Logging.Info(_Header + "taskkill terminated process tree " + processId + ": " + stdout.Trim());
         }
 
         /// <summary>

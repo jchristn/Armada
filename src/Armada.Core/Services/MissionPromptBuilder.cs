@@ -11,6 +11,23 @@ namespace Armada.Core.Services
     public static class MissionPromptBuilder
     {
         /// <summary>
+        /// Resolve the runtime-specific mission instructions filename.
+        /// </summary>
+        public static string GetInstructionsFileName(string? runtime)
+        {
+            if (String.IsNullOrWhiteSpace(runtime)) return "CLAUDE.md";
+
+            return runtime.Trim() switch
+            {
+                "ClaudeCode" => "CLAUDE.md",
+                "Codex" => "CODEX.md",
+                "Cursor" => "CURSOR.md",
+                "Gemini" => "GEMINI.md",
+                _ => "CLAUDE.md"
+            };
+        }
+
+        /// <summary>
         /// Build a consistent template parameter dictionary for mission prompt rendering.
         /// </summary>
         public static Dictionary<string, string> BuildTemplateParams(

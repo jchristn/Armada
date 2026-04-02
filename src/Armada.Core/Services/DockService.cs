@@ -13,6 +13,9 @@ namespace Armada.Core.Services
     {
         #region Private-Members
 
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> _RepoProvisionLocks =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.OrdinalIgnoreCase);
+
         private string _Header = "[DockService] ";
         private LoggingModule _Logging;
         private DatabaseDriver _Database;
@@ -55,9 +58,15 @@ namespace Armada.Core.Services
             // Falls back to per-captain path for backward compatibility.
             string dockDirName = !String.IsNullOrEmpty(missionId) ? missionId : captain.Name;
             string worktreePath = Path.Combine(_Settings.DocksDirectory, vessel.Name, dockDirName);
+            string normalizedRepoPath = Path.GetFullPath(repoPath);
+            SemaphoreSlim repoLock = _RepoProvisionLocks.GetOrAdd(normalizedRepoPath, _ => new SemaphoreSlim(1, 1));
+            bool repoLockAcquired = false;
 
             try
             {
+                await repoLock.WaitAsync(token).ConfigureAwait(false);
+                repoLockAcquired = true;
+
                 // Ensure bare clone exists. If the directory exists but isn't a valid repo
                 // (e.g. leftover from a failed clone/seed), remove it and re-clone.
                 if (Directory.Exists(repoPath) && !await _Git.IsRepositoryAsync(repoPath, token).ConfigureAwait(false))
@@ -110,13 +119,19 @@ namespace Armada.Core.Services
                 }
                 catch { }
 
+                List<Dock> vesselDocks = await _Database.Docks.EnumerateByVesselAsync(vessel.Id, token).ConfigureAwait(false);
+                Dock? reusableDock = await ResolveConflictingDockAsync(vessel, captain, branchName, worktreePath, vesselDocks, token).ConfigureAwait(false);
+                if (reusableDock != null)
+                {
+                    _Logging.Info(_Header + "reusing active dock " + reusableDock.Id + " at " + reusableDock.WorktreePath);
+                    return reusableDock;
+                }
+
                 // Clean up stale worktree directories under this vessel's dock directory.
                 // Only removes directories that are NOT associated with any active dock record.
                 string vesselDockDir = Path.Combine(_Settings.DocksDirectory, vessel.Name);
                 if (Directory.Exists(vesselDockDir))
                 {
-                    // Query active docks for this vessel to avoid deleting in-use worktrees
-                    List<Dock> vesselDocks = await _Database.Docks.EnumerateByVesselAsync(vessel.Id, token).ConfigureAwait(false);
                     HashSet<string> activeDockPaths = new HashSet<string>(
                         vesselDocks
                             .Where(d => d.Active && !String.IsNullOrEmpty(d.WorktreePath))
@@ -224,6 +239,11 @@ namespace Armada.Core.Services
                 }
 
                 return null;
+            }
+            finally
+            {
+                if (repoLockAcquired)
+                    repoLock.Release();
             }
         }
 
@@ -350,6 +370,60 @@ namespace Armada.Core.Services
         #endregion
 
         #region Private-Methods
+
+        private async Task<Dock?> ResolveConflictingDockAsync(
+            Vessel vessel,
+            Captain captain,
+            string branchName,
+            string worktreePath,
+            List<Dock> vesselDocks,
+            CancellationToken token)
+        {
+            if (vesselDocks == null || vesselDocks.Count == 0) return null;
+
+            List<Dock> conflicts = vesselDocks
+                .Where(d =>
+                    d.Active &&
+                    (!String.IsNullOrEmpty(d.WorktreePath) && String.Equals(d.WorktreePath, worktreePath, StringComparison.OrdinalIgnoreCase) ||
+                     !String.IsNullOrEmpty(d.BranchName) && String.Equals(d.BranchName, branchName, StringComparison.OrdinalIgnoreCase)))
+                .OrderBy(d => d.CreatedUtc)
+                .ToList();
+
+            foreach (Dock conflict in conflicts)
+            {
+                Captain? dockCaptain = !String.IsNullOrEmpty(conflict.CaptainId)
+                    ? await _Database.Captains.ReadAsync(conflict.CaptainId, token).ConfigureAwait(false)
+                    : null;
+
+                bool directoryExists = !String.IsNullOrEmpty(conflict.WorktreePath) && Directory.Exists(conflict.WorktreePath);
+                bool isRegistered = !String.IsNullOrEmpty(vessel.LocalPath) &&
+                    !String.IsNullOrEmpty(conflict.WorktreePath) &&
+                    await _Git.IsWorktreeRegisteredAsync(vessel.LocalPath, conflict.WorktreePath, token).ConfigureAwait(false);
+
+                bool captainStillOwnsDock = dockCaptain != null &&
+                    dockCaptain.State == Armada.Core.Enums.CaptainStateEnum.Working &&
+                    String.Equals(dockCaptain.CurrentDockId, conflict.Id, StringComparison.Ordinal);
+
+                if (captainStillOwnsDock && isRegistered && directoryExists)
+                {
+                    if (String.Equals(conflict.CaptainId, captain.Id, StringComparison.Ordinal))
+                    {
+                        return conflict;
+                    }
+
+                    throw new InvalidOperationException(
+                        "Active dock conflict for " + worktreePath + " owned by captain " + conflict.CaptainId);
+                }
+
+                conflict.Active = false;
+                conflict.CaptainId = null;
+                conflict.LastUpdateUtc = DateTime.UtcNow;
+                await _Database.Docks.UpdateAsync(conflict, token).ConfigureAwait(false);
+                _Logging.Warn(_Header + "deactivated stale dock " + conflict.Id + " for " + worktreePath);
+            }
+
+            return null;
+        }
 
         /// <summary>
         /// Clean up a dock's worktree by removing the git worktree and directory.
