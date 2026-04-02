@@ -1536,7 +1536,7 @@
 							"name": "Updated",
 							"status": "OK",
 							"code": 200,
-							"body": "{\n  \"Id\": \"cpt_abc123\",\n  \"Name\": \"Updated Captain Name\",\n  \"Runtime\": \"ClaudeCode\",\n  \"Model\": \"gpt-5.4-mini\",\n  \"SystemInstructions\": \"Focus on code quality and always run linting before commits.\",\n  \"AllowedPersonas\": [\"Worker\", \"Architect\"],\n  \"PreferredPersona\": \"Architect\",\n  \"State\": \"Idle\"\n}"
+							"body": "{\n  \"Id\": \"cpt_abc123\",\n  \"Name\": \"Updated Captain Name\",\n  \"Runtime\": \"ClaudeCode\",\n  \"Model\": \"gpt-5.4-mini\",\n  \"SystemInstructions\": \"Focus on code quality and always run linting before commits.\",\n  \"AllowedPersonas\": [\"Worker\", \"Architect\"],\n  \"PreferredPersona\": \"Architect\",\n  \"State\": \"Idle\",\n  \"CurrentMissionId\": null,\n  \"CurrentDockId\": null,\n  \"ProcessId\": null,\n  \"RecoveryAttempts\": 0,\n  \"LastHeartbeatUtc\": null,\n  \"CreatedUtc\": \"2026-03-07T12:00:00Z\",\n  \"LastUpdateUtc\": \"2026-03-07T12:05:00Z\"\n}"
 						}
 					]
 				},
