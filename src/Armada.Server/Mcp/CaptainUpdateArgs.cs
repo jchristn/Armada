@@ -1,5 +1,7 @@
 namespace Armada.Server.Mcp
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// MCP tool arguments for updating a captain.
     /// </summary>
@@ -19,6 +21,12 @@ namespace Armada.Server.Mcp
         /// New agent runtime: ClaudeCode, Codex, Gemini, Cursor, or Custom.
         /// </summary>
         public string? Runtime { get; set; }
+
+        /// <summary>
+        /// New model identifier for the runtime. Null means the runtime selects its default.
+        /// </summary>
+        [JsonPropertyName("model")]
+        public string? Model { get; set; }
 
         /// <summary>
         /// New system instructions for this captain.

@@ -10,9 +10,11 @@ namespace Armada.Server.Routes
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
     using Armada.Runtimes;
+    using SyslogLogging;
 
     /// <summary>
     /// REST API routes for captain management.
@@ -25,6 +27,7 @@ namespace Armada.Server.Routes
         private readonly AgentRuntimeFactory _runtimeFactory;
         private readonly Func<string, string, string?, string?, string?, string?, string?, string?, Task> _emitEvent;
         private readonly JsonSerializerOptions _jsonOptions;
+        private readonly AgentLifecycleHandler _lifecycleHandler;
 
         /// <summary>
         /// Instantiate.
@@ -49,6 +52,18 @@ namespace Armada.Server.Routes
             _runtimeFactory = runtimeFactory;
             _emitEvent = emitEvent;
             _jsonOptions = jsonOptions;
+
+            LoggingModule validationLogging = new LoggingModule();
+            _lifecycleHandler = new AgentLifecycleHandler(
+                validationLogging,
+                _database,
+                _settings,
+                _runtimeFactory,
+                _admiral,
+                new MessageTemplateService(validationLogging),
+                null,
+                null,
+                _emitEvent);
         }
 
         private async Task<string> ReadFileSharedAsync(string path)
@@ -147,6 +162,15 @@ namespace Armada.Server.Routes
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Captain.");
                 captain.TenantId = ctx.TenantId;
                 captain.UserId = ctx.UserId;
+                if (captain.Model != null)
+                {
+                    string? validationError = await _lifecycleHandler.ValidateModelAsync(captain.Runtime, captain.Model).ConfigureAwait(false);
+                    if (validationError != null)
+                    {
+                        req.Http.Response.StatusCode = 400;
+                        return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = validationError };
+                    }
+                }
                 captain = await _database.Captains.CreateAsync(captain).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 201;
                 return captain;
@@ -202,6 +226,15 @@ namespace Armada.Server.Routes
                 if (existing == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Captain not found" }; }
                 Captain updated = JsonSerializer.Deserialize<Captain>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Captain.");
+                if (updated.Model != existing.Model)
+                {
+                    string? validationError = await _lifecycleHandler.ValidateModelAsync(updated.Runtime, updated.Model).ConfigureAwait(false);
+                    if (validationError != null)
+                    {
+                        req.Http.Response.StatusCode = 400;
+                        return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = validationError };
+                    }
+                }
                 updated.Id = id;
                 updated.State = existing.State;
                 updated.CurrentMissionId = existing.CurrentMissionId;
@@ -217,7 +250,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Captains")
                 .WithSummary("Update a captain")
-                .WithDescription("Updates a captain's name, runtime, or max parallelism. Operational fields (state, process, mission) are preserved.")
+                .WithDescription("Updates a captain's name, runtime, or model. Operational fields (state, process, mission) are preserved.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Captain ID (cpt_ prefix)"))
                 .WithRequestBody(OpenApiRequestBodyMetadata.Json<Captain>("Updated captain data", true))
                 .WithResponse(200, OpenApiResponseMetadata.Json<Captain>("Updated captain"))

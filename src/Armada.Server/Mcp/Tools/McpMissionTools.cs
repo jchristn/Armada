@@ -38,7 +38,7 @@ namespace Armada.Server.Mcp.Tools
         {
             register(
                 "armada_mission_status",
-                "Get status of a specific mission",
+                "Get status of a specific mission. Returned Mission objects include totalRuntimeMs in milliseconds when available.",
                 new
                 {
                     type = "object",
@@ -60,7 +60,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "armada_create_mission",
-                "Create and dispatch a standalone mission to a vessel",
+                "Create and dispatch a standalone mission to a vessel. Returned Mission objects include totalRuntimeMs in milliseconds when available.",
                 new
                 {
                     type = "object",
@@ -99,7 +99,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "armada_update_mission",
-                "Update an existing mission's title, description, priority, vessel, voyage, branch, or PR URL. Operational fields (status, timestamps, captain) are managed by the system.",
+                "Update an existing mission's title, description, priority, vessel, voyage, branch, or PR URL. Operational fields (status, timestamps, captain) are managed by the system. Returned Mission objects include totalRuntimeMs in milliseconds when available.",
                 new
                 {
                     type = "object",
@@ -149,7 +149,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "armada_cancel_mission",
-                "Cancel a specific mission",
+                "Cancel a specific mission. Returned Mission objects include totalRuntimeMs in milliseconds when available.",
                 new
                 {
                     type = "object",
@@ -330,7 +330,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "armada_restart_mission",
-                "Restart a failed or cancelled mission, resetting it to Pending for re-dispatch. Optionally update title and description (instructions) before restarting.",
+                "Restart a failed or cancelled mission, resetting it to Pending for re-dispatch. Optionally update title and description (instructions) before restarting. Returned Mission objects include totalRuntimeMs in milliseconds when available.",
                 new
                 {
                     type = "object",
@@ -374,7 +374,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "armada_retry_landing",
-                "Retry landing for a mission in LandingFailed status. Rebases the mission branch onto the current target and re-attempts landing.",
+                "Retry landing for a mission in LandingFailed status. Rebases the mission branch onto the current target and re-attempts landing. Returned Mission objects include totalRuntimeMs in milliseconds when available.",
                 new
                 {
                     type = "object",
@@ -395,7 +395,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "armada_transition_mission_status",
-                "Transition a mission to a new status with validation. Valid transitions: Pending->Assigned, Assigned->InProgress, InProgress->Testing/Review/Complete/Failed, Testing->Review/InProgress/Complete/Failed, Review->Complete/InProgress/Failed. Most states allow ->Cancelled.",
+                "Transition a mission to a new status with validation. Valid transitions: Pending->Assigned, Assigned->InProgress, InProgress->Testing/Review/Complete/Failed, Testing->Review/InProgress/Complete/Failed, Review->Complete/InProgress/Failed. Most states allow ->Cancelled. Returned Mission objects include totalRuntimeMs in milliseconds when available.",
                 new
                 {
                     type = "object",

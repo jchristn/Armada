@@ -11,8 +11,11 @@ namespace Armada.Server.Mcp.Tools
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
+    using Armada.Runtimes;
+    using SyslogLogging;
 
     /// <summary>
     /// Registers MCP tools for captain operations (get, create, update, stop, delete, log).
@@ -35,6 +38,22 @@ namespace Armada.Server.Mcp.Tools
         /// <param name="onStopCaptain">Optional callback invoked when a captain is stopped.</param>
         public static void Register(RegisterToolDelegate register, DatabaseDriver database, IAdmiralService admiral, ArmadaSettings? settings, Func<string, Task>? onStopCaptain = null)
         {
+            AgentLifecycleHandler? lifecycleHandler = null;
+            if (settings != null)
+            {
+                LoggingModule validationLogging = new LoggingModule();
+                lifecycleHandler = new AgentLifecycleHandler(
+                    validationLogging,
+                    database,
+                    settings,
+                    new AgentRuntimeFactory(validationLogging),
+                    admiral,
+                    new MessageTemplateService(validationLogging),
+                    null,
+                    null,
+                    (eventType, message, entityType, entityId, captainId, missionId, voyageId, userId) => Task.CompletedTask);
+            }
+
             register(
                 "armada_get_captain",
                 "Get details of a specific captain (AI agent)",
@@ -66,6 +85,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         name = new { type = "string", description = "Captain display name" },
                         runtime = new { type = "string", description = "Agent runtime: ClaudeCode, Codex, Gemini, Cursor, or Custom" },
+                        model = new { type = "string", description = "Model identifier for the runtime. Null means the runtime selects its default." },
                         systemInstructions = new { type = "string", description = "System instructions for this captain -- injected into every mission prompt to specialize behavior" },
                         allowedPersonas = new { type = "string", description = "JSON array of persona names this captain can fill, e.g. [\"Worker\",\"Judge\"]. Null means any persona." },
                         preferredPersona = new { type = "string", description = "Preferred persona for dispatch routing priority" }
@@ -80,6 +100,13 @@ namespace Armada.Server.Mcp.Tools
                     captain.Name = request.Name;
                     if (!String.IsNullOrEmpty(request.Runtime) && Enum.TryParse<AgentRuntimeEnum>(request.Runtime, true, out AgentRuntimeEnum rt))
                         captain.Runtime = rt;
+                    captain.Model = request.Model;
+                    if (captain.Model != null && lifecycleHandler != null)
+                    {
+                        string? validationError = await lifecycleHandler.ValidateModelAsync(captain.Runtime, captain.Model).ConfigureAwait(false);
+                        if (validationError != null)
+                            return (object)new { Error = validationError };
+                    }
                     captain.SystemInstructions = request.SystemInstructions;
                     captain.AllowedPersonas = request.AllowedPersonas;
                     captain.PreferredPersona = request.PreferredPersona;
@@ -89,7 +116,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "armada_update_captain",
-                "Update a captain's name or runtime. Operational fields (state, process, mission) are preserved.",
+                "Update a captain's name, runtime, or model. Operational fields (state, process, mission) are preserved.",
                 new
                 {
                     type = "object",
@@ -98,6 +125,7 @@ namespace Armada.Server.Mcp.Tools
                         captainId = new { type = "string", description = "Captain ID (cpt_ prefix)" },
                         name = new { type = "string", description = "New display name" },
                         runtime = new { type = "string", description = "New agent runtime: ClaudeCode, Codex, Gemini, Cursor, or Custom" },
+                        model = new { type = "string", description = "Model identifier for the runtime. Null means the runtime selects its default." },
                         systemInstructions = new { type = "string", description = "New system instructions for this captain" },
                         allowedPersonas = new { type = "string", description = "JSON array of persona names this captain can fill, e.g. [\"Worker\",\"Judge\"]. Null means any persona." },
                         preferredPersona = new { type = "string", description = "Preferred persona for dispatch routing priority" }
@@ -107,13 +135,23 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     CaptainUpdateArgs request = JsonSerializer.Deserialize<CaptainUpdateArgs>(args!.Value, _JsonOptions)!;
+                    bool modelSpecified = args.Value.TryGetProperty("model", out _);
                     string captainId = request.CaptainId;
                     Captain? captain = await database.Captains.ReadAsync(captainId).ConfigureAwait(false);
                     if (captain == null) return (object)new { Error = "Captain not found" };
+                    string? existingModel = captain.Model;
                     if (request.Name != null)
                         captain.Name = request.Name;
                     if (!String.IsNullOrEmpty(request.Runtime) && Enum.TryParse<AgentRuntimeEnum>(request.Runtime, true, out AgentRuntimeEnum rt))
                         captain.Runtime = rt;
+                    if (modelSpecified)
+                        captain.Model = request.Model;
+                    if (modelSpecified && captain.Model != existingModel && lifecycleHandler != null)
+                    {
+                        string? validationError = await lifecycleHandler.ValidateModelAsync(captain.Runtime, captain.Model).ConfigureAwait(false);
+                        if (validationError != null)
+                            return (object)new { Error = validationError };
+                    }
                     if (request.SystemInstructions != null)
                         captain.SystemInstructions = request.SystemInstructions;
                     if (request.AllowedPersonas != null)
