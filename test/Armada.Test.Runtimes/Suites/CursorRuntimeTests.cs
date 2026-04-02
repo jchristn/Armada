@@ -16,7 +16,7 @@ namespace Armada.Test.Runtimes.Suites
 
             public string Command() => GetCommand();
 
-            public List<string> Args(string prompt) => BuildArguments(prompt);
+            public List<string> Args(string prompt, string? model = null) => BuildArguments(prompt, model);
         }
 
         private InspectableCursorRuntime CreateRuntime()
@@ -43,6 +43,15 @@ namespace Armada.Test.Runtimes.Suites
                 AssertTrue(args.Contains("--force"));
                 AssertTrue(args.Contains("--output-format"));
                 AssertTrue(args.Contains("text"));
+            });
+
+            await RunTest("BuildArguments Includes Model When Supplied", () =>
+            {
+                InspectableCursorRuntime runtime = CreateRuntime();
+                List<string> args = runtime.Args("test prompt", "gpt-5");
+                int modelIndex = args.IndexOf("--model");
+                AssertTrue(modelIndex >= 0);
+                AssertEqual("gpt-5", args[modelIndex + 1]);
             });
 
             await RunTest("Command Uses CursorAgent", () =>

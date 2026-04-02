@@ -1,5 +1,6 @@
 namespace Armada.Server
 {
+    using System.Diagnostics;
     using System.IO;
     using SyslogLogging;
     using Armada.Core;
@@ -29,6 +30,7 @@ namespace Armada.Server
         private IPromptTemplateService? _PromptTemplateService;
         private ArmadaWebSocketHub? _WebSocketHub;
         private Func<string, string, string?, string?, string?, string?, string?, string?, Task> _EmitEventAsync;
+        private readonly TimeSpan _ModelValidationTimeout = TimeSpan.FromSeconds(5);
 
         /// <summary>
         /// Accumulates agent stdout per mission for pipeline handoff.
@@ -148,6 +150,125 @@ namespace Armada.Server
         }
 
         /// <summary>
+        /// Validate that the captain's configured model can be launched by its runtime.
+        /// Returns null if validation succeeds, otherwise an error message.
+        /// </summary>
+        /// <param name="captain">Captain to validate.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Null if valid, otherwise an error message.</returns>
+        public Task<string?> ValidateCaptainModelAsync(Captain captain, CancellationToken token = default)
+        {
+            if (captain == null) throw new ArgumentNullException(nameof(captain));
+            return ValidateModelAsync(captain.Runtime, captain.Model, token);
+        }
+
+        /// <summary>
+        /// Validate that the given runtime can start with the requested model.
+        /// Returns null if validation succeeds, otherwise an error message.
+        /// </summary>
+        /// <param name="runtimeType">Runtime to validate.</param>
+        /// <param name="model">Model to validate.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Null if valid, otherwise an error message.</returns>
+        public async Task<string?> ValidateModelAsync(AgentRuntimeEnum runtimeType, string? model, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(model))
+                return null;
+
+            string validationDirectory = Path.Combine(Path.GetTempPath(), "armada-model-validation-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(validationDirectory);
+
+            Armada.Runtimes.Interfaces.IAgentRuntime runtime;
+            try
+            {
+                runtime = _RuntimeFactory.Create(runtimeType);
+            }
+            catch (Exception ex)
+            {
+                try { Directory.Delete(validationDirectory, true); } catch { }
+                return "Unable to create runtime " + runtimeType + " for model validation: " + ex.Message;
+            }
+
+            object outputLock = new object();
+            System.Text.StringBuilder output = new System.Text.StringBuilder();
+            TaskCompletionSource<int?> exitSource = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            runtime.OnOutputReceived += (processId, line) =>
+            {
+                lock (outputLock)
+                {
+                    if (output.Length < 4096)
+                    {
+                        output.AppendLine(line);
+                    }
+                }
+            };
+            runtime.OnProcessExited += (processId, exitCode) => exitSource.TrySetResult(exitCode);
+
+            int? processId = null;
+
+            try
+            {
+                await InitializeValidationWorkspaceAsync(runtimeType, validationDirectory, token).ConfigureAwait(false);
+
+                processId = await runtime.StartAsync(
+                    validationDirectory,
+                    "Respond with the single word OK.",
+                    model: model,
+                    token: token).ConfigureAwait(false);
+
+                Task completedTask = await Task.WhenAny(
+                    exitSource.Task,
+                    Task.Delay(_ModelValidationTimeout, token)).ConfigureAwait(false);
+
+                if (completedTask == exitSource.Task)
+                {
+                    int? exitCode = await exitSource.Task.ConfigureAwait(false);
+                    if (!exitCode.HasValue || exitCode.Value == 0)
+                    {
+                        return null;
+                    }
+
+                    string? details;
+                    lock (outputLock)
+                    {
+                        details = ExtractModelValidationError(output.ToString());
+                    }
+
+                    if (!String.IsNullOrEmpty(details))
+                    {
+                        return "Model '" + model + "' failed validation for runtime " + runtimeType + ": " + details;
+                    }
+
+                    return "Model '" + model + "' failed validation for runtime " + runtimeType + " with exit code " + exitCode.Value + ".";
+                }
+
+                token.ThrowIfCancellationRequested();
+                return null;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                return "Model '" + model + "' failed validation for runtime " + runtimeType + ": " + ex.Message;
+            }
+            finally
+            {
+                if (processId.HasValue)
+                {
+                    try
+                    {
+                        await runtime.StopAsync(processId.Value, token).ConfigureAwait(false);
+                    }
+                    catch { }
+                }
+
+                try { Directory.Delete(validationDirectory, true); } catch { }
+            }
+        }
+
+        /// <summary>
         /// Launch an agent process for the given captain, mission, and dock.
         /// </summary>
         public async Task<int> HandleLaunchAgentAsync(Captain captain, Mission mission, Dock dock)
@@ -199,7 +320,8 @@ namespace Armada.Server
                 processId = await runtime.StartAsync(
                     dock.WorktreePath ?? throw new InvalidOperationException("Dock worktree path is null"),
                     prompt,
-                    logFilePath: logFilePath).ConfigureAwait(false);
+                    logFilePath: logFilePath,
+                    model: captain.Model).ConfigureAwait(false);
             }
             catch
             {
@@ -462,6 +584,68 @@ namespace Armada.Server
                 (MissionStatusEnum.LandingFailed, MissionStatusEnum.Cancelled) => true,
                 _ => false
             };
+        }
+
+        private static string? ExtractModelValidationError(string output)
+        {
+            if (String.IsNullOrWhiteSpace(output))
+                return null;
+
+            string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i].Trim();
+                if (String.IsNullOrEmpty(line))
+                    continue;
+
+                if (line.IndexOf("error", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    line.IndexOf("invalid", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    line.IndexOf("unknown", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    line.IndexOf("unavailable", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    line.IndexOf("not found", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return line;
+                }
+            }
+
+            return lines[lines.Length - 1].Trim();
+        }
+
+        private static async Task InitializeValidationWorkspaceAsync(AgentRuntimeEnum runtimeType, string workingDirectory, CancellationToken token)
+        {
+            if (runtimeType != AgentRuntimeEnum.Codex)
+                return;
+
+            ProcessStartInfo startInfo = new ProcessStartInfo
+            {
+                FileName = "git",
+                WorkingDirectory = workingDirectory,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            startInfo.ArgumentList.Add("init");
+            startInfo.ArgumentList.Add("--quiet");
+
+            using (Process process = new Process { StartInfo = startInfo })
+            {
+                if (!process.Start())
+                    throw new InvalidOperationException("Failed to initialize temporary validation repository.");
+
+                await process.WaitForExitAsync(token).ConfigureAwait(false);
+                if (process.ExitCode == 0)
+                    return;
+
+                string stderr = await process.StandardError.ReadToEndAsync().ConfigureAwait(false);
+                string stdout = await process.StandardOutput.ReadToEndAsync().ConfigureAwait(false);
+                string details = !String.IsNullOrWhiteSpace(stderr) ? stderr.Trim() : stdout.Trim();
+                if (String.IsNullOrWhiteSpace(details))
+                    details = "git init exited with code " + process.ExitCode + ".";
+
+                throw new InvalidOperationException("Failed to initialize temporary validation repository: " + details);
+            }
         }
 
         #endregion

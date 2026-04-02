@@ -16,7 +16,7 @@ namespace Armada.Test.Runtimes.Suites
 
             public string Command() => GetCommand();
 
-            public List<string> Args(string prompt) => BuildArguments(prompt);
+            public List<string> Args(string prompt, string? model = null) => BuildArguments(prompt, model);
         }
 
         private InspectableGeminiRuntime CreateRuntime()
@@ -42,6 +42,15 @@ namespace Armada.Test.Runtimes.Suites
                 AssertEqual("test prompt", args[1]);
                 AssertTrue(args.Contains("--approval-mode"));
                 AssertTrue(args.Contains("yolo"));
+            });
+
+            await RunTest("BuildArguments Includes Model When Supplied", () =>
+            {
+                InspectableGeminiRuntime runtime = CreateRuntime();
+                List<string> args = runtime.Args("test prompt", "gemini-2.5-pro");
+                int modelIndex = args.IndexOf("--model");
+                AssertTrue(modelIndex >= 0);
+                AssertEqual("gemini-2.5-pro", args[modelIndex + 1]);
             });
 
             await RunTest("Windows Command Resolves Cmd Wrapper", () =>

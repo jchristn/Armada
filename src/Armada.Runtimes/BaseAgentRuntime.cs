@@ -68,19 +68,21 @@ namespace Armada.Runtimes
         /// <param name="prompt">Prompt/instructions for the agent.</param>
         /// <param name="environment">Optional environment variables.</param>
         /// <param name="logFilePath">Optional path to write agent stdout/stderr output.</param>
+        /// <param name="model">Optional model override.</param>
         /// <param name="token">Cancellation token.</param>
         public virtual async Task<int> StartAsync(
             string workingDirectory,
             string prompt,
             Dictionary<string, string>? environment = null,
             string? logFilePath = null,
+            string? model = null,
             CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(workingDirectory)) throw new ArgumentNullException(nameof(workingDirectory));
             if (String.IsNullOrEmpty(prompt)) throw new ArgumentNullException(nameof(prompt));
 
             string command = GetCommand();
-            List<string> args = BuildArguments(prompt);
+            List<string> args = BuildArguments(prompt, model);
 
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
@@ -278,7 +280,7 @@ namespace Armada.Runtimes
         /// <summary>
         /// Build the argument list for launching the agent with the given prompt.
         /// </summary>
-        protected abstract List<string> BuildArguments(string prompt);
+        protected abstract List<string> BuildArguments(string prompt, string? model);
 
         /// <summary>
         /// Whether the runtime expects the prompt to be written to stdin instead of passed as a CLI argument.

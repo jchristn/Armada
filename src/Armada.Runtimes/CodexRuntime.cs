@@ -71,7 +71,7 @@ namespace Armada.Runtimes
         /// <summary>
         /// Build Codex CLI arguments.
         /// </summary>
-        protected override List<string> BuildArguments(string prompt)
+        protected override List<string> BuildArguments(string prompt, string? model)
         {
             List<string> args = new List<string>();
 
@@ -88,6 +88,12 @@ namespace Armada.Runtimes
             else if (String.Equals(ApprovalMode, "full-auto", StringComparison.OrdinalIgnoreCase))
             {
                 args.Add("--full-auto");
+            }
+
+            if (!String.IsNullOrEmpty(model))
+            {
+                args.Add("--model");
+                args.Add(model);
             }
 
             args.Add(prompt);

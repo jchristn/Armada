@@ -8,11 +8,20 @@ namespace Armada.Test.Runtimes.Suites
     {
         public override string Name => "Claude Code Runtime Tests";
 
-        private ClaudeCodeRuntime CreateRuntime()
+        private sealed class InspectableClaudeCodeRuntime : ClaudeCodeRuntime
+        {
+            public InspectableClaudeCodeRuntime(LoggingModule logging) : base(logging)
+            {
+            }
+
+            public List<string> Args(string prompt, string? model = null) => BuildArguments(prompt, model);
+        }
+
+        private InspectableClaudeCodeRuntime CreateRuntime()
         {
             LoggingModule logging = new LoggingModule();
             logging.Settings.EnableConsole = false;
-            return new ClaudeCodeRuntime(logging);
+            return new InspectableClaudeCodeRuntime(logging);
         }
 
         protected override async Task RunTestsAsync()
@@ -51,6 +60,15 @@ namespace Armada.Test.Runtimes.Suites
             {
                 ClaudeCodeRuntime runtime = CreateRuntime();
                 AssertTrue(runtime.SkipPermissions);
+            });
+
+            await RunTest("BuildArguments Includes Model When Supplied", () =>
+            {
+                InspectableClaudeCodeRuntime runtime = CreateRuntime();
+                List<string> args = runtime.Args("test prompt", "sonnet");
+                int modelIndex = args.IndexOf("--model");
+                AssertTrue(modelIndex >= 0);
+                AssertEqual("sonnet", args[modelIndex + 1]);
             });
 
             await RunTest("IsRunningAsync Invalid ProcessId Returns False", async () =>

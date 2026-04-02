@@ -16,7 +16,7 @@ namespace Armada.Test.Runtimes.Suites
 
             public string Command() => GetCommand();
 
-            public List<string> Args(string prompt) => BuildArguments(prompt);
+            public List<string> Args(string prompt, string? model = null) => BuildArguments(prompt, model);
         }
 
         private InspectableCodexRuntime CreateRuntime()
@@ -61,7 +61,7 @@ namespace Armada.Test.Runtimes.Suites
                     AssertTrue(args.Contains("--dangerously-bypass-approvals-and-sandbox"));
                 else
                     AssertTrue(args.Contains("--full-auto"));
-                AssertEqual("-", args[args.Count - 1]);
+                AssertEqual("test prompt", args[args.Count - 1]);
             });
 
             await RunTest("BuildArguments Dangerous Uses Dangerous Flag", () =>
@@ -71,7 +71,16 @@ namespace Armada.Test.Runtimes.Suites
                 List<string> args = runtime.Args("test prompt");
                 AssertEqual("exec", args[0]);
                 AssertTrue(args.Contains("--dangerously-bypass-approvals-and-sandbox"));
-                AssertEqual("-", args[args.Count - 1]);
+                AssertEqual("test prompt", args[args.Count - 1]);
+            });
+
+            await RunTest("BuildArguments Includes Model When Supplied", () =>
+            {
+                InspectableCodexRuntime runtime = CreateRuntime();
+                List<string> args = runtime.Args("test prompt", "gpt-5.4");
+                int modelIndex = args.IndexOf("--model");
+                AssertTrue(modelIndex >= 0);
+                AssertEqual("gpt-5.4", args[modelIndex + 1]);
             });
 
             await RunTest("Windows Command Resolves Cmd Wrapper", () =>
