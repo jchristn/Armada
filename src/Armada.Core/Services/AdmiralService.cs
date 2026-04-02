@@ -564,32 +564,39 @@ namespace Armada.Core.Services
                 }
                 else
                 {
+                    string failureReason = await BuildProcessExitFailureReasonAsync(missionId, exitCode, token).ConfigureAwait(false);
+
                     // Recovery exhausted -- mark mission as failed
                     mission.Status = MissionStatusEnum.Failed;
-                    mission.FailureReason = "Agent process exited with code " + (exitCode?.ToString() ?? "unknown") + ", recovery exhausted";
+                    mission.FailureReason = failureReason;
                     mission.ProcessId = null;
                     mission.CompletedUtc = DateTime.UtcNow;
                     mission.LastUpdateUtc = DateTime.UtcNow;
                     await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
-                    _Logging.Warn(_Header + "mission " + missionId + " marked failed (process exit code " + (exitCode?.ToString() ?? "unknown") + ", recovery exhausted)");
+                    _Logging.Warn(_Header + "mission " + missionId + " marked failed after process exit (recovery exhausted)");
 
                     await EmitEventAsync("mission.failed",
-                        "Mission failed: " + mission.Title + " (agent process exited with code " + (exitCode?.ToString() ?? "unknown") + ", recovery exhausted)",
+                        "Mission failed: " + mission.Title + " (" + failureReason + ")",
                         entityType: "mission", entityId: mission.Id,
                         captainId: captain.Id, missionId: mission.Id,
                         vesselId: mission.VesselId, voyageId: mission.VoyageId, token: token).ConfigureAwait(false);
 
+                    if (!String.IsNullOrEmpty(mission.VoyageId))
+                    {
+                        await HaltVoyageAsync(mission.VoyageId, mission.Id, failureReason, token).ConfigureAwait(false);
+                    }
+
                     // Reclaim the dock
                     await ReclaimDockAsync(captain, mission, token).ConfigureAwait(false);
 
-                    // Mark captain as stalled
-                    await _Database.Captains.UpdateStateAsync(captain.Id, CaptainStateEnum.Stalled, token).ConfigureAwait(false);
+                    await _Captains.ReleaseAsync(captain, token).ConfigureAwait(false);
+                    _Logging.Info(_Header + "captain " + captain.Id + " released to Idle after mission failure " + missionId);
 
                     if (_Escalation != null)
                         await _Escalation.FireAsync(EscalationTriggerEnum.RecoveryExhausted, captain.Id,
                             "Captain " + captain.Id + " recovery exhausted for mission " + missionId + " (exit code " + (exitCode?.ToString() ?? "unknown") + ")", token).ConfigureAwait(false);
 
-                    Signal signal = new Signal(SignalTypeEnum.Error, "Agent process exited with code " + (exitCode?.ToString() ?? "unknown") + " for mission " + mission.Title + " (recovery exhausted)");
+                    Signal signal = new Signal(SignalTypeEnum.Error, "Mission " + missionId + " failed: " + failureReason);
                     signal.FromCaptainId = captain.Id;
                     await _Database.Signals.CreateAsync(signal, token).ConfigureAwait(false);
                 }

@@ -71,7 +71,7 @@ namespace Armada.Runtimes
         /// <summary>
         /// Build Claude Code CLI arguments.
         /// </summary>
-        protected override List<string> BuildArguments(string prompt)
+        protected override List<string> BuildArguments(string prompt, bool includePrompt)
         {
             List<string> args = new List<string>();
 
@@ -83,9 +83,20 @@ namespace Armada.Runtimes
                 args.Add("--dangerously-skip-permissions");
             }
 
-            args.Add(prompt);
+            if (includePrompt)
+            {
+                args.Add(prompt);
+            }
 
             return args;
+        }
+
+        /// <summary>
+        /// Claude supports non-interactive stdin input in print mode, which avoids Windows command-line length limits.
+        /// </summary>
+        protected override bool UseStandardInputForPrompt(string prompt)
+        {
+            return true;
         }
 
         /// <summary>

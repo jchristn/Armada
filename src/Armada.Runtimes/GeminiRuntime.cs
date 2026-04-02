@@ -72,12 +72,15 @@ namespace Armada.Runtimes
         /// <summary>
         /// Build Gemini CLI arguments.
         /// </summary>
-        protected override List<string> BuildArguments(string prompt)
+        protected override List<string> BuildArguments(string prompt, bool includePrompt)
         {
             List<string> args = new List<string>();
 
             args.Add("-p");
-            args.Add(prompt);
+            if (includePrompt)
+            {
+                args.Add(prompt);
+            }
             args.Add("--approval-mode");
             args.Add(ApprovalMode);
 

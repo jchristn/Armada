@@ -366,6 +366,67 @@ namespace Armada.Test.Unit.Suites.Services
                 }
             });
 
+            await RunTest("HandleProcessExitAsync RecoveryExhausted HaltsVoyageAndReleasesCaptain", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    SqliteDatabaseDriver db = testDb.Driver;
+                    StubGitService git = new StubGitService();
+                    ArmadaSettings settings = CreateSettings();
+                    settings.MaxRecoveryAttempts = 0;
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), db, settings, git);
+
+                    Vessel vessel = new Vessel("exit-failure-vessel", "https://github.com/test/repo.git");
+                    await db.Vessels.CreateAsync(vessel);
+
+                    Voyage voyage = new Voyage("exit-failure-voyage");
+                    voyage.Status = VoyageStatusEnum.InProgress;
+                    voyage = await db.Voyages.CreateAsync(voyage);
+
+                    Captain captain = new Captain("exit-failure-captain");
+                    captain.State = CaptainStateEnum.Working;
+                    captain.ProcessId = 12345;
+                    captain.RecoveryAttempts = 0;
+                    captain = await db.Captains.CreateAsync(captain);
+
+                    Mission mission = new Mission("Primary work");
+                    mission.VesselId = vessel.Id;
+                    mission.VoyageId = voyage.Id;
+                    mission.CaptainId = captain.Id;
+                    mission.Status = MissionStatusEnum.InProgress;
+                    mission.ProcessId = 12345;
+                    mission = await db.Missions.CreateAsync(mission);
+
+                    Mission pendingMission = new Mission("Pending follow-up");
+                    pendingMission.VesselId = vessel.Id;
+                    pendingMission.VoyageId = voyage.Id;
+                    pendingMission.Status = MissionStatusEnum.Pending;
+                    pendingMission = await db.Missions.CreateAsync(pendingMission);
+
+                    captain.CurrentMissionId = mission.Id;
+                    await db.Captains.UpdateAsync(captain);
+
+                    await service.HandleProcessExitAsync(12345, 1, captain.Id, mission.Id);
+
+                    Mission? updatedMission = await db.Missions.ReadAsync(mission.Id);
+                    Mission? updatedPending = await db.Missions.ReadAsync(pendingMission.Id);
+                    Voyage? updatedVoyage = await db.Voyages.ReadAsync(voyage.Id);
+                    Captain? updatedCaptain = await db.Captains.ReadAsync(captain.Id);
+
+                    AssertNotNull(updatedMission, "Failed mission should still exist");
+                    AssertEqual(MissionStatusEnum.Failed, updatedMission!.Status);
+                    AssertNotNull(updatedMission.CompletedUtc, "Failed mission should be completed");
+                    AssertNotNull(updatedVoyage, "Voyage should still exist");
+                    AssertEqual(VoyageStatusEnum.Cancelled, updatedVoyage!.Status, "Voyage should be cancelled when recovery is exhausted");
+                    AssertNotNull(updatedPending, "Pending mission should still exist");
+                    AssertEqual(MissionStatusEnum.Cancelled, updatedPending!.Status, "Pending voyage work should be cancelled");
+                    AssertNotNull(updatedCaptain, "Captain should still exist");
+                    AssertEqual(CaptainStateEnum.Idle, updatedCaptain!.State, "Captain should be released instead of left stalled");
+                    AssertNull(updatedCaptain.CurrentMissionId, "Released captain should clear current mission");
+                    AssertNull(updatedCaptain.ProcessId, "Released captain should clear process id");
+                }
+            });
+
             await RunTest("HealthCheckAsync NoCaptains DoesNotThrow", async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())

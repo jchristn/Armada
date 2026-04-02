@@ -71,7 +71,7 @@ namespace Armada.Runtimes
         /// <summary>
         /// Build Codex CLI arguments.
         /// </summary>
-        protected override List<string> BuildArguments(string prompt)
+        protected override List<string> BuildArguments(string prompt, bool includePrompt)
         {
             List<string> args = new List<string>();
 
@@ -86,9 +86,24 @@ namespace Armada.Runtimes
                 args.Add("--dangerously-bypass-approvals-and-sandbox");
             }
 
-            args.Add(prompt);
+            if (includePrompt)
+            {
+                args.Add(prompt);
+            }
+            else
+            {
+                args.Add("-");
+            }
 
             return args;
+        }
+
+        /// <summary>
+        /// Codex supports reading its prompt from stdin, which avoids Windows command-line length limits.
+        /// </summary>
+        protected override bool UseStandardInputForPrompt(string prompt)
+        {
+            return true;
         }
 
         #endregion

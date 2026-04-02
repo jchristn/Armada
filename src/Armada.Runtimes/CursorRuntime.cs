@@ -66,12 +66,15 @@ namespace Armada.Runtimes
         /// <summary>
         /// Build Cursor agent CLI arguments.
         /// </summary>
-        protected override List<string> BuildArguments(string prompt)
+        protected override List<string> BuildArguments(string prompt, bool includePrompt)
         {
             List<string> args = new List<string>();
 
             args.Add("-p");
-            args.Add(prompt);
+            if (includePrompt)
+            {
+                args.Add(prompt);
+            }
             args.Add("--force");
             args.Add("--output-format");
             args.Add("text");

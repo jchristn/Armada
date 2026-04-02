@@ -80,7 +80,8 @@ namespace Armada.Runtimes
             if (String.IsNullOrEmpty(prompt)) throw new ArgumentNullException(nameof(prompt));
 
             string command = GetCommand();
-            List<string> args = BuildArguments(prompt);
+            bool promptViaStandardInput = UseStandardInputForPrompt(prompt);
+            List<string> args = BuildArguments(prompt, includePrompt: !promptViaStandardInput);
 
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
@@ -116,17 +117,8 @@ namespace Armada.Runtimes
                 logWriter = new StreamWriter(logFilePath, append: true) { AutoFlush = true };
                 string timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss");
                 string argsJoined = String.Join(" ", args);
-                // Write command on first line, then prompt content preserving newlines
-                string firstFlag = "";
-                string promptContent = argsJoined;
-                int promptStart = argsJoined.IndexOf("Mission:");
-                if (promptStart > 0)
-                {
-                    firstFlag = argsJoined.Substring(0, promptStart).Trim();
-                    promptContent = argsJoined.Substring(promptStart);
-                }
-                await logWriter.WriteLineAsync("[" + timestamp + "] Agent starting: " + command + " " + firstFlag).ConfigureAwait(false);
-                await logWriter.WriteLineAsync(promptContent).ConfigureAwait(false);
+                await logWriter.WriteLineAsync("[" + timestamp + "] Agent starting: " + command + (argsJoined.Length > 0 ? " " + argsJoined : "")).ConfigureAwait(false);
+                await logWriter.WriteLineAsync(prompt).ConfigureAwait(false);
                 await logWriter.WriteLineAsync("").ConfigureAwait(false);
             }
 
@@ -191,7 +183,23 @@ namespace Armada.Runtimes
             try { OnProcessStarted?.Invoke(process.Id); }
             catch (Exception ex) { _Logging.Warn(_Header + "error in OnProcessStarted handler for process " + process.Id + ": " + ex.Message); }
 
-            // Close stdin immediately so the agent doesn't block waiting for piped input
+            if (promptViaStandardInput)
+            {
+                try
+                {
+                    await process.StandardInput.WriteAsync(prompt).ConfigureAwait(false);
+                    if (!prompt.EndsWith("\n", StringComparison.Ordinal))
+                    {
+                        await process.StandardInput.WriteAsync(Environment.NewLine).ConfigureAwait(false);
+                    }
+                    await process.StandardInput.FlushAsync(token).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _Logging.Warn(_Header + "error writing prompt to stdin for process " + process.Id + ": " + ex.Message);
+                }
+            }
+
             process.StandardInput.Close();
 
             process.BeginOutputReadLine();
@@ -315,7 +323,15 @@ namespace Armada.Runtimes
         /// <summary>
         /// Build the argument list for launching the agent with the given prompt.
         /// </summary>
-        protected abstract List<string> BuildArguments(string prompt);
+        protected abstract List<string> BuildArguments(string prompt, bool includePrompt);
+
+        /// <summary>
+        /// Whether the prompt should be delivered on standard input instead of the command line.
+        /// </summary>
+        protected virtual bool UseStandardInputForPrompt(string prompt)
+        {
+            return false;
+        }
 
         /// <summary>
         /// Apply runtime-specific environment variables to the process start info.

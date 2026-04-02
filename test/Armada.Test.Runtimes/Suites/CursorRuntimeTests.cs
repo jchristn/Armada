@@ -16,7 +16,7 @@ namespace Armada.Test.Runtimes.Suites
 
             public string Command() => GetCommand();
 
-            public List<string> Args(string prompt) => BuildArguments(prompt);
+            public List<string> Args(string prompt) => BuildArguments(prompt, includePrompt: true);
         }
 
         private InspectableCursorRuntime CreateRuntime()

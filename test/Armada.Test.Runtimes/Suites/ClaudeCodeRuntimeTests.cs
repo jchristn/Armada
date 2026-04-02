@@ -8,54 +8,79 @@ namespace Armada.Test.Runtimes.Suites
     {
         public override string Name => "Claude Code Runtime Tests";
 
-        private ClaudeCodeRuntime CreateRuntime()
+        private sealed class InspectableClaudeCodeRuntime : ClaudeCodeRuntime
+        {
+            public InspectableClaudeCodeRuntime(LoggingModule logging) : base(logging)
+            {
+            }
+
+            public List<string> Args(string prompt, bool includePrompt) => BuildArguments(prompt, includePrompt);
+
+            public bool UsesStandardInput(string prompt) => UseStandardInputForPrompt(prompt);
+        }
+
+        private InspectableClaudeCodeRuntime CreateRuntime()
         {
             LoggingModule logging = new LoggingModule();
             logging.Settings.EnableConsole = false;
-            return new ClaudeCodeRuntime(logging);
+            return new InspectableClaudeCodeRuntime(logging);
         }
 
         protected override async Task RunTestsAsync()
         {
             await RunTest("Name Returns Claude Code", () =>
             {
-                ClaudeCodeRuntime runtime = CreateRuntime();
+                InspectableClaudeCodeRuntime runtime = CreateRuntime();
                 AssertEqual("Claude Code", runtime.Name);
             });
 
             await RunTest("SupportsResume Returns True", () =>
             {
-                ClaudeCodeRuntime runtime = CreateRuntime();
+                InspectableClaudeCodeRuntime runtime = CreateRuntime();
                 AssertTrue(runtime.SupportsResume);
             });
 
             await RunTest("ExecutablePath Default Is Claude", () =>
             {
-                ClaudeCodeRuntime runtime = CreateRuntime();
+                InspectableClaudeCodeRuntime runtime = CreateRuntime();
                 AssertEqual("claude", runtime.ExecutablePath);
             });
 
             await RunTest("ExecutablePath Set Null Throws", () =>
             {
-                ClaudeCodeRuntime runtime = CreateRuntime();
+                InspectableClaudeCodeRuntime runtime = CreateRuntime();
                 AssertThrows<ArgumentNullException>(() => runtime.ExecutablePath = null!);
             });
 
             await RunTest("ExecutablePath Set Empty Throws", () =>
             {
-                ClaudeCodeRuntime runtime = CreateRuntime();
+                InspectableClaudeCodeRuntime runtime = CreateRuntime();
                 AssertThrows<ArgumentNullException>(() => runtime.ExecutablePath = "");
             });
 
             await RunTest("SkipPermissions Default Is True", () =>
             {
-                ClaudeCodeRuntime runtime = CreateRuntime();
+                InspectableClaudeCodeRuntime runtime = CreateRuntime();
                 AssertTrue(runtime.SkipPermissions);
+            });
+
+            await RunTest("BuildArguments Omits Prompt When Using Stdin", () =>
+            {
+                InspectableClaudeCodeRuntime runtime = CreateRuntime();
+                List<string> args = runtime.Args("test prompt", includePrompt: false);
+                AssertFalse(args.Contains("test prompt"), "Prompt should not be appended when stdin delivery is enabled");
+                AssertTrue(args.Contains("--print"), "Claude runtime should remain in print mode");
+            });
+
+            await RunTest("UseStandardInputForPrompt Returns True", () =>
+            {
+                InspectableClaudeCodeRuntime runtime = CreateRuntime();
+                AssertTrue(runtime.UsesStandardInput("test prompt"));
             });
 
             await RunTest("IsRunningAsync Invalid ProcessId Returns False", async () =>
             {
-                ClaudeCodeRuntime runtime = CreateRuntime();
+                InspectableClaudeCodeRuntime runtime = CreateRuntime();
                 bool running = await runtime.IsRunningAsync(-1);
                 AssertFalse(running);
             });

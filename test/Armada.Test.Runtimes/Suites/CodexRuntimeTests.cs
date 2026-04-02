@@ -16,7 +16,9 @@ namespace Armada.Test.Runtimes.Suites
 
             public string Command() => GetCommand();
 
-            public List<string> Args(string prompt) => BuildArguments(prompt);
+            public List<string> Args(string prompt, bool includePrompt) => BuildArguments(prompt, includePrompt);
+
+            public bool UsesStandardInput(string prompt) => UseStandardInputForPrompt(prompt);
         }
 
         private InspectableCodexRuntime CreateRuntime()
@@ -55,10 +57,24 @@ namespace Armada.Test.Runtimes.Suites
             await RunTest("BuildArguments Uses Exec FullAuto", () =>
             {
                 InspectableCodexRuntime runtime = CreateRuntime();
-                List<string> args = runtime.Args("test prompt");
+                List<string> args = runtime.Args("test prompt", includePrompt: true);
                 AssertEqual("exec", args[0]);
                 AssertTrue(args.Contains("--full-auto"));
                 AssertEqual("test prompt", args[args.Count - 1]);
+            });
+
+            await RunTest("BuildArguments Uses Dash Placeholder When Prompt Comes From Stdin", () =>
+            {
+                InspectableCodexRuntime runtime = CreateRuntime();
+                List<string> args = runtime.Args("test prompt", includePrompt: false);
+                AssertEqual("exec", args[0]);
+                AssertEqual("-", args[args.Count - 1]);
+            });
+
+            await RunTest("UseStandardInputForPrompt Returns True", () =>
+            {
+                InspectableCodexRuntime runtime = CreateRuntime();
+                AssertTrue(runtime.UsesStandardInput("test prompt"));
             });
 
             await RunTest("Windows Command Resolves Cmd Wrapper", () =>
