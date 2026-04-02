@@ -413,6 +413,16 @@ namespace Armada.Core.Database.Mysql
                     15,
                     "Add agent_output to missions",
                     TableQueries.MigrationV15Statements
+                ),
+                new SchemaMigration(
+                    26,
+                    "Add model to captains",
+                    TableQueries.MigrationV26Statements
+                ),
+                new SchemaMigration(
+                    27,
+                    "Add total_runtime_ms to missions",
+                    TableQueries.MigrationV27Statements
                 )
             };
         }
@@ -546,6 +556,7 @@ namespace Armada.Core.Database.Mysql
             captain.UserId = NullableString(reader["user_id"]);
             captain.Name = reader["name"].ToString()!;
             captain.Runtime = Enum.Parse<AgentRuntimeEnum>(reader["runtime"].ToString()!);
+            try { captain.Model = NullableString(reader["model"]); } catch { }
             captain.SystemInstructions = NullableString(reader["system_instructions"]);
             captain.State = Enum.Parse<CaptainStateEnum>(reader["state"].ToString()!);
             captain.CurrentMissionId = NullableString(reader["current_mission_id"]);

@@ -145,12 +145,37 @@ namespace Armada.Core.Models
         /// <summary>
         /// Timestamp when work started in UTC.
         /// </summary>
-        public DateTime? StartedUtc { get; set; } = null;
+        public DateTime? StartedUtc
+        {
+            get => _StartedUtc;
+            set
+            {
+                _StartedUtc = value;
+                RecalculateTotalRuntimeMs();
+            }
+        }
 
         /// <summary>
         /// Timestamp when work completed in UTC.
         /// </summary>
-        public DateTime? CompletedUtc { get; set; } = null;
+        public DateTime? CompletedUtc
+        {
+            get => _CompletedUtc;
+            set
+            {
+                _CompletedUtc = value;
+                RecalculateTotalRuntimeMs();
+            }
+        }
+
+        /// <summary>
+        /// Total runtime in milliseconds, computed from StartedUtc and CompletedUtc.
+        /// </summary>
+        public long? TotalRuntimeMs
+        {
+            get => _TotalRuntimeMs;
+            set => _TotalRuntimeMs = value;
+        }
 
         /// <summary>
         /// Last update timestamp in UTC.
@@ -163,6 +188,9 @@ namespace Armada.Core.Models
 
         private string _Id = Constants.IdGenerator.GenerateKSortable(Constants.MissionIdPrefix, 24);
         private string _Title = "New Mission";
+        private DateTime? _StartedUtc = null;
+        private DateTime? _CompletedUtc = null;
+        private long? _TotalRuntimeMs = null;
 
         #endregion
 
@@ -184,6 +212,23 @@ namespace Armada.Core.Models
         {
             Title = title;
             Description = description;
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private void RecalculateTotalRuntimeMs()
+        {
+            if (_StartedUtc.HasValue && _CompletedUtc.HasValue)
+            {
+                double totalMilliseconds = (_CompletedUtc.Value - _StartedUtc.Value).TotalMilliseconds;
+                _TotalRuntimeMs = totalMilliseconds >= 0 ? Convert.ToInt64(totalMilliseconds) : null;
+            }
+            else
+            {
+                _TotalRuntimeMs = null;
+            }
         }
 
         #endregion

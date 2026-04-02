@@ -558,6 +558,22 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration v26 statements for adding model to captains.
+        /// </summary>
+        public static readonly string[] MigrationV26Statements = new string[]
+        {
+            @"ALTER TABLE captains ADD COLUMN model TEXT NULL;"
+        };
+
+        /// <summary>
+        /// Migration v27 statements for adding total_runtime_ms to missions.
+        /// </summary>
+        public static readonly string[] MigrationV27Statements = new string[]
+        {
+            @"ALTER TABLE missions ADD COLUMN total_runtime_ms BIGINT NULL;"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

@@ -65,10 +65,10 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Connection = conn;
                     cmd.CommandText = @"INSERT INTO missions (id, tenant_id, user_id, voyage_id, vessel_id, captain_id, title, description,
                         status, priority, parent_mission_id, branch_name, dock_id, process_id,
-                        pr_url, commit_hash, diff_snapshot, agent_output, persona, depends_on_mission_id, failure_reason, created_utc, started_utc, completed_utc, last_update_utc)
+                        pr_url, commit_hash, diff_snapshot, agent_output, persona, depends_on_mission_id, failure_reason, total_runtime_ms, created_utc, started_utc, completed_utc, last_update_utc)
                         VALUES (@id, @tenant_id, @user_id, @voyage_id, @vessel_id, @captain_id, @title, @description,
                         @status, @priority, @parent_mission_id, @branch_name, @dock_id, @process_id,
-                        @pr_url, @commit_hash, @diff_snapshot, @agent_output, @persona, @depends_on_mission_id, @failure_reason, @created_utc, @started_utc, @completed_utc, @last_update_utc);";
+                        @pr_url, @commit_hash, @diff_snapshot, @agent_output, @persona, @depends_on_mission_id, @failure_reason, @total_runtime_ms, @created_utc, @started_utc, @completed_utc, @last_update_utc);";
                     AddMissionParameters(cmd, mission);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
@@ -133,7 +133,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         pr_url = @pr_url, commit_hash = @commit_hash, diff_snapshot = @diff_snapshot,
                         agent_output = @agent_output,
                         persona = @persona, depends_on_mission_id = @depends_on_mission_id,
-                        failure_reason = @failure_reason,
+                        failure_reason = @failure_reason, total_runtime_ms = @total_runtime_ms,
                         started_utc = @started_utc, completed_utc = @completed_utc,
                         last_update_utc = @last_update_utc
                         WHERE id = @id;";
@@ -659,6 +659,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@persona", (object?)mission.Persona ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@depends_on_mission_id", (object?)mission.DependsOnMissionId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@failure_reason", (object?)mission.FailureReason ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@total_runtime_ms", mission.TotalRuntimeMs.HasValue ? (object)mission.TotalRuntimeMs.Value : DBNull.Value);
             cmd.Parameters.AddWithValue("@created_utc", mission.CreatedUtc);
             cmd.Parameters.AddWithValue("@started_utc", mission.StartedUtc.HasValue ? (object)mission.StartedUtc.Value : DBNull.Value);
             cmd.Parameters.AddWithValue("@completed_utc", mission.CompletedUtc.HasValue ? (object)mission.CompletedUtc.Value : DBNull.Value);
@@ -735,6 +736,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             mission.CreatedUtc = ((DateTime)reader["created_utc"]).ToUniversalTime();
             mission.StartedUtc = NullableDateTime(reader["started_utc"]);
             mission.CompletedUtc = NullableDateTime(reader["completed_utc"]);
+            try { mission.TotalRuntimeMs = NullableLong(reader["total_runtime_ms"]); } catch { }
             mission.LastUpdateUtc = ((DateTime)reader["last_update_utc"]).ToUniversalTime();
             try { mission.Persona = NullableString(reader["persona"]); } catch { }
             try { mission.DependsOnMissionId = NullableString(reader["depends_on_mission_id"]); } catch { }
@@ -755,6 +757,12 @@ namespace Armada.Core.Database.Postgresql.Implementations
             return Convert.ToInt32(value);
         }
 
+        private static long? NullableLong(object value)
+        {
+            if (value == null || value == DBNull.Value) return null;
+            return Convert.ToInt64(value);
+        }
+
         private static DateTime? NullableDateTime(object value)
         {
             if (value == null || value == DBNull.Value) return null;
@@ -764,4 +772,3 @@ namespace Armada.Core.Database.Postgresql.Implementations
         #endregion
     }
 }
-

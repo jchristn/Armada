@@ -369,6 +369,17 @@ namespace Armada.Core.Database.Sqlite
         }
 
         /// <summary>
+        /// Convert an object value to a nullable long, handling DBNull.
+        /// </summary>
+        /// <param name="value">Object value.</param>
+        /// <returns>Nullable long value.</returns>
+        internal static long? NullableLong(object value)
+        {
+            if (value == null || value == DBNull.Value) return null;
+            return Convert.ToInt64(value);
+        }
+
+        /// <summary>
         /// Convert a SqliteDataReader row to a Fleet model.
         /// </summary>
         /// <param name="reader">Data reader positioned on a row.</param>
@@ -438,6 +449,7 @@ namespace Armada.Core.Database.Sqlite
             captain.UserId = NullableString(reader["user_id"]);
             captain.Name = reader["name"].ToString()!;
             captain.Runtime = Enum.Parse<AgentRuntimeEnum>(reader["runtime"].ToString()!);
+            try { captain.Model = NullableString(reader["model"]); } catch { }
             captain.SystemInstructions = NullableString(reader["system_instructions"]);
             captain.State = Enum.Parse<CaptainStateEnum>(reader["state"].ToString()!);
             captain.CurrentMissionId = NullableString(reader["current_mission_id"]);
@@ -481,6 +493,7 @@ namespace Armada.Core.Database.Sqlite
             mission.CreatedUtc = FromIso8601(reader["created_utc"].ToString()!);
             mission.StartedUtc = FromIso8601Nullable(reader["started_utc"]);
             mission.CompletedUtc = FromIso8601Nullable(reader["completed_utc"]);
+            try { mission.TotalRuntimeMs = NullableLong(reader["total_runtime_ms"]); } catch { }
             mission.LastUpdateUtc = FromIso8601(reader["last_update_utc"].ToString()!);
             try { mission.Persona = NullableString(reader["persona"]); } catch { }
             try { mission.DependsOnMissionId = NullableString(reader["depends_on_mission_id"]); } catch { }
