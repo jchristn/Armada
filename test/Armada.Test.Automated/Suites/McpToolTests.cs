@@ -155,6 +155,15 @@ namespace Armada.Test.Automated.Suites
                 }
             }).ConfigureAwait(false);
 
+            await RunTest("ToolsList_CaptainCreateAndUpdateExposeNullableModelSchema", async () =>
+            {
+                JsonElement result = await SendMcpRequestAsync("tools/list", new { }).ConfigureAwait(false);
+                JsonElement tools = result.GetProperty("tools");
+
+                AssertToolHasNullableStringProperty(tools, "armada_create_captain", "model", "runtime default");
+                AssertToolHasNullableStringProperty(tools, "armada_update_captain", "model", "runtime default");
+            }).ConfigureAwait(false);
+
             await RunTest("ToolsList_NoDuplicateToolNames", async () =>
             {
                 JsonElement result = await SendMcpRequestAsync("tools/list", new { }).ConfigureAwait(false);
@@ -945,6 +954,56 @@ namespace Armada.Test.Automated.Suites
                 AssertContains("ClaudeCode", text);
             }).ConfigureAwait(false);
 
+            await RunTest("ArmadaCreateCaptain_WithModel_SetsModel", async () =>
+            {
+                using (CursorShimScope shim = CursorShimScope.Create())
+                {
+                    JsonElement result = await CallToolAsync("armada_create_captain", new
+                    {
+                        name = "model-captain-" + Guid.NewGuid().ToString("N").Substring(0, 8),
+                        runtime = "Cursor",
+                        model = "gpt-5.4-mini"
+                    }).ConfigureAwait(false);
+                    AssertToolResultValid(result);
+
+                    Captain created = JsonHelper.Deserialize<Captain>(GetToolResultText(result));
+                    AssertEqual("gpt-5.4-mini", created.Model);
+
+                    JsonElement getResult = await CallToolAsync("armada_get_captain", new
+                    {
+                        captainId = created.Id
+                    }).ConfigureAwait(false);
+                    Captain fetched = JsonHelper.Deserialize<Captain>(GetToolResultText(getResult));
+                    AssertEqual("gpt-5.4-mini", fetched.Model);
+                }
+            }).ConfigureAwait(false);
+
+            await RunTest("ArmadaCreateCaptain_InvalidModel_ReturnsToolError", async () =>
+            {
+                string captainName = "invalid-model-create-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+
+                using (CursorShimScope shim = CursorShimScope.Create())
+                {
+                    JsonElement result = await CallToolAsync("armada_create_captain", new
+                    {
+                        name = captainName,
+                        runtime = "Cursor",
+                        model = "bad-model"
+                    }).ConfigureAwait(false);
+
+                    AssertToolResultError(result, "bad-model");
+                    AssertContains("unknown model", GetToolResultText(result));
+                }
+
+                JsonElement listResult = await CallToolAsync("armada_enumerate", new
+                {
+                    entityType = "captains",
+                    pageSize = 200
+                }).ConfigureAwait(false);
+                string listText = GetToolResultText(listResult);
+                AssertFalse(listText.Contains(captainName, StringComparison.Ordinal), "Invalid model should not create a captain");
+            }).ConfigureAwait(false);
+
             await RunTest("ArmadaCreateCaptain_VisibleViaEnumerate", async () =>
             {
                 JsonElement createResult = await CallToolAsync("armada_create_captain", new
@@ -1001,6 +1060,55 @@ namespace Armada.Test.Automated.Suites
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
                 AssertContains("updated-captain", text);
+            }).ConfigureAwait(false);
+
+            await RunTest("ArmadaUpdateCaptain_WithModel_SetsModel", async () =>
+            {
+                Captain captain = await CreateCaptainAsync("update-model-captain", "Cursor").ConfigureAwait(false);
+
+                using (CursorShimScope shim = CursorShimScope.Create())
+                {
+                    JsonElement result = await CallToolAsync("armada_update_captain", new
+                    {
+                        captainId = captain.Id,
+                        model = "gpt-5.4-mini"
+                    }).ConfigureAwait(false);
+                    AssertToolResultValid(result);
+
+                    Captain updated = JsonHelper.Deserialize<Captain>(GetToolResultText(result));
+                    AssertEqual("gpt-5.4-mini", updated.Model);
+                }
+
+                JsonElement getResult = await CallToolAsync("armada_get_captain", new
+                {
+                    captainId = captain.Id
+                }).ConfigureAwait(false);
+                Captain fetched = JsonHelper.Deserialize<Captain>(GetToolResultText(getResult));
+                AssertEqual("gpt-5.4-mini", fetched.Model);
+            }).ConfigureAwait(false);
+
+            await RunTest("ArmadaUpdateCaptain_InvalidModel_ReturnsToolError", async () =>
+            {
+                Captain captain = await CreateCaptainAsync("invalid-update-captain", "Cursor").ConfigureAwait(false);
+
+                using (CursorShimScope shim = CursorShimScope.Create())
+                {
+                    JsonElement result = await CallToolAsync("armada_update_captain", new
+                    {
+                        captainId = captain.Id,
+                        model = "bad-model"
+                    }).ConfigureAwait(false);
+
+                    AssertToolResultError(result, "bad-model");
+                    AssertContains("unknown model", GetToolResultText(result));
+                }
+
+                JsonElement getResult = await CallToolAsync("armada_get_captain", new
+                {
+                    captainId = captain.Id
+                }).ConfigureAwait(false);
+                Captain fetched = JsonHelper.Deserialize<Captain>(GetToolResultText(getResult));
+                AssertNull(fetched.Model, "Invalid model should not be persisted");
             }).ConfigureAwait(false);
 
             await RunTest("ArmadaUpdateCaptain_NotFound_ReturnsError", async () =>
@@ -1851,6 +1959,38 @@ namespace Armada.Test.Automated.Suites
             return result.GetProperty("content")[0].GetProperty("text").GetString()!;
         }
 
+        private void AssertToolResultError(JsonElement result, string expectedSubstring)
+        {
+            AssertToolResultValid(result);
+            Assert(result.TryGetProperty("isError", out JsonElement isError), "Tool result should include isError");
+            AssertTrue(isError.GetBoolean(), "Tool result should set isError to true");
+            AssertContains(expectedSubstring, GetToolResultText(result));
+        }
+
+        private void AssertToolHasNullableStringProperty(JsonElement tools, string toolName, string propertyName, string descriptionSubstring)
+        {
+            JsonElement tool = GetToolDefinition(tools, toolName);
+            JsonElement schema = tool.GetProperty("inputSchema");
+            JsonElement properties = schema.GetProperty("properties");
+
+            Assert(properties.TryGetProperty(propertyName, out JsonElement propertySchema), "Tool " + toolName + " should expose property " + propertyName);
+            AssertEqual("string", propertySchema.GetProperty("type").GetString());
+            Assert(propertySchema.TryGetProperty("nullable", out JsonElement nullable), "Tool " + toolName + " property " + propertyName + " should declare nullable");
+            AssertTrue(nullable.GetBoolean(), "Tool " + toolName + " property " + propertyName + " should be nullable");
+            AssertContains(descriptionSubstring, propertySchema.GetProperty("description").GetString()!);
+        }
+
+        private JsonElement GetToolDefinition(JsonElement tools, string toolName)
+        {
+            foreach (JsonElement tool in tools.EnumerateArray())
+            {
+                if (String.Equals(tool.GetProperty("name").GetString(), toolName, StringComparison.Ordinal))
+                    return tool;
+            }
+
+            throw new Exception("Unable to find tool definition for " + toolName);
+        }
+
         private JsonElement ParseToolResultJson(JsonElement result)
         {
             string text = GetToolResultText(result);
@@ -1987,6 +2127,146 @@ namespace Armada.Test.Automated.Suites
         private async Task<HttpResponseMessage> RestClientPutAsync(string path, HttpContent content)
         {
             return await _McpClient.PutAsync(path, content).ConfigureAwait(false);
+        }
+
+        private async Task<Captain> CreateCaptainAsync(string namePrefix, string runtime = "ClaudeCode")
+        {
+            string uniqueName = namePrefix + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+            JsonElement result = await CallToolAsync("armada_create_captain", new
+            {
+                name = uniqueName,
+                runtime = runtime
+            }).ConfigureAwait(false);
+            AssertToolResultValid(result);
+            return JsonHelper.Deserialize<Captain>(GetToolResultText(result));
+        }
+
+        private sealed class CursorShimScope : IDisposable
+        {
+            private readonly string _tempDirectory;
+            private readonly string _originalPath;
+            private readonly string? _windowsShimPath;
+            private readonly string? _windowsShimBackupPath;
+
+            private CursorShimScope(string tempDirectory, string originalPath, string? windowsShimPath, string? windowsShimBackupPath)
+            {
+                _tempDirectory = tempDirectory;
+                _originalPath = originalPath;
+                _windowsShimPath = windowsShimPath;
+                _windowsShimBackupPath = windowsShimBackupPath;
+            }
+
+            public static CursorShimScope Create()
+            {
+                string tempDirectory = Path.Combine(Path.GetTempPath(), "armada_cursor_shim_" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(tempDirectory);
+
+                string argsFile = Path.Combine(tempDirectory, "cursor-args.txt");
+                string originalPath = Environment.GetEnvironmentVariable("PATH") ?? String.Empty;
+                string? windowsShimPath = null;
+                string? windowsShimBackupPath = null;
+
+                Environment.SetEnvironmentVariable("ARMADA_TEST_CURSOR_ARGS_FILE", argsFile);
+
+                if (OperatingSystem.IsWindows())
+                {
+                    string npmDirectory = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                        "npm");
+                    Directory.CreateDirectory(npmDirectory);
+
+                    windowsShimPath = Path.Combine(npmDirectory, "cursor-agent.cmd");
+                    if (File.Exists(windowsShimPath))
+                    {
+                        windowsShimBackupPath = Path.Combine(tempDirectory, "cursor-agent.original.cmd");
+                        File.Copy(windowsShimPath, windowsShimBackupPath, true);
+                    }
+
+                    File.WriteAllText(windowsShimPath, BuildWindowsShim());
+                }
+                else
+                {
+                    string shimPath = Path.Combine(tempDirectory, "cursor-agent");
+                    File.WriteAllText(shimPath, BuildUnixShim());
+                    File.SetUnixFileMode(
+                        shimPath,
+                        UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                        UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+                        UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+                    Environment.SetEnvironmentVariable("PATH", tempDirectory + Path.PathSeparator + originalPath);
+                }
+
+                return new CursorShimScope(tempDirectory, originalPath, windowsShimPath, windowsShimBackupPath);
+            }
+
+            public void Dispose()
+            {
+                Environment.SetEnvironmentVariable("ARMADA_TEST_CURSOR_ARGS_FILE", null);
+                Environment.SetEnvironmentVariable("PATH", _originalPath);
+
+                if (OperatingSystem.IsWindows() && !String.IsNullOrEmpty(_windowsShimPath))
+                {
+                    try
+                    {
+                        if (!String.IsNullOrEmpty(_windowsShimBackupPath) && File.Exists(_windowsShimBackupPath))
+                        {
+                            File.Copy(_windowsShimBackupPath, _windowsShimPath, true);
+                        }
+                        else if (File.Exists(_windowsShimPath))
+                        {
+                            File.Delete(_windowsShimPath);
+                        }
+                    }
+                    catch { }
+                }
+
+                try { Directory.Delete(_tempDirectory, true); } catch { }
+            }
+
+            private static string BuildWindowsShim()
+            {
+                return "@echo off\r\n" +
+                    "setlocal EnableExtensions EnableDelayedExpansion\r\n" +
+                    "set \"ARGS_FILE=%ARMADA_TEST_CURSOR_ARGS_FILE%\"\r\n" +
+                    "set \"ALL_ARGS=%*\"\r\n" +
+                    ">> \"%ARGS_FILE%\" echo(!ALL_ARGS!\r\n" +
+                    "set \"MODEL=\"\r\n" +
+                    ":loop\r\n" +
+                    "if \"%~1\"==\"\" goto done\r\n" +
+                    ">> \"%ARGS_FILE%\" echo %~1\r\n" +
+                    "if /I \"%~1\"==\"--model\" set \"MODEL=%~2\"\r\n" +
+                    "shift\r\n" +
+                    "goto loop\r\n" +
+                    ":done\r\n" +
+                    "if /I \"%MODEL%\"==\"bad-model\" (\r\n" +
+                    "  >&2 echo unknown model '%MODEL%'\r\n" +
+                    "  exit /b 3\r\n" +
+                    ")\r\n" +
+                    "echo ok\r\n" +
+                    "exit /b 0\r\n";
+            }
+
+            private static string BuildUnixShim()
+            {
+                return "#!/usr/bin/env sh\n" +
+                    "args_file=\"$ARMADA_TEST_CURSOR_ARGS_FILE\"\n" +
+                    "printf '%s\\n' \"$*\" >> \"$args_file\"\n" +
+                    "prev=\"\"\n" +
+                    "model=\"\"\n" +
+                    "for arg in \"$@\"; do\n" +
+                    "  printf '%s\\n' \"$arg\" >> \"$args_file\"\n" +
+                    "  if [ \"$prev\" = \"--model\" ]; then\n" +
+                    "    model=\"$arg\"\n" +
+                    "  fi\n" +
+                    "  prev=\"$arg\"\n" +
+                    "done\n" +
+                    "if [ \"$model\" = \"bad-model\" ]; then\n" +
+                    "  printf '%s\\n' \"unknown model '$model'\" >&2\n" +
+                    "  exit 3\n" +
+                    "fi\n" +
+                    "printf '%s\\n' ok\n" +
+                    "exit 0\n";
+            }
         }
 
         #endregion
