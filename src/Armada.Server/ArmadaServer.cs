@@ -522,6 +522,7 @@ namespace Armada.Server
                     if (captain != null)
                         await _AgentLifecycle.HandleStopAgentAsync(captain).ConfigureAwait(false);
                 },
+                _AgentLifecycle,
                 _PromptTemplateService);
         }
 

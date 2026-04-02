@@ -13,6 +13,7 @@ namespace Armada.Server.Mcp.Tools
     using Armada.Core.Models;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
+    using Armada.Server;
 
     /// <summary>
     /// Registers MCP tools for captain operations (get, create, update, stop, delete, log).
@@ -32,8 +33,9 @@ namespace Armada.Server.Mcp.Tools
         /// <param name="database">Database driver for captain data access.</param>
         /// <param name="admiral">Admiral service for captain orchestration.</param>
         /// <param name="settings">Armada settings, or null if unavailable.</param>
+        /// <param name="agentLifecycle">Agent lifecycle handler used for captain model validation.</param>
         /// <param name="onStopCaptain">Optional callback invoked when a captain is stopped.</param>
-        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IAdmiralService admiral, ArmadaSettings? settings, Func<string, Task>? onStopCaptain = null)
+        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IAdmiralService admiral, ArmadaSettings? settings, AgentLifecycleHandler? agentLifecycle, Func<string, Task>? onStopCaptain = null)
         {
             register(
                 "armada_get_captain",
@@ -67,6 +69,7 @@ namespace Armada.Server.Mcp.Tools
                         name = new { type = "string", description = "Captain display name" },
                         runtime = new { type = "string", description = "Agent runtime: ClaudeCode, Codex, Gemini, Cursor, or Custom" },
                         systemInstructions = new { type = "string", description = "System instructions for this captain -- injected into every mission prompt to specialize behavior" },
+                        model = new { type = "string", nullable = true, description = "AI model identifier; null means runtime default" },
                         allowedPersonas = new { type = "string", description = "JSON array of persona names this captain can fill, e.g. [\"Worker\",\"Judge\"]. Null means any persona." },
                         preferredPersona = new { type = "string", description = "Preferred persona for dispatch routing priority" }
                     },
@@ -81,8 +84,15 @@ namespace Armada.Server.Mcp.Tools
                     if (!String.IsNullOrEmpty(request.Runtime) && Enum.TryParse<AgentRuntimeEnum>(request.Runtime, true, out AgentRuntimeEnum rt))
                         captain.Runtime = rt;
                     captain.SystemInstructions = request.SystemInstructions;
+                    captain.Model = request.Model;
                     captain.AllowedPersonas = request.AllowedPersonas;
                     captain.PreferredPersona = request.PreferredPersona;
+                    if (agentLifecycle != null)
+                    {
+                        string? validationError = await agentLifecycle.ValidateModelAsync(captain.Runtime, captain.Model).ConfigureAwait(false);
+                        if (!String.IsNullOrEmpty(validationError))
+                            return CreateToolErrorResponse(validationError);
+                    }
                     captain = await database.Captains.CreateAsync(captain).ConfigureAwait(false);
                     return (object)captain;
                 });
@@ -99,6 +109,7 @@ namespace Armada.Server.Mcp.Tools
                         name = new { type = "string", description = "New display name" },
                         runtime = new { type = "string", description = "New agent runtime: ClaudeCode, Codex, Gemini, Cursor, or Custom" },
                         systemInstructions = new { type = "string", description = "New system instructions for this captain" },
+                        model = new { type = "string", nullable = true, description = "AI model identifier; null means runtime default" },
                         allowedPersonas = new { type = "string", description = "JSON array of persona names this captain can fill, e.g. [\"Worker\",\"Judge\"]. Null means any persona." },
                         preferredPersona = new { type = "string", description = "Preferred persona for dispatch routing priority" }
                     },
@@ -116,10 +127,18 @@ namespace Armada.Server.Mcp.Tools
                         captain.Runtime = rt;
                     if (request.SystemInstructions != null)
                         captain.SystemInstructions = request.SystemInstructions;
+                    if (request.Model != null)
+                        captain.Model = request.Model;
                     if (request.AllowedPersonas != null)
                         captain.AllowedPersonas = request.AllowedPersonas;
                     if (request.PreferredPersona != null)
                         captain.PreferredPersona = request.PreferredPersona;
+                    if (agentLifecycle != null)
+                    {
+                        string? validationError = await agentLifecycle.ValidateModelAsync(captain.Runtime, captain.Model).ConfigureAwait(false);
+                        if (!String.IsNullOrEmpty(validationError))
+                            return CreateToolErrorResponse(validationError);
+                    }
                     captain.LastUpdateUtc = DateTime.UtcNow;
                     captain = await database.Captains.UpdateAsync(captain).ConfigureAwait(false);
                     return (object)captain;
@@ -289,6 +308,22 @@ namespace Armada.Server.Mcp.Tools
                         return (object)new { CaptainId = captainId, Log = log, Lines = slice.Length, TotalLines = totalLines };
                     });
             }
+        }
+
+        private static object CreateToolErrorResponse(string error)
+        {
+            return new
+            {
+                content = new[]
+                {
+                    new
+                    {
+                        type = "text",
+                        text = error
+                    }
+                },
+                isError = true
+            };
         }
     }
 }
