@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "armada-api-collection",
 		"name": "Armada API",
-		"description": "Complete API collection for the Armada multi-agent orchestration system.\n\nVersion: 0.3.0\n\n## Setup\n1. Set the `baseUrl` variable to your Admiral server (default: `http://localhost:7890`)\n2. For bearer token auth, set `bearerToken` (default: `default`)\n3. For session token auth, use the Authenticate request and set `sessionToken` from the response\n4. Legacy: If API key authentication is enabled, set the `apiKey` variable (deprecated)\n5. Use the Status > Health Check request to verify connectivity\n\n## Role model\n- IsAdmin=true: global system-wide admin\n- IsAdmin=false and IsTenantAdmin=true: tenant-scoped admin\n- IsAdmin=false and IsTenantAdmin=false: regular user with self-service on own account and credentials\n\n## Notes\n- Tenant, user, and credential protection is server-controlled through IsProtected\n- Immutable fields such as IDs, ownership columns, and creation timestamps are preserved server-side on update",
+		"description": "Complete API collection for the Armada multi-agent orchestration system.\n\nVersion: 0.5.0\n\n## Setup\n1. Set the `baseUrl` variable to your Admiral server (default: `http://localhost:7890`)\n2. For bearer token auth, set `bearerToken` (default: `default`)\n3. For session token auth, use the Authenticate request and set `sessionToken` from the response\n4. Legacy: If API key authentication is enabled, set the `apiKey` variable (deprecated)\n5. Use the Status > Health Check request to verify connectivity\n\n## Role model\n- IsAdmin=true: global system-wide admin\n- IsAdmin=false and IsTenantAdmin=true: tenant-scoped admin\n- IsAdmin=false and IsTenantAdmin=false: regular user with self-service on own account and credentials\n\n## Notes\n- Tenant, user, and credential protection is server-controlled through IsProtected\n- Immutable fields such as IDs, ownership columns, and creation timestamps are preserved server-side on update\n- Captain create and update examples include the optional per-captain `Model` override introduced in v0.5.0",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
@@ -1196,7 +1196,7 @@
 							"name": "Created",
 							"status": "Created",
 							"code": 201,
-							"body": "{\n  \"Id\": \"msn_abc123\",\n  \"VoyageId\": null,\n  \"VesselId\": \"vsl_abc123\",\n  \"CaptainId\": null,\n  \"Title\": \"Fix login bug\",\n  \"Description\": \"The login form does not validate email addresses.\",\n  \"Status\": \"Pending\",\n  \"Priority\": 100,\n  \"BranchName\": null,\n  \"PrUrl\": null,\n  \"CreatedUtc\": \"2026-03-07T12:00:00Z\"\n}"
+							"body": "{\n  \"Id\": \"msn_abc123\",\n  \"VoyageId\": null,\n  \"VesselId\": \"vsl_abc123\",\n  \"CaptainId\": null,\n  \"Title\": \"Fix login bug\",\n  \"Description\": \"The login form does not validate email addresses.\",\n  \"Status\": \"Pending\",\n  \"Priority\": 100,\n  \"BranchName\": null,\n  \"PrUrl\": null,\n  \"CreatedUtc\": \"2026-03-07T12:00:00Z\",\n  \"TotalRuntimeMs\": null\n}"
 						}
 					]
 				},
@@ -1482,21 +1482,21 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"Name\": \"captain-1\",\n  \"Runtime\": \"ClaudeCode\",\n  \"SystemInstructions\": \"You are a testing specialist. Always run tests before committing.\"\n}"
+							"raw": "{\n  \"Name\": \"captain-1\",\n  \"Runtime\": \"ClaudeCode\",\n  \"Model\": \"gpt-5.4\",\n  \"SystemInstructions\": \"You are a testing specialist. Always run tests before committing.\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/v1/captains",
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "v1", "captains"]
 						},
-						"description": "Registers a new captain (AI agent). Runtime options: ClaudeCode, Codex, Gemini, Cursor, Custom. SystemInstructions are optional per-captain instructions injected into every mission prompt. Auto-saves the ID to the captainId collection variable."
+						"description": "Registers a new captain (AI agent). Runtime options: ClaudeCode, Codex, Gemini, Cursor, Custom. Model is an optional per-captain override for the runtime default. SystemInstructions are optional per-captain instructions injected into every mission prompt. Auto-saves the ID to the captainId collection variable."
 					},
 					"response": [
 						{
 							"name": "Created",
 							"status": "Created",
 							"code": 201,
-							"body": "{\n  \"Id\": \"cpt_abc123\",\n  \"Name\": \"captain-1\",\n  \"Runtime\": \"ClaudeCode\",\n  \"SystemInstructions\": \"You are a testing specialist. Always run tests before committing.\",\n  \"State\": \"Idle\",\n  \"CurrentMissionId\": null,\n  \"CurrentDockId\": null,\n  \"ProcessId\": null,\n  \"RecoveryAttempts\": 0,\n  \"LastHeartbeatUtc\": null,\n  \"CreatedUtc\": \"2026-03-07T12:00:00Z\",\n  \"LastUpdateUtc\": \"2026-03-07T12:00:00Z\"\n}"
+							"body": "{\n  \"Id\": \"cpt_abc123\",\n  \"Name\": \"captain-1\",\n  \"Runtime\": \"ClaudeCode\",\n  \"Model\": \"gpt-5.4\",\n  \"SystemInstructions\": \"You are a testing specialist. Always run tests before committing.\",\n  \"State\": \"Idle\",\n  \"CurrentMissionId\": null,\n  \"CurrentDockId\": null,\n  \"ProcessId\": null,\n  \"RecoveryAttempts\": 0,\n  \"LastHeartbeatUtc\": null,\n  \"CreatedUtc\": \"2026-03-07T12:00:00Z\",\n  \"LastUpdateUtc\": \"2026-03-07T12:00:00Z\"\n}"
 						}
 					]
 				},
@@ -1522,21 +1522,21 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"Name\": \"Updated Captain Name\",\n  \"Runtime\": \"ClaudeCode\",\n  \"SystemInstructions\": \"Focus on code quality and always run linting before commits.\"\n}"
+							"raw": "{\n  \"Name\": \"Updated Captain Name\",\n  \"Runtime\": \"ClaudeCode\",\n  \"Model\": \"gpt-5.4\",\n  \"SystemInstructions\": \"Focus on code quality and always run linting before commits.\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/v1/captains/{{captainId}}",
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "v1", "captains", "{{captainId}}"]
 						},
-						"description": "Updates a captain's name or runtime. Operational fields (state, process, mission) are preserved."
+						"description": "Updates a captain's name, runtime, or model. Operational fields (state, process, mission) are preserved."
 					},
 					"response": [
 						{
 							"name": "Updated",
 							"status": "OK",
 							"code": 200,
-							"body": "{\n  \"Id\": \"cpt_abc123\",\n  \"Name\": \"Updated Captain Name\",\n  \"Runtime\": \"ClaudeCode\",\n  \"State\": \"Idle\"\n}"
+							"body": "{\n  \"Id\": \"cpt_abc123\",\n  \"Name\": \"Updated Captain Name\",\n  \"Runtime\": \"ClaudeCode\",\n  \"Model\": \"gpt-5.4\",\n  \"State\": \"Idle\"\n}"
 						}
 					]
 				},
@@ -2200,7 +2200,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"Name\": \"demo-captain\",\n  \"Runtime\": \"ClaudeCode\"\n}"
+							"raw": "{\n  \"Name\": \"demo-captain\",\n  \"Runtime\": \"ClaudeCode\",\n  \"Model\": \"gpt-5.4\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/v1/captains",

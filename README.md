@@ -7,7 +7,7 @@
 <p align="center">
   <strong>Reduce context switching across projects. Keep agent work in queryable memory.</strong>
   <br />
-  <em>v0.4.0 alpha -- APIs and schemas may change</em>
+  <em>v0.5.0 alpha -- APIs and schemas may change</em>
 </p>
 
 <p align="center">
@@ -50,6 +50,7 @@ Everything else in Armada exists to support that: isolated worktrees, parallel d
 - **Quality gates that run automatically.** Every piece of work can flow through a pipeline: plan it, implement it, test it, review it. No manual intervention between steps.
 - **Git isolation by default.** Every agent works in its own worktree on its own branch. Agents can't step on each other. Your main branch stays clean until you merge.
 - **Configurable and extensible workflows.** Prompt templates, personas, and pipelines are user-controlled, so you can adapt the system to your project instead of fitting your project to the built-ins.
+- **Per-captain model selection.** Override the runtime default model for a specific captain when a task or repository needs a different model profile.
 - **Works with the agents you already have.** Claude Code, Codex, Gemini, Cursor -- pluggable runtime system.
 
 ### Who It's For
@@ -857,6 +858,25 @@ The script backs up your original file to `settings.json.v0.1.0.bak` before maki
 
 **Requires:** jq (Linux/macOS) -- install via `apt install jq`, `brew install jq`, etc.
 
+### v0.4.0 to v0.5.0
+
+v0.5.0 adds per-captain model selection and mission runtime tracking. The database schema is automatically migrated on first startup. Key changes:
+
+- New captain field: `captains.model` stores an optional per-captain model override with validation on create and update
+- New mission field: `missions.total_runtime_ms` records end-to-end mission runtime in milliseconds
+- Dashboard updates include captain model editing, runtime display on mission detail, and dispatch page cleanup
+- Compose, Helm, REST docs, MCP docs, and Postman examples are aligned to `v0.5.0`
+
+### v0.3.0 to v0.4.0
+
+v0.4.0 adds personas, pipelines, and prompt templates. The database schema is automatically migrated on first startup (migrations 19-23). Key changes:
+
+- New tables: `prompt_templates`, `personas`, `pipelines`, `pipeline_stages`
+- New columns: `captains.allowed_personas`, `captains.preferred_persona`, `missions.persona`, `missions.depends_on_mission_id`, `fleets.default_pipeline_id`, `vessels.default_pipeline_id`
+- Built-in personas (Worker, Architect, Judge, TestEngineer) and pipelines (WorkerOnly, Reviewed, Tested, FullPipeline) are seeded automatically
+- 18 built-in prompt templates are seeded automatically
+- Standalone migration scripts available in `migrations/` for manual execution
+
 ### v0.2.0 to v0.3.0
 
 v0.3.0 introduces multi-tenant support. The database schema is automatically migrated on first startup. Key changes:
@@ -876,16 +896,6 @@ v0.3.0 introduces multi-tenant support. The database schema is automatically mig
 - **New settings:** `AllowSelfRegistration` (default: `true`), `RequireAuthForShutdown` (default: `false`), `SessionTokenEncryptionKey` (auto-generated)
 
 No manual changes to `settings.json` are required. Existing `ApiKey` settings continue to work.
-
-### v0.3.0 to v0.4.0
-
-v0.4.0 adds personas, pipelines, and prompt templates. The database schema is automatically migrated on first startup (migrations 19-23). Key changes:
-
-- New tables: `prompt_templates`, `personas`, `pipelines`, `pipeline_stages`
-- New columns: `captains.allowed_personas`, `captains.preferred_persona`, `missions.persona`, `missions.depends_on_mission_id`, `fleets.default_pipeline_id`, `vessels.default_pipeline_id`
-- Built-in personas (Worker, Architect, Judge, TestEngineer) and pipelines (WorkerOnly, Reviewed, Tested, FullPipeline) are seeded automatically
-- 18 built-in prompt templates are seeded automatically
-- Standalone migration scripts available in `migrations/` for manual execution
 
 ## Issues and Discussions
 

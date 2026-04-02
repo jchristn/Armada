@@ -4,6 +4,15 @@ All notable changes to Armada are documented in this file.
 
 ---
 
+## v0.5.0
+
+- Per-captain model selection with validation
+- Mission total runtime tracking (`totalRuntimeMs`)
+- Dashboard: captain model editing with error modal
+- Dashboard: mission detail 4-column layout with runtime display
+- Dashboard: dispatch page cleanup (removed unused `parsedTasks` logic)
+- Version bumps across compose, Helm, docs
+
 ## v0.4.0
 
 ### Personas and Pipelines
