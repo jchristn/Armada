@@ -1,6 +1,7 @@
 namespace Armada.Test.Unit
 {
     using Armada.Test.Common;
+    using Armada.Test.Unit.Suites.Documentation;
     using Armada.Test.Unit.Suites.Database;
     using Armada.Test.Unit.Suites.Models;
     using Armada.Test.Unit.Suites.Services;
@@ -56,6 +57,7 @@ namespace Armada.Test.Unit
             runner.AddSuite(new UserMasterTests());
             runner.AddSuite(new CredentialTests());
             runner.AddSuite(new AuthContextTests());
+            runner.AddSuite(new ApiDocumentationTests());
 
             // Service tests
             runner.AddSuite(new AdmiralServiceTests());
