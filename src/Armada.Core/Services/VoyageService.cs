@@ -109,15 +109,23 @@ namespace Armada.Core.Services
                 TotalMissions = missions.Count,
                 CompletedMissions = missions.Count(m => m.Status == MissionStatusEnum.Complete),
                 FailedMissions = missions.Count(m => m.Status == MissionStatusEnum.Failed || m.Status == MissionStatusEnum.LandingFailed),
-                InProgressMissions = missions.Count(m =>
-                    m.Status == MissionStatusEnum.InProgress ||
-                    m.Status == MissionStatusEnum.Assigned ||
-                    m.Status == MissionStatusEnum.Testing ||
-                    m.Status == MissionStatusEnum.WorkProduced ||
-                    m.Status == MissionStatusEnum.PullRequestOpen)
+                InProgressMissions = missions.Count(m => CountsAsActiveMission(m.Status))
             };
 
             return progress;
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private static bool CountsAsActiveMission(MissionStatusEnum status)
+        {
+            return status == MissionStatusEnum.Assigned ||
+                status == MissionStatusEnum.InProgress ||
+                status == MissionStatusEnum.Testing ||
+                status == MissionStatusEnum.Review ||
+                status == MissionStatusEnum.PullRequestOpen;
         }
 
         #endregion

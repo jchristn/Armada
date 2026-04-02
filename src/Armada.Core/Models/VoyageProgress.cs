@@ -31,7 +31,7 @@ namespace Armada.Core.Models
         public int FailedMissions { get; set; } = 0;
 
         /// <summary>
-        /// In-progress missions in this voyage.
+        /// Active missions in this voyage.
         /// </summary>
         public int InProgressMissions { get; set; } = 0;
 
