@@ -52,6 +52,12 @@ namespace Armada.Core.Models
         public AgentRuntimeEnum Runtime { get; set; } = AgentRuntimeEnum.ClaudeCode;
 
         /// <summary>
+        /// Optional model override for the selected runtime.
+        /// Null means the runtime chooses its default model.
+        /// </summary>
+        public string? Model { get; set; } = null;
+
+        /// <summary>
         /// User-supplied system instructions for this captain. Injected into every mission's
         /// instructions before vessel context and mission details. Use this to specialize
         /// captain behavior, add guardrails, or provide persistent context.
