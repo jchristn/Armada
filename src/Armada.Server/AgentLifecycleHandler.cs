@@ -196,10 +196,19 @@ namespace Armada.Server
             int processId;
             try
             {
+                string? model = captain.GetType().GetProperty("Model")?.GetValue(captain) as string;
+                if (model != null)
+                {
+                    model = model.Trim();
+                    if (model.Length < 1)
+                        throw new InvalidOperationException("Captain " + captain.Id + " has an invalid blank model value.");
+                }
+
                 processId = await runtime.StartAsync(
                     dock.WorktreePath ?? throw new InvalidOperationException("Dock worktree path is null"),
                     prompt,
-                    logFilePath: logFilePath).ConfigureAwait(false);
+                    logFilePath: logFilePath,
+                    model: model).ConfigureAwait(false);
             }
             catch
             {

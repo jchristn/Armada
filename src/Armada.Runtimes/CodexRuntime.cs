@@ -73,9 +73,23 @@ namespace Armada.Runtimes
         /// </summary>
         protected override List<string> BuildArguments(string prompt)
         {
+            return BuildArguments(prompt, null);
+        }
+
+        /// <summary>
+        /// Build Codex CLI arguments.
+        /// </summary>
+        protected override List<string> BuildArguments(string prompt, string? model)
+        {
             List<string> args = new List<string>();
 
             args.Add("exec");
+
+            if (!String.IsNullOrEmpty(model))
+            {
+                args.Add("--model");
+                args.Add(model);
+            }
 
             if (String.Equals(ApprovalMode, "dangerous", StringComparison.OrdinalIgnoreCase))
             {
