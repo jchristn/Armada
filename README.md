@@ -7,7 +7,7 @@
 <p align="center">
   <strong>Reduce context switching across projects. Keep agent work in queryable memory.</strong>
   <br />
-  <em>v0.4.0 alpha -- APIs and schemas may change</em>
+  <em>v0.5.0 alpha -- APIs and schemas may change</em>
 </p>
 
 <p align="center">
@@ -877,15 +877,15 @@ v0.3.0 introduces multi-tenant support. The database schema is automatically mig
 
 No manual changes to `settings.json` are required. Existing `ApiKey` settings continue to work.
 
-### v0.3.0 to v0.4.0
+### v0.4.0 to v0.5.0
 
-v0.4.0 adds personas, pipelines, and prompt templates. The database schema is automatically migrated on first startup (migrations 19-23). Key changes:
+v0.5.0 adds per-captain model selection, mission runtime tracking, dashboard model editing improvements, and dashboard UX cleanup. The database schema is automatically migrated on first startup (migrations 24-27). Key changes:
 
-- New tables: `prompt_templates`, `personas`, `pipelines`, `pipeline_stages`
-- New columns: `captains.allowed_personas`, `captains.preferred_persona`, `missions.persona`, `missions.depends_on_mission_id`, `fleets.default_pipeline_id`, `vessels.default_pipeline_id`
-- Built-in personas (Worker, Architect, Judge, TestEngineer) and pipelines (WorkerOnly, Reviewed, Tested, FullPipeline) are seeded automatically
-- 18 built-in prompt templates are seeded automatically
-- Standalone migration scripts available in `migrations/` for manual execution
+- New captain model field with runtime validation for per-captain model selection
+- New mission runtime tracking via `missions.total_runtime_ms`
+- Dashboard model editing now surfaces validation errors directly in the UI
+- Mission detail uses a 4-column layout and the dispatch page removes unused parsing state
+- Documentation and Postman collection references are updated for the v0.5.0 release
 
 ## Issues and Discussions
 

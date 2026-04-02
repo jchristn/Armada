@@ -4,6 +4,23 @@ All notable changes to Armada are documented in this file.
 
 ---
 
+## v0.5.0
+
+### Captain Model Selection
+- Added a per-captain model field so each captain can select its runtime model independently
+- Added runtime-side model validation so invalid model selections fail fast with clear errors
+
+### Mission Runtime Tracking
+- Added `TotalRuntimeMs` tracking for missions to capture end-to-end runtime after completion
+
+### Dashboard Updates
+- Added dashboard model editing support with validation error display
+- Updated Mission Detail to a 4-column layout for denser mission metadata
+- Cleaned up the Dispatch page by removing unused parsing state
+
+### Documentation and Tooling
+- Updated release documentation and Postman collection references for the v0.5.0 release
+
 ## v0.4.0
 
 ### Personas and Pipelines
