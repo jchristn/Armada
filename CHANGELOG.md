@@ -4,6 +4,19 @@ All notable changes to Armada are documented in this file.
 
 ---
 
+## v0.5.0
+
+### Captain Models
+- Added optional `Model` on captains so each runtime can launch with a captain-specific model override
+- Runtime launch flow now passes the selected model through `IAgentRuntime.StartAsync(...)` for Claude Code, Codex, Gemini, and Cursor
+
+### Mission Telemetry
+- Added `TotalRuntimeMs` on missions to persist end-to-end runtime after completion
+- Mission detail layout now uses a 4-column grid to surface the expanded mission metadata in the dashboard
+
+### Tooling and Docs
+- Updated Helm package version, Docker image tags, REST and MCP references, README upgrade guidance, and Postman examples for `0.5.0`
+
 ## v0.4.0
 
 ### Personas and Pipelines

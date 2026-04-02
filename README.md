@@ -7,7 +7,7 @@
 <p align="center">
   <strong>Reduce context switching across projects. Keep agent work in queryable memory.</strong>
   <br />
-  <em>v0.4.0 alpha -- APIs and schemas may change</em>
+  <em>v0.5.0 alpha -- APIs and schemas may change</em>
 </p>
 
 <p align="center">
@@ -886,6 +886,16 @@ v0.4.0 adds personas, pipelines, and prompt templates. The database schema is au
 - Built-in personas (Worker, Architect, Judge, TestEngineer) and pipelines (WorkerOnly, Reviewed, Tested, FullPipeline) are seeded automatically
 - 18 built-in prompt templates are seeded automatically
 - Standalone migration scripts available in `migrations/` for manual execution
+
+### v0.4.0 to v0.5.0
+
+v0.5.0 adds captain-level model overrides and mission runtime tracking. The database schema is automatically migrated on first startup. Key changes:
+
+- New captain field: `Model` lets you pin a runtime-specific model per captain while still falling back to the runtime default when unset
+- New mission field: `TotalRuntimeMs` stores end-to-end mission runtime once work completes
+- Runtime launch flow accepts an optional model override so Claude Code, Codex, Gemini, and Cursor captains can all honor captain-specific model selection
+- Dashboard mission detail layout expands to a 4-column grid to surface the additional mission metadata cleanly
+- Helm, Docker, REST/MCP docs, and the Postman collection are aligned on `0.5.0`
 
 ## Issues and Discussions
 

@@ -1,6 +1,6 @@
 # Armada MCP API Reference
 
-**Version:** 0.4.0
+**Version:** 0.5.0
 **Default URL:** `http://localhost:7891`
 **Protocol:** [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) over HTTP
 **Server Library:** Voltaic (McpHttpServer)
@@ -1559,6 +1559,7 @@ Register a new captain (AI agent).
   "properties": {
     "name": { "type": "string", "description": "Captain display name" },
     "runtime": { "type": "string", "description": "Agent runtime: ClaudeCode, Codex, Gemini, Cursor" },
+    "model": { "type": "string", "description": "Optional runtime-specific model override for this captain" },
     "systemInstructions": { "type": "string", "description": "System instructions for this captain -- injected into every mission prompt to specialize behavior" },
     "allowedPersonas": { "type": "array", "items": { "type": "string" }, "description": "List of persona names this captain is allowed to use" },
     "preferredPersona": { "type": "string", "description": "Preferred persona name for this captain" }
@@ -1571,6 +1572,7 @@ Register a new captain (AI agent).
 |---|---|---|---|
 | `name` | string | Yes | Captain display name |
 | `runtime` | string | No | Agent runtime: `ClaudeCode`, `Codex`, `Gemini`, `Cursor` |
+| `model` | string | No | Optional runtime-specific model override for this captain |
 | `systemInstructions` | string | No | System instructions injected into every mission prompt for this captain |
 | `allowedPersonas` | string[] | No | List of persona names this captain is allowed to use |
 | `preferredPersona` | string | No | Preferred persona name for this captain |
@@ -1601,7 +1603,7 @@ Get details of a specific captain (AI agent).
 
 ### armada_update_captain
 
-Update a captain's name or runtime. Operational fields (state, process, mission) are preserved.
+Update a captain's name, runtime, model override, or persona constraints. Operational fields (state, process, mission) are preserved.
 
 **Input Schema:**
 
@@ -1612,6 +1614,7 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
     "captainId": { "type": "string", "description": "Captain ID (cpt_ prefix)" },
     "name": { "type": "string", "description": "New display name" },
     "runtime": { "type": "string", "description": "New agent runtime: ClaudeCode, Codex, Gemini, Cursor" },
+    "model": { "type": "string", "description": "New runtime-specific model override for this captain" },
     "systemInstructions": { "type": "string", "description": "New system instructions for this captain" },
     "allowedPersonas": { "type": "array", "items": { "type": "string" }, "description": "New list of persona names this captain is allowed to use" },
     "preferredPersona": { "type": "string", "description": "New preferred persona name for this captain" }
@@ -1625,6 +1628,7 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
 | `captainId` | string | Yes | Captain ID (prefix `cpt_`) |
 | `name` | string | No | New display name |
 | `runtime` | string | No | New agent runtime: `ClaudeCode`, `Codex`, `Gemini`, `Cursor` |
+| `model` | string | No | New runtime-specific model override for this captain |
 | `systemInstructions` | string | No | New system instructions for this captain |
 | `allowedPersonas` | string[] | No | New list of persona names this captain is allowed to use |
 | `preferredPersona` | string | No | New preferred persona name for this captain |
@@ -2572,15 +2576,20 @@ Paginated result wrapper returned by `armada_enumerate`.
 | `status` | string | [MissionStatusEnum](#missionstatusenum) value |
 | `priority` | int | Priority (lower = higher priority, default 100) |
 | `parentMissionId` | string \| null | Parent mission ID for sub-tasks |
+| `persona` | string \| null | Persona assigned to the mission, if any |
+| `dependsOnMissionId` | string \| null | Predecessor mission that must complete before this mission can start |
 | `branchName` | string \| null | Git branch name created for this mission |
 | `dockId` | string \| null | Assigned dock (worktree) ID |
 | `processId` | int \| null | OS process ID of the agent working this mission |
 | `prUrl` | string \| null | Pull request URL |
 | `commitHash` | string \| null | Git commit hash (HEAD) captured at mission completion |
+| `failureReason` | string \| null | Failure summary when the mission ends in a failed state |
 | `diffSnapshot` | string \| null | Always `null` in list/status responses. Use `armada_get_mission_diff` to retrieve the full diff. |
+| `agentOutput` | string \| null | Captured final agent output, if stored |
 | `createdUtc` | string | ISO 8601 creation timestamp |
 | `startedUtc` | string \| null | ISO 8601 start timestamp |
 | `completedUtc` | string \| null | ISO 8601 completion timestamp |
+| `totalRuntimeMs` | long \| null | Total mission runtime in milliseconds, computed when work completes |
 | `lastUpdateUtc` | string | ISO 8601 last update timestamp |
 
 #### Captain
@@ -2590,6 +2599,10 @@ Paginated result wrapper returned by `armada_enumerate`.
 | `id` | string | Captain ID (prefix `cpt_`) |
 | `name` | string | Display name |
 | `runtime` | string | [AgentRuntimeEnum](#agentruntimeenum) value |
+| `model` | string \| null | Optional runtime-specific model override for this captain |
+| `systemInstructions` | string \| null | Per-captain system instructions injected into every mission prompt |
+| `allowedPersonas` | string[] \| null | Optional list of persona names this captain may run |
+| `preferredPersona` | string \| null | Preferred persona for routing when multiple are allowed |
 | `state` | string | [CaptainStateEnum](#captainstateenum) value |
 | `currentMissionId` | string \| null | Currently assigned mission ID |
 | `currentDockId` | string \| null | Currently assigned dock (worktree) ID |

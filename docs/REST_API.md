@@ -1,6 +1,6 @@
 # Armada REST API Reference
 
-**Version:** 0.4.0
+**Version:** 0.5.0
 **Base URL:** `http://localhost:7890`
 **Content-Type:** `application/json`
 
@@ -687,7 +687,7 @@ Health check endpoint. **Does not require authentication.**
   "Timestamp": "2026-03-07T12:00:00Z",
   "StartUtc": "2026-03-07T08:00:00Z",
   "Uptime": "0.04:00:00",
-  "Version": "0.2.0",
+  "Version": "0.5.0",
   "Ports": {
     "Admiral": 7890,
     "Mcp": 7891,
@@ -1497,13 +1497,17 @@ Register a new captain (AI agent).
 |---|---|---|---|
 | `Name` | string | yes | Captain name |
 | `Runtime` | string | no | Agent runtime type (default: `ClaudeCode`) |
+| `SystemInstructions` | string | no | Per-captain system instructions injected into every mission prompt |
+| `AllowedPersonas` | string[] | no | Optional list of persona names this captain may run |
+| `PreferredPersona` | string | no | Optional preferred persona when multiple choices are available |
+| `Model` | string | no | Optional runtime-specific model override for this captain |
 
 **Response:** `201 Created` - [Captain](#captain)
 
 ```bash
 curl -X POST http://localhost:7890/api/v1/captains \
   -H "Content-Type: application/json" \
-  -d '{"Name": "captain-1", "Runtime": "ClaudeCode", "SystemInstructions": "You are a testing specialist. Always run tests before committing."}'
+  -d '{"Name": "captain-1", "Runtime": "ClaudeCode", "SystemInstructions": "You are a testing specialist. Always run tests before committing.", "AllowedPersonas": ["Worker", "Judge"], "PreferredPersona": "Worker", "Model": "gpt-5.4"}'
 ```
 
 ---
@@ -1524,7 +1528,7 @@ Get a single captain by ID.
 
 #### PUT /api/v1/captains/{id}
 
-Update a captain's name or runtime. Operational fields (state, process, mission) are preserved.
+Update a captain's name, runtime, model override, or persona constraints. Operational fields (state, process, mission) are preserved.
 
 **Path Parameters:**
 | Parameter | Description |
@@ -1534,9 +1538,12 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
 **Request Body:**
 ```json
 {
-  "name": "captain-bravo",
-  "runtime": "Codex",
-  "systemInstructions": "Focus on code quality and always run linting before commits."
+  "Name": "captain-bravo",
+  "Runtime": "Codex",
+  "SystemInstructions": "Focus on code quality and always run linting before commits.",
+  "AllowedPersonas": ["Worker", "Architect"],
+  "PreferredPersona": "Worker",
+  "Model": "gpt-5.4"
 }
 ```
 
@@ -1547,7 +1554,7 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
 curl -X PUT http://localhost:7890/api/v1/captains/cpt_abc123 \
   -H "Content-Type: application/json" \
   -H "x-api-key: YOUR_KEY" \
-  -d '{"name": "captain-bravo", "runtime": "Codex"}'
+  -d '{"Name": "captain-bravo", "Runtime": "Codex", "Model": "gpt-5.4"}'
 ```
 
 ---
@@ -2863,15 +2870,20 @@ An atomic unit of work assigned to a captain.
   "Status": "InProgress",
   "Priority": 100,
   "ParentMissionId": null,
+  "Persona": null,
+  "DependsOnMissionId": null,
   "BranchName": "armada/msn_abc123",
   "DockId": null,
   "ProcessId": null,
   "PrUrl": null,
   "CommitHash": null,
+  "FailureReason": null,
   "DiffSnapshot": null,
+  "AgentOutput": null,
   "CreatedUtc": "2026-03-07T12:00:00Z",
   "StartedUtc": "2026-03-07T12:05:00Z",
   "CompletedUtc": null,
+  "TotalRuntimeMs": null,
   "LastUpdateUtc": "2026-03-07T12:10:00Z"
 }
 ```
@@ -2887,15 +2899,20 @@ An atomic unit of work assigned to a captain.
 | `Status` | [MissionStatusEnum](#missionstatusenum) | `Pending` | Current status |
 | `Priority` | int | 100 | Priority (lower number = higher priority) |
 | `ParentMissionId` | string? | null | Parent mission ID for sub-tasks |
+| `Persona` | string? | null | Persona assigned to the mission, if any |
+| `DependsOnMissionId` | string? | null | Predecessor mission that must complete before this mission can start |
 | `BranchName` | string? | null | Git branch name |
 | `DockId` | string? | null | Dock identifier for the mission's worktree |
 | `ProcessId` | int? | null | OS process ID of the agent working on the mission |
 | `PrUrl` | string? | null | Pull request URL if created |
 | `CommitHash` | string? | null | Git commit hash captured on completion |
+| `FailureReason` | string? | null | Failure summary when the mission ends in a failed state |
 | `DiffSnapshot` | string? | null | Always `null` in list/status responses to keep payloads compact. Use `GET /api/v1/missions/{id}/diff` to retrieve the full diff. |
+| `AgentOutput` | string? | null | Captured final agent output, if stored |
 | `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
 | `StartedUtc` | datetime? | null | Work start timestamp (UTC) |
 | `CompletedUtc` | datetime? | null | Completion timestamp (UTC) |
+| `TotalRuntimeMs` | long? | null | Total mission runtime in milliseconds, computed when work completes |
 | `LastUpdateUtc` | datetime | now | Last update timestamp (UTC) |
 
 ---
@@ -2909,7 +2926,10 @@ A worker AI agent instance executing missions.
   "Id": "cpt_abc123",
   "Name": "captain-1",
   "Runtime": "ClaudeCode",
+  "Model": null,
   "SystemInstructions": null,
+  "AllowedPersonas": null,
+  "PreferredPersona": null,
   "State": "Idle",
   "CurrentMissionId": null,
   "CurrentDockId": null,
@@ -2926,7 +2946,10 @@ A worker AI agent instance executing missions.
 | `Id` | string | auto-generated | Unique ID with `cpt_` prefix |
 | `Name` | string | `"Captain"` | Captain name |
 | `Runtime` | [AgentRuntimeEnum](#agentruntimeenum) | `ClaudeCode` | Agent runtime type |
+| `Model` | string? | null | Optional runtime-specific model override for this captain |
 | `SystemInstructions` | string? | null | Per-captain system instructions injected into every mission prompt |
+| `AllowedPersonas` | string[]? | null | Optional list of persona names this captain may run |
+| `PreferredPersona` | string? | null | Preferred persona for routing when multiple are allowed |
 | `State` | [CaptainStateEnum](#captainstateenum) | `Idle` | Current state |
 | `CurrentMissionId` | string? | null | Currently assigned mission ID |
 | `CurrentDockId` | string? | null | Currently assigned dock (worktree) ID |
