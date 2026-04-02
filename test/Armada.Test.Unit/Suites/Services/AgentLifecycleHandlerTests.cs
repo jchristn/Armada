@@ -1,6 +1,11 @@
 namespace Armada.Test.Unit.Suites.Services
 {
+    using System.Net;
+    using System.Net.Http;
+    using System.Net.Sockets;
+    using System.Text.Json;
     using System.IO;
+    using Armada.Core.Database.Sqlite;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -9,6 +14,8 @@ namespace Armada.Test.Unit.Suites.Services
     using Armada.Core.Settings;
     using Armada.Runtimes;
     using Armada.Server;
+    using Armada.Server.Mcp;
+    using Armada.Server.Mcp.Tools;
     using Armada.Test.Common;
     using Armada.Test.Unit.TestHelpers;
     using SyslogLogging;
@@ -127,6 +134,185 @@ namespace Armada.Test.Unit.Suites.Services
                     }
                 }
             });
+
+            await RunTest("Captain REST create rejects invalid model with validation error", async () =>
+            {
+                using (CursorShimScope shim = CursorShimScope.Create())
+                await using (LocalServerScope server = await LocalServerScope.CreateAsync().ConfigureAwait(false))
+                {
+                    HttpResponseMessage response = await server.Client.PostAsync(
+                        "/api/v1/captains",
+                        JsonHelper.ToJsonContent(new
+                        {
+                            Name = "invalid-rest-captain",
+                            Runtime = "Cursor",
+                            Model = "bad-model"
+                        })).ConfigureAwait(false);
+
+                    ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response).ConfigureAwait(false);
+
+                    AssertEqual(HttpStatusCode.BadRequest, response.StatusCode);
+                    AssertContains("bad-model", error.Message ?? String.Empty, "Error should include the rejected model");
+                    AssertContains("unknown model 'bad-model'", error.Message ?? String.Empty, "Error should include runtime validation output");
+                    string args = await WaitForRecordedArgsAsync(shim.ArgsFile, "bad-model").ConfigureAwait(false);
+                    AssertContains("--model", args, "REST create should launch validation with model flag");
+                }
+            });
+
+            await RunTest("Captain REST update skips validation when model is unchanged", async () =>
+            {
+                using (CursorShimScope shim = CursorShimScope.Create())
+                await using (LocalServerScope server = await LocalServerScope.CreateAsync().ConfigureAwait(false))
+                {
+                    Captain captain = await CreateCaptainViaRestAsync(server.Client, "rest-update-same-model", "gpt-5.4-mini").ConfigureAwait(false);
+                    if (File.Exists(shim.ArgsFile))
+                        File.Delete(shim.ArgsFile);
+
+                    HttpResponseMessage response = await server.Client.PutAsync(
+                        "/api/v1/captains/" + captain.Id,
+                        JsonHelper.ToJsonContent(new
+                        {
+                            Name = "rest-update-same-model-renamed",
+                            Runtime = "Cursor",
+                            Model = "gpt-5.4-mini"
+                        })).ConfigureAwait(false);
+
+                    Captain updated = await JsonHelper.DeserializeAsync<Captain>(response).ConfigureAwait(false);
+
+                    AssertEqual(HttpStatusCode.OK, response.StatusCode);
+                    AssertEqual("gpt-5.4-mini", updated.Model, "Model should remain unchanged");
+                    AssertEqual("rest-update-same-model-renamed", updated.Name, "Name should update");
+                    await Task.Delay(200).ConfigureAwait(false);
+                    AssertFalse(File.Exists(shim.ArgsFile), "Unchanged model should not trigger validation");
+                }
+            });
+
+            await RunTest("Captain REST update rejects changed invalid model and preserves stored captain", async () =>
+            {
+                using (CursorShimScope shim = CursorShimScope.Create())
+                await using (LocalServerScope server = await LocalServerScope.CreateAsync().ConfigureAwait(false))
+                {
+                    Captain captain = await CreateCaptainViaRestAsync(server.Client, "rest-update-bad-model", "gpt-5.4-mini").ConfigureAwait(false);
+                    if (File.Exists(shim.ArgsFile))
+                        File.Delete(shim.ArgsFile);
+
+                    HttpResponseMessage response = await server.Client.PutAsync(
+                        "/api/v1/captains/" + captain.Id,
+                        JsonHelper.ToJsonContent(new
+                        {
+                            Name = captain.Name,
+                            Runtime = "Cursor",
+                            Model = "bad-model"
+                        })).ConfigureAwait(false);
+
+                    ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response).ConfigureAwait(false);
+                    HttpResponseMessage getResponse = await server.Client.GetAsync("/api/v1/captains/" + captain.Id).ConfigureAwait(false);
+                    Captain persisted = await JsonHelper.DeserializeAsync<Captain>(getResponse).ConfigureAwait(false);
+
+                    AssertEqual(HttpStatusCode.BadRequest, response.StatusCode);
+                    AssertContains("bad-model", error.Message ?? String.Empty, "Error should include the rejected model");
+                    AssertEqual("gpt-5.4-mini", persisted.Model, "Failed update should not change the stored model");
+                    string args = await WaitForRecordedArgsAsync(shim.ArgsFile, "bad-model").ConfigureAwait(false);
+                    AssertContains("--model", args, "Changed model should trigger validation");
+                }
+            });
+
+            await RunTest("MCP captain tools expose model schema and persist validated model", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                using (CursorShimScope shim = CursorShimScope.Create())
+                {
+                    Dictionary<string, RegisteredTool> tools = RegisterCaptainTools(testDb.Driver, CreateSettings());
+                    JsonElement createSchema = ToJsonElement(tools["armada_create_captain"].InputSchema);
+                    JsonElement updateSchema = ToJsonElement(tools["armada_update_captain"].InputSchema);
+
+                    AssertTrue(createSchema.GetProperty("properties").TryGetProperty("model", out JsonElement createModel), "Create captain schema should include model");
+                    AssertTrue(updateSchema.GetProperty("properties").TryGetProperty("model", out JsonElement updateModel), "Update captain schema should include model");
+                    AssertContains("runtime selects its default", createModel.GetProperty("description").GetString() ?? String.Empty, "Create schema should describe model defaulting");
+                    AssertContains("runtime selects its default", updateModel.GetProperty("description").GetString() ?? String.Empty, "Update schema should describe model defaulting");
+
+                    object result = await tools["armada_create_captain"].Handler(ToJsonElement(new
+                    {
+                        name = "mcp-model-captain",
+                        runtime = "Cursor",
+                        model = "gpt-5.4-mini"
+                    })).ConfigureAwait(false);
+
+                    Captain captain = DeserializeResult<Captain>(result);
+                    AssertEqual("gpt-5.4-mini", captain.Model, "Create tool should persist the requested model");
+                    string args = await WaitForRecordedArgsAsync(shim.ArgsFile, "gpt-5.4-mini").ConfigureAwait(false);
+                    AssertContains("--model", args, "Create tool should validate with model flag");
+                }
+            });
+
+            await RunTest("MCP captain update preserves model when omitted and rejects invalid model changes", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                using (CursorShimScope shim = CursorShimScope.Create())
+                {
+                    Dictionary<string, RegisteredTool> tools = RegisterCaptainTools(testDb.Driver, CreateSettings());
+                    Captain captain = new Captain("mcp-existing", AgentRuntimeEnum.Cursor)
+                    {
+                        Model = "gpt-5.4-mini"
+                    };
+                    captain = await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+
+                    if (File.Exists(shim.ArgsFile))
+                        File.Delete(shim.ArgsFile);
+
+                    object omitModelResult = await tools["armada_update_captain"].Handler(ToJsonElement(new
+                    {
+                        captainId = captain.Id,
+                        name = "mcp-renamed",
+                        runtime = "Cursor"
+                    })).ConfigureAwait(false);
+
+                    Captain unchanged = DeserializeResult<Captain>(omitModelResult);
+                    AssertEqual("mcp-renamed", unchanged.Name, "Update without model should still update other fields");
+                    AssertEqual("gpt-5.4-mini", unchanged.Model, "Omitted model should preserve the stored value");
+                    await Task.Delay(200).ConfigureAwait(false);
+                    AssertFalse(File.Exists(shim.ArgsFile), "Omitted model should not trigger validation");
+
+                    object invalidModelResult = await tools["armada_update_captain"].Handler(ToJsonElement(new
+                    {
+                        captainId = captain.Id,
+                        runtime = "Cursor",
+                        model = "bad-model"
+                    })).ConfigureAwait(false);
+
+                    JsonElement error = ToJsonElement(invalidModelResult);
+                    Captain persisted = await testDb.Driver.Captains.ReadAsync(captain.Id).ConfigureAwait(false)
+                        ?? throw new InvalidOperationException("Captain should still exist after failed MCP update.");
+
+                    AssertContains("bad-model", error.GetProperty("Error").GetString() ?? String.Empty, "Invalid model should return an error");
+                    AssertEqual("gpt-5.4-mini", persisted.Model, "Failed MCP update should not change the stored model");
+                    string args = await WaitForRecordedArgsAsync(shim.ArgsFile, "bad-model").ConfigureAwait(false);
+                    AssertContains("--model", args, "Changed MCP model should trigger validation");
+                }
+            });
+
+            await RunTest("MCP mission tool descriptions mention totalRuntimeMs", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    Dictionary<string, RegisteredTool> tools = RegisterMissionTools(testDb.Driver);
+                    string[] missionTools =
+                    {
+                        "armada_mission_status",
+                        "armada_create_mission",
+                        "armada_update_mission",
+                        "armada_cancel_mission",
+                        "armada_restart_mission",
+                        "armada_retry_landing",
+                        "armada_transition_mission_status"
+                    };
+
+                    foreach (string toolName in missionTools)
+                    {
+                        AssertContains("totalRuntimeMs", tools[toolName].Description, toolName + " description should mention mission runtime exposure");
+                    }
+                }
+            });
         }
 
         private AgentLifecycleHandler CreateHandler(DatabaseDriver database, out ArmadaSettings settings)
@@ -161,6 +347,57 @@ namespace Armada.Test.Unit.Suites.Services
             ArmadaSettings settings = new ArmadaSettings();
             settings.LogDirectory = Path.Combine(Path.GetTempPath(), "armada_lifecycle_logs_" + Guid.NewGuid().ToString("N"));
             return settings;
+        }
+
+        private static Dictionary<string, RegisteredTool> RegisterCaptainTools(DatabaseDriver database, ArmadaSettings settings)
+        {
+            Dictionary<string, RegisteredTool> tools = new Dictionary<string, RegisteredTool>(StringComparer.Ordinal);
+            McpCaptainTools.Register(
+                (name, description, inputSchema, handler) => tools[name] = new RegisteredTool(description, inputSchema, handler),
+                database,
+                new StubAdmiralService(),
+                settings);
+            return tools;
+        }
+
+        private static Dictionary<string, RegisteredTool> RegisterMissionTools(DatabaseDriver database)
+        {
+            Dictionary<string, RegisteredTool> tools = new Dictionary<string, RegisteredTool>(StringComparer.Ordinal);
+            McpMissionTools.Register(
+                (name, description, inputSchema, handler) => tools[name] = new RegisteredTool(description, inputSchema, handler),
+                database,
+                new StubAdmiralService(),
+                null,
+                null,
+                null);
+            return tools;
+        }
+
+        private static JsonElement ToJsonElement(object value)
+        {
+            using JsonDocument document = JsonDocument.Parse(JsonSerializer.Serialize(value));
+            return document.RootElement.Clone();
+        }
+
+        private static T DeserializeResult<T>(object value)
+        {
+            return JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(value))
+                ?? throw new InvalidOperationException("Unable to deserialize tool result as " + typeof(T).Name + ".");
+        }
+
+        private static async Task<Captain> CreateCaptainViaRestAsync(HttpClient client, string name, string model)
+        {
+            HttpResponseMessage response = await client.PostAsync(
+                "/api/v1/captains",
+                JsonHelper.ToJsonContent(new
+                {
+                    Name = name,
+                    Runtime = "Cursor",
+                    Model = model
+                })).ConfigureAwait(false);
+
+            response.EnsureSuccessStatusCode();
+            return await JsonHelper.DeserializeAsync<Captain>(response).ConfigureAwait(false);
         }
 
         private static async Task<string> WaitForRecordedArgsAsync(string argsFile, string? expectedSubstring = null)
@@ -211,6 +448,20 @@ namespace Armada.Test.Unit.Suites.Services
             using FileStream stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             using StreamReader reader = new StreamReader(stream);
             return await reader.ReadToEndAsync().ConfigureAwait(false);
+        }
+
+        private sealed class RegisteredTool
+        {
+            public string Description { get; }
+            public object InputSchema { get; }
+            public Func<JsonElement?, Task<object>> Handler { get; }
+
+            public RegisteredTool(string description, object inputSchema, Func<JsonElement?, Task<object>> handler)
+            {
+                Description = description;
+                InputSchema = inputSchema;
+                Handler = handler;
+            }
         }
 
         private sealed class StubAdmiralService : IAdmiralService
@@ -267,6 +518,76 @@ namespace Armada.Test.Unit.Suites.Services
             {
                 return Task.CompletedTask;
             }
+        }
+
+        private sealed class LocalServerScope : IAsyncDisposable
+        {
+            public HttpClient Client { get; }
+
+            private readonly ArmadaServer _server;
+            private readonly string _tempDirectory;
+
+            private LocalServerScope(ArmadaServer server, HttpClient client, string tempDirectory)
+            {
+                _server = server;
+                Client = client;
+                _tempDirectory = tempDirectory;
+            }
+
+            public static async Task<LocalServerScope> CreateAsync()
+            {
+                string tempDirectory = Path.Combine(Path.GetTempPath(), "armada_lifecycle_server_" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(tempDirectory);
+
+                ArmadaSettings settings = new ArmadaSettings
+                {
+                    DataDirectory = tempDirectory,
+                    DatabasePath = Path.Combine(tempDirectory, "armada.db"),
+                    Database = new DatabaseSettings
+                    {
+                        Type = DatabaseTypeEnum.Sqlite,
+                        Filename = Path.Combine(tempDirectory, "armada.db")
+                    },
+                    LogDirectory = Path.Combine(tempDirectory, "logs"),
+                    DocksDirectory = Path.Combine(tempDirectory, "docks"),
+                    ReposDirectory = Path.Combine(tempDirectory, "repos"),
+                    AdmiralPort = GetAvailablePort(),
+                    McpPort = GetAvailablePort(),
+                    WebSocketPort = GetAvailablePort(),
+                    ApiKey = "test-key-" + Guid.NewGuid().ToString("N"),
+                    HeartbeatIntervalSeconds = 300
+                };
+                settings.InitializeDirectories();
+
+                ArmadaServer server = new ArmadaServer(CreateLogging(), settings, quiet: true);
+                await server.StartAsync().ConfigureAwait(false);
+                await Task.Delay(500).ConfigureAwait(false);
+
+                HttpClient client = new HttpClient
+                {
+                    BaseAddress = new Uri("http://localhost:" + settings.AdmiralPort)
+                };
+                client.DefaultRequestHeaders.Add("X-Api-Key", settings.ApiKey);
+
+                return new LocalServerScope(server, client, tempDirectory);
+            }
+
+            public async ValueTask DisposeAsync()
+            {
+                Client.Dispose();
+                try { _server.Stop(); } catch { }
+                await Task.Delay(200).ConfigureAwait(false);
+                try { Directory.Delete(_tempDirectory, true); } catch { }
+            }
+        }
+
+        private static int GetAvailablePort()
+        {
+            TcpListener listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            listener.Stop();
+            return port;
         }
 
         private sealed class CursorShimScope : IDisposable
