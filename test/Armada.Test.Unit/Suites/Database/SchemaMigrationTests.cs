@@ -144,6 +144,43 @@ namespace Armada.Test.Unit.Suites.Database
                     try { File.Delete(tempFile); } catch { }
                 }
             });
+
+            await RunTest("Migration script shell includes v0.5.0 backend statements", async () =>
+            {
+                string scriptPath = Path.Combine(GetRepositoryRoot(), "migrations", "migrate_v0.4.0_to_v0.5.0.sh");
+                AssertTrue(File.Exists(scriptPath), "Shell migration script should exist");
+
+                string contents = await File.ReadAllTextAsync(scriptPath).ConfigureAwait(false);
+                AssertTrue(contents.StartsWith("#!") && contents.Contains("bash"), "Shell migration script should declare bash");
+                AssertContains("ALTER TABLE captains ADD COLUMN model TEXT;", contents, "Shell script should add captains.model");
+                AssertContains("ALTER TABLE missions ADD COLUMN total_runtime_ms INTEGER;", contents, "Shell script should add SQLite missions.total_runtime_ms");
+                AssertContains("ALTER TABLE missions ADD COLUMN total_runtime_ms BIGINT;", contents, "Shell script should add BIGINT mission runtime columns");
+                AssertContains("ALTER TABLE captains ADD model NVARCHAR(MAX) NULL;", contents, "Shell script should include SQL Server captain model SQL");
+                AssertContains("ALTER TABLE missions ADD total_runtime_ms BIGINT NULL;", contents, "Shell script should include SQL Server mission runtime SQL");
+                AssertContains("VALUES (26, 'Add model to captains'", contents, "Shell script should record migration 26");
+                AssertContains("VALUES (27, 'Add total_runtime_ms to missions'", contents, "Shell script should record migration 27");
+            });
+
+            await RunTest("Migration script batch includes v0.5.0 backend statements", async () =>
+            {
+                string scriptPath = Path.Combine(GetRepositoryRoot(), "migrations", "migrate_v0.4.0_to_v0.5.0.bat");
+                AssertTrue(File.Exists(scriptPath), "Batch migration script should exist");
+
+                string contents = await File.ReadAllTextAsync(scriptPath).ConfigureAwait(false);
+                AssertTrue(contents.StartsWith("@echo off"), "Batch migration script should start with @echo off");
+                AssertContains("sqlite3 \"!DB_PATH!\" \"ALTER TABLE captains ADD COLUMN model TEXT;\"", contents, "Batch script should add captains.model");
+                AssertContains("sqlite3 \"!DB_PATH!\" \"ALTER TABLE missions ADD COLUMN total_runtime_ms INTEGER;\"", contents, "Batch script should add SQLite missions.total_runtime_ms");
+                AssertContains("echo ALTER TABLE missions ADD COLUMN total_runtime_ms BIGINT;", contents, "Batch script should emit BIGINT mission runtime SQL");
+                AssertContains("echo ALTER TABLE captains ADD model NVARCHAR(MAX^) NULL;", contents, "Batch script should include SQL Server captain model SQL");
+                AssertContains("echo ALTER TABLE missions ADD total_runtime_ms BIGINT NULL;", contents, "Batch script should include SQL Server mission runtime SQL");
+                AssertContains("VALUES (26, 'Add model to captains'", contents, "Batch script should record migration 26");
+                AssertContains("VALUES (27, 'Add total_runtime_ms to missions'", contents, "Batch script should record migration 27");
+            });
+        }
+
+        private static string GetRepositoryRoot()
+        {
+            return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
         }
     }
 }

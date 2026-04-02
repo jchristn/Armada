@@ -370,16 +370,24 @@ namespace Armada.Test.Database
             DatabaseFixture fixture = new DatabaseFixture(_Driver, _NoCleanup);
             try
             {
-                (TenantMetadata tenant, UserMaster user, _, _, _, Captain captain, _, _, _, _, _, _) = await SeedOperationalGraphAsync(fixture, token).ConfigureAwait(false);
+                TenantMetadata tenant = await fixture.CreateTenantAsync("operational-tenant", token: token).ConfigureAwait(false);
+                UserMaster user = await fixture.CreateUserAsync(tenant.Id, "operational-user", token: token).ConfigureAwait(false);
+                Captain captain = await fixture.CreateCaptainAsync(tenant.Id, user.Id, "operational-captain", token, model: "gpt-5.4").ConfigureAwait(false);
                 Captain? read = await _Driver.Captains.ReadAsync(captain.Id, token).ConfigureAwait(false);
                 read = DatabaseAssert.NotNull(read, "Captain read returned null");
                 DatabaseAssert.Equal(tenant.Id, read.TenantId, "Captain.TenantId");
                 DatabaseAssert.Equal(user.Id, read.UserId, "Captain.UserId");
                 DatabaseAssert.Equal(captain.Name, read.Name, "Captain.Name");
+                DatabaseAssert.Equal("gpt-5.4", read.Model, "Captain.Model");
 
                 read.RecoveryAttempts = 2;
-                Captain updated = await _Driver.Captains.UpdateAsync(read, token).ConfigureAwait(false);
-                DatabaseAssert.Equal(2, updated.RecoveryAttempts, "Captain.RecoveryAttempts");
+                read.Model = "gpt-5.4-mini";
+                await _Driver.Captains.UpdateAsync(read, token).ConfigureAwait(false);
+
+                Captain? reread = await _Driver.Captains.ReadAsync(captain.Id, token).ConfigureAwait(false);
+                reread = DatabaseAssert.NotNull(reread, "Captain reread returned null");
+                DatabaseAssert.Equal(2, reread.RecoveryAttempts, "Captain.RecoveryAttempts");
+                DatabaseAssert.Equal("gpt-5.4-mini", reread.Model, "Captain.Model after update");
             }
             finally
             {
@@ -413,18 +421,30 @@ namespace Armada.Test.Database
             DatabaseFixture fixture = new DatabaseFixture(_Driver, _NoCleanup);
             try
             {
-                (_, _, _, _, Vessel vessel, Captain captain, Voyage voyage, Mission mission, _, _, _, _) = await SeedOperationalGraphAsync(fixture, token).ConfigureAwait(false);
+                TenantMetadata tenant = await fixture.CreateTenantAsync("operational-tenant", token: token).ConfigureAwait(false);
+                UserMaster user = await fixture.CreateUserAsync(tenant.Id, "operational-user", token: token).ConfigureAwait(false);
+                Fleet fleet = await fixture.CreateFleetAsync(tenant.Id, user.Id, "operational-fleet", token).ConfigureAwait(false);
+                Vessel vessel = await fixture.CreateVesselAsync(tenant.Id, user.Id, fleet.Id, "operational-vessel", token).ConfigureAwait(false);
+                Captain captain = await fixture.CreateCaptainAsync(tenant.Id, user.Id, "operational-captain", token).ConfigureAwait(false);
+                Voyage voyage = await fixture.CreateVoyageAsync(tenant.Id, user.Id, "operational-voyage", token).ConfigureAwait(false);
+                Mission mission = await fixture.CreateMissionAsync(tenant.Id, user.Id, voyage.Id, vessel.Id, captain.Id, "operational-mission", token, totalRuntimeMs: 9000).ConfigureAwait(false);
                 Mission? read = await _Driver.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);
                 read = DatabaseAssert.NotNull(read, "Mission read returned null");
                 DatabaseAssert.Equal(vessel.Id, read.VesselId, "Mission.VesselId");
                 DatabaseAssert.Equal(captain.Id, read.CaptainId, "Mission.CaptainId");
                 DatabaseAssert.Equal(voyage.Id, read.VoyageId, "Mission.VoyageId");
+                DatabaseAssert.Equal(9000L, read.TotalRuntimeMs, "Mission.TotalRuntimeMs");
 
                 read.Status = MissionStatusEnum.InProgress;
                 read.Priority = 3;
-                Mission updated = await _Driver.Missions.UpdateAsync(read, token).ConfigureAwait(false);
-                DatabaseAssert.Equal(MissionStatusEnum.InProgress, updated.Status, "Mission.Status");
-                DatabaseAssert.Equal(3, updated.Priority, "Mission.Priority");
+                read.TotalRuntimeMs = 12000;
+                await _Driver.Missions.UpdateAsync(read, token).ConfigureAwait(false);
+
+                Mission? reread = await _Driver.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);
+                reread = DatabaseAssert.NotNull(reread, "Mission reread returned null");
+                DatabaseAssert.Equal(MissionStatusEnum.InProgress, reread.Status, "Mission.Status");
+                DatabaseAssert.Equal(3, reread.Priority, "Mission.Priority");
+                DatabaseAssert.Equal(12000L, reread.TotalRuntimeMs, "Mission.TotalRuntimeMs after update");
             }
             finally
             {
