@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { listVessels, listPipelines, createVoyage } from '../api/client';
 import type { Vessel, Pipeline } from '../types/models';
@@ -38,7 +38,6 @@ export default function Dispatch() {
   const [vesselId, setVesselId] = useState('');
   const [prompt, setPrompt] = useState('');
   const [priority, setPriority] = useState(100);
-  const [parsedTasks, setParsedTasks] = useState<string[]>([]);
   const [dispatching, setDispatching] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
 
@@ -52,22 +51,9 @@ export default function Dispatch() {
     });
   }, []);
 
-  const handlePromptChange = useCallback(
-    (value: string) => {
-      setPrompt(value);
-      const pipelineObj = pipelines.find((p) => p.name === selectedPipeline);
-      const isMultiStage = pipelineObj != null && pipelineObj.stages.length > 1;
-      if (isMultiStage) {
-        setParsedTasks([]);
-      } else {
-        const parsed = parseTasks(value);
-        const hasNumberedList = /(?:^|\n)\s*\d+\.\s+/.test(value);
-        const hasSemicolons = value.includes(';');
-        setParsedTasks((hasNumberedList || hasSemicolons) && parsed.length > 1 ? parsed : []);
-      }
-    },
-    [pipelines, selectedPipeline],
-  );
+  const handlePromptChange = (value: string) => {
+    setPrompt(value);
+  };
 
   const handleDispatch = async () => {
     if (!prompt.trim()) return;
@@ -83,12 +69,7 @@ export default function Dispatch() {
     if (isMultiStage) {
       tasks = [prompt.trim()];
     } else {
-      let parsed = parsedTasks;
-      if (!parsed.length) {
-        parsed = parseTasks(prompt);
-        setParsedTasks(parsed);
-      }
-      tasks = parsed;
+      tasks = parseTasks(prompt);
     }
     if (!tasks.length) return;
 
@@ -113,7 +94,6 @@ export default function Dispatch() {
         : `${missions.length} mission${missions.length !== 1 ? 's' : ''}`;
       setResult({ ok: true, message: `Dispatched voyage with ${missionCount}` });
       setPrompt('');
-      setParsedTasks([]);
       setTimeout(() => {
         navigate(`/voyages/${voyage.id}`);
       }, 1500);
