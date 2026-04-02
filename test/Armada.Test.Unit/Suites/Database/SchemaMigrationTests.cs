@@ -69,7 +69,32 @@ namespace Armada.Test.Unit.Suites.Database
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
                     int version = await testDb.Driver.GetSchemaVersionAsync();
-                    AssertTrue(version >= 1, "Schema version should be at least 1 after initialization");
+                    AssertTrue(version >= 27, "Schema version should include captain model and mission runtime migrations");
+                }
+            });
+
+            await RunTest("InitializeAsync adds captain model and mission runtime columns", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    using (SqliteConnection conn = new SqliteConnection(testDb.ConnectionString))
+                    {
+                        await conn.OpenAsync();
+
+                        using (SqliteCommand captainCmd = conn.CreateCommand())
+                        {
+                            captainCmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info('captains') WHERE name = 'model';";
+                            object? result = await captainCmd.ExecuteScalarAsync();
+                            AssertEqual(1L, Convert.ToInt64(result));
+                        }
+
+                        using (SqliteCommand missionCmd = conn.CreateCommand())
+                        {
+                            missionCmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info('missions') WHERE name = 'total_runtime_ms';";
+                            object? result = await missionCmd.ExecuteScalarAsync();
+                            AssertEqual(1L, Convert.ToInt64(result));
+                        }
+                    }
                 }
             });
 

@@ -95,12 +95,13 @@ namespace Armada.Test.Database
             return vessel;
         }
 
-        public async Task<Captain> CreateCaptainAsync(string tenantId, string userId, string namePrefix, CancellationToken token = default)
+        public async Task<Captain> CreateCaptainAsync(string tenantId, string userId, string namePrefix, CancellationToken token = default, string? model = null)
         {
             Captain captain = new Captain(namePrefix + "-" + Token(), AgentRuntimeEnum.Codex)
             {
                 TenantId = tenantId,
                 UserId = userId,
+                Model = model,
                 State = CaptainStateEnum.Idle
             };
 
@@ -123,7 +124,7 @@ namespace Armada.Test.Database
             return voyage;
         }
 
-        public async Task<Mission> CreateMissionAsync(string tenantId, string userId, string voyageId, string vesselId, string captainId, string titlePrefix, CancellationToken token = default)
+        public async Task<Mission> CreateMissionAsync(string tenantId, string userId, string voyageId, string vesselId, string captainId, string titlePrefix, CancellationToken token = default, long? totalRuntimeMs = null)
         {
             Mission mission = new Mission(titlePrefix + "-" + Token(), "Mission description")
             {
@@ -134,7 +135,8 @@ namespace Armada.Test.Database
                 CaptainId = captainId,
                 Status = MissionStatusEnum.Pending,
                 Priority = 10,
-                BranchName = "feature/" + Token()
+                BranchName = "feature/" + Token(),
+                TotalRuntimeMs = totalRuntimeMs
             };
 
             await _Driver.Missions.CreateAsync(mission, token).ConfigureAwait(false);

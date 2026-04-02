@@ -53,6 +53,13 @@ namespace Armada.Test.Database
             {
                 DatabaseAssert.True(await IndexExistsAsync(conn, indexName, token).ConfigureAwait(false), "Missing index " + indexName);
             }
+
+            if (_Settings.Type == DatabaseTypeEnum.Sqlite || _Settings.Type == DatabaseTypeEnum.SqlServer)
+            {
+                DatabaseAssert.True(await GetMaxSchemaVersionAsync(conn, token).ConfigureAwait(false) >= 27, "Expected schema version >= 27 for captain model and mission runtime migrations");
+                await AssertColumnAsync(conn, "captains", "model", token).ConfigureAwait(false);
+                await AssertColumnAsync(conn, "missions", "total_runtime_ms", token).ConfigureAwait(false);
+            }
         }
 
         private DbConnection CreateConnection()

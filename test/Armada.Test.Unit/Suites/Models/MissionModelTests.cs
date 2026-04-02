@@ -38,6 +38,7 @@ namespace Armada.Test.Unit.Suites.Models
                 AssertNull(mission.ParentMissionId);
                 AssertNull(mission.BranchName);
                 AssertNull(mission.PrUrl);
+                AssertNull(mission.TotalRuntimeMs);
                 AssertNull(mission.StartedUtc);
                 AssertNull(mission.CompletedUtc);
             });
@@ -62,6 +63,7 @@ namespace Armada.Test.Unit.Suites.Models
                 mission.VoyageId = "vyg_test";
                 mission.VesselId = "vsl_test";
                 mission.CaptainId = "cpt_test";
+                mission.TotalRuntimeMs = 1234;
 
                 string json = JsonSerializer.Serialize(mission);
                 Mission deserialized = JsonSerializer.Deserialize<Mission>(json)!;
@@ -71,6 +73,7 @@ namespace Armada.Test.Unit.Suites.Models
                 AssertEqual(mission.Status, deserialized.Status);
                 AssertEqual(mission.Priority, deserialized.Priority);
                 AssertEqual(mission.VoyageId, deserialized.VoyageId);
+                AssertEqual(mission.TotalRuntimeMs, deserialized.TotalRuntimeMs);
             });
 
             await RunTest("Mission StatusEnum SerializesAsString", () =>

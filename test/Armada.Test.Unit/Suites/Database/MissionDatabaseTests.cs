@@ -123,6 +123,7 @@ namespace Armada.Test.Unit.Suites.Database
                     mission.VesselId = vessel.Id;
                     mission.VoyageId = voyage.Id;
                     mission.Priority = 10;
+                    mission.TotalRuntimeMs = 1500;
                     await db.Missions.CreateAsync(mission);
 
                     Mission? result = await db.Missions.ReadAsync(mission.Id);
@@ -134,6 +135,7 @@ namespace Armada.Test.Unit.Suites.Database
                     AssertEqual(voyage.Id, result.VoyageId);
                     AssertEqual(MissionStatusEnum.Pending, result.Status);
                     AssertEqual(10, result.Priority);
+                    AssertEqual(1500L, result.TotalRuntimeMs);
                 }
             });
         }
@@ -164,6 +166,7 @@ namespace Armada.Test.Unit.Suites.Database
                     mission.Priority = 1;
                     mission.CaptainId = captain.Id;
                     mission.BranchName = "feature/updated";
+                    mission.TotalRuntimeMs = 2500;
                     mission.StartedUtc = DateTime.UtcNow;
                     await db.Missions.UpdateAsync(mission);
 
@@ -176,6 +179,7 @@ namespace Armada.Test.Unit.Suites.Database
                     AssertEqual(1, result.Priority);
                     AssertEqual(captain.Id, result.CaptainId);
                     AssertEqual("feature/updated", result.BranchName);
+                    AssertEqual(2500L, result.TotalRuntimeMs);
                     AssertNotNull(result.StartedUtc);
                 }
             });
