@@ -383,6 +383,7 @@ namespace Armada.Core.Database.SqlServer
             captain.UserId = NullableString(reader["user_id"]);
             captain.Name = reader["name"].ToString()!;
             captain.Runtime = Enum.Parse<AgentRuntimeEnum>(reader["runtime"].ToString()!);
+            try { captain.Model = NullableString(reader["model"]); } catch { }
             captain.SystemInstructions = NullableString(reader["system_instructions"]);
             captain.State = Enum.Parse<CaptainStateEnum>(reader["state"].ToString()!);
             captain.CurrentMissionId = NullableString(reader["current_mission_id"]);
@@ -600,4 +601,3 @@ namespace Armada.Core.Database.SqlServer
         #endregion
     }
 }
-

@@ -740,6 +740,9 @@ namespace Armada.Core.Database.Sqlite.Queries
                 ),
                 new SchemaMigration(25, "Add agent_output to missions for capturing stdout",
                     @"ALTER TABLE missions ADD COLUMN agent_output TEXT;"
+                ),
+                new SchemaMigration(26, "Add model column to captains table",
+                    @"ALTER TABLE captains ADD COLUMN model TEXT NULL;"
                 )
             };
         }
