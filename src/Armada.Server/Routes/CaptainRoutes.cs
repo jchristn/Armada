@@ -25,6 +25,7 @@ namespace Armada.Server.Routes
         private readonly AgentRuntimeFactory _runtimeFactory;
         private readonly Func<string, string, string?, string?, string?, string?, string?, string?, Task> _emitEvent;
         private readonly JsonSerializerOptions _jsonOptions;
+        private readonly TimeSpan _modelValidationTimeout = TimeSpan.FromSeconds(5);
 
         /// <summary>
         /// Instantiate.
@@ -69,6 +70,182 @@ namespace Armada.Server.Routes
                 lines.Add(line);
             }
             return lines.ToArray();
+        }
+
+        private async Task<string?> ValidateCaptainModelAsync(AgentRuntimeEnum runtimeType, string? model, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(model))
+                return null;
+
+            string validationDirectory = Path.Combine(Path.GetTempPath(), "armada-model-validation-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(validationDirectory);
+
+            Armada.Runtimes.Interfaces.IAgentRuntime runtime;
+            try
+            {
+                runtime = _runtimeFactory.Create(runtimeType);
+            }
+            catch (Exception ex)
+            {
+                try { Directory.Delete(validationDirectory, true); } catch { }
+                return "Unable to create runtime " + runtimeType + " for model validation: " + ex.Message;
+            }
+
+            object outputLock = new object();
+            System.Text.StringBuilder output = new System.Text.StringBuilder();
+            TaskCompletionSource<int?> exitSource = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            runtime.OnOutputReceived += (processId, line) =>
+            {
+                lock (outputLock)
+                {
+                    if (output.Length < 4096)
+                    {
+                        output.AppendLine(line);
+                    }
+                }
+            };
+            runtime.OnProcessExited += (processId, exitCode) => exitSource.TrySetResult(exitCode);
+
+            int? processId = null;
+
+            try
+            {
+                await InitializeValidationWorkspaceAsync(runtimeType, validationDirectory, token).ConfigureAwait(false);
+
+                processId = await runtime.StartAsync(
+                    validationDirectory,
+                    "Respond with the single word OK.",
+                    model: model,
+                    token: token).ConfigureAwait(false);
+
+                Task completedTask = await Task.WhenAny(
+                    exitSource.Task,
+                    Task.Delay(_modelValidationTimeout, token)).ConfigureAwait(false);
+
+                if (completedTask == exitSource.Task)
+                {
+                    int? exitCode = await exitSource.Task.ConfigureAwait(false);
+                    if (!exitCode.HasValue || exitCode.Value == 0)
+                    {
+                        return null;
+                    }
+
+                    string? details;
+                    lock (outputLock)
+                    {
+                        details = ExtractModelValidationError(output.ToString());
+                    }
+
+                    if (!String.IsNullOrEmpty(details))
+                    {
+                        return "Model '" + model + "' failed validation for runtime " + runtimeType + ": " + details;
+                    }
+
+                    return "Model '" + model + "' failed validation for runtime " + runtimeType + " with exit code " + exitCode.Value + ".";
+                }
+
+                token.ThrowIfCancellationRequested();
+
+                string? timeoutDetails;
+                lock (outputLock)
+                {
+                    timeoutDetails = ExtractModelValidationError(output.ToString());
+                }
+
+                string timeoutMessage =
+                    "Model '" + model + "' failed validation for runtime " + runtimeType +
+                    ": validation timed out after " + _modelValidationTimeout.TotalSeconds.ToString("0") + " seconds.";
+
+                if (!String.IsNullOrEmpty(timeoutDetails))
+                {
+                    timeoutMessage += " " + timeoutDetails;
+                }
+
+                return timeoutMessage;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                return "Model '" + model + "' failed validation for runtime " + runtimeType + ": " + ex.Message;
+            }
+            finally
+            {
+                if (processId.HasValue)
+                {
+                    try
+                    {
+                        await runtime.StopAsync(processId.Value, token).ConfigureAwait(false);
+                    }
+                    catch { }
+                }
+
+                try { Directory.Delete(validationDirectory, true); } catch { }
+            }
+        }
+
+        private static string? ExtractModelValidationError(string output)
+        {
+            if (String.IsNullOrWhiteSpace(output))
+                return null;
+
+            string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i].Trim();
+                if (String.IsNullOrEmpty(line))
+                    continue;
+
+                if (line.IndexOf("error", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    line.IndexOf("invalid", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    line.IndexOf("unknown", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    line.IndexOf("unavailable", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    line.IndexOf("not found", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return line;
+                }
+            }
+
+            return lines[lines.Length - 1].Trim();
+        }
+
+        private static async Task InitializeValidationWorkspaceAsync(AgentRuntimeEnum runtimeType, string workingDirectory, CancellationToken token)
+        {
+            if (runtimeType != AgentRuntimeEnum.Codex)
+                return;
+
+            ProcessStartInfo startInfo = new ProcessStartInfo
+            {
+                FileName = "git",
+                WorkingDirectory = workingDirectory,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            startInfo.ArgumentList.Add("init");
+            startInfo.ArgumentList.Add("--quiet");
+
+            using (Process process = new Process { StartInfo = startInfo })
+            {
+                if (!process.Start())
+                    throw new InvalidOperationException("Failed to initialize temporary validation repository.");
+
+                await process.WaitForExitAsync(token).ConfigureAwait(false);
+                if (process.ExitCode == 0)
+                    return;
+
+                string stderr = await process.StandardError.ReadToEndAsync().ConfigureAwait(false);
+                string stdout = await process.StandardOutput.ReadToEndAsync().ConfigureAwait(false);
+                string details = !String.IsNullOrWhiteSpace(stderr) ? stderr.Trim() : stdout.Trim();
+                if (String.IsNullOrWhiteSpace(details))
+                    details = "git init exited with code " + process.ExitCode + ".";
+
+                throw new InvalidOperationException("Failed to initialize temporary validation repository: " + details);
+            }
         }
 
         /// <summary>
@@ -145,6 +322,15 @@ namespace Armada.Server.Routes
                 }
                 Captain captain = JsonSerializer.Deserialize<Captain>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Captain.");
+                if (captain.Model != null)
+                {
+                    string? validationError = await ValidateCaptainModelAsync(captain.Runtime, captain.Model).ConfigureAwait(false);
+                    if (!String.IsNullOrEmpty(validationError))
+                    {
+                        req.Http.Response.StatusCode = 400;
+                        return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = validationError };
+                    }
+                }
                 captain.TenantId = ctx.TenantId;
                 captain.UserId = ctx.UserId;
                 captain = await _database.Captains.CreateAsync(captain).ConfigureAwait(false);
@@ -202,6 +388,15 @@ namespace Armada.Server.Routes
                 if (existing == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Captain not found" }; }
                 Captain updated = JsonSerializer.Deserialize<Captain>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Captain.");
+                if (updated.Model != null)
+                {
+                    string? validationError = await ValidateCaptainModelAsync(updated.Runtime, updated.Model).ConfigureAwait(false);
+                    if (!String.IsNullOrEmpty(validationError))
+                    {
+                        req.Http.Response.StatusCode = 400;
+                        return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = validationError };
+                    }
+                }
                 updated.Id = id;
                 updated.State = existing.State;
                 updated.CurrentMissionId = existing.CurrentMissionId;
