@@ -216,6 +216,51 @@ namespace Armada.Test.Unit.Suites.Services
                 }
             });
 
+            await RunTest("Pending mission on cancelled voyage is cancelled instead of assigned", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    StubGitService git = new StubGitService();
+                    IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
+                    ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
+                    MissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService, git: git);
+
+                    Vessel vessel = new Vessel("cancelled-voyage-vessel", "https://github.com/test/repo.git");
+                    vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
+                    vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
+                    vessel.DefaultBranch = "main";
+                    vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    Captain captain = new Captain("cancelled-voyage-captain");
+                    captain.State = CaptainStateEnum.Idle;
+                    captain = await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+
+                    Voyage voyage = new Voyage("cancelled-voyage");
+                    voyage.Status = VoyageStatusEnum.Cancelled;
+                    voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
+
+                    Mission mission = new Mission("Cancelled child mission");
+                    mission.VoyageId = voyage.Id;
+                    mission.VesselId = vessel.Id;
+                    mission.Status = MissionStatusEnum.Pending;
+                    mission = await testDb.Driver.Missions.CreateAsync(mission).ConfigureAwait(false);
+
+                    bool assigned = await missionService.TryAssignAsync(mission, vessel).ConfigureAwait(false);
+                    AssertFalse(assigned, "Mission should not be assigned when its voyage is already cancelled");
+
+                    Mission? updatedMission = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    Captain? updatedCaptain = await testDb.Driver.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
+
+                    AssertNotNull(updatedMission, "Mission should still exist");
+                    AssertNotNull(updatedCaptain, "Captain should still exist");
+                    AssertEqual(MissionStatusEnum.Cancelled, updatedMission!.Status, "Pending mission should be cancelled when its voyage is terminal");
+                    AssertContains("Parent voyage", updatedMission.FailureReason ?? String.Empty, "Mission should record why assignment was skipped");
+                    AssertEqual(CaptainStateEnum.Idle, updatedCaptain!.State, "Captain should remain idle when assignment is skipped");
+                }
+            });
+
             await RunTest("Dependent mission waits for pipeline handoff when dependency is WorkProduced", async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())

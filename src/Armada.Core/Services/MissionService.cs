@@ -168,6 +168,30 @@ namespace Armada.Core.Services
                     return false;
                 }
 
+                if (!String.IsNullOrEmpty(mission.VoyageId))
+                {
+                    Voyage? voyage = await _Database.Voyages.ReadAsync(mission.VoyageId, token).ConfigureAwait(false);
+                    if (voyage != null &&
+                        (voyage.Status == VoyageStatusEnum.Cancelled ||
+                         voyage.Status == VoyageStatusEnum.Failed ||
+                         voyage.Status == VoyageStatusEnum.Complete))
+                    {
+                        mission.Status = MissionStatusEnum.Cancelled;
+                        mission.ProcessId = null;
+                        mission.CompletedUtc = DateTime.UtcNow;
+                        mission.LastUpdateUtc = DateTime.UtcNow;
+                        if (String.IsNullOrWhiteSpace(mission.FailureReason))
+                        {
+                            mission.FailureReason = "Parent voyage " + voyage.Id + " is " + voyage.Status + ".";
+                        }
+
+                        await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                        _Logging.Info(_Header + "mission " + mission.Id + " belongs to terminal voyage " + voyage.Id +
+                            " (" + voyage.Status + ") -- cancelling instead of assigning");
+                        return false;
+                    }
+                }
+
             // Check pipeline dependency -- skip if the mission depends on another that hasn't completed
             // or if the downstream handoff has not yet populated the mission's branch/context.
             if (!String.IsNullOrEmpty(mission.DependsOnMissionId))
