@@ -589,6 +589,92 @@ namespace Armada.Test.Unit.Suites.Services
                 }
             });
 
+            await RunTest("GenerateClaudeMdAsync strips stale Armada mission blocks from existing instructions", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    StubGitService git = new StubGitService();
+                    MissionService service = CreateMissionService(logging, testDb.Driver, settings, git);
+
+                    string tempDir = Path.Combine(Path.GetTempPath(), "armada_prompt_test_" + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(tempDir);
+
+                    try
+                    {
+                        string existingInstructions =
+                            "## Project Context\n" +
+                            "Stable project guidance.\n" +
+                            "\n" +
+                            "## Code Style\n" +
+                            "Use explicit types.\n" +
+                            "\n" +
+                            "# Mission Instructions\n" +
+                            "\n" +
+                            "## Mission\n" +
+                            "- **Title:** Stale mission title\n" +
+                            "\n" +
+                            "[ARMADA:MISSION] Old task\n";
+                        await File.WriteAllTextAsync(Path.Combine(tempDir, "CLAUDE.md"), existingInstructions);
+
+                        Vessel vessel = new Vessel("ExistingInstructionsVessel", "https://github.com/test/repo");
+                        Mission mission = new Mission("Fresh mission", "Fresh description.");
+
+                        await service.GenerateClaudeMdAsync(tempDir, mission, vessel);
+
+                        string content = await File.ReadAllTextAsync(Path.Combine(tempDir, "CLAUDE.md"));
+                        AssertContains("## Existing Project Instructions", content);
+                        AssertContains("Stable project guidance.", content);
+                        AssertFalse(content.Contains("Stale mission title"), "Generated mission blocks from the existing file should be stripped");
+                        AssertTrue(
+                            content.IndexOf("## Existing Project Instructions", StringComparison.Ordinal) ==
+                            content.LastIndexOf("## Existing Project Instructions", StringComparison.Ordinal),
+                            "Existing project instructions should be wrapped only once");
+                    }
+                    finally
+                    {
+                        try { Directory.Delete(tempDir, true); } catch { }
+                    }
+                }
+            });
+
+            await RunTest("GenerateClaudeMdAsync omits empty existing instruction wrapper after sanitization", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    StubGitService git = new StubGitService();
+                    MissionService service = CreateMissionService(logging, testDb.Driver, settings, git);
+
+                    string tempDir = Path.Combine(Path.GetTempPath(), "armada_prompt_test_" + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(tempDir);
+
+                    try
+                    {
+                        string existingInstructions =
+                            "# Mission Instructions\n" +
+                            "\n" +
+                            "## Mission\n" +
+                            "- **Title:** Generated only\n";
+                        await File.WriteAllTextAsync(Path.Combine(tempDir, "CLAUDE.md"), existingInstructions);
+
+                        Vessel vessel = new Vessel("GeneratedOnlyInstructionsVessel", "https://github.com/test/repo");
+                        Mission mission = new Mission("Fresh mission", "Fresh description.");
+
+                        await service.GenerateClaudeMdAsync(tempDir, mission, vessel);
+
+                        string content = await File.ReadAllTextAsync(Path.Combine(tempDir, "CLAUDE.md"));
+                        AssertFalse(content.Contains("## Existing Project Instructions"), "Empty sanitized instructions should not be wrapped");
+                    }
+                    finally
+                    {
+                        try { Directory.Delete(tempDir, true); } catch { }
+                    }
+                }
+            });
+
             await RunTest("Shared launch prompt builder produces compact prompt and defers to runtime instruction file", async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())

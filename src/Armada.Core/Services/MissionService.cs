@@ -794,8 +794,18 @@ namespace Armada.Core.Services
             if (File.Exists(instructionsPath))
             {
                 string existing = await File.ReadAllTextAsync(instructionsPath).ConfigureAwait(false);
-                templateParams["ExistingClaudeMd"] = existing;
-                content += await ResolveSectionAsync("mission.existing_instructions_wrapper", templateParams, token).ConfigureAwait(false);
+                string sanitizedExisting = SanitizeExistingInstructions(existing);
+
+                if (!String.IsNullOrWhiteSpace(sanitizedExisting))
+                {
+                    if (!String.Equals(existing, sanitizedExisting, StringComparison.Ordinal))
+                    {
+                        _Logging.Info(_Header + "sanitized generated mission sections from existing instructions at " + instructionsPath);
+                    }
+
+                    templateParams["ExistingClaudeMd"] = sanitizedExisting;
+                    content += await ResolveSectionAsync("mission.existing_instructions_wrapper", templateParams, token).ConfigureAwait(false);
+                }
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(instructionsPath)!);
@@ -851,6 +861,29 @@ namespace Armada.Core.Services
         private async Task<string> ResolvePersonaPromptAsync(string? persona, Dictionary<string, string> templateParams, CancellationToken token)
         {
             return await MissionPromptBuilder.ResolvePersonaPromptAsync(persona, templateParams, _PromptTemplates, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Preserve only stable project instructions from an existing runtime instruction file.
+        /// Generated Armada mission blocks are stripped to avoid recursively injecting stale
+        /// mission objectives into future captain prompts.
+        /// </summary>
+        private static string SanitizeExistingInstructions(string existing)
+        {
+            if (String.IsNullOrWhiteSpace(existing)) return String.Empty;
+
+            int generatedSectionIndex = existing.IndexOf("# Mission Instructions", StringComparison.Ordinal);
+            if (generatedSectionIndex < 0)
+            {
+                generatedSectionIndex = existing.IndexOf("## Mission Instructions", StringComparison.Ordinal);
+            }
+
+            if (generatedSectionIndex >= 0)
+            {
+                return existing.Substring(0, generatedSectionIndex).TrimEnd();
+            }
+
+            return existing.TrimEnd();
         }
 
         /// <summary>
@@ -1549,16 +1582,50 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrWhiteSpace(source)) return;
 
-            foreach (string rawLine in source.Split('\n'))
+            string[] lines = source.Split('\n');
+
+            for (int i = 0; i < lines.Length; i++)
             {
-                string line = rawLine.Trim();
+                string line = lines[i].Trim();
                 if (String.IsNullOrEmpty(line)) continue;
                 if (IsAgentTelemetryLine(line)) continue;
                 if (IsArchitectSummaryPreambleOrFooter(line)) continue;
 
                 if (TryParseArchitectSummaryLine(line, out string? title, out string? description))
                 {
-                    TryAddParsedArchitectMission(results, seenTitles, title, description);
+                    List<string> descriptionLines = new List<string>();
+                    if (!String.IsNullOrWhiteSpace(description))
+                    {
+                        descriptionLines.Add(description);
+                    }
+
+                    int nextIndex = i + 1;
+                    while (nextIndex < lines.Length)
+                    {
+                        string nextLine = lines[nextIndex].Trim();
+                        if (String.IsNullOrEmpty(nextLine))
+                        {
+                            nextIndex++;
+                            continue;
+                        }
+
+                        if (IsAgentTelemetryLine(nextLine) || IsArchitectSummaryPreambleOrFooter(nextLine))
+                        {
+                            nextIndex++;
+                            continue;
+                        }
+
+                        if (TryParseArchitectSummaryLine(nextLine, out _, out _))
+                        {
+                            break;
+                        }
+
+                        descriptionLines.Add(nextLine);
+                        nextIndex++;
+                    }
+
+                    TryAddParsedArchitectMission(results, seenTitles, title, String.Join("\n", descriptionLines));
+                    i = nextIndex - 1;
                 }
             }
         }
@@ -1637,16 +1704,16 @@ namespace Armada.Core.Services
             foreach (string rawLine in description.Replace("\r\n", "\n").Split('\n'))
             {
                 string trimmed = rawLine.Trim();
-                System.Text.RegularExpressions.Match dependencyMatch =
-                    System.Text.RegularExpressions.Regex.Match(
-                        trimmed,
-                        @"^(?:[-*]\s*)?depends on:\s*(?<dependency>.+)$",
-                        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                if (dependencyMatch.Success)
+                if (TryExtractArchitectDependency(trimmed, out string? dependencyCandidate, out string? remainingDescription))
                 {
                     if (String.IsNullOrWhiteSpace(dependencyReference))
                     {
-                        dependencyReference = NormalizeArchitectDependencyReference(dependencyMatch.Groups["dependency"].Value);
+                        dependencyReference = NormalizeArchitectDependencyReference(dependencyCandidate ?? String.Empty);
+                    }
+
+                    if (!String.IsNullOrWhiteSpace(remainingDescription))
+                    {
+                        keptLines.Add(remainingDescription);
                     }
 
                     continue;
@@ -1656,6 +1723,42 @@ namespace Armada.Core.Services
             }
 
             return (String.Join("\n", keptLines).Trim(), String.IsNullOrWhiteSpace(dependencyReference) ? null : dependencyReference);
+        }
+
+        private static bool TryExtractArchitectDependency(string line, out string? dependencyReference, out string? remainingDescription)
+        {
+            dependencyReference = null;
+            remainingDescription = null;
+
+            if (String.IsNullOrWhiteSpace(line)) return false;
+
+            string trimmed = line.Trim();
+            if (!trimmed.StartsWith("depends on", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            string remainder = trimmed.Substring("depends on".Length).TrimStart();
+            if (remainder.StartsWith(":", StringComparison.Ordinal))
+            {
+                remainder = remainder.Substring(1).TrimStart();
+            }
+
+            if (String.IsNullOrWhiteSpace(remainder)) return false;
+
+            int sentenceBoundary = remainder.IndexOf(". ", StringComparison.Ordinal);
+            if (sentenceBoundary >= 0)
+            {
+                dependencyReference = remainder.Substring(0, sentenceBoundary).Trim().TrimEnd('.');
+                remainingDescription = remainder.Substring(sentenceBoundary + 2).Trim();
+            }
+            else
+            {
+                dependencyReference = remainder.Trim().TrimEnd('.');
+                remainingDescription = "";
+            }
+
+            return !String.IsNullOrWhiteSpace(dependencyReference);
         }
 
         private static string NormalizeArchitectDependencyReference(string dependencyReference)
@@ -1710,8 +1813,21 @@ namespace Armada.Core.Services
 
             if (String.IsNullOrWhiteSpace(line)) return false;
 
+            string trimmedLine = line.Trim();
+            System.Text.RegularExpressions.Match missionHeadingMatch =
+                System.Text.RegularExpressions.Regex.Match(
+                    trimmedLine,
+                    @"^(?:\*\*)?Mission\s+\d+\s*:\s*(?<title>.+?)(?:\*\*)?(?<tail>.*)$",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (missionHeadingMatch.Success)
+            {
+                title = TrimArchitectSummaryMetadata(missionHeadingMatch.Groups["title"].Value.Trim());
+                description = ParseArchitectSummaryTail(missionHeadingMatch.Groups["tail"].Value);
+                return !String.IsNullOrEmpty(title);
+            }
+
             System.Text.RegularExpressions.Match numberedMatch =
-                System.Text.RegularExpressions.Regex.Match(line.Trim(), @"^\d+\.\s+(?<rest>.+)$");
+                System.Text.RegularExpressions.Regex.Match(trimmedLine, @"^\d+\.\s+(?<rest>.+)$");
             if (!numberedMatch.Success) return false;
 
             string rest = numberedMatch.Groups["rest"].Value.Trim();

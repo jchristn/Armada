@@ -480,6 +480,111 @@ namespace Armada.Test.Unit.Suites.Services
                 }
             });
 
+            await RunTest("Architect markdown mission headings with multiline descriptions fan out cleanly", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    DirCreatingGitStub git = new DirCreatingGitStub();
+                    IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
+                    ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
+                    MissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService);
+                    captainService.OnLaunchAgent = (Captain c, Mission m, Dock d) => Task.FromResult(2600 + git.WorktreeCalls.Count);
+
+                    Vessel vessel = new Vessel("architect-markdown-vessel", "https://github.com/test/repo.git");
+                    vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
+                    vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
+                    vessel.DefaultBranch = "main";
+                    vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    Captain architectCaptain = new Captain("architect-markdown-captain");
+                    architectCaptain.State = CaptainStateEnum.Working;
+                    architectCaptain = await testDb.Driver.Captains.CreateAsync(architectCaptain).ConfigureAwait(false);
+
+                    Captain workerCaptain = new Captain("architect-markdown-worker");
+                    workerCaptain.State = CaptainStateEnum.Idle;
+                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+
+                    Voyage voyage = new Voyage("architect-markdown-voyage");
+                    voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
+
+                    Mission architect = new Mission("[Architect] Plan", "Break this down");
+                    architect.VesselId = vessel.Id;
+                    architect.VoyageId = voyage.Id;
+                    architect.CaptainId = architectCaptain.Id;
+                    architect.Persona = "Architect";
+                    architect.Status = MissionStatusEnum.InProgress;
+                    architect.BranchName = "armada/architect/markdown";
+                    architect = await testDb.Driver.Missions.CreateAsync(architect).ConfigureAwait(false);
+
+                    Dock architectDock = new Dock(vessel.Id);
+                    architectDock.CaptainId = architectCaptain.Id;
+                    architectDock.WorktreePath = Path.Combine(settings.DocksDirectory, vessel.Name, architect.Id);
+                    architectDock.BranchName = architect.BranchName;
+                    architectDock.Active = true;
+                    architectDock = await testDb.Driver.Docks.CreateAsync(architectDock).ConfigureAwait(false);
+                    architect.DockId = architectDock.Id;
+                    await testDb.Driver.Missions.UpdateAsync(architect).ConfigureAwait(false);
+
+                    Mission worker = new Mission("[Worker] Placeholder", "Initial worker");
+                    worker.VesselId = vessel.Id;
+                    worker.VoyageId = voyage.Id;
+                    worker.Persona = "Worker";
+                    worker.Status = MissionStatusEnum.Pending;
+                    worker.DependsOnMissionId = architect.Id;
+                    worker = await testDb.Driver.Missions.CreateAsync(worker).ConfigureAwait(false);
+
+                    Mission testEngineer = new Mission("[TestEngineer] Placeholder", "Initial tests");
+                    testEngineer.VesselId = vessel.Id;
+                    testEngineer.VoyageId = voyage.Id;
+                    testEngineer.Persona = "TestEngineer";
+                    testEngineer.Status = MissionStatusEnum.Pending;
+                    testEngineer.DependsOnMissionId = worker.Id;
+                    testEngineer = await testDb.Driver.Missions.CreateAsync(testEngineer).ConfigureAwait(false);
+
+                    Mission judge = new Mission("[Judge] Placeholder", "Initial review");
+                    judge.VesselId = vessel.Id;
+                    judge.VoyageId = voyage.Id;
+                    judge.Persona = "Judge";
+                    judge.Status = MissionStatusEnum.Pending;
+                    judge.DependsOnMissionId = testEngineer.Id;
+                    judge = await testDb.Driver.Missions.CreateAsync(judge).ConfigureAwait(false);
+
+                    architectCaptain.CurrentMissionId = architect.Id;
+                    architectCaptain.CurrentDockId = architectDock.Id;
+                    await testDb.Driver.Captains.UpdateAsync(architectCaptain).ConfigureAwait(false);
+
+                    missionService.OnGetMissionOutput = _ =>
+                        "Architect mission complete. Here is the summary of 2 missions decomposed:\n" +
+                        "**Mission 1: Core model and database groundwork** (9 files)\n" +
+                        "Add Captain.Model and Mission.TotalRuntimeMs across core models and baseline persistence.\n" +
+                        "**Mission 2: API exposure and validation** (6 files)\n" +
+                        "Depends on Mission 1. Expose the new fields through REST and MCP and validate configured captain models.\n";
+
+                    await missionService.HandleCompletionAsync(architectCaptain, architect.Id).ConfigureAwait(false);
+
+                    List<Mission> afterArchitect = await testDb.Driver.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false);
+                    List<Mission> workerMissions = afterArchitect.Where(m => String.Equals(m.Persona, "Worker", StringComparison.OrdinalIgnoreCase)).ToList();
+                    List<Mission> testMissions = afterArchitect.Where(m => String.Equals(m.Persona, "TestEngineer", StringComparison.OrdinalIgnoreCase)).ToList();
+                    List<Mission> judgeMissions = afterArchitect.Where(m => String.Equals(m.Persona, "Judge", StringComparison.OrdinalIgnoreCase)).ToList();
+
+                    AssertEqual(7, afterArchitect.Count, "Markdown architect summary should fan out two downstream chains");
+                    AssertEqual(2, workerMissions.Count, "Markdown architect summary should produce two worker missions");
+                    AssertEqual(2, testMissions.Count, "Markdown architect summary should produce two test missions");
+                    AssertEqual(2, judgeMissions.Count, "Markdown architect summary should produce two judge missions");
+
+                    Mission? secondWorker = workerMissions.FirstOrDefault(m =>
+                        (m.Description ?? String.Empty).Contains("Expose the new fields through REST and MCP", StringComparison.Ordinal));
+                    AssertNotNull(secondWorker, "Expected second markdown summary worker mission to exist");
+                    Mission? dependencyMission = afterArchitect.FirstOrDefault(m => m.Id == secondWorker!.DependsOnMissionId);
+                    AssertNotNull(dependencyMission, "Expected markdown summary dependency to resolve to an existing mission");
+                    AssertEqual("Judge", dependencyMission!.Persona, "Natural-language dependency sentence should point the second worker to the first chain terminal stage");
+                    AssertContains("Expose the new fields through REST and MCP", secondWorker.Description ?? String.Empty, "Trailing description after the dependency sentence should be preserved");
+                    AssertFalse((secondWorker.Description ?? String.Empty).StartsWith("Depends on", StringComparison.OrdinalIgnoreCase), "Dependency sentence should be removed from the worker description after parsing");
+                }
+            });
+
             await RunTest("Architect fan-out clones full downstream chain and lands only terminal stage", async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
