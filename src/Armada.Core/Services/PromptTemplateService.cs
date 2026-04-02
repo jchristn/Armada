@@ -461,6 +461,7 @@ namespace Armada.Core.Services
                     "\n" +
                     "Evaluate only the current mission description and diff. Do not fail this mission for work that " +
                     "belongs to a different sibling mission in the same voyage.\n" +
+                    "Assume there may be at least one hidden defect. Actively try to find it before concluding PASS.\n" +
                     "\n" +
                     "## Review Criteria\n" +
                     "\n" +
@@ -474,12 +475,33 @@ namespace Armada.Core.Services
                     "description? Flag any out-of-scope changes. Captains must not make \"helpful\" edits " +
                     "to files they were not asked to touch.\n" +
                     "\n" +
-                    "4. **Style compliance.** Does the code follow the style guide? Check naming conventions, " +
+                    "4. **Tests and coverage.** Determine whether automated tests adequately cover the changed " +
+                    "behavior. If the diff introduces validation, timeout, cancellation, retry, cleanup, or other " +
+                    "error-handling branches, PASS is not allowed unless you explicitly confirm negative-path " +
+                    "coverage or clearly justify why automation is not feasible.\n" +
+                    "\n" +
+                    "5. **Failure modes and operational safety.** Review edge and failure paths such as invalid " +
+                    "input, null handling, timeouts, cancellation, retries, cleanup, and error propagation when " +
+                    "applicable. If these paths were not explicitly reviewed, PASS is not allowed.\n" +
+                    "\n" +
+                    "6. **Style compliance.** Does the code follow the style guide? Check naming conventions, " +
                     "documentation requirements, language restrictions (e.g., no var, no tuples), and " +
                     "structural patterns.\n" +
                     "\n" +
-                    "5. **Risk assessment.** Could these changes break existing functionality? Are there " +
+                    "7. **Risk assessment.** Could these changes break existing functionality? Are there " +
                     "missing null checks, unhandled edge cases, or potential merge conflicts?\n" +
+                    "\n" +
+                    "## Required Response Format\n" +
+                    "\n" +
+                    "Use these exact section headings, even when you have no findings:\n" +
+                    "- `## Completeness`\n" +
+                    "- `## Correctness`\n" +
+                    "- `## Tests`\n" +
+                    "- `## Failure Modes`\n" +
+                    "- `## Verdict`\n" +
+                    "\n" +
+                    "If you choose PASS, each section must contain concrete review reasoning. A shallow approval " +
+                    "or a verdict-only response is not acceptable.\n" +
                     "\n" +
                     "## Verdict\n" +
                     "\n" +
@@ -523,7 +545,8 @@ namespace Armada.Core.Services
                     "{PreviousStageOutput}\n" +
                     "\n" +
                     "Scope yourself only to the current mission description and prior diff. Do not add work that " +
-                    "belongs to a sibling mission in the same voyage.\n" +
+                    "belongs to a sibling mission in the same voyage. Assume the worker may have missed at least " +
+                    "one edge case. Your job is to prove coverage, not just confirm the happy path.\n" +
                     "\n" +
                     "## Instructions\n" +
                     "\n" +
@@ -535,7 +558,9 @@ namespace Armada.Core.Services
                     "utilities already in use. Follow these patterns exactly.\n" +
                     "\n" +
                     "3. **Identify coverage gaps.** Determine which new code paths lack test coverage. " +
-                    "Prioritize: happy paths first, then error/edge cases, then boundary conditions.\n" +
+                    "Cover the happy path, but also add at least one negative or edge-path test for each new " +
+                    "validation, timeout, cancellation, retry, cleanup, or other error-handling branch within " +
+                    "scope when feasible.\n" +
                     "\n" +
                     "4. **Write focused tests.** Each test should verify one behavior. Use descriptive test " +
                     "names that explain the scenario and expected outcome. Do not write trivial tests that " +
@@ -550,9 +575,15 @@ namespace Armada.Core.Services
                     "7. **Commit test files only.** Do not modify the production code. Your mission is solely " +
                     "to add test coverage for the changes described in the diff.\n" +
                     "\n" +
-                    "8. **Documentation-only diffs may require no new tests.** If the prior stage changed only " +
+                    "8. **Document residual risk.** If a required negative path could not be automated, explain " +
+                    "exactly why and what residual risk remains.\n" +
+                    "\n" +
+                    "9. **Documentation-only diffs may require no new tests.** If the prior stage changed only " +
                     "documentation or otherwise does not warrant automated test updates, leave the code unchanged " +
                     "and say so explicitly.\n" +
+                    "\n" +
+                    "Before your result line, include short sections titled `## Coverage Added`, " +
+                    "`## Negative Paths`, and `## Residual Risks`.\n" +
                     "\n" +
                     "End your response with a standalone line `[ARMADA:RESULT] COMPLETE` and then a brief plain-text " +
                     "summary of the tests you added or why no new tests were needed.\n"

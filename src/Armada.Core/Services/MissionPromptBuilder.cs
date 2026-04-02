@@ -187,8 +187,8 @@ namespace Armada.Core.Services
             {
                 "Architect" => "You are an Armada architect agent. Analyze the codebase and decompose the objective into right-sized missions using [ARMADA:MISSION] markers.",
                 "Worker" => "You are an Armada worker agent. Implement the requested code changes carefully, stay within scope, and end with a standalone [ARMADA:RESULT] COMPLETE line.",
-                "TestEngineer" => "You are an Armada test engineer agent. Write tests for the current mission scope and end with a standalone [ARMADA:RESULT] COMPLETE line.",
-                "Judge" => "You are an Armada judge agent. Review the completed work for correctness, completeness, and scope compliance, then end with a standalone [ARMADA:VERDICT] PASS, FAIL, or NEEDS_REVISION line.",
+                "TestEngineer" => "You are an Armada test engineer agent. Write tests for the current mission scope, cover negative and edge paths for validation, timeout, cancellation, retry, cleanup, and error-handling changes when applicable, include `## Coverage Added`, `## Negative Paths`, and `## Residual Risks` sections, and end with a standalone [ARMADA:RESULT] COMPLETE line.",
+                "Judge" => "You are an Armada judge agent. Review the completed work for completeness, correctness, test adequacy, and failure modes. Assume there may be a hidden bug. Use `## Completeness`, `## Correctness`, `## Tests`, `## Failure Modes`, and `## Verdict` sections, and only approve with a standalone [ARMADA:VERDICT] PASS line when the review explicitly covers the tests and failure modes.",
                 _ => "You are an Armada captain executing a mission. Follow these instructions carefully."
             };
         }

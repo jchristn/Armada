@@ -101,6 +101,29 @@ namespace Armada.Test.Unit.Suites.Services
                 }
             });
 
+            await RunTest("Judge and test engineer embedded defaults require structured risk-aware review", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = new LoggingModule();
+                    logging.Settings.EnableConsole = false;
+
+                    PromptTemplateService service = new PromptTemplateService(testDb.Driver, logging);
+
+                    PromptTemplate? judge = await service.ResolveAsync("persona.judge").ConfigureAwait(false);
+                    AssertNotNull(judge, "Judge template should resolve");
+                    AssertContains("## Completeness", judge!.Content, "Judge template should require a Completeness section");
+                    AssertContains("## Failure Modes", judge.Content, "Judge template should require a Failure Modes section");
+                    AssertContains("PASS is not allowed", judge.Content, "Judge template should constrain PASS when review is incomplete");
+
+                    PromptTemplate? testEngineer = await service.ResolveAsync("persona.test_engineer").ConfigureAwait(false);
+                    AssertNotNull(testEngineer, "Test engineer template should resolve");
+                    AssertContains("negative or edge-path test", testEngineer!.Content, "Test engineer template should require negative-path coverage");
+                    AssertContains("## Coverage Added", testEngineer.Content, "Test engineer template should request a coverage summary section");
+                    AssertContains("residual risk", testEngineer.Content, "Test engineer template should require residual risk notes");
+                }
+            });
+
             await RunTest("Render substitutes placeholders", async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())

@@ -477,6 +477,55 @@ namespace Armada.Test.Unit.Suites.Services
                 }
             });
 
+            await RunTest("Template-resolved persona prompts require structured test and judge analysis", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    StubGitService git = new StubGitService();
+                    IPromptTemplateService templateService;
+                    MissionService service = CreateMissionServiceWithTemplates(logging, testDb.Driver, settings, git, out templateService);
+                    await templateService.SeedDefaultsAsync();
+
+                    string tempDir = Path.Combine(Path.GetTempPath(), "armada_prompt_test_" + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(tempDir);
+
+                    try
+                    {
+                        Vessel vessel = new Vessel("PersonaPromptVessel", "https://github.com/test/repo");
+
+                        Mission judgeMission = new Mission();
+                        judgeMission.Title = "Judge structure test";
+                        judgeMission.Description = "Verify judge review requirements.";
+                        judgeMission.Persona = "Judge";
+
+                        await service.GenerateClaudeMdAsync(tempDir, judgeMission, vessel);
+
+                        string judgeContent = await File.ReadAllTextAsync(Path.Combine(tempDir, "CLAUDE.md"));
+                        AssertContains("## Completeness", judgeContent, "Judge prompt should require a Completeness section");
+                        AssertContains("## Failure Modes", judgeContent, "Judge prompt should require a Failure Modes section");
+                        AssertContains("PASS is not allowed", judgeContent, "Judge prompt should constrain PASS approvals");
+
+                        Mission testMission = new Mission();
+                        testMission.Title = "Test coverage structure test";
+                        testMission.Description = "Verify test engineer requirements.";
+                        testMission.Persona = "TestEngineer";
+
+                        await service.GenerateClaudeMdAsync(tempDir, testMission, vessel);
+
+                        string testContent = await File.ReadAllTextAsync(Path.Combine(tempDir, "CLAUDE.md"));
+                        AssertContains("negative or edge-path", testContent, "Test engineer prompt should require negative-path coverage");
+                        AssertContains("## Coverage Added", testContent, "Test engineer prompt should request a coverage summary section");
+                        AssertContains("## Residual Risks", testContent, "Test engineer prompt should request residual risk reporting");
+                    }
+                    finally
+                    {
+                        try { Directory.Delete(tempDir, true); } catch { }
+                    }
+                }
+            });
+
             await RunTest("Template-resolved CLAUDE.md contains persona prompt", async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())

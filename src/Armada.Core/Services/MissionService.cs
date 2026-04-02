@@ -577,12 +577,18 @@ namespace Armada.Core.Services
             if (String.Equals(mission.Persona, "Judge", StringComparison.OrdinalIgnoreCase))
             {
                 JudgeVerdict verdict = ParseJudgeVerdict(mission.AgentOutput);
+                string? verdictFailureReason = null;
+                if (verdict == JudgeVerdict.Pass && !TryValidateJudgePassOutput(mission.AgentOutput, out verdictFailureReason))
+                {
+                    verdict = JudgeVerdict.NeedsRevision;
+                }
+
                 if (verdict != JudgeVerdict.Pass)
                 {
                     mission.Status = MissionStatusEnum.Failed;
                     mission.CompletedUtc = DateTime.UtcNow;
                     mission.LastUpdateUtc = DateTime.UtcNow;
-                    mission.FailureReason = verdict switch
+                    mission.FailureReason = verdictFailureReason ?? verdict switch
                     {
                         JudgeVerdict.Fail => "Judge verdict: FAIL",
                         JudgeVerdict.NeedsRevision => "Judge verdict: NEEDS_REVISION",
@@ -1229,15 +1235,21 @@ namespace Armada.Core.Services
                             "You are writing tests for code changes made by the Worker. " +
                             "Review the diff below and write unit tests, integration tests, or test harness updates " +
                             "that cover the changes. Follow existing test patterns in the repository. " +
-                            "Scope yourself only to this mission, not sibling missions in the same voyage. " +
+                            "Scope yourself only to this mission, not sibling missions in the same voyage. Cover the " +
+                            "happy path, but also add negative or edge-path coverage for validation, timeout, cancellation, " +
+                            "retry, cleanup, and error-handling branches when they are in scope. Include short " +
+                            "`## Coverage Added`, `## Negative Paths`, and `## Residual Risks` sections. " +
                             "End with a standalone `[ARMADA:RESULT] COMPLETE` line and a short summary.\n\n";
                         break;
                     case "Judge":
                         personaPreamble = "## Your Role: Judge (Review)\n\n" +
                             "You are reviewing the completed work for correctness, completeness, scope compliance, " +
-                            "and style. Examine the diff below against the current mission description only, " +
-                            "not sibling missions in the same voyage. Produce a clear verdict: PASS, FAIL " +
-                            "(with reasons), or NEEDS_REVISION (with feedback). End with a standalone line " +
+                            "test adequacy, and failure-mode safety. Examine the diff below against the current mission " +
+                            "description only, not sibling missions in the same voyage. Assume there may be at least " +
+                            "one hidden bug. Your response must include `## Completeness`, `## Correctness`, `## Tests`, " +
+                            "`## Failure Modes`, and `## Verdict` sections. A PASS is only allowed when tests are adequate, " +
+                            "negative-path coverage for validation, timeout, cancellation, retry, cleanup, and error-handling " +
+                            "changes is present or justified, and failure modes were explicitly reviewed. End with a standalone line " +
                             "`[ARMADA:VERDICT] PASS`, `[ARMADA:VERDICT] FAIL`, or `[ARMADA:VERDICT] NEEDS_REVISION`.\n\n";
                         break;
                 }
@@ -2041,6 +2053,73 @@ namespace Armada.Core.Services
             }
 
             return JudgeVerdict.None;
+        }
+
+        private bool TryValidateJudgePassOutput(string? agentOutput, out string? failureReason)
+        {
+            failureReason = null;
+
+            if (String.IsNullOrWhiteSpace(agentOutput))
+            {
+                failureReason = "Judge PASS verdict missing review output";
+                return false;
+            }
+
+            List<string> missingSections = new List<string>();
+            if (!ContainsJudgeReviewSection(agentOutput, "Completeness")) missingSections.Add("Completeness");
+            if (!ContainsJudgeReviewSection(agentOutput, "Correctness")) missingSections.Add("Correctness");
+            if (!ContainsJudgeReviewSection(agentOutput, "Tests")) missingSections.Add("Tests");
+            if (!ContainsJudgeReviewSection(agentOutput, "Failure Modes")) missingSections.Add("Failure Modes");
+
+            if (missingSections.Count > 0)
+            {
+                failureReason = "Judge PASS verdict missing required review sections: " + String.Join(", ", missingSections);
+                return false;
+            }
+
+            string substantiveReview = ExtractJudgeNarrative(agentOutput);
+            if (substantiveReview.Length < 120)
+            {
+                failureReason = "Judge PASS verdict review is too short to justify approval";
+                return false;
+            }
+
+            return true;
+        }
+
+        private static bool ContainsJudgeReviewSection(string agentOutput, string sectionName)
+        {
+            if (String.IsNullOrWhiteSpace(agentOutput) || String.IsNullOrWhiteSpace(sectionName)) return false;
+
+            string pattern =
+                @"(?im)^\s*(?:#{1,6}\s*)?(?:[-*]\s*)?(?:\d+\.\s*)?(?:\*\*|__|`)?"
+                + System.Text.RegularExpressions.Regex.Escape(sectionName)
+                + @"(?:\*\*|__|`)?\s*(?::|-)?(?:\s|$)";
+
+            return System.Text.RegularExpressions.Regex.IsMatch(agentOutput, pattern);
+        }
+
+        private static string ExtractJudgeNarrative(string agentOutput)
+        {
+            if (String.IsNullOrWhiteSpace(agentOutput)) return String.Empty;
+
+            List<string> lines = new List<string>();
+            string[] split = agentOutput.Replace("\r\n", "\n").Split('\n');
+
+            foreach (string rawLine in split)
+            {
+                string line = rawLine.Trim();
+                if (String.IsNullOrWhiteSpace(line)) continue;
+                if (IsAgentTelemetryLine(line)) continue;
+                if (ParseStructuredJudgeVerdictSignal(line).HasValue) continue;
+
+                string normalized = line.Trim('*', '_', '`', '#', '>', '-', ' ');
+                if (ParseExplicitJudgeVerdictLine(normalized).HasValue) continue;
+
+                lines.Add(line);
+            }
+
+            return String.Join(" ", lines);
         }
 
         private static JudgeVerdict? ParseStructuredJudgeVerdictSignal(string line)

@@ -729,8 +729,15 @@ namespace Armada.Test.Unit.Suites.Services
 
                     Captain? judgeCaptain = await testDb.Driver.Captains.ReadAsync(apiJudge.CaptainId!).ConfigureAwait(false);
                     missionService.OnGetMissionOutput = _ =>
-                        "**Findings**\n" +
-                        "No findings.\n" +
+                        "## Completeness\n" +
+                        "The staged work covers the assigned requirements and there are no missing deliverables in this chain.\n\n" +
+                        "## Correctness\n" +
+                        "The implementation and test updates are coherent, and I do not see logic or scope defects in the reviewed diff.\n\n" +
+                        "## Tests\n" +
+                        "The automated tests added in the prior stage cover the reviewed behavior adequately for this mission.\n\n" +
+                        "## Failure Modes\n" +
+                        "I reviewed the relevant edge and failure behavior for this scope and did not find any unresolved blockers.\n\n" +
+                        "## Verdict\n" +
                         "[ARMADA:VERDICT] PASS\n" +
                         "The work is complete and correctly scoped.\n" +
                         "tokens used\n" +
@@ -882,8 +889,15 @@ namespace Armada.Test.Unit.Suites.Services
 
                     Captain? activeJudgeCaptain = await testDb.Driver.Captains.ReadAsync(coreJudge.CaptainId!).ConfigureAwait(false);
                     missionService.OnGetMissionOutput = _ =>
-                        "**Findings**\n" +
-                        "No findings.\n" +
+                        "## Completeness\n" +
+                        "The upstream worker and test stages completed the requested scope and nothing material is missing.\n\n" +
+                        "## Correctness\n" +
+                        "I reviewed the diff and prior output and did not find correctness issues in the completed upstream chain.\n\n" +
+                        "## Tests\n" +
+                        "The upstream tests cover the changed behavior and are sufficient for this dependency chain.\n\n" +
+                        "## Failure Modes\n" +
+                        "Relevant error and edge paths were reviewed for this scope and I do not see unresolved safety concerns.\n\n" +
+                        "## Verdict\n" +
                         "[ARMADA:VERDICT] PASS\n" +
                         "Upstream chain is approved.\n";
                     await missionService.HandleCompletionAsync(activeJudgeCaptain!, coreJudge.Id).ConfigureAwait(false);
@@ -1434,8 +1448,15 @@ namespace Armada.Test.Unit.Suites.Services
                     await testDb.Driver.Captains.UpdateAsync(judgeCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
-                        "## Findings\n" +
-                        "No findings.\n" +
+                        "## Completeness\n" +
+                        "The mission requirements are fully implemented with no missing scope items.\n\n" +
+                        "## Correctness\n" +
+                        "The reviewed changes are logically consistent and I do not see defects in the touched paths.\n\n" +
+                        "## Tests\n" +
+                        "Automated coverage exists for the new behavior and the affected scenarios are exercised.\n\n" +
+                        "## Failure Modes\n" +
+                        "I reviewed error and edge behavior for this scope and found no unaddressed safety issues.\n\n" +
+                        "## Verdict\n" +
                         "[ARMADA:VERDICT] PASS\n" +
                         "Everything is complete and correctly scoped.";
 
@@ -1505,8 +1526,14 @@ namespace Armada.Test.Unit.Suites.Services
                     await testDb.Driver.Captains.UpdateAsync(judgeCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
-                        "## Judge Review: readyz endpoint metadata and uptime\n" +
-                        "Everything required is present and correctly scoped.\n\n" +
+                        "## Completeness\n" +
+                        "Everything required by the mission is present and stays within the assigned scope.\n\n" +
+                        "## Correctness\n" +
+                        "The implementation follows the intended behavior and I did not find logic errors in the reviewed diff.\n\n" +
+                        "## Tests\n" +
+                        "The updated tests cover the changed behavior and are sufficient for this mission.\n\n" +
+                        "## Failure Modes\n" +
+                        "I explicitly reviewed edge and failure paths relevant to this change and found no remaining blockers.\n\n" +
                         "### Verdict: **PASS**\n" +
                         "The mission is complete and correct.";
 
@@ -1516,6 +1543,76 @@ namespace Armada.Test.Unit.Suites.Services
                     AssertNotNull(reloadedJudge, "Judge mission should remain readable");
                     AssertEqual(MissionStatusEnum.Complete, reloadedJudge!.Status, "Markdown verdict heading should permit landing");
                     AssertEqual(1, landingCalls, "PASS verdict emitted as a markdown heading should invoke landing");
+                }
+            });
+
+            await RunTest("Judge PASS requires structured review sections before landing", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    DirCreatingGitStub git = new DirCreatingGitStub();
+                    IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
+                    ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
+                    MissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService);
+                    int landingCalls = 0;
+                    missionService.OnMissionComplete = (m, d) =>
+                    {
+                        landingCalls++;
+                        m.Status = MissionStatusEnum.Complete;
+                        m.CompletedUtc = DateTime.UtcNow;
+                        m.LastUpdateUtc = DateTime.UtcNow;
+                        return testDb.Driver.Missions.UpdateAsync(m);
+                    };
+
+                    Vessel vessel = new Vessel("judge-vessel", "https://github.com/test/repo.git");
+                    vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
+                    vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
+                    vessel.DefaultBranch = "main";
+                    vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    Captain judgeCaptain = new Captain("judge-captain");
+                    judgeCaptain.State = CaptainStateEnum.Working;
+                    judgeCaptain = await testDb.Driver.Captains.CreateAsync(judgeCaptain).ConfigureAwait(false);
+
+                    Voyage voyage = new Voyage("judge-voyage");
+                    voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
+
+                    Mission judge = new Mission("[Judge] Review worker output", "Review changes");
+                    judge.VesselId = vessel.Id;
+                    judge.VoyageId = voyage.Id;
+                    judge.Persona = "Judge";
+                    judge.Status = MissionStatusEnum.InProgress;
+                    judge.CaptainId = judgeCaptain.Id;
+                    judge.BranchName = "armada/judge/review";
+                    judge = await testDb.Driver.Missions.CreateAsync(judge).ConfigureAwait(false);
+
+                    Dock judgeDock = new Dock(vessel.Id);
+                    judgeDock.CaptainId = judgeCaptain.Id;
+                    judgeDock.WorktreePath = Path.Combine(settings.DocksDirectory, vessel.Name, judge.Id);
+                    judgeDock.BranchName = judge.BranchName;
+                    judgeDock.Active = true;
+                    judgeDock = await testDb.Driver.Docks.CreateAsync(judgeDock).ConfigureAwait(false);
+
+                    judge.DockId = judgeDock.Id;
+                    await testDb.Driver.Missions.UpdateAsync(judge).ConfigureAwait(false);
+
+                    judgeCaptain.CurrentMissionId = judge.Id;
+                    judgeCaptain.CurrentDockId = judgeDock.Id;
+                    await testDb.Driver.Captains.UpdateAsync(judgeCaptain).ConfigureAwait(false);
+
+                    missionService.OnGetMissionOutput = _ =>
+                        "Looks good overall.\n" +
+                        "[ARMADA:VERDICT] PASS\n";
+
+                    await missionService.HandleCompletionAsync(judgeCaptain, judge.Id).ConfigureAwait(false);
+
+                    Mission? reloadedJudge = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
+                    AssertNotNull(reloadedJudge, "Judge mission should remain readable");
+                    AssertEqual(MissionStatusEnum.Failed, reloadedJudge!.Status, "PASS without structured review sections should be rejected");
+                    AssertEqual(0, landingCalls, "Rejected PASS review should not invoke landing");
+                    AssertContains("missing required review sections", reloadedJudge.FailureReason, "Failure reason should explain why the PASS review was rejected");
                 }
             });
 
