@@ -426,6 +426,7 @@ namespace Armada.Core.Database.SqlServer
             mission.CreatedUtc = FromIso8601(reader["created_utc"].ToString()!);
             mission.StartedUtc = FromIso8601Nullable(reader["started_utc"]);
             mission.CompletedUtc = FromIso8601Nullable(reader["completed_utc"]);
+            try { mission.TotalRuntimeMs = reader["total_runtime_ms"] == DBNull.Value ? mission.TotalRuntimeMs : Convert.ToInt64(reader["total_runtime_ms"]); } catch { }
             mission.LastUpdateUtc = FromIso8601(reader["last_update_utc"].ToString()!);
             try { mission.Persona = NullableString(reader["persona"]); } catch { }
             try { mission.DependsOnMissionId = NullableString(reader["depends_on_mission_id"]); } catch { }
@@ -600,4 +601,3 @@ namespace Armada.Core.Database.SqlServer
         #endregion
     }
 }
-

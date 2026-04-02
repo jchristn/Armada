@@ -413,6 +413,11 @@ namespace Armada.Core.Database.Mysql
                     15,
                     "Add agent_output to missions",
                     TableQueries.MigrationV15Statements
+                ),
+                new SchemaMigration(
+                    27,
+                    "Add total_runtime_ms column to missions table",
+                    TableQueries.MigrationV27Statements
                 )
             };
         }
