@@ -21,6 +21,11 @@ namespace Armada.Server.Mcp
         public string? Runtime { get; set; }
 
         /// <summary>
+        /// New runtime model override. Null lets the runtime choose its default model.
+        /// </summary>
+        public string? Model { get; set; }
+
+        /// <summary>
         /// New system instructions for this captain.
         /// </summary>
         public string? SystemInstructions { get; set; }

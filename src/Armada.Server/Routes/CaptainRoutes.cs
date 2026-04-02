@@ -154,7 +154,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Captains")
                 .WithSummary("Create a captain")
-                .WithDescription("Registers a new captain (AI agent).")
+                .WithDescription("Registers a new captain (AI agent), including an optional runtime model override.")
                 .WithRequestBody(OpenApiRequestBodyMetadata.Json<Captain>("Captain data", true))
                 .WithResponse(201, OpenApiResponseMetadata.Json<Captain>("Created captain"))
                 .WithSecurity("ApiKey"));
@@ -179,7 +179,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Captains")
                 .WithSummary("Get a captain")
-                .WithDescription("Returns a single captain by ID.")
+                .WithDescription("Returns a single captain by ID, including its configured runtime model when present.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Captain ID (cpt_ prefix)"))
                 .WithResponse(200, OpenApiResponseMetadata.Json<Captain>("Captain details"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
@@ -217,7 +217,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Captains")
                 .WithSummary("Update a captain")
-                .WithDescription("Updates a captain's name, runtime, or max parallelism. Operational fields (state, process, mission) are preserved.")
+                .WithDescription("Updates a captain's metadata, including runtime and optional model override. Operational fields (state, process, mission) are preserved.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Captain ID (cpt_ prefix)"))
                 .WithRequestBody(OpenApiRequestBodyMetadata.Json<Captain>("Updated captain data", true))
                 .WithResponse(200, OpenApiResponseMetadata.Json<Captain>("Updated captain"))

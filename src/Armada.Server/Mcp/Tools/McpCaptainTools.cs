@@ -25,6 +25,14 @@ namespace Armada.Server.Mcp.Tools
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         };
 
+        // This API slice can land before the Captain.Model persistence slice, so probe for the property at runtime.
+        private static void TrySetCaptainModel(Captain captain, string? model)
+        {
+            var modelProperty = typeof(Captain).GetProperty("Model");
+            if (modelProperty?.CanWrite == true && modelProperty.PropertyType == typeof(string))
+                modelProperty.SetValue(captain, model);
+        }
+
         /// <summary>
         /// Registers captain MCP tools with the server.
         /// </summary>
@@ -66,6 +74,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         name = new { type = "string", description = "Captain display name" },
                         runtime = new { type = "string", description = "Agent runtime: ClaudeCode, Codex, Gemini, Cursor, or Custom" },
+                        model = new { type = "string", description = "Optional runtime model override. Null lets the runtime choose its default model." },
                         systemInstructions = new { type = "string", description = "System instructions for this captain -- injected into every mission prompt to specialize behavior" },
                         allowedPersonas = new { type = "string", description = "JSON array of persona names this captain can fill, e.g. [\"Worker\",\"Judge\"]. Null means any persona." },
                         preferredPersona = new { type = "string", description = "Preferred persona for dispatch routing priority" }
@@ -80,6 +89,7 @@ namespace Armada.Server.Mcp.Tools
                     captain.Name = request.Name;
                     if (!String.IsNullOrEmpty(request.Runtime) && Enum.TryParse<AgentRuntimeEnum>(request.Runtime, true, out AgentRuntimeEnum rt))
                         captain.Runtime = rt;
+                    TrySetCaptainModel(captain, request.Model);
                     captain.SystemInstructions = request.SystemInstructions;
                     captain.AllowedPersonas = request.AllowedPersonas;
                     captain.PreferredPersona = request.PreferredPersona;
@@ -89,7 +99,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "armada_update_captain",
-                "Update a captain's name or runtime. Operational fields (state, process, mission) are preserved.",
+                "Update a captain's metadata, including runtime and model overrides. Operational fields (state, process, mission) are preserved.",
                 new
                 {
                     type = "object",
@@ -98,6 +108,7 @@ namespace Armada.Server.Mcp.Tools
                         captainId = new { type = "string", description = "Captain ID (cpt_ prefix)" },
                         name = new { type = "string", description = "New display name" },
                         runtime = new { type = "string", description = "New agent runtime: ClaudeCode, Codex, Gemini, Cursor, or Custom" },
+                        model = new { type = "string", description = "New runtime model override. Null lets the runtime choose its default model." },
                         systemInstructions = new { type = "string", description = "New system instructions for this captain" },
                         allowedPersonas = new { type = "string", description = "JSON array of persona names this captain can fill, e.g. [\"Worker\",\"Judge\"]. Null means any persona." },
                         preferredPersona = new { type = "string", description = "Preferred persona for dispatch routing priority" }
@@ -114,6 +125,8 @@ namespace Armada.Server.Mcp.Tools
                         captain.Name = request.Name;
                     if (!String.IsNullOrEmpty(request.Runtime) && Enum.TryParse<AgentRuntimeEnum>(request.Runtime, true, out AgentRuntimeEnum rt))
                         captain.Runtime = rt;
+                    if (args.HasValue && args.Value.TryGetProperty("model", out JsonElement modelElement))
+                        TrySetCaptainModel(captain, modelElement.ValueKind == JsonValueKind.Null ? null : modelElement.GetString());
                     if (request.SystemInstructions != null)
                         captain.SystemInstructions = request.SystemInstructions;
                     if (request.AllowedPersonas != null)

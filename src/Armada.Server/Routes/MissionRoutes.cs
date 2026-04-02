@@ -291,7 +291,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Missions")
                 .WithSummary("Get a mission")
-                .WithDescription("Returns a single mission by ID.")
+                .WithDescription("Returns a single mission by ID, including totalRuntimeMs when the mission has completed.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
                 .WithResponse(200, OpenApiResponseMetadata.Json<Mission>("Mission details"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
@@ -327,7 +327,7 @@ namespace Armada.Server.Routes
                 existing.LastUpdateUtc = DateTime.UtcNow;
 
                 // Preserve operational/timestamp fields: CreatedUtc, StartedUtc, CompletedUtc,
-                // Status, CaptainId, DockId, ProcessId, CommitHash, DiffSnapshot
+                // TotalRuntimeMs, Status, CaptainId, DockId, ProcessId, CommitHash, DiffSnapshot
 
                 existing = await _database.Missions.UpdateAsync(existing).ConfigureAwait(false);
                 return (object)existing;
@@ -335,7 +335,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Missions")
                 .WithSummary("Update a mission")
-                .WithDescription("Updates an existing mission by ID.")
+                .WithDescription("Updates mission metadata by ID while preserving system-managed runtime fields such as totalRuntimeMs.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
                 .WithRequestBody(OpenApiRequestBodyMetadata.Json<Mission>("Updated mission data", true))
                 .WithResponse(200, OpenApiResponseMetadata.Json<Mission>("Updated mission"))
