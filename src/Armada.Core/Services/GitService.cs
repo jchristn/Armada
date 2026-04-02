@@ -487,21 +487,36 @@ namespace Armada.Core.Services
         /// Ensure a local branch exists, preferring the matching remote branch and otherwise
         /// creating it from the repository's default available history.
         /// </summary>
-        public async Task<bool> EnsureLocalBranchAsync(string repoPath, string branchName, CancellationToken token = default)
+        public async Task<bool> EnsureLocalBranchAsync(string repoPath, string branchName, CancellationToken token = default, bool skipFetch = false)
         {
             if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
             if (String.IsNullOrEmpty(branchName)) throw new ArgumentNullException(nameof(branchName));
 
-            await FetchAsync(repoPath, token).ConfigureAwait(false);
-
-            if (await SyncLocalBranchFromRemoteAsync(repoPath, branchName).ConfigureAwait(false))
+            if (skipFetch)
             {
-                return true;
+                if (await SyncLocalBranchFromRemoteAsync(repoPath, branchName).ConfigureAwait(false))
+                {
+                    return true;
+                }
+
+                if (await BranchExistsAsync(repoPath, branchName, token).ConfigureAwait(false))
+                {
+                    return true;
+                }
             }
-
-            if (await BranchExistsAsync(repoPath, branchName, token).ConfigureAwait(false))
+            else
             {
-                return true;
+                await FetchAsync(repoPath, token).ConfigureAwait(false);
+
+                if (await SyncLocalBranchFromRemoteAsync(repoPath, branchName).ConfigureAwait(false))
+                {
+                    return true;
+                }
+
+                if (await BranchExistsAsync(repoPath, branchName, token).ConfigureAwait(false))
+                {
+                    return true;
+                }
             }
 
             string? baseRef = await ResolveFallbackBranchSourceAsync(repoPath).ConfigureAwait(false);

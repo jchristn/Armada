@@ -165,8 +165,9 @@ namespace Armada.Core.Services.Interfaces
         /// <param name="repoPath">Path to the repository.</param>
         /// <param name="branchName">Branch name to ensure.</param>
         /// <param name="token">Cancellation token.</param>
+        /// <param name="skipFetch">When true, use existing local and remote-tracking refs without fetching from origin.</param>
         /// <returns>True if the branch exists or was created; false if the repo has no commits/branches.</returns>
-        Task<bool> EnsureLocalBranchAsync(string repoPath, string branchName, CancellationToken token = default);
+        Task<bool> EnsureLocalBranchAsync(string repoPath, string branchName, CancellationToken token = default, bool skipFetch = false);
 
         /// <summary>
         /// Check if a path is registered as a git worktree.

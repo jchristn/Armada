@@ -254,11 +254,50 @@ namespace Armada.Test.Unit.Suites.Services
 
                     await service.CloneBareAsync(sourceDir, bareDir).ConfigureAwait(false);
 
-                    bool ensured = await service.EnsureLocalBranchAsync(bareDir, "release/e2e").ConfigureAwait(false);
+                    bool ensured = await service.EnsureLocalBranchAsync(bareDir, "release/e2e", skipFetch: true).ConfigureAwait(false);
                     string ensuredCommit = (await RunGitAsync(bareDir, "rev-parse", "refs/heads/release/e2e").ConfigureAwait(false)).Trim();
 
                     AssertTrue(ensured, "EnsureLocalBranchAsync should create a missing branch when repo history exists");
                     AssertEqual(sourceHead, ensuredCommit, "Created branch should point at the existing default history");
+                }
+                finally
+                {
+                    if (Directory.Exists(rootDir))
+                    {
+                        try { Directory.Delete(rootDir, true); }
+                        catch { }
+                    }
+                }
+            });
+
+            await RunTest("EnsureLocalBranchAsync ExistingRemoteTrackingBranch DoesNotRequireFetch", async () =>
+            {
+                GitService service = CreateService();
+                string rootDir = Path.Combine(Path.GetTempPath(), "armada-gitservice-" + Guid.NewGuid().ToString("N"));
+                string sourceDir = Path.Combine(rootDir, "source");
+                string bareDir = Path.Combine(rootDir, "bare.git");
+
+                try
+                {
+                    Directory.CreateDirectory(sourceDir);
+                    await RunGitAsync(sourceDir, "init", "-b", "main").ConfigureAwait(false);
+                    await RunGitAsync(sourceDir, "config", "user.name", "Armada Tests").ConfigureAwait(false);
+                    await RunGitAsync(sourceDir, "config", "user.email", "armada-tests@example.com").ConfigureAwait(false);
+                    await File.WriteAllTextAsync(Path.Combine(sourceDir, "README.md"), "hello\n").ConfigureAwait(false);
+                    await RunGitAsync(sourceDir, "add", "README.md").ConfigureAwait(false);
+                    await RunGitAsync(sourceDir, "commit", "-m", "Initial commit").ConfigureAwait(false);
+
+                    await RunGitAsync(rootDir, "clone", "--bare", sourceDir, bareDir).ConfigureAwait(false);
+
+                    string sourceHead = (await RunGitAsync(bareDir, "rev-parse", "refs/heads/main").ConfigureAwait(false)).Trim();
+                    await RunGitAsync(bareDir, "update-ref", "refs/remotes/origin/release/e2e", sourceHead).ConfigureAwait(false);
+                    await RunGitAsync(bareDir, "remote", "set-url", "origin", Path.Combine(rootDir, "missing-remote.git")).ConfigureAwait(false);
+
+                    bool ensured = await service.EnsureLocalBranchAsync(bareDir, "release/e2e", skipFetch: true).ConfigureAwait(false);
+                    string ensuredCommit = (await RunGitAsync(bareDir, "rev-parse", "refs/heads/release/e2e").ConfigureAwait(false)).Trim();
+
+                    AssertTrue(ensured, "EnsureLocalBranchAsync should create the branch from existing remote-tracking refs");
+                    AssertEqual(sourceHead, ensuredCommit, "Created branch should use the existing remote-tracking commit without fetching");
                 }
                 finally
                 {

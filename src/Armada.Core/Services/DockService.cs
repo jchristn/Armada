@@ -61,6 +61,7 @@ namespace Armada.Core.Services
             string normalizedRepoPath = Path.GetFullPath(repoPath);
             SemaphoreSlim repoLock = _RepoProvisionLocks.GetOrAdd(normalizedRepoPath, _ => new SemaphoreSlim(1, 1));
             bool repoLockAcquired = false;
+            bool repoJustCloned = false;
 
             try
             {
@@ -80,6 +81,7 @@ namespace Armada.Core.Services
                     if (String.IsNullOrEmpty(vessel.RepoUrl))
                         throw new InvalidOperationException("Vessel " + vessel.Name + " has no remote URL configured");
                     await _Git.CloneBareAsync(vessel.RepoUrl, repoPath, token).ConfigureAwait(false);
+                    repoJustCloned = true;
                     vessel.LocalPath = repoPath;
                     await _Database.Vessels.UpdateAsync(vessel, token).ConfigureAwait(false);
                 }
@@ -87,7 +89,7 @@ namespace Armada.Core.Services
                 // Ensure the configured default branch exists locally. Missing configured branches
                 // in non-empty repos should be created from the remote/default history rather than
                 // being treated as an empty repository.
-                bool hasDefaultBranch = await _Git.EnsureLocalBranchAsync(repoPath, vessel.DefaultBranch, token).ConfigureAwait(false);
+                bool hasDefaultBranch = await _Git.EnsureLocalBranchAsync(repoPath, vessel.DefaultBranch, token, skipFetch: repoJustCloned).ConfigureAwait(false);
                 if (!hasDefaultBranch)
                 {
                     _Logging.Info(_Header + "bare repo for " + vessel.Name + " has no usable branch history for " + vessel.DefaultBranch + " -- seeding initial commit");
@@ -101,7 +103,7 @@ namespace Armada.Core.Services
                 }
 
                 // Fetch latest from remote to ensure worktrees branch from current main
-                if (!String.IsNullOrEmpty(vessel.RepoUrl))
+                if (!repoJustCloned && !String.IsNullOrEmpty(vessel.RepoUrl))
                 {
                     try
                     {

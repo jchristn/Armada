@@ -123,7 +123,7 @@ namespace Armada.Test.Unit.TestHelpers
             if (branchName == "main") return Task.FromResult(DefaultBranchExistsResult);
             return Task.FromResult(false);
         }
-        public Task<bool> EnsureLocalBranchAsync(string repoPath, string branchName, CancellationToken token = default)
+        public Task<bool> EnsureLocalBranchAsync(string repoPath, string branchName, CancellationToken token = default, bool skipFetch = false)
             => BranchExistsAsync(repoPath, branchName, token);
         public Task<bool> IsWorktreeRegisteredAsync(string repoPath, string worktreePath, CancellationToken token = default) => Task.FromResult(false);
     }

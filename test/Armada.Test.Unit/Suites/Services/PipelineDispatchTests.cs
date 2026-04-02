@@ -1959,7 +1959,7 @@ namespace Armada.Test.Unit.Suites.Services
                 => Task.FromResult(branchName == "main" || WorktreeBranches.Contains(branchName));
 
             /// <inheritdoc />
-            public Task<bool> EnsureLocalBranchAsync(string repoPath, string branchName, CancellationToken token = default)
+            public Task<bool> EnsureLocalBranchAsync(string repoPath, string branchName, CancellationToken token = default, bool skipFetch = false)
                 => BranchExistsAsync(repoPath, branchName, token);
 
             /// <inheritdoc />
