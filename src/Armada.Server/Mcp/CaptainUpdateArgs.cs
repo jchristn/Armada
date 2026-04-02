@@ -26,6 +26,11 @@ namespace Armada.Server.Mcp
         public string? SystemInstructions { get; set; }
 
         /// <summary>
+        /// New AI model identifier. Null means runtime default.
+        /// </summary>
+        public string? Model { get; set; }
+
+        /// <summary>
         /// JSON array of persona names this captain can fill. Null means any persona.
         /// </summary>
         public string? AllowedPersonas { get; set; }

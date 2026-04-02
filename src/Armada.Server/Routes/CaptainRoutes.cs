@@ -13,6 +13,7 @@ namespace Armada.Server.Routes
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
     using Armada.Runtimes;
+    using Armada.Server;
 
     /// <summary>
     /// REST API routes for captain management.
@@ -23,6 +24,7 @@ namespace Armada.Server.Routes
         private readonly IAdmiralService _admiral;
         private readonly ArmadaSettings _settings;
         private readonly AgentRuntimeFactory _runtimeFactory;
+        private readonly AgentLifecycleHandler _agentLifecycle;
         private readonly Func<string, string, string?, string?, string?, string?, string?, string?, Task> _emitEvent;
         private readonly JsonSerializerOptions _jsonOptions;
 
@@ -33,6 +35,7 @@ namespace Armada.Server.Routes
         /// <param name="admiral">Admiral coordination service.</param>
         /// <param name="settings">Application settings.</param>
         /// <param name="runtimeFactory">Agent runtime factory.</param>
+        /// <param name="agentLifecycle">Agent lifecycle handler.</param>
         /// <param name="emitEvent">Event broadcast callback.</param>
         /// <param name="jsonOptions">JSON serializer options.</param>
         public CaptainRoutes(
@@ -40,6 +43,7 @@ namespace Armada.Server.Routes
             IAdmiralService admiral,
             ArmadaSettings settings,
             AgentRuntimeFactory runtimeFactory,
+            AgentLifecycleHandler agentLifecycle,
             Func<string, string, string?, string?, string?, string?, string?, string?, Task> emitEvent,
             JsonSerializerOptions jsonOptions)
         {
@@ -47,6 +51,7 @@ namespace Armada.Server.Routes
             _admiral = admiral;
             _settings = settings;
             _runtimeFactory = runtimeFactory;
+            _agentLifecycle = agentLifecycle;
             _emitEvent = emitEvent;
             _jsonOptions = jsonOptions;
         }
@@ -147,6 +152,15 @@ namespace Armada.Server.Routes
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Captain.");
                 captain.TenantId = ctx.TenantId;
                 captain.UserId = ctx.UserId;
+                if (captain.Model != null)
+                {
+                    string? validationError = await _agentLifecycle.ValidateCaptainModelAsync(captain).ConfigureAwait(false);
+                    if (validationError != null)
+                    {
+                        req.Http.Response.StatusCode = 400;
+                        return validationError;
+                    }
+                }
                 captain = await _database.Captains.CreateAsync(captain).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 201;
                 return captain;
@@ -211,6 +225,15 @@ namespace Armada.Server.Routes
                 updated.LastHeartbeatUtc = existing.LastHeartbeatUtc;
                 updated.CreatedUtc = existing.CreatedUtc;
                 updated.LastUpdateUtc = DateTime.UtcNow;
+                if (updated.Model != null)
+                {
+                    string? validationError = await _agentLifecycle.ValidateCaptainModelAsync(updated).ConfigureAwait(false);
+                    if (validationError != null)
+                    {
+                        req.Http.Response.StatusCode = 400;
+                        return validationError;
+                    }
+                }
                 updated = await _database.Captains.UpdateAsync(updated).ConfigureAwait(false);
                 return (object)updated;
             },

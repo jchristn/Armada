@@ -8,6 +8,7 @@ namespace Armada.Server.Mcp
     using Armada.Core.Database;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
+    using Armada.Server;
     using Armada.Server.Mcp.Tools;
 
     /// <summary>
@@ -42,6 +43,7 @@ namespace Armada.Server.Mcp
         /// <param name="mergeQueue">Merge queue service.</param>
         /// <param name="dockService">Dock service for dock management.</param>
         /// <param name="landingService">Landing service for retry landing operations.</param>
+        /// <param name="agentLifecycle">Agent lifecycle handler for captain model validation.</param>
         /// <param name="onStop">Callback to stop the server.</param>
         /// <param name="onStopCaptain">Callback to kill a captain's agent process by captain ID. Called before RecallCaptainAsync.</param>
         /// <param name="templateService">Prompt template service for template operations.</param>
@@ -54,6 +56,7 @@ namespace Armada.Server.Mcp
             IMergeQueueService? mergeQueue = null,
             IDockService? dockService = null,
             ILandingService? landingService = null,
+            AgentLifecycleHandler? agentLifecycle = null,
             Action? onStop = null,
             Func<string, Task>? onStopCaptain = null,
             IPromptTemplateService? templateService = null)
@@ -64,7 +67,8 @@ namespace Armada.Server.Mcp
             McpVesselTools.Register(register, database, dockService);
             McpVoyageTools.Register(register, database, admiral, settings);
             McpMissionTools.Register(register, database, admiral, settings, git, landingService);
-            McpCaptainTools.Register(register, database, admiral, settings, onStopCaptain);
+            if (agentLifecycle == null) throw new ArgumentNullException(nameof(agentLifecycle));
+            McpCaptainTools.Register(register, database, admiral, settings, agentLifecycle, onStopCaptain);
             McpSignalTools.Register(register, database);
             McpEventTools.Register(register, database);
             McpDockTools.Register(register, database, dockService);
