@@ -557,44 +557,13 @@ namespace Armada.Core.Services
             }
             else
             {
-                // Non-zero or unknown exit code — attempt recovery or mark failed
+                // Non-zero or unknown exit code — fail the mission deterministically.
+                // Process exits should not bounce between recovery paths; preserve the
+                // captured runtime error, halt the voyage, and only stall the captain
+                // when the failure indicates the runtime itself is unavailable.
                 _Logging.Warn(_Header + "agent process " + processId + " exited with code " + (exitCode?.ToString() ?? "unknown") + " for mission " + missionId);
-
-                if (captain.RecoveryAttempts < _Settings.MaxRecoveryAttempts)
-                {
-                    await _Captains.TryRecoverAsync(captain, token).ConfigureAwait(false);
-                }
-                else
-                {
-                    // Recovery exhausted -- mark mission as failed
-                    mission.Status = MissionStatusEnum.Failed;
-                    mission.FailureReason = "Agent process exited with code " + (exitCode?.ToString() ?? "unknown") + ", recovery exhausted";
-                    mission.ProcessId = null;
-                    mission.CompletedUtc = DateTime.UtcNow;
-                    mission.LastUpdateUtc = DateTime.UtcNow;
-                    await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
-                    _Logging.Warn(_Header + "mission " + missionId + " marked failed (process exit code " + (exitCode?.ToString() ?? "unknown") + ", recovery exhausted)");
-
-                    await EmitEventAsync("mission.failed",
-                        "Mission failed: " + mission.Title + " (agent process exited with code " + (exitCode?.ToString() ?? "unknown") + ", recovery exhausted)",
-                        entityType: "mission", entityId: mission.Id,
-                        captainId: captain.Id, missionId: mission.Id,
-                        vesselId: mission.VesselId, voyageId: mission.VoyageId, token: token).ConfigureAwait(false);
-
-                    // Reclaim the dock
-                    await ReclaimDockAsync(captain, mission, token).ConfigureAwait(false);
-
-                    // Mark captain as stalled
-                    await _Database.Captains.UpdateStateAsync(captain.Id, CaptainStateEnum.Stalled, token).ConfigureAwait(false);
-
-                    if (_Escalation != null)
-                        await _Escalation.FireAsync(EscalationTriggerEnum.RecoveryExhausted, captain.Id,
-                            "Captain " + captain.Id + " recovery exhausted for mission " + missionId + " (exit code " + (exitCode?.ToString() ?? "unknown") + ")", token).ConfigureAwait(false);
-
-                    Signal signal = new Signal(SignalTypeEnum.Error, "Agent process exited with code " + (exitCode?.ToString() ?? "unknown") + " for mission " + mission.Title + " (recovery exhausted)");
-                    signal.FromCaptainId = captain.Id;
-                    await _Database.Signals.CreateAsync(signal, token).ConfigureAwait(false);
-                }
+                string failureReason = await BuildProcessExitFailureReasonAsync(missionId, exitCode, token).ConfigureAwait(false);
+                await HandleTerminalProcessExitFailureAsync(captain, mission, missionId, failureReason, token).ConfigureAwait(false);
             }
 
             // Try to dispatch any pending missions now that capacity may have freed up
@@ -770,39 +739,7 @@ namespace Armada.Core.Services
                         captainId: captain.Id, missionId: missionId, token: token).ConfigureAwait(false);
 
                     string failureReason = await BuildProcessExitFailureReasonAsync(missionId, exitCode, token).ConfigureAwait(false);
-
-                    // Non-zero process exits are terminal mission failures. Do not auto-recover
-                    // or relaunch automatically; leave restart under explicit user control.
-                    if (mission != null)
-                    {
-                        mission.Status = MissionStatusEnum.Failed;
-                        mission.FailureReason = failureReason;
-                        mission.ProcessId = null;
-                        mission.CompletedUtc = DateTime.UtcNow;
-                        mission.LastUpdateUtc = DateTime.UtcNow;
-                        await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
-                        _Logging.Warn(_Header + "mission " + missionId + " marked failed after process exit");
-
-                        await EmitEventAsync("mission.failed", "Mission failed: " + mission.Title + " (" + failureReason + ")",
-                            entityType: "mission", entityId: mission.Id,
-                            captainId: captain.Id, missionId: mission.Id, token: token).ConfigureAwait(false);
-
-                        if (!String.IsNullOrEmpty(mission.VoyageId))
-                        {
-                            await HaltVoyageAsync(mission.VoyageId, mission.Id, failureReason, token).ConfigureAwait(false);
-                        }
-                    }
-
-                    await ReclaimDockAsync(captain, mission, token).ConfigureAwait(false);
-                    await _Captains.ReleaseAsync(captain, token).ConfigureAwait(false);
-                    _Logging.Info(_Header + "captain " + captain.Id + " released to Idle after mission failure " + missionId);
-
-                    if (_Escalation != null)
-                        await _Escalation.FireAsync(EscalationTriggerEnum.RecoveryExhausted, captain.Id, "Captain " + captain.Id + " failed mission " + missionId + " (" + failureReason + ")", token).ConfigureAwait(false);
-
-                    Signal signal = new Signal(SignalTypeEnum.Error, "Mission " + missionId + " failed: " + failureReason);
-                    signal.FromCaptainId = captain.Id;
-                    await _Database.Signals.CreateAsync(signal, token).ConfigureAwait(false);
+                    await HandleTerminalProcessExitFailureAsync(captain, mission, missionId, failureReason, token).ConfigureAwait(false);
                 }
             }
             else
@@ -1204,7 +1141,7 @@ namespace Armada.Core.Services
                             line.Contains("error", StringComparison.OrdinalIgnoreCase) ||
                             line.Contains("exception", StringComparison.OrdinalIgnoreCase))
                         {
-                            return line;
+                            return NormalizeProcessExitFailureReason(line);
                         }
                     }
                 }
@@ -1215,6 +1152,110 @@ namespace Armada.Core.Services
             }
 
             return "Agent process exited with code " + (exitCode?.ToString() ?? "unknown");
+        }
+
+        private async Task HandleTerminalProcessExitFailureAsync(
+            Captain captain,
+            Mission? mission,
+            string missionId,
+            string failureReason,
+            CancellationToken token)
+        {
+            if (mission != null)
+            {
+                mission.Status = MissionStatusEnum.Failed;
+                mission.FailureReason = failureReason;
+                mission.ProcessId = null;
+                mission.CompletedUtc = DateTime.UtcNow;
+                mission.LastUpdateUtc = DateTime.UtcNow;
+                await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                _Logging.Warn(_Header + "mission " + missionId + " marked failed after process exit");
+
+                await EmitEventAsync("mission.failed", "Mission failed: " + mission.Title + " (" + failureReason + ")",
+                    entityType: "mission", entityId: mission.Id,
+                    captainId: captain.Id, missionId: mission.Id,
+                    vesselId: mission.VesselId, voyageId: mission.VoyageId, token: token).ConfigureAwait(false);
+
+                if (!String.IsNullOrEmpty(mission.VoyageId))
+                {
+                    await HaltVoyageAsync(mission.VoyageId, mission.Id, failureReason, token).ConfigureAwait(false);
+                }
+            }
+
+            await ReclaimDockAsync(captain, mission, token).ConfigureAwait(false);
+            await _Captains.ReleaseAsync(captain, token).ConfigureAwait(false);
+
+            if (IsCaptainUnavailableFailureReason(failureReason))
+            {
+                await _Database.Captains.UpdateStateAsync(captain.Id, CaptainStateEnum.Stalled, token).ConfigureAwait(false);
+                _Logging.Warn(_Header + "captain " + captain.Id + " marked Stalled after non-retryable runtime failure on mission " + missionId);
+            }
+            else
+            {
+                _Logging.Info(_Header + "captain " + captain.Id + " released to Idle after mission failure " + missionId);
+            }
+
+            if (_Escalation != null)
+            {
+                await _Escalation.FireAsync(EscalationTriggerEnum.RecoveryExhausted, captain.Id,
+                    "Captain " + captain.Id + " failed mission " + missionId + " (" + failureReason + ")", token).ConfigureAwait(false);
+            }
+
+            string signalMessage = "Mission " + missionId + " failed: " + failureReason;
+            if (IsCaptainUnavailableFailureReason(failureReason))
+            {
+                signalMessage += " (captain stalled)";
+            }
+
+            Signal signal = new Signal(SignalTypeEnum.Error, signalMessage);
+            signal.FromCaptainId = captain.Id;
+            await _Database.Signals.CreateAsync(signal, token).ConfigureAwait(false);
+        }
+
+        private static bool IsCaptainUnavailableFailureReason(string failureReason)
+        {
+            if (String.IsNullOrWhiteSpace(failureReason))
+                return false;
+
+            string normalized = NormalizeProcessExitFailureReason(failureReason);
+
+            if (normalized.Contains("hit your limit", StringComparison.OrdinalIgnoreCase) ||
+                normalized.Contains("rate limit", StringComparison.OrdinalIgnoreCase) ||
+                normalized.Contains("quota", StringComparison.OrdinalIgnoreCase) ||
+                normalized.Contains("insufficient_quota", StringComparison.OrdinalIgnoreCase) ||
+                normalized.Contains("invalid api key", StringComparison.OrdinalIgnoreCase) ||
+                normalized.Contains("authentication failed", StringComparison.OrdinalIgnoreCase) ||
+                normalized.Contains("unauthorized", StringComparison.OrdinalIgnoreCase) ||
+                normalized.Contains("forbidden", StringComparison.OrdinalIgnoreCase) ||
+                normalized.Contains("not logged in", StringComparison.OrdinalIgnoreCase) ||
+                normalized.Contains("login required", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            bool mentionsModel = normalized.Contains("model", StringComparison.OrdinalIgnoreCase);
+            bool modelUnavailable =
+                normalized.Contains("invalid", StringComparison.OrdinalIgnoreCase) ||
+                normalized.Contains("unknown", StringComparison.OrdinalIgnoreCase) ||
+                normalized.Contains("not found", StringComparison.OrdinalIgnoreCase) ||
+                normalized.Contains("unsupported", StringComparison.OrdinalIgnoreCase) ||
+                normalized.Contains("unavailable", StringComparison.OrdinalIgnoreCase);
+
+            return mentionsModel && modelUnavailable;
+        }
+
+        private static string NormalizeProcessExitFailureReason(string failureReason)
+        {
+            if (String.IsNullOrWhiteSpace(failureReason))
+                return String.Empty;
+
+            string normalized = failureReason.Trim();
+            if (normalized.StartsWith("[stderr]", StringComparison.OrdinalIgnoreCase))
+            {
+                normalized = normalized.Substring("[stderr]".Length).Trim();
+            }
+
+            return normalized;
         }
 
         private async Task HaltVoyageAsync(string voyageId, string failedMissionId, string failureReason, CancellationToken token)
