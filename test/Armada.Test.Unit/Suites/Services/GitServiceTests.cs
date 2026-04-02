@@ -349,7 +349,7 @@ namespace Armada.Test.Unit.Suites.Services
                     }
 
                     AssertTrue(ex != null, "Expected dirty worktree creation to throw");
-                    AssertTrue(ex!.Message.Contains("Fresh worktree", StringComparison.Ordinal), "Exception should explain that the new worktree is dirty");
+                    AssertTrue(ex!.Message.Contains("contains tracked modifications", StringComparison.Ordinal), "Exception should explain that the checkout is dirty");
                     AssertTrue(ex.Message.Contains("test/Dirty.csproj", StringComparison.Ordinal), "Exception should list the dirty tracked file");
                     AssertFalse(Directory.Exists(worktreeDir), "Failed worktree creation should clean up the worktree directory");
 
@@ -552,6 +552,65 @@ namespace Armada.Test.Unit.Suites.Services
                     AssertTrue(!String.IsNullOrWhiteSpace(localBranch), "Landing checkout should create a local target branch when it is missing");
                     AssertEqual("base\nworker change\n", mergedReadme, "Landing merge should include worker changes");
                     AssertEqual("target branch content\n", targetBranchFile, "Landing merge should preserve target branch files");
+                }
+                finally
+                {
+                    if (Directory.Exists(rootDir))
+                    {
+                        try { Directory.Delete(rootDir, true); }
+                        catch { }
+                    }
+                }
+            });
+
+            await RunTest("MergeBranchLocalAsync DirtyLandingCheckout Throws Before Merge", async () =>
+            {
+                GitService service = CreateService();
+                string rootDir = Path.Combine(Path.GetTempPath(), "armada-gitservice-" + Guid.NewGuid().ToString("N"));
+                string sourceDir = Path.Combine(rootDir, "source");
+                string bareDir = Path.Combine(rootDir, "bare.git");
+                string targetDir = Path.Combine(rootDir, "target");
+
+                try
+                {
+                    Directory.CreateDirectory(sourceDir);
+                    await RunGitAsync(sourceDir, "init", "-b", "main").ConfigureAwait(false);
+                    await RunGitAsync(sourceDir, "config", "user.name", "Armada Tests").ConfigureAwait(false);
+                    await RunGitAsync(sourceDir, "config", "user.email", "armada-tests@example.com").ConfigureAwait(false);
+                    await File.WriteAllTextAsync(Path.Combine(sourceDir, "README.md"), "base\n").ConfigureAwait(false);
+                    await RunGitAsync(sourceDir, "add", "README.md").ConfigureAwait(false);
+                    await RunGitAsync(sourceDir, "commit", "-m", "Initial commit").ConfigureAwait(false);
+
+                    await RunGitAsync(rootDir, "clone", "--bare", sourceDir, bareDir).ConfigureAwait(false);
+                    await RunGitAsync(rootDir, "clone", bareDir, targetDir).ConfigureAwait(false);
+                    await RunGitAsync(targetDir, "config", "user.name", "Armada Tests").ConfigureAwait(false);
+                    await RunGitAsync(targetDir, "config", "user.email", "armada-tests@example.com").ConfigureAwait(false);
+
+                    await RunGitAsync(sourceDir, "remote", "add", "armada", bareDir).ConfigureAwait(false);
+                    await RunGitAsync(sourceDir, "checkout", "-b", "armada/worker-2").ConfigureAwait(false);
+                    await File.WriteAllTextAsync(Path.Combine(sourceDir, "README.md"), "base\nworker change\n").ConfigureAwait(false);
+                    await RunGitAsync(sourceDir, "commit", "-am", "Worker change").ConfigureAwait(false);
+                    await RunGitAsync(sourceDir, "push", "armada", "armada/worker-2").ConfigureAwait(false);
+
+                    await File.WriteAllTextAsync(Path.Combine(targetDir, "README.md"), "dirty landing checkout\n").ConfigureAwait(false);
+
+                    InvalidOperationException? ex = null;
+                    try
+                    {
+                        await service.MergeBranchLocalAsync(targetDir, bareDir, "armada/worker-2", "main").ConfigureAwait(false);
+                    }
+                    catch (InvalidOperationException caught)
+                    {
+                        ex = caught;
+                    }
+
+                    string currentBranch = (await RunGitAsync(targetDir, "rev-parse", "--abbrev-ref", "HEAD").ConfigureAwait(false)).Trim();
+                    string fileContents = await File.ReadAllTextAsync(Path.Combine(targetDir, "README.md")).ConfigureAwait(false);
+
+                    AssertNotNull(ex, "Dirty landing checkout should throw");
+                    AssertTrue(ex.Message.Contains("contains tracked modifications", StringComparison.Ordinal), "Dirty landing checkout should be rejected with a clear error");
+                    AssertEqual("main", currentBranch, "Dirty landing checkout should not switch branches");
+                    AssertEqual("dirty landing checkout\n", fileContents, "Dirty landing checkout should remain untouched");
                 }
                 finally
                 {

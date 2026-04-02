@@ -306,6 +306,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(branchName)) throw new ArgumentNullException(nameof(branchName));
 
             _Logging.Info(_Header + "merging branch " + branchName + " from " + sourceRepoPath + " into " + targetWorkDir);
+            await EnsureTrackedFilesCleanAsync(targetWorkDir, token).ConfigureAwait(false);
 
             // Ensure we are on the correct target branch before merging.
             // Without this, a previous fetch/merge could leave HEAD on a different branch,
@@ -575,7 +576,7 @@ namespace Armada.Core.Services
             }
 
             throw new InvalidOperationException(
-                "Fresh worktree " + worktreePath + " contains tracked modifications: " + status);
+                "Git checkout " + worktreePath + " contains tracked modifications: " + status);
         }
 
         private async Task<string> ResolveCommitAsync(string workingDirectory, string gitRef)
