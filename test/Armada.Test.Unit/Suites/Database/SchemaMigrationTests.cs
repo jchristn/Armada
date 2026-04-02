@@ -69,7 +69,7 @@ namespace Armada.Test.Unit.Suites.Database
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
                     int version = await testDb.Driver.GetSchemaVersionAsync();
-                    AssertTrue(version >= 1, "Schema version should be at least 1 after initialization");
+                    AssertTrue(version >= 27, "Schema version should include captain model and mission runtime migrations");
                 }
             });
 
@@ -94,11 +94,28 @@ namespace Armada.Test.Unit.Suites.Database
                     driver2.Dispose();
 
                     AssertEqual(v1, v2);
-                    AssertTrue(v1 >= 1);
+                    AssertTrue(v1 >= 27);
                 }
                 finally
                 {
                     try { File.Delete(tempFile); } catch { }
+                }
+            });
+
+            await RunTest("InitializeAsync creates captain model and mission runtime columns", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    using (SqliteConnection conn = new SqliteConnection(testDb.ConnectionString))
+                    {
+                        await conn.OpenAsync();
+
+                        HashSet<string> captainColumns = await ReadColumnNamesAsync(conn, "captains").ConfigureAwait(false);
+                        HashSet<string> missionColumns = await ReadColumnNamesAsync(conn, "missions").ConfigureAwait(false);
+
+                        AssertTrue(captainColumns.Contains("model"), "captains.model missing");
+                        AssertTrue(missionColumns.Contains("total_runtime_ms"), "missions.total_runtime_ms missing");
+                    }
                 }
             });
 
@@ -144,6 +161,25 @@ namespace Armada.Test.Unit.Suites.Database
                     try { File.Delete(tempFile); } catch { }
                 }
             });
+        }
+
+        private static async Task<HashSet<string>> ReadColumnNamesAsync(SqliteConnection conn, string tableName)
+        {
+            HashSet<string> columnNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            using (SqliteCommand cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = "PRAGMA table_info(" + tableName + ");";
+                using (SqliteDataReader reader = await cmd.ExecuteReaderAsync().ConfigureAwait(false))
+                {
+                    while (await reader.ReadAsync().ConfigureAwait(false))
+                    {
+                        columnNames.Add(reader["name"].ToString()!);
+                    }
+                }
+            }
+
+            return columnNames;
         }
     }
 }

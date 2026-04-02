@@ -91,8 +91,12 @@ namespace Armada.Test.Unit.Suites.Database
                     mission.VoyageId = voyage.Id;
                     mission.Priority = 5;
                     mission.BranchName = "feature/test";
+                    mission.StartedUtc = _BaseTime;
+                    mission.CompletedUtc = _BaseTime.AddMilliseconds(6543);
+                    mission.TotalRuntimeMs = 6543;
 
                     Mission result = await db.Missions.CreateAsync(mission);
+                    Mission? stored = await db.Missions.ReadAsync(result.Id);
 
                     AssertNotNull(result);
                     AssertStartsWith("msn_", result.Id);
@@ -103,6 +107,8 @@ namespace Armada.Test.Unit.Suites.Database
                     AssertEqual(MissionStatusEnum.Pending, result.Status);
                     AssertEqual(5, result.Priority);
                     AssertEqual("feature/test", result.BranchName);
+                    AssertNotNull(stored);
+                    AssertEqual(6543L, stored!.TotalRuntimeMs!.Value);
                 }
             });
         }
@@ -134,6 +140,7 @@ namespace Armada.Test.Unit.Suites.Database
                     AssertEqual(voyage.Id, result.VoyageId);
                     AssertEqual(MissionStatusEnum.Pending, result.Status);
                     AssertEqual(10, result.Priority);
+                    AssertNull(result.TotalRuntimeMs);
                 }
             });
         }
@@ -164,7 +171,9 @@ namespace Armada.Test.Unit.Suites.Database
                     mission.Priority = 1;
                     mission.CaptainId = captain.Id;
                     mission.BranchName = "feature/updated";
-                    mission.StartedUtc = DateTime.UtcNow;
+                    mission.StartedUtc = _BaseTime.AddHours(1);
+                    mission.CompletedUtc = mission.StartedUtc.Value.AddMilliseconds(12000);
+                    mission.TotalRuntimeMs = 12000;
                     await db.Missions.UpdateAsync(mission);
 
                     Mission? result = await db.Missions.ReadAsync(mission.Id);
@@ -177,6 +186,11 @@ namespace Armada.Test.Unit.Suites.Database
                     AssertEqual(captain.Id, result.CaptainId);
                     AssertEqual("feature/updated", result.BranchName);
                     AssertNotNull(result.StartedUtc);
+                    AssertNotNull(result.CompletedUtc);
+                    AssertNotNull(result.TotalRuntimeMs);
+                    AssertEqual(_BaseTime.AddHours(1), result.StartedUtc!.Value);
+                    AssertEqual(_BaseTime.AddHours(1).AddMilliseconds(12000), result.CompletedUtc!.Value);
+                    AssertEqual(12000L, result.TotalRuntimeMs!.Value);
                 }
             });
         }

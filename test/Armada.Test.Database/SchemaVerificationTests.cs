@@ -27,7 +27,7 @@ namespace Armada.Test.Database
             await conn.OpenAsync(token).ConfigureAwait(false);
 
             DatabaseAssert.True(await TableExistsAsync(conn, "schema_migrations", token).ConfigureAwait(false), "schema_migrations table missing");
-            DatabaseAssert.True(await GetMaxSchemaVersionAsync(conn, token).ConfigureAwait(false) >= 16, "Expected schema version >= 16");
+            DatabaseAssert.True(await GetMaxSchemaVersionAsync(conn, token).ConfigureAwait(false) >= 27, "Expected schema version >= 27");
 
             await AssertColumnAsync(conn, "tenants", "is_protected", token).ConfigureAwait(false);
             await AssertColumnAsync(conn, "users", "is_protected", token).ConfigureAwait(false);
@@ -39,6 +39,9 @@ namespace Armada.Test.Database
                 await AssertColumnAsync(conn, table, "tenant_id", token).ConfigureAwait(false);
                 await AssertColumnAsync(conn, table, "user_id", token).ConfigureAwait(false);
             }
+
+            await AssertColumnAsync(conn, "captains", "model", token).ConfigureAwait(false);
+            await AssertColumnAsync(conn, "missions", "total_runtime_ms", token).ConfigureAwait(false);
 
             foreach (string indexName in new[] {
                 "idx_users_tenant_email",

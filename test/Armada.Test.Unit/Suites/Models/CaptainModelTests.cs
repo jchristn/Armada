@@ -30,6 +30,7 @@ namespace Armada.Test.Unit.Suites.Models
                 Captain captain = new Captain();
                 AssertEqual("Captain", captain.Name);
                 AssertEqual(AgentRuntimeEnum.ClaudeCode, captain.Runtime);
+                AssertNull(captain.Model);
                 AssertEqual(CaptainStateEnum.Idle, captain.State);
                 AssertNull(captain.CurrentMissionId);
                 AssertNull(captain.CurrentDockId);
@@ -47,6 +48,7 @@ namespace Armada.Test.Unit.Suites.Models
             await RunTest("Captain Serialization RoundTrip", () =>
             {
                 Captain captain = new Captain("test-captain", AgentRuntimeEnum.Codex);
+                captain.Model = "gpt-5.4";
                 captain.State = CaptainStateEnum.Working;
                 captain.CurrentMissionId = "msn_test";
                 captain.ProcessId = 12345;
@@ -58,6 +60,7 @@ namespace Armada.Test.Unit.Suites.Models
                 AssertEqual(captain.Id, deserialized.Id);
                 AssertEqual(captain.Name, deserialized.Name);
                 AssertEqual(captain.Runtime, deserialized.Runtime);
+                AssertEqual(captain.Model, deserialized.Model);
                 AssertEqual(captain.State, deserialized.State);
                 AssertEqual(captain.ProcessId, deserialized.ProcessId);
                 AssertEqual(captain.RecoveryAttempts, deserialized.RecoveryAttempts);

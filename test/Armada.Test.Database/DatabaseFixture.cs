@@ -95,12 +95,13 @@ namespace Armada.Test.Database
             return vessel;
         }
 
-        public async Task<Captain> CreateCaptainAsync(string tenantId, string userId, string namePrefix, CancellationToken token = default)
+        public async Task<Captain> CreateCaptainAsync(string tenantId, string userId, string namePrefix, CancellationToken token = default, string? model = null)
         {
             Captain captain = new Captain(namePrefix + "-" + Token(), AgentRuntimeEnum.Codex)
             {
                 TenantId = tenantId,
                 UserId = userId,
+                Model = model,
                 State = CaptainStateEnum.Idle
             };
 
@@ -123,7 +124,7 @@ namespace Armada.Test.Database
             return voyage;
         }
 
-        public async Task<Mission> CreateMissionAsync(string tenantId, string userId, string voyageId, string vesselId, string captainId, string titlePrefix, CancellationToken token = default)
+        public async Task<Mission> CreateMissionAsync(string tenantId, string userId, string voyageId, string vesselId, string captainId, string titlePrefix, CancellationToken token = default, long? totalRuntimeMs = null)
         {
             Mission mission = new Mission(titlePrefix + "-" + Token(), "Mission description")
             {
@@ -136,6 +137,14 @@ namespace Armada.Test.Database
                 Priority = 10,
                 BranchName = "feature/" + Token()
             };
+
+            if (totalRuntimeMs.HasValue)
+            {
+                DateTime completedUtc = new DateTime(2025, 1, 1, 0, 0, 30, DateTimeKind.Utc);
+                mission.StartedUtc = completedUtc.AddMilliseconds(-totalRuntimeMs.Value);
+                mission.CompletedUtc = completedUtc;
+                mission.TotalRuntimeMs = totalRuntimeMs.Value;
+            }
 
             await _Driver.Missions.CreateAsync(mission, token).ConfigureAwait(false);
             RegisterCleanup(async ct => await _Driver.Missions.DeleteAsync(mission.Id, ct).ConfigureAwait(false));
