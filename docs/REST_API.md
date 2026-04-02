@@ -687,7 +687,7 @@ Health check endpoint. **Does not require authentication.**
   "Timestamp": "2026-03-07T12:00:00Z",
   "StartUtc": "2026-03-07T08:00:00Z",
   "Uptime": "0.04:00:00",
-  "Version": "0.2.0",
+  "Version": "0.5.0",
   "Ports": {
     "Admiral": 7890,
     "Mcp": 7891,
@@ -1519,6 +1519,7 @@ Register a new captain (AI agent).
 | `Name` | string | yes | Captain name |
 | `Runtime` | string | no | Agent runtime type (default: `ClaudeCode`) |
 | `Model` | string | no | Optional model override for this captain. When omitted, the runtime selects its default model |
+| `SystemInstructions` | string | no | Optional per-captain instructions injected into every mission prompt |
 
 **Response:** `201 Created` - [Captain](#captain)
 **Error:** `400 Bad Request` - Invalid or unavailable model
@@ -1566,15 +1567,16 @@ Update a captain's name, runtime, or model. Operational fields (state, process, 
 **Request Body:**
 ```json
 {
-  "name": "captain-bravo",
-  "runtime": "Codex",
-  "model": "gpt-5.4",
-  "systemInstructions": "Focus on code quality and always run linting before commits."
+  "Name": "captain-bravo",
+  "Runtime": "Codex",
+  "Model": "gpt-5.4",
+  "SystemInstructions": "Focus on code quality and always run linting before commits."
 }
 ```
 
 **Response:** `200 OK` - [Captain](#captain)
 **Error:** `400 Bad Request` - Invalid or unavailable model
+**Error:** `404` - Captain not found
 
 Example validation error:
 
@@ -1585,14 +1587,11 @@ Example validation error:
 }
 ```
 
-**Response:** `200 OK` - [Captain](#captain)
-**Error:** `404` - Captain not found
-
 ```bash
 curl -X PUT http://localhost:7890/api/v1/captains/cpt_abc123 \
   -H "Content-Type: application/json" \
   -H "x-api-key: YOUR_KEY" \
-  -d '{"name": "captain-bravo", "runtime": "Codex"}'
+  -d '{"Name": "captain-bravo", "Runtime": "Codex", "Model": "gpt-5.4", "SystemInstructions": "Focus on code quality and always run linting before commits."}'
 ```
 
 ---

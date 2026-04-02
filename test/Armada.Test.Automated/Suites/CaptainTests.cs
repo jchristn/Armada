@@ -85,6 +85,55 @@ namespace Armada.Test.Automated.Suites
                 AssertEqual("ClaudeCode", captain.Runtime.ToString());
             });
 
+            await RunTest("Create Captain With Valid Model Round Trips", async () =>
+            {
+                string captainName = "model-roundtrip-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                const string instructions = "Focus on regression testing and document failures clearly.";
+                HttpResponseMessage response = await _Client.PostAsync("/api/v1/captains",
+                    JsonHelper.ToJsonContent(new
+                    {
+                        Name = captainName,
+                        Runtime = "Codex",
+                        Model = "gpt-5.4",
+                        SystemInstructions = instructions
+                    }));
+
+                AssertEqual(HttpStatusCode.Created, response.StatusCode);
+
+                Captain created = await JsonHelper.DeserializeAsync<Captain>(response);
+                _CreatedCaptainIds.Add(created.Id);
+
+                AssertEqual("Codex", created.Runtime.ToString());
+                AssertEqual("gpt-5.4", created.Model);
+                AssertEqual(instructions, created.SystemInstructions);
+
+                HttpResponseMessage getResponse = await _Client.GetAsync("/api/v1/captains/" + created.Id);
+                AssertEqual(HttpStatusCode.OK, getResponse.StatusCode);
+
+                Captain fetched = await JsonHelper.DeserializeAsync<Captain>(getResponse);
+                AssertEqual(created.Id, fetched.Id);
+                AssertEqual("gpt-5.4", fetched.Model);
+                AssertEqual(instructions, fetched.SystemInstructions);
+            });
+
+            await RunTest("Create Captain Invalid Model Returns 400 With Validation Message", async () =>
+            {
+                string captainName = "invalid-model-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                HttpResponseMessage response = await _Client.PostAsync("/api/v1/captains",
+                    JsonHelper.ToJsonContent(new
+                    {
+                        Name = captainName,
+                        Runtime = "ClaudeCode",
+                        Model = "bad-model"
+                    }));
+
+                AssertEqual(HttpStatusCode.BadRequest, response.StatusCode);
+
+                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
+                AssertEqual("BadRequest", error.Error);
+                AssertEqual("Model 'bad-model' is not available for runtime ClaudeCode", error.Message);
+            });
+
             await RunTest("Create Captain State Is Idle", async () =>
             {
                 Captain captain = await CreateCaptainAsync("idle-check");
@@ -361,6 +410,64 @@ namespace Armada.Test.Automated.Suites
                 Captain updated = await JsonHelper.DeserializeAsync<Captain>(response);
 
                 AssertEqual(originalCreatedUtc.ToString("O"), updated.CreatedUtc.ToString("O"));
+            });
+
+            await RunTest("Update Captain Valid Model Round Trips Through Get", async () =>
+            {
+                Captain created = await CreateCaptainAsync("model-update");
+                string newName = "model-update-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                const string instructions = "Keep test runs fast and report runtime regressions.";
+
+                HttpResponseMessage response = await _Client.PutAsync("/api/v1/captains/" + created.Id,
+                    JsonHelper.ToJsonContent(new
+                    {
+                        Name = newName,
+                        Runtime = "Codex",
+                        Model = "gpt-5.4",
+                        SystemInstructions = instructions
+                    }));
+                AssertEqual(HttpStatusCode.OK, response.StatusCode);
+
+                Captain updated = await JsonHelper.DeserializeAsync<Captain>(response);
+                AssertEqual(newName, updated.Name);
+                AssertEqual("Codex", updated.Runtime.ToString());
+                AssertEqual("gpt-5.4", updated.Model);
+                AssertEqual(instructions, updated.SystemInstructions);
+
+                HttpResponseMessage getResponse = await _Client.GetAsync("/api/v1/captains/" + created.Id);
+                AssertEqual(HttpStatusCode.OK, getResponse.StatusCode);
+
+                Captain fetched = await JsonHelper.DeserializeAsync<Captain>(getResponse);
+                AssertEqual(newName, fetched.Name);
+                AssertEqual("Codex", fetched.Runtime.ToString());
+                AssertEqual("gpt-5.4", fetched.Model);
+                AssertEqual(instructions, fetched.SystemInstructions);
+            });
+
+            await RunTest("Update Captain Invalid Model Returns 400 With Validation Message", async () =>
+            {
+                Captain created = await CreateCaptainAsync("invalid-update");
+
+                HttpResponseMessage response = await _Client.PutAsync("/api/v1/captains/" + created.Id,
+                    JsonHelper.ToJsonContent(new
+                    {
+                        Name = created.Name,
+                        Runtime = "ClaudeCode",
+                        Model = "bad-model"
+                    }));
+                AssertEqual(HttpStatusCode.BadRequest, response.StatusCode);
+
+                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
+                AssertEqual("BadRequest", error.Error);
+                AssertEqual("Model 'bad-model' is not available for runtime ClaudeCode", error.Message);
+
+                HttpResponseMessage getResponse = await _Client.GetAsync("/api/v1/captains/" + created.Id);
+                AssertEqual(HttpStatusCode.OK, getResponse.StatusCode);
+
+                Captain fetched = await JsonHelper.DeserializeAsync<Captain>(getResponse);
+                AssertEqual(created.Id, fetched.Id);
+                AssertEqual("ClaudeCode", fetched.Runtime.ToString());
+                AssertTrue(string.IsNullOrEmpty(fetched.Model), "Failed update should not persist an invalid model");
             });
 
             #endregion

@@ -607,6 +607,28 @@ namespace Armada.Test.Automated.Suites
                 AssertTrue(transitioned.TotalRuntimeMs != null, "Complete transition should preserve TotalRuntimeMs when StartedUtc exists");
             });
 
+            await RunTest("Get Mission After Complete Returns TotalRuntimeMs", async () =>
+            {
+                string vesselId = await SetupVesselAsync();
+                Mission created = await CreateMissionAsync(vesselId, "Runtime Readback");
+                string missionId = created.Id;
+
+                await TransitionAndAssertAsync(missionId, "Assigned");
+                await TransitionAndAssertAsync(missionId, "InProgress");
+
+                HttpResponseMessage completeResponse = await TransitionAsync(missionId, "Complete");
+                AssertEqual(HttpStatusCode.OK, completeResponse.StatusCode);
+
+                HttpResponseMessage getResponse = await _AuthClient.GetAsync("/api/v1/missions/" + missionId);
+                AssertEqual(HttpStatusCode.OK, getResponse.StatusCode);
+
+                Mission fetched = await JsonHelper.DeserializeAsync<Mission>(getResponse);
+                AssertEqual(MissionStatusEnum.Complete, fetched.Status);
+                AssertTrue(fetched.CompletedUtc != null, "Completed mission read should include CompletedUtc");
+                AssertTrue(fetched.TotalRuntimeMs != null, "Completed mission read should include TotalRuntimeMs");
+                AssertTrue(fetched.TotalRuntimeMs!.Value >= 0, "Completed mission runtime should be non-negative");
+            });
+
             await RunTest("StatusTransition_FullLifecycle_SetsCompletedUtcOnFailed", async () =>
             {
                 string vesselId = await SetupVesselAsync();
