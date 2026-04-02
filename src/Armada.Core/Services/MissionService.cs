@@ -1653,6 +1653,12 @@ namespace Armada.Core.Services
             string normalizedTitle = title.Trim();
             string normalizedDescription = NormalizeArchitectDescription(description);
             (normalizedDescription, string? dependencyReference) = ExtractArchitectDependencyReference(normalizedDescription);
+            if (String.IsNullOrWhiteSpace(normalizedDescription))
+            {
+                // Title-only architect blocks are still actionable; preserve the title as
+                // the downstream mission description so worker/test/judge prompts are not empty.
+                normalizedDescription = normalizedTitle;
+            }
 
             if (IsArchitectPlaceholderTitle(normalizedTitle))
                 return;
