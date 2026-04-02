@@ -24,6 +24,7 @@ import JsonViewer from '../components/shared/JsonViewer';
 import DiffViewer from '../components/shared/DiffViewer';
 import LogViewer from '../components/shared/LogViewer';
 import CopyButton from '../components/shared/CopyButton';
+import { formatDuration, MISSION_DETAIL_GRID_COLUMNS } from './missionDetailUtils';
 
 const MISSION_STATUSES = [
   'Pending', 'Assigned', 'InProgress', 'WorkProduced', 'Testing', 'Review', 'Complete', 'Failed', 'LandingFailed', 'Cancelled',
@@ -42,32 +43,6 @@ function formatTimeRelative(utc: string | null | undefined): string {
   if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
   if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
   return Math.floor(diff / 86400000) + 'd ago';
-}
-
-function formatDuration(runtimeMs: number | null | undefined): string {
-  if (runtimeMs == null) return '--';
-
-  if (runtimeMs < 60000) {
-    return (runtimeMs / 1000).toFixed(1).replace(/\.0$/, '') + 's';
-  }
-
-  const totalSeconds = Math.round(runtimeMs / 1000);
-  const seconds = totalSeconds % 60;
-  const totalMinutes = Math.floor(totalSeconds / 60);
-
-  if (totalMinutes < 60) {
-    return totalMinutes + 'm ' + seconds + 's';
-  }
-
-  const minutes = totalMinutes % 60;
-  const hours = Math.floor(totalMinutes / 60);
-
-  if (hours < 24) {
-    return hours + 'h ' + minutes + 'm';
-  }
-
-  const days = Math.floor(hours / 24);
-  return days + 'd ' + (hours % 24) + 'h';
 }
 
 export default function MissionDetail() {
@@ -406,7 +381,7 @@ export default function MissionDetail() {
       )}
 
       {/* Mission Info */}
-      <div className="detail-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
+      <div className="detail-grid" style={{ gridTemplateColumns: MISSION_DETAIL_GRID_COLUMNS }}>
         <div className="detail-field">
           <span className="detail-label">ID</span>
           <span className="id-display">

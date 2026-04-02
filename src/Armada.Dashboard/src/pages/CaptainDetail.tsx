@@ -17,6 +17,13 @@ import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import StatusBadge from '../components/shared/StatusBadge';
 import CopyButton from '../components/shared/CopyButton';
+import {
+  buildCaptainUpdatePayload,
+  createCaptainEditForm,
+  getCaptainModelDisplayText,
+  getCaptainSaveErrorMessage,
+  RUNTIME_DEFAULT_MODEL_TEXT,
+} from './captainDetailUtils';
 
 const RUNTIMES = ['ClaudeCode', 'Codex', 'Gemini', 'Cursor', 'Custom'];
 
@@ -36,31 +43,6 @@ function formatTimeRelative(utc: string | null): string {
   if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
   if (diff < 2592000000) return `${Math.floor(diff / 86400000)}d ago`;
   return d.toLocaleDateString();
-}
-
-function getErrorMessage(error: unknown): string | null {
-  if (error instanceof Error && error.message) return error.message;
-  if (typeof error === 'string' && error) return error;
-  if (!error || typeof error !== 'object') return null;
-
-  const errorObject = error as {
-    message?: unknown;
-    data?: { message?: unknown; error?: unknown };
-    response?: { data?: { message?: unknown; error?: unknown } };
-  };
-
-  const errorMessage = errorObject.message;
-  const dataMessage = errorObject.data?.message;
-  const dataError = errorObject.data?.error;
-  const responseMessage = errorObject.response?.data?.message;
-  const responseError = errorObject.response?.data?.error;
-
-  if (typeof errorMessage === 'string' && errorMessage) return errorMessage;
-  if (typeof dataMessage === 'string' && dataMessage) return dataMessage;
-  if (typeof dataError === 'string' && dataError) return dataError;
-  if (typeof responseMessage === 'string' && responseMessage) return responseMessage;
-  if (typeof responseError === 'string' && responseError) return responseError;
-  return null;
 }
 
 export default function CaptainDetail() {
@@ -122,14 +104,7 @@ export default function CaptainDetail() {
   function openEdit() {
     if (!captain) return;
     setError('');
-    setForm({
-      name: captain.name,
-      runtime: captain.runtime || 'ClaudeCode',
-      model: captain.model ?? '',
-      systemInstructions: captain.systemInstructions ?? '',
-      allowedPersonas: captain.allowedPersonas ?? '',
-      preferredPersona: captain.preferredPersona ?? '',
-    });
+    setForm(createCaptainEditForm(captain));
     setShowForm(true);
   }
 
@@ -138,15 +113,12 @@ export default function CaptainDetail() {
     if (!captain) return;
     try {
       setError('');
-      const payload = { ...form, model: form.model.trim() || null } as Record<string, unknown>;
-      if (!payload.systemInstructions) delete payload.systemInstructions;
-      if (!payload.allowedPersonas) delete payload.allowedPersonas;
-      if (!payload.preferredPersona) delete payload.preferredPersona;
+      const payload = buildCaptainUpdatePayload(form);
       await updateCaptain(captain.id, payload);
       setShowForm(false);
       load();
     } catch (saveError) {
-      setError(getErrorMessage(saveError) || 'Save failed.');
+      setError(getCaptainSaveErrorMessage(saveError));
     }
   }
 
@@ -262,7 +234,7 @@ export default function CaptainDetail() {
             </label>
             <label>
               Model
-              <input value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} placeholder="(runtime default)" />
+              <input value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} placeholder={RUNTIME_DEFAULT_MODEL_TEXT} />
             </label>
             <label title="Optional instructions injected into every mission prompt for this captain. Use this to specialize behavior, add guardrails, or provide persistent context.">
               System Instructions
@@ -302,7 +274,7 @@ export default function CaptainDetail() {
         <div className="detail-field"><span className="detail-label">Runtime</span><span>{captain.runtime || 'ClaudeCode'}</span></div>
         <div className="detail-field">
           <span className="detail-label">Model</span>
-          <span>{captain.model || <span className="text-dim">(runtime default)</span>}</span>
+          <span>{captain.model ? captain.model : <span className="text-dim">{getCaptainModelDisplayText(captain.model)}</span>}</span>
         </div>
       </div>
       {captain.systemInstructions && (
