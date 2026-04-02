@@ -164,9 +164,10 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Captains")
                 .WithSummary("Create a captain")
-                .WithDescription("Registers a new captain (AI agent).")
+                .WithDescription("Registers a new captain (AI agent). Optional model overrides are validated against the selected runtime before creation.")
                 .WithRequestBody(OpenApiRequestBodyMetadata.Json<Captain>("Captain data", true))
                 .WithResponse(201, OpenApiResponseMetadata.Json<Captain>("Created captain"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Rest.Get("/api/v1/captains/{id}", async (AppRequest req) =>
@@ -233,10 +234,11 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Captains")
                 .WithSummary("Update a captain")
-                .WithDescription("Updates a captain's name, runtime, or max parallelism. Operational fields (state, process, mission) are preserved.")
+                .WithDescription("Updates a captain's name, runtime, or model. Operational fields (state, process, mission) are preserved. Invalid or unavailable models return 400 Bad Request.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Captain ID (cpt_ prefix)"))
                 .WithRequestBody(OpenApiRequestBodyMetadata.Json<Captain>("Updated captain data", true))
                 .WithResponse(200, OpenApiResponseMetadata.Json<Captain>("Updated captain"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 

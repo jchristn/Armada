@@ -1211,7 +1211,15 @@
 							"path": ["api", "v1", "missions", "{{missionId}}"]
 						},
 						"description": "Returns a single mission by ID."
-					}
+					},
+					"response": [
+						{
+							"name": "Completed Mission",
+							"status": "OK",
+							"code": 200,
+							"body": "{\n  \"Id\": \"msn_abc123\",\n  \"VoyageId\": \"vyg_abc123\",\n  \"VesselId\": \"vsl_abc123\",\n  \"CaptainId\": \"cpt_abc123\",\n  \"Title\": \"Fix login bug\",\n  \"Description\": \"The login form does not validate email addresses.\",\n  \"Status\": \"Complete\",\n  \"Priority\": 100,\n  \"BranchName\": \"armada/msn_abc123\",\n  \"PrUrl\": null,\n  \"StartedUtc\": \"2026-03-07T12:05:00Z\",\n  \"CompletedUtc\": \"2026-03-07T12:05:45Z\",\n  \"TotalRuntimeMs\": 45000,\n  \"LastUpdateUtc\": \"2026-03-07T12:05:45Z\"\n}"
+						}
+					]
 				},
 				{
 					"name": "Update Mission",
@@ -1497,6 +1505,12 @@
 							"status": "Created",
 							"code": 201,
 							"body": "{\n  \"Id\": \"cpt_abc123\",\n  \"Name\": \"captain-1\",\n  \"Runtime\": \"ClaudeCode\",\n  \"Model\": \"claude-sonnet-4-20250514\",\n  \"SystemInstructions\": \"You are a testing specialist. Always run tests before committing.\",\n  \"State\": \"Idle\",\n  \"CurrentMissionId\": null,\n  \"CurrentDockId\": null,\n  \"ProcessId\": null,\n  \"RecoveryAttempts\": 0,\n  \"LastHeartbeatUtc\": null,\n  \"CreatedUtc\": \"2026-03-07T12:00:00Z\",\n  \"LastUpdateUtc\": \"2026-03-07T12:00:00Z\"\n}"
+						},
+						{
+							"name": "Invalid Model",
+							"status": "Bad Request",
+							"code": 400,
+							"body": "{\n  \"Error\": \"BadRequest\",\n  \"Message\": \"Model 'bad-model' is not available for runtime ClaudeCode\"\n}"
 						}
 					]
 				},
@@ -1537,6 +1551,12 @@
 							"status": "OK",
 							"code": 200,
 							"body": "{\n  \"Id\": \"cpt_abc123\",\n  \"Name\": \"Updated Captain Name\",\n  \"Runtime\": \"ClaudeCode\",\n  \"Model\": \"claude-sonnet-4-20250514\",\n  \"State\": \"Idle\"\n}"
+						},
+						{
+							"name": "Invalid Model",
+							"status": "Bad Request",
+							"code": 400,
+							"body": "{\n  \"Error\": \"BadRequest\",\n  \"Message\": \"Model 'bad-model' is not available for runtime ClaudeCode\"\n}"
 						}
 					]
 				},

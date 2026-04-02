@@ -1249,6 +1249,27 @@ Get a single mission by ID.
 
 > **Note:** The `DiffSnapshot` field is excluded from responses to keep payloads compact. Use `GET /api/v1/missions/{id}/diff` to retrieve the full diff.
 
+Example completed mission response:
+
+```json
+{
+  "Id": "msn_abc123",
+  "VoyageId": "vyg_abc123",
+  "VesselId": "vsl_abc123",
+  "CaptainId": "cpt_abc123",
+  "Title": "Fix login bug",
+  "Description": "The login form does not validate email addresses",
+  "Status": "Complete",
+  "Priority": 100,
+  "BranchName": "armada/msn_abc123",
+  "PrUrl": null,
+  "StartedUtc": "2026-03-07T12:05:00Z",
+  "CompletedUtc": "2026-03-07T12:05:45Z",
+  "TotalRuntimeMs": 45000,
+  "LastUpdateUtc": "2026-03-07T12:05:45Z"
+}
+```
+
 ---
 
 #### PUT /api/v1/missions/{id}
@@ -1502,6 +1523,15 @@ Register a new captain (AI agent).
 **Response:** `201 Created` - [Captain](#captain)
 **Error:** `400 Bad Request` - Invalid or unavailable model
 
+Example validation error:
+
+```json
+{
+  "Error": "BadRequest",
+  "Message": "Model 'bad-model' is not available for runtime Codex"
+}
+```
+
 ```bash
 curl -X POST http://localhost:7890/api/v1/captains \
   -H "Content-Type: application/json" \
@@ -1545,6 +1575,15 @@ Update a captain's name, runtime, or model. Operational fields (state, process, 
 
 **Response:** `200 OK` - [Captain](#captain)
 **Error:** `400 Bad Request` - Invalid or unavailable model
+
+Example validation error:
+
+```json
+{
+  "Error": "BadRequest",
+  "Message": "Model 'bad-model' is not available for runtime ClaudeCode"
+}
+```
 
 **Response:** `200 OK` - [Captain](#captain)
 **Error:** `404` - Captain not found
@@ -2878,6 +2917,7 @@ An atomic unit of work assigned to a captain.
   "CreatedUtc": "2026-03-07T12:00:00Z",
   "StartedUtc": "2026-03-07T12:05:00Z",
   "CompletedUtc": null,
+  "TotalRuntimeMs": null,
   "LastUpdateUtc": "2026-03-07T12:10:00Z"
 }
 ```
