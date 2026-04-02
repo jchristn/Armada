@@ -2,9 +2,11 @@ namespace Armada.Test.Automated.Suites
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Linq;
     using System.Net;
     using System.Net.Http;
+    using System.Text.Json;
     using System.Threading.Tasks;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -78,6 +80,17 @@ namespace Armada.Test.Automated.Suites
                 string vesselId = await SetupVesselAsync();
                 Mission mission = await CreateMissionAsync(vesselId, "Pending Check");
                 AssertEqual(MissionStatusEnum.Pending, mission.Status);
+            });
+
+            await RunTest("CreateMission_DefaultRuntimeFieldsAreNull", async () =>
+            {
+                string vesselId = await SetupVesselAsync();
+                Mission mission = await CreateMissionAsync(vesselId, "Default Runtime Fields");
+
+                AssertTrue(mission.StartedUtc == null, "StartedUtc should be null before work starts");
+                AssertTrue(mission.CompletedUtc == null, "CompletedUtc should be null before work completes");
+                AssertTrue(mission.TotalRuntimeMs == null, "TotalRuntimeMs should be null before work completes");
+                AssertTrue(mission.DiffSnapshot == null, "DiffSnapshot should stay compact in mission payloads");
             });
 
             await RunTest("CreateMission_DefaultPriorityIs100", async () =>
@@ -607,6 +620,30 @@ namespace Armada.Test.Automated.Suites
                 AssertTrue(transitioned.TotalRuntimeMs != null, "Complete transition should preserve TotalRuntimeMs when StartedUtc exists");
             });
 
+            await RunTest("GetMission_CompletedResponseIncludesRuntimeFields", async () =>
+            {
+                string vesselId = await SetupVesselAsync();
+                Mission created = await CreateMissionAsync(vesselId, "Runtime Response Fields");
+                string missionId = created.Id;
+
+                await TransitionAndAssertAsync(missionId, "Assigned");
+                await TransitionAndAssertAsync(missionId, "InProgress");
+                await TransitionAndAssertAsync(missionId, "Complete");
+
+                HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/missions/" + missionId);
+                AssertEqual(HttpStatusCode.OK, response.StatusCode);
+
+                string body = await response.Content.ReadAsStringAsync();
+                Mission fetched = JsonHelper.Deserialize<Mission>(body);
+
+                AssertTrue(fetched.StartedUtc != null, "StartedUtc should be populated on completed mission fetches");
+                AssertTrue(fetched.CompletedUtc != null, "CompletedUtc should be populated on completed mission fetches");
+                AssertTrue(fetched.TotalRuntimeMs != null, "TotalRuntimeMs should be populated on completed mission fetches");
+                AssertContains("\"StartedUtc\":", body);
+                AssertContains("\"CompletedUtc\":", body);
+                AssertContains("\"TotalRuntimeMs\":", body);
+            });
+
             await RunTest("StatusTransition_FullLifecycle_SetsCompletedUtcOnFailed", async () =>
             {
                 string vesselId = await SetupVesselAsync();
@@ -1008,6 +1045,75 @@ namespace Armada.Test.Automated.Suites
                 {
                     AssertTrue(mission.DiffSnapshot == null);
                 }
+            });
+
+            await RunTest("OpenApi Create Mission Describes Runtime Fields And Compact DiffSnapshot", async () =>
+            {
+                using JsonDocument openApi = await GetOpenApiDocumentAsync();
+
+                JsonElement operation = openApi.RootElement
+                    .GetProperty("paths")
+                    .GetProperty("/api/v1/missions")
+                    .GetProperty("post");
+
+                string description = operation.GetProperty("description").GetString() ?? String.Empty;
+
+                AssertContains("StartedUtc, CompletedUtc, and TotalRuntimeMs as runtime fields", description);
+                AssertContains("Use GET /api/v1/missions/{id}/diff for diff content", description);
+            });
+
+            await RunTest("OpenApi Get Mission Describes Runtime Progress And Compact DiffSnapshot", async () =>
+            {
+                using JsonDocument openApi = await GetOpenApiDocumentAsync();
+
+                JsonElement operation = openApi.RootElement
+                    .GetProperty("paths")
+                    .GetProperty("/api/v1/missions/{id}")
+                    .GetProperty("get");
+
+                string description = operation.GetProperty("description").GetString() ?? String.Empty;
+
+                AssertContains("StartedUtc, CompletedUtc, and TotalRuntimeMs show runtime progress", description);
+                AssertContains("DiffSnapshot is returned as null", description);
+                AssertContains("Use GET /api/v1/missions/{id}/diff for the full diff", description);
+            });
+
+            await RunTest("REST Docs Mission Sections Include Runtime Field Examples", async () =>
+            {
+                string docs = await File.ReadAllTextAsync(Path.Combine(FindRepositoryRoot(), "docs", "REST_API.md"));
+
+                AssertContains("Create and dispatch a new mission. The response uses the [Mission](#mission) contract", docs);
+                AssertContains("`StartedUtc`, `CompletedUtc`, and `TotalRuntimeMs` are server-managed runtime fields", docs);
+                AssertContains("\"StartedUtc\": \"2026-03-07T12:05:00Z\"", docs);
+                AssertContains("\"CompletedUtc\": \"2026-03-07T12:10:30Z\"", docs);
+                AssertContains("\"TotalRuntimeMs\": 330000", docs);
+                AssertContains("Use `GET /api/v1/missions/{id}/diff` to retrieve the full diff.", docs);
+            });
+
+            await RunTest("Postman Mission Examples Include Runtime Fields And Compact DiffSnapshot", async () =>
+            {
+                using JsonDocument postman = await LoadPostmanCollectionAsync();
+
+                JsonElement createMission = FindPostmanItemByName(postman.RootElement, "Create Mission");
+                JsonElement getMission = FindPostmanItemByName(postman.RootElement, "Get Mission");
+
+                AssertContains("StartedUtc, CompletedUtc, and TotalRuntimeMs as runtime fields", createMission.GetProperty("request").GetProperty("description").GetString() ?? String.Empty);
+                AssertContains("DiffSnapshot is returned as null", getMission.GetProperty("request").GetProperty("description").GetString() ?? String.Empty);
+
+                JsonElement createdResponse = FindPostmanResponseByName(createMission, "Created");
+                JsonElement okResponse = FindPostmanResponseByName(getMission, "OK");
+
+                string createdBody = createdResponse.GetProperty("body").GetString() ?? String.Empty;
+                string okBody = okResponse.GetProperty("body").GetString() ?? String.Empty;
+
+                AssertContains("\"StartedUtc\": null", createdBody);
+                AssertContains("\"CompletedUtc\": null", createdBody);
+                AssertContains("\"TotalRuntimeMs\": null", createdBody);
+                AssertContains("\"DiffSnapshot\": null", createdBody);
+                AssertContains("\"StartedUtc\": \"2026-03-07T12:05:00Z\"", okBody);
+                AssertContains("\"CompletedUtc\": \"2026-03-07T12:10:30Z\"", okBody);
+                AssertContains("\"TotalRuntimeMs\": 330000", okBody);
+                AssertContains("\"DiffSnapshot\": null", okBody);
             });
 
             #endregion
@@ -1695,6 +1801,84 @@ namespace Armada.Test.Automated.Suites
             Voyage voyage = JsonHelper.Deserialize<Voyage>(body);
             _CreatedVoyageIds.Add(voyage.Id);
             return voyage.Id;
+        }
+
+        private async Task<JsonDocument> GetOpenApiDocumentAsync()
+        {
+            HttpResponseMessage response = await _AuthClient.GetAsync("/openapi.json");
+            response.EnsureSuccessStatusCode();
+            string body = await response.Content.ReadAsStringAsync();
+            return JsonDocument.Parse(body);
+        }
+
+        private static async Task<JsonDocument> LoadPostmanCollectionAsync()
+        {
+            string path = Path.Combine(FindRepositoryRoot(), "Armada.postman_collection.json");
+            string body = await File.ReadAllTextAsync(path);
+            return JsonDocument.Parse(body);
+        }
+
+        private static JsonElement FindPostmanItemByName(JsonElement root, string itemName)
+        {
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return default;
+            }
+
+            if (root.TryGetProperty("name", out JsonElement currentName) &&
+                String.Equals(currentName.GetString(), itemName, StringComparison.Ordinal))
+            {
+                return root;
+            }
+
+            if (root.TryGetProperty("item", out JsonElement children) && children.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement child in children.EnumerateArray())
+                {
+                    JsonElement match = FindPostmanItemByName(child, itemName);
+                    if (match.ValueKind != JsonValueKind.Undefined)
+                    {
+                        return match;
+                    }
+                }
+            }
+
+            return default;
+        }
+
+        private static JsonElement FindPostmanResponseByName(JsonElement item, string responseName)
+        {
+            if (item.TryGetProperty("response", out JsonElement responses) && responses.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement response in responses.EnumerateArray())
+                {
+                    if (response.TryGetProperty("name", out JsonElement currentName) &&
+                        String.Equals(currentName.GetString(), responseName, StringComparison.Ordinal))
+                    {
+                        return response;
+                    }
+                }
+            }
+
+            return default;
+        }
+
+        private static string FindRepositoryRoot()
+        {
+            DirectoryInfo? current = new DirectoryInfo(AppContext.BaseDirectory);
+            while (current != null)
+            {
+                if (File.Exists(Path.Combine(current.FullName, "Armada.postman_collection.json")) &&
+                    Directory.Exists(Path.Combine(current.FullName, "docs")) &&
+                    Directory.Exists(Path.Combine(current.FullName, "src")))
+                {
+                    return current.FullName;
+                }
+
+                current = current.Parent;
+            }
+
+            throw new DirectoryNotFoundException("Could not locate repository root from test base directory.");
         }
 
         private async Task CleanupAsync()

@@ -2,9 +2,11 @@ namespace Armada.Test.Automated.Suites
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Linq;
     using System.Net;
     using System.Net.Http;
+    using System.Text.Json;
     using System.Threading.Tasks;
     using Armada.Core.Models;
     using Armada.Test.Common;
@@ -83,6 +85,19 @@ namespace Armada.Test.Automated.Suites
                 Captain captain = await JsonHelper.DeserializeAsync<Captain>(response);
                 _CreatedCaptainIds.Add(captain.Id);
                 AssertEqual("ClaudeCode", captain.Runtime.ToString());
+            });
+
+            await RunTest("Create Captain Invalid Model Returns BadRequest", async () =>
+            {
+                string captainName = "invalid-model-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                HttpResponseMessage response = await _Client.PostAsync("/api/v1/captains",
+                    JsonHelper.ToJsonContent(new { Name = captainName, Runtime = "Cursor", Model = "bad-model" }));
+
+                AssertEqual(HttpStatusCode.BadRequest, response.StatusCode);
+
+                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
+                AssertContains("bad-model", error.Message ?? String.Empty);
+                AssertContains("Cursor", error.Message ?? String.Empty);
             });
 
             await RunTest("Create Captain State Is Idle", async () =>
@@ -361,6 +376,27 @@ namespace Armada.Test.Automated.Suites
                 Captain updated = await JsonHelper.DeserializeAsync<Captain>(response);
 
                 AssertEqual(originalCreatedUtc.ToString("O"), updated.CreatedUtc.ToString("O"));
+            });
+
+            await RunTest("Update Captain Invalid Model Returns BadRequest And Preserves Existing Configuration", async () =>
+            {
+                Captain created = await CreateCaptainAsync("invalid-update-check");
+
+                HttpResponseMessage response = await _Client.PutAsync("/api/v1/captains/" + created.Id,
+                    JsonHelper.ToJsonContent(new { Name = created.Name, Runtime = "Cursor", Model = "bad-model" }));
+
+                AssertEqual(HttpStatusCode.BadRequest, response.StatusCode);
+
+                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response);
+                AssertContains("bad-model", error.Message ?? String.Empty);
+                AssertContains("Cursor", error.Message ?? String.Empty);
+
+                HttpResponseMessage getResp = await _Client.GetAsync("/api/v1/captains/" + created.Id);
+                Captain fetched = await JsonHelper.DeserializeAsync<Captain>(getResp);
+
+                AssertEqual(created.Name, fetched.Name);
+                AssertEqual(created.Runtime.ToString(), fetched.Runtime.ToString());
+                AssertTrue(String.IsNullOrEmpty(fetched.Model), "Failed update should not persist the invalid model");
             });
 
             #endregion
@@ -1088,6 +1124,71 @@ namespace Armada.Test.Automated.Suites
                 Assert(captain.LastUpdateUtc != default, "Should have LastUpdateUtc");
             });
 
+            await RunTest("OpenApi Create Captain Includes BadRequest Metadata", async () =>
+            {
+                using JsonDocument openApi = await GetOpenApiDocumentAsync();
+
+                JsonElement operation = openApi.RootElement
+                    .GetProperty("paths")
+                    .GetProperty("/api/v1/captains")
+                    .GetProperty("post");
+
+                string description = operation.GetProperty("description").GetString() ?? String.Empty;
+                JsonElement responses = operation.GetProperty("responses");
+
+                AssertContains("validates the Runtime/Model combination", description);
+                AssertTrue(responses.TryGetProperty("400", out _), "Create captain OpenAPI should advertise 400 Bad Request");
+            });
+
+            await RunTest("OpenApi Update Captain Describes Preserved Fields And BadRequest Metadata", async () =>
+            {
+                using JsonDocument openApi = await GetOpenApiDocumentAsync();
+
+                JsonElement operation = openApi.RootElement
+                    .GetProperty("paths")
+                    .GetProperty("/api/v1/captains/{id}")
+                    .GetProperty("put");
+
+                string summary = operation.GetProperty("summary").GetString() ?? String.Empty;
+                string description = operation.GetProperty("description").GetString() ?? String.Empty;
+                JsonElement responses = operation.GetProperty("responses");
+
+                AssertEqual("Update captain configuration", summary);
+                AssertContains("preserving the path ID, current state and assignments, process and recovery fields, LastHeartbeatUtc, and CreatedUtc", description);
+                AssertContains("invalid Runtime/Model combinations return 400", description);
+                AssertTrue(responses.TryGetProperty("400", out _), "Update captain OpenAPI should advertise 400 Bad Request");
+            });
+
+            await RunTest("REST Docs Captain Sections Include Validation Error Examples", async () =>
+            {
+                string docs = await File.ReadAllTextAsync(Path.Combine(FindRepositoryRoot(), "docs", "REST_API.md"));
+
+                AssertContains("The server validates the `Runtime` and `Model` combination before creation", docs);
+                AssertContains("Invalid runtime/model combination.", docs);
+                AssertContains("Update captain configuration. The path ID, current assignments, process and recovery fields, `LastHeartbeatUtc`, and `CreatedUtc` are preserved.", docs);
+                AssertContains("-d '{\"Name\": \"captain-bravo\", \"Runtime\": \"Codex\"}'", docs);
+            });
+
+            await RunTest("Postman Captain Examples Include Invalid Model Responses", async () =>
+            {
+                using JsonDocument postman = await LoadPostmanCollectionAsync();
+
+                JsonElement createCaptain = FindPostmanItemByName(postman.RootElement, "Create Captain");
+                JsonElement updateCaptain = FindPostmanItemByName(postman.RootElement, "Update Captain");
+
+                AssertContains("Runtime/Model is validated before creation", createCaptain.GetProperty("request").GetProperty("description").GetString() ?? String.Empty);
+                AssertContains("invalid Runtime/Model combinations return 400", updateCaptain.GetProperty("request").GetProperty("description").GetString() ?? String.Empty);
+
+                JsonElement createInvalid = FindPostmanResponseByName(createCaptain, "Invalid Model");
+                JsonElement updateInvalid = FindPostmanResponseByName(updateCaptain, "Invalid Model");
+                JsonElement updatedResponse = FindPostmanResponseByName(updateCaptain, "Updated");
+
+                AssertContains("Invalid runtime/model combination.", createInvalid.GetProperty("body").GetString() ?? String.Empty);
+                AssertContains("Invalid runtime/model combination.", updateInvalid.GetProperty("body").GetString() ?? String.Empty);
+                AssertContains("\"SystemInstructions\":", updatedResponse.GetProperty("body").GetString() ?? String.Empty);
+                AssertContains("\"LastUpdateUtc\":", updatedResponse.GetProperty("body").GetString() ?? String.Empty);
+            });
+
             #endregion
 
             // Cleanup
@@ -1123,6 +1224,84 @@ namespace Armada.Test.Automated.Suites
         {
             Captain captain = await CreateCaptainAsync(name, runtime);
             return captain.Id;
+        }
+
+        private async Task<JsonDocument> GetOpenApiDocumentAsync()
+        {
+            HttpResponseMessage response = await _Client.GetAsync("/openapi.json");
+            response.EnsureSuccessStatusCode();
+            string body = await response.Content.ReadAsStringAsync();
+            return JsonDocument.Parse(body);
+        }
+
+        private static async Task<JsonDocument> LoadPostmanCollectionAsync()
+        {
+            string path = Path.Combine(FindRepositoryRoot(), "Armada.postman_collection.json");
+            string body = await File.ReadAllTextAsync(path);
+            return JsonDocument.Parse(body);
+        }
+
+        private static JsonElement FindPostmanItemByName(JsonElement root, string itemName)
+        {
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return default;
+            }
+
+            if (root.TryGetProperty("name", out JsonElement currentName) &&
+                String.Equals(currentName.GetString(), itemName, StringComparison.Ordinal))
+            {
+                return root;
+            }
+
+            if (root.TryGetProperty("item", out JsonElement children) && children.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement child in children.EnumerateArray())
+                {
+                    JsonElement match = FindPostmanItemByName(child, itemName);
+                    if (match.ValueKind != JsonValueKind.Undefined)
+                    {
+                        return match;
+                    }
+                }
+            }
+
+            return default;
+        }
+
+        private static JsonElement FindPostmanResponseByName(JsonElement item, string responseName)
+        {
+            if (item.TryGetProperty("response", out JsonElement responses) && responses.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement response in responses.EnumerateArray())
+                {
+                    if (response.TryGetProperty("name", out JsonElement currentName) &&
+                        String.Equals(currentName.GetString(), responseName, StringComparison.Ordinal))
+                    {
+                        return response;
+                    }
+                }
+            }
+
+            return default;
+        }
+
+        private static string FindRepositoryRoot()
+        {
+            DirectoryInfo? current = new DirectoryInfo(AppContext.BaseDirectory);
+            while (current != null)
+            {
+                if (File.Exists(Path.Combine(current.FullName, "Armada.postman_collection.json")) &&
+                    Directory.Exists(Path.Combine(current.FullName, "docs")) &&
+                    Directory.Exists(Path.Combine(current.FullName, "src")))
+                {
+                    return current.FullName;
+                }
+
+                current = current.Parent;
+            }
+
+            throw new DirectoryNotFoundException("Could not locate repository root from test base directory.");
         }
 
         #endregion
