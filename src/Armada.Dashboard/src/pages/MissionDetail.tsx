@@ -44,6 +44,17 @@ function formatTimeRelative(utc: string | null | undefined): string {
   return Math.floor(diff / 86400000) + 'd ago';
 }
 
+function formatDuration(ms: number | null | undefined): string {
+  if (ms == null || ms < 0) return '-';
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
+
 export default function MissionDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -380,7 +391,7 @@ export default function MissionDetail() {
       )}
 
       {/* Mission Info */}
-      <div className="detail-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+      <div className="detail-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
         <div className="detail-field">
           <span className="detail-label">ID</span>
           <span className="id-display">
@@ -486,6 +497,10 @@ export default function MissionDetail() {
             {formatTimeRelative(mission.completedUtc) || '-'}
             {mission.completedUtc && <span className="text-dim"> ({formatTimeAbsolute(mission.completedUtc)})</span>}
           </span>
+        </div>
+        <div className="detail-field">
+          <span className="detail-label">Total Runtime</span>
+          <span>{formatDuration(mission.totalRuntimeMs)}</span>
         </div>
         <div className="detail-field">
           <span className="detail-label">Last Updated</span>

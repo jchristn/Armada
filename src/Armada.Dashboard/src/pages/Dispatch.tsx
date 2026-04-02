@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { listVessels, listPipelines, createVoyage } from '../api/client';
 import type { Vessel, Pipeline } from '../types/models';
@@ -52,22 +52,23 @@ export default function Dispatch() {
     });
   }, []);
 
-  const handlePromptChange = useCallback(
-    (value: string) => {
-      setPrompt(value);
-      const pipelineObj = pipelines.find((p) => p.name === selectedPipeline);
-      const isMultiStage = pipelineObj != null && pipelineObj.stages.length > 1;
-      if (isMultiStage) {
-        setParsedTasks([]);
-      } else {
-        const parsed = parseTasks(value);
-        const hasNumberedList = /(?:^|\n)\s*\d+\.\s+/.test(value);
-        const hasSemicolons = value.includes(';');
-        setParsedTasks((hasNumberedList || hasSemicolons) && parsed.length > 1 ? parsed : []);
-      }
-    },
-    [pipelines, selectedPipeline],
-  );
+  const selectedPipelineObj = pipelines.find((p) => p.name === selectedPipeline);
+  const isMultiStagePipeline = selectedPipelineObj != null && selectedPipelineObj.stages.length > 1;
+
+  function handlePromptChange(value: string) {
+    setPrompt(value);
+  }
+
+  useEffect(() => {
+    if (!prompt.trim() || isMultiStagePipeline) {
+      setParsedTasks([]);
+      return;
+    }
+    const parsed = parseTasks(prompt);
+    const hasNumberedList = /(?:^|\n)\s*\d+\.\s+/.test(prompt);
+    const hasSemicolons = prompt.includes(';');
+    setParsedTasks((hasNumberedList || hasSemicolons) && parsed.length > 1 ? parsed : []);
+  }, [prompt, isMultiStagePipeline]);
 
   const handleDispatch = async () => {
     if (!prompt.trim()) return;
@@ -76,11 +77,8 @@ export default function Dispatch() {
       return;
     }
 
-    const selectedPipelineObj = pipelines.find((p) => p.name === selectedPipeline);
-    const isMultiStage = selectedPipelineObj != null && selectedPipelineObj.stages.length > 1;
-
     let tasks: string[];
-    if (isMultiStage) {
+    if (isMultiStagePipeline) {
       tasks = [prompt.trim()];
     } else {
       let parsed = parsedTasks;
@@ -108,7 +106,7 @@ export default function Dispatch() {
         missions,
         ...(selectedPipeline ? { pipeline: selectedPipeline } : {}),
       });
-      const missionCount = isMultiStage
+      const missionCount = isMultiStagePipeline
         ? `${selectedPipelineObj!.stages.length} pipeline stages`
         : `${missions.length} mission${missions.length !== 1 ? 's' : ''}`;
       setResult({ ok: true, message: `Dispatched voyage with ${missionCount}` });
@@ -131,15 +129,16 @@ export default function Dispatch() {
         <div>
           <h2>Dispatch</h2>
           <p className="text-muted">
-            Describe what you need done. Use numbered lists or semicolons for multiple tasks.
+            {isMultiStagePipeline
+              ? 'Describe the mission once. The selected pipeline will keep the full prompt together and route it through its stages.'
+              : 'Describe what you need done. Use numbered lists or semicolons for multiple tasks.'}
           </p>
         </div>
       </div>
 
       <div className="card" style={{ marginBottom: '1rem' }}>
         <div className="dispatch-form">
-          {/* Row 1: Vessel + Pipeline + Priority */}
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 1fr', gap: '0 1.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0 1.5rem' }}>
             <div className="form-group">
               <label>Vessel</label>
               <select
@@ -168,6 +167,11 @@ export default function Dispatch() {
                   </option>
                 ))}
               </select>
+              {selectedPipelineObj && (
+                <div className="text-dim" style={{ marginTop: '0.35rem', fontSize: '0.9em' }}>
+                  Stages: {selectedPipelineObj.stages.map((s) => s.personaName).join(' -> ')}
+                </div>
+              )}
             </div>
             <div className="form-group">
               <label>Priority</label>
@@ -182,15 +186,21 @@ export default function Dispatch() {
             </div>
           </div>
 
-          {/* Prompt */}
           <div className="form-group">
             <label>Description</label>
             <textarea
               value={prompt}
               onChange={(e) => handlePromptChange(e.target.value)}
               rows={12}
-              placeholder={'Describe what you need done.\n\nFor multiple tasks, use numbered lists or semicolons:\n1. Add user authentication\n2. Create dashboard page\n3. Write unit tests'}
+              placeholder={isMultiStagePipeline
+                ? 'Describe the mission outcome and constraints for the full pipeline.\n\nExample:\nImplement dashboard filtering, verify it with tests, and prepare the review summary.'
+                : 'Describe what you need done.\n\nFor multiple tasks, use numbered lists or semicolons:\n1. Add user authentication\n2. Create dashboard page\n3. Write unit tests'}
             />
+            {!isMultiStagePipeline && parsedTasks.length > 1 && (
+              <div className="text-dim" style={{ marginTop: '0.5rem', fontSize: '0.9em' }}>
+                This prompt will dispatch {parsedTasks.length} missions.
+              </div>
+            )}
           </div>
 
           <div className="form-actions">
