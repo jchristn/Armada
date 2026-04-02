@@ -83,6 +83,48 @@ namespace Armada.Test.Unit.Suites.Documentation
                     AssertEqual(JsonValueKind.Null, totalRuntimeMs.ValueKind, "Create Mission response TotalRuntimeMs should default to null");
                 }
             });
+
+            await RunTest("Release metadata files reference v0.5.0 consistently", async () =>
+            {
+                string helmContents = await ReadRepositoryFileAsync(Path.Combine("src", "Armada.Helm", "Armada.Helm.csproj")).ConfigureAwait(false);
+                AssertContains("<Version>0.5.0</Version>", helmContents, "Helm package version");
+
+                string composeContents = await ReadRepositoryFileAsync(Path.Combine("docker", "compose.yaml")).ConfigureAwait(false);
+                AssertContains("image: jchristn77/armada-server:v0.5.0", composeContents, "Compose server image tag");
+                AssertContains("image: jchristn77/armada-dashboard:v0.5.0", composeContents, "Compose dashboard image tag");
+                AssertFalse(composeContents.Contains("jchristn77/armada-server:v0.4.0", StringComparison.Ordinal), "Compose file should not reference old server image tag");
+                AssertFalse(composeContents.Contains("jchristn77/armada-dashboard:v0.4.0", StringComparison.Ordinal), "Compose file should not reference old dashboard image tag");
+
+                string readmeContents = await ReadRepositoryFileAsync("README.md").ConfigureAwait(false);
+                AssertContains("<em>v0.5.0 alpha -- APIs and schemas may change</em>", readmeContents, "README alpha banner");
+                AssertContains("### v0.4.0 to v0.5.0", readmeContents, "README upgrade heading");
+                AssertContains("v0.5.0 adds per-captain model selection, mission runtime tracking, dashboard model editing improvements, and dashboard UX cleanup.", readmeContents, "README upgrade summary");
+                AssertContains("- Documentation and Postman collection references are updated for the v0.5.0 release", readmeContents, "README release notes bullet");
+            });
+
+            await RunTest("CHANGELOG documents the v0.5.0 release summary at the top", async () =>
+            {
+                string contents = await ReadRepositoryFileAsync("CHANGELOG.md").ConfigureAwait(false);
+
+                int v050Index = contents.IndexOf("## v0.5.0", StringComparison.Ordinal);
+                int v040Index = contents.IndexOf("## v0.4.0", StringComparison.Ordinal);
+
+                AssertTrue(v050Index >= 0, "CHANGELOG should include v0.5.0 heading");
+                AssertTrue(v040Index >= 0, "CHANGELOG should include v0.4.0 heading");
+                AssertTrue(v050Index < v040Index, "v0.5.0 section should be listed before v0.4.0");
+
+                AssertContains("### Captain Model Selection", contents, "CHANGELOG captain model heading");
+                AssertContains("- Added a per-captain model field so each captain can select its runtime model independently", contents, "CHANGELOG captain model bullet");
+                AssertContains("- Added runtime-side model validation so invalid model selections fail fast with clear errors", contents, "CHANGELOG model validation bullet");
+                AssertContains("### Mission Runtime Tracking", contents, "CHANGELOG mission runtime heading");
+                AssertContains("- Added `TotalRuntimeMs` tracking for missions to capture end-to-end runtime after completion", contents, "CHANGELOG mission runtime bullet");
+                AssertContains("### Dashboard Updates", contents, "CHANGELOG dashboard heading");
+                AssertContains("- Added dashboard model editing support with validation error display", contents, "CHANGELOG dashboard model editing bullet");
+                AssertContains("- Updated Mission Detail to a 4-column layout for denser mission metadata", contents, "CHANGELOG mission detail layout bullet");
+                AssertContains("- Cleaned up the Dispatch page by removing unused parsing state", contents, "CHANGELOG dispatch cleanup bullet");
+                AssertContains("### Documentation and Tooling", contents, "CHANGELOG documentation heading");
+                AssertContains("- Updated release documentation and Postman collection references for the v0.5.0 release", contents, "CHANGELOG documentation bullet");
+            });
         }
 
         private static JsonElement FindItemByName(JsonElement element, string name)
