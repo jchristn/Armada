@@ -155,6 +155,38 @@ namespace Armada.Test.Automated.Suites
                 }
             }).ConfigureAwait(false);
 
+            await RunTest("ToolsList_CaptainCreateAndUpdateIncludeModelSchema", async () =>
+            {
+                JsonElement result = await SendMcpRequestAsync("tools/list", new { }).ConfigureAwait(false);
+                JsonElement tools = result.GetProperty("tools");
+
+                bool foundCreate = false;
+                bool foundUpdate = false;
+
+                foreach (JsonElement tool in tools.EnumerateArray())
+                {
+                    string name = tool.GetProperty("name").GetString()!;
+                    if (name != "armada_create_captain" && name != "armada_update_captain") continue;
+
+                    JsonElement modelSchema = tool
+                        .GetProperty("inputSchema")
+                        .GetProperty("properties")
+                        .GetProperty("model");
+                    JsonElement typeSchema = modelSchema.GetProperty("type");
+                    List<string> allowedTypes = typeSchema.EnumerateArray().Select(x => x.GetString()!).ToList();
+
+                    Assert(allowedTypes.Contains("string"), "Captain tool model schema should allow string");
+                    Assert(allowedTypes.Contains("null"), "Captain tool model schema should allow null");
+                    AssertContains("runtime default", modelSchema.GetProperty("description").GetString()!);
+
+                    if (name == "armada_create_captain") foundCreate = true;
+                    if (name == "armada_update_captain") foundUpdate = true;
+                }
+
+                Assert(foundCreate, "Tool list should expose model schema for armada_create_captain");
+                Assert(foundUpdate, "Tool list should expose model schema for armada_update_captain");
+            }).ConfigureAwait(false);
+
             await RunTest("ToolsList_NoDuplicateToolNames", async () =>
             {
                 JsonElement result = await SendMcpRequestAsync("tools/list", new { }).ConfigureAwait(false);
@@ -964,6 +996,19 @@ namespace Armada.Test.Automated.Suites
                 AssertContains(captainId, listText);
             }).ConfigureAwait(false);
 
+            await RunTest("ArmadaCreateCaptain_WithInvalidModel_ReturnsValidationError", async () =>
+            {
+                JsonElement result = await CallToolAsync("armada_create_captain", new
+                {
+                    name = "invalid-model-captain",
+                    runtime = "Custom",
+                    model = "bad-model"
+                }).ConfigureAwait(false);
+                AssertToolResultValid(result);
+                string text = GetToolResultText(result);
+                AssertContains("Unable to create runtime Custom", text);
+            }).ConfigureAwait(false);
+
             // ArmadaGetCaptain
             await RunTest("ArmadaGetCaptain_ExistingCaptain_ReturnsDetails", async () =>
             {
@@ -1013,6 +1058,40 @@ namespace Armada.Test.Automated.Suites
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
                 Assert(text.Contains("not found", StringComparison.OrdinalIgnoreCase), "Should contain 'not found'");
+            }).ConfigureAwait(false);
+
+            await RunTest("ArmadaUpdateCaptain_WithInvalidModel_ReturnsValidationErrorAndPreservesCaptain", async () =>
+            {
+                string createName = "custom-captain-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                JsonElement createResult = await CallToolAsync("armada_create_captain", new
+                {
+                    name = createName,
+                    runtime = "Custom"
+                }).ConfigureAwait(false);
+                AssertToolResultValid(createResult);
+                Captain created = JsonHelper.Deserialize<Captain>(GetToolResultText(createResult));
+
+                string attemptedName = "bad-model-update-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                JsonElement updateResult = await CallToolAsync("armada_update_captain", new
+                {
+                    captainId = created.Id,
+                    name = attemptedName,
+                    model = "bad-model"
+                }).ConfigureAwait(false);
+                AssertToolResultValid(updateResult);
+                string updateText = GetToolResultText(updateResult);
+                AssertContains("Unable to create runtime Custom", updateText);
+
+                JsonElement getResult = await CallToolAsync("armada_get_captain", new
+                {
+                    captainId = created.Id
+                }).ConfigureAwait(false);
+                AssertToolResultValid(getResult);
+                Captain fetched = JsonHelper.Deserialize<Captain>(GetToolResultText(getResult));
+
+                AssertEqual(createName, fetched.Name);
+                AssertEqual("Custom", fetched.Runtime.ToString());
+                Assert(string.IsNullOrEmpty(fetched.Model), "Failed MCP update should not persist a model");
             }).ConfigureAwait(false);
 
             // ArmadaDeleteCaptain

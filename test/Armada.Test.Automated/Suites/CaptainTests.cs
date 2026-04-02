@@ -138,6 +138,18 @@ namespace Armada.Test.Automated.Suites
                 AssertEqual("Custom", captain.Runtime.ToString());
             });
 
+            await RunTest("Create Captain With Invalid Model Returns BadRequest", async () =>
+            {
+                string captainName = "invalid-model-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                HttpResponseMessage response = await _Client.PostAsync("/api/v1/captains",
+                    JsonHelper.ToJsonContent(new { Name = captainName, Runtime = "Custom", Model = "bad-model" }));
+
+                AssertEqual(HttpStatusCode.BadRequest, response.StatusCode);
+
+                string body = await response.Content.ReadAsStringAsync();
+                AssertContains("Unable to create runtime Custom", body);
+            });
+
             await RunTest("Create Captain Multiple Captains Have Unique Ids", async () =>
             {
                 Captain captain1 = await CreateCaptainAsync("unique-1");
@@ -265,6 +277,27 @@ namespace Armada.Test.Automated.Suites
 
                 Captain updated = await JsonHelper.DeserializeAsync<Captain>(response);
                 AssertEqual("Codex", updated.Runtime.ToString());
+            });
+
+            await RunTest("Update Captain With Invalid Model Returns BadRequest And PreservesCaptain", async () =>
+            {
+                Captain created = await CreateCaptainAsync("invalid-model-update", "Custom");
+                string attemptedName = "invalid-model-updated-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+
+                HttpResponseMessage response = await _Client.PutAsync("/api/v1/captains/" + created.Id,
+                    JsonHelper.ToJsonContent(new { Name = attemptedName, Runtime = "Custom", Model = "bad-model" }));
+
+                AssertEqual(HttpStatusCode.BadRequest, response.StatusCode);
+
+                string body = await response.Content.ReadAsStringAsync();
+                AssertContains("Unable to create runtime Custom", body);
+
+                HttpResponseMessage getResp = await _Client.GetAsync("/api/v1/captains/" + created.Id);
+                Captain fetched = await JsonHelper.DeserializeAsync<Captain>(getResp);
+
+                AssertEqual(created.Name, fetched.Name);
+                AssertEqual("Custom", fetched.Runtime.ToString());
+                Assert(string.IsNullOrEmpty(fetched.Model), "Failed update should not persist a model");
             });
 
             await RunTest("Update Captain Preserves State", async () =>
