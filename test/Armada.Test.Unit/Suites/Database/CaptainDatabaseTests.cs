@@ -32,11 +32,13 @@ namespace Armada.Test.Unit.Suites.Database
                 {
                     SqliteDatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("read-test");
+                    captain.Model = "gpt-5.4-mini";
                     await db.Captains.CreateAsync(captain);
 
                     Captain? result = await db.Captains.ReadAsync(captain.Id);
                     AssertNotNull(result);
                     AssertEqual(captain.Id, result!.Id);
+                    AssertEqual("gpt-5.4-mini", result.Model);
                     AssertEqual(CaptainStateEnum.Idle, result.State);
                 }
             });
@@ -61,8 +63,10 @@ namespace Armada.Test.Unit.Suites.Database
                 {
                     SqliteDatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("update-test");
+                    captain.Model = "gpt-5.4-mini";
                     await db.Captains.CreateAsync(captain);
 
+                    captain.Model = "gpt-5.4";
                     captain.State = CaptainStateEnum.Working;
                     captain.CurrentMissionId = "msn_test";
                     captain.ProcessId = 12345;
@@ -71,9 +75,17 @@ namespace Armada.Test.Unit.Suites.Database
 
                     Captain? result = await db.Captains.ReadAsync(captain.Id);
                     AssertEqual(CaptainStateEnum.Working, result!.State);
+                    AssertEqual("gpt-5.4", result.Model);
                     AssertEqual("msn_test", result.CurrentMissionId);
                     AssertEqual(12345, result.ProcessId);
                     AssertEqual(2, result.RecoveryAttempts);
+
+                    captain.Model = "";
+                    await db.Captains.UpdateAsync(captain);
+
+                    Captain? cleared = await db.Captains.ReadAsync(captain.Id);
+                    AssertNotNull(cleared);
+                    AssertNull(cleared!.Model);
                 }
             });
 

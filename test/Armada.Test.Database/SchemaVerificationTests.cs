@@ -33,6 +33,7 @@ namespace Armada.Test.Database
             await AssertColumnAsync(conn, "users", "is_protected", token).ConfigureAwait(false);
             await AssertColumnAsync(conn, "users", "is_tenant_admin", token).ConfigureAwait(false);
             await AssertColumnAsync(conn, "credentials", "is_protected", token).ConfigureAwait(false);
+            await AssertColumnAsync(conn, "captains", "model", token).ConfigureAwait(false);
 
             foreach (string table in new[] { "fleets", "vessels", "captains", "voyages", "missions", "docks", "signals", "events", "merge_entries" })
             {

@@ -1,5 +1,6 @@
 namespace Armada.Test.Unit.Suites.Database
 {
+    using System.Reflection;
     using Armada.Core.Database;
     using Armada.Core.Database.Sqlite;
     using Armada.Test.Common;
@@ -47,6 +48,24 @@ namespace Armada.Test.Unit.Suites.Database
                     new SchemaMigration(1, "Empty migration"));
             });
 
+            await RunTest("Captain model migration exists across backends", () =>
+            {
+                AssertCaptainModelMigration(
+                    Armada.Core.Database.Sqlite.Queries.TableQueries.GetMigrations(),
+                    "ALTER TABLE captains ADD COLUMN model TEXT");
+                AssertCaptainModelMigration(
+                    Armada.Core.Database.Postgresql.Queries.TableQueries.GetMigrations(),
+                    "ALTER TABLE captains ADD COLUMN");
+                AssertCaptainModelMigration(
+                    Armada.Core.Database.SqlServer.Queries.TableQueries.GetMigrations(),
+                    "ALTER TABLE captains ADD model NVARCHAR(MAX) NULL");
+
+                MethodInfo getMysqlMigrations = typeof(Armada.Core.Database.Mysql.MysqlDatabaseDriver)
+                    .GetMethod("GetMigrations", BindingFlags.NonPublic | BindingFlags.Static)!;
+                List<SchemaMigration> mysqlMigrations = (List<SchemaMigration>)getMysqlMigrations.Invoke(null, null)!;
+                AssertCaptainModelMigration(mysqlMigrations, "ALTER TABLE captains ADD COLUMN model TEXT NULL");
+            });
+
             await RunTest("InitializeAsync creates schema version table", async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
@@ -70,6 +89,43 @@ namespace Armada.Test.Unit.Suites.Database
                 {
                     int version = await testDb.Driver.GetSchemaVersionAsync();
                     AssertTrue(version >= 1, "Schema version should be at least 1 after initialization");
+                }
+            });
+
+            await RunTest("InitializeAsync applies captain model migration", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    using (SqliteConnection conn = new SqliteConnection(testDb.ConnectionString))
+                    {
+                        await conn.OpenAsync();
+
+                        bool hasModelColumn = false;
+                        using (SqliteCommand cmd = conn.CreateCommand())
+                        {
+                            cmd.CommandText = "PRAGMA table_info(captains);";
+                            using (SqliteDataReader reader = await cmd.ExecuteReaderAsync())
+                            {
+                                while (await reader.ReadAsync())
+                                {
+                                    if (String.Equals(reader["name"].ToString(), "model", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        hasModelColumn = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        AssertTrue(hasModelColumn, "captains.model column should exist after initialization");
+
+                        using (SqliteCommand cmd = conn.CreateCommand())
+                        {
+                            cmd.CommandText = "SELECT description FROM schema_migrations WHERE version = 26;";
+                            object? result = await cmd.ExecuteScalarAsync();
+                            AssertEqual("Add model column to captains table", result);
+                        }
+                    }
                 }
             });
 
@@ -144,6 +200,50 @@ namespace Armada.Test.Unit.Suites.Database
                     try { File.Delete(tempFile); } catch { }
                 }
             });
+
+            await RunTest("Captain model migration scripts include alter table statement", async () =>
+            {
+                string repoRoot = FindRepoRoot();
+                string shellScriptPath = Path.Combine(repoRoot, "migrations", "migrate_add_captain_model.sh");
+                string batchScriptPath = Path.Combine(repoRoot, "migrations", "migrate_add_captain_model.bat");
+
+                AssertTrue(File.Exists(shellScriptPath), "Shell migration script should exist");
+                AssertTrue(File.Exists(batchScriptPath), "Batch migration script should exist");
+
+                string shellScript = await File.ReadAllTextAsync(shellScriptPath);
+                string batchScript = await File.ReadAllTextAsync(batchScriptPath);
+
+                AssertContains("ALTER TABLE captains ADD COLUMN model TEXT", shellScript);
+                AssertContains("ALTER TABLE captains ADD COLUMN model TEXT", batchScript);
+            });
+        }
+
+        private void AssertCaptainModelMigration(List<SchemaMigration> migrations, string expectedSql)
+        {
+            SchemaMigration? migration = migrations.SingleOrDefault(x => x.Version == 26);
+            AssertNotNull(migration);
+            AssertEqual("Add model column to captains table", migration!.Description);
+            AssertEqual(1, migration.Statements.Count);
+            AssertContains(expectedSql, migration.Statements[0]);
+        }
+
+        private static string FindRepoRoot()
+        {
+            DirectoryInfo? current = new DirectoryInfo(AppContext.BaseDirectory);
+
+            while (current != null)
+            {
+                if (Directory.Exists(Path.Combine(current.FullName, "migrations"))
+                    && Directory.Exists(Path.Combine(current.FullName, "src"))
+                    && Directory.Exists(Path.Combine(current.FullName, "test")))
+                {
+                    return current.FullName;
+                }
+
+                current = current.Parent;
+            }
+
+            throw new DirectoryNotFoundException("Unable to locate repository root from test output directory.");
         }
     }
 }

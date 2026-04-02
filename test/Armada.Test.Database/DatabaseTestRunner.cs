@@ -368,21 +368,49 @@ namespace Armada.Test.Database
         private async Task TestCaptainCrudAsync(CancellationToken token)
         {
             DatabaseFixture fixture = new DatabaseFixture(_Driver, _NoCleanup);
+            Captain? captain = null;
             try
             {
-                (TenantMetadata tenant, UserMaster user, _, _, _, Captain captain, _, _, _, _, _, _) = await SeedOperationalGraphAsync(fixture, token).ConfigureAwait(false);
+                TenantMetadata tenant = await fixture.CreateTenantAsync("captain-tenant", token: token).ConfigureAwait(false);
+                UserMaster user = await fixture.CreateUserAsync(tenant.Id, "captain-user", token: token).ConfigureAwait(false);
+                captain = new Captain("operational-captain-" + Guid.NewGuid().ToString("N"), AgentRuntimeEnum.Codex)
+                {
+                    TenantId = tenant.Id,
+                    UserId = user.Id,
+                    State = CaptainStateEnum.Idle,
+                    Model = "gpt-5.4-mini"
+                };
+                captain = await _Driver.Captains.CreateAsync(captain, token).ConfigureAwait(false);
+
                 Captain? read = await _Driver.Captains.ReadAsync(captain.Id, token).ConfigureAwait(false);
                 read = DatabaseAssert.NotNull(read, "Captain read returned null");
                 DatabaseAssert.Equal(tenant.Id, read.TenantId, "Captain.TenantId");
                 DatabaseAssert.Equal(user.Id, read.UserId, "Captain.UserId");
                 DatabaseAssert.Equal(captain.Name, read.Name, "Captain.Name");
+                DatabaseAssert.Equal("gpt-5.4-mini", read.Model, "Captain.Model");
 
+                read.Model = "gpt-5.4";
                 read.RecoveryAttempts = 2;
                 Captain updated = await _Driver.Captains.UpdateAsync(read, token).ConfigureAwait(false);
+                DatabaseAssert.Equal("gpt-5.4", updated.Model, "Captain.Model updated");
                 DatabaseAssert.Equal(2, updated.RecoveryAttempts, "Captain.RecoveryAttempts");
+
+                Captain? reloaded = await _Driver.Captains.ReadAsync(captain.Id, token).ConfigureAwait(false);
+                reloaded = DatabaseAssert.NotNull(reloaded, "Captain re-read returned null");
+                DatabaseAssert.Equal("gpt-5.4", reloaded.Model, "Captain.Model after update");
             }
             finally
             {
+                if (!_NoCleanup && captain != null)
+                {
+                    try
+                    {
+                        await _Driver.Captains.DeleteAsync(captain.Id, token).ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                    }
+                }
                 await fixture.CleanupAsync(token).ConfigureAwait(false);
             }
         }
