@@ -583,6 +583,175 @@ namespace Armada.Test.Unit.Suites.Services
                 }
             });
 
+            await RunTest("Judge structured verdict failure halts voyage and skips landing", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    DirCreatingGitStub git = new DirCreatingGitStub();
+                    IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
+                    ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
+                    MissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService);
+
+                    int landingCalls = 0;
+                    missionService.OnMissionComplete = (Mission mission, Dock dock) =>
+                    {
+                        landingCalls++;
+                        return Task.CompletedTask;
+                    };
+                    missionService.OnGetMissionOutput = _ => "[ARMADA:VERDICT] NEEDS_REVISION\nMissing migration update";
+
+                    Vessel vessel = new Vessel("judge-failure-vessel", "https://github.com/test/repo.git");
+                    vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
+                    vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
+                    vessel.DefaultBranch = "main";
+                    vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    Captain judgeCaptain = new Captain("judge-failure-captain");
+                    judgeCaptain.State = CaptainStateEnum.Working;
+                    judgeCaptain = await testDb.Driver.Captains.CreateAsync(judgeCaptain).ConfigureAwait(false);
+
+                    Voyage voyage = new Voyage("judge-failure-voyage");
+                    voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
+
+                    Dock judgeDock = new Dock(vessel.Id);
+                    judgeDock.CaptainId = judgeCaptain.Id;
+                    judgeDock.WorktreePath = Path.Combine(settings.DocksDirectory, vessel.Name, "judge-failure");
+                    judgeDock.BranchName = "armada/judge-failure";
+                    judgeDock.Active = true;
+                    judgeDock = await testDb.Driver.Docks.CreateAsync(judgeDock).ConfigureAwait(false);
+
+                    Mission judgeMission = new Mission("Review migration changes", "Review scoped changes");
+                    judgeMission.VesselId = vessel.Id;
+                    judgeMission.VoyageId = voyage.Id;
+                    judgeMission.CaptainId = judgeCaptain.Id;
+                    judgeMission.DockId = judgeDock.Id;
+                    judgeMission.Persona = "Judge";
+                    judgeMission.Status = MissionStatusEnum.InProgress;
+                    judgeMission.BranchName = judgeDock.BranchName;
+                    judgeMission = await testDb.Driver.Missions.CreateAsync(judgeMission).ConfigureAwait(false);
+
+                    Mission pendingMission = new Mission("Pending sibling work", "Should be cancelled");
+                    pendingMission.VesselId = vessel.Id;
+                    pendingMission.VoyageId = voyage.Id;
+                    pendingMission.Persona = "Worker";
+                    pendingMission.Status = MissionStatusEnum.Pending;
+                    pendingMission = await testDb.Driver.Missions.CreateAsync(pendingMission).ConfigureAwait(false);
+
+                    judgeCaptain.CurrentMissionId = judgeMission.Id;
+                    judgeCaptain.CurrentDockId = judgeDock.Id;
+                    await testDb.Driver.Captains.UpdateAsync(judgeCaptain).ConfigureAwait(false);
+
+                    await missionService.HandleCompletionAsync(judgeCaptain, judgeMission.Id).ConfigureAwait(false);
+
+                    Mission? updatedJudge = await testDb.Driver.Missions.ReadAsync(judgeMission.Id).ConfigureAwait(false);
+                    Mission? updatedPending = await testDb.Driver.Missions.ReadAsync(pendingMission.Id).ConfigureAwait(false);
+                    Voyage? updatedVoyage = await testDb.Driver.Voyages.ReadAsync(voyage.Id).ConfigureAwait(false);
+                    Captain? updatedCaptain = await testDb.Driver.Captains.ReadAsync(judgeCaptain.Id).ConfigureAwait(false);
+                    Dock? updatedDock = await testDb.Driver.Docks.ReadAsync(judgeDock.Id).ConfigureAwait(false);
+
+                    AssertNotNull(updatedJudge, "Judge mission should still exist");
+                    AssertEqual(MissionStatusEnum.Failed, updatedJudge!.Status, "Judge mission should fail on NEEDS_REVISION verdict");
+                    AssertContains("NEEDS_REVISION", updatedJudge.FailureReason ?? String.Empty);
+                    AssertContains("Missing migration update", updatedJudge.FailureReason ?? String.Empty);
+                    AssertNotNull(updatedPending, "Pending sibling mission should still exist");
+                    AssertEqual(MissionStatusEnum.Cancelled, updatedPending!.Status, "Pending sibling mission should be cancelled when the voyage halts");
+                    AssertNotNull(updatedVoyage, "Voyage should still exist");
+                    AssertEqual(VoyageStatusEnum.Cancelled, updatedVoyage!.Status, "Voyage should be cancelled on structured judge failure");
+                    AssertEqual(0, landingCalls, "Landing should not run when judge returns NEEDS_REVISION");
+                    AssertNotNull(updatedCaptain, "Judge captain should still exist");
+                    AssertEqual(CaptainStateEnum.Idle, updatedCaptain!.State, "Judge captain should be released after structured failure");
+                    AssertNotNull(updatedDock, "Judge dock should still exist");
+                    AssertFalse(updatedDock!.Active, "Judge dock should be reclaimed after structured failure");
+                }
+            });
+
+            await RunTest("Worker structured result failure halts voyage and skips landing", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    DirCreatingGitStub git = new DirCreatingGitStub();
+                    IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
+                    ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
+                    MissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService);
+
+                    int landingCalls = 0;
+                    missionService.OnMissionComplete = (Mission mission, Dock dock) =>
+                    {
+                        landingCalls++;
+                        return Task.CompletedTask;
+                    };
+                    missionService.OnGetMissionOutput = _ => "[ARMADA:RESULT] FAIL\nCould not update all database backends";
+
+                    Vessel vessel = new Vessel("worker-failure-vessel", "https://github.com/test/repo.git");
+                    vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
+                    vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
+                    vessel.DefaultBranch = "main";
+                    vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    Captain workerCaptain = new Captain("worker-failure-captain");
+                    workerCaptain.State = CaptainStateEnum.Working;
+                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+
+                    Voyage voyage = new Voyage("worker-failure-voyage");
+                    voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
+
+                    Dock workerDock = new Dock(vessel.Id);
+                    workerDock.CaptainId = workerCaptain.Id;
+                    workerDock.WorktreePath = Path.Combine(settings.DocksDirectory, vessel.Name, "worker-failure");
+                    workerDock.BranchName = "armada/worker-failure";
+                    workerDock.Active = true;
+                    workerDock = await testDb.Driver.Docks.CreateAsync(workerDock).ConfigureAwait(false);
+
+                    Mission workerMission = new Mission("Apply migration changes", "Implement the data-layer update");
+                    workerMission.VesselId = vessel.Id;
+                    workerMission.VoyageId = voyage.Id;
+                    workerMission.CaptainId = workerCaptain.Id;
+                    workerMission.DockId = workerDock.Id;
+                    workerMission.Persona = "Worker";
+                    workerMission.Status = MissionStatusEnum.InProgress;
+                    workerMission.BranchName = workerDock.BranchName;
+                    workerMission = await testDb.Driver.Missions.CreateAsync(workerMission).ConfigureAwait(false);
+
+                    Mission pendingReviewer = new Mission("Follow-up review", "Should be cancelled");
+                    pendingReviewer.VesselId = vessel.Id;
+                    pendingReviewer.VoyageId = voyage.Id;
+                    pendingReviewer.Persona = "Judge";
+                    pendingReviewer.Status = MissionStatusEnum.Pending;
+                    pendingReviewer.DependsOnMissionId = workerMission.Id;
+                    pendingReviewer = await testDb.Driver.Missions.CreateAsync(pendingReviewer).ConfigureAwait(false);
+
+                    workerCaptain.CurrentMissionId = workerMission.Id;
+                    workerCaptain.CurrentDockId = workerDock.Id;
+                    await testDb.Driver.Captains.UpdateAsync(workerCaptain).ConfigureAwait(false);
+
+                    await missionService.HandleCompletionAsync(workerCaptain, workerMission.Id).ConfigureAwait(false);
+
+                    Mission? updatedWorker = await testDb.Driver.Missions.ReadAsync(workerMission.Id).ConfigureAwait(false);
+                    Mission? updatedReviewer = await testDb.Driver.Missions.ReadAsync(pendingReviewer.Id).ConfigureAwait(false);
+                    Voyage? updatedVoyage = await testDb.Driver.Voyages.ReadAsync(voyage.Id).ConfigureAwait(false);
+                    Captain? updatedCaptain = await testDb.Driver.Captains.ReadAsync(workerCaptain.Id).ConfigureAwait(false);
+                    Dock? updatedDock = await testDb.Driver.Docks.ReadAsync(workerDock.Id).ConfigureAwait(false);
+
+                    AssertNotNull(updatedWorker, "Worker mission should still exist");
+                    AssertEqual(MissionStatusEnum.Failed, updatedWorker!.Status, "Worker mission should fail on structured FAIL result");
+                    AssertContains("FAIL", updatedWorker.FailureReason ?? String.Empty);
+                    AssertContains("Could not update all database backends", updatedWorker.FailureReason ?? String.Empty);
+                    AssertNotNull(updatedReviewer, "Dependent reviewer mission should still exist");
+                    AssertEqual(MissionStatusEnum.Cancelled, updatedReviewer!.Status, "Dependent stage should be cancelled when the voyage halts");
+                    AssertNotNull(updatedVoyage, "Voyage should still exist");
+                    AssertEqual(VoyageStatusEnum.Cancelled, updatedVoyage!.Status, "Voyage should be cancelled on structured worker failure");
+                    AssertEqual(0, landingCalls, "Landing should not run when worker reports FAIL");
+                    AssertNotNull(updatedCaptain, "Worker captain should still exist");
+                    AssertEqual(CaptainStateEnum.Idle, updatedCaptain!.State, "Worker captain should be released after structured failure");
+                    AssertNotNull(updatedDock, "Worker dock should still exist");
+                    AssertFalse(updatedDock!.Active, "Worker dock should be reclaimed after structured failure");
+                }
+            });
+
             await RunTest("Persona-aware captain routing prefers matching captain", async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())

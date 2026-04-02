@@ -56,6 +56,27 @@ namespace Armada.Core.Services
             public string Description { get; set; } = "";
         }
 
+        /// <summary>
+        /// Structured outcome parsed from agent output markers.
+        /// </summary>
+        private class StructuredMissionOutcome
+        {
+            /// <summary>
+            /// True when the output explicitly reported a terminal failure or revision request.
+            /// </summary>
+            public bool IsFailure { get; set; } = false;
+
+            /// <summary>
+            /// Parsed result or verdict token.
+            /// </summary>
+            public string? Value { get; set; } = null;
+
+            /// <summary>
+            /// Failure reason derived from the agent output.
+            /// </summary>
+            public string? FailureReason { get; set; } = null;
+        }
+
         #endregion
 
         #region Constructors-and-Factories
@@ -408,31 +429,10 @@ namespace Armada.Core.Services
                 return;
             }
 
-            // Mark mission as work produced (agent finished, landing not yet attempted)
-            mission.Status = MissionStatusEnum.WorkProduced;
+            // Clear stale process bookkeeping before handling output or handoff.
             mission.ProcessId = null;
             mission.LastUpdateUtc = DateTime.UtcNow;
             await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
-            _Logging.Info(_Header + "mission " + mission.Id + " work produced by captain " + captain.Id);
-
-            // Emit mission.work_produced event for audit trail
-            try
-            {
-                ArmadaEvent workProducedEvent = new ArmadaEvent("mission.work_produced", "Work produced: " + mission.Title);
-                workProducedEvent.TenantId = mission.TenantId;
-                workProducedEvent.UserId = mission.UserId;
-                workProducedEvent.EntityType = "mission";
-                workProducedEvent.EntityId = mission.Id;
-                workProducedEvent.CaptainId = captain.Id;
-                workProducedEvent.MissionId = mission.Id;
-                workProducedEvent.VesselId = mission.VesselId;
-                workProducedEvent.VoyageId = mission.VoyageId;
-                await _Database.Events.CreateAsync(workProducedEvent, token).ConfigureAwait(false);
-            }
-            catch (Exception evtEx)
-            {
-                _Logging.Warn(_Header + "error emitting mission.work_produced event for " + mission.Id + ": " + evtEx.Message);
-            }
 
             // Get dock for diff capture (prefer mission-level DockId, fall back to captain-level)
             Dock? dock = null;
@@ -483,6 +483,21 @@ namespace Armada.Core.Services
                 }
             }
 
+            StructuredMissionOutcome structuredOutcome = ParseStructuredOutcome(mission);
+            if (structuredOutcome.IsFailure)
+            {
+                await HandleStructuredFailureAsync(mission, captain, dock, structuredOutcome, token).ConfigureAwait(false);
+                return;
+            }
+
+            // Mark mission as work produced (agent finished, landing not yet attempted)
+            mission.Status = MissionStatusEnum.WorkProduced;
+            mission.LastUpdateUtc = DateTime.UtcNow;
+            await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+            _Logging.Info(_Header + "mission " + mission.Id + " work produced by captain " + captain.Id);
+
+            await EmitWorkProducedEventAsync(mission, captain, token).ConfigureAwait(false);
+
             // Pipeline handoff: if missions in the same voyage depend on this one, prepare them
             bool preparedDownstreamStages = await TryHandoffToNextStageAsync(mission, token).ConfigureAwait(false);
 
@@ -521,53 +536,15 @@ namespace Armada.Core.Services
                 }
             }
 
-            // Reclaim the dock after the handoff completes (or if no handler was set)
-            string? completionDockId = dock?.Id;
-            if (!String.IsNullOrEmpty(completionDockId))
-            {
-                try
-                {
-                    await _Docks.ReclaimAsync(completionDockId, token: token).ConfigureAwait(false);
-                }
-                catch (Exception reclaimEx)
-                {
-                    _Logging.Warn(_Header + "error reclaiming dock " + completionDockId + " after mission " + mission.Id + ": " + reclaimEx.Message);
-                }
-            }
+            await ReclaimCompletionDockAsync(dock, mission, token).ConfigureAwait(false);
 
             // Log work produced signal
             Signal signal = new Signal(SignalTypeEnum.Completion, "Work produced: " + mission.Title);
             signal.FromCaptainId = captain.Id;
             await _Database.Signals.CreateAsync(signal, token).ConfigureAwait(false);
 
-            // Release the captain to idle only AFTER the handoff and dock reclaim are done,
-            // and only if the captain is still assigned to this mission. Orphan recovery can
-            // finalize an older mission using a captain record that has already moved on.
-            Captain? latestCaptain = await _Database.Captains.ReadAsync(captain.Id, token).ConfigureAwait(false);
-            if (latestCaptain != null && latestCaptain.CurrentMissionId == mission.Id)
-            {
-                await _Captains.ReleaseAsync(latestCaptain, token).ConfigureAwait(false);
-            }
-            else
-            {
-                _Logging.Info(_Header + "skipping captain release for mission " + mission.Id +
-                    " because captain " + captain.Id + " is now assigned to " + (latestCaptain?.CurrentMissionId ?? "nothing"));
-            }
-
-            // Try to pick up next pending mission
-            List<Mission> pendingMissions = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending, token).ConfigureAwait(false);
-            if (pendingMissions.Any())
-            {
-                Mission nextMission = pendingMissions.OrderBy(m => m.Priority).ThenBy(m => m.CreatedUtc).First();
-                if (!String.IsNullOrEmpty(nextMission.VesselId))
-                {
-                    Vessel? vessel = await _Database.Vessels.ReadAsync(nextMission.VesselId, token).ConfigureAwait(false);
-                    if (vessel != null)
-                    {
-                        await TryAssignAsync(nextMission, vessel, token).ConfigureAwait(false);
-                    }
-                }
-            }
+            await ReleaseCaptainIfStillAssignedAsync(captain, mission, token).ConfigureAwait(false);
+            await TryAssignNextPendingMissionAsync(token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
@@ -990,13 +967,15 @@ namespace Armada.Core.Services
                         personaPreamble = "## Your Role: TestEngineer (Write Tests)\n\n" +
                             "You are writing tests for code changes made by the Worker. " +
                             "Review the diff below and write unit tests, integration tests, or test harness updates " +
-                            "that cover the changes. Follow existing test patterns in the repository.\n\n";
+                            "that cover the changes. Follow existing test patterns in the repository. " +
+                            "End with exactly one standalone line [ARMADA:RESULT] COMPLETE or [ARMADA:RESULT] FAIL.\n\n";
                         break;
                     case "Judge":
                         personaPreamble = "## Your Role: Judge (Review)\n\n" +
                             "You are reviewing the completed work for correctness, completeness, scope compliance, " +
                             "and style. Examine the diff below against the original mission description. " +
-                            "Produce a clear verdict: PASS, FAIL (with reasons), or NEEDS_REVISION (with feedback).\n\n";
+                            "End with exactly one standalone verdict line: [ARMADA:VERDICT] PASS, " +
+                            "[ARMADA:VERDICT] FAIL, or [ARMADA:VERDICT] NEEDS_REVISION, then provide a brief explanation.\n\n";
                         break;
                 }
 
@@ -1086,6 +1065,304 @@ namespace Armada.Core.Services
 
             List<Mission> voyageMissions = await _Database.Missions.EnumerateByVoyageAsync(voyageId, token).ConfigureAwait(false);
             return voyageMissions.Any(m => m.DependsOnMissionId == missionId);
+        }
+
+        private async Task EmitWorkProducedEventAsync(Mission mission, Captain captain, CancellationToken token)
+        {
+            try
+            {
+                ArmadaEvent workProducedEvent = new ArmadaEvent("mission.work_produced", "Work produced: " + mission.Title);
+                workProducedEvent.TenantId = mission.TenantId;
+                workProducedEvent.UserId = mission.UserId;
+                workProducedEvent.EntityType = "mission";
+                workProducedEvent.EntityId = mission.Id;
+                workProducedEvent.CaptainId = captain.Id;
+                workProducedEvent.MissionId = mission.Id;
+                workProducedEvent.VesselId = mission.VesselId;
+                workProducedEvent.VoyageId = mission.VoyageId;
+                await _Database.Events.CreateAsync(workProducedEvent, token).ConfigureAwait(false);
+            }
+            catch (Exception evtEx)
+            {
+                _Logging.Warn(_Header + "error emitting mission.work_produced event for " + mission.Id + ": " + evtEx.Message);
+            }
+        }
+
+        private async Task HandleStructuredFailureAsync(
+            Mission mission,
+            Captain captain,
+            Dock? dock,
+            StructuredMissionOutcome outcome,
+            CancellationToken token)
+        {
+            string failureReason = outcome.FailureReason ??
+                ((mission.Persona ?? "Mission") + " reported " + (outcome.Value ?? "FAIL"));
+
+            mission.Status = MissionStatusEnum.Failed;
+            mission.ProcessId = null;
+            mission.FailureReason = failureReason;
+            mission.CompletedUtc = DateTime.UtcNow;
+            mission.LastUpdateUtc = DateTime.UtcNow;
+            await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+            _Logging.Warn(_Header + "mission " + mission.Id + " failed from structured " +
+                (String.Equals(mission.Persona, "Judge", StringComparison.OrdinalIgnoreCase) ? "verdict" : "result") +
+                " " + (outcome.Value ?? "unknown") + ": " + failureReason);
+
+            try
+            {
+                ArmadaEvent missionFailedEvent = new ArmadaEvent("mission.failed", "Mission failed: " + mission.Title);
+                missionFailedEvent.TenantId = mission.TenantId;
+                missionFailedEvent.UserId = mission.UserId;
+                missionFailedEvent.EntityType = "mission";
+                missionFailedEvent.EntityId = mission.Id;
+                missionFailedEvent.CaptainId = captain.Id;
+                missionFailedEvent.MissionId = mission.Id;
+                missionFailedEvent.VesselId = mission.VesselId;
+                missionFailedEvent.VoyageId = mission.VoyageId;
+                await _Database.Events.CreateAsync(missionFailedEvent, token).ConfigureAwait(false);
+            }
+            catch (Exception evtEx)
+            {
+                _Logging.Warn(_Header + "error emitting mission.failed event for " + mission.Id + ": " + evtEx.Message);
+            }
+
+            if (!String.IsNullOrEmpty(mission.VoyageId))
+            {
+                await HaltVoyageAfterFailureAsync(mission.VoyageId, mission.Id, failureReason, token).ConfigureAwait(false);
+            }
+
+            await ReclaimCompletionDockAsync(dock, mission, token).ConfigureAwait(false);
+
+            Signal signal = new Signal(SignalTypeEnum.Error, "Mission " + mission.Id + " failed: " + failureReason);
+            signal.FromCaptainId = captain.Id;
+            await _Database.Signals.CreateAsync(signal, token).ConfigureAwait(false);
+
+            await ReleaseCaptainIfStillAssignedAsync(captain, mission, token).ConfigureAwait(false);
+            await TryAssignNextPendingMissionAsync(token).ConfigureAwait(false);
+        }
+
+        private async Task HaltVoyageAfterFailureAsync(string voyageId, string failedMissionId, string failureReason, CancellationToken token)
+        {
+            Voyage? voyage = await _Database.Voyages.ReadAsync(voyageId, token).ConfigureAwait(false);
+            if (voyage == null) return;
+            if (voyage.Status == VoyageStatusEnum.Cancelled || voyage.Status == VoyageStatusEnum.Complete) return;
+
+            voyage.Status = VoyageStatusEnum.Cancelled;
+            voyage.CompletedUtc = DateTime.UtcNow;
+            voyage.LastUpdateUtc = DateTime.UtcNow;
+            await _Database.Voyages.UpdateAsync(voyage, token).ConfigureAwait(false);
+
+            List<Mission> voyageMissions = await _Database.Missions.EnumerateByVoyageAsync(voyageId, token).ConfigureAwait(false);
+            foreach (Mission otherMission in voyageMissions)
+            {
+                if (otherMission.Id == failedMissionId) continue;
+
+                bool isTerminal =
+                    otherMission.Status == MissionStatusEnum.Complete ||
+                    otherMission.Status == MissionStatusEnum.Failed ||
+                    otherMission.Status == MissionStatusEnum.Cancelled ||
+                    otherMission.Status == MissionStatusEnum.LandingFailed ||
+                    otherMission.Status == MissionStatusEnum.PullRequestOpen ||
+                    otherMission.Status == MissionStatusEnum.WorkProduced;
+
+                if (isTerminal) continue;
+
+                otherMission.Status = MissionStatusEnum.Cancelled;
+                otherMission.FailureReason = "Voyage halted after mission " + failedMissionId + " failed: " + failureReason;
+                otherMission.ProcessId = null;
+                otherMission.CompletedUtc = DateTime.UtcNow;
+                otherMission.LastUpdateUtc = DateTime.UtcNow;
+                await _Database.Missions.UpdateAsync(otherMission, token).ConfigureAwait(false);
+            }
+
+            try
+            {
+                ArmadaEvent voyageCancelledEvent = new ArmadaEvent("voyage.cancelled", "Voyage halted after mission " + failedMissionId + " failed");
+                voyageCancelledEvent.TenantId = voyage.TenantId;
+                voyageCancelledEvent.UserId = voyage.UserId;
+                voyageCancelledEvent.EntityType = "voyage";
+                voyageCancelledEvent.EntityId = voyage.Id;
+                voyageCancelledEvent.MissionId = failedMissionId;
+                voyageCancelledEvent.VoyageId = voyage.Id;
+                await _Database.Events.CreateAsync(voyageCancelledEvent, token).ConfigureAwait(false);
+            }
+            catch (Exception evtEx)
+            {
+                _Logging.Warn(_Header + "error emitting voyage.cancelled event for " + voyage.Id + ": " + evtEx.Message);
+            }
+        }
+
+        private async Task ReclaimCompletionDockAsync(Dock? dock, Mission mission, CancellationToken token)
+        {
+            string? completionDockId = dock?.Id;
+            if (String.IsNullOrEmpty(completionDockId)) return;
+
+            try
+            {
+                await _Docks.ReclaimAsync(completionDockId, token: token).ConfigureAwait(false);
+            }
+            catch (Exception reclaimEx)
+            {
+                _Logging.Warn(_Header + "error reclaiming dock " + completionDockId + " after mission " + mission.Id + ": " + reclaimEx.Message);
+            }
+        }
+
+        private async Task ReleaseCaptainIfStillAssignedAsync(Captain captain, Mission mission, CancellationToken token)
+        {
+            Captain? latestCaptain = await _Database.Captains.ReadAsync(captain.Id, token).ConfigureAwait(false);
+            if (latestCaptain != null && latestCaptain.CurrentMissionId == mission.Id)
+            {
+                await _Captains.ReleaseAsync(latestCaptain, token).ConfigureAwait(false);
+            }
+            else
+            {
+                _Logging.Info(_Header + "skipping captain release for mission " + mission.Id +
+                    " because captain " + captain.Id + " is now assigned to " + (latestCaptain?.CurrentMissionId ?? "nothing"));
+            }
+        }
+
+        private async Task TryAssignNextPendingMissionAsync(CancellationToken token)
+        {
+            List<Mission> pendingMissions = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending, token).ConfigureAwait(false);
+            if (!pendingMissions.Any()) return;
+
+            Mission nextMission = pendingMissions.OrderBy(m => m.Priority).ThenBy(m => m.CreatedUtc).First();
+            if (String.IsNullOrEmpty(nextMission.VesselId)) return;
+
+            Vessel? vessel = await _Database.Vessels.ReadAsync(nextMission.VesselId, token).ConfigureAwait(false);
+            if (vessel != null)
+            {
+                await TryAssignAsync(nextMission, vessel, token).ConfigureAwait(false);
+            }
+        }
+
+        private StructuredMissionOutcome ParseStructuredOutcome(Mission mission)
+        {
+            StructuredMissionOutcome outcome = new StructuredMissionOutcome();
+            if (mission == null || String.IsNullOrWhiteSpace(mission.AgentOutput)) return outcome;
+
+            string output = mission.AgentOutput;
+            string persona = mission.Persona ?? String.Empty;
+
+            if (String.Equals(persona, "Judge", StringComparison.OrdinalIgnoreCase))
+            {
+                (string? value, string? explanation) = TryParseOutcomeValue(
+                    output,
+                    @"^\s*\[ARMADA:VERDICT\]\s*(?<value>[A-Za-z_]+)\b(?:[ \t:.\-]+(?<rest>.*))?$");
+                if (String.IsNullOrEmpty(value))
+                {
+                    (value, explanation) = TryParseOutcomeValue(
+                        output,
+                        @"^\s*(?<value>PASS|FAIL|NEEDS_REVISION)\b(?:[ \t:.\-]+(?<rest>.*))?$");
+                }
+
+                if (String.IsNullOrEmpty(value)) return outcome;
+
+                string normalized = value.ToUpperInvariant();
+                outcome.Value = normalized;
+                switch (normalized)
+                {
+                    case "PASS":
+                        return outcome;
+                    case "FAIL":
+                    case "NEEDS_REVISION":
+                        outcome.IsFailure = true;
+                        outcome.FailureReason = BuildStructuredFailureReason("Judge", normalized, explanation);
+                        return outcome;
+                    default:
+                        outcome.IsFailure = true;
+                        outcome.FailureReason = BuildStructuredFailureReason("Judge", "INVALID_VERDICT " + normalized, explanation);
+                        return outcome;
+                }
+            }
+
+            if (String.Equals(persona, "Worker", StringComparison.OrdinalIgnoreCase) ||
+                String.Equals(persona, "TestEngineer", StringComparison.OrdinalIgnoreCase))
+            {
+                (string? value, string? explanation) = TryParseOutcomeValue(
+                    output,
+                    @"^\s*\[ARMADA:RESULT\]\s*(?<value>[A-Za-z_]+)\b(?:[ \t:.\-]+(?<rest>.*))?$");
+                if (String.IsNullOrEmpty(value))
+                {
+                    (value, explanation) = TryParseOutcomeValue(
+                        output,
+                        @"^\s*(?<value>COMPLETE|FAIL|NEEDS_REVISION|BLOCKED)\b(?:[ \t:.\-]+(?<rest>.*))?$");
+                }
+
+                if (String.IsNullOrEmpty(value)) return outcome;
+
+                string normalized = value.ToUpperInvariant();
+                outcome.Value = normalized;
+                switch (normalized)
+                {
+                    case "COMPLETE":
+                        return outcome;
+                    case "FAIL":
+                    case "NEEDS_REVISION":
+                    case "BLOCKED":
+                        outcome.IsFailure = true;
+                        outcome.FailureReason = BuildStructuredFailureReason(persona, normalized, explanation);
+                        return outcome;
+                    default:
+                        outcome.IsFailure = true;
+                        outcome.FailureReason = BuildStructuredFailureReason(persona, "INVALID_RESULT " + normalized, explanation);
+                        return outcome;
+                }
+            }
+
+            return outcome;
+        }
+
+        private static (string? Value, string? Explanation) TryParseOutcomeValue(string output, string pattern)
+        {
+            System.Text.RegularExpressions.MatchCollection matches =
+                System.Text.RegularExpressions.Regex.Matches(
+                    output,
+                    pattern,
+                    System.Text.RegularExpressions.RegexOptions.Multiline |
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            if (matches.Count < 1) return (null, null);
+
+            System.Text.RegularExpressions.Match match = matches[matches.Count - 1];
+            string value = match.Groups["value"].Value.Trim();
+            if (String.IsNullOrEmpty(value)) return (null, null);
+
+            string explanation = match.Groups["rest"].Value.Trim();
+            if (String.IsNullOrEmpty(explanation))
+            {
+                int remainderIndex = match.Index + match.Length;
+                if (remainderIndex < output.Length)
+                {
+                    explanation = output.Substring(remainderIndex).Trim();
+                }
+            }
+
+            return (value, NormalizeStructuredExplanation(explanation));
+        }
+
+        private static string BuildStructuredFailureReason(string persona, string value, string? explanation)
+        {
+            string reason = persona + " reported " + value;
+            if (!String.IsNullOrWhiteSpace(explanation))
+            {
+                reason += ": " + explanation;
+            }
+
+            return reason;
+        }
+
+        private static string? NormalizeStructuredExplanation(string? explanation)
+        {
+            if (String.IsNullOrWhiteSpace(explanation)) return null;
+
+            string normalized = System.Text.RegularExpressions.Regex.Replace(explanation, @"\s+", " ").Trim();
+            if (normalized.Length > 400)
+            {
+                normalized = normalized.Substring(0, 400) + "...";
+            }
+
+            return normalized;
         }
 
         /// <summary>

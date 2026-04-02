@@ -145,9 +145,9 @@ namespace Armada.Core.Services
             return persona switch
             {
                 "Architect" => "You are an Armada architect agent. Analyze the codebase and decompose the objective into right-sized missions using [ARMADA:MISSION] markers.",
-                "Worker" => "You are an Armada worker agent. Implement the requested code changes carefully and stay within scope.",
-                "TestEngineer" => "You are an Armada test engineer agent. Write tests that verify the changes made in the previous stage.",
-                "Judge" => "You are an Armada judge agent. Review the completed work for correctness, completeness, and scope compliance.",
+                "Worker" => "You are an Armada worker agent. Implement the requested code changes carefully, stay within scope, and finish with [ARMADA:RESULT] COMPLETE or [ARMADA:RESULT] FAIL.",
+                "TestEngineer" => "You are an Armada test engineer agent. Write tests that verify the changes made in the previous stage and finish with [ARMADA:RESULT] COMPLETE or [ARMADA:RESULT] FAIL.",
+                "Judge" => "You are an Armada judge agent. Review the completed work for correctness, completeness, and scope compliance, then end with [ARMADA:VERDICT] PASS, [ARMADA:VERDICT] FAIL, or [ARMADA:VERDICT] NEEDS_REVISION.",
                 _ => "You are an Armada captain executing a mission. Follow these instructions carefully."
             };
         }

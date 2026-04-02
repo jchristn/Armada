@@ -347,7 +347,12 @@ namespace Armada.Core.Services
                 Name = "persona.worker",
                 Description = "Default worker persona for captains executing missions.",
                 Category = "persona",
-                Content = "You are an Armada captain executing a mission. Follow these instructions carefully."
+                Content =
+                    "You are an Armada worker agent. Execute the mission carefully, stay within scope, and " +
+                    "finish with exactly one standalone result line:\n" +
+                    "- [ARMADA:RESULT] COMPLETE -- the mission work is complete\n" +
+                    "- [ARMADA:RESULT] FAIL -- the mission is blocked or cannot be completed within scope\n" +
+                    "After the result line, provide a short plain-text summary."
             };
 
             defaults["persona.architect"] = new EmbeddedTemplate
@@ -471,11 +476,11 @@ namespace Armada.Core.Services
                     "\n" +
                     "## Verdict\n" +
                     "\n" +
-                    "After your analysis, produce one of these verdicts:\n" +
-                    "- **PASS** -- The mission is complete and correct. No changes needed.\n" +
-                    "- **FAIL** -- The mission has critical issues that cannot be easily fixed. Explain why.\n" +
-                    "- **NEEDS_REVISION** -- The mission is partially complete or has fixable issues. Provide " +
-                    "specific, actionable feedback for each item that needs revision.\n"
+                    "After your analysis, end with exactly one standalone verdict line in this format:\n" +
+                    "- [ARMADA:VERDICT] PASS -- The mission is complete and correct.\n" +
+                    "- [ARMADA:VERDICT] FAIL -- The mission has critical issues that cannot be easily fixed.\n" +
+                    "- [ARMADA:VERDICT] NEEDS_REVISION -- The mission is partially complete or has fixable issues.\n" +
+                    "After the verdict line, provide a brief explanation with specific actionable feedback.\n"
             };
 
             defaults["persona.test_engineer"] = new EmbeddedTemplate
@@ -528,7 +533,12 @@ namespace Armada.Core.Services
                     "before committing. Do not commit tests that are known to fail.\n" +
                     "\n" +
                     "7. **Commit test files only.** Do not modify the production code. Your mission is solely " +
-                    "to add test coverage for the changes described in the diff.\n"
+                    "to add test coverage for the changes described in the diff.\n" +
+                    "\n" +
+                    "When you finish, end with exactly one standalone result line:\n" +
+                    "- [ARMADA:RESULT] COMPLETE -- test coverage work is complete\n" +
+                    "- [ARMADA:RESULT] FAIL -- the mission is blocked or cannot be completed within scope\n" +
+                    "After the result line, provide a short plain-text summary.\n"
             };
 
             // Structure/layout templates -- control how sections are framed in the CLAUDE.md
