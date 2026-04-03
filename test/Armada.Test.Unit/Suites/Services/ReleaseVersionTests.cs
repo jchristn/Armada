@@ -11,15 +11,46 @@ namespace Armada.Test.Unit.Suites.Services
 
         protected override async Task RunTestsAsync()
         {
-            await RunTest("ProductVersion And Shared Build Props Match V050", () =>
+            await RunTest("Directory Build Props Is Canonical Release Version", () =>
             {
-                string propsContents = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "src", "Directory.Build.props"));
-                MatchCollection versionMatches = Regex.Matches(propsContents, @"<Version>\s*([^<]+)\s*</Version>");
+                string releaseVersion = GetCanonicalReleaseVersion();
 
-                AssertTrue(versionMatches.Count == 1, "Directory.Build.props should contain exactly one Version element");
-                Match versionMatch = versionMatches[0];
-                AssertEqual("0.5.0", Constants.ProductVersion);
-                AssertEqual(Constants.ProductVersion, versionMatch.Groups[1].Value.Trim());
+                AssertEqual("0.5.0", releaseVersion, "Directory.Build.props release version");
+                AssertEqual(releaseVersion, Constants.ProductVersion, "Constants.ProductVersion should match Directory.Build.props");
+            });
+
+            await RunTest("Release Artifacts Stay In Lockstep With Directory Build Props", () =>
+            {
+                string releaseVersion = GetCanonicalReleaseVersion();
+                string constantsContents = ReadRepositoryFile("src", "Armada.Core", "Constants.cs");
+                string helmProjectContents = ReadRepositoryFile("src", "Armada.Helm", "Armada.Helm.csproj");
+                string dashboardPackageContents = ReadRepositoryFile("src", "Armada.Dashboard", "package.json");
+                string composeContents = ReadRepositoryFile("docker", "compose.yaml");
+
+                AssertSingleMatchGroupValue(constantsContents, @"ProductVersion\s*=\s*""([^""]+)""", releaseVersion, "Constants.ProductVersion should match Directory.Build.props");
+                AssertSingleMatchGroupValue(helmProjectContents, @"<Version>\s*([^<]+)\s*</Version>", releaseVersion, "Armada.Helm.csproj version should match Directory.Build.props");
+                AssertSingleMatchGroupValue(dashboardPackageContents, @"""version""\s*:\s*""([^""]+)""", releaseVersion, "Armada.Dashboard/package.json version should match Directory.Build.props");
+
+                MatchCollection composeVersionMatches = Regex.Matches(composeContents, @"jchristn77/armada-(?:server|dashboard):v([0-9]+\.[0-9]+\.[0-9]+)");
+                AssertEqual(2, composeVersionMatches.Count, "docker/compose.yaml should pin both Armada images");
+                foreach (Match composeVersionMatch in composeVersionMatches)
+                {
+                    AssertEqual(releaseVersion, composeVersionMatch.Groups[1].Value, "docker/compose.yaml image tag should match Directory.Build.props");
+                }
+            });
+
+            await RunTest("Docs And Postman Samples Stay In Lockstep With Directory Build Props", () =>
+            {
+                string releaseVersion = GetCanonicalReleaseVersion();
+                string restApiContents = ReadRepositoryFile("docs", "REST_API.md");
+                string mcpApiContents = ReadRepositoryFile("docs", "MCP_API.md");
+                string postmanContents = ReadRepositoryFile("Armada.postman_collection.json");
+
+                AssertSingleMatchGroupValue(restApiContents, @"\*\*Version:\*\*\s*([0-9]+\.[0-9]+\.[0-9]+)", releaseVersion, "docs/REST_API.md version header should match Directory.Build.props");
+                AssertSingleMatchGroupValue(mcpApiContents, @"\*\*Version:\*\*\s*([0-9]+\.[0-9]+\.[0-9]+)", releaseVersion, "docs/MCP_API.md version header should match Directory.Build.props");
+                AssertSingleMatchGroupValue(postmanContents, @"Version:\s*([0-9]+\.[0-9]+\.[0-9]+)", releaseVersion, "Armada.postman_collection.json description version should match Directory.Build.props");
+                AssertSingleMatchGroupValue(restApiContents, @"#### GET /api/v1/status/health[\s\S]*?""Version"":\s*""([^""]+)""", releaseVersion, "docs/REST_API.md health response sample should match Directory.Build.props");
+                AssertContains("\\\"Version\\\": \\\"" + releaseVersion + "\\\"", postmanContents, "Armada.postman_collection.json response bodies should use the canonical release version");
             });
 
             await RunTest("Helm Program Uses ProductVersion Constant", () =>
@@ -34,6 +65,33 @@ namespace Armada.Test.Unit.Suites.Services
                 AssertFalse(programContents.Contains("\"v0.5.0\""), "Helm entry point should compose the prefixed version instead of hard-coding it");
                 AssertFalse(programContents.Contains("SetApplicationVersion(\"0.5.0\")"), "Helm CLI version should not be hard-coded");
             });
+        }
+
+        private string GetCanonicalReleaseVersion()
+        {
+            string propsContents = ReadRepositoryFile("src", "Directory.Build.props");
+            MatchCollection versionMatches = Regex.Matches(propsContents, @"<Version>\s*([^<]+)\s*</Version>");
+
+            AssertEqual(1, versionMatches.Count, "Directory.Build.props should contain exactly one Version element");
+            return versionMatches[0].Groups[1].Value.Trim();
+        }
+
+        private string ReadRepositoryFile(params string[] relativePathParts)
+        {
+            string path = FindRepositoryRoot();
+            foreach (string relativePathPart in relativePathParts)
+            {
+                path = Path.Combine(path, relativePathPart);
+            }
+
+            return File.ReadAllText(path);
+        }
+
+        private void AssertSingleMatchGroupValue(string contents, string pattern, string expectedValue, string label)
+        {
+            MatchCollection matches = Regex.Matches(contents, pattern);
+            AssertEqual(1, matches.Count, label + " should produce exactly one version match");
+            AssertEqual(expectedValue, matches[0].Groups[1].Value.Trim(), label);
         }
 
         private static string FindRepositoryRoot()
