@@ -50,6 +50,42 @@ namespace Armada.Test.Unit.Suites.Services
                 AssertContains("-f net10.0 -- mcp remove --yes", removeMcpBatContents, "remove-mcp.bat should use net10.0");
                 AssertContains("-f net10.0 -- mcp remove --yes", removeMcpShContents, "remove-mcp.sh should use net10.0");
             });
+
+            await RunTest("Dashboard Mission TypeScript Model Includes Agent Output", () =>
+            {
+                string modelsContents = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "src", "Armada.Dashboard", "src", "types", "models.ts"));
+                Match missionInterfaceMatch = Regex.Match(modelsContents, @"export interface Mission\s*\{(?<body>.*?)\n\}", RegexOptions.Singleline);
+
+                AssertTrue(missionInterfaceMatch.Success, "Mission interface should exist in dashboard models");
+
+                string missionInterfaceBody = missionInterfaceMatch.Groups["body"].Value;
+                AssertContains("agentOutput?: string | null;", missionInterfaceBody, "Mission interface should expose nullable agent output");
+                AssertContains("totalRuntimeMs: number | null;", missionInterfaceBody, "Mission interface should keep total runtime aligned with backend");
+            });
+
+            await RunTest("Dashboard Mission Detail Shows Agent Output In Collapsible Readonly Section", () =>
+            {
+                string missionDetailContents = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "src", "Armada.Dashboard", "src", "pages", "MissionDetail.tsx"));
+
+                AssertContains("{mission.agentOutput && (", missionDetailContents, "Mission detail should render agent output conditionally");
+                AssertContains("<details>", missionDetailContents, "Mission detail should use a collapsible details element for agent output");
+                AssertContains(">Agent Output</summary>", missionDetailContents, "Mission detail should label the collapsible agent output section");
+                AssertContains("gridColumn: '1 / -1'", missionDetailContents, "Agent output section should span the full detail grid width");
+                AssertContains("overflow: 'auto'", missionDetailContents, "Agent output section should preserve scrollable overflow for long logs");
+                AssertContains("maxHeight: '24rem'", missionDetailContents, "Agent output section should cap rendered height");
+                AssertContains("fontFamily: 'monospace'", missionDetailContents, "Agent output section should preserve fixed-width log formatting");
+                AssertContains(">{mission.agentOutput}</pre>", missionDetailContents, "Mission detail should render the raw agent output text");
+            });
+
+            await RunTest("Dashboard Mission Detail Keeps Current Layout And Avoids Legacy Patterns", () =>
+            {
+                string missionDetailContents = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "src", "Armada.Dashboard", "src", "pages", "MissionDetail.tsx"));
+
+                AssertContains("gridTemplateColumns: '1fr 1fr 1fr 1fr'", missionDetailContents, "Mission detail should keep the current four-column grid");
+                AssertFalse(missionDetailContents.Contains("gridTemplateColumns: '1fr 1fr 1fr'"), "Mission detail should not regress to the old three-column grid");
+                AssertFalse(missionDetailContents.Contains("parsedTasks"), "Mission detail should not reference removed dispatch parsing state");
+                AssertFalse(missionDetailContents.Contains("1 task detected"), "Mission detail should not include removed dispatch task detection copy");
+            });
         }
 
         private static string FindRepositoryRoot()
