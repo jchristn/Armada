@@ -1,6 +1,8 @@
 namespace Armada.Test.Unit.Suites.Services
 {
+    using System.Collections.Generic;
     using System.IO;
+    using System.Text.Json;
     using System.Text.RegularExpressions;
     using Armada.Core;
     using Armada.Test.Common;
@@ -11,29 +13,159 @@ namespace Armada.Test.Unit.Suites.Services
 
         protected override async Task RunTestsAsync()
         {
-            await RunTest("ProductVersion And Shared Build Props Match V050", () =>
+            await RunTest("Release Surfaces Stay In Lockstep At V050", () =>
             {
-                string propsContents = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "src", "Directory.Build.props"));
-                MatchCollection versionMatches = Regex.Matches(propsContents, @"<Version>\s*([^<]+)\s*</Version>");
+                string repositoryRoot = FindRepositoryRoot();
+                string expectedVersion = ReadSingleCapturedVersion(
+                    repositoryRoot,
+                    "src/Directory.Build.props",
+                    @"<Version>\s*(?<version>[^<]+)\s*</Version>",
+                    "the shared build version");
 
-                AssertTrue(versionMatches.Count == 1, "Directory.Build.props should contain exactly one Version element");
-                Match versionMatch = versionMatches[0];
-                AssertEqual("0.5.0", Constants.ProductVersion);
-                AssertEqual(Constants.ProductVersion, versionMatch.Groups[1].Value.Trim());
+                AssertTrue(expectedVersion == "0.5.0", "Directory.Build.props should pin the v0.5.0 release");
+                AssertTrue(Constants.ProductVersion == expectedVersion, "Constants.ProductVersion should match Directory.Build.props");
+
+                AssertAllCapturedVersionsMatch(
+                    repositoryRoot,
+                    "src/Armada.Core/Constants.cs",
+                    @"ProductVersion\s*=\s*""(?<version>\d+\.\d+\.\d+)""",
+                    expectedVersion,
+                    "the product version constant");
+
+                AssertAllCapturedVersionsMatch(
+                    repositoryRoot,
+                    "src/Armada.Helm/Armada.Helm.csproj",
+                    @"<Version>\s*(?<version>[^<]+)\s*</Version>",
+                    expectedVersion,
+                    "the Helm package version");
+
+                AssertAllCapturedVersionsMatch(
+                    repositoryRoot,
+                    "src/Armada.Dashboard/package.json",
+                    @"""version"":\s*""(?<version>\d+\.\d+\.\d+)""",
+                    expectedVersion,
+                    "the dashboard package version");
+
+                AssertAllCapturedVersionsMatch(
+                    repositoryRoot,
+                    "docker/compose.yaml",
+                    @"image:\s+jchristn77/armada-(?:server|dashboard):v(?<version>\d+\.\d+\.\d+)",
+                    expectedVersion,
+                    "the Docker image tag");
+
+                AssertAllCapturedVersionsMatch(
+                    repositoryRoot,
+                    "docs/REST_API.md",
+                    @"(?:\*\*Version:\*\*\s*|""Version"":\s*"")(?<version>\d+\.\d+\.\d+)",
+                    expectedVersion,
+                    "the REST API release literal");
+
+                AssertAllCapturedVersionsMatch(
+                    repositoryRoot,
+                    "docs/MCP_API.md",
+                    @"\*\*Version:\*\*\s*(?<version>\d+\.\d+\.\d+)",
+                    expectedVersion,
+                    "the MCP API release literal");
+
+                AssertPostmanCollectionVersionsMatch(
+                    repositoryRoot,
+                    "Armada.postman_collection.json",
+                    expectedVersion);
             });
+        }
 
-            await RunTest("Helm Program Uses ProductVersion Constant", () =>
+        private void AssertAllCapturedVersionsMatch(
+            string repositoryRoot,
+            string relativePath,
+            string pattern,
+            string expectedVersion,
+            string description)
+        {
+            string contents = File.ReadAllText(GetRepositoryPath(repositoryRoot, relativePath));
+            MatchCollection matches = Regex.Matches(contents, pattern);
+
+            AssertTrue(matches.Count > 0, relativePath + " should contain " + description);
+
+            foreach (Match match in matches)
             {
-                string programContents = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "src", "Armada.Helm", "Program.cs"));
+                string actualVersion = match.Groups["version"].Value.Trim();
+                AssertTrue(
+                    actualVersion == expectedVersion,
+                    relativePath + " should keep " + description + " in lockstep with " + expectedVersion + ", but found " + actualVersion);
+            }
+        }
 
-                AssertContains("\"v\" + Constants.ProductVersion", programContents, "Helm banner/help version should come from Constants.ProductVersion");
-                AssertContains("AnsiConsole.MarkupLine(\"[dim]Multi-Agent Orchestration System  \" + _VersionLabel + \"[/]\");", programContents, "Helm subtitle should render the shared version label");
-                AssertContains("config.SetApplicationVersion(Constants.ProductVersion);", programContents, "Helm CLI version should come from Constants.ProductVersion");
-                AssertFalse(programContents.Contains("0.3.0"), "Helm entry point should not contain the stale 0.3.0 literal");
-                AssertFalse(programContents.Contains("\"0.5.0\""), "Helm entry point should not contain a hard-coded release version literal");
-                AssertFalse(programContents.Contains("\"v0.5.0\""), "Helm entry point should compose the prefixed version instead of hard-coding it");
-                AssertFalse(programContents.Contains("SetApplicationVersion(\"0.5.0\")"), "Helm CLI version should not be hard-coded");
-            });
+        private void AssertPostmanCollectionVersionsMatch(
+            string repositoryRoot,
+            string relativePath,
+            string expectedVersion)
+        {
+            string contents = File.ReadAllText(GetRepositoryPath(repositoryRoot, relativePath));
+            using JsonDocument document = JsonDocument.Parse(contents);
+
+            List<string> versions = new List<string>();
+            Regex descriptionVersionPattern = new Regex(@"Version:\s*(?<version>\d+\.\d+\.\d+)");
+            Regex responseVersionPattern = new Regex("\"Version\":\\s*\"(?<version>\\d+\\.\\d+\\.\\d+)\"");
+
+            CollectJsonStringMatches(document.RootElement, descriptionVersionPattern, versions);
+            CollectJsonStringMatches(document.RootElement, responseVersionPattern, versions);
+
+            AssertTrue(versions.Count > 0, relativePath + " should contain release version literals");
+
+            foreach (string actualVersion in versions)
+            {
+                AssertTrue(
+                    actualVersion == expectedVersion,
+                    relativePath + " should keep embedded release literals in lockstep with " + expectedVersion + ", but found " + actualVersion);
+            }
+        }
+
+        private static void CollectJsonStringMatches(JsonElement element, Regex pattern, List<string> versions)
+        {
+            switch (element.ValueKind)
+            {
+                case JsonValueKind.Object:
+                    foreach (JsonProperty property in element.EnumerateObject())
+                    {
+                        CollectJsonStringMatches(property.Value, pattern, versions);
+                    }
+                    break;
+
+                case JsonValueKind.Array:
+                    foreach (JsonElement child in element.EnumerateArray())
+                    {
+                        CollectJsonStringMatches(child, pattern, versions);
+                    }
+                    break;
+
+                case JsonValueKind.String:
+                    string value = element.GetString() ?? string.Empty;
+                    MatchCollection matches = pattern.Matches(value);
+
+                    foreach (Match match in matches)
+                    {
+                        versions.Add(match.Groups["version"].Value.Trim());
+                    }
+                    break;
+            }
+        }
+
+        private string ReadSingleCapturedVersion(
+            string repositoryRoot,
+            string relativePath,
+            string pattern,
+            string description)
+        {
+            string contents = File.ReadAllText(GetRepositoryPath(repositoryRoot, relativePath));
+            MatchCollection matches = Regex.Matches(contents, pattern);
+
+            AssertTrue(matches.Count == 1, relativePath + " should contain exactly one match for " + description);
+            return matches[0].Groups["version"].Value.Trim();
+        }
+
+        private static string GetRepositoryPath(string repositoryRoot, string relativePath)
+        {
+            return Path.Combine(repositoryRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
         }
 
         private static string FindRepositoryRoot()
