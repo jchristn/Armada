@@ -72,6 +72,81 @@ namespace Armada.Test.Unit.Suites.Services
                     "Armada.postman_collection.json",
                     expectedVersion);
             });
+
+            await RunTest("ReadSingleCapturedVersion Rejects Duplicate Shared Build Versions", () =>
+            {
+                WithTemporaryRepositoryRoot(tempRoot =>
+                {
+                    WriteRepositoryFile(
+                        tempRoot,
+                        "src/Directory.Build.props",
+                        "<Project>\n  <PropertyGroup>\n    <Version>0.5.0</Version>\n    <Version>0.2.0</Version>\n  </PropertyGroup>\n</Project>\n");
+
+                    Exception exception = CaptureException(() => ReadSingleCapturedVersion(
+                        tempRoot,
+                        "src/Directory.Build.props",
+                        @"<Version>\s*(?<version>[^<]+)\s*</Version>",
+                        "the shared build version"));
+
+                    AssertContains("exactly one match", exception.Message, "duplicate shared build versions should be rejected");
+                });
+            });
+
+            await RunTest("AssertAllCapturedVersionsMatch Rejects Stale Rest Release Literals", () =>
+            {
+                WithTemporaryRepositoryRoot(tempRoot =>
+                {
+                    WriteRepositoryFile(
+                        tempRoot,
+                        "docs/REST_API.md",
+                        "**Version:** 0.5.0\n\n{\n  \"Version\": \"0.2.0\"\n}\n");
+
+                    Exception exception = CaptureException(() => AssertAllCapturedVersionsMatch(
+                        tempRoot,
+                        "docs/REST_API.md",
+                        @"(?:\*\*Version:\*\*\s*|""Version"":\s*"")(?<version>\d+\.\d+\.\d+)",
+                        "0.5.0",
+                        "the REST API release literal"));
+
+                    AssertContains("but found 0.2.0", exception.Message, "stale REST release literals should be rejected");
+                });
+            });
+
+            await RunTest("AssertPostmanCollectionVersionsMatch Rejects Split Embedded Versions", () =>
+            {
+                WithTemporaryRepositoryRoot(tempRoot =>
+                {
+                    string postmanContents = JsonSerializer.Serialize(new
+                    {
+                        info = new
+                        {
+                            description = "Version: 0.5.0"
+                        },
+                        item = new object[]
+                        {
+                            new
+                            {
+                                response = new object[]
+                                {
+                                    new
+                                    {
+                                        body = "{\n  \"Version\": \"0.2.0\"\n}"
+                                    }
+                                }
+                            }
+                        }
+                    });
+
+                    WriteRepositoryFile(tempRoot, "Armada.postman_collection.json", postmanContents);
+
+                    Exception exception = CaptureException(() => AssertPostmanCollectionVersionsMatch(
+                        tempRoot,
+                        "Armada.postman_collection.json",
+                        "0.5.0"));
+
+                    AssertContains("but found 0.2.0", exception.Message, "split Postman embedded versions should be rejected");
+                });
+            });
         }
 
         private void AssertAllCapturedVersionsMatch(
@@ -166,6 +241,51 @@ namespace Armada.Test.Unit.Suites.Services
         private static string GetRepositoryPath(string repositoryRoot, string relativePath)
         {
             return Path.Combine(repositoryRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        }
+
+        private static Exception CaptureException(Action action)
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception exception)
+            {
+                return exception;
+            }
+
+            throw new Exception("Assertion failed: expected an exception but no exception was thrown");
+        }
+
+        private static void WithTemporaryRepositoryRoot(Action<string> action)
+        {
+            string tempRoot = Path.Combine(Path.GetTempPath(), "armada-release-version-tests-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempRoot);
+
+            try
+            {
+                action(tempRoot);
+            }
+            finally
+            {
+                if (Directory.Exists(tempRoot))
+                {
+                    Directory.Delete(tempRoot, true);
+                }
+            }
+        }
+
+        private static void WriteRepositoryFile(string repositoryRoot, string relativePath, string contents)
+        {
+            string path = GetRepositoryPath(repositoryRoot, relativePath);
+            string? directory = Path.GetDirectoryName(path);
+
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            File.WriteAllText(path, contents);
         }
 
         private static string FindRepositoryRoot()
