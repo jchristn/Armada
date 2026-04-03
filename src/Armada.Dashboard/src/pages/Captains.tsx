@@ -132,8 +132,11 @@ export default function Captains() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     try {
-      const payload = { ...form } as Record<string, unknown>;
-      if (!payload.systemInstructions) delete payload.systemInstructions;
+      const payload: Partial<Captain> = {
+        name: form.name,
+        runtime: form.runtime,
+        systemInstructions: form.systemInstructions.trim() ? form.systemInstructions : null,
+      };
       if (editing) await updateCaptain(editing.id, payload);
       else await createCaptain(payload);
       setShowForm(false);
@@ -200,7 +203,7 @@ export default function Captains() {
     setConfirm({
       open: true,
       title: 'Restart Captain',
-      message: `Restart captain "${name}"? The captain will be deleted and recreated with the same name and runtime.`,
+      message: `Restart captain "${name}"? The captain will be deleted and recreated with the same editable settings, including model, instructions, and persona fields.`,
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
         try { await restartCaptain(id); load(); } catch { setError('Restart failed.'); }

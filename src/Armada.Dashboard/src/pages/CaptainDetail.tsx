@@ -104,11 +104,14 @@ export default function CaptainDetail() {
     e.preventDefault();
     if (!captain) return;
     try {
-      const payload = { ...form } as Record<string, unknown>;
-      if (!payload.systemInstructions) delete payload.systemInstructions;
-      payload.model = form.model.trim() ? form.model.trim() : null;
-      if (!payload.allowedPersonas) delete payload.allowedPersonas;
-      if (!payload.preferredPersona) delete payload.preferredPersona;
+      const payload: Partial<Captain> = {
+        name: form.name,
+        runtime: form.runtime,
+        systemInstructions: form.systemInstructions.trim() ? form.systemInstructions : null,
+        model: form.model.trim() ? form.model.trim() : null,
+        allowedPersonas: form.allowedPersonas.trim() ? form.allowedPersonas.trim() : null,
+        preferredPersona: form.preferredPersona.trim() ? form.preferredPersona.trim() : null,
+      };
       await updateCaptain(captain.id, payload);
       setShowForm(false);
       load();
