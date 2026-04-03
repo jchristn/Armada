@@ -1777,6 +1777,172 @@ namespace Armada.Test.Unit.Suites.Services
                 }
             });
 
+            await RunTest("Judge parser accepts inline sentence verdict emitted by Claude", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    DirCreatingGitStub git = new DirCreatingGitStub();
+                    IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
+                    ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
+                    MissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService);
+                    int landingCalls = 0;
+                    missionService.OnMissionComplete = (m, d) =>
+                    {
+                        landingCalls++;
+                        m.Status = MissionStatusEnum.Complete;
+                        m.CompletedUtc = DateTime.UtcNow;
+                        m.LastUpdateUtc = DateTime.UtcNow;
+                        return testDb.Driver.Missions.UpdateAsync(m);
+                    };
+
+                    Vessel vessel = new Vessel("judge-vessel", "https://github.com/test/repo.git");
+                    vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
+                    vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
+                    vessel.DefaultBranch = "main";
+                    vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    Captain judgeCaptain = new Captain("judge-captain");
+                    judgeCaptain.State = CaptainStateEnum.Working;
+                    judgeCaptain = await testDb.Driver.Captains.CreateAsync(judgeCaptain).ConfigureAwait(false);
+
+                    Voyage voyage = new Voyage("judge-voyage");
+                    voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
+
+                    Mission judge = new Mission("[Judge] Review worker output", "Review changes");
+                    judge.VesselId = vessel.Id;
+                    judge.VoyageId = voyage.Id;
+                    judge.Persona = "Judge";
+                    judge.Status = MissionStatusEnum.InProgress;
+                    judge.CaptainId = judgeCaptain.Id;
+                    judge.BranchName = "armada/judge/review";
+                    judge = await testDb.Driver.Missions.CreateAsync(judge).ConfigureAwait(false);
+
+                    Dock judgeDock = new Dock(vessel.Id);
+                    judgeDock.CaptainId = judgeCaptain.Id;
+                    judgeDock.WorktreePath = Path.Combine(settings.DocksDirectory, vessel.Name, judge.Id);
+                    judgeDock.BranchName = judge.BranchName;
+                    judgeDock.Active = true;
+                    judgeDock = await testDb.Driver.Docks.CreateAsync(judgeDock).ConfigureAwait(false);
+
+                    judge.DockId = judgeDock.Id;
+                    await testDb.Driver.Missions.UpdateAsync(judge).ConfigureAwait(false);
+
+                    judgeCaptain.CurrentMissionId = judge.Id;
+                    judgeCaptain.CurrentDockId = judgeDock.Id;
+                    await testDb.Driver.Captains.UpdateAsync(judgeCaptain).ConfigureAwait(false);
+
+                    missionService.OnGetMissionOutput = _ =>
+                        "## Completeness\n" +
+                        "Everything required by the mission is present and stays within the assigned scope.\n\n" +
+                        "## Correctness\n" +
+                        "The implementation follows the intended behavior and I did not find logic errors in the reviewed diff.\n\n" +
+                        "## Tests\n" +
+                        "The updated tests cover the changed behavior and are sufficient for this mission.\n\n" +
+                        "## Failure Modes\n" +
+                        "I explicitly reviewed edge and failure paths relevant to this change and found no remaining blockers.\n\n" +
+                        "Judge review complete. Verdict: **PASS**. All 8 release surfaces are checked, negative paths are covered, and the REST_API.md drift fix stays within scope.";
+
+                    await missionService.HandleCompletionAsync(judgeCaptain, judge.Id).ConfigureAwait(false);
+
+                    Mission? reloadedJudge = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
+                    AssertNotNull(reloadedJudge, "Judge mission should remain readable");
+                    AssertEqual(MissionStatusEnum.Complete, reloadedJudge!.Status, "Inline sentence verdict should permit landing");
+                    AssertEqual(1, landingCalls, "Sentence-style PASS verdict should invoke landing");
+                }
+            });
+
+            await RunTest("Judge failure emits failure telemetry instead of work produced", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    DirCreatingGitStub git = new DirCreatingGitStub();
+                    IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
+                    ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
+                    MissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService);
+                    int landingCalls = 0;
+                    missionService.OnMissionComplete = (m, d) =>
+                    {
+                        landingCalls++;
+                        return Task.CompletedTask;
+                    };
+
+                    Vessel vessel = new Vessel("judge-vessel", "https://github.com/test/repo.git");
+                    vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
+                    vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
+                    vessel.DefaultBranch = "main";
+                    vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    Captain judgeCaptain = new Captain("judge-captain");
+                    judgeCaptain.State = CaptainStateEnum.Working;
+                    judgeCaptain = await testDb.Driver.Captains.CreateAsync(judgeCaptain).ConfigureAwait(false);
+
+                    Voyage voyage = new Voyage("judge-voyage");
+                    voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
+
+                    Mission judge = new Mission("[Judge] Review worker output", "Review changes");
+                    judge.VesselId = vessel.Id;
+                    judge.VoyageId = voyage.Id;
+                    judge.Persona = "Judge";
+                    judge.Status = MissionStatusEnum.InProgress;
+                    judge.CaptainId = judgeCaptain.Id;
+                    judge.BranchName = "armada/judge/review";
+                    judge = await testDb.Driver.Missions.CreateAsync(judge).ConfigureAwait(false);
+
+                    Dock judgeDock = new Dock(vessel.Id);
+                    judgeDock.CaptainId = judgeCaptain.Id;
+                    judgeDock.WorktreePath = Path.Combine(settings.DocksDirectory, vessel.Name, judge.Id);
+                    judgeDock.BranchName = judge.BranchName;
+                    judgeDock.Active = true;
+                    judgeDock = await testDb.Driver.Docks.CreateAsync(judgeDock).ConfigureAwait(false);
+
+                    judge.DockId = judgeDock.Id;
+                    await testDb.Driver.Missions.UpdateAsync(judge).ConfigureAwait(false);
+
+                    judgeCaptain.CurrentMissionId = judge.Id;
+                    judgeCaptain.CurrentDockId = judgeDock.Id;
+                    await testDb.Driver.Captains.UpdateAsync(judgeCaptain).ConfigureAwait(false);
+
+                    missionService.OnGetMissionOutput = _ =>
+                        "## Completeness\n" +
+                        "The reviewed work is missing part of the required contract alignment.\n\n" +
+                        "## Correctness\n" +
+                        "The update path can still drop omitted settings, so I cannot approve it yet.\n\n" +
+                        "## Tests\n" +
+                        "Coverage is still missing for the omitted-field preservation path.\n\n" +
+                        "## Failure Modes\n" +
+                        "This can silently erase stored captain configuration during partial updates.\n\n" +
+                        "Judge review complete. Verdict: NEEDS_REVISION. The REST and MCP update contracts still diverge.";
+
+                    await missionService.HandleCompletionAsync(judgeCaptain, judge.Id).ConfigureAwait(false);
+
+                    Mission? reloadedJudge = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
+                    AssertNotNull(reloadedJudge, "Judge mission should remain readable");
+                    AssertEqual(MissionStatusEnum.Failed, reloadedJudge!.Status, "Judge failure should block landing");
+                    AssertEqual("Judge verdict: NEEDS_REVISION", reloadedJudge.FailureReason, "Failure reason should preserve the verdict");
+                    AssertEqual(0, landingCalls, "Judge failure must not invoke landing");
+
+                    List<Signal> signals = await testDb.Driver.Signals.EnumerateRecentAsync(10).ConfigureAwait(false);
+                    AssertFalse(
+                        signals.Any(s => s.Type == SignalTypeEnum.Completion && s.Payload == "Work produced: " + judge.Title),
+                        "Failed judge review should not emit a completion signal");
+                    AssertTrue(
+                        signals.Any(s => s.Type == SignalTypeEnum.Error && (s.Payload ?? String.Empty).Contains("Judge verdict: NEEDS_REVISION")),
+                        "Failed judge review should emit an error signal with the failure reason");
+
+                    List<ArmadaEvent> events = await testDb.Driver.Events.EnumerateRecentAsync(10).ConfigureAwait(false);
+                    AssertFalse(
+                        events.Any(e => e.EventType == "mission.work_produced" && e.MissionId == judge.Id),
+                        "Failed judge review should not emit a mission.work_produced event");
+                    AssertTrue(
+                        events.Any(e => e.EventType == "mission.failed" && e.MissionId == judge.Id),
+                        "Failed judge review should emit a mission.failed event");
+                }
+            });
+
             await RunTest("Judge PASS requires structured review sections before landing", async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())

@@ -545,25 +545,6 @@ namespace Armada.Core.Services
             await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
             _Logging.Info(_Header + "mission " + mission.Id + " work produced by captain " + captain.Id);
 
-            // Emit mission.work_produced event for audit trail
-            try
-            {
-                ArmadaEvent workProducedEvent = new ArmadaEvent("mission.work_produced", "Work produced: " + mission.Title);
-                workProducedEvent.TenantId = mission.TenantId;
-                workProducedEvent.UserId = mission.UserId;
-                workProducedEvent.EntityType = "mission";
-                workProducedEvent.EntityId = mission.Id;
-                workProducedEvent.CaptainId = captain.Id;
-                workProducedEvent.MissionId = mission.Id;
-                workProducedEvent.VesselId = mission.VesselId;
-                workProducedEvent.VoyageId = mission.VoyageId;
-                await _Database.Events.CreateAsync(workProducedEvent, token).ConfigureAwait(false);
-            }
-            catch (Exception evtEx)
-            {
-                _Logging.Warn(_Header + "error emitting mission.work_produced event for " + mission.Id + ": " + evtEx.Message);
-            }
-
             // Get dock for diff capture (prefer mission-level DockId, fall back to captain-level)
             Dock? dock = null;
             string? dockId = mission.DockId ?? captain.CurrentDockId;
@@ -665,6 +646,8 @@ namespace Armada.Core.Services
                 await UpdateVoyageTerminalStatusAsync(mission.VoyageId, token).ConfigureAwait(false);
             }
 
+            await EmitMissionOutcomeTelemetryAsync(mission, captain, token).ConfigureAwait(false);
+
             bool hasDependentPipelineStages = await HasDependentPipelineStages(mission.VoyageId, mission.Id, token).ConfigureAwait(false);
             bool shouldAttemptLanding =
                 !preparedDownstreamStages &&
@@ -717,8 +700,8 @@ namespace Armada.Core.Services
                 await CleanupArchitectBranchAsync(mission, dock, token).ConfigureAwait(false);
             }
 
-            // Log work produced signal
-            Signal signal = new Signal(SignalTypeEnum.Completion, "Work produced: " + mission.Title);
+            (SignalTypeEnum signalType, string signalPayload) = BuildMissionOutcomeSignal(mission);
+            Signal signal = new Signal(signalType, signalPayload);
             signal.FromCaptainId = captain.Id;
             await _Database.Signals.CreateAsync(signal, token).ConfigureAwait(false);
 
@@ -2333,6 +2316,20 @@ namespace Armada.Core.Services
                     _ => null
                 };
 
+            System.Text.RegularExpressions.Match inlineLabeledVerdict = System.Text.RegularExpressions.Regex.Match(
+                candidate,
+                @"\bVERDICT\s*(?::|=|-|IS)?\s*(?:\*\*|__|`)?(?<verdict>PASS|FAIL|NEEDS_REVISION)(?:\*\*|__|`)?"
+                + verdictSuffixPattern,
+                options);
+            if (inlineLabeledVerdict.Success)
+                return inlineLabeledVerdict.Groups["verdict"].Value.ToUpperInvariant() switch
+                {
+                    "PASS" => JudgeVerdict.Pass,
+                    "FAIL" => JudgeVerdict.Fail,
+                    "NEEDS_REVISION" => JudgeVerdict.NeedsRevision,
+                    _ => null
+                };
+
             System.Text.RegularExpressions.Match bareVerdict = System.Text.RegularExpressions.Regex.Match(
                 candidate,
                 @"^(?:\*\*|__|`)?(?<verdict>PASS|FAIL|NEEDS_REVISION)(?:\*\*|__|`)?"
@@ -2348,6 +2345,73 @@ namespace Armada.Core.Services
                 };
 
             return null;
+        }
+
+        private async Task EmitMissionOutcomeTelemetryAsync(Mission mission, Captain captain, CancellationToken token)
+        {
+            if (mission == null) throw new ArgumentNullException(nameof(mission));
+            if (captain == null) throw new ArgumentNullException(nameof(captain));
+
+            (string eventType, string eventMessage) = BuildMissionOutcomeEvent(mission);
+
+            try
+            {
+                ArmadaEvent outcomeEvent = new ArmadaEvent(eventType, eventMessage);
+                outcomeEvent.TenantId = mission.TenantId;
+                outcomeEvent.UserId = mission.UserId;
+                outcomeEvent.EntityType = "mission";
+                outcomeEvent.EntityId = mission.Id;
+                outcomeEvent.CaptainId = captain.Id;
+                outcomeEvent.MissionId = mission.Id;
+                outcomeEvent.VesselId = mission.VesselId;
+                outcomeEvent.VoyageId = mission.VoyageId;
+                await _Database.Events.CreateAsync(outcomeEvent, token).ConfigureAwait(false);
+            }
+            catch (Exception evtEx)
+            {
+                _Logging.Warn(_Header + "error emitting mission outcome event for " + mission.Id + ": " + evtEx.Message);
+            }
+        }
+
+        private static (SignalTypeEnum Type, string Payload) BuildMissionOutcomeSignal(Mission mission)
+        {
+            if (mission == null) throw new ArgumentNullException(nameof(mission));
+
+            return mission.Status switch
+            {
+                MissionStatusEnum.Complete => (SignalTypeEnum.Completion, "Mission completed: " + mission.Title),
+                MissionStatusEnum.PullRequestOpen => (SignalTypeEnum.Completion, "Pull request open: " + mission.Title),
+                MissionStatusEnum.Failed => (SignalTypeEnum.Error, BuildFailurePayload("Mission failed: ", mission)),
+                MissionStatusEnum.LandingFailed => (SignalTypeEnum.Error, BuildFailurePayload("Landing failed: ", mission)),
+                MissionStatusEnum.Cancelled => (SignalTypeEnum.Error, BuildFailurePayload("Mission cancelled: ", mission)),
+                _ => (SignalTypeEnum.Completion, "Work produced: " + mission.Title)
+            };
+        }
+
+        private static (string EventType, string EventMessage) BuildMissionOutcomeEvent(Mission mission)
+        {
+            if (mission == null) throw new ArgumentNullException(nameof(mission));
+
+            return mission.Status switch
+            {
+                MissionStatusEnum.Failed => ("mission.failed", BuildFailurePayload("Mission failed: ", mission)),
+                MissionStatusEnum.LandingFailed => ("mission.landing_failed", BuildFailurePayload("Landing failed: ", mission)),
+                MissionStatusEnum.Cancelled => ("mission.cancelled", BuildFailurePayload("Mission cancelled: ", mission)),
+                _ => ("mission.work_produced", "Work produced: " + mission.Title)
+            };
+        }
+
+        private static string BuildFailurePayload(string prefix, Mission mission)
+        {
+            if (mission == null) throw new ArgumentNullException(nameof(mission));
+
+            string payload = prefix + mission.Title;
+            if (!String.IsNullOrWhiteSpace(mission.FailureReason))
+            {
+                payload += " (" + mission.FailureReason + ")";
+            }
+
+            return payload;
         }
 
         /// <summary>
