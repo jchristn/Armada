@@ -19,6 +19,7 @@ namespace Armada.Helm
             @"/ _` | '_| '  \/ _` / _` / _` |",
             @"\__,_|_| |_|_|_\__,_\__,_\__,_|",
         };
+        private static readonly string _VersionLabel = "v" + Constants.ProductVersion;
 
         /// <summary>
         /// Write the Armada banner to the console.
@@ -32,14 +33,19 @@ namespace Armada.Helm
             AnsiConsole.WriteLine();
         }
 
+        private static void WriteVersionSubtitle()
+        {
+            AnsiConsole.MarkupLine("[dim]Multi-Agent Orchestration System  " + _VersionLabel + "[/]");
+            AnsiConsole.WriteLine();
+        }
+
         static int Main(string[] args)
         {
             // First-run welcome
             if (args.Length == 0 && !File.Exists(ArmadaSettings.DefaultSettingsPath))
             {
                 WriteBanner();
-                AnsiConsole.MarkupLine("[dim]Multi-Agent Orchestration System  v0.3.0[/]");
-                AnsiConsole.WriteLine();
+                WriteVersionSubtitle();
                 AnsiConsole.MarkupLine("Welcome to Armada. To dispatch your first task:");
                 AnsiConsole.WriteLine();
                 AnsiConsole.MarkupLine("  [green]armada go \"your task description\"[/]");
@@ -52,8 +58,7 @@ namespace Armada.Helm
             if (args.Length == 0 || args[0] == "--help" || args[0] == "-h")
             {
                 WriteBanner();
-                AnsiConsole.MarkupLine("[dim]Multi-Agent Orchestration System  v0.3.0[/]");
-                AnsiConsole.WriteLine();
+                WriteVersionSubtitle();
             }
 
             TypeRegistrar registrar = new TypeRegistrar();
@@ -62,7 +67,7 @@ namespace Armada.Helm
             app.Configure(config =>
             {
                 config.SetApplicationName("armada");
-                config.SetApplicationVersion("0.3.0");
+                config.SetApplicationVersion(Constants.ProductVersion);
 
                 // --- Common commands (top-level, used most often) ---
                 config.AddCommand<GoCommand>("go")

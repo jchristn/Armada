@@ -63,6 +63,7 @@ namespace Armada.Test.Unit
             runner.AddSuite(new MessageTemplateServiceTests());
             runner.AddSuite(new ProgressParserTests());
             runner.AddSuite(new SettingsTests());
+            runner.AddSuite(new ReleaseVersionTests());
             runner.AddSuite(new GitServiceTests());
             runner.AddSuite(new GitInferenceTests());
             runner.AddSuite(new LogRotationServiceTests());
