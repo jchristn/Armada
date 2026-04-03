@@ -61,7 +61,7 @@ namespace Armada.Core.Services
                 ["ModelContext"] = vessel.EnableModelContext ? vessel.ModelContext ?? "" : "",
                 ["CaptainId"] = captain?.Id ?? "",
                 ["CaptainName"] = captain?.Name ?? "",
-                ["CaptainInstructions"] = captain?.SystemInstructions ?? "",
+                ["CaptainInstructions"] = BuildCaptainInstructions(captain?.SystemInstructions, mission.Persona),
                 ["Timestamp"] = DateTime.UtcNow.ToString("o")
             };
         }
@@ -179,6 +179,36 @@ namespace Armada.Core.Services
                 return personaSummary;
 
             return GetPersonaPromptFallback(persona);
+        }
+
+        private static string BuildCaptainInstructions(string? existingInstructions, string? persona)
+        {
+            string existing = existingInstructions?.Trim() ?? String.Empty;
+            string outputContract = GetPersonaOutputContract(persona);
+
+            if (String.IsNullOrEmpty(outputContract))
+                return existing;
+
+            if (String.IsNullOrEmpty(existing))
+                return outputContract;
+
+            return existing + "\n\n## Required Output Contract\n" + outputContract;
+        }
+
+        private static string GetPersonaOutputContract(string? persona)
+        {
+            return persona switch
+            {
+                "Architect" =>
+                    "Respond only with real [ARMADA:MISSION] blocks. Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.",
+                "Worker" =>
+                    "Stay within scope, make the requested changes, and end with a standalone line `[ARMADA:RESULT] COMPLETE` followed by a brief plain-text summary.",
+                "TestEngineer" =>
+                    "Before your result line, include short `## Coverage Added`, `## Negative Paths`, and `## Residual Risks` sections. End with a standalone line `[ARMADA:RESULT] COMPLETE` followed by a brief plain-text summary.",
+                "Judge" =>
+                    "Your response must contain these exact section headings: `## Completeness`, `## Correctness`, `## Tests`, `## Failure Modes`, and `## Verdict`. Do not reply with only a verdict line or brief summary. End with exactly one standalone line `[ARMADA:VERDICT] PASS`, `[ARMADA:VERDICT] FAIL`, or `[ARMADA:VERDICT] NEEDS_REVISION`.",
+                _ => String.Empty
+            };
         }
 
         private static string GetPersonaPromptFallback(string? persona)

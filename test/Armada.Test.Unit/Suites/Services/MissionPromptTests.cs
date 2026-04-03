@@ -526,6 +526,50 @@ namespace Armada.Test.Unit.Suites.Services
                 }
             });
 
+            await RunTest("GenerateClaudeMdAsync appends judge output contract after custom captain instructions", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    StubGitService git = new StubGitService();
+                    IPromptTemplateService templateService;
+                    MissionService service = CreateMissionServiceWithTemplates(logging, testDb.Driver, settings, git, out templateService);
+                    await templateService.SeedDefaultsAsync();
+
+                    string tempDir = Path.Combine(Path.GetTempPath(), "armada_prompt_test_" + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(tempDir);
+
+                    try
+                    {
+                        Vessel vessel = new Vessel("JudgeCaptainPromptVessel", "https://github.com/test/repo");
+
+                        Mission mission = new Mission();
+                        mission.Title = "Judge custom instruction contract test";
+                        mission.Description = "Verify custom judge instructions still include the required structured output contract.";
+                        mission.Persona = "Judge";
+
+                        Captain captain = new Captain("judge-captain");
+                        captain.Runtime = Armada.Core.Enums.AgentRuntimeEnum.ClaudeCode;
+                        captain.SystemInstructions = "End with exactly one standalone verdict line and give a brief explanation.";
+
+                        await service.GenerateClaudeMdAsync(tempDir, mission, vessel, captain);
+
+                        string content = await File.ReadAllTextAsync(Path.Combine(tempDir, "CLAUDE.md"));
+                        AssertContains("## Captain Instructions", content, "Custom captain instructions should still be included");
+                        AssertContains("brief explanation", content, "Original captain instruction text should be preserved");
+                        AssertContains("## Required Output Contract", content, "Generated instructions should append a structured output contract");
+                        AssertContains("## Completeness", content, "Judge output contract should require Completeness");
+                        AssertContains("## Failure Modes", content, "Judge output contract should require Failure Modes");
+                        AssertContains("[ARMADA:VERDICT] PASS", content, "Judge output contract should preserve the standalone verdict signal");
+                    }
+                    finally
+                    {
+                        try { Directory.Delete(tempDir, true); } catch { }
+                    }
+                }
+            });
+
             await RunTest("Template-resolved CLAUDE.md contains persona prompt", async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
