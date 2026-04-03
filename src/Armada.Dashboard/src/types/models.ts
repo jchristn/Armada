@@ -161,6 +161,7 @@ export interface Mission {
   commitHash: string | null;
   failureReason: string | null;
   diffSnapshot: string | null;
+  agentOutput?: string | null;
   createdUtc: string;
   startedUtc: string | null;
   completedUtc: string | null;

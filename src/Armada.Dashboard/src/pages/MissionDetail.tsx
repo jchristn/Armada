@@ -425,6 +425,27 @@ export default function MissionDetail() {
             }}>{mission.failureReason}</pre>
           </div>
         )}
+        {mission.agentOutput && (
+          <div className="detail-field" style={{ gridColumn: '1 / -1' }}>
+            <details>
+              <summary className="detail-label" style={{ cursor: 'pointer' }}>Agent Output</summary>
+              <pre style={{
+                margin: '0.75rem 0 0',
+                padding: '0.75rem',
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid var(--border)',
+                borderRadius: '4px',
+                color: 'var(--text)',
+                fontSize: '0.85em',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                overflow: 'auto',
+                maxHeight: '24rem',
+                fontFamily: 'monospace'
+              }}>{mission.agentOutput}</pre>
+            </details>
+          </div>
+        )}
         <div className="detail-field"><span className="detail-label">Priority</span><span>{mission.priority}</span></div>
         <div className="detail-field">
           <span className="detail-label">Voyage</span>
