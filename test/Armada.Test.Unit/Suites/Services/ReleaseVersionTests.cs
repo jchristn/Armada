@@ -50,7 +50,25 @@ namespace Armada.Test.Unit.Suites.Services
                 AssertSingleMatchGroupValue(mcpApiContents, @"\*\*Version:\*\*\s*([0-9]+\.[0-9]+\.[0-9]+)", releaseVersion, "docs/MCP_API.md version header should match Directory.Build.props");
                 AssertSingleMatchGroupValue(postmanContents, @"Version:\s*([0-9]+\.[0-9]+\.[0-9]+)", releaseVersion, "Armada.postman_collection.json description version should match Directory.Build.props");
                 AssertSingleMatchGroupValue(restApiContents, @"#### GET /api/v1/status/health[\s\S]*?""Version"":\s*""([^""]+)""", releaseVersion, "docs/REST_API.md health response sample should match Directory.Build.props");
-                AssertContains("\\\"Version\\\": \\\"" + releaseVersion + "\\\"", postmanContents, "Armada.postman_collection.json response bodies should use the canonical release version");
+                AssertAllMatchGroupValues(postmanContents, "\\\\\"Version\\\\\":\\s*\\\\\"([^\\\\\"]+)\\\\\"", releaseVersion, "Armada.postman_collection.json response bodies should use the canonical release version");
+            });
+
+            await RunTest("Embedded Version Match Helper Accepts Multiple Canonical Matches", () =>
+            {
+                const string escapedVersionPattern = "\\\\\"Version\\\\\":\\s*\\\\\"([^\\\\\"]+)\\\\\"";
+                string sampleContents = "\\\"Version\\\": \\\"0.5.0\\\"\\n\\\"Version\\\": \\\"0.5.0\\\"";
+
+                AssertAllMatchGroupValues(sampleContents, escapedVersionPattern, "0.5.0", "Escaped sample versions");
+            });
+
+            await RunTest("Version Match Helpers Reject Missing Duplicate And Stale Versions", () =>
+            {
+                const string versionPattern = @"Version:\s*([0-9]+\.[0-9]+\.[0-9]+)";
+                const string escapedVersionPattern = "\\\\\"Version\\\\\":\\s*\\\\\"([^\\\\\"]+)\\\\\"";
+
+                AssertThrows<Exception>(() => AssertSingleMatchGroupValue("No release version here", versionPattern, "0.5.0", "Release version sample"), "AssertSingleMatchGroupValue should reject missing matches");
+                AssertThrows<Exception>(() => AssertSingleMatchGroupValue("Version: 0.5.0\nVersion: 0.5.0", versionPattern, "0.5.0", "Release version sample"), "AssertSingleMatchGroupValue should reject duplicate matches");
+                AssertThrows<Exception>(() => AssertAllMatchGroupValues("\\\"Version\\\": \\\"0.5.0\\\"\\n\\\"Version\\\": \\\"0.4.0\\\"", escapedVersionPattern, "0.5.0", "Escaped sample versions"), "AssertAllMatchGroupValues should reject stale embedded versions");
             });
 
             await RunTest("Helm Program Uses ProductVersion Constant", () =>
@@ -92,6 +110,16 @@ namespace Armada.Test.Unit.Suites.Services
             MatchCollection matches = Regex.Matches(contents, pattern);
             AssertEqual(1, matches.Count, label + " should produce exactly one version match");
             AssertEqual(expectedValue, matches[0].Groups[1].Value.Trim(), label);
+        }
+
+        private void AssertAllMatchGroupValues(string contents, string pattern, string expectedValue, string label)
+        {
+            MatchCollection matches = Regex.Matches(contents, pattern);
+            AssertTrue(matches.Count > 0, label + " should produce at least one version match");
+            foreach (Match match in matches)
+            {
+                AssertEqual(expectedValue, match.Groups[1].Value.Trim(), label);
+            }
         }
 
         private static string FindRepositoryRoot()
