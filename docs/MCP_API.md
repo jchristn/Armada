@@ -1558,10 +1558,10 @@ Register a new captain (AI agent).
   "type": "object",
   "properties": {
     "name": { "type": "string", "description": "Captain display name" },
-    "runtime": { "type": "string", "description": "Agent runtime: ClaudeCode, Codex, Gemini, Cursor" },
+    "runtime": { "type": "string", "description": "Agent runtime: ClaudeCode, Codex, Gemini, Cursor, Custom" },
     "model": { "type": "string", "description": "Optional model override for this captain. When omitted, the runtime chooses automatically" },
     "systemInstructions": { "type": "string", "description": "System instructions for this captain -- injected into every mission prompt to specialize behavior" },
-    "allowedPersonas": { "type": "array", "items": { "type": "string" }, "description": "List of persona names this captain is allowed to use" },
+    "allowedPersonas": { "type": "array", "items": { "type": "string" }, "description": "JSON array of persona names this captain is allowed to use" },
     "preferredPersona": { "type": "string", "description": "Preferred persona name for this captain" }
   },
   "required": ["name"]
@@ -1571,10 +1571,10 @@ Register a new captain (AI agent).
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `name` | string | Yes | Captain display name |
-| `runtime` | string | No | Agent runtime: `ClaudeCode`, `Codex`, `Gemini`, `Cursor` |
+| `runtime` | string | No | Agent runtime: `ClaudeCode`, `Codex`, `Gemini`, `Cursor`, `Custom` |
 | `model` | string | No | Optional model override. When omitted, the runtime chooses automatically |
 | `systemInstructions` | string | No | System instructions injected into every mission prompt for this captain |
-| `allowedPersonas` | string[] | No | List of persona names this captain is allowed to use |
+| `allowedPersonas` | string[] | No | JSON array of persona names this captain is allowed to use |
 | `preferredPersona` | string | No | Preferred persona name for this captain |
 
 **Response:** [Captain](#captain) object. Invalid or unavailable models are returned as MCP tool errors.
@@ -1603,7 +1603,7 @@ Get details of a specific captain (AI agent).
 
 ### armada_update_captain
 
-Update a captain's name or runtime. Operational fields (state, process, mission) are preserved.
+Update a captain's name, runtime, model, or persona settings. Operational fields (state, process, mission) are preserved.
 
 **Input Schema:**
 
@@ -1613,10 +1613,10 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
   "properties": {
     "captainId": { "type": "string", "description": "Captain ID (cpt_ prefix)" },
     "name": { "type": "string", "description": "New display name" },
-    "runtime": { "type": "string", "description": "New agent runtime: ClaudeCode, Codex, Gemini, Cursor" },
+    "runtime": { "type": "string", "description": "New agent runtime: ClaudeCode, Codex, Gemini, Cursor, Custom" },
     "model": { "type": "string", "description": "New optional model override for this captain" },
     "systemInstructions": { "type": "string", "description": "New system instructions for this captain" },
-    "allowedPersonas": { "type": "array", "items": { "type": "string" }, "description": "New list of persona names this captain is allowed to use" },
+    "allowedPersonas": { "type": "array", "items": { "type": "string" }, "description": "New JSON array of persona names this captain is allowed to use" },
     "preferredPersona": { "type": "string", "description": "New preferred persona name for this captain" }
   },
   "required": ["captainId"]
@@ -1627,10 +1627,10 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
 |---|---|---|---|
 | `captainId` | string | Yes | Captain ID (prefix `cpt_`) |
 | `name` | string | No | New display name |
-| `runtime` | string | No | New agent runtime: `ClaudeCode`, `Codex`, `Gemini`, `Cursor` |
+| `runtime` | string | No | New agent runtime: `ClaudeCode`, `Codex`, `Gemini`, `Cursor`, `Custom` |
 | `model` | string | No | New optional model override. When omitted, the existing value is preserved |
 | `systemInstructions` | string | No | New system instructions for this captain |
-| `allowedPersonas` | string[] | No | New list of persona names this captain is allowed to use |
+| `allowedPersonas` | string[] | No | New JSON array of persona names this captain is allowed to use |
 | `preferredPersona` | string | No | New preferred persona name for this captain |
 
 **Response:** Updated [Captain](#captain) object, or `{ "Error": "Captain not found" }`. Invalid or unavailable models are returned as MCP tool errors.
@@ -2420,7 +2420,7 @@ Create a backup of the Armada database and settings as a ZIP archive.
 {
   "Path": "~/.armada/backups/armada-backup-20260311T120000Z.zip",
   "Timestamp": "2026-03-11T12:00:00Z",
-  "SchemaVersion": 9,
+  "SchemaVersion": 27,
   "SizeBytes": 245760,
   "RecordCounts": {
     "Fleets": 2,
@@ -2466,7 +2466,7 @@ Restore Armada from a previously created backup ZIP file.
 {
   "Status": "restored",
   "SafetyBackupPath": "~/.armada/backups/armada-safety-backup-20260311T120000Z.zip",
-  "SchemaVersion": 9,
+  "SchemaVersion": 27,
   "Message": "Database restored from armada-backup-20260311T120000Z.zip. Restart the server to reload the restored data."
 }
 ```
@@ -2596,6 +2596,9 @@ Paginated result wrapper returned by `armada_enumerate`.
 | `name` | string | Display name |
 | `runtime` | string | [AgentRuntimeEnum](#agentruntimeenum) value |
 | `model` | string \| null | Optional model override for this captain |
+| `systemInstructions` | string \| null | Per-captain system instructions injected into every mission prompt |
+| `allowedPersonas` | string[] \| null | JSON array of persona names this captain is allowed to use |
+| `preferredPersona` | string \| null | Preferred persona name for this captain |
 | `state` | string | [CaptainStateEnum](#captainstateenum) value |
 | `currentMissionId` | string \| null | Currently assigned mission ID |
 | `currentDockId` | string \| null | Currently assigned dock (worktree) ID |

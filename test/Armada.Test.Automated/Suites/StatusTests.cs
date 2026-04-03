@@ -5,6 +5,7 @@ namespace Armada.Test.Automated.Suites
     using System.Net;
     using System.Net.Http;
     using System.Threading.Tasks;
+    using Armada.Core;
     using Armada.Core.Models;
     using Armada.Test.Common;
 
@@ -329,7 +330,7 @@ namespace Armada.Test.Automated.Suites
             {
                 HttpResponseMessage response = await _AuthClient.GetAsync("/api/v1/status/health").ConfigureAwait(false);
                 HealthResponse health = await JsonHelper.DeserializeAsync<HealthResponse>(response).ConfigureAwait(false);
-                Assert(health.Version != null, "Health check should include Version");
+                AssertEqual(Constants.ProductVersion, health.Version);
             }).ConfigureAwait(false);
 
             await RunTest("GetHealth_HasUptime", async () =>

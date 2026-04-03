@@ -1,6 +1,6 @@
 # Armada WebSocket API Reference
 
-**Version:** 0.2.0
+**Version:** 0.5.0
 **Default URL:** `ws://localhost:7892`
 **Protocol:** WebSocket (RFC 6455) via WatsonWebsocket
 **Transport:** JSON text frames
@@ -1358,7 +1358,9 @@ Create a new captain.
   "action": "create_captain",
   "data": {
     "Name": "captain-1",
-    "Runtime": "ClaudeCode"
+    "Runtime": "Custom",
+    "AllowedPersonas": ["Worker", "Judge"],
+    "PreferredPersona": "Worker"
   }
 }
 ```
@@ -1367,6 +1369,8 @@ Create a new captain.
 |---|---|---|---|
 | `action` | string | Yes | `"create_captain"` |
 | `data` | object | Yes | Captain creation data |
+
+`data.Runtime` accepts `ClaudeCode`, `Codex`, `Gemini`, `Cursor`, or `Custom`. `data.AllowedPersonas` is a JSON array of strings.
 
 ---
 
@@ -1382,7 +1386,9 @@ Update an existing captain. Operational fields (state, current mission, heartbea
   "action": "update_captain",
   "id": "cpt_abc123",
   "data": {
-    "Name": "captain-primary"
+    "Name": "captain-primary",
+    "Runtime": "Custom",
+    "AllowedPersonas": ["Worker", "Judge"]
   }
 }
 ```
@@ -1392,6 +1398,8 @@ Update an existing captain. Operational fields (state, current mission, heartbea
 | `action` | string | Yes | `"update_captain"` |
 | `id` | string | Yes | Captain ID (prefix `cpt_`) |
 | `data` | object | Yes | Fields to update |
+
+`data.Runtime` accepts `ClaudeCode`, `Codex`, `Gemini`, `Cursor`, or `Custom`. `data.AllowedPersonas` is a JSON array of strings.
 
 ---
 
@@ -1710,7 +1718,7 @@ Create a backup of the Armada database and settings as a ZIP archive.
   "data": {
     "Path": "~/.armada/backups/armada-backup-20260311T120000Z.zip",
     "Timestamp": "2026-03-11T12:00:00Z",
-    "SchemaVersion": 9,
+    "SchemaVersion": 27,
     "SizeBytes": 245760,
     "RecordCounts": {
       "Fleets": 2,
@@ -1755,7 +1763,7 @@ Restore Armada from a previously created backup ZIP file.
   "data": {
     "Status": "restored",
     "SafetyBackupPath": "~/.armada/backups/armada-safety-backup-20260311T120000Z.zip",
-    "SchemaVersion": 9,
+    "SchemaVersion": 27,
     "Message": "Database restored from armada-backup-20260311T120000Z.zip. Restart the server to reload the restored data."
   }
 }
@@ -2066,6 +2074,10 @@ If a message is sent without a route:
 | `id` | string | Captain ID (prefix `cpt_`) |
 | `name` | string | Display name |
 | `runtime` | string | [AgentRuntimeEnum](#agentruntimeenum) value |
+| `model` | string \| null | Optional model override for this captain |
+| `systemInstructions` | string \| null | Per-captain system instructions injected into every mission prompt |
+| `allowedPersonas` | string[] \| null | JSON array of persona names this captain is allowed to use |
+| `preferredPersona` | string \| null | Preferred persona name for this captain |
 | `state` | string | [CaptainStateEnum](#captainstateenum) value |
 | `currentMissionId` | string \| null | Currently assigned mission |
 | `currentDockId` | string \| null | Currently assigned dock (worktree) |

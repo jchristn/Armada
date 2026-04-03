@@ -687,7 +687,7 @@ Health check endpoint. **Does not require authentication.**
   "Timestamp": "2026-03-07T12:00:00Z",
   "StartUtc": "2026-03-07T08:00:00Z",
   "Uptime": "0.04:00:00",
-  "Version": "0.2.0",
+  "Version": "0.5.0",
   "Ports": {
     "Admiral": 7890,
     "Mcp": 7891,
@@ -1496,8 +1496,11 @@ Register a new captain (AI agent).
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `Name` | string | yes | Captain name |
-| `Runtime` | string | no | Agent runtime type (default: `ClaudeCode`) |
+| `Runtime` | string | no | Agent runtime type (`ClaudeCode`, `Codex`, `Gemini`, `Cursor`, `Custom`; default: `ClaudeCode`) |
 | `Model` | string | no | Optional model override for this captain. When omitted, the runtime selects its default model |
+| `SystemInstructions` | string | no | Per-captain system instructions injected into every mission prompt |
+| `AllowedPersonas` | string[] | no | JSON array of persona names this captain is allowed to use |
+| `PreferredPersona` | string | no | Preferred persona name for this captain |
 
 **Response:** `201 Created` - [Captain](#captain)
 **Error:** `400 Bad Request` - Invalid or unavailable model
@@ -1505,7 +1508,7 @@ Register a new captain (AI agent).
 ```bash
 curl -X POST http://localhost:7890/api/v1/captains \
   -H "Content-Type: application/json" \
-  -d '{"Name": "captain-1", "Runtime": "ClaudeCode", "Model": "claude-sonnet-4-20250514", "SystemInstructions": "You are a testing specialist. Always run tests before committing."}'
+  -d '{"Name": "captain-1", "Runtime": "Custom", "Model": "claude-sonnet-4-20250514", "SystemInstructions": "You are a testing specialist. Always run tests before committing.", "AllowedPersonas": ["Worker", "Judge"], "PreferredPersona": "Worker"}'
 ```
 
 ---
@@ -1526,7 +1529,7 @@ Get a single captain by ID.
 
 #### PUT /api/v1/captains/{id}
 
-Update a captain's name, runtime, or model. Operational fields (state, process, mission) are preserved.
+Update a captain's name, runtime, model, or persona settings. Operational fields (state, process, mission) are preserved.
 
 **Path Parameters:**
 | Parameter | Description |
@@ -1537,9 +1540,11 @@ Update a captain's name, runtime, or model. Operational fields (state, process, 
 ```json
 {
   "name": "captain-bravo",
-  "runtime": "Codex",
+  "runtime": "Custom",
   "model": "gpt-5.4",
-  "systemInstructions": "Focus on code quality and always run linting before commits."
+  "systemInstructions": "Focus on code quality and always run linting before commits.",
+  "allowedPersonas": ["Worker", "Judge"],
+  "preferredPersona": "Worker"
 }
 ```
 
@@ -1553,7 +1558,7 @@ Update a captain's name, runtime, or model. Operational fields (state, process, 
 curl -X PUT http://localhost:7890/api/v1/captains/cpt_abc123 \
   -H "Content-Type: application/json" \
   -H "x-api-key: YOUR_KEY" \
-  -d '{"name": "captain-bravo", "runtime": "Codex"}'
+  -d '{"name": "captain-bravo", "runtime": "Custom", "allowedPersonas": ["Worker", "Judge"]}'
 ```
 
 ---
@@ -2512,7 +2517,7 @@ Restore Armada from a previously created backup ZIP file.
 {
   "Status": "restored",
   "SafetyBackupPath": "~/.armada/backups/armada-safety-backup-20260311T120000Z.zip",
-  "SchemaVersion": 9,
+  "SchemaVersion": 27,
   "Message": "Database restored from backup.zip. Restart the server to reload the restored data."
 }
 ```
@@ -2918,6 +2923,8 @@ A worker AI agent instance executing missions.
   "Runtime": "ClaudeCode",
   "Model": null,
   "SystemInstructions": null,
+  "AllowedPersonas": ["Worker", "Judge"],
+  "PreferredPersona": "Worker",
   "State": "Idle",
   "CurrentMissionId": null,
   "CurrentDockId": null,
@@ -2933,9 +2940,11 @@ A worker AI agent instance executing missions.
 |---|---|---|---|
 | `Id` | string | auto-generated | Unique ID with `cpt_` prefix |
 | `Name` | string | `"Captain"` | Captain name |
-| `Runtime` | [AgentRuntimeEnum](#agentruntimeenum) | `ClaudeCode` | Agent runtime type |
+| `Runtime` | [AgentRuntimeEnum](#agentruntimeenum) | `ClaudeCode` | Agent runtime type (`ClaudeCode`, `Codex`, `Gemini`, `Cursor`, `Custom`) |
 | `Model` | string? | null | Optional model override for this captain. When null, the runtime chooses its default model |
 | `SystemInstructions` | string? | null | Per-captain system instructions injected into every mission prompt |
+| `AllowedPersonas` | string[]? | null | JSON array of persona names this captain is allowed to use |
+| `PreferredPersona` | string? | null | Preferred persona name for this captain |
 | `State` | [CaptainStateEnum](#captainstateenum) | `Idle` | Current state |
 | `CurrentMissionId` | string? | null | Currently assigned mission ID |
 | `CurrentDockId` | string? | null | Currently assigned dock (worktree) ID |
