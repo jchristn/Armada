@@ -30,6 +30,15 @@ namespace Armada.Test.Automated.Suites
 
         private HttpClient _McpClient;
         private string _SessionId = null!;
+        private (string Runtime, string Model)? _ValidatedCaptainModel;
+
+        private static readonly (string Runtime, string Model)[] _CaptainModelCandidates = new[]
+        {
+            ("Codex", "gpt-5.4"),
+            ("Codex", "gpt-5.4-mini"),
+            ("Cursor", "gpt-5.4-mini"),
+            ("Gemini", "gemini-2.5-pro")
+        };
 
         #endregion
 
@@ -945,6 +954,36 @@ namespace Armada.Test.Automated.Suites
                 AssertContains("ClaudeCode", text);
             }).ConfigureAwait(false);
 
+            await RunTest("ArmadaCreateCaptain_WithValidModel_RoundTripsModel", async () =>
+            {
+                (string runtime, string model) = await FindValidatedCaptainModelAsync().ConfigureAwait(false);
+                JsonElement result = await CallToolAsync("armada_create_captain", new
+                {
+                    name = "modeled-captain",
+                    runtime = runtime,
+                    model = model
+                }).ConfigureAwait(false);
+                AssertToolResultValid(result);
+
+                Captain captain = ParseCaptainToolResult(result);
+                AssertEqual(runtime, captain.Runtime.ToString());
+                AssertEqual(model, captain.Model);
+            }).ConfigureAwait(false);
+
+            await RunTest("ArmadaCreateCaptain_UnavailableModel_ReturnsToolError", async () =>
+            {
+                string unavailableModel = "unavailable-model-" + Guid.NewGuid().ToString("N");
+                JsonElement result = await CallToolAsync("armada_create_captain", new
+                {
+                    name = "unavailable-model-captain",
+                    runtime = "Custom",
+                    model = unavailableModel
+                }).ConfigureAwait(false);
+
+                string text = AssertCaptainToolError(result);
+                AssertContains("Custom", text);
+            }).ConfigureAwait(false);
+
             await RunTest("ArmadaCreateCaptain_VisibleViaEnumerate", async () =>
             {
                 JsonElement createResult = await CallToolAsync("armada_create_captain", new
@@ -1013,6 +1052,71 @@ namespace Armada.Test.Automated.Suites
                 AssertToolResultValid(result);
                 string text = GetToolResultText(result);
                 Assert(text.Contains("not found", StringComparison.OrdinalIgnoreCase), "Should contain 'not found'");
+            }).ConfigureAwait(false);
+
+            await RunTest("ArmadaUpdateCaptain_WithValidModel_RoundTripsModelAndPreservesOperationalFields", async () =>
+            {
+                (string runtime, string model) = await FindValidatedCaptainModelAsync().ConfigureAwait(false);
+                string captainId = await RestCreateCaptainAsync("mcp-model-update", runtime).ConfigureAwait(false);
+
+                JsonElement result = await CallToolAsync("armada_update_captain", new
+                {
+                    captainId = captainId,
+                    name = "mcp-model-updated",
+                    runtime = runtime,
+                    model = model
+                }).ConfigureAwait(false);
+                AssertToolResultValid(result);
+
+                Captain updated = ParseCaptainToolResult(result);
+                AssertEqual(captainId, updated.Id);
+                AssertEqual(model, updated.Model);
+                AssertEqual(runtime, updated.Runtime.ToString());
+                AssertEqual("Idle", updated.State.ToString());
+                AssertEqual(0, updated.RecoveryAttempts);
+            }).ConfigureAwait(false);
+
+            await RunTest("ArmadaUpdateCaptain_UnavailableModel_ReturnsToolErrorAndDoesNotPersistChanges", async () =>
+            {
+                (string runtime, string model) = await FindValidatedCaptainModelAsync().ConfigureAwait(false);
+                JsonElement createResult = await CallToolAsync("armada_create_captain", new
+                {
+                    name = "mcp-invalid-model-update",
+                    runtime = runtime,
+                    model = model
+                }).ConfigureAwait(false);
+                AssertToolResultValid(createResult);
+
+                Captain created = ParseCaptainToolResult(createResult);
+                string unavailableModel = "unavailable-model-" + Guid.NewGuid().ToString("N");
+
+                JsonElement updateResult = await CallToolAsync("armada_update_captain", new
+                {
+                    captainId = created.Id,
+                    name = "should-not-stick",
+                    runtime = "Custom",
+                    model = unavailableModel
+                }).ConfigureAwait(false);
+
+                string errorText = AssertCaptainToolError(updateResult);
+                AssertContains("Custom", errorText);
+
+                JsonElement getResult = await CallToolAsync("armada_get_captain", new
+                {
+                    captainId = created.Id
+                }).ConfigureAwait(false);
+                AssertToolResultValid(getResult);
+
+                Captain fetched = ParseCaptainToolResult(getResult);
+                AssertEqual(created.Id, fetched.Id);
+                AssertEqual(created.Name, fetched.Name);
+                AssertEqual(runtime, fetched.Runtime.ToString());
+                AssertEqual(model, fetched.Model);
+                AssertEqual(created.State.ToString(), fetched.State.ToString());
+                AssertEqual(created.CurrentMissionId, fetched.CurrentMissionId);
+                AssertEqual(created.CurrentDockId, fetched.CurrentDockId);
+                AssertEqual(created.ProcessId, fetched.ProcessId);
+                AssertEqual(created.RecoveryAttempts, fetched.RecoveryAttempts);
             }).ConfigureAwait(false);
 
             // ArmadaDeleteCaptain
@@ -1846,9 +1950,68 @@ namespace Armada.Test.Automated.Suites
             AssertFalse(string.IsNullOrEmpty(content[0].GetProperty("text").GetString()), "Tool result text should not be empty");
         }
 
+        private string AssertCaptainToolError(JsonElement result)
+        {
+            if (result.TryGetProperty("isError", out JsonElement isError) && isError.GetBoolean())
+            {
+                string text = GetToolResultText(result);
+                AssertFalse(string.IsNullOrEmpty(text), "Tool error text should not be empty");
+                return text;
+            }
+
+            string body = GetToolResultText(result);
+            JsonElement parsed = JsonSerializer.Deserialize<JsonElement>(body);
+            if (parsed.ValueKind == JsonValueKind.Object &&
+                parsed.TryGetProperty("isError", out JsonElement nestedIsError) &&
+                nestedIsError.GetBoolean() &&
+                parsed.TryGetProperty("content", out JsonElement nestedContent) &&
+                nestedContent.ValueKind == JsonValueKind.Array &&
+                nestedContent.GetArrayLength() > 0 &&
+                nestedContent[0].TryGetProperty("text", out JsonElement nestedText))
+            {
+                string text = nestedText.GetString() ?? String.Empty;
+                AssertFalse(string.IsNullOrEmpty(text), "Nested tool error text should not be empty");
+                return text;
+            }
+
+            if (parsed.ValueKind == JsonValueKind.Object && parsed.TryGetProperty("Error", out JsonElement errorValue))
+                return errorValue.ValueKind == JsonValueKind.String ? errorValue.GetString()! : body;
+
+            Assert(false, "Captain tool error should expose either isError=true or an Error property. Body: " + body);
+            return body;
+        }
+
         private string GetToolResultText(JsonElement result)
         {
             return result.GetProperty("content")[0].GetProperty("text").GetString()!;
+        }
+
+        private Captain ParseCaptainToolResult(JsonElement result)
+        {
+            string body = GetToolResultText(result);
+
+            if (result.TryGetProperty("isError", out JsonElement isError) && isError.GetBoolean())
+                throw new Exception("Captain tool returned error: " + body);
+
+            JsonElement parsed = JsonSerializer.Deserialize<JsonElement>(body);
+            if (parsed.ValueKind == JsonValueKind.Object &&
+                parsed.TryGetProperty("isError", out JsonElement nestedIsError) &&
+                nestedIsError.GetBoolean() &&
+                parsed.TryGetProperty("content", out JsonElement nestedContent) &&
+                nestedContent.ValueKind == JsonValueKind.Array &&
+                nestedContent.GetArrayLength() > 0 &&
+                nestedContent[0].TryGetProperty("text", out JsonElement nestedText))
+            {
+                throw new Exception("Captain tool returned error: " + (nestedText.GetString() ?? body));
+            }
+
+            if (parsed.ValueKind == JsonValueKind.Object && parsed.TryGetProperty("Error", out JsonElement errorValue))
+            {
+                string error = errorValue.ValueKind == JsonValueKind.String ? errorValue.GetString()! : body;
+                throw new Exception("Captain tool returned error: " + error);
+            }
+
+            return JsonHelper.Deserialize<Captain>(body);
         }
 
         private JsonElement ParseToolResultJson(JsonElement result)
@@ -1906,17 +2069,68 @@ namespace Armada.Test.Automated.Suites
             return vessel.Id;
         }
 
-        private async Task<string> RestCreateCaptainAsync(string name = "mcp-test-captain")
+        private async Task<string> RestCreateCaptainAsync(string name = "mcp-test-captain", string runtime = "ClaudeCode", string? model = null)
         {
             string uniqueName = name + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
-            JsonElement result = await CallToolAsync("armada_create_captain", new
+            object arguments;
+            if (model == null)
             {
-                name = uniqueName,
-                runtime = "ClaudeCode"
-            }).ConfigureAwait(false);
-            string text = GetToolResultText(result);
-            Captain captain = JsonHelper.Deserialize<Captain>(text);
+                arguments = new
+                {
+                    name = uniqueName,
+                    runtime = runtime
+                };
+            }
+            else
+            {
+                arguments = new
+                {
+                    name = uniqueName,
+                    runtime = runtime,
+                    model = model
+                };
+            }
+            JsonElement result = await CallToolAsync("armada_create_captain", arguments).ConfigureAwait(false);
+            Captain captain = ParseCaptainToolResult(result);
             return captain.Id;
+        }
+
+        private async Task<(string Runtime, string Model)> FindValidatedCaptainModelAsync()
+        {
+            if (_ValidatedCaptainModel.HasValue)
+                return _ValidatedCaptainModel.Value;
+
+            List<string> failures = new List<string>();
+
+            foreach ((string runtime, string model) in _CaptainModelCandidates)
+            {
+                JsonElement result = await CallToolAsync("armada_create_captain", new
+                {
+                    name = "mcp-validated-model-" + Guid.NewGuid().ToString("N").Substring(0, 8),
+                    runtime = runtime,
+                    model = model
+                }).ConfigureAwait(false);
+
+                try
+                {
+                    Captain captain = ParseCaptainToolResult(result);
+                    if (!String.Equals(captain.Runtime.ToString(), runtime, StringComparison.Ordinal) ||
+                        !String.Equals(captain.Model, model, StringComparison.Ordinal))
+                    {
+                        failures.Add(runtime + "/" + model + " => returned Runtime=" + captain.Runtime + " Model=" + (captain.Model ?? "<null>"));
+                        continue;
+                    }
+
+                    _ValidatedCaptainModel = (runtime, model);
+                    return _ValidatedCaptainModel.Value;
+                }
+                catch (Exception ex)
+                {
+                    failures.Add(runtime + "/" + model + " => " + ex.Message);
+                }
+            }
+
+            throw new Exception("No runtime/model candidate passed MCP captain model validation. Attempts: " + String.Join(" | ", failures));
         }
 
         private async Task<string> RestCreateMissionAsync(string title = "McpTestMission", string? vesselId = null)

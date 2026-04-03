@@ -28,6 +28,15 @@ namespace Armada.Test.Automated.Suites
         private HttpClient _Client;
         private HttpClient _UnauthClient;
         private List<string> _CreatedCaptainIds = new List<string>();
+        private (string Runtime, string Model)? _ValidatedCaptainModel;
+
+        private static readonly (string Runtime, string Model)[] _CaptainModelCandidates = new[]
+        {
+            ("Codex", "gpt-5.4"),
+            ("Codex", "gpt-5.4-mini"),
+            ("Cursor", "gpt-5.4-mini"),
+            ("Gemini", "gemini-2.5-pro")
+        };
 
         #endregion
 
@@ -136,6 +145,28 @@ namespace Armada.Test.Automated.Suites
             {
                 Captain captain = await CreateCaptainAsync("custom-captain", "Custom");
                 AssertEqual("Custom", captain.Runtime.ToString());
+            });
+
+            await RunTest("Create Captain With Valid Model Round Trips Model", async () =>
+            {
+                (string runtime, string model) = await FindValidatedCaptainModelAsync().ConfigureAwait(false);
+                Captain captain = await CreateCaptainAsync("model-create", runtime, model).ConfigureAwait(false);
+                AssertEqual(runtime, captain.Runtime.ToString());
+                AssertEqual(model, captain.Model);
+            });
+
+            await RunTest("Create Captain Unavailable Model Returns Bad Request", async () =>
+            {
+                string unavailableModel = "unavailable-model-" + Guid.NewGuid().ToString("N");
+                string captainName = "unavailable-model-create-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+
+                HttpResponseMessage response = await _Client.PostAsync("/api/v1/captains",
+                    JsonHelper.ToJsonContent(new { Name = captainName, Runtime = "Custom", Model = unavailableModel })).ConfigureAwait(false);
+
+                AssertEqual(HttpStatusCode.BadRequest, response.StatusCode);
+
+                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response).ConfigureAwait(false);
+                AssertContains("Custom", error.Message ?? String.Empty);
             });
 
             await RunTest("Create Captain Multiple Captains Have Unique Ids", async () =>
@@ -267,6 +298,25 @@ namespace Armada.Test.Automated.Suites
                 AssertEqual("Codex", updated.Runtime.ToString());
             });
 
+            await RunTest("Update Captain With Model Round Trips Model And Preserves Operational Fields", async () =>
+            {
+                (string runtime, string model) = await FindValidatedCaptainModelAsync().ConfigureAwait(false);
+                Captain created = await CreateCaptainAsync("model-update", runtime).ConfigureAwait(false);
+
+                HttpResponseMessage response = await _Client.PutAsync("/api/v1/captains/" + created.Id,
+                    JsonHelper.ToJsonContent(new { Name = created.Name, Runtime = runtime, Model = model })).ConfigureAwait(false);
+                AssertEqual(HttpStatusCode.OK, response.StatusCode);
+
+                Captain updated = await JsonHelper.DeserializeAsync<Captain>(response).ConfigureAwait(false);
+                AssertEqual(created.Id, updated.Id);
+                AssertEqual(model, updated.Model);
+                AssertEqual("Idle", updated.State.ToString());
+                AssertEqual(created.CurrentMissionId, updated.CurrentMissionId);
+                AssertEqual(created.CurrentDockId, updated.CurrentDockId);
+                AssertEqual(created.ProcessId, updated.ProcessId);
+                AssertEqual(created.RecoveryAttempts, updated.RecoveryAttempts);
+            });
+
             await RunTest("Update Captain Preserves State", async () =>
             {
                 string captainId = await CreateCaptainAndGetIdAsync("state-preserve");
@@ -361,6 +411,36 @@ namespace Armada.Test.Automated.Suites
                 Captain updated = await JsonHelper.DeserializeAsync<Captain>(response);
 
                 AssertEqual(originalCreatedUtc.ToString("O"), updated.CreatedUtc.ToString("O"));
+            });
+
+            await RunTest("Update Captain Unavailable Model Returns Bad Request And Does Not Persist Changes", async () =>
+            {
+                (string runtime, string model) = await FindValidatedCaptainModelAsync().ConfigureAwait(false);
+                Captain created = await CreateCaptainAsync("model-update-reject", runtime, model).ConfigureAwait(false);
+                string rejectedName = "rejected-update-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                string unavailableModel = "unavailable-model-" + Guid.NewGuid().ToString("N");
+
+                HttpResponseMessage response = await _Client.PutAsync("/api/v1/captains/" + created.Id,
+                    JsonHelper.ToJsonContent(new { Name = rejectedName, Runtime = "Custom", Model = unavailableModel })).ConfigureAwait(false);
+                AssertEqual(HttpStatusCode.BadRequest, response.StatusCode);
+
+                ArmadaErrorResponse error = await JsonHelper.DeserializeAsync<ArmadaErrorResponse>(response).ConfigureAwait(false);
+                AssertContains("Custom", error.Message ?? String.Empty);
+
+                HttpResponseMessage getResponse = await _Client.GetAsync("/api/v1/captains/" + created.Id).ConfigureAwait(false);
+                AssertEqual(HttpStatusCode.OK, getResponse.StatusCode);
+
+                Captain fetched = await JsonHelper.DeserializeAsync<Captain>(getResponse).ConfigureAwait(false);
+                AssertEqual(created.Id, fetched.Id);
+                AssertEqual(created.Name, fetched.Name);
+                AssertEqual(runtime, fetched.Runtime.ToString());
+                AssertEqual(model, fetched.Model);
+                AssertEqual(created.State.ToString(), fetched.State.ToString());
+                AssertEqual(created.CurrentMissionId, fetched.CurrentMissionId);
+                AssertEqual(created.CurrentDockId, fetched.CurrentDockId);
+                AssertEqual(created.ProcessId, fetched.ProcessId);
+                AssertEqual(created.RecoveryAttempts, fetched.RecoveryAttempts);
+                AssertEqual(created.CreatedUtc.ToString("O"), fetched.CreatedUtc.ToString("O"));
             });
 
             #endregion
@@ -1104,16 +1184,51 @@ namespace Armada.Test.Automated.Suites
         /// <summary>
         /// Creates a captain and returns the deserialized Captain object.
         /// </summary>
-        private async Task<Captain> CreateCaptainAsync(string name, string runtime = "ClaudeCode")
+        private async Task<Captain> CreateCaptainAsync(string name, string runtime = "ClaudeCode", string? model = null)
         {
             string uniqueName = name + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
-            object body = new { Name = uniqueName, Runtime = runtime };
+            object body;
+            if (model == null)
+                body = new { Name = uniqueName, Runtime = runtime };
+            else
+                body = new { Name = uniqueName, Runtime = runtime, Model = model };
             HttpResponseMessage resp = await _Client.PostAsync("/api/v1/captains",
-                JsonHelper.ToJsonContent(body));
+                JsonHelper.ToJsonContent(body)).ConfigureAwait(false);
             resp.EnsureSuccessStatusCode();
-            Captain captain = await JsonHelper.DeserializeAsync<Captain>(resp);
+            Captain captain = await JsonHelper.DeserializeAsync<Captain>(resp).ConfigureAwait(false);
             _CreatedCaptainIds.Add(captain.Id);
             return captain;
+        }
+
+        /// <summary>
+        /// Finds a runtime/model pair that passes real server-side validation in the current environment.
+        /// </summary>
+        private async Task<(string Runtime, string Model)> FindValidatedCaptainModelAsync()
+        {
+            if (_ValidatedCaptainModel.HasValue)
+                return _ValidatedCaptainModel.Value;
+
+            List<string> failures = new List<string>();
+
+            foreach ((string runtime, string model) in _CaptainModelCandidates)
+            {
+                string candidateName = "validated-model-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                HttpResponseMessage response = await _Client.PostAsync("/api/v1/captains",
+                    JsonHelper.ToJsonContent(new { Name = candidateName, Runtime = runtime, Model = model })).ConfigureAwait(false);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    Captain captain = await JsonHelper.DeserializeAsync<Captain>(response).ConfigureAwait(false);
+                    _CreatedCaptainIds.Add(captain.Id);
+                    _ValidatedCaptainModel = (runtime, model);
+                    return _ValidatedCaptainModel.Value;
+                }
+
+                string errorBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                failures.Add(runtime + "/" + model + " => " + ((int)response.StatusCode).ToString() + " " + errorBody);
+            }
+
+            throw new Exception("No runtime/model candidate passed captain model validation. Attempts: " + String.Join(" | ", failures));
         }
 
         /// <summary>
