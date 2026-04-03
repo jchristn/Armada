@@ -3,6 +3,7 @@ namespace Armada.Test.Unit
     using Armada.Test.Common;
     using Armada.Test.Unit.Suites.Database;
     using Armada.Test.Unit.Suites.Models;
+    using Armada.Test.Unit.Suites.Routes;
     using Armada.Test.Unit.Suites.Services;
 
     public class Program
@@ -40,6 +41,7 @@ namespace Armada.Test.Unit
             runner.AddSuite(new TenantScopedEnumerationTests());
             runner.AddSuite(new TenantScopedPaginationTests());
             runner.AddSuite(new TenantScopedPaginationTests2());
+            runner.AddSuite(new TenantFilteringTests());
 
             // Model tests
             runner.AddSuite(new FleetModelTests());
