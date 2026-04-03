@@ -1057,11 +1057,18 @@ namespace Armada.Test.Automated.Suites
             await RunTest("ArmadaUpdateCaptain_WithValidModel_RoundTripsModelAndPreservesOperationalFields", async () =>
             {
                 (string runtime, string model) = await FindValidatedCaptainModelAsync().ConfigureAwait(false);
-                string captainId = await RestCreateCaptainAsync("mcp-model-update", runtime).ConfigureAwait(false);
+                JsonElement createResult = await CallToolAsync("armada_create_captain", new
+                {
+                    name = "mcp-model-update",
+                    runtime = runtime
+                }).ConfigureAwait(false);
+                AssertToolResultValid(createResult);
+
+                Captain created = ParseCaptainToolResult(createResult);
 
                 JsonElement result = await CallToolAsync("armada_update_captain", new
                 {
-                    captainId = captainId,
+                    captainId = created.Id,
                     name = "mcp-model-updated",
                     runtime = runtime,
                     model = model
@@ -1069,11 +1076,16 @@ namespace Armada.Test.Automated.Suites
                 AssertToolResultValid(result);
 
                 Captain updated = ParseCaptainToolResult(result);
-                AssertEqual(captainId, updated.Id);
+                AssertEqual(created.Id, updated.Id);
+                AssertEqual("mcp-model-updated", updated.Name);
                 AssertEqual(model, updated.Model);
                 AssertEqual(runtime, updated.Runtime.ToString());
-                AssertEqual("Idle", updated.State.ToString());
-                AssertEqual(0, updated.RecoveryAttempts);
+                AssertEqual(created.State.ToString(), updated.State.ToString());
+                AssertEqual(created.CurrentMissionId, updated.CurrentMissionId);
+                AssertEqual(created.CurrentDockId, updated.CurrentDockId);
+                AssertEqual(created.ProcessId, updated.ProcessId);
+                AssertEqual(created.RecoveryAttempts, updated.RecoveryAttempts);
+                AssertEqual(created.CreatedUtc.ToString("O"), updated.CreatedUtc.ToString("O"));
             }).ConfigureAwait(false);
 
             await RunTest("ArmadaUpdateCaptain_UnavailableModel_ReturnsToolErrorAndDoesNotPersistChanges", async () =>

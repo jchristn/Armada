@@ -1220,6 +1220,12 @@ namespace Armada.Test.Automated.Suites
                 {
                     Captain captain = await JsonHelper.DeserializeAsync<Captain>(response).ConfigureAwait(false);
                     _CreatedCaptainIds.Add(captain.Id);
+                    if (!String.Equals(captain.Runtime.ToString(), runtime, StringComparison.Ordinal) ||
+                        !String.Equals(captain.Model, model, StringComparison.Ordinal))
+                    {
+                        failures.Add(runtime + "/" + model + " => returned Runtime=" + captain.Runtime + " Model=" + (captain.Model ?? "<null>"));
+                        continue;
+                    }
                     _ValidatedCaptainModel = (runtime, model);
                     return _ValidatedCaptainModel.Value;
                 }
