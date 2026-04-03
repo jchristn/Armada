@@ -85,6 +85,13 @@ namespace Armada.Test.Unit.Suites.Services
             return method.Invoke(null, new object[] { line })?.ToString();
         }
 
+        private void AssertNotContains(string expectedToBeAbsent, string actual, string context)
+        {
+            AssertFalse(
+                actual.Contains(expectedToBeAbsent, StringComparison.Ordinal),
+                context + " should not contain " + expectedToBeAbsent);
+        }
+
         private async Task AssertResultPersonaSignalsAsync(PromptTemplateService templates, string persona, string templateName)
         {
             string embeddedPrompt = await ResolveTemplateContentAsync(templates, templateName).ConfigureAwait(false);
@@ -106,6 +113,11 @@ namespace Armada.Test.Unit.Suites.Services
             AssertContains("[ARMADA:RESULT] COMPLETE", templateParams["CaptainInstructions"], persona + " captain instructions");
             AssertContains("[ARMADA:RESULT] COMPLETE", fallbackPrompt, persona + " fallback prompt");
             AssertContains("[ARMADA:RESULT] COMPLETE", launchPrompt, persona + " launch prompt");
+
+            AssertNotContains("[ARMADA:VERDICT]", embeddedPrompt, templateName + " embedded template");
+            AssertNotContains("[ARMADA:VERDICT]", templateParams["CaptainInstructions"], persona + " captain instructions");
+            AssertNotContains("[ARMADA:VERDICT]", fallbackPrompt, persona + " fallback prompt");
+            AssertNotContains("[ARMADA:VERDICT]", launchPrompt, persona + " launch prompt");
         }
 
         private async Task AssertJudgeSignalsAsync(PromptTemplateService templates)
@@ -140,6 +152,11 @@ namespace Armada.Test.Unit.Suites.Services
             AssertContains("[ARMADA:VERDICT] PASS", launchPrompt, "judge launch prompt PASS");
             AssertContains("[ARMADA:VERDICT] FAIL", launchPrompt, "judge launch prompt FAIL");
             AssertContains("[ARMADA:VERDICT] NEEDS_REVISION", launchPrompt, "judge launch prompt NEEDS_REVISION");
+
+            AssertNotContains("[ARMADA:RESULT]", embeddedPrompt, "judge embedded template");
+            AssertNotContains("[ARMADA:RESULT]", templateParams["CaptainInstructions"], "judge captain instructions");
+            AssertNotContains("[ARMADA:RESULT]", fallbackPrompt, "judge fallback");
+            AssertNotContains("[ARMADA:RESULT]", launchPrompt, "judge launch prompt");
         }
 
         protected override async Task RunTestsAsync()
@@ -160,12 +177,20 @@ namespace Armada.Test.Unit.Suites.Services
                     AssertContains("`[ARMADA:VERDICT] FAIL`", embeddedSignals, "embedded runtime signals should include VERDICT FAIL");
                     AssertContains("`[ARMADA:VERDICT] NEEDS_REVISION`", embeddedSignals, "embedded runtime signals should include VERDICT NEEDS_REVISION");
                     AssertContains("Architect missions must not emit `[ARMADA:RESULT]` or `[ARMADA:VERDICT]`", embeddedSignals, "embedded runtime signals should restrict architect output");
+                    AssertNotContains("`[ARMADA:RESULT] PASS`", embeddedSignals, "embedded runtime signals");
+                    AssertNotContains("`[ARMADA:RESULT] FAIL`", embeddedSignals, "embedded runtime signals");
+                    AssertNotContains("`[ARMADA:RESULT] NEEDS_REVISION`", embeddedSignals, "embedded runtime signals");
+                    AssertNotContains("`[ARMADA:VERDICT] COMPLETE`", embeddedSignals, "embedded runtime signals");
 
                     AssertContains("`[ARMADA:RESULT] COMPLETE`", fallbackSignals, "fallback runtime signals should include RESULT COMPLETE");
                     AssertContains("`[ARMADA:VERDICT] PASS`", fallbackSignals, "fallback runtime signals should include VERDICT PASS");
                     AssertContains("`[ARMADA:VERDICT] FAIL`", fallbackSignals, "fallback runtime signals should include VERDICT FAIL");
                     AssertContains("`[ARMADA:VERDICT] NEEDS_REVISION`", fallbackSignals, "fallback runtime signals should include VERDICT NEEDS_REVISION");
                     AssertContains("Architect missions must not emit `[ARMADA:RESULT]` or `[ARMADA:VERDICT]`", fallbackSignals, "fallback runtime signals should restrict architect output");
+                    AssertNotContains("`[ARMADA:RESULT] PASS`", fallbackSignals, "fallback runtime signals");
+                    AssertNotContains("`[ARMADA:RESULT] FAIL`", fallbackSignals, "fallback runtime signals");
+                    AssertNotContains("`[ARMADA:RESULT] NEEDS_REVISION`", fallbackSignals, "fallback runtime signals");
+                    AssertNotContains("`[ARMADA:VERDICT] COMPLETE`", fallbackSignals, "fallback runtime signals");
                 }
             });
 
