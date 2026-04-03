@@ -137,10 +137,9 @@ namespace Armada.Test.Unit.Suites.Services
                 foreach (JsonElement response in responses.EnumerateArray())
                 {
                     if (response.TryGetProperty("body", out JsonElement bodyElement) &&
-                        bodyElement.ValueKind == JsonValueKind.String &&
-                        TryExtractJsonBodyVersion(bodyElement.GetString(), out string? version))
+                        bodyElement.ValueKind == JsonValueKind.String)
                     {
-                        versions.Add(version!);
+                        CollectJsonBodyVersions(bodyElement.GetString(), versions);
                     }
                 }
             }
@@ -154,30 +153,48 @@ namespace Armada.Test.Unit.Suites.Services
             }
         }
 
-        private static bool TryExtractJsonBodyVersion(string? body, out string? version)
+        private static void CollectJsonBodyVersions(string? body, List<string> versions)
         {
-            version = null;
-
             if (String.IsNullOrWhiteSpace(body) || !body.Contains("\"Version\""))
             {
-                return false;
+                return;
             }
 
             try
             {
                 using JsonDocument bodyDocument = JsonDocument.Parse(body);
-                if (!bodyDocument.RootElement.TryGetProperty("Version", out JsonElement versionElement) ||
-                    versionElement.ValueKind != JsonValueKind.String)
-                {
-                    return false;
-                }
-
-                version = versionElement.GetString();
-                return !String.IsNullOrWhiteSpace(version);
+                CollectJsonVersionValues(bodyDocument.RootElement, versions);
             }
             catch (JsonException)
             {
-                return false;
+                return;
+            }
+        }
+
+        private static void CollectJsonVersionValues(JsonElement element, List<string> versions)
+        {
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                foreach (JsonProperty property in element.EnumerateObject())
+                {
+                    if (property.NameEquals("Version") && property.Value.ValueKind == JsonValueKind.String)
+                    {
+                        string? version = property.Value.GetString();
+                        if (!String.IsNullOrWhiteSpace(version))
+                        {
+                            versions.Add(version!);
+                        }
+                    }
+
+                    CollectJsonVersionValues(property.Value, versions);
+                }
+            }
+            else if (element.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement item in element.EnumerateArray())
+                {
+                    CollectJsonVersionValues(item, versions);
+                }
             }
         }
 
