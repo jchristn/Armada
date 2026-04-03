@@ -230,6 +230,36 @@ namespace Armada.Test.Unit.Suites.Services
                     }
                 }
             });
+
+            await RunTest("GetAndClearMissionOutput prefers final message artifact over streamed output", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    AgentLifecycleHandler handler = CreateHandler(testDb.Driver, out _);
+                    string missionId = "msn_final_output_prefers_artifact";
+                    string artifactDirectory = Path.Combine(Path.GetTempPath(), "armada_final_output_" + Guid.NewGuid().ToString("N"));
+                    string artifactPath = Path.Combine(artifactDirectory, missionId + ".txt");
+                    Directory.CreateDirectory(artifactDirectory);
+
+                    try
+                    {
+                        SeedMissionOutput(handler, missionId, "streamed intermediate output");
+                        RegisterFinalMessageArtifact(handler, missionId, artifactPath);
+                        await File.WriteAllTextAsync(artifactPath, "[ARMADA:RESULT] COMPLETE\ncanonical final response").ConfigureAwait(false);
+
+                        string? output = handler.GetAndClearMissionOutput(missionId);
+
+                        AssertNotNull(output);
+                        AssertContains("canonical final response", output!, "Canonical final response should win over streamed output");
+                        AssertFalse(output!.Contains("streamed intermediate output", StringComparison.Ordinal), "Stream noise should not be persisted as AgentOutput when a final artifact exists");
+                        AssertFalse(File.Exists(artifactPath), "Final message artifact should be deleted after retrieval");
+                    }
+                    finally
+                    {
+                        try { Directory.Delete(artifactDirectory, true); } catch { }
+                    }
+                }
+            });
         }
 
         private AgentLifecycleHandler CreateHandler(DatabaseDriver database, out ArmadaSettings settings)
@@ -333,6 +363,30 @@ namespace Armada.Test.Unit.Suites.Services
                 captainMap[processId] = captainId;
                 missionMap[processId] = missionId;
             }
+        }
+
+        private static void SeedMissionOutput(AgentLifecycleHandler handler, string missionId, string output)
+        {
+            FieldInfo outputField = typeof(AgentLifecycleHandler).GetField("_MissionOutput", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Could not find _MissionOutput field");
+
+            System.Collections.Concurrent.ConcurrentDictionary<string, System.Text.StringBuilder> outputMap =
+                (System.Collections.Concurrent.ConcurrentDictionary<string, System.Text.StringBuilder>)(outputField.GetValue(handler)
+                ?? throw new InvalidOperationException("Mission output map was null"));
+
+            outputMap[missionId] = new System.Text.StringBuilder(output);
+        }
+
+        private static void RegisterFinalMessageArtifact(AgentLifecycleHandler handler, string missionId, string artifactPath)
+        {
+            FieldInfo artifactField = typeof(AgentLifecycleHandler).GetField("_MissionFinalMessageFiles", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Could not find _MissionFinalMessageFiles field");
+
+            System.Collections.Concurrent.ConcurrentDictionary<string, string> artifactMap =
+                (System.Collections.Concurrent.ConcurrentDictionary<string, string>)(artifactField.GetValue(handler)
+                ?? throw new InvalidOperationException("Mission final message map was null"));
+
+            artifactMap[missionId] = artifactPath;
         }
 
         private static void StartTrackedProcessHeartbeat(AgentLifecycleHandler handler, int processId, string captainId, string missionId)

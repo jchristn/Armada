@@ -71,7 +71,7 @@ namespace Armada.Runtimes
         /// <summary>
         /// Build Codex CLI arguments.
         /// </summary>
-        protected override List<string> BuildArguments(string prompt, string? model)
+        protected override List<string> BuildArguments(string prompt, string? model, string? finalMessageFilePath)
         {
             List<string> args = new List<string>();
 
@@ -94,6 +94,12 @@ namespace Armada.Runtimes
             {
                 args.Add("--model");
                 args.Add(model);
+            }
+
+            if (!String.IsNullOrEmpty(finalMessageFilePath))
+            {
+                args.Add("--output-last-message");
+                args.Add(finalMessageFilePath);
             }
 
             args.Add(prompt);

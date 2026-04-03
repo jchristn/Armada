@@ -16,7 +16,7 @@ namespace Armada.Test.Runtimes.Suites
 
             public string Command() => GetCommand();
 
-            public List<string> Args(string prompt, string? model = null) => BuildArguments(prompt, model);
+            public List<string> Args(string prompt, string? model = null, string? finalMessageFilePath = null) => BuildArguments(prompt, model, finalMessageFilePath);
         }
 
         private InspectableCodexRuntime CreateRuntime()
@@ -81,6 +81,15 @@ namespace Armada.Test.Runtimes.Suites
                 int modelIndex = args.IndexOf("--model");
                 AssertTrue(modelIndex >= 0);
                 AssertEqual("gpt-5.4", args[modelIndex + 1]);
+            });
+
+            await RunTest("BuildArguments Includes Final Message Path When Supplied", () =>
+            {
+                InspectableCodexRuntime runtime = CreateRuntime();
+                List<string> args = runtime.Args("test prompt", "gpt-5.4", "C:/temp/final-message.txt");
+                int outputIndex = args.IndexOf("--output-last-message");
+                AssertTrue(outputIndex >= 0);
+                AssertEqual("C:/temp/final-message.txt", args[outputIndex + 1]);
             });
 
             await RunTest("Windows Command Resolves Cmd Wrapper", () =>

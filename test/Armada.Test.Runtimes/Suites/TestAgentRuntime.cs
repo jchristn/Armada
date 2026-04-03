@@ -22,6 +22,6 @@ namespace Armada.Test.Runtimes.Suites
 
         protected override string GetCommand() => CommandOverride;
 
-        protected override List<string> BuildArguments(string prompt, string? model) => ArgsOverride;
+        protected override List<string> BuildArguments(string prompt, string? model, string? finalMessageFilePath) => ArgsOverride;
     }
 }

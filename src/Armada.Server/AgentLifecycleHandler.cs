@@ -44,6 +44,11 @@ namespace Armada.Server
         private System.Collections.Concurrent.ConcurrentDictionary<string, DateTime> _MissionHeartbeatWrites = new System.Collections.Concurrent.ConcurrentDictionary<string, DateTime>();
 
         /// <summary>
+        /// Tracks per-mission final response artifacts so canonical agent output can be recovered even if live streaming is noisy.
+        /// </summary>
+        private System.Collections.Concurrent.ConcurrentDictionary<string, string> _MissionFinalMessageFiles = new System.Collections.Concurrent.ConcurrentDictionary<string, string>();
+
+        /// <summary>
         /// Tracks launches that have started but have not yet completed HandleLaunchAgentAsync registration.
         /// This closes the race where a fast process can emit output or exit before the PID mapping is written.
         /// </summary>
@@ -123,12 +128,34 @@ namespace Armada.Server
         public string? GetAndClearMissionOutput(string missionId)
         {
             if (String.IsNullOrEmpty(missionId)) return null;
+            string? streamedOutput = null;
             if (_MissionOutput.TryRemove(missionId, out System.Text.StringBuilder? sb))
             {
-                string output = sb.ToString().Trim();
-                return String.IsNullOrEmpty(output) ? null : output;
+                streamedOutput = sb.ToString().Trim();
+                if (String.IsNullOrEmpty(streamedOutput))
+                    streamedOutput = null;
             }
-            return null;
+
+            if (_MissionFinalMessageFiles.TryRemove(missionId, out string? finalMessageFilePath) &&
+                !String.IsNullOrEmpty(finalMessageFilePath))
+            {
+                try
+                {
+                    if (File.Exists(finalMessageFilePath))
+                    {
+                        string finalMessage = File.ReadAllText(finalMessageFilePath).Trim();
+                        try { File.Delete(finalMessageFilePath); } catch { }
+                        if (!String.IsNullOrEmpty(finalMessage))
+                            return finalMessage;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _Logging.Warn(_Header + "error reading final message artifact for mission " + missionId + ": " + ex.Message);
+                }
+            }
+
+            return streamedOutput;
         }
 
         /// <summary>
@@ -336,6 +363,16 @@ namespace Armada.Server
 
             string missionLogDir = Path.Combine(_Settings.LogDirectory, "missions");
             string logFilePath = Path.Combine(missionLogDir, mission.Id + ".log");
+            string finalMessageDir = Path.Combine(_Settings.LogDirectory, "final-messages");
+            Directory.CreateDirectory(finalMessageDir);
+            string finalMessageFilePath = Path.Combine(finalMessageDir, mission.Id + ".txt");
+            try
+            {
+                if (File.Exists(finalMessageFilePath))
+                    File.Delete(finalMessageFilePath);
+            }
+            catch { }
+            _MissionFinalMessageFiles[mission.Id] = finalMessageFilePath;
             string captainLogDir = Path.Combine(_Settings.LogDirectory, "captains");
             Directory.CreateDirectory(captainLogDir);
             string captainLogPointer = Path.Combine(captainLogDir, captain.Id + ".current");
@@ -348,11 +385,13 @@ namespace Armada.Server
                     dock.WorktreePath ?? throw new InvalidOperationException("Dock worktree path is null"),
                     prompt,
                     logFilePath: logFilePath,
+                    finalMessageFilePath: finalMessageFilePath,
                     model: captain.Model).ConfigureAwait(false);
             }
             catch
             {
                 _PendingLaunches.TryRemove(launchKey, out _);
+                _MissionFinalMessageFiles.TryRemove(mission.Id, out _);
                 throw;
             }
 

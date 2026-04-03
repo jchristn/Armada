@@ -40,6 +40,7 @@ namespace Armada.Runtimes.Interfaces
         /// <param name="prompt">Initial prompt or mission description.</param>
         /// <param name="environment">Additional environment variables.</param>
         /// <param name="logFilePath">Optional path to write agent output log.</param>
+        /// <param name="finalMessageFilePath">Optional path to write the agent's final response artifact.</param>
         /// <param name="model">Optional model override.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>Process ID of the started agent.</returns>
@@ -48,6 +49,7 @@ namespace Armada.Runtimes.Interfaces
             string prompt,
             Dictionary<string, string>? environment = null,
             string? logFilePath = null,
+            string? finalMessageFilePath = null,
             string? model = null,
             CancellationToken token = default);
 

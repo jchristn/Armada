@@ -72,7 +72,7 @@ namespace Armada.Runtimes
         /// <summary>
         /// Build Gemini CLI arguments.
         /// </summary>
-        protected override List<string> BuildArguments(string prompt, string? model)
+        protected override List<string> BuildArguments(string prompt, string? model, string? finalMessageFilePath)
         {
             List<string> args = new List<string>();
 

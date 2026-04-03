@@ -66,7 +66,7 @@ namespace Armada.Runtimes
         /// <summary>
         /// Build Cursor agent CLI arguments.
         /// </summary>
-        protected override List<string> BuildArguments(string prompt, string? model)
+        protected override List<string> BuildArguments(string prompt, string? model, string? finalMessageFilePath)
         {
             List<string> args = new List<string>();
 

@@ -14,7 +14,7 @@ namespace Armada.Test.Runtimes.Suites
             {
             }
 
-            public List<string> Args(string prompt, string? model = null) => BuildArguments(prompt, model);
+            public List<string> Args(string prompt, string? model = null, string? finalMessageFilePath = null) => BuildArguments(prompt, model, finalMessageFilePath);
         }
 
         private InspectableClaudeCodeRuntime CreateRuntime()

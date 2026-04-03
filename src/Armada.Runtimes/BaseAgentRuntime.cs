@@ -68,6 +68,7 @@ namespace Armada.Runtimes
         /// <param name="prompt">Prompt/instructions for the agent.</param>
         /// <param name="environment">Optional environment variables.</param>
         /// <param name="logFilePath">Optional path to write agent stdout/stderr output.</param>
+        /// <param name="finalMessageFilePath">Optional path to write the agent's final response artifact.</param>
         /// <param name="model">Optional model override.</param>
         /// <param name="token">Cancellation token.</param>
         public virtual async Task<int> StartAsync(
@@ -75,6 +76,7 @@ namespace Armada.Runtimes
             string prompt,
             Dictionary<string, string>? environment = null,
             string? logFilePath = null,
+            string? finalMessageFilePath = null,
             string? model = null,
             CancellationToken token = default)
         {
@@ -82,7 +84,7 @@ namespace Armada.Runtimes
             if (String.IsNullOrEmpty(prompt)) throw new ArgumentNullException(nameof(prompt));
 
             string command = GetCommand();
-            List<string> args = BuildArguments(prompt, model);
+            List<string> args = BuildArguments(prompt, model, finalMessageFilePath);
 
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
@@ -253,6 +255,11 @@ namespace Armada.Runtimes
         }
 
         /// <summary>
+        /// Build runtime-specific command-line arguments.
+        /// </summary>
+        protected abstract List<string> BuildArguments(string prompt, string? model, string? finalMessageFilePath);
+
+        /// <summary>
         /// Check if a process is still running.
         /// </summary>
         public virtual async Task<bool> IsRunningAsync(int processId, CancellationToken token = default)
@@ -276,11 +283,6 @@ namespace Armada.Runtimes
         /// Get the command to execute for this runtime.
         /// </summary>
         protected abstract string GetCommand();
-
-        /// <summary>
-        /// Build the argument list for launching the agent with the given prompt.
-        /// </summary>
-        protected abstract List<string> BuildArguments(string prompt, string? model);
 
         /// <summary>
         /// Whether the runtime expects the prompt to be written to stdin instead of passed as a CLI argument.
