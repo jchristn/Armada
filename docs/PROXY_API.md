@@ -7,12 +7,14 @@ This document describes the first shipped Armada proxy API surface in `v0.6.0`.
 `v0.6.0` includes:
 
 - websocket tunnel termination at `/tunnel`
+- challenge-based browser login using the shared proxy password
 - in-memory instance registration keyed by `instanceId`
 - live instance summary and detail endpoints
 - a mobile-first remote operations shell served at `/`
 - focused remote inspection endpoints for activity, missions, voyages, captains, logs, and diffs
 - bounded remote management endpoints for fleets, vessels, voyages, missions, and captain control
 - live request/response forwarding for Armada health, status, detail snapshots, and management actions
+- tunnel handshake validation using shared-password proofs plus optional enrollment-token validation
 
 `v0.6.0` does not yet include:
 
@@ -49,6 +51,7 @@ Configuration is read from the `ArmadaProxy` section:
     ],
     "requireEnrollmentToken": false,
     "enrollmentTokens": [],
+    "password": "armadaadmin",
     "handshakeTimeoutSeconds": 15,
     "staleAfterSeconds": 90,
     "requestTimeoutSeconds": 20,
@@ -56,6 +59,57 @@ Configuration is read from the `ArmadaProxy` section:
   }
 }
 ```
+
+---
+
+## Authentication Model
+
+The proxy now exposes a small auth surface for the browser app:
+
+- `GET /api/v1/auth/challenge`
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/logout`
+
+`GET /api/v1/status/health` remains unauthenticated.
+
+All other `/api/v1/*` routes require the `X-Armada-Proxy-Session` header, obtained from `POST /api/v1/auth/login`.
+
+The browser does not send the raw shared password. It first requests a nonce from `/api/v1/auth/challenge`, computes a SHA-256 proof in the browser, and submits that proof to `/api/v1/auth/login`.
+
+If `ArmadaProxy.password` is omitted or blank, the proxy defaults it to `armadaadmin`.
+
+### GET /api/v1/auth/challenge
+
+Returns a one-time challenge for browser login.
+
+```json
+{
+  "nonce": "4f3a0c7a8f6c49d9b6711d2c1a7b5e90",
+  "expiresUtc": "2026-04-04T05:10:00Z"
+}
+```
+
+### POST /api/v1/auth/login
+
+Validates the browser proof and returns a short-lived session token.
+
+```json
+{
+  "nonce": "4f3a0c7a8f6c49d9b6711d2c1a7b5e90",
+  "proofSha256": "8f5c4e1e1d7b5d8b2f6c6c987bfb76f5d55a75b8b940f882c817d39de42d83cc"
+}
+```
+
+```json
+{
+  "sessionToken": "0f34455311b54e719f50927df5ecdfd798f8f27ed4ae45e2a73c0c3b2d194f73",
+  "expiresUtc": "2026-04-04T17:05:00Z"
+}
+```
+
+### POST /api/v1/auth/logout
+
+Invalidates the current browser session identified by `X-Armada-Proxy-Session`.
 
 ---
 
@@ -88,7 +142,7 @@ Returns proxy process health and instance counts.
   "healthy": true,
   "product": "Armada.Proxy",
   "version": "0.6.0",
-  "protocolVersion": "2026-04-03",
+  "protocolVersion": "2026-04-04",
   "port": 7893,
   "startedUtc": "2026-04-03T21:00:00Z",
   "instances": {
@@ -112,7 +166,7 @@ Returns summary rows for all known instances.
       "instanceId": "armada-1f2e3d4c5b6a",
       "state": "connected",
       "armadaVersion": "0.6.0",
-      "protocolVersion": "2026-04-03",
+      "protocolVersion": "2026-04-04",
       "capabilities": [
         "remoteControl.handshake",
         "remoteControl.heartbeat",
@@ -152,7 +206,7 @@ Returns the current summary plus recent inbound event history for an instance.
     "instanceId": "armada-1f2e3d4c5b6a",
     "state": "connected",
     "armadaVersion": "0.6.0",
-    "protocolVersion": "2026-04-03",
+    "protocolVersion": "2026-04-04",
     "capabilities": [
       "remoteControl.handshake",
       "remoteControl.heartbeat",
@@ -424,7 +478,8 @@ See [docs/TUNNEL_PROTOCOL.md](TUNNEL_PROTOCOL.md) for envelope details.
 ## Current Guardrails
 
 - the registry is process-local and in-memory
-- only static enrollment-token validation is supported
+- browser API access is protected by a shared-password session gate, not a multi-user identity model
+- tunnel registration requires a valid shared-password proof and optional enrollment-token validation
 - routed requests currently support:
   - `armada.instance.summary`
   - `armada.fleets.list`
@@ -457,6 +512,6 @@ See [docs/TUNNEL_PROTOCOL.md](TUNNEL_PROTOCOL.md) for envelope details.
   - `armada.status.snapshot`
   - `armada.status.health`
 - recent event history is bounded by `maxRecentEvents`
-- destructive actions are client-confirmed in the remote shell, but there is no proxy authn/authz or policy engine yet; this is still an implementation-stage operator service
+- destructive actions are client-confirmed in the remote shell, but there is still no per-user authz or policy engine; this remains an implementation-stage operator service
 
 

@@ -56,6 +56,7 @@ interface RemoteControlSettings {
   tunnelUrl: string | null;
   instanceId: string | null;
   enrollmentToken: string | null;
+  password: string | null;
   connectTimeoutSeconds: number;
   heartbeatIntervalSeconds: number;
   reconnectBaseDelaySeconds: number;
@@ -87,6 +88,8 @@ interface McpClientReference {
   location: string;
 }
 
+type RemoteSecretField = 'enrollmentToken' | 'password';
+
 const DEFAULT_REMOTE_TUNNEL_URL = 'http://proxy.armadago.ai:7893/tunnel';
 
 const MCP_CLIENTS: McpClientReference[] = [
@@ -107,6 +110,7 @@ function getDefaultRemoteControlSettings(): RemoteControlSettings {
     tunnelUrl: DEFAULT_REMOTE_TUNNEL_URL,
     instanceId: null,
     enrollmentToken: null,
+    password: 'armadaadmin',
     connectTimeoutSeconds: 15,
     heartbeatIntervalSeconds: 30,
     reconnectBaseDelaySeconds: 5,
@@ -159,6 +163,7 @@ export default function Server() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [backupLoading, setBackupLoading] = useState(false);
+  const [revealedRemoteField, setRevealedRemoteField] = useState<RemoteSecretField | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
     message: string;
@@ -170,6 +175,14 @@ export default function Server() {
   const showToast = useCallback((severity: Severity, msg: string) => {
     pushToast(severity, msg);
   }, [pushToast]);
+
+  function beginRevealRemoteField(field: RemoteSecretField) {
+    setRevealedRemoteField(field);
+  }
+
+  function endRevealRemoteField() {
+    setRevealedRemoteField(null);
+  }
 
   const loadData = useCallback(async () => {
     try {
@@ -712,20 +725,80 @@ export default function Server() {
             </div>
             <div className="form-group">
               <label>Enrollment Token</label>
-              <input
-                type="password"
-                value={settings.remoteControl.enrollmentToken ?? ''}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    remoteControl: {
-                      ...settings.remoteControl,
-                      enrollmentToken: e.target.value || null,
-                    },
-                  })
-                }
-                placeholder="Optional bootstrap token"
-              />
+              <div className="settings-secret-field">
+                <input
+                  type={revealedRemoteField === 'enrollmentToken' ? 'text' : 'password'}
+                  value={settings.remoteControl.enrollmentToken ?? ''}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      remoteControl: {
+                        ...settings.remoteControl,
+                        enrollmentToken: e.target.value || null,
+                      },
+                    })
+                  }
+                  placeholder="Optional bootstrap token"
+                />
+                <button
+                  type="button"
+                  className="settings-secret-toggle"
+                  aria-label={revealedRemoteField === 'enrollmentToken' ? 'Hide enrollment token' : 'Show enrollment token'}
+                  title={revealedRemoteField === 'enrollmentToken' ? 'Hide enrollment token' : 'Show enrollment token'}
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    beginRevealRemoteField('enrollmentToken');
+                  }}
+                  onPointerUp={endRevealRemoteField}
+                  onPointerLeave={endRevealRemoteField}
+                  onPointerCancel={endRevealRemoteField}
+                  onBlur={endRevealRemoteField}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Shared Password</label>
+              <div className="settings-secret-field">
+                <input
+                  type={revealedRemoteField === 'password' ? 'text' : 'password'}
+                  value={settings.remoteControl.password ?? ''}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      remoteControl: {
+                        ...settings.remoteControl,
+                        password: e.target.value,
+                      },
+                    })
+                  }
+                  placeholder="Defaults to armadaadmin"
+                  title="Shared password used by Armada.Proxy browser login and the outbound remote tunnel."
+                />
+                <button
+                  type="button"
+                  className="settings-secret-toggle"
+                  aria-label={revealedRemoteField === 'password' ? 'Hide shared password' : 'Show shared password'}
+                  title={revealedRemoteField === 'password' ? 'Hide shared password' : 'Show shared password'}
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    beginRevealRemoteField('password');
+                  }}
+                  onPointerUp={endRevealRemoteField}
+                  onPointerLeave={endRevealRemoteField}
+                  onPointerCancel={endRevealRemoteField}
+                  onBlur={endRevealRemoteField}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                </button>
+              </div>
             </div>
             <div className="form-group">
               <label>Connect Timeout (seconds)</label>

@@ -154,14 +154,21 @@ select {
 }
 
 .theme-toggle-button {
-  min-width: 74px;
+  min-width: 40px;
+  width: 40px;
+  padding: 0;
 }
 
 .icon-button {
   min-width: 40px;
   width: 40px;
   padding: 0;
-  font-size: 1.1rem;
+}
+
+.icon-button svg {
+  width: 18px;
+  height: 18px;
+  display: block;
 }
 
 .tag,

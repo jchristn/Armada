@@ -28,6 +28,7 @@ namespace Armada.Proxy
         private readonly ProxySettings _Settings;
         private readonly bool _Quiet;
         private readonly InstanceRegistry _Registry;
+        private readonly ProxyAuthService _Auth;
         private readonly string _WwwrootDirectory;
         private readonly DateTime _StartUtc = DateTime.UtcNow;
 
@@ -44,6 +45,7 @@ namespace Armada.Proxy
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _Quiet = quiet;
             _Registry = new InstanceRegistry(_Settings);
+            _Auth = new ProxyAuthService(_Settings);
             _WwwrootDirectory = Path.Combine(AppContext.BaseDirectory, "wwwroot");
         }
 
@@ -140,11 +142,31 @@ namespace Armada.Proxy
                 _Logging.Debug(_Header + ctx.Request.Method + " " + ctx.Request.Url.RawWithQuery + " " + ctx.Response.StatusCode + " (" + elapsedMs.ToString("F2") + "ms)");
             });
 
+            server.Middleware.Add(async (ctx, next, token) =>
+            {
+                string path = ctx.Request.Url.RawWithoutQuery ?? String.Empty;
+                if (!IsProtectedApiPath(path))
+                {
+                    await next().ConfigureAwait(false);
+                    return;
+                }
+
+                string? sessionToken = ctx.Request.Headers.Get(Constants.ProxySessionTokenHeader);
+                if (_Auth.TryValidateSession(sessionToken, out DateTime? _))
+                {
+                    await next().ConfigureAwait(false);
+                    return;
+                }
+
+                await SendJsonErrorAsync(ctx, 401, "Proxy authentication required. Sign in again.").ConfigureAwait(false);
+            });
+
             server.UseOpenApi(api =>
             {
                 api.Info.Title = Constants.ProductName + " Proxy API";
                 api.Info.Version = Constants.ProductVersion;
                 api.Info.Description = "Remote proxy service for Armada instance discovery, tunnel routing, and bounded management actions.";
+                api.Tags.Add(new OpenApiTag { Name = "Auth", Description = "Proxy browser authentication routes" });
                 api.Tags.Add(new OpenApiTag { Name = "Status", Description = "Proxy health and status routes" });
                 api.Tags.Add(new OpenApiTag { Name = "Instances", Description = "Remote instance inspection and tunnel forwarding" });
             });
@@ -176,6 +198,43 @@ namespace Armada.Proxy
 
         private void RegisterApiRoutes(Webserver server)
         {
+            server.Get("/api/v1/auth/challenge", async (req) =>
+            {
+                (string nonce, DateTime expiresUtc) = _Auth.CreateChallenge();
+                return new
+                {
+                    nonce,
+                    expiresUtc
+                };
+            });
+
+            server.Post("/api/v1/auth/login", async (req) =>
+            {
+                JsonElement payload = ReadJsonBody(req);
+                string? nonce = GetOptionalProperty(payload, "nonce");
+                string? proofSha256 = GetOptionalProperty(payload, "proofSha256");
+
+                if (!_Auth.TryLogin(nonce, proofSha256, out string? sessionToken, out DateTime? expiresUtc, out string? error))
+                {
+                    req.Http.Response.StatusCode = 401;
+                    return new { error = error ?? "Proxy authentication failed." };
+                }
+
+                _Logging.Info(_Header + "browser login accepted");
+                return new
+                {
+                    token = sessionToken,
+                    expiresUtc = expiresUtc
+                };
+            });
+
+            server.Post("/api/v1/auth/logout", async (req) =>
+            {
+                string? sessionToken = req.Http.Request.Headers.Get(Constants.ProxySessionTokenHeader);
+                _Auth.Logout(sessionToken);
+                return new { success = true };
+            });
+
             server.Get("/api/v1/status/health", async (req) => BuildHealthPayload());
 
             server.Get("/api/v1/instances", async (req) =>
@@ -796,6 +855,39 @@ namespace Armada.Proxy
             }
 
             return null;
+        }
+
+        private static bool IsProtectedApiPath(string? path)
+        {
+            if (String.IsNullOrWhiteSpace(path))
+            {
+                return false;
+            }
+
+            if (!path.StartsWith("/api/v1/", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (path.StartsWith("/api/v1/auth/", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (String.Equals(path, "/api/v1/status/health", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        private static Task SendJsonErrorAsync(HttpContextBase ctx, int statusCode, string message)
+        {
+            ctx.Response.StatusCode = statusCode;
+            ctx.Response.ContentType = "application/json";
+            string json = JsonSerializer.Serialize(new { error = message }, RemoteTunnelProtocol.JsonOptions);
+            return ctx.Response.Send(json, ctx.Token);
         }
 
         private static List<string> GetCapabilities()

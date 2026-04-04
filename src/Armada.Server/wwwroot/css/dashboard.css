@@ -1821,10 +1821,8 @@ a:hover { text-decoration: underline; }
 }
 
 .tunnel-status-card {
-    display: inline-block;
-    width: fit-content;
-    min-width: 16rem;
-    max-width: 100%;
+    display: block;
+    width: 100%;
     margin-bottom: 0.75rem;
 }
 
@@ -1852,6 +1850,43 @@ a:hover { text-decoration: underline; }
     white-space: pre;
     overflow-x: auto;
     color: var(--text);
+}
+
+.settings-secret-field {
+    position: relative;
+}
+
+.settings-secret-field input {
+    margin: 0;
+    padding-right: 44px;
+}
+
+.settings-secret-toggle {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+}
+
+.settings-secret-toggle:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+}
+
+.settings-secret-toggle:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 
 .settings-actions {

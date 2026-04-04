@@ -107,7 +107,27 @@
                     </div>
                     <div class="form-group">
                         <label>Enrollment Token</label>
-                        <input type="password" x-model="serverSettings.remoteControl.enrollmentToken" placeholder="Optional bootstrap token">
+                        <div class="settings-secret-field">
+                            <input :type="revealedRemoteField === 'enrollmentToken' ? 'text' : 'password'" x-model="serverSettings.remoteControl.enrollmentToken" placeholder="Optional bootstrap token">
+                            <button type="button" class="settings-secret-toggle" :aria-label="revealedRemoteField === 'enrollmentToken' ? 'Hide enrollment token' : 'Show enrollment token'" :title="revealedRemoteField === 'enrollmentToken' ? 'Hide enrollment token' : 'Show enrollment token'" @pointerdown.prevent="beginRevealRemoteField('enrollmentToken')" @pointerup="endRevealRemoteField()" @pointerleave="endRevealRemoteField()" @pointercancel="endRevealRemoteField()" @blur="endRevealRemoteField()">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"></path>
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Shared Password</label>
+                        <div class="settings-secret-field">
+                            <input :type="revealedRemoteField === 'password' ? 'text' : 'password'" x-model="serverSettings.remoteControl.password" placeholder="Defaults to armadaadmin" title="Shared password used by Armada.Proxy browser login and the outbound remote tunnel.">
+                            <button type="button" class="settings-secret-toggle" :aria-label="revealedRemoteField === 'password' ? 'Hide shared password' : 'Show shared password'" :title="revealedRemoteField === 'password' ? 'Hide shared password' : 'Show shared password'" @pointerdown.prevent="beginRevealRemoteField('password')" @pointerup="endRevealRemoteField()" @pointerleave="endRevealRemoteField()" @pointercancel="endRevealRemoteField()" @blur="endRevealRemoteField()">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"></path>
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label>Connect Timeout (seconds)</label>

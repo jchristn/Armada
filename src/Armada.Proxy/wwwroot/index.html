@@ -17,16 +17,23 @@
             <div class="eyebrow">Armada</div>
           </div>
         </div>
-        <button id="loginThemeToggleButton" type="button" class="button theme-toggle-button">Dark</button>
+        <button id="loginThemeToggleButton" type="button" class="button icon-button theme-toggle-button" aria-label="Toggle theme" title="Toggle theme">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 1 0 9.8 9.8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+        </button>
       </div>
 
       <p class="login-copy">
-        Enter your deployment ID.
+        Enter your deployment ID and shared password.
       </p>
 
       <form id="loginForm" class="form-stack login-form">
         <label class="field">
           <input id="loginInstanceId" type="text" placeholder="armada-1f2e3d4c5b6a" aria-label="Deployment ID" autocomplete="off" spellcheck="false">
+        </label>
+        <label class="field">
+          <input id="loginPassword" type="password" placeholder="Shared password (defaults to armadaadmin)" aria-label="Shared password" autocomplete="current-password" spellcheck="false">
         </label>
 
         <div class="form-actions">
@@ -40,7 +47,6 @@
       <section class="login-available card-block">
         <div class="section-head">
           <div>
-            <h3>Connected Deployments</h3>
             <p class="text-muted">No deployments available.</p>
           </div>
           <span id="instanceCount" class="pill">0</span>
@@ -91,7 +97,11 @@
           <span id="currentDeploymentState" class="tag idle">Offline</span>
         </div>
         <div class="top-bar-actions">
-          <button id="themeToggleButton" type="button" class="button theme-toggle-button">Dark</button>
+          <button id="themeToggleButton" type="button" class="button icon-button theme-toggle-button" aria-label="Toggle theme" title="Toggle theme">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 1 0 9.8 9.8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+          </button>
           <button id="refreshButton" type="button" class="button icon-button" aria-label="Refresh deployment" title="Refresh deployment">&#8635;</button>
           <button id="openDispatchButton" type="button" class="button button-primary">Dispatch</button>
           <button id="switchDeploymentButton" type="button" class="button">Logout</button>

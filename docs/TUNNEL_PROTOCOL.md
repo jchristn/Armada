@@ -8,7 +8,7 @@ This document describes the shipped tunnel contract between `Armada.Server` and 
 
 - outbound websocket tunnel initiation from Armada
 - proxy websocket termination at `/tunnel`
-- handshake with protocol version, instance ID, enrollment token, and capability manifest
+- handshake with protocol version, instance ID, shared-password proof, optional enrollment token, and capability manifest
 - request/response correlation IDs
 - event forwarding from Armada to the proxy
 - bounded proxy management routing for fleets, vessels, voyages, missions, and captain control
@@ -72,12 +72,15 @@ The first message from Armada must be:
   "type": "request",
   "correlationId": "5a9b9ed0cc4343e5882e5f4abaf9d0e0",
   "method": "armada.tunnel.handshake",
-  "timestampUtc": "2026-04-03T18:30:00Z",
+  "timestampUtc": "2026-04-04T18:30:00Z",
   "payload": {
-    "protocolVersion": "2026-04-03",
+    "protocolVersion": "2026-04-04",
     "armadaVersion": "0.6.0",
     "instanceId": "armada-1f2e3d4c5b6a",
     "enrollmentToken": "optional-token",
+    "passwordProofSha256": "9c9be4bdc9b3d11f2c4a9a482d0f36d93fb7357db10ee3119af7c0a0c38e4d54",
+    "passwordNonce": "4f3a0c7a8f6c49d9b6711d2c1a7b5e90",
+    "passwordTimestampUtc": "2026-04-04T18:30:00Z",
     "capabilities": [
       "remoteControl.handshake",
       "remoteControl.heartbeat",
@@ -123,7 +126,14 @@ The proxy validates:
 
 - `instanceId` is present
 - `protocolVersion` is present
-- enrollment token rules from `ArmadaProxy`
+- `passwordProofSha256`, `passwordNonce`, and `passwordTimestampUtc` are present
+- the shared-password proof matches the configured `ArmadaProxy.password`
+- the password-proof timestamp is fresh enough to reject stale or replayed handshakes
+- enrollment token rules from `ArmadaProxy`, when enabled
+
+If either side leaves the password blank, it defaults to `armadaadmin`.
+
+The tunnel does not send the raw shared password. The proof is a SHA-256 value derived from the instance ID, timestamp, nonce, and the password hash.
 
 Accepted handshake response:
 
@@ -131,14 +141,14 @@ Accepted handshake response:
 {
   "type": "response",
   "correlationId": "5a9b9ed0cc4343e5882e5f4abaf9d0e0",
-  "timestampUtc": "2026-04-03T18:30:00Z",
+  "timestampUtc": "2026-04-04T18:30:00Z",
   "statusCode": 200,
   "success": true,
   "message": "Handshake accepted.",
   "payload": {
     "accepted": true,
     "proxyVersion": "0.6.0",
-    "protocolVersion": "2026-04-03",
+    "protocolVersion": "2026-04-04",
     "instanceId": "armada-1f2e3d4c5b6a",
     "message": "Handshake accepted.",
     "capabilities": [
@@ -185,11 +195,11 @@ Rejected handshake response:
 {
   "type": "response",
   "correlationId": "5a9b9ed0cc4343e5882e5f4abaf9d0e0",
-  "timestampUtc": "2026-04-03T18:30:00Z",
+  "timestampUtc": "2026-04-04T18:30:00Z",
   "statusCode": 401,
   "success": false,
   "errorCode": "handshake_rejected",
-  "message": "Handshake enrollment token is invalid."
+  "message": "Handshake shared password proof is invalid."
 }
 ```
 

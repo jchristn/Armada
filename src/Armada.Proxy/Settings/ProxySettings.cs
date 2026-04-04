@@ -66,6 +66,16 @@ namespace Armada.Proxy.Settings
         public List<string> EnrollmentTokens { get; set; } = new List<string>();
 
         /// <summary>
+        /// Shared password required for tunnel and browser authentication.
+        /// Defaults to "armadaadmin" when blank.
+        /// </summary>
+        public string? Password
+        {
+            get => _Password;
+            set => _Password = RemoteTunnelAuth.NormalizePassword(value);
+        }
+
+        /// <summary>
         /// Initial handshake timeout in seconds.
         /// </summary>
         public int HandshakeTimeoutSeconds
@@ -195,6 +205,7 @@ namespace Armada.Proxy.Settings
         private int _StaleAfterSeconds = Constants.DefaultProxyStaleAfterSeconds;
         private int _RequestTimeoutSeconds = Constants.DefaultProxyRequestTimeoutSeconds;
         private int _MaxRecentEvents = 50;
+        private string? _Password = Constants.DefaultRemoteTunnelPassword;
 
         #endregion
 
@@ -224,6 +235,7 @@ namespace Armada.Proxy.Settings
             if (TryGetInt(section, nameof(RequestTimeoutSeconds), out int requestTimeoutSeconds)) RequestTimeoutSeconds = requestTimeoutSeconds;
             if (TryGetInt(section, nameof(MaxRecentEvents), out int maxRecentEvents)) MaxRecentEvents = maxRecentEvents;
             if (TryGetSyslogServers(section, nameof(SyslogServers), out List<SyslogServer> syslogServers)) SyslogServers = syslogServers;
+            if (TryGetProperty(section, nameof(Password), out JsonElement password) && password.ValueKind == JsonValueKind.String) Password = password.GetString();
 
             if (TryGetProperty(section, nameof(EnrollmentTokens), out JsonElement enrollmentTokens) && enrollmentTokens.ValueKind == JsonValueKind.Array)
             {

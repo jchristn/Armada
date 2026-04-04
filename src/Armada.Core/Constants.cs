@@ -173,7 +173,12 @@ namespace Armada.Core
         /// <summary>
         /// Current remote tunnel protocol version.
         /// </summary>
-        public static readonly string RemoteTunnelProtocolVersion = "2026-04-03";
+        public static readonly string RemoteTunnelProtocolVersion = "2026-04-04";
+
+        /// <summary>
+        /// Default shared password for proxy/tunnel authentication.
+        /// </summary>
+        public static readonly string DefaultRemoteTunnelPassword = "armadaadmin";
 
         /// <summary>
         /// Default proxy handshake timeout in seconds.
@@ -209,6 +214,11 @@ namespace Armada.Core
         /// Header name for session tokens.
         /// </summary>
         public static readonly string SessionTokenHeader = "X-Token";
+
+        /// <summary>
+        /// Header name for authenticated Armada.Proxy browser sessions.
+        /// </summary>
+        public static readonly string ProxySessionTokenHeader = "X-Armada-Proxy-Session";
 
         /// <summary>
         /// Default tenant identifier.

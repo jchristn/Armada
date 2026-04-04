@@ -98,6 +98,7 @@ namespace Armada.Test.Unit.Suites.Services
                 AssertFalse(settings.RemoteControl.Enabled);
                 AssertEqual(Constants.DefaultRemoteConnectTimeoutSeconds, settings.RemoteControl.ConnectTimeoutSeconds);
                 AssertEqual(Constants.DefaultRemoteHeartbeatIntervalSeconds, settings.RemoteControl.HeartbeatIntervalSeconds);
+                AssertEqual(Constants.DefaultRemoteTunnelPassword, settings.RemoteControl.Password);
             });
 
             await RunTest("ArmadaSettings IdleCaptainTimeoutSeconds NegativeThrows", () =>
@@ -197,6 +198,7 @@ namespace Armada.Test.Unit.Suites.Services
                     original.RemoteControl.TunnelUrl = "https://control.example.com/tunnel";
                     original.RemoteControl.InstanceId = "armada-test-instance";
                     original.RemoteControl.EnrollmentToken = "token-123";
+                    original.RemoteControl.Password = "proxy-secret";
                     original.RemoteControl.ConnectTimeoutSeconds = 25;
                     original.RemoteControl.HeartbeatIntervalSeconds = 45;
                     original.RemoteControl.ReconnectBaseDelaySeconds = 8;
@@ -210,6 +212,7 @@ namespace Armada.Test.Unit.Suites.Services
                     AssertEqual("https://control.example.com/tunnel", loaded.RemoteControl.TunnelUrl);
                     AssertEqual("armada-test-instance", loaded.RemoteControl.InstanceId);
                     AssertEqual("token-123", loaded.RemoteControl.EnrollmentToken);
+                    AssertEqual("proxy-secret", loaded.RemoteControl.Password);
                     AssertEqual(25, loaded.RemoteControl.ConnectTimeoutSeconds);
                     AssertEqual(45, loaded.RemoteControl.HeartbeatIntervalSeconds);
                     AssertEqual(8, loaded.RemoteControl.ReconnectBaseDelaySeconds);

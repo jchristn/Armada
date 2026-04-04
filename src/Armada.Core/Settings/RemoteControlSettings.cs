@@ -1,5 +1,7 @@
 namespace Armada.Core.Settings
 {
+    using Armada.Core;
+
     /// <summary>
     /// Settings for Armada's outbound remote-control tunnel.
     /// </summary>
@@ -32,6 +34,16 @@ namespace Armada.Core.Settings
         /// Optional enrollment token sent during tunnel handshake.
         /// </summary>
         public string? EnrollmentToken { get; set; } = null;
+
+        /// <summary>
+        /// Shared password used to authenticate the tunnel with Armada.Proxy.
+        /// Defaults to "armadaadmin" when blank.
+        /// </summary>
+        public string? Password
+        {
+            get => _Password;
+            set => _Password = RemoteTunnelAuth.NormalizePassword(value);
+        }
 
         /// <summary>
         /// Connection timeout in seconds.
@@ -100,6 +112,7 @@ namespace Armada.Core.Settings
         private int _ReconnectBaseDelaySeconds = Constants.DefaultRemoteReconnectBaseDelaySeconds;
         private int _ReconnectMaxDelaySeconds = Constants.DefaultRemoteReconnectMaxDelaySeconds;
         private string? _TunnelUrl = Constants.DefaultRemoteTunnelUrl;
+        private string? _Password = Constants.DefaultRemoteTunnelPassword;
 
         #endregion
     }

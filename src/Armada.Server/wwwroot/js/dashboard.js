@@ -62,6 +62,7 @@ function dashboard() {
         // Notification history
         notificationHistory: [],
         unreadNotificationCount: 0,
+        revealedRemoteField: null,
 
         // Data
         status: {},
@@ -1402,6 +1403,14 @@ function dashboard() {
                 let result = await resp.json();
                 this.toast(result.Message || result.message || 'Restore complete', 'success');
             } catch (e) { this.toast('Restore failed: ' + e.message, 'error'); }
+        },
+
+        beginRevealRemoteField(field) {
+            this.revealedRemoteField = field;
+        },
+
+        endRevealRemoteField() {
+            this.revealedRemoteField = null;
         },
 
         getMcpRpcUrl() {

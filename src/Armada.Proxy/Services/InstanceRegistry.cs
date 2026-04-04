@@ -1,6 +1,7 @@
 namespace Armada.Proxy.Services
 {
     using System.Collections.Concurrent;
+    using Armada.Core;
     using Armada.Proxy.Models;
     using Armada.Proxy.Settings;
     using Armada.Core.Models;
@@ -47,6 +48,48 @@ namespace Armada.Proxy.Services
             if (String.IsNullOrWhiteSpace(payload.ProtocolVersion))
             {
                 error = "Handshake payload is missing protocolVersion.";
+                return false;
+            }
+
+            DateTime nowUtc = _UtcNow();
+            CleanupExpiredHandshakeProofs(nowUtc);
+
+            string submittedNonce = (payload.PasswordNonce ?? String.Empty).Trim().ToLowerInvariant();
+            string submittedTimestamp = (payload.PasswordTimestampUtc ?? String.Empty).Trim();
+            string submittedProof = (payload.PasswordProofSha256 ?? String.Empty).Trim().ToLowerInvariant();
+
+            if (String.IsNullOrWhiteSpace(submittedNonce) ||
+                String.IsNullOrWhiteSpace(submittedTimestamp) ||
+                String.IsNullOrWhiteSpace(submittedProof))
+            {
+                error = "Handshake password proof is required.";
+                return false;
+            }
+
+            if (!RemoteTunnelAuth.TryParseTimestampUtc(submittedTimestamp, out DateTime proofTimestampUtc))
+            {
+                error = "Handshake password proof timestamp is invalid.";
+                return false;
+            }
+
+            if (Math.Abs((nowUtc - proofTimestampUtc).TotalSeconds) > 120)
+            {
+                error = "Handshake password proof has expired.";
+                return false;
+            }
+
+            string replayKey = BuildHandshakeReplayKey(payload.InstanceId!, submittedTimestamp, submittedNonce, submittedProof);
+            if (!_HandshakeProofs.TryAdd(replayKey, nowUtc.AddMinutes(5)))
+            {
+                error = "Handshake password proof has already been used.";
+                return false;
+            }
+
+            string expectedProof = RemoteTunnelAuth.ComputeTunnelHandshakeProof(_Settings.Password, payload.InstanceId!, submittedTimestamp, submittedNonce);
+            if (!RemoteTunnelAuth.FixedTimeEqualsHex(submittedProof, expectedProof))
+            {
+                _HandshakeProofs.TryRemove(replayKey, out DateTime _);
+                error = "Handshake password proof is invalid.";
                 return false;
             }
 
@@ -185,6 +228,30 @@ namespace Armada.Proxy.Services
         private readonly ProxySettings _Settings;
         private readonly Func<DateTime> _UtcNow;
         private readonly ConcurrentDictionary<string, RemoteInstanceRecord> _Records = new ConcurrentDictionary<string, RemoteInstanceRecord>(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<string, DateTime> _HandshakeProofs = new ConcurrentDictionary<string, DateTime>(StringComparer.Ordinal);
+
+        #endregion
+
+        #region Private-Methods
+
+        private static string BuildHandshakeReplayKey(string instanceId, string timestampUtc, string nonce, string proofSha256)
+        {
+            return instanceId.Trim().ToLowerInvariant() + "|" +
+                timestampUtc.Trim() + "|" +
+                nonce.Trim().ToLowerInvariant() + "|" +
+                proofSha256.Trim().ToLowerInvariant();
+        }
+
+        private void CleanupExpiredHandshakeProofs(DateTime nowUtc)
+        {
+            foreach (KeyValuePair<string, DateTime> entry in _HandshakeProofs.ToArray())
+            {
+                if (entry.Value <= nowUtc)
+                {
+                    _HandshakeProofs.TryRemove(entry.Key, out DateTime _);
+                }
+            }
+        }
 
         #endregion
     }

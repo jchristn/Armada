@@ -28,6 +28,21 @@ namespace Armada.Core.Models
         public string? EnrollmentToken { get; set; } = null;
 
         /// <summary>
+        /// One-time SHA256 proof of the shared password.
+        /// </summary>
+        public string? PasswordProofSha256 { get; set; } = null;
+
+        /// <summary>
+        /// Nonce paired with the password proof.
+        /// </summary>
+        public string? PasswordNonce { get; set; } = null;
+
+        /// <summary>
+        /// UTC timestamp paired with the password proof.
+        /// </summary>
+        public string? PasswordTimestampUtc { get; set; } = null;
+
+        /// <summary>
         /// Capability names supported by the instance.
         /// </summary>
         public List<string> Capabilities { get; set; } = new List<string>();

@@ -70,6 +70,7 @@ Optional proxy configuration lives under `ArmadaProxy`, for example:
     ],
     "requireEnrollmentToken": false,
     "enrollmentTokens": [],
+    "password": "armadaadmin",
     "handshakeTimeoutSeconds": 15,
     "staleAfterSeconds": 90,
     "requestTimeoutSeconds": 20,
@@ -79,6 +80,13 @@ Optional proxy configuration lives under `ArmadaProxy`, for example:
 ```
 
 If you enable enrollment-token enforcement, the same token must be configured on the Armada instance.
+
+The proxy now also enforces a shared password for:
+
+- browser login to the proxy app
+- Armada tunnel handshake proof validation
+
+If `password` is missing or blank on either side, it defaults to `armadaadmin`.
 
 ## 2. Point Armada At The Proxy
 
@@ -99,6 +107,7 @@ Set:
 - `Tunnel URL`: for example `ws://localhost:7893/tunnel`
 - `Instance ID Override`: optional
 - `Enrollment Token`: optional unless required by the proxy
+- `Shared Password`: defaults to `armadaadmin` when blank
 - timeout and reconnect values as needed
 
 Then click `Save Remote Control Settings`.
@@ -111,6 +120,7 @@ Open `Server Settings` and fill in the same `Remote Control` fields:
 - tunnel URL
 - optional instance ID override
 - optional enrollment token
+- shared password
 - timeout and reconnect settings
 
 Then click `Save Remote Control Settings`.
@@ -126,6 +136,7 @@ Update your Armada settings file with:
     "tunnelUrl": "ws://localhost:7893/tunnel",
     "instanceId": null,
     "enrollmentToken": null,
+    "password": "armadaadmin",
     "connectTimeoutSeconds": 15,
     "heartbeatIntervalSeconds": 30,
     "reconnectBaseDelaySeconds": 5,
@@ -198,6 +209,8 @@ Open:
 ```text
 http://localhost:7893/
 ```
+
+Before the proxy shows connected deployments or forwards any management API calls, enter the shared password. If your Armada instance uses a custom remote-control password, the proxy `ArmadaProxy.password` value must match it.
 
 The shell is organized around:
 

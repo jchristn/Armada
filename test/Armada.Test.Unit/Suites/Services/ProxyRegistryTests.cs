@@ -36,20 +36,14 @@ namespace Armada.Test.Unit.Suites.Services
                 }, out string? missingProtocolError));
                 AssertContains("protocolVersion", missingProtocolError ?? String.Empty, "Missing protocolVersion should be rejected");
 
-                AssertFalse(registry.TryValidateHandshake(new RemoteTunnelHandshakePayload
-                {
-                    InstanceId = "armada-test",
-                    ProtocolVersion = Constants.RemoteTunnelProtocolVersion,
-                    EnrollmentToken = "wrong-token"
-                }, out string? badTokenError));
+                AssertFalse(registry.TryValidateHandshake(
+                    CreateHandshakePayload("armada-test", "wrong-token"),
+                    out string? badTokenError));
                 AssertContains("invalid", badTokenError ?? String.Empty, "Invalid token should be rejected");
 
-                AssertTrue(registry.TryValidateHandshake(new RemoteTunnelHandshakePayload
-                {
-                    InstanceId = "armada-test",
-                    ProtocolVersion = Constants.RemoteTunnelProtocolVersion,
-                    EnrollmentToken = "secret-token"
-                }, out string? _), "Valid handshake should be accepted");
+                AssertTrue(registry.TryValidateHandshake(
+                    CreateHandshakePayload("armada-test", "secret-token"),
+                    out string? _), "Valid handshake should be accepted");
             });
 
             await RunTest("RegisterHandshake TracksConnectedStaleAndOfflineStates", () =>
@@ -63,13 +57,12 @@ namespace Armada.Test.Unit.Suites.Services
                 RemoteInstanceSession session = new RemoteInstanceSession((envelope, token) => Task.CompletedTask);
 
                 registry.RegisterHandshake(
-                    new RemoteTunnelHandshakePayload
-                    {
-                        InstanceId = "armada-123",
-                        ProtocolVersion = Constants.RemoteTunnelProtocolVersion,
-                        ArmadaVersion = Constants.ProductVersion,
-                        Capabilities = new List<string> { "status.snapshot" }
-                    },
+                    CreateHandshakePayload(
+                        "armada-123",
+                        null,
+                        Constants.DefaultRemoteTunnelPassword,
+                        Constants.ProductVersion,
+                        new List<string> { "status.snapshot" }),
                     "127.0.0.1",
                     session);
 
@@ -102,12 +95,7 @@ namespace Armada.Test.Unit.Suites.Services
                 });
 
                 registry.RegisterHandshake(
-                    new RemoteTunnelHandshakePayload
-                    {
-                        InstanceId = "armada-req",
-                        ProtocolVersion = Constants.RemoteTunnelProtocolVersion,
-                        ArmadaVersion = Constants.ProductVersion
-                    },
+                    CreateHandshakePayload("armada-req", null, Constants.DefaultRemoteTunnelPassword, Constants.ProductVersion),
                     "127.0.0.1",
                     session);
 
@@ -142,12 +130,7 @@ namespace Armada.Test.Unit.Suites.Services
                 RemoteInstanceSession session = new RemoteInstanceSession((envelope, token) => Task.CompletedTask);
 
                 registry.RegisterHandshake(
-                    new RemoteTunnelHandshakePayload
-                    {
-                        InstanceId = "armada-events",
-                        ProtocolVersion = Constants.RemoteTunnelProtocolVersion,
-                        ArmadaVersion = Constants.ProductVersion
-                    },
+                    CreateHandshakePayload("armada-events", null, Constants.DefaultRemoteTunnelPassword, Constants.ProductVersion),
                     "127.0.0.1",
                     session);
 
@@ -162,6 +145,28 @@ namespace Armada.Test.Unit.Suites.Services
                 AssertEqual("mission.progress", recentEvents[0].Method);
                 AssertEqual("mission.completed", recentEvents[1].Method);
             });
+        }
+
+        private static RemoteTunnelHandshakePayload CreateHandshakePayload(
+            string instanceId,
+            string? enrollmentToken = null,
+            string? password = null,
+            string? armadaVersion = null,
+            List<string>? capabilities = null)
+        {
+            string timestampUtc = DateTime.UtcNow.ToString("O");
+            string nonce = RemoteTunnelAuth.CreateNonce();
+            return new RemoteTunnelHandshakePayload
+            {
+                InstanceId = instanceId,
+                ProtocolVersion = Constants.RemoteTunnelProtocolVersion,
+                ArmadaVersion = armadaVersion,
+                EnrollmentToken = enrollmentToken,
+                PasswordNonce = nonce,
+                PasswordTimestampUtc = timestampUtc,
+                PasswordProofSha256 = RemoteTunnelAuth.ComputeTunnelHandshakeProof(password ?? Constants.DefaultRemoteTunnelPassword, instanceId, timestampUtc, nonce),
+                Capabilities = capabilities ?? new List<string>()
+            };
         }
     }
 }

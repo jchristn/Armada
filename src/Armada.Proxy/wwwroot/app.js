@@ -1,5 +1,7 @@
 const DEPLOYMENT_STORAGE_KEY = 'armada_proxy_instance_id';
+const PROXY_SESSION_STORAGE_KEY = 'armada_proxy_session_token';
 const THEME_STORAGE_KEY = 'armada_proxy_theme';
+const PROXY_SESSION_HEADER = 'X-Armada-Proxy-Session';
 const BUILT_IN_PIPELINES = [
   { id: 'WorkerOnly', name: 'WorkerOnly' },
   { id: 'Reviewed', name: 'Reviewed' },
@@ -10,6 +12,7 @@ const BUILT_IN_PIPELINES = [
 const state = {
   instances: [],
   selectedInstanceId: null,
+  sessionToken: null,
   isAuthenticated: false,
   sidebarOpen: false,
   summary: null,
@@ -31,6 +34,7 @@ const elements = {
   loginLogo: document.getElementById('loginLogo'),
   loginForm: document.getElementById('loginForm'),
   loginInstanceId: document.getElementById('loginInstanceId'),
+  loginPassword: document.getElementById('loginPassword'),
   loginStatus: document.getElementById('loginStatus'),
   loginRefreshButton: document.getElementById('loginRefreshButton'),
   loginThemeToggleButton: document.getElementById('loginThemeToggleButton'),
@@ -135,6 +139,130 @@ function escapeHtml(text) {
     .replaceAll('"', '&quot;');
 }
 
+const SHA256_CONSTANTS = [
+  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
+  0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+  0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc,
+  0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
+  0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+  0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3,
+  0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5,
+  0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+  0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+];
+
+function rotateRight(value, bits) {
+  return (value >>> bits) | (value << (32 - bits));
+}
+
+// Fallback SHA-256 for non-secure HTTP contexts where SubtleCrypto is unavailable.
+function sha256HexFallback(message) {
+  const bytes = Array.from(new TextEncoder().encode(String(message)));
+  const bitLength = bytes.length * 8;
+  const highBits = Math.floor(bitLength / 0x100000000);
+  const lowBits = bitLength >>> 0;
+
+  bytes.push(0x80);
+  while ((bytes.length % 64) !== 56) bytes.push(0);
+
+  bytes.push((highBits >>> 24) & 0xff);
+  bytes.push((highBits >>> 16) & 0xff);
+  bytes.push((highBits >>> 8) & 0xff);
+  bytes.push(highBits & 0xff);
+  bytes.push((lowBits >>> 24) & 0xff);
+  bytes.push((lowBits >>> 16) & 0xff);
+  bytes.push((lowBits >>> 8) & 0xff);
+  bytes.push(lowBits & 0xff);
+
+  let h0 = 0x6a09e667;
+  let h1 = 0xbb67ae85;
+  let h2 = 0x3c6ef372;
+  let h3 = 0xa54ff53a;
+  let h4 = 0x510e527f;
+  let h5 = 0x9b05688c;
+  let h6 = 0x1f83d9ab;
+  let h7 = 0x5be0cd19;
+
+  for (let offset = 0; offset < bytes.length; offset += 64) {
+    const schedule = new Array(64).fill(0);
+    for (let index = 0; index < 16; index += 1) {
+      const base = offset + (index * 4);
+      schedule[index] = (
+        (bytes[base] << 24) |
+        (bytes[base + 1] << 16) |
+        (bytes[base + 2] << 8) |
+        bytes[base + 3]
+      ) | 0;
+    }
+
+    for (let index = 16; index < 64; index += 1) {
+      const sigma0 = rotateRight(schedule[index - 15], 7) ^ rotateRight(schedule[index - 15], 18) ^ (schedule[index - 15] >>> 3);
+      const sigma1 = rotateRight(schedule[index - 2], 17) ^ rotateRight(schedule[index - 2], 19) ^ (schedule[index - 2] >>> 10);
+      schedule[index] = (schedule[index - 16] + sigma0 + schedule[index - 7] + sigma1) | 0;
+    }
+
+    let a = h0;
+    let b = h1;
+    let c = h2;
+    let d = h3;
+    let e = h4;
+    let f = h5;
+    let g = h6;
+    let h = h7;
+
+    for (let index = 0; index < 64; index += 1) {
+      const sigma1 = rotateRight(e, 6) ^ rotateRight(e, 11) ^ rotateRight(e, 25);
+      const choice = (e & f) ^ (~e & g);
+      const temp1 = (h + sigma1 + choice + SHA256_CONSTANTS[index] + schedule[index]) | 0;
+      const sigma0 = rotateRight(a, 2) ^ rotateRight(a, 13) ^ rotateRight(a, 22);
+      const majority = (a & b) ^ (a & c) ^ (b & c);
+      const temp2 = (sigma0 + majority) | 0;
+
+      h = g;
+      g = f;
+      f = e;
+      e = (d + temp1) | 0;
+      d = c;
+      c = b;
+      b = a;
+      a = (temp1 + temp2) | 0;
+    }
+
+    h0 = (h0 + a) | 0;
+    h1 = (h1 + b) | 0;
+    h2 = (h2 + c) | 0;
+    h3 = (h3 + d) | 0;
+    h4 = (h4 + e) | 0;
+    h5 = (h5 + f) | 0;
+    h6 = (h6 + g) | 0;
+    h7 = (h7 + h) | 0;
+  }
+
+  return [h0, h1, h2, h3, h4, h5, h6, h7]
+    .map((value) => (value >>> 0).toString(16).padStart(8, '0'))
+    .join('');
+}
+
+async function sha256Hex(message) {
+  const text = String(message ?? '');
+  if (window.crypto?.subtle) {
+    const bytes = new TextEncoder().encode(text);
+    const digest = await window.crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest))
+      .map((value) => value.toString(16).padStart(2, '0'))
+      .join('');
+  }
+
+  return sha256HexFallback(text);
+}
+
 function formatTimestamp(value) {
   if (!value) return '-';
   const date = new Date(value);
@@ -169,6 +297,7 @@ function setFormStatus(element, message, kind) {
 }
 
 async function fetchJson(url, options = {}) {
+  const skipProxySession = Boolean(options.skipProxySession);
   const request = {
     cache: 'no-store',
     ...options,
@@ -180,6 +309,10 @@ async function fetchJson(url, options = {}) {
   if (request.body !== undefined && typeof request.body !== 'string') {
     request.headers['Content-Type'] = 'application/json';
     request.body = JSON.stringify(request.body);
+  }
+
+  if (!skipProxySession && state.sessionToken) {
+    request.headers[PROXY_SESSION_HEADER] = state.sessionToken;
   }
 
   const response = await fetch(url, request);
@@ -195,6 +328,9 @@ async function fetchJson(url, options = {}) {
   }
 
   if (!response.ok) {
+    if (response.status === 401 && !String(url).includes('/api/v1/auth/')) {
+      handleUnauthorizedProxySession(body.error || body.message || 'Proxy session expired.');
+    }
     throw new Error(body.error || body.message || `Request failed: ${response.status}`);
   }
 
@@ -215,6 +351,25 @@ function storeDeploymentId(instanceId) {
       localStorage.setItem(DEPLOYMENT_STORAGE_KEY, instanceId);
     } else {
       localStorage.removeItem(DEPLOYMENT_STORAGE_KEY);
+    }
+  } catch {
+  }
+}
+
+function getStoredProxySessionToken() {
+  try {
+    return localStorage.getItem(PROXY_SESSION_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function storeProxySessionToken(sessionToken) {
+  try {
+    if (sessionToken) {
+      localStorage.setItem(PROXY_SESSION_STORAGE_KEY, sessionToken);
+    } else {
+      localStorage.removeItem(PROXY_SESSION_STORAGE_KEY);
     }
   } catch {
   }
@@ -243,9 +398,23 @@ function getPreferredTheme() {
 }
 
 function syncThemeButtons() {
-  const nextLabel = state.theme === 'dark' ? 'Light' : 'Dark';
-  if (elements.themeToggleButton) elements.themeToggleButton.textContent = nextLabel;
-  if (elements.loginThemeToggleButton) elements.loginThemeToggleButton.textContent = nextLabel;
+  const nextTheme = state.theme === 'dark' ? 'light' : 'dark';
+  const icon = nextTheme === 'dark'
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 1 0 9.8 9.8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"></circle><path d="M12 2v2.2M12 19.8V22M4.93 4.93l1.56 1.56M17.51 17.51l1.56 1.56M2 12h2.2M19.8 12H22M4.93 19.07l1.56-1.56M17.51 6.49l1.56-1.56" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>';
+  const label = nextTheme === 'dark' ? 'Switch to dark mode' : 'Switch to light mode';
+
+  if (elements.themeToggleButton) {
+    elements.themeToggleButton.innerHTML = icon;
+    elements.themeToggleButton.setAttribute('aria-label', label);
+    elements.themeToggleButton.setAttribute('title', label);
+  }
+
+  if (elements.loginThemeToggleButton) {
+    elements.loginThemeToggleButton.innerHTML = icon;
+    elements.loginThemeToggleButton.setAttribute('aria-label', label);
+    elements.loginThemeToggleButton.setAttribute('title', label);
+  }
 }
 
 function syncThemeLogos() {
@@ -300,6 +469,26 @@ function getInstanceById(instanceId) {
 
 function setLoginStatus(message, kind) {
   setFormStatus(elements.loginStatus, message, kind);
+}
+
+function normalizeSharedPassword(password) {
+  return String(password || '').trim();
+}
+
+async function buildBrowserLoginProof(password, nonce) {
+  const normalizedPassword = normalizeSharedPassword(password);
+  if (!normalizedPassword) {
+    throw new Error('Enter the shared password to unlock this proxy.');
+  }
+  const passwordHash = await sha256Hex(normalizedPassword);
+  const normalizedNonce = String(nonce || '').trim().toLowerCase();
+  return sha256Hex(`proxy-browser-login:proxy:${normalizedNonce}:${passwordHash}`);
+}
+
+function setProxySession(sessionToken) {
+  state.sessionToken = sessionToken || null;
+  state.isAuthenticated = Boolean(state.sessionToken);
+  storeProxySessionToken(state.sessionToken);
 }
 
 function setDeploymentChrome() {
@@ -595,7 +784,27 @@ function resetProxyState() {
   resetMissionForm();
 }
 
+function returnToDeploymentSelection(message = '', prefill = '') {
+  state.selectedInstanceId = null;
+  storeDeploymentId(null);
+  resetProxyState();
+  renderSessionState();
+  elements.loginInstanceId.value = prefill || '';
+  if (message) setLoginStatus(message, 'error');
+  else setLoginStatus('', null);
+}
+
+function handleUnauthorizedProxySession(message) {
+  if (!state.isAuthenticated && !state.sessionToken) return;
+  logoutToLogin(message || 'Proxy session expired. Sign in again.', state.selectedInstanceId || elements.loginInstanceId.value || '');
+}
+
 async function authenticateInstance(instanceId) {
+  if (!state.isAuthenticated || !state.sessionToken) {
+    setLoginStatus('Enter the shared password to unlock this proxy first.', 'error');
+    return;
+  }
+
   const normalized = String(instanceId || '').trim();
   if (!normalized) {
     setLoginStatus('Deployment ID is required.', 'error');
@@ -628,12 +837,16 @@ async function authenticateInstance(instanceId) {
 }
 
 function logoutToLogin(message = '', prefill = '') {
-  state.isAuthenticated = false;
   state.selectedInstanceId = null;
+  setProxySession(null);
+  state.instances = [];
   storeDeploymentId(null);
   resetProxyState();
+  renderInstanceList();
+  elements.instanceCount.textContent = '0';
   renderSessionState();
   elements.loginInstanceId.value = prefill || '';
+  elements.loginPassword.value = '';
   if (message) setLoginStatus(message, 'error');
   else setLoginStatus('', null);
 }
@@ -662,7 +875,7 @@ async function loadInstances() {
   if (state.isAuthenticated && state.selectedInstanceId) {
     if (!getInstanceById(state.selectedInstanceId)) {
       const missingId = state.selectedInstanceId;
-      logoutToLogin(`Deployment "${missingId}" is no longer registered with this proxy.`, missingId);
+      returnToDeploymentSelection(`Deployment "${missingId}" is no longer registered with this proxy.`, missingId);
       return;
     }
     await loadSelectedInstance();
@@ -700,6 +913,40 @@ async function loadSelectedInstance() {
       <p>${escapeHtml(error instanceof Error ? error.message : 'Unable to load deployment summary through the proxy.')}</p>
     `;
     throw error;
+  }
+}
+
+async function unlockProxySession(password) {
+  const challenge = await fetchJson('/api/v1/auth/challenge', { skipProxySession: true });
+  const nonce = challenge.nonce || challenge.Nonce || '';
+  if (!nonce) {
+    throw new Error('Proxy did not return a login challenge.');
+  }
+
+  const proofSha256 = await buildBrowserLoginProof(password, nonce);
+  const login = await fetchJson('/api/v1/auth/login', {
+    method: 'POST',
+    body: { nonce, proofSha256 },
+    skipProxySession: true,
+  });
+
+  const sessionToken = login.token || login.Token || '';
+  if (!sessionToken) {
+    throw new Error('Proxy did not return a session token.');
+  }
+
+  setProxySession(sessionToken);
+  await loadInstances();
+}
+
+async function revokeProxySession() {
+  if (!state.sessionToken) {
+    return;
+  }
+
+  try {
+    await fetchJson('/api/v1/auth/logout', { method: 'POST' });
+  } catch {
   }
 }
 
@@ -1602,35 +1849,82 @@ function bindSidebarNavigation() {
 
 async function initializeProxyShell() {
   const storedDeploymentId = getStoredDeploymentId();
+  const storedSessionToken = getStoredProxySessionToken();
+
+  if (storedDeploymentId) {
+    elements.loginInstanceId.value = storedDeploymentId;
+  }
+
+  if (!storedSessionToken) {
+    renderSessionState();
+    return;
+  }
+
+  setProxySession(storedSessionToken);
 
   try {
     await loadInstances();
     renderSessionState();
 
     if (storedDeploymentId) {
-      elements.loginInstanceId.value = storedDeploymentId;
-      if (!getInstanceById(storedDeploymentId)) {
-        setLoginStatus(`Deployment "${storedDeploymentId}" is not currently connected to this proxy.`, 'error');
+      if (getInstanceById(storedDeploymentId)) {
+        await authenticateInstance(storedDeploymentId);
+        return;
       }
+
+      setLoginStatus(`Deployment "${storedDeploymentId}" is not currently connected to this proxy.`, 'error');
+      return;
+    }
+
+    if (state.instances.length > 0) {
+      setLoginStatus('Proxy unlocked. Select a deployment below.', 'success');
     }
   } catch {
-    renderSessionState();
-    setLoginStatus('Unable to load connected deployments right now.', 'error');
+    logoutToLogin('Proxy session expired. Sign in again.', storedDeploymentId || '');
   }
 }
 
 elements.loginForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  await authenticateInstance(elements.loginInstanceId.value);
+  try {
+    if (!state.isAuthenticated || !state.sessionToken) {
+      setLoginStatus('Validating shared password...', null);
+      await unlockProxySession(elements.loginPassword.value);
+    }
+
+    if (String(elements.loginInstanceId.value || '').trim()) {
+      await authenticateInstance(elements.loginInstanceId.value);
+      return;
+    }
+
+    if (state.instances.length > 0) {
+      setLoginStatus('Proxy unlocked. Select a deployment below.', 'success');
+    } else {
+      setLoginStatus('No deployments available.', null);
+    }
+  } catch (error) {
+    setLoginStatus(error instanceof Error ? error.message : 'Proxy authentication failed.', 'error');
+  }
 });
 
 elements.loginRefreshButton.addEventListener('click', async () => {
   try {
+    if (!state.isAuthenticated || !state.sessionToken) {
+      setLoginStatus('Validating shared password...', null);
+      await unlockProxySession(elements.loginPassword.value);
+      if (state.instances.length > 0) {
+        setLoginStatus('Proxy unlocked. Select a deployment below.', 'success');
+      } else {
+        setLoginStatus('No deployments available.', null);
+      }
+      return;
+    }
+
     setLoginStatus('Refreshing proxy registry...', null);
     await loadInstances();
     setLoginStatus('Registry refreshed.', 'success');
   } catch (error) {
-    setLoginStatus(error instanceof Error ? error.message : 'Failed to refresh proxy registry.', 'error');
+    setLoginStatus(error instanceof Error ? error.message : 'Failed to validate the proxy password.', 'error');
   }
 });
 
@@ -1672,11 +1966,13 @@ elements.missionBrowseRecentButton.addEventListener('click', loadRecentMissionLi
 elements.voyageBrowseForm.addEventListener('submit', submitVoyageBrowseForm);
 elements.voyageBrowseRecentButton.addEventListener('click', loadRecentVoyageList);
 
-elements.switchDeploymentButton.addEventListener('click', () => {
+elements.switchDeploymentButton.addEventListener('click', async () => {
+  await revokeProxySession();
   logoutToLogin('', state.selectedInstanceId || '');
 });
 
-elements.sidebarSwitchDeploymentButton.addEventListener('click', () => {
+elements.sidebarSwitchDeploymentButton.addEventListener('click', async () => {
+  await revokeProxySession();
   logoutToLogin('', state.selectedInstanceId || '');
 });
 
@@ -1724,6 +2020,6 @@ applyTheme(getPreferredTheme());
 renderSessionState();
 initializeProxyShell().catch(() => {
   renderSessionState();
-  elements.instanceList.innerHTML = '<div class="text-muted">Unable to load connected deployments right now.</div>';
-  setLoginStatus('Unable to load connected deployments right now.', 'error');
+  elements.instanceList.innerHTML = '';
+  setLoginStatus('Unable to initialize the proxy shell.', 'error');
 });

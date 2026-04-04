@@ -572,12 +572,17 @@ namespace Armada.Server
             RemoteTunnelCapabilityManifest capabilityManifest,
             CancellationToken token)
         {
+            string proofTimestampUtc = DateTime.UtcNow.ToString("O");
+            string proofNonce = RemoteTunnelAuth.CreateNonce();
             RemoteTunnelHandshakePayload payload = new RemoteTunnelHandshakePayload
             {
                 ProtocolVersion = capabilityManifest.ProtocolVersion,
                 ArmadaVersion = capabilityManifest.ArmadaVersion,
                 InstanceId = instanceId,
                 EnrollmentToken = settings.EnrollmentToken,
+                PasswordNonce = proofNonce,
+                PasswordTimestampUtc = proofTimestampUtc,
+                PasswordProofSha256 = RemoteTunnelAuth.ComputeTunnelHandshakeProof(settings.Password, instanceId, proofTimestampUtc, proofNonce),
                 Capabilities = new List<string>(capabilityManifest.Features)
             };
             await SendEnvelopeAsync(socket, RemoteTunnelProtocol.CreateRequest("armada.tunnel.handshake", payload), token).ConfigureAwait(false);
