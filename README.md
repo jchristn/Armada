@@ -889,7 +889,7 @@ v0.4.0 adds personas, pipelines, and prompt templates. The database schema is au
 
 ### v0.4.0 to v0.5.0
 
-v0.5.0 adds captain model selection, startup model validation, and mission runtime tracking. The database schema is automatically migrated on first startup (migrations 24-27). Key changes:
+v0.5.0 is focused on dispatch and pipeline stability. It adds captain model selection, startup model validation, mission runtime tracking, and a broad set of handoff, landing, cleanup, and workflow reliability improvements. The database schema is automatically migrated on first startup (migrations 24-27). Key changes:
 
 - New columns: `captains.model`, `missions.total_runtime_ms`
 - Captain model overrides are persisted across SQLite, MySQL, PostgreSQL, and SQL Server
@@ -900,7 +900,7 @@ v0.5.0 adds captain model selection, startup model validation, and mission runti
 
 ### v0.5.0 to v0.6.0
 
-v0.6.0 starts the remote-control foundation in Armada itself. This release adds the local outbound tunnel client, a first shipped `Armada.Proxy` service, tunnel telemetry, server/dashboard configuration surfaces, and a bounded remote management shell for day-one operator workflows. No database schema migration is required for this release.
+v0.6.0 is focused on remote access. This release adds the local outbound tunnel client, the first shipped `Armada.Proxy` service, tunnel telemetry, server/dashboard configuration surfaces, and a bounded remote management shell for day-one operator workflows. No database schema migration is required for this release.
 
 Key changes:
 

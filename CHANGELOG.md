@@ -6,7 +6,9 @@ All notable changes to Armada are documented in this file.
 
 ## v0.6.0
 
-### Remote Control Foundation
+Focus: remote access.
+
+### Remote Access
 - Added an experimental outbound remote-control tunnel foundation in `Armada.Server`
 - New `RemoteControl` settings are persisted in `settings.json` and exposed through `GET/PUT /api/v1/settings`
 - Health and status responses now expose `RemoteTunnel` telemetry including state, instance ID, latency, and last error
@@ -25,6 +27,13 @@ All notable changes to Armada are documented in this file.
 ---
 
 ## v0.5.0
+
+Focus: dispatch and pipeline stability.
+
+### Dispatch and Pipeline Stability
+- Hardened architect-to-worker handoff behavior, mission status freshness, branch cleanup, worktree cleanup, and landing paths
+- Improved mission and voyage telemetry so active work reports current state more reliably
+- Tightened dock/worktree safety to prevent dirty fresh docks and stale branch leakage
 
 ### Captains and Runtime Selection
 - Added optional `Model` on captains across SQLite, MySQL, PostgreSQL, and SQL Server
