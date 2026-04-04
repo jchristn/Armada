@@ -59,6 +59,8 @@ namespace Armada.Server
                     return await CreateVesselAsync(envelope, token).ConfigureAwait(false);
                 case "armada.vessel.update":
                     return await UpdateVesselAsync(envelope, token).ConfigureAwait(false);
+                case "armada.pipelines.list":
+                    return await ListPipelinesAsync(DeserializeQueryRequest(envelope), token).ConfigureAwait(false);
                 case "armada.voyages.list":
                     return await ListVoyagesAsync(DeserializeQueryRequest(envelope), token).ConfigureAwait(false);
                 case "armada.voyage.dispatch":
@@ -237,6 +239,23 @@ namespace Armada.Server
             vessel = await _Database.Vessels.CreateAsync(vessel, token).ConfigureAwait(false);
             await _EmitEventAsync("vessel.created", "Vessel created from proxy: " + vessel.Name, "vessel", vessel.Id, null, null, vessel.Id, null).ConfigureAwait(false);
             return Created(vessel, "Vessel created.");
+        }
+
+        private async Task<RemoteTunnelRequestResult> ListPipelinesAsync(RemoteTunnelQueryRequest request, CancellationToken token)
+        {
+            int limit = Clamp(request.Limit, 24, 1, 200);
+            List<Pipeline> rows = (await _Database.Pipelines.EnumerateAsync(token).ConfigureAwait(false))
+                .OrderByDescending(p => p.LastUpdateUtc)
+                .ThenByDescending(p => p.CreatedUtc)
+                .Take(limit)
+                .ToList();
+
+            return Ok(new
+            {
+                limit = limit,
+                count = rows.Count,
+                pipelines = rows
+            }, "Pipeline list captured.");
         }
 
         private async Task<RemoteTunnelRequestResult> UpdateVesselAsync(RemoteTunnelEnvelope envelope, CancellationToken token)

@@ -1,4 +1,11 @@
 const DEPLOYMENT_STORAGE_KEY = 'armada_proxy_instance_id';
+const THEME_STORAGE_KEY = 'armada_proxy_theme';
+const BUILT_IN_PIPELINES = [
+  { id: 'WorkerOnly', name: 'WorkerOnly' },
+  { id: 'Reviewed', name: 'Reviewed' },
+  { id: 'Tested', name: 'Tested' },
+  { id: 'FullPipeline', name: 'FullPipeline' },
+];
 
 const state = {
   instances: [],
@@ -6,23 +13,30 @@ const state = {
   isAuthenticated: false,
   sidebarOpen: false,
   summary: null,
-  detail: null,
   fleets: [],
   vessels: [],
+  pipelines: [],
+  theme: 'light',
   selectedFleetId: null,
   selectedVesselId: null,
   selectedMissionId: null,
+  editingFleet: null,
+  editingVessel: null,
+  editingMission: null,
+  detailModal: null,
 };
 
 const elements = {
   loginView: document.getElementById('loginView'),
-  appView: document.getElementById('appView'),
+  loginLogo: document.getElementById('loginLogo'),
   loginForm: document.getElementById('loginForm'),
   loginInstanceId: document.getElementById('loginInstanceId'),
   loginStatus: document.getElementById('loginStatus'),
   loginRefreshButton: document.getElementById('loginRefreshButton'),
+  loginThemeToggleButton: document.getElementById('loginThemeToggleButton'),
   instanceCount: document.getElementById('instanceCount'),
   instanceList: document.getElementById('instanceList'),
+  appView: document.getElementById('appView'),
   sidebar: document.getElementById('sidebar'),
   sidebarOverlay: document.getElementById('sidebarOverlay'),
   sidebarDeploymentId: document.getElementById('sidebarDeploymentId'),
@@ -33,7 +47,8 @@ const elements = {
   currentDeploymentLabel: document.getElementById('currentDeploymentLabel'),
   currentDeploymentState: document.getElementById('currentDeploymentState'),
   refreshButton: document.getElementById('refreshButton'),
-  refreshSummaryButton: document.getElementById('refreshSummaryButton'),
+  themeToggleButton: document.getElementById('themeToggleButton'),
+  openDispatchButton: document.getElementById('openDispatchButton'),
   emptyState: document.getElementById('emptyState'),
   instanceWorkspace: document.getElementById('instanceWorkspace'),
   summaryTitle: document.getElementById('summaryTitle'),
@@ -42,6 +57,9 @@ const elements = {
   activityFeed: document.getElementById('activityFeed'),
   missionList: document.getElementById('missionList'),
   voyageList: document.getElementById('voyageList'),
+  captainList: document.getElementById('captainList'),
+  fleetList: document.getElementById('fleetList'),
+  vesselList: document.getElementById('vesselList'),
   missionBrowseForm: document.getElementById('missionBrowseForm'),
   missionBrowseStatus: document.getElementById('missionBrowseStatus'),
   missionBrowseLimit: document.getElementById('missionBrowseLimit'),
@@ -54,13 +72,26 @@ const elements = {
   voyageBrowseLimit: document.getElementById('voyageBrowseLimit'),
   voyageBrowseRecentButton: document.getElementById('voyageBrowseRecentButton'),
   voyageBrowseStatusText: document.getElementById('voyageBrowseStatusText'),
-  captainList: document.getElementById('captainList'),
-  fleetList: document.getElementById('fleetList'),
-  vesselList: document.getElementById('vesselList'),
-  detailTitle: document.getElementById('detailTitle'),
-  detailSubtitle: document.getElementById('detailSubtitle'),
-  detailBody: document.getElementById('detailBody'),
+  openFleetModalButton: document.getElementById('openFleetModalButton'),
+  openVesselModalButton: document.getElementById('openVesselModalButton'),
   entityCardTemplate: document.getElementById('entityCardTemplate'),
+  detailModal: document.getElementById('detailModal'),
+  detailModalTitle: document.getElementById('detailModalTitle'),
+  detailModalSubtitle: document.getElementById('detailModalSubtitle'),
+  detailModalBody: document.getElementById('detailModalBody'),
+  dispatchModal: document.getElementById('dispatchModal'),
+  dispatchForm: document.getElementById('dispatchForm'),
+  dispatchVesselId: document.getElementById('dispatchVesselId'),
+  dispatchPipelineId: document.getElementById('dispatchPipelineId'),
+  dispatchPriority: document.getElementById('dispatchPriority'),
+  dispatchTitle: document.getElementById('dispatchTitle'),
+  dispatchDescription: document.getElementById('dispatchDescription'),
+  dispatchMissions: document.getElementById('dispatchMissions'),
+  dispatchSubmitButton: document.getElementById('dispatchSubmitButton'),
+  dispatchFormStatus: document.getElementById('dispatchFormStatus'),
+  fleetModal: document.getElementById('fleetModal'),
+  fleetModalTitle: document.getElementById('fleetModalTitle'),
+  fleetModalSubtitle: document.getElementById('fleetModalSubtitle'),
   fleetForm: document.getElementById('fleetForm'),
   fleetName: document.getElementById('fleetName'),
   fleetDescription: document.getElementById('fleetDescription'),
@@ -68,6 +99,9 @@ const elements = {
   fleetActive: document.getElementById('fleetActive'),
   fleetResetButton: document.getElementById('fleetResetButton'),
   fleetFormStatus: document.getElementById('fleetFormStatus'),
+  vesselModal: document.getElementById('vesselModal'),
+  vesselModalTitle: document.getElementById('vesselModalTitle'),
+  vesselModalSubtitle: document.getElementById('vesselModalSubtitle'),
   vesselForm: document.getElementById('vesselForm'),
   vesselFleetId: document.getElementById('vesselFleetId'),
   vesselName: document.getElementById('vesselName'),
@@ -79,14 +113,9 @@ const elements = {
   vesselActive: document.getElementById('vesselActive'),
   vesselResetButton: document.getElementById('vesselResetButton'),
   vesselFormStatus: document.getElementById('vesselFormStatus'),
-  dispatchForm: document.getElementById('dispatchForm'),
-  dispatchVesselId: document.getElementById('dispatchVesselId'),
-  dispatchTitle: document.getElementById('dispatchTitle'),
-  dispatchDescription: document.getElementById('dispatchDescription'),
-  dispatchPipelineId: document.getElementById('dispatchPipelineId'),
-  dispatchPipeline: document.getElementById('dispatchPipeline'),
-  dispatchMissions: document.getElementById('dispatchMissions'),
-  dispatchFormStatus: document.getElementById('dispatchFormStatus'),
+  missionModal: document.getElementById('missionModal'),
+  missionModalTitle: document.getElementById('missionModalTitle'),
+  missionModalSubtitle: document.getElementById('missionModalSubtitle'),
   missionForm: document.getElementById('missionForm'),
   missionTitle: document.getElementById('missionTitle'),
   missionDescription: document.getElementById('missionDescription'),
@@ -120,6 +149,16 @@ function badgeClass(value) {
 function renderBadge(text) {
   const value = String(text || 'unknown');
   return `<span class="badge ${badgeClass(value)}">${escapeHtml(value)}</span>`;
+}
+
+function renderStatusPill(label, value, extraClass = '') {
+  const className = badgeClass(value) || 'unknown';
+  return `
+    <span class="summary-meta-item ${extraClass}">
+      <span class="summary-meta-label">${escapeHtml(label)}</span>
+      <span class="summary-meta-value ${extraClass ? `summary-meta-value-${extraClass}` : ''} ${className}">${escapeHtml(value || '-')}</span>
+    </span>
+  `;
 }
 
 function setFormStatus(element, message, kind) {
@@ -178,8 +217,56 @@ function storeDeploymentId(instanceId) {
       localStorage.removeItem(DEPLOYMENT_STORAGE_KEY);
     }
   } catch {
-    // Ignore storage failures in private/incognito contexts.
   }
+}
+
+function getStoredTheme() {
+  try {
+    return localStorage.getItem(THEME_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function storeTheme(theme) {
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch {
+  }
+}
+
+function getPreferredTheme() {
+  const stored = getStoredTheme();
+  if (stored === 'light' || stored === 'dark') return stored;
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+  return 'light';
+}
+
+function syncThemeButtons() {
+  const nextLabel = state.theme === 'dark' ? 'Light' : 'Dark';
+  if (elements.themeToggleButton) elements.themeToggleButton.textContent = nextLabel;
+  if (elements.loginThemeToggleButton) elements.loginThemeToggleButton.textContent = nextLabel;
+}
+
+function syncThemeLogos() {
+  if (elements.loginLogo) {
+    elements.loginLogo.src = state.theme === 'dark'
+      ? '/img/logo-light-grey.png'
+      : '/img/logo-dark-grey.png';
+  }
+}
+
+function applyTheme(theme) {
+  state.theme = theme === 'dark' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', state.theme);
+  syncThemeButtons();
+  syncThemeLogos();
+}
+
+function toggleTheme() {
+  const nextTheme = state.theme === 'dark' ? 'light' : 'dark';
+  applyTheme(nextTheme);
+  storeTheme(nextTheme);
 }
 
 function getInstanceIdValue(instance) {
@@ -244,26 +331,268 @@ function openSidebar() {
 
 function renderSessionState() {
   const authenticated = state.isAuthenticated && Boolean(state.selectedInstanceId);
-
   elements.loginView.classList.toggle('hidden', authenticated);
   elements.appView.classList.toggle('hidden', !authenticated);
+  if (authenticated) setDeploymentChrome();
+  else closeSidebar();
+}
 
-  if (authenticated) {
-    setDeploymentChrome();
-  } else {
-    closeSidebar();
+function isAnyModalOpen() {
+  return document.querySelector('.modal-shell:not(.hidden)') !== null;
+}
+
+function openModal(element) {
+  if (!element) return;
+  element.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+  closeSidebar();
+}
+
+function closeModal(element) {
+  if (!element) return;
+  element.classList.add('hidden');
+  if (!isAnyModalOpen()) document.body.classList.remove('modal-open');
+}
+
+function closeModalById(id) {
+  if (!id) return;
+  const element = document.getElementById(id);
+  if (!element) return;
+  closeModal(element);
+  if (id === 'detailModal') state.detailModal = null;
+}
+
+function closeAllModals() {
+  document.querySelectorAll('.modal-shell').forEach((modal) => modal.classList.add('hidden'));
+  document.body.classList.remove('modal-open');
+  state.detailModal = null;
+}
+
+function buildOptionMarkup(rows, placeholder, getValue, getLabel) {
+  const options = [`<option value="">${escapeHtml(placeholder)}</option>`];
+  for (const row of rows) {
+    const value = String(getValue(row) ?? '');
+    const label = String(getLabel(row) ?? value);
+    options.push(`<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`);
   }
+  return options.join('');
+}
+
+function populateSelect(select, rows, placeholder, getValue, getLabel, selectedValue = '') {
+  if (!select) return;
+  select.innerHTML = buildOptionMarkup(rows, placeholder, getValue, getLabel);
+  select.value = selectedValue || '';
+}
+
+function vesselOptionLabel(vessel) {
+  const name = vessel?.name || vessel?.id || 'Unnamed vessel';
+  const id = vessel?.id ? ` | ${vessel.id}` : '';
+  return `${name}${id}`;
+}
+
+function pipelineOptionLabel(pipeline) {
+  const name = getPipelineNameValue(pipeline) || 'Unnamed pipeline';
+  const id = getPipelineIdValue(pipeline);
+  return id && id !== name ? `${name} | ${id}` : name;
+}
+
+function fleetOptionLabel(fleet) {
+  const name = fleet?.name || fleet?.id || 'Unnamed fleet';
+  const id = fleet?.id ? ` | ${fleet.id}` : '';
+  return `${name}${id}`;
+}
+
+function getPipelineIdValue(pipeline) {
+  return pipeline?.id || pipeline?.Id || pipeline?.name || pipeline?.Name || '';
+}
+
+function getPipelineNameValue(pipeline) {
+  return pipeline?.name || pipeline?.Name || pipeline?.id || pipeline?.Id || '';
+}
+
+function buildPipelineOptionRows() {
+  const rows = [];
+  const seenIds = new Set();
+  const seenNames = new Set();
+
+  const addPipeline = (pipeline) => {
+    const id = String(getPipelineIdValue(pipeline) || '').trim();
+    const name = String(getPipelineNameValue(pipeline) || '').trim();
+    if (!id && !name) return;
+
+    const normalizedId = id.toLowerCase();
+    const normalizedName = name.toLowerCase();
+    if ((normalizedId && seenIds.has(normalizedId)) || (normalizedName && seenNames.has(normalizedName))) return;
+
+    rows.push({
+      id: id || name,
+      name: name || id,
+    });
+
+    if (normalizedId) seenIds.add(normalizedId);
+    if (normalizedName) seenNames.add(normalizedName);
+  };
+
+  for (const pipeline of state.pipelines || []) addPipeline(pipeline);
+  for (const pipeline of BUILT_IN_PIPELINES) addPipeline(pipeline);
+  for (const row of [...(state.fleets || []), ...(state.vessels || [])]) {
+    if (row?.defaultPipelineId) addPipeline({ id: row.defaultPipelineId, name: row.defaultPipelineId });
+  }
+  for (const selectedValue of [
+    elements.dispatchPipelineId?.value,
+    elements.fleetDefaultPipelineId?.value,
+    elements.vesselDefaultPipelineId?.value,
+  ]) {
+    if (selectedValue) addPipeline({ id: selectedValue, name: selectedValue });
+  }
+
+  return rows.sort((left, right) => pipelineOptionLabel(left).localeCompare(pipelineOptionLabel(right)));
+}
+
+function populateFormSelects() {
+  const pipelineRows = buildPipelineOptionRows();
+  populateSelect(elements.dispatchVesselId, state.vessels, 'Select a vessel', (row) => row.id, vesselOptionLabel, elements.dispatchVesselId.value);
+  populateSelect(elements.dispatchPipelineId, pipelineRows, 'Use default pipeline', getPipelineIdValue, pipelineOptionLabel, elements.dispatchPipelineId.value);
+  populateSelect(elements.fleetDefaultPipelineId, pipelineRows, 'No default pipeline', getPipelineIdValue, pipelineOptionLabel, elements.fleetDefaultPipelineId.value);
+  populateSelect(elements.vesselFleetId, state.fleets, 'No fleet', (row) => row.id, fleetOptionLabel, elements.vesselFleetId.value);
+  populateSelect(elements.vesselDefaultPipelineId, pipelineRows, 'No default pipeline', getPipelineIdValue, pipelineOptionLabel, elements.vesselDefaultPipelineId.value);
+  populateSelect(elements.missionVesselId, state.vessels, 'Select a vessel', (row) => row.id, vesselOptionLabel, elements.missionVesselId.value);
+}
+
+function resetDispatchForm() {
+  elements.dispatchForm.reset();
+  populateFormSelects();
+  elements.dispatchPriority.value = '100';
+  setButtonBusy(elements.dispatchSubmitButton, false, 'Dispatch', 'Dispatching...');
+  setFormStatus(elements.dispatchFormStatus, '', null);
+}
+
+function populateFleetForm(fleet) {
+  state.selectedFleetId = fleet?.id || null;
+  state.editingFleet = fleet || null;
+  elements.fleetName.value = fleet?.name || '';
+  elements.fleetDescription.value = fleet?.description || '';
+  populateFormSelects();
+  elements.fleetDefaultPipelineId.value = fleet?.defaultPipelineId || '';
+  elements.fleetActive.checked = fleet?.active !== false;
+  setFormStatus(elements.fleetFormStatus, '', null);
+}
+
+function resetFleetForm() {
+  if (state.editingFleet && state.selectedFleetId) {
+    populateFleetForm(state.editingFleet);
+    return;
+  }
+
+  state.selectedFleetId = null;
+  state.editingFleet = null;
+  elements.fleetForm.reset();
+  populateFormSelects();
+  elements.fleetActive.checked = true;
+  setFormStatus(elements.fleetFormStatus, '', null);
+}
+
+function openFleetModal(fleet = null) {
+  populateFleetForm(fleet);
+  elements.fleetModalTitle.textContent = fleet ? 'Edit Fleet' : 'Add Fleet';
+  elements.fleetModalSubtitle.textContent = fleet?.id || 'Create a new fleet.';
+  openModal(elements.fleetModal);
+}
+
+function populateVesselForm(vessel) {
+  state.selectedVesselId = vessel?.id || null;
+  state.editingVessel = vessel || null;
+  elements.vesselName.value = vessel?.name || '';
+  elements.vesselRepoUrl.value = vessel?.repoUrl || '';
+  elements.vesselWorkingDirectory.value = vessel?.workingDirectory || '';
+  elements.vesselDefaultBranch.value = vessel?.defaultBranch || 'main';
+  populateFormSelects();
+  elements.vesselFleetId.value = vessel?.fleetId || '';
+  elements.vesselDefaultPipelineId.value = vessel?.defaultPipelineId || '';
+  elements.vesselAllowConcurrentMissions.checked = Boolean(vessel?.allowConcurrentMissions);
+  elements.vesselActive.checked = vessel?.active !== false;
+  setFormStatus(elements.vesselFormStatus, '', null);
+}
+
+function resetVesselForm() {
+  if (state.editingVessel && state.selectedVesselId) {
+    populateVesselForm(state.editingVessel);
+    return;
+  }
+
+  state.selectedVesselId = null;
+  state.editingVessel = null;
+  elements.vesselForm.reset();
+  populateFormSelects();
+  elements.vesselDefaultBranch.value = 'main';
+  elements.vesselAllowConcurrentMissions.checked = false;
+  elements.vesselActive.checked = true;
+  setFormStatus(elements.vesselFormStatus, '', null);
+}
+
+function openVesselModal(vessel = null) {
+  populateVesselForm(vessel);
+  elements.vesselModalTitle.textContent = vessel ? 'Edit Vessel' : 'Add Vessel';
+  elements.vesselModalSubtitle.textContent = vessel?.id || 'Register a repository for remote work.';
+  openModal(elements.vesselModal);
+}
+
+function setButtonBusy(button, isBusy, idleLabel, busyLabel) {
+  if (!button) return;
+  button.disabled = Boolean(isBusy);
+  button.textContent = isBusy ? busyLabel : idleLabel;
+}
+
+function populateMissionForm(mission) {
+  state.selectedMissionId = mission?.id || null;
+  state.editingMission = mission || null;
+  elements.missionTitle.value = mission?.title || '';
+  elements.missionDescription.value = mission?.description || '';
+  populateFormSelects();
+  elements.missionVesselId.value = mission?.vesselId || '';
+  elements.missionVoyageId.value = mission?.voyageId || '';
+  elements.missionPersona.value = mission?.persona || '';
+  elements.missionPriority.value = mission?.priority != null ? String(mission.priority) : '100';
+  setFormStatus(elements.missionFormStatus, '', null);
+}
+
+function resetMissionForm() {
+  if (state.editingMission && state.selectedMissionId) {
+    populateMissionForm(state.editingMission);
+    return;
+  }
+
+  state.selectedMissionId = null;
+  state.editingMission = null;
+  elements.missionForm.reset();
+  populateFormSelects();
+  elements.missionPriority.value = '100';
+  setFormStatus(elements.missionFormStatus, '', null);
+}
+
+function openMissionModal(mission) {
+  populateMissionForm(mission);
+  elements.missionModalTitle.textContent = 'Edit Mission';
+  elements.missionModalSubtitle.textContent = mission?.id || 'Update mission details.';
+  openModal(elements.missionModal);
 }
 
 function resetProxyState() {
   state.summary = null;
-  state.detail = null;
   state.fleets = [];
   state.vessels = [];
+  state.pipelines = [];
+  state.selectedFleetId = null;
+  state.selectedVesselId = null;
+  state.selectedMissionId = null;
+  state.editingFleet = null;
+  state.editingVessel = null;
+  state.editingMission = null;
+  closeAllModals();
   resetFleetForm();
   resetVesselForm();
+  resetDispatchForm();
   resetMissionForm();
-  renderDetail();
 }
 
 async function authenticateInstance(instanceId) {
@@ -278,9 +607,7 @@ async function authenticateInstance(instanceId) {
     try {
       await loadInstances();
     } catch {
-      // Keep the original not-found flow if the refresh itself fails.
     }
-
     instance = getInstanceById(normalized);
   }
 
@@ -307,11 +634,8 @@ function logoutToLogin(message = '', prefill = '') {
   resetProxyState();
   renderSessionState();
   elements.loginInstanceId.value = prefill || '';
-  if (message) {
-    setLoginStatus(message, 'error');
-  } else {
-    setLoginStatus('', null);
-  }
+  if (message) setLoginStatus(message, 'error');
+  else setLoginStatus('', null);
 }
 
 function instanceBaseUrl() {
@@ -320,13 +644,11 @@ function instanceBaseUrl() {
 
 function buildQuery(params) {
   const query = new URLSearchParams();
-
   Object.entries(params || {}).forEach(([key, value]) => {
     if (value === null || value === undefined) return;
     if (String(value).trim() === '') return;
     query.set(key, String(value).trim());
   });
-
   const serialized = query.toString();
   return serialized ? `?${serialized}` : '';
 }
@@ -343,7 +665,6 @@ async function loadInstances() {
       logoutToLogin(`Deployment "${missingId}" is no longer registered with this proxy.`, missingId);
       return;
     }
-
     await loadSelectedInstance();
   } else {
     renderSessionState();
@@ -355,15 +676,18 @@ async function loadSelectedInstance() {
 
   try {
     const base = instanceBaseUrl();
-    const [summary, fleets, vessels] = await Promise.all([
+    const [summary, fleets, vessels, pipelines] = await Promise.all([
       fetchJson(`${base}/summary`),
-      fetchJson(`${base}/fleets?limit=12`),
-      fetchJson(`${base}/vessels?limit=12`),
+      fetchJson(`${base}/fleets?limit=24`),
+      fetchJson(`${base}/vessels?limit=48`),
+      fetchJson(`${base}/pipelines?limit=48`).catch(() => ({ pipelines: [] })),
     ]);
 
     state.summary = summary;
     state.fleets = fleets.fleets || [];
     state.vessels = vessels.vessels || [];
+    state.pipelines = pipelines.pipelines || [];
+    populateFormSelects();
     renderSessionState();
     renderSelectedInstance();
   } catch (error) {
@@ -381,10 +705,7 @@ async function loadSelectedInstance() {
 
 function renderInstanceList() {
   elements.instanceList.innerHTML = '';
-
-  if (state.instances.length === 0) {
-    return;
-  }
+  if (state.instances.length === 0) return;
 
   for (const instance of state.instances) {
     const instanceId = getInstanceIdValue(instance);
@@ -414,6 +735,44 @@ function renderInstanceList() {
   }
 }
 
+function renderSummaryMeta(health, generatedUtc) {
+  return `
+    ${renderStatusPill('Version', health.version || 'unknown version')}
+    ${renderStatusPill('Tunnel', health.remoteTunnel?.state || 'unknown', 'state')}
+    ${renderStatusPill('Generated', formatTimestamp(generatedUtc))}
+  `;
+}
+
+function makeSummaryCard(label, valueHtml, detailHtml = '', extraClass = '') {
+  return `
+    <article class="summary-card${extraClass ? ` ${extraClass}` : ''}">
+      <div class="summary-label">${escapeHtml(label)}</div>
+      <div class="summary-value">${valueHtml}</div>
+      ${detailHtml ? `<div class="summary-detail">${detailHtml}</div>` : ''}
+    </article>
+  `;
+}
+
+function renderMissionStateMarkup(states) {
+  const entries = Object.entries(states || {})
+    .sort((left, right) => Number(right[1]) - Number(left[1]));
+
+  if (entries.length === 0) {
+    return '<div class="text-muted">No recent mission states.</div>';
+  }
+
+  return `
+    <div class="state-chip-grid">
+      ${entries.map(([key, value]) => `
+        <div class="state-chip ${badgeClass(key)}">
+          <span class="state-chip-label">${escapeHtml(key)}</span>
+          <span class="state-chip-value">${escapeHtml(String(value))}</span>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
 function renderSelectedInstance() {
   if (!state.selectedInstanceId || !state.summary) {
     elements.emptyState.classList.remove('hidden');
@@ -429,14 +788,19 @@ function renderSelectedInstance() {
   elements.emptyState.classList.add('hidden');
   elements.instanceWorkspace.classList.remove('hidden');
   elements.summaryTitle.textContent = state.selectedInstanceId;
-  elements.summarySubtitle.textContent = `${health.version || 'unknown version'} | tunnel ${health.remoteTunnel?.state || 'unknown'} | generated ${formatTimestamp(summary.generatedUtc)}`;
+  elements.summarySubtitle.innerHTML = renderSummaryMeta(health, summary.generatedUtc);
   setDeploymentChrome();
 
+  const tunnelState = health.remoteTunnel?.state || 'unknown';
+  const latencyValue = health.remoteTunnel?.latencyMs != null ? `${health.remoteTunnel.latencyMs} ms` : '-';
+  const activeVoyages = String(status.activeVoyages ?? 0);
+  const workingCaptains = String(status.workingCaptains ?? 0);
+
   elements.summaryCards.innerHTML = [
-    makeSummaryCard('Tunnel', health.remoteTunnel?.state || 'unknown', health.remoteTunnel?.tunnelUrl || 'No tunnel URL configured'),
-    makeSummaryCard('Latency', health.remoteTunnel?.latencyMs != null ? `${health.remoteTunnel.latencyMs} ms` : '-', `Last heartbeat ${formatTimestamp(health.remoteTunnel?.lastHeartbeatUtc)}`),
-    makeSummaryCard('Active Voyages', status.activeVoyages ?? 0, `Working captains ${status.workingCaptains ?? 0}`),
-    makeSummaryCard('Mission States', countMissionStates(status.missionsByStatus || {}), 'Snapshot from local Admiral'),
+    makeSummaryCard('Tunnel', renderBadge(tunnelState), escapeHtml(health.remoteTunnel?.tunnelUrl || 'No tunnel URL configured')),
+    makeSummaryCard('Latency', escapeHtml(latencyValue), escapeHtml(`Last heartbeat ${formatTimestamp(health.remoteTunnel?.lastHeartbeatUtc)}`)),
+    makeSummaryCard('Active Voyages', escapeHtml(activeVoyages), escapeHtml(`Working captains ${workingCaptains}`)),
+    makeSummaryCard('Mission States', renderMissionStateMarkup(status.missionsByStatus || {}), '', 'summary-card-wide'),
   ].join('');
 
   renderActivity(summary.recentActivity || []);
@@ -445,7 +809,6 @@ function renderSelectedInstance() {
   renderEntityList(elements.captainList, summary.recentCaptains || [], 'captain');
   renderEntityList(elements.fleetList, state.fleets || [], 'fleet');
   renderEntityList(elements.vesselList, state.vessels || [], 'vessel');
-  renderDetail();
 }
 
 function loadRecentMissionList() {
@@ -458,22 +821,6 @@ function loadRecentVoyageList() {
   const rows = state.summary?.recentVoyages || [];
   renderEntityList(elements.voyageList, rows, 'voyage');
   setFormStatus(elements.voyageBrowseStatusText, `Showing ${rows.length} recent voyage${rows.length === 1 ? '' : 's'}.`, null);
-}
-
-function makeSummaryCard(label, value, detail) {
-  return `
-    <article class="summary-card">
-      <div class="summary-label">${escapeHtml(label)}</div>
-      <div class="summary-value">${escapeHtml(String(value))}</div>
-      <div class="summary-detail">${escapeHtml(detail)}</div>
-    </article>
-  `;
-}
-
-function countMissionStates(states) {
-  const entries = Object.entries(states);
-  if (entries.length === 0) return 'none';
-  return entries.map(([key, value]) => `${key}: ${value}`).join(' | ');
 }
 
 function renderActivity(activity) {
@@ -495,6 +842,76 @@ function renderActivity(activity) {
   }
 }
 
+function buildEntityMeta(kind, row) {
+  if (kind === 'mission') {
+    return {
+      meta: `${row.persona || 'Worker'} | ${row.id || '-'}`,
+      secondary: `Priority ${row.priority ?? 100} | Updated ${formatTimestamp(row.lastUpdateUtc)}`,
+    };
+  }
+
+  if (kind === 'captain') {
+    return {
+      meta: `${row.runtime || 'runtime'} | ${row.id || '-'}`,
+      secondary: `Heartbeat ${formatTimestamp(row.lastHeartbeatUtc || row.lastUpdateUtc)}`,
+    };
+  }
+
+  if (kind === 'voyage') {
+    return {
+      meta: row.id || '-',
+      secondary: `Updated ${formatTimestamp(row.lastUpdateUtc)}`,
+    };
+  }
+
+  if (kind === 'fleet') {
+    return {
+      meta: row.id || '-',
+      secondary: row.description || 'No description',
+    };
+  }
+
+  if (kind === 'vessel') {
+    return {
+      meta: row.repoUrl || row.id || '-',
+      secondary: row.workingDirectory || 'No working directory',
+    };
+  }
+
+  return {
+    meta: row.id || '-',
+    secondary: '',
+  };
+}
+
+async function handleEntitySelection(kind, row) {
+  if (!row || !row.id) return;
+
+  if (kind === 'mission') {
+    await openMissionDetailModal(row.id);
+    return;
+  }
+
+  if (kind === 'voyage') {
+    await openVoyageDetailModal(row.id);
+    return;
+  }
+
+  if (kind === 'captain') {
+    await openCaptainDetailModal(row.id);
+    return;
+  }
+
+  if (kind === 'fleet') {
+    openFleetModal(row);
+    return;
+  }
+
+  if (kind === 'vessel') {
+    openVesselModal(row);
+  }
+}
+
 function renderEntityList(container, rows, kind) {
   container.innerHTML = '';
   if (!rows || rows.length === 0) {
@@ -511,406 +928,410 @@ function renderEntityList(container, rows, kind) {
     const secondary = fragment.querySelector('.entity-meta-secondary');
     const titleValue = row.title || row.name || row.id;
     const badgeValue = row.status || row.state || row.persona || 'detail';
+    const description = buildEntityMeta(kind, row);
 
     title.textContent = titleValue;
     badge.textContent = String(badgeValue);
     badge.classList.add(badgeClass(badgeValue));
-
-    if (kind === 'mission') {
-      meta.textContent = `${row.persona || 'Worker'} | ${row.id}`;
-      secondary.textContent = `Updated ${formatTimestamp(row.lastUpdateUtc)}`;
-    } else if (kind === 'captain') {
-      meta.textContent = `${row.runtime || 'runtime'} · ${row.id}`;
-      secondary.textContent = `Heartbeat ${formatTimestamp(row.lastHeartbeatUtc || row.lastUpdateUtc)}`;
-    } else if (kind === 'voyage') {
-      meta.textContent = row.id;
-      secondary.textContent = `Updated ${formatTimestamp(row.lastUpdateUtc)}`;
-    } else if (kind === 'fleet') {
-      meta.textContent = row.id;
-      secondary.textContent = row.description || 'No description';
-    } else if (kind === 'vessel') {
-      meta.textContent = row.repoUrl || row.id;
-      secondary.textContent = row.workingDirectory || 'No working directory';
-    }
+    meta.textContent = description.meta;
+    secondary.textContent = description.secondary;
 
     card.addEventListener('click', async () => {
-      await loadDetail(kind, row.id);
+      await handleEntitySelection(kind, row);
     });
 
     container.appendChild(fragment);
   }
 }
 
-async function loadDetail(kind, id) {
-  if (!state.selectedInstanceId) return;
-
+async function loadDetailPayload(kind, id) {
   const base = instanceBaseUrl();
-  let detail;
-  if (kind === 'mission') {
-    detail = await fetchJson(`${base}/missions/${encodeURIComponent(id)}`);
-  } else if (kind === 'voyage') {
-    detail = await fetchJson(`${base}/voyages/${encodeURIComponent(id)}`);
-  } else if (kind === 'captain') {
-    detail = await fetchJson(`${base}/captains/${encodeURIComponent(id)}`);
-  } else if (kind === 'fleet') {
-    detail = await fetchJson(`${base}/fleets/${encodeURIComponent(id)}`);
-  } else if (kind === 'vessel') {
-    detail = await fetchJson(`${base}/vessels/${encodeURIComponent(id)}`);
-  } else {
-    return;
-  }
-
-  state.detail = { kind, payload: detail };
-  renderDetail();
+  if (kind === 'mission') return fetchJson(`${base}/missions/${encodeURIComponent(id)}`);
+  if (kind === 'voyage') return fetchJson(`${base}/voyages/${encodeURIComponent(id)}`);
+  if (kind === 'captain') return fetchJson(`${base}/captains/${encodeURIComponent(id)}`);
+  throw new Error(`Unsupported detail type: ${kind}`);
 }
 
-function renderDetail() {
-  if (!state.detail) {
-    elements.detailTitle.textContent = 'Focused Detail';
-    elements.detailSubtitle.textContent = 'Select a mission, voyage, captain, fleet, or vessel card to inspect it here.';
-    elements.detailBody.innerHTML = '<div class="detail-empty">No focused entity selected yet.</div>';
-    return;
-  }
-
-  switch (state.detail.kind) {
-    case 'mission':
-      renderMissionDetail(state.detail.payload);
-      return;
-    case 'voyage':
-      renderVoyageDetail(state.detail.payload);
-      return;
-    case 'captain':
-      renderCaptainDetail(state.detail.payload);
-      return;
-    case 'fleet':
-      renderFleetDetail(state.detail.payload);
-      return;
-    case 'vessel':
-      renderVesselDetail(state.detail.payload);
-      return;
-    default:
-      elements.detailBody.innerHTML = '<div class="detail-empty">Unsupported detail type.</div>';
-  }
+async function loadMissionLog(id) {
+  const base = instanceBaseUrl();
+  return fetchJson(`${base}/missions/${encodeURIComponent(id)}/log?lines=240&offset=0`);
 }
 
-function renderMissionDetail(payload) {
+async function loadMissionDiff(id) {
+  const base = instanceBaseUrl();
+  return fetchJson(`${base}/missions/${encodeURIComponent(id)}/diff`);
+}
+
+function renderKeyValueCard(title, rows, extraClass = '') {
+  const safeRows = rows && rows.length > 0 ? rows : [['Value', '-']];
+  return `
+    <section class="detail-card${extraClass ? ` ${extraClass}` : ''}">
+      <h3>${escapeHtml(title)}</h3>
+      ${safeRows.map(([key, value]) => `
+        <div class="detail-row">
+          <span class="detail-key">${escapeHtml(String(key))}</span>
+          <span class="detail-value mono">${escapeHtml(String(value ?? '-'))}</span>
+        </div>
+      `).join('')}
+    </section>
+  `;
+}
+
+function renderMissionListCard(title, rows) {
+  return `
+    <section class="detail-card">
+      <h3>${escapeHtml(title)}</h3>
+      <div class="detail-list">
+        ${rows.length === 0 ? '<div class="text-muted">Nothing to show.</div>' : rows.map((mission) => `
+          <button type="button" class="detail-list-item" data-detail-action="open-mission" data-id="${escapeHtml(mission.id || '')}">
+            <span class="detail-list-copy">
+              <span class="detail-list-title">${escapeHtml(mission.title || mission.id || 'Mission')}</span>
+              <span class="detail-list-meta mono">${escapeHtml(mission.id || '')}</span>
+            </span>
+            ${renderBadge(mission.status || 'unknown')}
+          </button>
+        `).join('')}
+      </div>
+    </section>
+  `;
+}
+
+function setDetailModalFrame(title, subtitleHtml, bodyHtml) {
+  elements.detailModalTitle.textContent = title;
+  elements.detailModalSubtitle.innerHTML = subtitleHtml || '';
+  elements.detailModalBody.innerHTML = bodyHtml;
+}
+
+function renderMissionDetailModal() {
+  const modal = state.detailModal;
+  const payload = modal?.payload || {};
   const mission = payload.mission || {};
   const captain = payload.captain || {};
   const voyage = payload.voyage || {};
   const vessel = payload.vessel || {};
   const dock = payload.dock || {};
+  const activeTab = modal?.tab || 'overview';
+  const log = modal?.log || '';
+  const diff = modal?.diff || '';
+  const logMeta = modal?.logMeta || {};
 
-  elements.detailTitle.textContent = mission.title || mission.id || 'Mission Detail';
-  elements.detailSubtitle.textContent = `${mission.persona || 'Worker'} · ${mission.id || ''}`;
-  elements.detailBody.innerHTML = `
-    <div class="detail-grid">
-      ${renderKeyValueCard('Mission', [
-        ['Status', mission.status],
-        ['Branch', mission.branchName],
-        ['Captain', captain.name || mission.captainId],
-        ['Voyage', voyage.title || mission.voyageId],
-        ['Runtime', mission.totalRuntimeMs != null ? `${mission.totalRuntimeMs} ms` : '-'],
-      ])}
-      ${renderKeyValueCard('Worktree', [
-        ['Dock', dock.id || mission.dockId],
-        ['Path', dock.worktreePath],
-        ['Vessel', vessel.name || mission.vesselId],
-        ['Updated', formatTimestamp(mission.lastUpdateUtc)],
-        ['Failure', mission.failureReason || '-'],
-      ])}
-    </div>
-    <div class="detail-actions">
-      <button class="button" data-detail-action="mission-log" data-id="${escapeHtml(mission.id || '')}">Load Mission Log</button>
-      <button class="button" data-detail-action="mission-diff" data-id="${escapeHtml(mission.id || '')}">Load Mission Diff</button>
-      <button class="button" data-detail-action="mission-edit" data-id="${escapeHtml(mission.id || '')}">Edit Mission</button>
-      <button class="button" data-detail-action="mission-restart" data-id="${escapeHtml(mission.id || '')}">Restart Mission</button>
-      <button class="button" data-detail-action="mission-cancel" data-id="${escapeHtml(mission.id || '')}">Cancel Mission</button>
-    </div>
-    <pre id="detailCodeView" class="code-view">Select a mission action above.</pre>
-  `;
-  bindDetailActions();
+  let tabMarkup = '';
+  if (activeTab === 'overview') {
+    tabMarkup = `
+      <div class="detail-grid">
+        ${renderKeyValueCard('Mission', [
+          ['Status', mission.status],
+          ['Persona', mission.persona || 'Worker'],
+          ['Priority', mission.priority ?? 100],
+          ['Branch', mission.branchName || '-'],
+          ['Runtime', mission.totalRuntimeMs != null ? `${mission.totalRuntimeMs} ms` : '-'],
+          ['Created', formatTimestamp(mission.createdUtc)],
+          ['Updated', formatTimestamp(mission.lastUpdateUtc)],
+        ])}
+        ${renderKeyValueCard('Routing', [
+          ['Captain', captain.name || mission.captainId || '-'],
+          ['Voyage', voyage.title || mission.voyageId || '-'],
+          ['Vessel', vessel.name || mission.vesselId || '-'],
+          ['Dock', dock.id || mission.dockId || '-'],
+          ['Path', dock.worktreePath || '-'],
+          ['Failure', mission.failureReason || '-'],
+        ])}
+      </div>
+    `;
+  } else if (activeTab === 'instructions') {
+    tabMarkup = `
+      <section class="detail-card detail-card-full">
+        <h3>Instructions</h3>
+        <div class="detail-prose">${escapeHtml(mission.description || 'No instructions provided.')}</div>
+      </section>
+    `;
+  } else if (activeTab === 'log') {
+    tabMarkup = `
+      <div class="detail-actions detail-actions-inline">
+        <button type="button" class="button" data-detail-action="mission-log-refresh" data-id="${escapeHtml(mission.id || '')}">Reload Log</button>
+        <span class="text-muted">Showing ${escapeHtml(String(logMeta.totalLines ?? logMeta.lines ?? 0))} log lines</span>
+      </div>
+      <pre class="code-view">${escapeHtml(log || 'No log content available.')}</pre>
+    `;
+  } else if (activeTab === 'diff') {
+    tabMarkup = `
+      <div class="detail-actions detail-actions-inline">
+        <button type="button" class="button" data-detail-action="mission-diff-refresh" data-id="${escapeHtml(mission.id || '')}">Reload Diff</button>
+      </div>
+      <pre class="code-view">${escapeHtml(diff || 'No diff content available.')}</pre>
+    `;
+  }
+
+  setDetailModalFrame(
+    mission.title || mission.id || 'Mission Detail',
+    `${renderBadge(mission.status || 'unknown')} <span class="mono">${escapeHtml(mission.id || '')}</span>`,
+    `
+      <div class="detail-body">
+        <div class="detail-actions">
+          <button type="button" class="button" data-detail-action="mission-edit" data-id="${escapeHtml(mission.id || '')}">Edit</button>
+          <button type="button" class="button" data-detail-action="mission-restart" data-id="${escapeHtml(mission.id || '')}">Restart</button>
+          <button type="button" class="button" data-detail-action="mission-cancel" data-id="${escapeHtml(mission.id || '')}">Cancel</button>
+        </div>
+        <div class="tab-strip">
+          <button type="button" class="tab-button${activeTab === 'overview' ? ' active' : ''}" data-detail-tab="overview">Overview</button>
+          <button type="button" class="tab-button${activeTab === 'instructions' ? ' active' : ''}" data-detail-tab="instructions">Instructions</button>
+          <button type="button" class="tab-button${activeTab === 'log' ? ' active' : ''}" data-detail-tab="log">Log</button>
+          <button type="button" class="tab-button${activeTab === 'diff' ? ' active' : ''}" data-detail-tab="diff">Diff</button>
+        </div>
+        ${tabMarkup}
+      </div>
+    `,
+  );
 }
 
-function renderVoyageDetail(payload) {
+function renderVoyageDetailModal() {
+  const payload = state.detailModal?.payload || {};
   const voyage = payload.voyage || {};
   const missions = payload.missions || [];
 
-  elements.detailTitle.textContent = voyage.title || voyage.id || 'Voyage Detail';
-  elements.detailSubtitle.textContent = `${voyage.status || 'unknown'} · ${voyage.id || ''}`;
-  elements.detailBody.innerHTML = `
-    <div class="detail-grid">
-      ${renderKeyValueCard('Voyage', [
-        ['Status', voyage.status],
-        ['Created', formatTimestamp(voyage.createdUtc)],
-        ['Updated', formatTimestamp(voyage.lastUpdateUtc)],
-        ['Completed', formatTimestamp(voyage.completedUtc)],
-        ['Missions', missions.length],
-      ])}
-      ${renderKeyValueCard('Description', [['Text', voyage.description || '-']])}
-    </div>
-    <div class="detail-actions">
-      <button class="button" data-detail-action="voyage-cancel" data-id="${escapeHtml(voyage.id || '')}">Cancel Voyage</button>
-    </div>
-    <div class="detail-card">
-      <h3>Mission Chain</h3>
-      ${missions.length === 0 ? '<div class="text-muted">No missions associated with this voyage.</div>' : missions.map((mission) => `
-        <div class="detail-row">
-          <span class="detail-key">${escapeHtml(mission.title || mission.id)}</span>
-          <span class="detail-value">${escapeHtml(String(mission.status || 'unknown'))}</span>
-        </div>`).join('')}
-    </div>
-  `;
-  bindDetailActions();
+  setDetailModalFrame(
+    voyage.title || voyage.id || 'Voyage Detail',
+    `${renderBadge(voyage.status || 'unknown')} <span class="mono">${escapeHtml(voyage.id || '')}</span>`,
+    `
+      <div class="detail-body">
+        <div class="detail-actions">
+          <button type="button" class="button" data-detail-action="voyage-cancel" data-id="${escapeHtml(voyage.id || '')}">Cancel Voyage</button>
+        </div>
+        <div class="detail-grid">
+          ${renderKeyValueCard('Voyage', [
+            ['Status', voyage.status],
+            ['Created', formatTimestamp(voyage.createdUtc)],
+            ['Updated', formatTimestamp(voyage.lastUpdateUtc)],
+            ['Completed', formatTimestamp(voyage.completedUtc)],
+            ['Missions', missions.length],
+          ])}
+          ${renderKeyValueCard('Description', [['Summary', voyage.description || '-']])}
+        </div>
+        ${renderMissionListCard('Mission Chain', missions)}
+      </div>
+    `,
+  );
 }
 
-function renderCaptainDetail(payload) {
+function renderCaptainDetailModal() {
+  const payload = state.detailModal?.payload || {};
   const captain = payload.captain || {};
   const currentMission = payload.currentMission || {};
   const currentDock = payload.currentDock || {};
   const recentMissions = payload.recentMissions || [];
 
-  elements.detailTitle.textContent = captain.name || captain.id || 'Captain Detail';
-  elements.detailSubtitle.textContent = `${captain.runtime || 'runtime'} · ${captain.id || ''}`;
-  elements.detailBody.innerHTML = `
-    <div class="detail-grid">
-      ${renderKeyValueCard('Captain', [
-        ['State', captain.state],
-        ['Model', captain.model || 'auto'],
-        ['Heartbeat', formatTimestamp(captain.lastHeartbeatUtc)],
-        ['Current Mission', currentMission.title || captain.currentMissionId],
-        ['Current Dock', currentDock.id || captain.currentDockId],
-      ])}
-      ${renderKeyValueCard('Recent Work', recentMissions.slice(0, 6).map((mission) => [mission.title || mission.id, mission.status || 'unknown']))}
-    </div>
-    <div class="detail-actions">
-      <button class="button" data-detail-action="captain-log" data-id="${escapeHtml(captain.id || '')}">Load Captain Log</button>
-      <button class="button" data-detail-action="captain-stop" data-id="${escapeHtml(captain.id || '')}">Stop Captain</button>
-    </div>
-    <pre id="detailCodeView" class="code-view">Select a captain action above.</pre>
-  `;
-  bindDetailActions();
+  setDetailModalFrame(
+    captain.name || captain.id || 'Captain Detail',
+    `${renderBadge(captain.state || 'unknown')} <span class="mono">${escapeHtml(captain.id || '')}</span>`,
+    `
+      <div class="detail-body">
+        <div class="detail-actions">
+          <button type="button" class="button" data-detail-action="captain-log" data-id="${escapeHtml(captain.id || '')}">Load Captain Log</button>
+          <button type="button" class="button" data-detail-action="captain-stop" data-id="${escapeHtml(captain.id || '')}">Stop Captain</button>
+        </div>
+        <div class="detail-grid">
+          ${renderKeyValueCard('Captain', [
+            ['State', captain.state],
+            ['Runtime', captain.runtime || '-'],
+            ['Model', captain.model || 'auto'],
+            ['Heartbeat', formatTimestamp(captain.lastHeartbeatUtc)],
+            ['Current Mission', currentMission.title || captain.currentMissionId || '-'],
+            ['Current Dock', currentDock.id || captain.currentDockId || '-'],
+          ])}
+          ${renderMissionListCard('Recent Work', recentMissions.slice(0, 8))}
+        </div>
+        <pre class="code-view">${escapeHtml(state.detailModal?.log || 'Select "Load Captain Log" to inspect the active captain session.')}</pre>
+      </div>
+    `,
+  );
 }
 
-function renderFleetDetail(payload) {
-  const fleet = payload.fleet || {};
-  const vessels = payload.vessels || [];
+function renderDetailModal() {
+  if (!state.detailModal) {
+    setDetailModalFrame('Detail', '', '<div class="detail-empty">No detail selected.</div>');
+    return;
+  }
 
-  elements.detailTitle.textContent = fleet.name || fleet.id || 'Fleet Detail';
-  elements.detailSubtitle.textContent = `${fleet.id || ''}`;
-  elements.detailBody.innerHTML = `
-    <div class="detail-grid">
-      ${renderKeyValueCard('Fleet', [
-        ['Name', fleet.name],
-        ['Description', fleet.description || '-'],
-        ['Default Pipeline', fleet.defaultPipelineId || '-'],
-        ['Active', fleet.active ? 'true' : 'false'],
-        ['Updated', formatTimestamp(fleet.lastUpdateUtc)],
-      ])}
-      ${renderKeyValueCard('Vessels', vessels.slice(0, 8).map((vessel) => [vessel.name || vessel.id, vessel.id || '-']))}
-    </div>
-    <div class="detail-actions">
-      <button class="button" data-detail-action="fleet-edit" data-id="${escapeHtml(fleet.id || '')}">Edit Fleet</button>
-    </div>
-  `;
-  bindDetailActions();
+  if (state.detailModal.loading) {
+    setDetailModalFrame(
+      state.detailModal.title || 'Loading detail',
+      state.detailModal.subtitle || '',
+      '<div class="detail-empty">Loading detail from the deployment...</div>',
+    );
+    return;
+  }
+
+  if (state.detailModal.type === 'mission') {
+    renderMissionDetailModal();
+    return;
+  }
+
+  if (state.detailModal.type === 'voyage') {
+    renderVoyageDetailModal();
+    return;
+  }
+
+  if (state.detailModal.type === 'captain') {
+    renderCaptainDetailModal();
+    return;
+  }
+
+  setDetailModalFrame('Detail', '', '<div class="detail-empty">Unsupported detail type.</div>');
 }
 
-function renderVesselDetail(payload) {
-  const vessel = payload.vessel || {};
-  const recentMissions = payload.recentMissions || [];
-
-  elements.detailTitle.textContent = vessel.name || vessel.id || 'Vessel Detail';
-  elements.detailSubtitle.textContent = `${vessel.id || ''}`;
-  elements.detailBody.innerHTML = `
-    <div class="detail-grid">
-      ${renderKeyValueCard('Vessel', [
-        ['Fleet', vessel.fleetId || '-'],
-        ['Repo', vessel.repoUrl || '-'],
-        ['Working Directory', vessel.workingDirectory || '-'],
-        ['Default Branch', vessel.defaultBranch || '-'],
-        ['Concurrent Missions', vessel.allowConcurrentMissions ? 'true' : 'false'],
-      ])}
-      ${renderKeyValueCard('Recent Missions', recentMissions.slice(0, 8).map((mission) => [mission.title || mission.id, mission.status || '-']))}
-    </div>
-    <div class="detail-actions">
-      <button class="button" data-detail-action="vessel-edit" data-id="${escapeHtml(vessel.id || '')}">Edit Vessel</button>
-    </div>
-  `;
-  bindDetailActions();
+function showDetailLoading(type, title, subtitle = '') {
+  state.detailModal = { type, title, subtitle, loading: true, tab: 'overview' };
+  renderDetailModal();
+  openModal(elements.detailModal);
 }
 
-function renderKeyValueCard(title, rows) {
-  const safeRows = rows && rows.length > 0 ? rows : [['Value', '-']];
-  return `
-    <section class="detail-card">
-      <h3>${escapeHtml(title)}</h3>
-      ${safeRows.map(([key, value]) => `
-        <div class="detail-row">
-          <span class="detail-key">${escapeHtml(String(key))}</span>
-          <span class="detail-value mono">${escapeHtml(String(value || '-'))}</span>
-        </div>`).join('')}
-    </section>
-  `;
+async function openMissionDetailModal(id, preferredTab = 'overview') {
+  showDetailLoading('mission', 'Mission Detail');
+  try {
+    const [payload, logData, diffData] = await Promise.all([
+      loadDetailPayload('mission', id),
+      loadMissionLog(id).catch(() => ({ log: 'Unable to load mission log.', lines: 0, totalLines: 0 })),
+      loadMissionDiff(id).catch(() => ({ diff: 'Unable to load mission diff.' })),
+    ]);
+
+    state.detailModal = {
+      type: 'mission',
+      id,
+      tab: preferredTab,
+      loading: false,
+      payload,
+      log: logData.log || '',
+      logMeta: logData,
+      diff: diffData.diff || '',
+    };
+    renderDetailModal();
+    openModal(elements.detailModal);
+  } catch (error) {
+    state.detailModal = { type: 'mission', id, loading: false, payload: null };
+    setDetailModalFrame(
+      'Mission Detail',
+      '',
+      `<div class="detail-empty">${escapeHtml(error instanceof Error ? error.message : 'Unable to load mission detail.')}</div>`,
+    );
+    openModal(elements.detailModal);
+  }
 }
 
-function bindDetailActions() {
-  document.querySelectorAll('[data-detail-action]').forEach((button) => {
-    button.addEventListener('click', async (event) => {
-      const target = event.currentTarget;
-      const action = target.getAttribute('data-detail-action');
-      const id = target.getAttribute('data-id');
-      if (!action || !id || !state.selectedInstanceId) return;
-      await performDetailAction(action, id);
-    });
-  });
+async function openVoyageDetailModal(id) {
+  showDetailLoading('voyage', 'Voyage Detail');
+  try {
+    const payload = await loadDetailPayload('voyage', id);
+    state.detailModal = { type: 'voyage', id, loading: false, payload };
+    renderDetailModal();
+    openModal(elements.detailModal);
+  } catch (error) {
+    setDetailModalFrame(
+      'Voyage Detail',
+      '',
+      `<div class="detail-empty">${escapeHtml(error instanceof Error ? error.message : 'Unable to load voyage detail.')}</div>`,
+    );
+    openModal(elements.detailModal);
+  }
+}
+
+async function openCaptainDetailModal(id) {
+  showDetailLoading('captain', 'Captain Detail');
+  try {
+    const payload = await loadDetailPayload('captain', id);
+    state.detailModal = { type: 'captain', id, loading: false, payload, log: '' };
+    renderDetailModal();
+    openModal(elements.detailModal);
+  } catch (error) {
+    setDetailModalFrame(
+      'Captain Detail',
+      '',
+      `<div class="detail-empty">${escapeHtml(error instanceof Error ? error.message : 'Unable to load captain detail.')}</div>`,
+    );
+    openModal(elements.detailModal);
+  }
 }
 
 async function performDetailAction(action, id) {
-  const codeView = document.getElementById('detailCodeView');
   const base = instanceBaseUrl();
-  const writeCodeView = (message) => {
-    if (codeView) codeView.textContent = message;
-  };
 
   try {
-    if (action === 'mission-log') {
-      writeCodeView('Loading...');
-      const data = await fetchJson(`${base}/missions/${encodeURIComponent(id)}/log?lines=200&offset=0`);
-      writeCodeView(data.log || 'No log content available.');
-      return;
-    }
-
-    if (action === 'mission-diff') {
-      writeCodeView('Loading...');
-      const data = await fetchJson(`${base}/missions/${encodeURIComponent(id)}/diff`);
-      writeCodeView(data.diff || 'No diff content available.');
-      return;
-    }
-
-    if (action === 'captain-log') {
-      writeCodeView('Loading...');
-      const data = await fetchJson(`${base}/captains/${encodeURIComponent(id)}/log?lines=80&offset=0`);
-      writeCodeView(data.log || 'No log content available.');
-      return;
-    }
-
-    if (action === 'fleet-edit') {
-      if (state.detail?.payload?.fleet) populateFleetForm(state.detail.payload.fleet);
-      return;
-    }
-
-    if (action === 'vessel-edit') {
-      if (state.detail?.payload?.vessel) populateVesselForm(state.detail.payload.vessel);
+    if (action === 'open-mission') {
+      await openMissionDetailModal(id);
       return;
     }
 
     if (action === 'mission-edit') {
-      if (state.detail?.payload?.mission) populateMissionForm(state.detail.payload.mission);
+      if (state.detailModal?.payload?.mission) openMissionModal(state.detailModal.payload.mission);
+      return;
+    }
+
+    if (action === 'mission-log-refresh') {
+      const logData = await loadMissionLog(id);
+      if (state.detailModal) {
+        state.detailModal.log = logData.log || '';
+        state.detailModal.logMeta = logData;
+      }
+      renderDetailModal();
+      return;
+    }
+
+    if (action === 'mission-diff-refresh') {
+      const diffData = await loadMissionDiff(id);
+      if (state.detailModal) state.detailModal.diff = diffData.diff || '';
+      renderDetailModal();
       return;
     }
 
     if (action === 'mission-cancel') {
       if (!confirm('Cancel this mission?')) return;
       await fetchJson(`${base}/missions/${encodeURIComponent(id)}`, { method: 'DELETE' });
-      writeCodeView('Mission cancelled.');
-      await refreshAfterMutation('mission', id);
+      await loadSelectedInstance();
+      await openMissionDetailModal(id, state.detailModal?.tab || 'overview');
       return;
     }
 
     if (action === 'mission-restart') {
       if (!confirm('Restart this mission?')) return;
       await fetchJson(`${base}/missions/${encodeURIComponent(id)}/restart`, { method: 'POST', body: {} });
-      writeCodeView('Mission restarted.');
-      await refreshAfterMutation('mission', id);
+      await loadSelectedInstance();
+      await openMissionDetailModal(id, state.detailModal?.tab || 'overview');
       return;
     }
 
     if (action === 'voyage-cancel') {
       if (!confirm('Cancel this voyage and its active work?')) return;
       await fetchJson(`${base}/voyages/${encodeURIComponent(id)}`, { method: 'DELETE' });
-      await refreshAfterMutation('voyage', id);
+      await loadSelectedInstance();
+      await openVoyageDetailModal(id);
+      return;
+    }
+
+    if (action === 'captain-log') {
+      const data = await fetchJson(`${base}/captains/${encodeURIComponent(id)}/log?lines=120&offset=0`);
+      if (state.detailModal) state.detailModal.log = data.log || 'No log content available.';
+      renderDetailModal();
       return;
     }
 
     if (action === 'captain-stop') {
       if (!confirm('Stop this captain?')) return;
       await fetchJson(`${base}/captains/${encodeURIComponent(id)}/stop`, { method: 'POST' });
-      writeCodeView('Captain stop requested.');
-      await refreshAfterMutation('captain', id);
+      await loadSelectedInstance();
+      await openCaptainDetailModal(id);
     }
   } catch (error) {
-    writeCodeView(error instanceof Error ? error.message : 'Action failed.');
+    if (state.detailModal?.type === 'mission') {
+      state.detailModal.log = error instanceof Error ? error.message : 'Action failed.';
+      renderDetailModal();
+      return;
+    }
+
+    setDetailModalFrame(
+      elements.detailModalTitle.textContent || 'Detail',
+      elements.detailModalSubtitle.innerHTML,
+      `<div class="detail-empty">${escapeHtml(error instanceof Error ? error.message : 'Action failed.')}</div>`,
+    );
   }
-}
-
-async function refreshAfterMutation(kind, id) {
-  await loadSelectedInstance();
-  if (!kind || !id) {
-    renderDetail();
-    return;
-  }
-
-  try {
-    await loadDetail(kind, id);
-  } catch {
-    renderDetail();
-  }
-}
-
-function populateFleetForm(fleet) {
-  state.selectedFleetId = fleet.id || null;
-  elements.fleetName.value = fleet.name || '';
-  elements.fleetDescription.value = fleet.description || '';
-  elements.fleetDefaultPipelineId.value = fleet.defaultPipelineId || '';
-  elements.fleetActive.checked = fleet.active !== false;
-  setFormStatus(elements.fleetFormStatus, `Editing ${fleet.name || fleet.id}`, null);
-}
-
-function resetFleetForm() {
-  state.selectedFleetId = null;
-  elements.fleetForm.reset();
-  elements.fleetActive.checked = true;
-  setFormStatus(elements.fleetFormStatus, '', null);
-}
-
-function populateVesselForm(vessel) {
-  state.selectedVesselId = vessel.id || null;
-  elements.vesselFleetId.value = vessel.fleetId || '';
-  elements.vesselName.value = vessel.name || '';
-  elements.vesselRepoUrl.value = vessel.repoUrl || '';
-  elements.vesselWorkingDirectory.value = vessel.workingDirectory || '';
-  elements.vesselDefaultBranch.value = vessel.defaultBranch || 'main';
-  elements.vesselDefaultPipelineId.value = vessel.defaultPipelineId || '';
-  elements.vesselAllowConcurrentMissions.checked = Boolean(vessel.allowConcurrentMissions);
-  elements.vesselActive.checked = vessel.active !== false;
-  setFormStatus(elements.vesselFormStatus, `Editing ${vessel.name || vessel.id}`, null);
-}
-
-function resetVesselForm() {
-  state.selectedVesselId = null;
-  elements.vesselForm.reset();
-  elements.vesselDefaultBranch.value = 'main';
-  elements.vesselActive.checked = true;
-  elements.vesselAllowConcurrentMissions.checked = false;
-  setFormStatus(elements.vesselFormStatus, '', null);
-}
-
-function populateMissionForm(mission) {
-  state.selectedMissionId = mission.id || null;
-  elements.missionTitle.value = mission.title || '';
-  elements.missionDescription.value = mission.description || '';
-  elements.missionVesselId.value = mission.vesselId || '';
-  elements.missionVoyageId.value = mission.voyageId || '';
-  elements.missionPersona.value = mission.persona || '';
-  elements.missionPriority.value = mission.priority != null ? mission.priority : 100;
-  setFormStatus(elements.missionFormStatus, `Editing ${mission.title || mission.id}`, null);
-}
-
-function resetMissionForm() {
-  state.selectedMissionId = null;
-  elements.missionForm.reset();
-  elements.missionPriority.value = '100';
-  setFormStatus(elements.missionFormStatus, '', null);
 }
 
 function parseDispatchMissions(raw) {
@@ -933,6 +1354,31 @@ function parseDispatchMissions(raw) {
       };
     })
     .filter((mission) => mission.title);
+}
+
+async function applyDispatchPriority(voyageId, priority) {
+  if (!voyageId) return;
+  const targetPriority = Number(priority);
+  if (!Number.isFinite(targetPriority) || targetPriority === 100) return;
+
+  const base = instanceBaseUrl();
+  const detail = await fetchJson(`${base}/voyages/${encodeURIComponent(voyageId)}`);
+  const missions = detail.missions || [];
+
+  await Promise.all(missions.map((mission) => fetchJson(`${base}/missions/${encodeURIComponent(mission.id)}`, {
+    method: 'PUT',
+    body: {
+      title: mission.title,
+      description: mission.description || null,
+      priority: targetPriority,
+      vesselId: mission.vesselId || null,
+      voyageId: mission.voyageId || null,
+      branchName: mission.branchName || null,
+      prUrl: mission.prUrl || null,
+      parentMissionId: mission.parentMissionId || null,
+      persona: mission.persona || null,
+    },
+  })));
 }
 
 async function submitFleetForm(event) {
@@ -962,6 +1408,9 @@ async function submitFleetForm(event) {
     }
 
     await loadSelectedInstance();
+    closeModal(elements.fleetModal);
+    state.selectedFleetId = null;
+    state.editingFleet = null;
   } catch (error) {
     setFormStatus(elements.fleetFormStatus, error instanceof Error ? error.message : 'Fleet save failed.', 'error');
   }
@@ -998,6 +1447,9 @@ async function submitVesselForm(event) {
     }
 
     await loadSelectedInstance();
+    closeModal(elements.vesselModal);
+    state.selectedVesselId = null;
+    state.editingVessel = null;
   } catch (error) {
     setFormStatus(elements.vesselFormStatus, error instanceof Error ? error.message : 'Vessel save failed.', 'error');
   }
@@ -1013,9 +1465,9 @@ async function submitDispatchForm(event) {
     description: elements.dispatchDescription.value.trim(),
     vesselId: elements.dispatchVesselId.value.trim(),
     pipelineId: elements.dispatchPipelineId.value.trim() || null,
-    pipeline: elements.dispatchPipeline.value.trim() || null,
     missions,
   };
+  const priority = Number.parseInt(elements.dispatchPriority.value || '100', 10) || 100;
 
   if (!payload.title) {
     setFormStatus(elements.dispatchFormStatus, 'Voyage title is required.', 'error');
@@ -1023,7 +1475,7 @@ async function submitDispatchForm(event) {
   }
 
   if (!payload.vesselId) {
-    setFormStatus(elements.dispatchFormStatus, 'A vessel id is required for dispatch.', 'error');
+    setFormStatus(elements.dispatchFormStatus, 'Select a vessel for dispatch.', 'error');
     return;
   }
 
@@ -1032,13 +1484,21 @@ async function submitDispatchForm(event) {
     return;
   }
 
+  setButtonBusy(elements.dispatchSubmitButton, true, 'Dispatch', 'Dispatching...');
+  setFormStatus(elements.dispatchFormStatus, 'Dispatching voyage...', null);
+
   try {
     const base = instanceBaseUrl();
     const voyage = await fetchJson(`${base}/voyages/dispatch`, { method: 'POST', body: payload });
+    await applyDispatchPriority(voyage.id, priority);
     setFormStatus(elements.dispatchFormStatus, `Voyage dispatched: ${voyage.id || voyage.title || 'created'}`, 'success');
     await loadSelectedInstance();
+    closeModal(elements.dispatchModal);
+    if (voyage.id) await openVoyageDetailModal(voyage.id);
   } catch (error) {
     setFormStatus(elements.dispatchFormStatus, error instanceof Error ? error.message : 'Dispatch failed.', 'error');
+  } finally {
+    setButtonBusy(elements.dispatchSubmitButton, false, 'Dispatch', 'Dispatching...');
   }
 }
 
@@ -1070,7 +1530,12 @@ async function submitMissionForm(event) {
       setFormStatus(elements.missionFormStatus, 'Mission created.', 'success');
     }
 
+    const currentMissionId = state.selectedMissionId;
     await loadSelectedInstance();
+    closeModal(elements.missionModal);
+    if (currentMissionId) await openMissionDetailModal(currentMissionId);
+    state.selectedMissionId = null;
+    state.editingMission = null;
   } catch (error) {
     setFormStatus(elements.missionFormStatus, error instanceof Error ? error.message : 'Mission save failed.', 'error');
   }
@@ -1092,7 +1557,7 @@ async function submitMissionBrowseForm(event) {
     const data = await fetchJson(`${base}/missions${query}`);
     const rows = data.missions || [];
     renderEntityList(elements.missionList, rows, 'mission');
-    setFormStatus(elements.missionBrowseStatusText, `Loaded ${rows.length} mission${rows.length === 1 ? '' : 's'} from the instance.`, 'success');
+    setFormStatus(elements.missionBrowseStatusText, `Loaded ${rows.length} mission${rows.length === 1 ? '' : 's'} from the deployment.`, 'success');
   } catch (error) {
     setFormStatus(elements.missionBrowseStatusText, error instanceof Error ? error.message : 'Mission browse failed.', 'error');
   }
@@ -1112,7 +1577,7 @@ async function submitVoyageBrowseForm(event) {
     const data = await fetchJson(`${base}/voyages${query}`);
     const rows = data.voyages || [];
     renderEntityList(elements.voyageList, rows, 'voyage');
-    setFormStatus(elements.voyageBrowseStatusText, `Loaded ${rows.length} voyage${rows.length === 1 ? '' : 's'} from the instance.`, 'success');
+    setFormStatus(elements.voyageBrowseStatusText, `Loaded ${rows.length} voyage${rows.length === 1 ? '' : 's'} from the deployment.`, 'success');
   } catch (error) {
     setFormStatus(elements.voyageBrowseStatusText, error instanceof Error ? error.message : 'Voyage browse failed.', 'error');
   }
@@ -1140,15 +1605,15 @@ async function initializeProxyShell() {
 
   try {
     await loadInstances();
-
     renderSessionState();
+
     if (storedDeploymentId) {
       elements.loginInstanceId.value = storedDeploymentId;
       if (!getInstanceById(storedDeploymentId)) {
         setLoginStatus(`Deployment "${storedDeploymentId}" is not currently connected to this proxy.`, 'error');
       }
     }
-  } catch (error) {
+  } catch {
     renderSessionState();
     setLoginStatus('Unable to load connected deployments right now.', 'error');
   }
@@ -1173,21 +1638,39 @@ elements.refreshButton.addEventListener('click', async () => {
   await loadInstances();
 });
 
-elements.refreshSummaryButton.addEventListener('click', async () => {
-  await loadSelectedInstance();
+elements.themeToggleButton.addEventListener('click', toggleTheme);
+elements.loginThemeToggleButton.addEventListener('click', toggleTheme);
+
+elements.openDispatchButton.addEventListener('click', () => {
+  resetDispatchForm();
+  openModal(elements.dispatchModal);
+});
+
+elements.openFleetModalButton.addEventListener('click', () => {
+  state.selectedFleetId = null;
+  state.editingFleet = null;
+  resetFleetForm();
+  openFleetModal();
+});
+
+elements.openVesselModalButton.addEventListener('click', () => {
+  state.selectedVesselId = null;
+  state.editingVessel = null;
+  resetVesselForm();
+  openVesselModal();
 });
 
 elements.fleetForm.addEventListener('submit', submitFleetForm);
 elements.fleetResetButton.addEventListener('click', resetFleetForm);
 elements.vesselForm.addEventListener('submit', submitVesselForm);
 elements.vesselResetButton.addEventListener('click', resetVesselForm);
+elements.dispatchForm.addEventListener('submit', submitDispatchForm);
+elements.missionForm.addEventListener('submit', submitMissionForm);
+elements.missionResetButton.addEventListener('click', resetMissionForm);
 elements.missionBrowseForm.addEventListener('submit', submitMissionBrowseForm);
 elements.missionBrowseRecentButton.addEventListener('click', loadRecentMissionList);
 elements.voyageBrowseForm.addEventListener('submit', submitVoyageBrowseForm);
 elements.voyageBrowseRecentButton.addEventListener('click', loadRecentVoyageList);
-elements.dispatchForm.addEventListener('submit', submitDispatchForm);
-elements.missionForm.addEventListener('submit', submitMissionForm);
-elements.missionResetButton.addEventListener('click', resetMissionForm);
 
 elements.switchDeploymentButton.addEventListener('click', () => {
   logoutToLogin('', state.selectedInstanceId || '');
@@ -1198,18 +1681,48 @@ elements.sidebarSwitchDeploymentButton.addEventListener('click', () => {
 });
 
 elements.mobileMenuButton.addEventListener('click', () => {
-  if (state.sidebarOpen) {
-    closeSidebar();
-  } else {
-    openSidebar();
-  }
+  if (state.sidebarOpen) closeSidebar();
+  else openSidebar();
 });
 
 elements.sidebarOverlay.addEventListener('click', closeSidebar);
 
+document.querySelectorAll('[data-close-modal]').forEach((button) => {
+  button.addEventListener('click', () => {
+    closeModalById(button.getAttribute('data-close-modal'));
+  });
+});
+
+elements.detailModalBody.addEventListener('click', async (event) => {
+  const tabButton = event.target.closest('[data-detail-tab]');
+  if (tabButton && state.detailModal?.type === 'mission') {
+    state.detailModal.tab = tabButton.getAttribute('data-detail-tab') || 'overview';
+    renderDetailModal();
+    return;
+  }
+
+  const actionButton = event.target.closest('[data-detail-action]');
+  if (!actionButton || !state.selectedInstanceId) return;
+
+  const action = actionButton.getAttribute('data-detail-action');
+  const id = actionButton.getAttribute('data-id');
+  if (!action || !id) return;
+  await performDetailAction(action, id);
+});
+
+window.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  if (isAnyModalOpen()) {
+    closeAllModals();
+    return;
+  }
+  if (state.sidebarOpen) closeSidebar();
+});
+
 bindSidebarNavigation();
+applyTheme(getPreferredTheme());
 renderSessionState();
-initializeProxyShell().catch((error) => {
+initializeProxyShell().catch(() => {
   renderSessionState();
   elements.instanceList.innerHTML = '<div class="text-muted">Unable to load connected deployments right now.</div>';
   setLoginStatus('Unable to load connected deployments right now.', 'error');

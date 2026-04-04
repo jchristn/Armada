@@ -351,6 +351,13 @@ namespace Armada.Proxy
                 return await ForwardPayloadAsync(req, instanceId, "armada.vessel.detail", new RemoteTunnelQueryRequest { VesselId = vesselId }).ConfigureAwait(false);
             });
 
+            server.Get("/api/v1/instances/{instanceId}/pipelines", async (req) =>
+            {
+                string instanceId = RequireParameter(req, "instanceId");
+                int limit = ParsePositiveInt(req.Query["limit"], 24, 1, 200);
+                return await ForwardPayloadAsync(req, instanceId, "armada.pipelines.list", new RemoteTunnelQueryRequest { Limit = limit }).ConfigureAwait(false);
+            });
+
             server.Post("/api/v1/instances/{instanceId}/vessels", async (req) =>
             {
                 string instanceId = RequireParameter(req, "instanceId");

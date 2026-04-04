@@ -10,11 +10,14 @@
 <body>
   <div id="loginView" class="login-container">
     <section class="login-box proxy-login-card">
-      <div class="proxy-login-brand">
-        <img src="/img/logo-dark-grey.png" alt="Armada" class="login-logo proxy-login-logo">
-        <div class="proxy-login-copy-block">
-          <div class="eyebrow">Armada Proxy</div>
+      <div class="proxy-login-header">
+        <div class="proxy-login-brand">
+          <img id="loginLogo" src="/img/logo-dark-grey.png" alt="Armada" class="login-logo proxy-login-logo">
+          <div class="proxy-login-copy-block">
+            <div class="eyebrow">Armada</div>
+          </div>
         </div>
+        <button id="loginThemeToggleButton" type="button" class="button theme-toggle-button">Dark</button>
       </div>
 
       <p class="login-copy">
@@ -50,10 +53,9 @@
   <div id="appView" class="app-layout hidden">
     <aside id="sidebar" class="sidebar">
       <div class="sidebar-brand">
-        <img src="/img/logo-light-grey.png" alt="Armada" class="sidebar-logo">
+        <img id="sidebarLogo" src="/img/logo-light-grey.png" alt="Armada" class="sidebar-logo">
         <div class="sidebar-brand-copy">
           <h1 class="sidebar-label">Armada</h1>
-          <p class="sidebar-label">Proxy</p>
         </div>
       </div>
 
@@ -71,12 +73,10 @@
         <button type="button" class="sidebar-nav-item" data-scroll-target="captainsSection">Captains</button>
         <button type="button" class="sidebar-nav-item" data-scroll-target="fleetsSection">Fleets</button>
         <button type="button" class="sidebar-nav-item" data-scroll-target="vesselsSection">Vessels</button>
-        <button type="button" class="sidebar-nav-item" data-scroll-target="studiosSection">Studios</button>
-        <button type="button" class="sidebar-nav-item" data-scroll-target="detailSection">Focused Detail</button>
       </nav>
 
       <div class="sidebar-footer">
-        <button id="sidebarSwitchDeploymentButton" type="button" class="button sidebar-action">Change Deployment</button>
+        <button id="sidebarSwitchDeploymentButton" type="button" class="button sidebar-action">Logout</button>
       </div>
     </aside>
 
@@ -84,31 +84,25 @@
 
     <div class="main-content-area">
       <div class="top-bar">
-        <button id="mobileMenuButton" type="button" class="menu-button" aria-label="Open navigation">☰</button>
+        <button id="mobileMenuButton" type="button" class="menu-button" aria-label="Open navigation">&#9776;</button>
         <div class="top-bar-group">
           <span class="top-bar-label">Deployment</span>
           <span id="currentDeploymentLabel" class="top-bar-value mono">-</span>
           <span id="currentDeploymentState" class="tag idle">Offline</span>
         </div>
         <div class="top-bar-actions">
-          <button id="refreshButton" type="button" class="button">Refresh</button>
-          <button id="switchDeploymentButton" type="button" class="button">Change Deployment</button>
+          <button id="themeToggleButton" type="button" class="button theme-toggle-button">Dark</button>
+          <button id="refreshButton" type="button" class="button icon-button" aria-label="Refresh deployment" title="Refresh deployment">&#8635;</button>
+          <button id="openDispatchButton" type="button" class="button button-primary">Dispatch</button>
+          <button id="switchDeploymentButton" type="button" class="button">Logout</button>
         </div>
       </div>
 
       <main class="main">
         <section class="page-header proxy-hero">
           <div>
-            <div class="eyebrow">Remote Operations</div>
-            <h2>Manage one Armada deployment through the proxy</h2>
-            <p class="text-muted hero-copy">
-              This shell is tied to a single deployment at a time. Review live status, dispatch voyages,
-              edit missions, inspect logs and diffs, and manage fleets or vessels from a phone-sized screen
-              without exposing the full local dashboard.
-            </p>
-          </div>
-          <div class="hero-actions">
-            <button id="refreshSummaryButton" type="button" class="button button-primary">Refresh Deployment</button>
+            <div class="eyebrow">Remote Control</div>
+            <h2>Manage your Armada deployment</h2>
           </div>
         </section>
 
@@ -122,7 +116,7 @@
             <div class="panel-header">
               <div>
                 <h2 id="summaryTitle">Deployment Summary</h2>
-                <p id="summarySubtitle" class="text-muted"></p>
+                <div id="summarySubtitle" class="summary-meta"></div>
               </div>
             </div>
             <div id="summaryCards" class="summary-cards"></div>
@@ -150,7 +144,19 @@
                 <div class="field-row">
                   <label class="field">
                     <span>Status</span>
-                    <input id="missionBrowseStatus" type="text" placeholder="InProgress">
+                    <select id="missionBrowseStatus">
+                      <option value="">All</option>
+                      <option value="Pending">Pending</option>
+                      <option value="Assigned">Assigned</option>
+                      <option value="InProgress">InProgress</option>
+                      <option value="WorkProduced">WorkProduced</option>
+                      <option value="Testing">Testing</option>
+                      <option value="Review">Review</option>
+                      <option value="Complete">Complete</option>
+                      <option value="Failed">Failed</option>
+                      <option value="LandingFailed">LandingFailed</option>
+                      <option value="Cancelled">Cancelled</option>
+                    </select>
                   </label>
                   <label class="field">
                     <span>Limit</span>
@@ -180,7 +186,7 @@
               <div class="panel-header">
                 <div>
                   <h2>Voyages</h2>
-                  <p class="text-muted">Dispatch new voyages and browse remote voyage state.</p>
+                  <p class="text-muted">Browse remote voyage state and dispatch new work.</p>
                 </div>
               </div>
               <form id="voyageBrowseForm" class="form-stack panel-filters">
@@ -217,7 +223,10 @@
               <div class="panel-header">
                 <div>
                   <h2>Fleets</h2>
-                  <p class="text-muted">Review current fleet definitions before editing them below.</p>
+                  <p class="text-muted">Review current fleet definitions and add new ones.</p>
+                </div>
+                <div class="panel-header-actions">
+                  <button id="openFleetModalButton" type="button" class="button">Add Fleet</button>
                 </div>
               </div>
               <div id="fleetList" class="entity-stack"></div>
@@ -227,197 +236,15 @@
               <div class="panel-header">
                 <div>
                   <h2>Vessels</h2>
-                  <p class="text-muted">Review current repository registrations and deployment targets.</p>
+                  <p class="text-muted">Review repository registrations and add new deployment targets.</p>
+                </div>
+                <div class="panel-header-actions">
+                  <button id="openVesselModalButton" type="button" class="button">Add Vessel</button>
                 </div>
               </div>
               <div id="vesselList" class="entity-stack"></div>
             </section>
           </div>
-
-          <div id="studiosSection" class="management-grid">
-            <section class="panel">
-              <div class="panel-header">
-                <div>
-                  <h2>Fleet Studio</h2>
-                  <p class="text-muted">Create a new fleet or update the selected fleet.</p>
-                </div>
-              </div>
-              <form id="fleetForm" class="form-stack">
-                <label class="field">
-                  <span>Name</span>
-                  <input id="fleetName" type="text" maxlength="128" placeholder="Production Fleet">
-                </label>
-                <label class="field">
-                  <span>Description</span>
-                  <textarea id="fleetDescription" rows="3" placeholder="Primary repositories and deployment context"></textarea>
-                </label>
-                <label class="field">
-                  <span>Default Pipeline Id</span>
-                  <input id="fleetDefaultPipelineId" type="text" placeholder="ppl_...">
-                </label>
-                <label class="field field-checkbox">
-                  <input id="fleetActive" type="checkbox" checked>
-                  <span>Fleet is active</span>
-                </label>
-                <div class="form-actions">
-                  <button type="submit" class="button button-primary">Save Fleet</button>
-                  <button id="fleetResetButton" type="button" class="button">New Fleet</button>
-                </div>
-                <div id="fleetFormStatus" class="form-status"></div>
-              </form>
-            </section>
-
-            <section class="panel">
-              <div class="panel-header">
-                <div>
-                  <h2>Vessel Studio</h2>
-                  <p class="text-muted">Register a vessel or update the selected vessel.</p>
-                </div>
-              </div>
-              <form id="vesselForm" class="form-stack">
-                <label class="field">
-                  <span>Fleet Id</span>
-                  <input id="vesselFleetId" type="text" placeholder="flt_...">
-                </label>
-                <label class="field">
-                  <span>Name</span>
-                  <input id="vesselName" type="text" maxlength="128" placeholder="armada-prod">
-                </label>
-                <label class="field">
-                  <span>Repo URL</span>
-                  <input id="vesselRepoUrl" type="text" placeholder="https://github.com/org/repo">
-                </label>
-                <label class="field">
-                  <span>Working Directory</span>
-                  <input id="vesselWorkingDirectory" type="text" placeholder="C:\\code\\repo">
-                </label>
-                <div class="field-row">
-                  <label class="field">
-                    <span>Default Branch</span>
-                    <input id="vesselDefaultBranch" type="text" placeholder="main">
-                  </label>
-                  <label class="field">
-                    <span>Default Pipeline Id</span>
-                    <input id="vesselDefaultPipelineId" type="text" placeholder="ppl_...">
-                  </label>
-                </div>
-                <div class="field-row">
-                  <label class="field field-checkbox">
-                    <input id="vesselAllowConcurrentMissions" type="checkbox">
-                    <span>Allow concurrent missions</span>
-                  </label>
-                  <label class="field field-checkbox">
-                    <input id="vesselActive" type="checkbox" checked>
-                    <span>Vessel is active</span>
-                  </label>
-                </div>
-                <div class="form-actions">
-                  <button type="submit" class="button button-primary">Save Vessel</button>
-                  <button id="vesselResetButton" type="button" class="button">New Vessel</button>
-                </div>
-                <div id="vesselFormStatus" class="form-status"></div>
-              </form>
-            </section>
-
-            <section class="panel">
-              <div class="panel-header">
-                <div>
-                  <h2>Voyage Dispatch</h2>
-                  <p class="text-muted">Dispatch a new voyage through the selected deployment.</p>
-                </div>
-              </div>
-              <form id="dispatchForm" class="form-stack">
-                <label class="field">
-                  <span>Vessel Id</span>
-                  <input id="dispatchVesselId" type="text" placeholder="vsl_...">
-                </label>
-                <label class="field">
-                  <span>Title</span>
-                  <input id="dispatchTitle" type="text" placeholder="Remote release hardening">
-                </label>
-                <label class="field">
-                  <span>Description</span>
-                  <textarea id="dispatchDescription" rows="3" placeholder="High-level voyage objective"></textarea>
-                </label>
-                <div class="field-row">
-                  <label class="field">
-                    <span>Pipeline Id</span>
-                    <input id="dispatchPipelineId" type="text" placeholder="ppl_...">
-                  </label>
-                  <label class="field">
-                    <span>Pipeline Name</span>
-                    <input id="dispatchPipeline" type="text" placeholder="FullPipeline">
-                  </label>
-                </div>
-                <label class="field">
-                  <span>Missions</span>
-                  <textarea id="dispatchMissions" rows="6" placeholder="One mission per line. Use Title :: Description to provide detailed instructions."></textarea>
-                </label>
-                <div class="form-actions">
-                  <button type="submit" class="button button-primary">Dispatch Voyage</button>
-                </div>
-                <div id="dispatchFormStatus" class="form-status"></div>
-              </form>
-            </section>
-
-            <section class="panel">
-              <div class="panel-header">
-                <div>
-                  <h2>Mission Studio</h2>
-                  <p class="text-muted">Create a standalone mission or edit the mission selected from recent activity.</p>
-                </div>
-              </div>
-              <form id="missionForm" class="form-stack">
-                <label class="field">
-                  <span>Title</span>
-                  <input id="missionTitle" type="text" placeholder="Investigate remote shell regression">
-                </label>
-                <label class="field">
-                  <span>Description</span>
-                  <textarea id="missionDescription" rows="4" placeholder="Mission instructions"></textarea>
-                </label>
-                <div class="field-row">
-                  <label class="field">
-                    <span>Vessel Id</span>
-                    <input id="missionVesselId" type="text" placeholder="vsl_...">
-                  </label>
-                  <label class="field">
-                    <span>Voyage Id</span>
-                    <input id="missionVoyageId" type="text" placeholder="vyg_...">
-                  </label>
-                </div>
-                <div class="field-row">
-                  <label class="field">
-                    <span>Persona</span>
-                    <input id="missionPersona" type="text" placeholder="Worker">
-                  </label>
-                  <label class="field">
-                    <span>Priority</span>
-                    <input id="missionPriority" type="number" min="0" max="1000" value="100">
-                  </label>
-                </div>
-                <div class="form-actions">
-                  <button type="submit" class="button button-primary">Save Mission</button>
-                  <button id="missionResetButton" type="button" class="button">New Mission</button>
-                </div>
-                <div id="missionFormStatus" class="form-status"></div>
-              </form>
-            </section>
-          </div>
-
-          <section id="detailSection" class="panel panel-detail">
-            <div class="panel-header">
-              <div>
-                <h2 id="detailTitle">Focused Detail</h2>
-                <p id="detailSubtitle" class="text-muted">Select a mission, voyage, captain, fleet, or vessel card to inspect it here.</p>
-              </div>
-            </div>
-            <div id="detailBody" class="detail-body">
-              <div class="detail-empty">
-                No focused entity selected yet.
-              </div>
-            </div>
-          </section>
         </div>
       </main>
     </div>
@@ -433,6 +260,206 @@
       <div class="entity-meta-secondary"></div>
     </button>
   </template>
+
+  <div id="detailModal" class="modal-shell hidden">
+    <div class="modal-backdrop" data-close-modal="detailModal"></div>
+    <div class="modal-card modal-card-wide" role="dialog" aria-modal="true" aria-labelledby="detailModalTitle">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h2 id="detailModalTitle">Detail</h2>
+          <p id="detailModalSubtitle" class="text-muted"></p>
+        </div>
+        <button type="button" class="button modal-close-button" data-close-modal="detailModal">Close</button>
+      </div>
+      <div id="detailModalBody" class="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="dispatchModal" class="modal-shell hidden">
+    <div class="modal-backdrop" data-close-modal="dispatchModal"></div>
+    <div class="modal-card modal-card-wide" role="dialog" aria-modal="true" aria-labelledby="dispatchModalTitle">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h2 id="dispatchModalTitle">Dispatch</h2>
+          <p class="text-muted">Create a voyage and queue missions from this deployment.</p>
+        </div>
+        <button type="button" class="button modal-close-button" data-close-modal="dispatchModal">Close</button>
+      </div>
+      <form id="dispatchForm" class="form-stack modal-form">
+        <div class="field-row field-row-triple">
+          <label class="field">
+            <span>Vessel</span>
+            <select id="dispatchVesselId"></select>
+          </label>
+          <label class="field">
+            <span>Pipeline</span>
+            <select id="dispatchPipelineId"></select>
+          </label>
+          <label class="field">
+            <span>Priority</span>
+            <input id="dispatchPriority" type="number" min="0" max="1000" value="100">
+          </label>
+        </div>
+        <label class="field">
+          <span>Title</span>
+          <input id="dispatchTitle" type="text" placeholder="Remote release hardening">
+        </label>
+        <label class="field">
+          <span>Description</span>
+          <textarea id="dispatchDescription" rows="3" placeholder="High-level voyage objective"></textarea>
+        </label>
+        <label class="field">
+          <span>Missions</span>
+          <textarea id="dispatchMissions" rows="6" placeholder="One mission per line. Use Title :: Description to provide detailed instructions."></textarea>
+        </label>
+        <div class="form-actions">
+          <button id="dispatchSubmitButton" type="submit" class="button button-primary">Dispatch</button>
+          <button type="button" class="button" data-close-modal="dispatchModal">Cancel</button>
+        </div>
+        <div id="dispatchFormStatus" class="form-status"></div>
+      </form>
+    </div>
+  </div>
+
+  <div id="fleetModal" class="modal-shell hidden">
+    <div class="modal-backdrop" data-close-modal="fleetModal"></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="fleetModalTitle">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h2 id="fleetModalTitle">Add Fleet</h2>
+          <p id="fleetModalSubtitle" class="text-muted">Create a new fleet.</p>
+        </div>
+        <button type="button" class="button modal-close-button" data-close-modal="fleetModal">Close</button>
+      </div>
+      <form id="fleetForm" class="form-stack modal-form">
+        <label class="field">
+          <span>Name</span>
+          <input id="fleetName" type="text" maxlength="128" placeholder="Production Fleet">
+        </label>
+        <label class="field">
+          <span>Description</span>
+          <textarea id="fleetDescription" rows="4" placeholder="Primary repositories and deployment context"></textarea>
+        </label>
+        <label class="field">
+          <span>Default Pipeline</span>
+          <select id="fleetDefaultPipelineId"></select>
+        </label>
+        <label class="field field-checkbox">
+          <input id="fleetActive" type="checkbox" checked>
+          <span>Fleet is active</span>
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="button button-primary">Save Fleet</button>
+          <button id="fleetResetButton" type="button" class="button">Reset</button>
+        </div>
+        <div id="fleetFormStatus" class="form-status"></div>
+      </form>
+    </div>
+  </div>
+
+  <div id="vesselModal" class="modal-shell hidden">
+    <div class="modal-backdrop" data-close-modal="vesselModal"></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="vesselModalTitle">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h2 id="vesselModalTitle">Add Vessel</h2>
+          <p id="vesselModalSubtitle" class="text-muted">Register a repository for remote work.</p>
+        </div>
+        <button type="button" class="button modal-close-button" data-close-modal="vesselModal">Close</button>
+      </div>
+      <form id="vesselForm" class="form-stack modal-form">
+        <label class="field">
+          <span>Fleet</span>
+          <select id="vesselFleetId"></select>
+        </label>
+        <label class="field">
+          <span>Name</span>
+          <input id="vesselName" type="text" maxlength="128" placeholder="armada-prod">
+        </label>
+        <label class="field">
+          <span>Repo URL</span>
+          <input id="vesselRepoUrl" type="text" placeholder="https://github.com/org/repo">
+        </label>
+        <label class="field">
+          <span>Working Directory</span>
+          <input id="vesselWorkingDirectory" type="text" placeholder="C:\code\repo">
+        </label>
+        <div class="field-row">
+          <label class="field">
+            <span>Default Branch</span>
+            <input id="vesselDefaultBranch" type="text" placeholder="main">
+          </label>
+          <label class="field">
+            <span>Default Pipeline</span>
+            <select id="vesselDefaultPipelineId"></select>
+          </label>
+        </div>
+        <div class="field-row">
+          <label class="field field-checkbox">
+            <input id="vesselAllowConcurrentMissions" type="checkbox">
+            <span>Allow concurrent missions</span>
+          </label>
+          <label class="field field-checkbox">
+            <input id="vesselActive" type="checkbox" checked>
+            <span>Vessel is active</span>
+          </label>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="button button-primary">Save Vessel</button>
+          <button id="vesselResetButton" type="button" class="button">Reset</button>
+        </div>
+        <div id="vesselFormStatus" class="form-status"></div>
+      </form>
+    </div>
+  </div>
+
+  <div id="missionModal" class="modal-shell hidden">
+    <div class="modal-backdrop" data-close-modal="missionModal"></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="missionModalTitle">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h2 id="missionModalTitle">Edit Mission</h2>
+          <p id="missionModalSubtitle" class="text-muted">Update an existing mission.</p>
+        </div>
+        <button type="button" class="button modal-close-button" data-close-modal="missionModal">Close</button>
+      </div>
+      <form id="missionForm" class="form-stack modal-form">
+        <label class="field">
+          <span>Title</span>
+          <input id="missionTitle" type="text" placeholder="Investigate remote shell regression">
+        </label>
+        <label class="field">
+          <span>Instructions</span>
+          <textarea id="missionDescription" rows="6" placeholder="Mission instructions"></textarea>
+        </label>
+        <div class="field-row">
+          <label class="field">
+            <span>Vessel</span>
+            <select id="missionVesselId"></select>
+          </label>
+          <label class="field">
+            <span>Voyage Id</span>
+            <input id="missionVoyageId" type="text" placeholder="vyg_...">
+          </label>
+        </div>
+        <div class="field-row">
+          <label class="field">
+            <span>Persona</span>
+            <input id="missionPersona" type="text" placeholder="Worker">
+          </label>
+          <label class="field">
+            <span>Priority</span>
+            <input id="missionPriority" type="number" min="0" max="1000" value="100">
+          </label>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="button button-primary">Save Mission</button>
+          <button id="missionResetButton" type="button" class="button">Reset</button>
+        </div>
+        <div id="missionFormStatus" class="form-status"></div>
+      </form>
+    </div>
+  </div>
 
   <script src="/app.js"></script>
 </body>
