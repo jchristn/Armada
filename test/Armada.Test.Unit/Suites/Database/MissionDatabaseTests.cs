@@ -111,10 +111,10 @@ namespace Armada.Test.Unit.Suites.Database
                     AssertEqual(MissionStatusEnum.Complete, result.Status);
                     AssertEqual(5, result.Priority);
                     AssertEqual("feature/test", result.BranchName);
-                    AssertNotNull(result.TotalRuntimeMs);
-                    AssertEqual(2500L, result.TotalRuntimeMs.Value);
-                    AssertNotNull(read!.TotalRuntimeMs);
-                    AssertEqual(2500L, read.TotalRuntimeMs.Value);
+                    long resultRuntimeMs = result.TotalRuntimeMs ?? throw new InvalidOperationException("Expected result.TotalRuntimeMs to be populated.");
+                    long readRuntimeMs = read!.TotalRuntimeMs ?? throw new InvalidOperationException("Expected read.TotalRuntimeMs to be populated.");
+                    AssertEqual(2500L, resultRuntimeMs);
+                    AssertEqual(2500L, readRuntimeMs);
                 }
             });
         }
@@ -191,8 +191,8 @@ namespace Armada.Test.Unit.Suites.Database
                     AssertEqual("feature/updated", result.BranchName);
                     AssertNotNull(result.StartedUtc);
                     AssertNotNull(result.CompletedUtc);
-                    AssertNotNull(result.TotalRuntimeMs);
-                    AssertEqual(1750L, result.TotalRuntimeMs.Value);
+                    long runtimeMs = result.TotalRuntimeMs ?? throw new InvalidOperationException("Expected result.TotalRuntimeMs to be populated.");
+                    AssertEqual(1750L, runtimeMs);
                 }
             });
         }
