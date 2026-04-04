@@ -160,7 +160,8 @@ namespace Armada.Proxy
 
             if (Directory.Exists(_WwwrootDirectory))
             {
-                server.Routes.PreAuthentication.Content.Add(_WwwrootDirectory, true);
+                server.Routes.PreAuthentication.Content.BaseDirectory = _WwwrootDirectory;
+                server.Routes.PreAuthentication.Content.Add("/", true);
             }
             else
             {
