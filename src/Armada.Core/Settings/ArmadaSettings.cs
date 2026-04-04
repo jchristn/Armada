@@ -3,6 +3,7 @@ namespace Armada.Core.Settings
     using System.Text.Json;
     using System.Text.Json.Serialization;
     using Armada.Core.Enums;
+    using SyslogLogging;
 
     /// <summary>
     /// Top-level application settings.
@@ -228,6 +229,12 @@ namespace Armada.Core.Settings
                 _MaxLogFileCount = value;
             }
         }
+
+        /// <summary>
+        /// Optional syslog targets for process-level logging.
+        /// When empty, Armada logs only to console and local files.
+        /// </summary>
+        public List<SyslogServer> SyslogServers { get; set; } = new List<SyslogServer>();
 
         /// <summary>
         /// Data retention period in days for completed voyages, missions, signals, and events.

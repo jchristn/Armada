@@ -1,0 +1,4 @@
+# Ignore all runtime data written by the proxy container.
+*
+!.gitignore
+!.gitkeep

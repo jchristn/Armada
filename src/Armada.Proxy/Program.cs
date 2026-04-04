@@ -1,5 +1,6 @@
 namespace Armada.Proxy
 {
+    using System.Collections.Generic;
     using System.IO;
     using System.Runtime.Loader;
     using System.Threading;
@@ -48,16 +49,8 @@ namespace Armada.Proxy
 
             _Settings = ProxySettings.Load(GetExplicitConfigPath(args));
 
-            Directory.CreateDirectory(Constants.DefaultDataDirectory);
-            string logDirectory = Path.Combine(Constants.DefaultDataDirectory, "logs");
-            Directory.CreateDirectory(logDirectory);
-
-            _Logging = new LoggingModule();
-            _Logging.Settings.EnableConsole = true;
-            _Logging.Settings.EnableColors = true;
-            _Logging.Settings.MinimumSeverity = Severity.Debug;
-            _Logging.Settings.FileLogging = FileLoggingMode.FileWithDate;
-            _Logging.Settings.LogFilename = Path.Combine(logDirectory, "proxy.log");
+            InitializeDirectories();
+            InitializeLogging();
 
             _Logging.Info("[Program] starting Proxy on port " + _Settings.Port);
 
@@ -117,6 +110,30 @@ namespace Armada.Proxy
             if (String.IsNullOrWhiteSpace(hostname)) return "localhost";
             if (hostname == "*" || hostname == "+" || hostname == "0.0.0.0") return "localhost";
             return hostname;
+        }
+
+        private static void InitializeDirectories()
+        {
+            Directory.CreateDirectory(Constants.DefaultDataDirectory);
+
+            string logDirectory = Path.Combine(Constants.DefaultDataDirectory, "logs");
+            if (!Directory.Exists(logDirectory))
+            {
+                Directory.CreateDirectory(logDirectory);
+            }
+        }
+
+        private static void InitializeLogging()
+        {
+            string logDirectory = Path.Combine(Constants.DefaultDataDirectory, "logs");
+            List<SyslogServer> syslogServers = _Settings.SyslogServers ?? new List<SyslogServer>();
+
+            _Logging = new LoggingModule(syslogServers, true);
+            _Logging.Settings.EnableConsole = true;
+            _Logging.Settings.EnableColors = true;
+            _Logging.Settings.MinimumSeverity = Severity.Debug;
+            _Logging.Settings.FileLogging = FileLoggingMode.FileWithDate;
+            _Logging.Settings.LogFilename = Path.Combine(logDirectory, "proxy.log");
         }
     }
 }

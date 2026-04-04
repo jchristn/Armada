@@ -2,6 +2,7 @@ namespace Armada.Proxy.Settings
 {
     using System.Text.Json;
     using Armada.Core;
+    using SyslogLogging;
 
     /// <summary>
     /// Runtime settings for Armada.Proxy.
@@ -91,6 +92,12 @@ namespace Armada.Proxy.Settings
         }
 
         /// <summary>
+        /// Optional syslog targets for proxy process logging.
+        /// When empty, the proxy logs only to console and local files.
+        /// </summary>
+        public List<SyslogServer> SyslogServers { get; set; } = new List<SyslogServer>();
+
+        /// <summary>
         /// Normalize configured enrollment tokens by trimming blanks.
         /// </summary>
         /// <returns>Distinct non-empty tokens.</returns>
@@ -166,6 +173,7 @@ namespace Armada.Proxy.Settings
             if (TryGetInt(section, nameof(StaleAfterSeconds), out int staleAfterSeconds)) StaleAfterSeconds = staleAfterSeconds;
             if (TryGetInt(section, nameof(RequestTimeoutSeconds), out int requestTimeoutSeconds)) RequestTimeoutSeconds = requestTimeoutSeconds;
             if (TryGetInt(section, nameof(MaxRecentEvents), out int maxRecentEvents)) MaxRecentEvents = maxRecentEvents;
+            if (TryGetSyslogServers(section, nameof(SyslogServers), out List<SyslogServer> syslogServers)) SyslogServers = syslogServers;
 
             if (TryGetProperty(section, nameof(EnrollmentTokens), out JsonElement enrollmentTokens) && enrollmentTokens.ValueKind == JsonValueKind.Array)
             {
@@ -235,6 +243,40 @@ namespace Armada.Proxy.Settings
             }
 
             return false;
+        }
+
+        private static bool TryGetSyslogServers(JsonElement root, string propertyName, out List<SyslogServer> value)
+        {
+            value = new List<SyslogServer>();
+
+            if (!TryGetProperty(root, propertyName, out JsonElement property) || property.ValueKind != JsonValueKind.Array)
+            {
+                return false;
+            }
+
+            try
+            {
+                List<SyslogServer>? parsed = JsonSerializer.Deserialize<List<SyslogServer>>(
+                    property.GetRawText(),
+                    new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
+
+                if (parsed != null)
+                {
+                    value = parsed
+                        .Where(server => !String.IsNullOrWhiteSpace(server.Hostname))
+                        .ToList();
+                }
+
+                return true;
+            }
+            catch
+            {
+                value = new List<SyslogServer>();
+                return false;
+            }
         }
 
         private static bool TryGetBool(JsonElement root, string propertyName, out bool value)

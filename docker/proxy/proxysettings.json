@@ -1,0 +1,13 @@
+{
+  "ArmadaProxy": {
+    "hostname": "0.0.0.0",
+    "port": 7893,
+    "syslogServers": [],
+    "requireEnrollmentToken": false,
+    "enrollmentTokens": [],
+    "handshakeTimeoutSeconds": 15,
+    "staleAfterSeconds": 90,
+    "requestTimeoutSeconds": 20,
+    "maxRecentEvents": 50
+  }
+}

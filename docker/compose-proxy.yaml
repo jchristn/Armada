@@ -1,0 +1,11 @@
+services:
+  armada-proxy:
+    image: jchristn77/armada-proxy:v0.6.0
+    ports:
+      - "7893:7893"
+    environment:
+      - ARMADA_PROXY_SETTINGS_FILE=/config/proxysettings.json
+    volumes:
+      - ./proxy/proxysettings.json:/config/proxysettings.json:ro
+      - ./proxy/data:/root/.armada
+      - ./proxy/logs:/root/.armada/logs

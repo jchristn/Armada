@@ -1,6 +1,7 @@
 namespace Armada.Server
 {
     using System;
+    using System.Collections.Generic;
     using System.IO;
     using System.Runtime.Loader;
     using System.Text.Json;
@@ -62,14 +63,7 @@ namespace Armada.Server
             _Settings.InitializeDirectories();
 
             // Initialize logging
-            _Logging = new LoggingModule();
-            _Logging.Settings.EnableConsole = true;
-            _Logging.Settings.EnableColors = true;
-            _Logging.Settings.MinimumSeverity = Severity.Debug;
-            _Logging.Settings.FileLogging = FileLoggingMode.FileWithDate;
-            if (!Directory.Exists(_Settings.LogDirectory))
-                Directory.CreateDirectory(_Settings.LogDirectory);
-            _Logging.Settings.LogFilename = Path.Combine(_Settings.LogDirectory, "admiral.log");
+            InitializeLogging();
 
             _Logging.Info("[Program] starting Admiral on port " + _Settings.AdmiralPort);
 
@@ -115,6 +109,23 @@ namespace Armada.Server
 
             _Server.Stop();
             _Logging.Info("[Program] stopped at " + DateTime.UtcNow.ToString("o"));
+        }
+
+        private static void InitializeLogging()
+        {
+            List<SyslogServer> syslogServers = _Settings.SyslogServers ?? new List<SyslogServer>();
+
+            _Logging = new LoggingModule(syslogServers, true);
+            _Logging.Settings.EnableConsole = true;
+            _Logging.Settings.EnableColors = true;
+            _Logging.Settings.MinimumSeverity = Severity.Debug;
+            _Logging.Settings.FileLogging = FileLoggingMode.FileWithDate;
+            if (!Directory.Exists(_Settings.LogDirectory))
+            {
+                Directory.CreateDirectory(_Settings.LogDirectory);
+            }
+
+            _Logging.Settings.LogFilename = Path.Combine(_Settings.LogDirectory, "admiral.log");
         }
     }
 }
