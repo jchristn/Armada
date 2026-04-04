@@ -1915,6 +1915,27 @@ a:hover { text-decoration: underline; }
     .diff-file-nav { width: 100%; max-width: 100%; max-height: 30vh; border-right: none; border-bottom: 1px solid var(--border); }
     .diff-modal-header { flex-wrap: wrap; }
     .settings-grid { grid-template-columns: 1fr; }
+    .login-footer {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 12px;
+    }
+    .login-footer .github-link {
+        order: 1;
+    }
+    .login-footer span {
+        order: 2;
+    }
+    .login-theme-toggle {
+        order: 3;
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        border: none;
+        padding-top: 8px;
+        margin-top: 4px;
+        border-top: none;
+    }
 }
 
 /* Settings Page */
