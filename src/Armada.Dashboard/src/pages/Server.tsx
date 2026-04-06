@@ -255,6 +255,35 @@ export default function Server() {
     }
   };
 
+  const handleRemoteTunnelEnabledChange = (enabled: boolean) => {
+    if (!settings) return;
+
+    if (!enabled) {
+      setSettings({
+        ...settings,
+        remoteControl: { ...settings.remoteControl, enabled: false },
+      });
+      return;
+    }
+
+    setConfirmDialog({
+      open: true,
+      message:
+        'Enabling remote tunnel will enable remote connectivity to this Armada instance.  Are you sure?',
+      onConfirm: () => {
+        setSettings(current =>
+          current
+            ? {
+                ...current,
+                remoteControl: { ...current.remoteControl, enabled: true },
+              }
+            : current,
+        );
+        setConfirmDialog({ open: false, message: '', onConfirm: () => {} });
+      },
+    });
+  };
+
   const handleHealthCheck = async () => {
     try {
       const result = (await getHealth()) as unknown as HealthInfo;
@@ -678,12 +707,7 @@ export default function Server() {
                 <input
                   type="checkbox"
                   checked={settings.remoteControl.enabled}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      remoteControl: { ...settings.remoteControl, enabled: e.target.checked },
-                    })
-                  }
+                  onChange={(e) => handleRemoteTunnelEnabledChange(e.target.checked)}
                 />
                 <span>Enable Remote Tunnel</span>
               </label>

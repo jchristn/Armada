@@ -1335,6 +1335,20 @@ function dashboard() {
             } catch (e) { this.toast('Failed: ' + e.message, 'error'); }
         },
 
+        async handleRemoteTunnelEnabledToggle(event) {
+            if (!this.serverSettings?.remoteControl) return;
+
+            let enabled = !!event.target.checked;
+            if (!enabled) {
+                this.serverSettings.remoteControl.enabled = false;
+                return;
+            }
+
+            let confirmed = await this.showConfirm('Enabling remote tunnel will enable remote connectivity to this Armada instance.  Are you sure?');
+            this.serverSettings.remoteControl.enabled = confirmed;
+            event.target.checked = confirmed;
+        },
+
         async healthCheck() {
             try {
                 let result = await this.api('GET', '/api/v1/status/health');

@@ -93,7 +93,7 @@
                 <div class="settings-grid">
                     <div class="form-group">
                         <label class="settings-checkbox-label">
-                            <input type="checkbox" x-model="serverSettings.remoteControl.enabled">
+                            <input type="checkbox" :checked="!!serverSettings.remoteControl.enabled" @change="handleRemoteTunnelEnabledToggle($event)">
                             <span>Enable Remote Tunnel</span>
                         </label>
                     </div>
