@@ -515,25 +515,25 @@ namespace Armada.Proxy
 
         private void MapJsonGet(Webserver server, string path, Func<ApiRequest, Task<object>> handler)
         {
-            server.Get(path, async (req) => await SendJsonResponseAsync(req, handler).ConfigureAwait(false));
+            server.Get(path, async (req) => await PrepareJsonResponseAsync(req, handler).ConfigureAwait(false));
         }
 
         private void MapJsonPost(Webserver server, string path, Func<ApiRequest, Task<object>> handler)
         {
-            server.Post(path, async (req) => await SendJsonResponseAsync(req, handler).ConfigureAwait(false));
+            server.Post(path, async (req) => await PrepareJsonResponseAsync(req, handler).ConfigureAwait(false));
         }
 
         private void MapJsonPut(Webserver server, string path, Func<ApiRequest, Task<object>> handler)
         {
-            server.Put(path, async (req) => await SendJsonResponseAsync(req, handler).ConfigureAwait(false));
+            server.Put(path, async (req) => await PrepareJsonResponseAsync(req, handler).ConfigureAwait(false));
         }
 
         private void MapJsonDelete(Webserver server, string path, Func<ApiRequest, Task<object>> handler)
         {
-            server.Delete(path, async (req) => await SendJsonResponseAsync(req, handler).ConfigureAwait(false));
+            server.Delete(path, async (req) => await PrepareJsonResponseAsync(req, handler).ConfigureAwait(false));
         }
 
-        private static async Task<object> SendJsonResponseAsync(ApiRequest req, Func<ApiRequest, Task<object>> handler)
+        private static async Task<object> PrepareJsonResponseAsync(ApiRequest req, Func<ApiRequest, Task<object>> handler)
         {
             object payload = await handler(req).ConfigureAwait(false);
             if (req.Http.Response.StatusCode <= 0)
@@ -541,10 +541,12 @@ namespace Armada.Proxy
                 req.Http.Response.StatusCode = 200;
             }
 
-            req.Http.Response.ContentType = "application/json";
-            string json = JsonSerializer.Serialize(payload, RemoteTunnelProtocol.JsonOptions);
-            await req.Http.Response.Send(json, req.CancellationToken).ConfigureAwait(false);
-            return new { };
+            if (String.IsNullOrWhiteSpace(req.Http.Response.ContentType))
+            {
+                req.Http.Response.ContentType = "application/json";
+            }
+
+            return payload;
         }
 
         private void RegisterWebSocketRoutes(Webserver server)
