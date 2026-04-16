@@ -1,0 +1,104 @@
+{
+  "admiralPort": 7890,
+  "mcpPort": 7891,
+  "webSocketPort": 7892,
+  "heartbeatIntervalSeconds": 30,
+  "stallThresholdMinutes": 10,
+  "maxLandingRetries": 3,
+  "branchCleanupPolicy": "LocalOnly",
+  "autoPush": true,
+  "autoCreatePullRequests": false,
+  "autoMergePullRequests": false,
+  "maxRecoveryAttempts": 3,
+  "maxLogFileSizeBytes": 10485760,
+  "maxLogFileCount": 5,
+  "syslogServers": [
+    {
+      "hostname": "127.0.0.1",
+      "port": 514,
+      "ipPort": "127.0.0.1:514"
+    }
+  ],
+  "dataRetentionDays": 30,
+  "minIdleCaptains": 0,
+  "maxCaptains": 0,
+  "allowSelfRegistration": true,
+  "requireAuthForShutdown": false,
+  "notifications": true,
+  "terminalBell": true,
+  "idleCaptainTimeoutSeconds": 0,
+  "agents": [
+    {
+      "runtime": "ClaudeCode",
+      "command": "claude",
+      "args": "--dangerously-skip-permissions --print",
+      "environment": {
+        "CLAUDE_CODE_DISABLE_NONINTERACTIVE_HINT": "1"
+      },
+      "supportsResume": true,
+      "maxConcurrent": 0
+    },
+    {
+      "runtime": "Codex",
+      "command": "codex",
+      "args": "--approval-mode full-auto",
+      "environment": {},
+      "supportsResume": false,
+      "maxConcurrent": 0
+    },
+    {
+      "runtime": "Gemini",
+      "command": "gemini",
+      "args": "--sandbox none -p",
+      "environment": {},
+      "supportsResume": false,
+      "maxConcurrent": 0
+    },
+    {
+      "runtime": "Cursor",
+      "command": "cursor",
+      "args": "--agent --prompt",
+      "environment": {},
+      "supportsResume": false,
+      "maxConcurrent": 0
+    }
+  ],
+  "escalationRules": [],
+  "database": {
+    "type": "Sqlite",
+    "filename": "armada.db",
+    "hostname": "localhost",
+    "port": 0,
+    "username": "",
+    "password": "",
+    "databaseName": "armada",
+    "schema": "public",
+    "requireEncryption": false,
+    "logQueries": false,
+    "minPoolSize": 1,
+    "maxPoolSize": 25,
+    "connectionLifetimeSeconds": 300,
+    "connectionIdleTimeoutSeconds": 60
+  },
+  "rest": {
+    "hostname": "localhost",
+    "ssl": false
+  },
+  "messageTemplates": {
+    "enableCommitMetadata": true,
+    "enablePrMetadata": true,
+    "commitMessageTemplate": "\nArmada-Mission-Id: {MissionId}\nArmada-Voyage-Id: {VoyageId}\nArmada-Captain-Id: {CaptainId}\nArmada-Vessel-Id: {VesselId}",
+    "prDescriptionTemplate": "\n\n---\nCommitted by [Armada](https://github.com/jchristn/armada)\n- Mission ID : {MissionId}\n- Voyage ID  : {VoyageId}\n- Captain ID : {CaptainId}\n- Vessel ID  : {VesselId}",
+    "mergeCommitTemplate": "Merge armada mission: {BranchName}\n\nArmada-Mission-Id: {MissionId}\nArmada-Voyage-Id: {VoyageId}"
+  },
+  "remoteControl": {
+    "enabled": false,
+    "tunnelUrl": "http://proxy.armadago.ai:7893/tunnel",
+    "password": "armadaadmin",
+    "connectTimeoutSeconds": 15,
+    "heartbeatIntervalSeconds": 30,
+    "reconnectBaseDelaySeconds": 5,
+    "reconnectMaxDelaySeconds": 60,
+    "allowInvalidCertificates": false
+  }
+}
