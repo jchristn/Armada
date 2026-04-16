@@ -1078,6 +1078,16 @@ export default function Server() {
           <div className="settings-actions">
             <button
               className="btn btn-sm"
+              onClick={() => {
+                try { localStorage.removeItem('armada_setup_completed'); } catch {}
+                window.location.reload();
+              }}
+              title="Re-open the first-run setup guide"
+            >
+              Setup Wizard
+            </button>
+            <button
+              className="btn btn-sm"
               onClick={handleHealthCheck}
               title="Run a health check and display the result"
             >

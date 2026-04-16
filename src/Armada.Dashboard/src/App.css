@@ -2358,6 +2358,283 @@ thead tr.column-filter-row td input.col-filter::placeholder {
 .login-theme-toggle { background: none; border: 1px solid var(--border); border-radius: var(--radius); padding: 4px 8px; font-size: 14px; cursor: pointer; color: var(--text-dim); line-height: 1; }
 .login-theme-toggle:hover { background: var(--bg-hover); }
 
+/* ==================== Setup Wizard ==================== */
+.wizard-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--modal-overlay);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    padding: 1.5rem;
+}
+
+.wizard-container {
+    position: relative;
+    display: flex;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.3);
+    max-width: 820px;
+    width: 100%;
+    min-height: 460px;
+    max-height: 85vh;
+    overflow: hidden;
+}
+
+.wizard-close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 1.4rem;
+    line-height: 1;
+    padding: 4px 8px;
+    border-radius: var(--radius);
+    cursor: pointer;
+}
+.wizard-close:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+}
+
+/* Table-of-contents sidebar */
+.wizard-toc {
+    width: 200px;
+    min-width: 200px;
+    background: var(--sidebar-bg);
+    padding: 1.25rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.wizard-toc-title {
+    color: var(--sidebar-text);
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 0 1rem 0.75rem;
+    opacity: 0.6;
+}
+
+.wizard-toc-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    width: 100%;
+    text-align: left;
+    padding: 0.55rem 1rem;
+    background: none;
+    border: none;
+    color: var(--sidebar-text);
+    font-size: 0.82rem;
+    cursor: pointer;
+    border-radius: 0;
+    transition: background 0.12s, color 0.12s;
+    position: relative;
+}
+
+.wizard-toc-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #e2e8f0;
+}
+
+.wizard-toc-item.active {
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.wizard-toc-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 4px;
+    bottom: 4px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--accent);
+}
+
+.wizard-toc-item.completed {
+    color: var(--green);
+}
+.wizard-toc-item.completed .wizard-toc-number {
+    background: var(--green);
+    color: #fff;
+}
+
+.wizard-toc-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    font-size: 0.7rem;
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--sidebar-text);
+    flex-shrink: 0;
+}
+
+.wizard-toc-item.active .wizard-toc-number {
+    background: var(--accent);
+    color: #fff;
+}
+
+.wizard-toc-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Main content area */
+.wizard-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 2rem 2.5rem;
+    overflow-y: auto;
+}
+
+.wizard-content {
+    flex: 1;
+}
+
+.wizard-step-heading {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin: 0 0 1.25rem;
+    color: var(--text);
+}
+
+.wizard-text {
+    font-size: 0.92rem;
+    line-height: 1.7;
+    color: var(--text);
+    margin-bottom: 0.9rem;
+}
+
+.wizard-text strong {
+    font-weight: 600;
+}
+
+.wizard-text code {
+    font-family: var(--mono);
+    font-size: 0.85em;
+    background: var(--bg-hover);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+}
+
+/* Actions bar */
+.wizard-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+}
+
+.wizard-actions-right {
+    display: flex;
+    gap: 0.5rem;
+}
+
+/* Responsive: stack TOC above content on narrow screens */
+@media (max-width: 640px) {
+    .wizard-container {
+        flex-direction: column;
+        max-height: 95vh;
+    }
+    .wizard-toc {
+        width: 100%;
+        min-width: auto;
+        flex-direction: row;
+        overflow-x: auto;
+        padding: 0.75rem 0.5rem;
+        gap: 0;
+    }
+    .wizard-toc-title { display: none; }
+    .wizard-toc-item { padding: 0.4rem 0.75rem; white-space: nowrap; }
+    .wizard-toc-item.active::before { display: none; }
+    .wizard-toc-label { display: none; }
+    .wizard-body { padding: 1.25rem; }
+}
+
+/* ---- Wizard-active sidebar spotlight ---- */
+
+/* Lift the sidebar above the wizard overlay so highlighted items are
+   rendered at full brightness (not dimmed through the backdrop). */
+.app-layout.wizard-active .sidebar {
+    position: relative;
+    z-index: 2100;
+}
+
+/* Block sidebar navigation while the wizard is open so users can't
+   strand themselves mid-flow. */
+.app-layout.wizard-active .sidebar-nav-item {
+    pointer-events: none;
+}
+
+/* Dim every sidebar nav item except the ones the current wizard step
+   is pointing at. */
+.app-layout.wizard-active .sidebar-nav-item:not(.wizard-highlight) {
+    opacity: 0.25;
+    filter: grayscale(0.4);
+    transition: opacity 0.2s, filter 0.2s;
+}
+
+/* The highlighted item itself: bright accent fill, thicker left bar,
+   glowing halo that extends beyond the sidebar, and a pulse animation. */
+.sidebar-nav-item.wizard-highlight {
+    background: var(--accent) !important;
+    color: #ffffff !important;
+    font-weight: 700;
+    border-radius: 6px;
+    margin: 2px 6px;
+    animation: wizard-pulse 1.4s ease-in-out infinite;
+    position: relative;
+    z-index: 2200;
+    transform: scale(1.04);
+    transform-origin: left center;
+}
+.sidebar-nav-item.wizard-highlight svg {
+    stroke: #ffffff !important;
+}
+.sidebar-nav-item.wizard-highlight::before {
+    content: '';
+    position: absolute;
+    left: -6px;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    border-radius: 0 4px 4px 0;
+    background: #ffffff;
+    box-shadow: 0 0 8px 2px var(--accent);
+}
+@keyframes wizard-pulse {
+    0%, 100% {
+        box-shadow:
+            0 0 0 0 rgba(59, 130, 246, 0.7),
+            0 0 22px 4px rgba(59, 130, 246, 0.55);
+    }
+    50% {
+        box-shadow:
+            0 0 0 10px rgba(59, 130, 246, 0),
+            0 0 34px 10px rgba(59, 130, 246, 0.85);
+    }
+}
+
 /* Status transitions */
 .status-transitions {
     margin: 1rem 0;

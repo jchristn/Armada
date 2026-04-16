@@ -5,12 +5,14 @@ import { useTheme } from '../context/ThemeContext';
 import { useWebSocket } from '../context/WebSocketContext';
 import { useNotifications } from '../context/NotificationContext';
 import { getHealth } from '../api/client';
+import SetupWizard, { isSetupComplete } from './SetupWizard';
 
 interface NavItem {
   to: string;
   label: string;
   icon: ReactNode;
   hidden?: boolean;
+  tooltip?: string;
 }
 
 interface NavSection {
@@ -23,6 +25,7 @@ interface NavSection {
 const dashboardItem: NavItem = {
   to: '/dashboard',
   label: 'Dashboard',
+  tooltip: 'Overview of captains, missions, and voyages',
   icon: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="3" width="7" height="7" />
@@ -42,6 +45,7 @@ const navSections: NavSection[] = [
       {
         to: '/dispatch',
         label: 'Dispatch',
+        tooltip: 'Send work to vessels via missions and voyages',
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M22 2 11 13" />
@@ -52,6 +56,7 @@ const navSections: NavSection[] = [
       {
         to: '/voyages',
         label: 'Voyages',
+        tooltip: 'Batches of related missions dispatched together',
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" />
@@ -62,6 +67,7 @@ const navSections: NavSection[] = [
       {
         to: '/missions',
         label: 'Missions',
+        tooltip: 'Individual work units assigned to captains',
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -74,6 +80,7 @@ const navSections: NavSection[] = [
       {
         to: '/merge-queue',
         label: 'Merge Queue',
+        tooltip: 'Bors-style queue for landing and testing branches',
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="18" cy="18" r="3" />
@@ -92,6 +99,7 @@ const navSections: NavSection[] = [
       {
         to: '/fleets',
         label: 'Fleets',
+        tooltip: 'Collections of vessels grouped together',
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
@@ -102,6 +110,7 @@ const navSections: NavSection[] = [
       {
         to: '/vessels',
         label: 'Vessels',
+        tooltip: 'Git repositories registered with Armada',
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
@@ -111,6 +120,7 @@ const navSections: NavSection[] = [
       {
         to: '/captains',
         label: 'Captains',
+        tooltip: 'AI coding agents that execute missions',
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
@@ -121,6 +131,7 @@ const navSections: NavSection[] = [
       {
         to: '/docks',
         label: 'Docks',
+        tooltip: 'Isolated git worktrees assigned to captains',
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
@@ -138,6 +149,7 @@ const navSections: NavSection[] = [
       {
         to: '/signals',
         label: 'Signals',
+        tooltip: 'Messages exchanged between the Admiral and captains',
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
@@ -147,6 +159,7 @@ const navSections: NavSection[] = [
       {
         to: '/events',
         label: 'Events',
+        tooltip: 'Audit log of system-wide actions and state changes',
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 20h9" />
@@ -157,6 +170,7 @@ const navSections: NavSection[] = [
       {
         to: '/notifications',
         label: 'Notifications',
+        tooltip: 'Real-time alerts for mission completions and failures',
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
@@ -174,6 +188,7 @@ const navSections: NavSection[] = [
       {
         to: '/personas',
         label: 'Personas',
+        tooltip: 'Agent personality profiles (Worker, Architect, Judge, etc.)',
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
@@ -184,6 +199,7 @@ const navSections: NavSection[] = [
       {
         to: '/pipelines',
         label: 'Pipelines',
+        tooltip: 'Multi-stage workflows combining different personas',
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="16 3 21 3 21 8" />
@@ -197,6 +213,7 @@ const navSections: NavSection[] = [
       {
         to: '/prompt-templates',
         label: 'Templates',
+        tooltip: 'Customizable prompt templates injected into agent instructions',
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -210,6 +227,7 @@ const navSections: NavSection[] = [
       {
         to: '/server',
         label: 'Server',
+        tooltip: 'Admiral server settings, ports, and configuration',
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
@@ -222,6 +240,7 @@ const navSections: NavSection[] = [
       {
         to: '/doctor',
         label: 'Doctor',
+        tooltip: 'System health diagnostics and environment checks',
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
@@ -238,6 +257,7 @@ const navSections: NavSection[] = [
       {
         to: '/admin/tenants',
         label: 'Tenants',
+        tooltip: 'Multi-tenant organizations within Armada',
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 21h18" />
@@ -252,6 +272,7 @@ const navSections: NavSection[] = [
       {
         to: '/admin/users',
         label: 'Users',
+        tooltip: 'User accounts and role assignments',
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -264,6 +285,7 @@ const navSections: NavSection[] = [
       {
         to: '/admin/credentials',
         label: 'Credentials',
+        tooltip: 'API tokens and bearer credentials for authentication',
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1 7.78 7.78l-3.19-3.19" />
@@ -285,6 +307,8 @@ export default function Layout() {
   const { darkMode, toggleTheme } = useTheme();
   const { connected } = useWebSocket();
   const { unreadCount, toasts, dismissToast } = useNotifications();
+  const [showWizard, setShowWizard] = useState(() => !isSetupComplete());
+  const [wizardHighlights, setWizardHighlights] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem('armada_sidebar_collapsed') === 'true';
@@ -376,7 +400,7 @@ export default function Layout() {
   );
 
   return (
-    <div className="app-layout" style={{ gridTemplateColumns: collapsed ? '56px 1fr' : '180px 1fr' }}>
+    <div className={`app-layout${showWizard ? ' wizard-active' : ''}`} style={{ gridTemplateColumns: collapsed ? '56px 1fr' : '180px 1fr' }}>
       <aside className={`sidebar${collapsed ? ' sidebar-collapsed' : ''}`}>
         <div className="sidebar-brand">
           <img
@@ -393,8 +417,8 @@ export default function Layout() {
         <nav className="sidebar-nav">
           <NavLink
             to={dashboardItem.to}
-            className={({ isActive }) => `sidebar-nav-item${isActive ? ' active' : ''}`}
-            title={collapsed ? dashboardItem.label : undefined}
+            className={({ isActive }) => `sidebar-nav-item${isActive ? ' active' : ''}${wizardHighlights.includes(dashboardItem.to) ? ' wizard-highlight' : ''}`}
+            title={collapsed ? dashboardItem.label : dashboardItem.tooltip}
           >
             {dashboardItem.icon}
             <span className="sidebar-label">{dashboardItem.label}</span>
@@ -420,8 +444,8 @@ export default function Layout() {
                   <NavLink
                     key={item.to}
                     to={item.to}
-                    className={({ isActive }) => `sidebar-nav-item${isActive ? ' active' : ''}`}
-                    title={collapsed ? item.label : undefined}
+                    className={({ isActive }) => `sidebar-nav-item${isActive ? ' active' : ''}${wizardHighlights.includes(item.to) ? ' wizard-highlight' : ''}`}
+                    title={collapsed ? item.label : item.tooltip}
                   >
                     {item.icon}
                     <span className="sidebar-label">{item.label}</span>
@@ -522,6 +546,13 @@ export default function Layout() {
             </div>
           ))}
         </div>
+      )}
+
+      {showWizard && (
+        <SetupWizard
+          onClose={() => setShowWizard(false)}
+          onHighlightChange={setWizardHighlights}
+        />
       )}
     </div>
   );
