@@ -574,6 +574,56 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration v28 statements for adding playbooks and mission/voyage associations.
+        /// </summary>
+        public static readonly string[] MigrationV28Statements = new string[]
+        {
+            @"CREATE TABLE IF NOT EXISTS playbooks (
+                id VARCHAR(450) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(450),
+                user_id VARCHAR(450),
+                file_name VARCHAR(450) NOT NULL,
+                description LONGTEXT,
+                content LONGTEXT NOT NULL,
+                active TINYINT(1) NOT NULL DEFAULT 1,
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL,
+                FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+            );",
+            @"CREATE UNIQUE INDEX idx_playbooks_tenant_file_name ON playbooks(tenant_id, file_name);",
+            @"CREATE INDEX idx_playbooks_tenant ON playbooks(tenant_id);",
+            @"CREATE INDEX idx_playbooks_user ON playbooks(user_id);",
+            @"CREATE INDEX idx_playbooks_active ON playbooks(active);",
+            @"CREATE TABLE IF NOT EXISTS voyage_playbooks (
+                voyage_id VARCHAR(450) NOT NULL,
+                playbook_id VARCHAR(450) NOT NULL,
+                selection_order INT NOT NULL,
+                delivery_mode VARCHAR(450) NOT NULL,
+                PRIMARY KEY (voyage_id, selection_order),
+                FOREIGN KEY (voyage_id) REFERENCES voyages(id) ON DELETE CASCADE,
+                FOREIGN KEY (playbook_id) REFERENCES playbooks(id) ON DELETE CASCADE
+            );",
+            @"CREATE INDEX idx_voyage_playbooks_playbook ON voyage_playbooks(playbook_id);",
+            @"CREATE TABLE IF NOT EXISTS mission_playbook_snapshots (
+                mission_id VARCHAR(450) NOT NULL,
+                selection_order INT NOT NULL,
+                playbook_id VARCHAR(450),
+                file_name VARCHAR(450) NOT NULL,
+                description LONGTEXT,
+                content LONGTEXT NOT NULL,
+                delivery_mode VARCHAR(450) NOT NULL,
+                resolved_path LONGTEXT,
+                worktree_relative_path LONGTEXT,
+                source_last_update_utc DATETIME(6),
+                PRIMARY KEY (mission_id, selection_order),
+                FOREIGN KEY (mission_id) REFERENCES missions(id) ON DELETE CASCADE,
+                FOREIGN KEY (playbook_id) REFERENCES playbooks(id) ON DELETE SET NULL
+            );",
+            @"CREATE INDEX idx_mission_playbook_snapshots_playbook ON mission_playbook_snapshots(playbook_id);"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

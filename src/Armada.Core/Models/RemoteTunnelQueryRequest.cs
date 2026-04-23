@@ -33,6 +33,11 @@ namespace Armada.Core.Models
         public string? CaptainId { get; set; } = null;
 
         /// <summary>
+        /// Optional playbook identifier.
+        /// </summary>
+        public string? PlaybookId { get; set; } = null;
+
+        /// <summary>
         /// Optional status filter.
         /// </summary>
         public string? Status { get; set; } = null;

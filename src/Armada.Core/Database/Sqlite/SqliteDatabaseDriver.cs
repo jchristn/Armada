@@ -70,6 +70,7 @@ namespace Armada.Core.Database.Sqlite
             Users = new UserMethods(this, _Settings, _Logging);
             Credentials = new CredentialMethods(this, _Settings, _Logging);
             PromptTemplates = new PromptTemplateMethods(this, _Settings, _Logging);
+            Playbooks = new PlaybookMethods(this, _Settings, _Logging);
             Personas = new PersonaMethods(this, _Settings, _Logging);
             Pipelines = new PipelineMethods(this, _Settings, _Logging);
         }
@@ -98,6 +99,7 @@ namespace Armada.Core.Database.Sqlite
             Users = new UserMethods(this, _Settings, _Logging);
             Credentials = new CredentialMethods(this, _Settings, _Logging);
             PromptTemplates = new PromptTemplateMethods(this, _Settings, _Logging);
+            Playbooks = new PlaybookMethods(this, _Settings, _Logging);
             Personas = new PersonaMethods(this, _Settings, _Logging);
             Pipelines = new PipelineMethods(this, _Settings, _Logging);
         }

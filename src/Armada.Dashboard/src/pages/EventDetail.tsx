@@ -12,6 +12,7 @@ import JsonViewer from '../components/shared/JsonViewer';
 import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
+import { useNotifications } from '../context/NotificationContext';
 
 /** Map entity ID prefix to a route. */
 function entityRoute(entityId: string | null): string | null {
@@ -29,6 +30,7 @@ function entityRoute(entityId: string | null): string | null {
 
 export default function EventDetail() {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
+  const { pushToast } = useNotifications();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
@@ -65,6 +67,7 @@ export default function EventDetail() {
         try {
           await deleteEventsBatch([id!]);
           setConfirmAction(null);
+          pushToast('warning', t('Event {{id}} deleted.', { id: id ?? '' }));
           navigate('/events');
         } catch {
           setError(t('Delete failed.'));

@@ -11,6 +11,7 @@ import CopyButton from '../components/shared/CopyButton';
 import RefreshButton from '../components/shared/RefreshButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
+import { useNotifications } from '../context/NotificationContext';
 
 type SortDir = 'asc' | 'desc';
 type SortField = 'name' | 'runtime' | 'state' | 'createdUtc';
@@ -18,6 +19,7 @@ type SortField = 'name' | 'runtime' | 'state' | 'createdUtc';
 export default function Captains() {
   const navigate = useNavigate();
   const { t, formatRelativeTime, formatDateTime } = useLocale();
+  const { pushToast } = useNotifications();
   const [captains, setCaptains] = useState<Captain[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -129,6 +131,9 @@ export default function Captains() {
       if (editing) await updateCaptain(editing.id, payload);
       else await createCaptain(payload);
       setShowForm(false);
+      pushToast('success', editing
+        ? t('Captain "{{name}}" saved.', { name: form.name })
+        : t('Captain "{{name}}" created.', { name: form.name }));
       load();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('Save failed.'));
@@ -142,7 +147,11 @@ export default function Captains() {
       message: t('Delete captain "{{name}}"? This cannot be undone.', { name }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try { await deleteCaptain(id); load(); } catch { setError(t('Delete failed.')); }
+        try {
+          await deleteCaptain(id);
+          pushToast('warning', t('Captain "{{name}}" deleted.', { name }));
+          load();
+        } catch { setError(t('Delete failed.')); }
       },
     });
   }
@@ -160,6 +169,12 @@ export default function Captains() {
         for (const id of ids) {
           try { await deleteCaptain(id); } catch { failed++; }
         }
+        const deleted = ids.length - failed;
+        if (deleted > 0) {
+          pushToast(failed > 0 ? 'warning' : 'success', failed > 0
+            ? t('Deleted {{deleted}} captains. {{failed}} failed.', { deleted, failed })
+            : t('Deleted {{deleted}} captains.', { deleted }));
+        }
         if (failed > 0) setError(t('Deleted {{deleted}} captains, {{failed}} failed.', { deleted: ids.length - failed, failed }));
         load();
       },
@@ -173,7 +188,11 @@ export default function Captains() {
       message: t('Stop captain "{{name}}"? The captain process will be terminated.', { name }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try { await stopCaptain(id); load(); } catch { setError(t('Stop failed.')); }
+        try {
+          await stopCaptain(id);
+          pushToast('warning', t('Captain "{{name}}" stopped.', { name }));
+          load();
+        } catch { setError(t('Stop failed.')); }
       },
     });
   }
@@ -185,7 +204,11 @@ export default function Captains() {
       message: t('Recall captain "{{name}}"? The captain will be recalled from its current mission.', { name }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try { await recallCaptain(id); load(); } catch { setError(t('Recall failed.')); }
+        try {
+          await recallCaptain(id);
+          pushToast('warning', t('Captain "{{name}}" recalled.', { name }));
+          load();
+        } catch { setError(t('Recall failed.')); }
       },
     });
   }
@@ -197,7 +220,11 @@ export default function Captains() {
       message: t('Restart captain "{{name}}"? The captain will be deleted and recreated with the same saved configuration.', { name }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try { await restartCaptain(id); load(); } catch { setError(t('Restart failed.')); }
+        try {
+          await restartCaptain(id);
+          pushToast('success', t('Captain "{{name}}" restarted.', { name }));
+          load();
+        } catch { setError(t('Restart failed.')); }
       },
     });
   }
@@ -209,7 +236,11 @@ export default function Captains() {
       message: t('Stop ALL captains? All captain processes will be terminated. This cannot be undone.'),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try { await stopAllCaptains(); load(); } catch { setError(t('Stop all failed.')); }
+        try {
+          await stopAllCaptains();
+          pushToast('warning', t('All captains stopped.'));
+          load();
+        } catch { setError(t('Stop all failed.')); }
       },
     });
   }

@@ -261,6 +261,107 @@ namespace Armada.Test.Unit.Suites.Services
                     AssertContains("Remote Pipeline", listPipelinesJson);
                 }
             });
+
+            await RunTest("PlaybookCrudAndDispatchSelectionsOperateThroughTunnel", async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    StubAdmiralService admiral = new StubAdmiralService(testDb.Driver);
+                    RemoteControlManagementService service = new RemoteControlManagementService(
+                        testDb.Driver,
+                        admiral,
+                        (_, _, _, _, _, _, _, _) => Task.CompletedTask);
+
+                    RemoteTunnelRequestResult createPlaybook = await service.HandleAsync(
+                        RemoteTunnelProtocol.CreateRequest("armada.playbook.create", new
+                        {
+                            fileName = "CSHARP_BACKEND_ARCHITECTURE.md",
+                            description = "Rules for C# backend work",
+                            content = "# Rules\n\nAlways use DI.",
+                            active = true
+                        }),
+                        CancellationToken.None).ConfigureAwait(false);
+
+                    AssertEqual(201, createPlaybook.StatusCode);
+                    string playbookId = JsonDocument.Parse(JsonSerializer.Serialize(createPlaybook.Payload, RemoteTunnelProtocol.JsonOptions))
+                        .RootElement.GetProperty("id").GetString()!;
+
+                    RemoteTunnelRequestResult listPlaybooks = await service.HandleAsync(
+                        RemoteTunnelProtocol.CreateRequest("armada.playbooks.list", new RemoteTunnelQueryRequest
+                        {
+                            Limit = 10
+                        }),
+                        CancellationToken.None).ConfigureAwait(false);
+                    AssertContains("CSHARP_BACKEND_ARCHITECTURE.md", JsonSerializer.Serialize(listPlaybooks.Payload, RemoteTunnelProtocol.JsonOptions));
+
+                    RemoteTunnelRequestResult detailPlaybook = await service.HandleAsync(
+                        RemoteTunnelProtocol.CreateRequest("armada.playbook.detail", new RemoteTunnelQueryRequest
+                        {
+                            PlaybookId = playbookId
+                        }),
+                        CancellationToken.None).ConfigureAwait(false);
+                    AssertContains("Rules for C# backend work", JsonSerializer.Serialize(detailPlaybook.Payload, RemoteTunnelProtocol.JsonOptions));
+
+                    RemoteTunnelRequestResult updatePlaybook = await service.HandleAsync(
+                        RemoteTunnelProtocol.CreateRequest("armada.playbook.update", new
+                        {
+                            playbookId = playbookId,
+                            playbook = new
+                            {
+                                fileName = "CSHARP_BACKEND_ARCHITECTURE.md",
+                                description = "Updated rules for C# backend work",
+                                content = "# Rules\n\nAlways use DI.\nPrefer async APIs.",
+                                active = true
+                            }
+                        }),
+                        CancellationToken.None).ConfigureAwait(false);
+                    AssertEqual(200, updatePlaybook.StatusCode);
+                    AssertContains("Prefer async APIs", JsonSerializer.Serialize(updatePlaybook.Payload, RemoteTunnelProtocol.JsonOptions));
+
+                    Vessel vessel = new Vessel("Playbook Vessel", "https://github.com/example/playbook.git");
+                    vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    RemoteTunnelRequestResult dispatch = await service.HandleAsync(
+                        RemoteTunnelProtocol.CreateRequest("armada.voyage.dispatch", new
+                        {
+                            title = "Playbook Voyage",
+                            description = "Voyage with playbook selections",
+                            vesselId = vessel.Id,
+                            selectedPlaybooks = new[]
+                            {
+                                new
+                                {
+                                    playbookId = playbookId,
+                                    deliveryMode = PlaybookDeliveryModeEnum.InlineFullContent.ToString()
+                                }
+                            },
+                            missions = new[]
+                            {
+                                new { title = "Apply playbook", description = "Use the selected playbook." }
+                            }
+                        }),
+                        CancellationToken.None).ConfigureAwait(false);
+
+                    AssertEqual(201, dispatch.StatusCode);
+                    string voyageId = JsonDocument.Parse(JsonSerializer.Serialize(dispatch.Payload, RemoteTunnelProtocol.JsonOptions))
+                        .RootElement.GetProperty("id").GetString()!;
+                    List<SelectedPlaybook> selections = await testDb.Driver.Playbooks.GetVoyageSelectionsAsync(voyageId).ConfigureAwait(false);
+                    AssertEqual(1, selections.Count);
+                    List<Mission> missions = await testDb.Driver.Missions.EnumerateByVoyageAsync(voyageId).ConfigureAwait(false);
+                    AssertEqual(1, missions.Count);
+                    List<MissionPlaybookSnapshot> snapshots = await testDb.Driver.Playbooks.GetMissionSnapshotsAsync(missions[0].Id).ConfigureAwait(false);
+                    AssertEqual(1, snapshots.Count);
+                    AssertEqual("CSHARP_BACKEND_ARCHITECTURE.md", snapshots[0].FileName);
+
+                    RemoteTunnelRequestResult deletePlaybook = await service.HandleAsync(
+                        RemoteTunnelProtocol.CreateRequest("armada.playbook.delete", new RemoteTunnelQueryRequest
+                        {
+                            PlaybookId = playbookId
+                        }),
+                        CancellationToken.None).ConfigureAwait(false);
+                    AssertEqual(200, deletePlaybook.StatusCode);
+                }
+            });
         }
 
         private sealed class StubAdmiralService : IAdmiralService
@@ -283,17 +384,32 @@ namespace Armada.Test.Unit.Suites.Services
 
             public async Task<Voyage> DispatchVoyageAsync(string title, string description, string vesselId, List<MissionDescription> missionDescriptions, CancellationToken token = default)
             {
-                return await DispatchVoyageAsync(title, description, vesselId, missionDescriptions, null, token).ConfigureAwait(false);
+                return await DispatchVoyageAsync(title, description, vesselId, missionDescriptions, null, null, token).ConfigureAwait(false);
+            }
+
+            public async Task<Voyage> DispatchVoyageAsync(string title, string description, string vesselId, List<MissionDescription> missionDescriptions, List<SelectedPlaybook>? selectedPlaybooks, CancellationToken token = default)
+            {
+                return await DispatchVoyageAsync(title, description, vesselId, missionDescriptions, null, selectedPlaybooks, token).ConfigureAwait(false);
             }
 
             public async Task<Voyage> DispatchVoyageAsync(string title, string description, string vesselId, List<MissionDescription> missionDescriptions, string? pipelineId, CancellationToken token = default)
+            {
+                return await DispatchVoyageAsync(title, description, vesselId, missionDescriptions, pipelineId, null, token).ConfigureAwait(false);
+            }
+
+            public async Task<Voyage> DispatchVoyageAsync(string title, string description, string vesselId, List<MissionDescription> missionDescriptions, string? pipelineId, List<SelectedPlaybook>? selectedPlaybooks, CancellationToken token = default)
             {
                 Vessel? vessel = await _database.Vessels.ReadAsync(vesselId, token).ConfigureAwait(false);
                 Voyage voyage = new Voyage(title, description);
                 voyage.TenantId = vessel?.TenantId;
                 voyage.UserId = vessel?.UserId;
                 voyage.Status = VoyageStatusEnum.Open;
+                voyage.SelectedPlaybooks = selectedPlaybooks ?? new List<SelectedPlaybook>();
                 voyage = await _database.Voyages.CreateAsync(voyage, token).ConfigureAwait(false);
+                if (voyage.SelectedPlaybooks.Count > 0)
+                {
+                    await _database.Playbooks.SetVoyageSelectionsAsync(voyage.Id, voyage.SelectedPlaybooks, token).ConfigureAwait(false);
+                }
 
                 foreach (MissionDescription descriptionItem in missionDescriptions)
                 {
@@ -302,7 +418,26 @@ namespace Armada.Test.Unit.Suites.Services
                     mission.VoyageId = voyage.Id;
                     mission.TenantId = vessel?.TenantId;
                     mission.UserId = vessel?.UserId;
-                    await _database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
+                    mission = await _database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
+                    if (selectedPlaybooks != null && selectedPlaybooks.Count > 0)
+                    {
+                        List<MissionPlaybookSnapshot> snapshots = new List<MissionPlaybookSnapshot>();
+                        foreach (SelectedPlaybook selection in selectedPlaybooks)
+                        {
+                            Playbook? playbook = await _database.Playbooks.ReadAsync(selection.PlaybookId, token).ConfigureAwait(false);
+                            if (playbook == null) continue;
+                            snapshots.Add(new MissionPlaybookSnapshot
+                            {
+                                PlaybookId = playbook.Id,
+                                FileName = playbook.FileName,
+                                Description = playbook.Description,
+                                Content = playbook.Content,
+                                DeliveryMode = selection.DeliveryMode,
+                                SourceLastUpdateUtc = playbook.LastUpdateUtc
+                            });
+                        }
+                        await _database.Playbooks.SetMissionSnapshotsAsync(mission.Id, snapshots, token).ConfigureAwait(false);
+                    }
                 }
 
                 return voyage;

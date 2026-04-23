@@ -1,10 +1,10 @@
 # Proxy API
 
-**Version:** 0.6.0
+**Version:** 0.7.0
 
-This document describes the first shipped Armada proxy API surface in `v0.6.0`.
+This document describes the first shipped Armada proxy API surface in `v0.7.0`.
 
-`v0.6.0` includes:
+`v0.7.0` includes:
 
 - websocket tunnel termination at `/tunnel`
 - challenge-based browser login using the shared proxy password
@@ -12,11 +12,11 @@ This document describes the first shipped Armada proxy API surface in `v0.6.0`.
 - live instance summary and detail endpoints
 - a mobile-first remote operations shell served at `/`
 - focused remote inspection endpoints for activity, missions, voyages, captains, logs, and diffs
-- bounded remote management endpoints for fleets, vessels, voyages, missions, and captain control
+- bounded remote management endpoints for fleets, vessels, playbooks, voyages, missions, and captain control
 - live request/response forwarding for Armada health, status, detail snapshots, and management actions
 - tunnel handshake validation using shared-password proofs plus optional enrollment-token validation
 
-`v0.6.0` does not yet include:
+`v0.7.0` does not yet include:
 
 - SaaS user accounts
 - enrollment workflows beyond static token validation
@@ -119,7 +119,7 @@ Invalidates the current browser session identified by `X-Armada-Proxy-Session`.
 
 Serves the proxy remote operations shell.
 
-The shell is designed for quick remote triage rather than full local-dashboard parity. In `v0.6.0` it includes:
+The shell is designed for quick remote triage rather than full local-dashboard parity. In `v0.7.0` it includes:
 
 - instance list
 - instance summary cards
@@ -128,6 +128,7 @@ The shell is designed for quick remote triage rather than full local-dashboard p
 - focused mission, voyage, captain, fleet, and vessel detail
 - fleet creation and editing
 - vessel creation and editing
+- playbook creation, editing, deletion, and selection during voyage dispatch
 - voyage dispatch and cancellation
 - mission creation, editing, cancellation, and restart
 - captain stop
@@ -141,7 +142,7 @@ Returns proxy process health and instance counts.
 {
   "healthy": true,
   "product": "Armada.Proxy",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "protocolVersion": "2026-04-04",
   "port": 7893,
   "startedUtc": "2026-04-03T21:00:00Z",
@@ -165,7 +166,7 @@ Returns summary rows for all known instances.
     {
       "instanceId": "armada-1f2e3d4c5b6a",
       "state": "connected",
-      "armadaVersion": "0.6.0",
+      "armadaVersion": "0.7.0",
       "protocolVersion": "2026-04-04",
       "capabilities": [
         "remoteControl.handshake",
@@ -205,7 +206,7 @@ Returns the current summary plus recent inbound event history for an instance.
   "summary": {
     "instanceId": "armada-1f2e3d4c5b6a",
     "state": "connected",
-    "armadaVersion": "0.6.0",
+    "armadaVersion": "0.7.0",
     "protocolVersion": "2026-04-04",
     "capabilities": [
       "remoteControl.handshake",
@@ -250,7 +251,7 @@ Returns the aggregated remote-shell summary for a connected instance by issuing 
   "generatedUtc": "2026-04-03T21:05:00Z",
   "health": {
     "status": "healthy",
-    "version": "0.6.0"
+    "version": "0.7.0"
   },
   "status": {
     "activeVoyages": 1,
@@ -326,6 +327,14 @@ Vessel management:
 - `POST /api/v1/instances/{instanceId}/vessels`
 - `PUT /api/v1/instances/{instanceId}/vessels/{vesselId}`
 
+Playbook management:
+
+- `GET /api/v1/instances/{instanceId}/playbooks?limit=25`
+- `GET /api/v1/instances/{instanceId}/playbooks/{playbookId}`
+- `POST /api/v1/instances/{instanceId}/playbooks`
+- `PUT /api/v1/instances/{instanceId}/playbooks/{playbookId}`
+- `DELETE /api/v1/instances/{instanceId}/playbooks/{playbookId}`
+
 Voyage management:
 
 - `GET /api/v1/instances/{instanceId}/voyages?limit=25&status=InProgress`
@@ -349,9 +358,15 @@ Example voyage dispatch request:
 ```json
 {
   "title": "Remote release hardening",
-  "description": "Ship the v0.6.0 proxy management surface.",
+  "description": "Ship the v0.7.0 proxy management surface.",
   "vesselId": "vsl_abc123",
   "pipeline": "FullPipeline",
+  "selectedPlaybooks": [
+    {
+      "playbookId": "pbk_abc123",
+      "deliveryMode": "InlineFullContent"
+    }
+  ],
   "missions": [
     {
       "title": "Tighten remote shell UX",
@@ -431,7 +446,7 @@ Sends a live tunnel request to the connected Armada instance using method `armad
     "timestamp": "2026-04-03T21:02:00Z",
     "startUtc": "2026-04-03T20:00:00Z",
     "uptime": "0.01:02:00",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "ports": {
       "admiral": 7890,
       "mcp": 7891
@@ -489,6 +504,11 @@ See [docs/TUNNEL_PROTOCOL.md](TUNNEL_PROTOCOL.md) for envelope details.
   - `armada.vessel.detail`
   - `armada.vessel.create`
   - `armada.vessel.update`
+  - `armada.playbooks.list`
+  - `armada.playbook.detail`
+  - `armada.playbook.create`
+  - `armada.playbook.update`
+  - `armada.playbook.delete`
   - `armada.activity.recent`
   - `armada.missions.list`
   - `armada.missions.recent`
@@ -512,4 +532,3 @@ See [docs/TUNNEL_PROTOCOL.md](TUNNEL_PROTOCOL.md) for envelope details.
   - `armada.status.health`
 - recent event history is bounded by `maxRecentEvents`
 - destructive actions are client-confirmed in the remote shell, but there is still no per-user authz or policy engine; this remains an implementation-stage operator service
-

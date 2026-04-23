@@ -11,6 +11,7 @@ import CopyButton from '../components/shared/CopyButton';
 import RefreshButton from '../components/shared/RefreshButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
+import { useNotifications } from '../context/NotificationContext';
 
 type SortDir = 'asc' | 'desc';
 type SortField = 'name' | 'description' | 'stages' | 'isBuiltIn' | 'active' | 'createdUtc';
@@ -29,6 +30,7 @@ function formatStages(stages: PipelineStage[]): string {
 export default function Pipelines() {
   const navigate = useNavigate();
   const { t, formatRelativeTime } = useLocale();
+  const { pushToast } = useNotifications();
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -177,6 +179,9 @@ export default function Pipelines() {
       if (editing) await updatePipeline(editing.name, payload as Partial<Pipeline>);
       else await createPipeline(payload);
       setShowForm(false);
+      pushToast('success', editing
+        ? t('Pipeline "{{name}}" saved.', { name: editing.name })
+        : t('Pipeline "{{name}}" created.', { name: form.name }));
       load();
     } catch { setError(t('Save failed.')); }
   }
@@ -188,7 +193,11 @@ export default function Pipelines() {
       message: t('Delete pipeline "{{name}}"? This cannot be undone.', { name }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try { await deletePipeline(name); load(); } catch { setError(t('Delete failed.')); }
+        try {
+          await deletePipeline(name);
+          pushToast('warning', t('Pipeline "{{name}}" deleted.', { name }));
+          load();
+        } catch { setError(t('Delete failed.')); }
       },
     });
   }

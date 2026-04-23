@@ -59,6 +59,7 @@ namespace Armada.Core.Services
                 ["ProjectContext"] = vessel.ProjectContext ?? "",
                 ["StyleGuide"] = vessel.StyleGuide ?? "",
                 ["ModelContext"] = vessel.EnableModelContext ? vessel.ModelContext ?? "" : "",
+                ["SelectedPlaybooksMarkdown"] = "",
                 ["CaptainId"] = captain?.Id ?? "",
                 ["CaptainName"] = captain?.Name ?? "",
                 ["CaptainInstructions"] = BuildCaptainInstructions(captain?.SystemInstructions, mission.Persona),

@@ -8,9 +8,11 @@ import JsonViewer from '../components/shared/JsonViewer';
 import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
+import { useNotifications } from '../context/NotificationContext';
 
 export default function FleetDetail() {
   const { t, formatDateTime } = useLocale();
+  const { pushToast } = useNotifications();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [fleet, setFleet] = useState<Fleet | null>(null);
@@ -62,6 +64,7 @@ export default function FleetDetail() {
     try {
       await updateFleet(fleet.id, form);
       setShowForm(false);
+      pushToast('success', t('Fleet "{{name}}" saved.', { name: form.name }));
       load();
     } catch { setError(t('Save failed.')); }
   }
@@ -76,6 +79,7 @@ export default function FleetDetail() {
         setConfirm(c => ({ ...c, open: false }));
         try {
           await deleteFleet(fleet.id);
+          pushToast('warning', t('Fleet "{{name}}" deleted.', { name: fleet.name }));
           navigate('/fleets');
         } catch { setError(t('Delete failed.')); }
       },

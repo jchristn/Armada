@@ -166,6 +166,8 @@ export interface Mission {
   completedUtc: string | null;
   totalRuntimeMs: number | null;
   lastUpdateUtc: string;
+  selectedPlaybooks?: SelectedPlaybook[];
+  playbookSnapshots?: MissionPlaybookSnapshot[];
 }
 
 export interface Voyage {
@@ -181,6 +183,40 @@ export interface Voyage {
   autoCreatePullRequests: boolean | null;
   autoMergePullRequests: boolean | null;
   landingMode: string | null;
+  selectedPlaybooks?: SelectedPlaybook[];
+}
+
+export type PlaybookDeliveryMode =
+  | 'InlineFullContent'
+  | 'InstructionWithReference'
+  | 'AttachIntoWorktree';
+
+export interface SelectedPlaybook {
+  playbookId: string;
+  deliveryMode: PlaybookDeliveryMode;
+}
+
+export interface MissionPlaybookSnapshot {
+  playbookId: string | null;
+  fileName: string;
+  description: string | null;
+  content: string;
+  deliveryMode: PlaybookDeliveryMode;
+  resolvedPath: string | null;
+  worktreeRelativePath: string | null;
+  sourceLastUpdateUtc: string | null;
+}
+
+export interface Playbook {
+  id: string;
+  tenantId: string | null;
+  userId: string | null;
+  fileName: string;
+  description: string | null;
+  content: string;
+  active: boolean;
+  createdUtc: string;
+  lastUpdateUtc: string;
 }
 
 export interface ArmadaEvent {
@@ -288,6 +324,7 @@ export interface VoyageCreateRequest {
   pipelineId?: string;
   pipeline?: string;
   missions: DispatchRequest[];
+  selectedPlaybooks?: SelectedPlaybook[];
 }
 
 export interface TransitionRequest {
@@ -371,4 +408,4 @@ export interface PipelineStage {
   description: string | null;
 }
 
-export type EntityType = 'fleets' | 'vessels' | 'captains' | 'missions' | 'voyages' | 'signals' | 'events' | 'docks' | 'merge-queue' | 'personas' | 'prompt-templates' | 'pipelines';
+export type EntityType = 'fleets' | 'vessels' | 'captains' | 'missions' | 'voyages' | 'signals' | 'events' | 'docks' | 'merge-queue' | 'personas' | 'prompt-templates' | 'pipelines' | 'playbooks';

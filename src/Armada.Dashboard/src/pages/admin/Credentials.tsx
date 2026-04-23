@@ -10,6 +10,7 @@ import RefreshButton from '../../components/shared/RefreshButton';
 import { useAuth } from '../../context/AuthContext';
 import ErrorModal from '../../components/shared/ErrorModal';
 import { useLocale } from '../../context/LocaleContext';
+import { useNotifications } from '../../context/NotificationContext';
 
 type SortField = 'name' | 'userId' | 'active' | 'createdUtc';
 type SortDir = 'asc' | 'desc';
@@ -17,6 +18,7 @@ type SortDir = 'asc' | 'desc';
 export default function Credentials() {
   const { user, isAdmin, isTenantAdmin } = useAuth();
   const { t, formatRelativeTime, formatDateTime } = useLocale();
+  const { pushToast } = useNotifications();
   const [items, setItems] = useState<Credential[]>([]);
   const [users, setUsers] = useState<UserMaster[]>([]);
   const [tenants, setTenants] = useState<TenantMetadata[]>([]);
@@ -143,6 +145,9 @@ export default function Credentials() {
       }
       setShowForm(false);
       setEditing(null);
+      pushToast('success', editing
+        ? t('Credential "{{name}}" saved.', { name: form.name || editing.id })
+        : t('Credential created.'));
       load();
     } catch {
       setError(editing ? t('Update failed.') : t('Create failed.'));
@@ -156,7 +161,11 @@ export default function Credentials() {
       resourceName: name || id,
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try { await deleteCredential(id); load(); } catch { setError(t('Delete failed.')); }
+        try {
+          await deleteCredential(id);
+          pushToast('warning', t('Credential "{{name}}" deleted.', { name: name || id }));
+          load();
+        } catch { setError(t('Delete failed.')); }
       },
     });
   }
@@ -171,6 +180,12 @@ export default function Credentials() {
         const ids = [...selected]; setSelected([]);
         let failed = 0;
         for (const id of ids) { try { await deleteCredential(id); } catch { failed++; } }
+        const success = ids.length - failed;
+        if (success > 0) {
+          pushToast(failed > 0 ? 'warning' : 'success', failed > 0
+            ? t('Deleted {{success}} credentials. {{failed}} failed.', { success, failed })
+            : t('Deleted {{success}} credentials.', { success }));
+        }
         if (failed > 0) setError(t('Deleted {{success}}, {{failed}} failed.', { success: ids.length - failed, failed }));
         load();
       },

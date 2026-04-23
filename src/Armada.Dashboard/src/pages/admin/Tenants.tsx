@@ -10,6 +10,7 @@ import RefreshButton from '../../components/shared/RefreshButton';
 import { useAuth } from '../../context/AuthContext';
 import ErrorModal from '../../components/shared/ErrorModal';
 import { useLocale } from '../../context/LocaleContext';
+import { useNotifications } from '../../context/NotificationContext';
 
 type SortField = 'name' | 'active' | 'createdUtc';
 type SortDir = 'asc' | 'desc';
@@ -17,6 +18,7 @@ type SortDir = 'asc' | 'desc';
 export default function Tenants() {
   const { user, isAdmin } = useAuth();
   const { t, formatRelativeTime, formatDateTime } = useLocale();
+  const { pushToast } = useNotifications();
   const [items, setItems] = useState<TenantMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -92,6 +94,9 @@ export default function Tenants() {
       if (editing) await updateTenant(editing.id, form);
       else await createTenant(form);
       setShowForm(false);
+      pushToast('success', editing
+        ? t('Tenant "{{name}}" saved.', { name: form.name })
+        : t('Tenant "{{name}}" created.', { name: form.name }));
       load();
     } catch { setError(t('Save failed.')); }
   }
@@ -103,7 +108,11 @@ export default function Tenants() {
       resourceName: name,
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try { await deleteTenant(id); load(); } catch { setError(t('Delete failed.')); }
+        try {
+          await deleteTenant(id);
+          pushToast('warning', t('Tenant "{{name}}" deleted.', { name }));
+          load();
+        } catch { setError(t('Delete failed.')); }
       },
     });
   }
@@ -118,6 +127,12 @@ export default function Tenants() {
         const ids = [...selected]; setSelected([]);
         let failed = 0;
         for (const id of ids) { try { await deleteTenant(id); } catch { failed++; } }
+        const success = ids.length - failed;
+        if (success > 0) {
+          pushToast(failed > 0 ? 'warning' : 'success', failed > 0
+            ? t('Deleted {{success}} tenants. {{failed}} failed.', { success, failed })
+            : t('Deleted {{success}} tenants.', { success }));
+        }
         if (failed > 0) setError(t('Deleted {{success}}, {{failed}} failed.', { success: ids.length - failed, failed }));
         load();
       },

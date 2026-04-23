@@ -1,6 +1,6 @@
 # Armada Remote Management
 
-**Version:** 0.6.0
+**Version:** 0.7.0
 
 This guide is the operator-focused setup path for connecting an Armada instance to `Armada.Proxy` and then using the proxy app for remote management.
 
@@ -12,17 +12,17 @@ If you want protocol details, see:
 
 ## Scope
 
-`v0.6.0` supports:
+`v0.7.0` supports:
 
 - outbound Armada-to-proxy tunnel connection with shared-password handshake and optional enrollment-token validation
 - challenge-based proxy browser login and connected-deployment discovery
-- remote fleet and vessel management, including default pipeline selection
-- remote voyage dispatch and cancellation
+- remote fleet, vessel, and playbook management, including default pipeline selection
+- remote voyage dispatch and cancellation, including playbook selection with delivery-mode control
 - remote mission create, update, cancel, and restart
 - remote captain stop
 - remote recent activity, mission logs, diffs, and focused detail views
 
-`v0.6.0` does not yet provide:
+`v0.7.0` does not yet provide:
 
 - SaaS user accounts
 - delegated identity or local-session brokerage
@@ -217,7 +217,7 @@ The current proxy shell login flow is:
 2. Choose a connected deployment.
 3. Enter the deployment password prompt and open the deployment.
 
-In `v0.6.0`, that deployment password prompt reuses the same shared password used by the proxy and the connected Armada instance. It is not yet a distinct per-deployment user-auth model.
+In `v0.7.0`, that deployment password prompt reuses the same shared password used by the proxy and the connected Armada instance. It is not yet a distinct per-deployment user-auth model.
 
 If your Armada instance uses a custom remote-control password, the proxy `ArmadaProxy.password` value must match it or the tunnel handshake will fail and the deployment will not appear as connected.
 
@@ -230,6 +230,7 @@ The shell is organized around:
 - captains
 - fleets
 - vessels
+- playbooks
 - focused detail
 - management forms
 
@@ -258,6 +259,7 @@ Use `Voyage Dispatch` to:
 - choose a vessel ID
 - provide a voyage title and description
 - optionally set `pipelineId` or `pipeline`
+- optionally attach ordered playbook selections with per-selection delivery mode
 - provide one mission per line
 
 Mission lines support:
@@ -267,6 +269,15 @@ Title :: Description
 ```
 
 If you omit `::`, the full line is used as both title and description.
+
+### Manage Playbooks
+
+Use `Playbook Studio` to:
+
+- create a markdown playbook
+- edit file name, description, content, and active state
+- delete a playbook when it is no longer needed
+- prepare reusable instruction sets before attaching them during dispatch
 
 ### Manage Missions
 

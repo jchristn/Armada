@@ -11,6 +11,7 @@ import CopyButton from '../components/shared/CopyButton';
 import RefreshButton from '../components/shared/RefreshButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
+import { useNotifications } from '../context/NotificationContext';
 
 type SortDir = 'asc' | 'desc';
 type SortField = 'name' | 'createdUtc' | '_vesselCount' | 'description';
@@ -23,6 +24,7 @@ interface FleetWithCount extends Fleet {
 export default function Fleets() {
   const navigate = useNavigate();
   const { t, formatRelativeTime, formatDateTime } = useLocale();
+  const { pushToast } = useNotifications();
   const [fleets, setFleets] = useState<FleetWithCount[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -146,6 +148,9 @@ export default function Fleets() {
       if (editing) await updateFleet(editing.id, payload);
       else await createFleet(payload);
       setShowForm(false);
+      pushToast('success', editing
+        ? t('Fleet "{{name}}" saved.', { name: form.name })
+        : t('Fleet "{{name}}" created.', { name: form.name }));
       load();
     } catch { setError(t('Save failed.')); }
   }
@@ -157,7 +162,11 @@ export default function Fleets() {
       message: t('Delete fleet "{{name}}"? This cannot be undone.', { name }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try { await deleteFleet(id); load(); } catch { setError(t('Delete failed.')); }
+        try {
+          await deleteFleet(id);
+          pushToast('warning', t('Fleet "{{name}}" deleted.', { name }));
+          load();
+        } catch { setError(t('Delete failed.')); }
       },
     });
   }
@@ -174,6 +183,12 @@ export default function Fleets() {
         let failed = 0;
         for (const id of ids) {
           try { await deleteFleet(id); } catch { failed++; }
+        }
+        const deleted = ids.length - failed;
+        if (deleted > 0) {
+          pushToast(failed > 0 ? 'warning' : 'success', failed > 0
+            ? t('Deleted {{deleted}} fleets. {{failed}} failed.', { deleted, failed })
+            : t('Deleted {{deleted}} fleets.', { deleted }));
         }
         if (failed > 0) setError(t('Deleted {{deleted}} fleets, {{failed}} failed.', { deleted: ids.length - failed, failed }));
         load();

@@ -746,6 +746,51 @@ namespace Armada.Core.Database.Sqlite.Queries
                 ),
                 new SchemaMigration(27, "Add total_runtime_ms to missions",
                     @"ALTER TABLE missions ADD COLUMN total_runtime_ms BIGINT NULL;"
+                ),
+                new SchemaMigration(28, "Add playbooks and mission/voyage playbook associations",
+                    @"CREATE TABLE IF NOT EXISTS playbooks (
+                        id TEXT PRIMARY KEY,
+                        tenant_id TEXT,
+                        user_id TEXT,
+                        file_name TEXT NOT NULL,
+                        description TEXT,
+                        content TEXT NOT NULL,
+                        active INTEGER NOT NULL DEFAULT 1,
+                        created_utc TEXT NOT NULL,
+                        last_update_utc TEXT NOT NULL,
+                        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+                    );",
+                    @"CREATE UNIQUE INDEX IF NOT EXISTS idx_playbooks_tenant_file_name ON playbooks(tenant_id, file_name);",
+                    @"CREATE INDEX IF NOT EXISTS idx_playbooks_tenant ON playbooks(tenant_id);",
+                    @"CREATE INDEX IF NOT EXISTS idx_playbooks_user ON playbooks(user_id);",
+                    @"CREATE INDEX IF NOT EXISTS idx_playbooks_active ON playbooks(active);",
+                    @"CREATE TABLE IF NOT EXISTS voyage_playbooks (
+                        voyage_id TEXT NOT NULL,
+                        playbook_id TEXT NOT NULL,
+                        selection_order INTEGER NOT NULL,
+                        delivery_mode TEXT NOT NULL,
+                        PRIMARY KEY (voyage_id, selection_order),
+                        FOREIGN KEY (voyage_id) REFERENCES voyages(id) ON DELETE CASCADE,
+                        FOREIGN KEY (playbook_id) REFERENCES playbooks(id) ON DELETE CASCADE
+                    );",
+                    @"CREATE INDEX IF NOT EXISTS idx_voyage_playbooks_playbook ON voyage_playbooks(playbook_id);",
+                    @"CREATE TABLE IF NOT EXISTS mission_playbook_snapshots (
+                        mission_id TEXT NOT NULL,
+                        selection_order INTEGER NOT NULL,
+                        playbook_id TEXT,
+                        file_name TEXT NOT NULL,
+                        description TEXT,
+                        content TEXT NOT NULL,
+                        delivery_mode TEXT NOT NULL,
+                        resolved_path TEXT,
+                        worktree_relative_path TEXT,
+                        source_last_update_utc TEXT,
+                        PRIMARY KEY (mission_id, selection_order),
+                        FOREIGN KEY (mission_id) REFERENCES missions(id) ON DELETE CASCADE,
+                        FOREIGN KEY (playbook_id) REFERENCES playbooks(id) ON DELETE SET NULL
+                    );",
+                    @"CREATE INDEX IF NOT EXISTS idx_mission_playbook_snapshots_playbook ON mission_playbook_snapshots(playbook_id);"
                 )
             };
         }

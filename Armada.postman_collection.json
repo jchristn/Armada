@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "armada-api-collection",
     "name": "Armada API",
-    "description": "Complete API collection for the Armada multi-agent orchestration system.\n\nVersion: 0.6.0\n\n## Setup\n1. Set the `baseUrl` variable to your Admiral server (default: `http://localhost:7890`)\n2. For bearer token auth, set `bearerToken` (default: `default`)\n3. For session token auth, use the Authenticate request and set `sessionToken` from the response\n4. Legacy: If API key authentication is enabled, set the `apiKey` variable (deprecated)\n5. Use the Status > Health Check request to verify connectivity\n\n## Role model\n- IsAdmin=true: global system-wide admin\n- IsAdmin=false and IsTenantAdmin=true: tenant-scoped admin\n- IsAdmin=false and IsTenantAdmin=false: regular user with self-service on own account and credentials\n\n## Notes\n- Tenant, user, and credential protection is server-controlled through IsProtected\n- Immutable fields such as IDs, ownership columns, and creation timestamps are preserved server-side on update",
+    "description": "Complete API collection for the Armada multi-agent orchestration system.\n\nVersion: 0.7.0\n\n## Setup\n1. Set the `baseUrl` variable to your Admiral server (default: `http://localhost:7890`)\n2. For bearer token auth, set `bearerToken` (default: `default`)\n3. For session token auth, use the Authenticate request and set `sessionToken` from the response\n4. Legacy: If API key authentication is enabled, set the `apiKey` variable (deprecated)\n5. Use the Status > Health Check request to verify connectivity\n\n## Role model\n- IsAdmin=true: global system-wide admin\n- IsAdmin=false and IsTenantAdmin=true: tenant-scoped admin\n- IsAdmin=false and IsTenantAdmin=false: regular user with self-service on own account and credentials\n\n## Notes\n- Tenant, user, and credential protection is server-controlled through IsProtected\n- Immutable fields such as IDs, ownership columns, and creation timestamps are preserved server-side on update",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -64,6 +64,11 @@
     },
     {
       "key": "voyageId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "playbookId",
       "value": "",
       "type": "string"
     },
@@ -778,7 +783,7 @@
               "name": "Healthy",
               "status": "OK",
               "code": 200,
-              "body": "{\n  \"Status\": \"healthy\",\n  \"Timestamp\": \"2026-03-07T12:00:00Z\",\n  \"StartUtc\": \"2026-03-07T08:00:00Z\",\n  \"Uptime\": \"0.04:00:00\",\n  \"Version\": \"0.6.0\",\n  \"Ports\": {\n    \"Admiral\": 7890,\n    \"Mcp\": 7891\n  },\n  \"RemoteTunnel\": {\n    \"Enabled\": false,\n    \"State\": \"Disabled\",\n    \"TunnelUrl\": null,\n    \"InstanceId\": \"armada-1f2e3d4c5b6a\",\n    \"LastError\": null,\n    \"ReconnectAttempts\": 0,\n    \"LatencyMs\": null\n  }\n}"
+              "body": "{\n  \"Status\": \"healthy\",\n  \"Timestamp\": \"2026-03-07T12:00:00Z\",\n  \"StartUtc\": \"2026-03-07T08:00:00Z\",\n  \"Uptime\": \"0.04:00:00\",\n  \"Version\": \"0.7.0\",\n  \"Ports\": {\n    \"Admiral\": 7890,\n    \"Mcp\": 7891\n  },\n  \"RemoteTunnel\": {\n    \"Enabled\": false,\n    \"State\": \"Disabled\",\n    \"TunnelUrl\": null,\n    \"InstanceId\": \"armada-1f2e3d4c5b6a\",\n    \"LastError\": null,\n    \"ReconnectAttempts\": 0,\n    \"LatencyMs\": null\n  }\n}"
             }
           ]
         },
@@ -805,7 +810,7 @@
               "name": "System Status",
               "status": "OK",
               "code": 200,
-              "body": "{\n  \"TotalCaptains\": 3,\n  \"IdleCaptains\": 1,\n  \"WorkingCaptains\": 2,\n  \"StalledCaptains\": 0,\n  \"ActiveVoyages\": 1,\n  \"MissionsByStatus\": {\n    \"Pending\": 2,\n    \"InProgress\": 2,\n    \"Complete\": 5\n  },\n  \"Voyages\": [],\n  \"RecentSignals\": [],\n  \"RemoteTunnel\": {\n    \"Enabled\": false,\n    \"State\": \"Disabled\",\n    \"TunnelUrl\": null,\n    \"InstanceId\": \"armada-1f2e3d4c5b6a\",\n    \"LastError\": null,\n    \"ReconnectAttempts\": 0,\n    \"LatencyMs\": null,\n    \"CapabilityManifest\": {\n      \"ProtocolVersion\": \"2026-04-03\",\n      \"ArmadaVersion\": \"0.6.0\",\n      \"Features\": [\n        \"remoteControl.handshake\",\n        \"remoteControl.heartbeat\",\n        \"status.health\",\n        \"status.snapshot\",\n        \"settings.remoteControl\"\n      ]\n    }\n  },\n  \"TimestampUtc\": \"2026-03-07T12:00:00Z\"\n}"
+              "body": "{\n  \"TotalCaptains\": 3,\n  \"IdleCaptains\": 1,\n  \"WorkingCaptains\": 2,\n  \"StalledCaptains\": 0,\n  \"ActiveVoyages\": 1,\n  \"MissionsByStatus\": {\n    \"Pending\": 2,\n    \"InProgress\": 2,\n    \"Complete\": 5\n  },\n  \"Voyages\": [],\n  \"RecentSignals\": [],\n  \"RemoteTunnel\": {\n    \"Enabled\": false,\n    \"State\": \"Disabled\",\n    \"TunnelUrl\": null,\n    \"InstanceId\": \"armada-1f2e3d4c5b6a\",\n    \"LastError\": null,\n    \"ReconnectAttempts\": 0,\n    \"LatencyMs\": null,\n    \"CapabilityManifest\": {\n      \"ProtocolVersion\": \"2026-04-03\",\n      \"ArmadaVersion\": \"0.7.0\",\n      \"Features\": [\n        \"remoteControl.handshake\",\n        \"remoteControl.heartbeat\",\n        \"status.health\",\n        \"status.snapshot\",\n        \"settings.remoteControl\"\n      ]\n    }\n  },\n  \"TimestampUtc\": \"2026-03-07T12:00:00Z\"\n}"
             }
           ]
         },
@@ -1512,7 +1517,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"Title\": \"API Hardening\",\n  \"Description\": \"Security improvements across the API\",\n  \"VesselId\": \"{{vesselId}}\",\n  \"Missions\": [\n    {\n      \"Title\": \"Add rate limiting\",\n      \"Description\": \"Add rate limiting middleware to all endpoints\"\n    },\n    {\n      \"Title\": \"Add input validation\",\n      \"Description\": \"Validate all POST endpoint request bodies\"\n    },\n    {\n      \"Title\": \"Add request logging\",\n      \"Description\": \"Log all requests with correlation IDs\"\n    }\n  ]\n}"
+              "raw": "{\n  \"Title\": \"API Hardening\",\n  \"Description\": \"Security improvements across the API\",\n  \"VesselId\": \"{{vesselId}}\",\n  \"SelectedPlaybooks\": [\n    {\n      \"PlaybookId\": \"{{playbookId}}\",\n      \"DeliveryMode\": \"InlineFullContent\"\n    }\n  ],\n  \"Missions\": [\n    {\n      \"Title\": \"Add rate limiting\",\n      \"Description\": \"Add rate limiting middleware to all endpoints\"\n    },\n    {\n      \"Title\": \"Add input validation\",\n      \"Description\": \"Validate all POST endpoint request bodies\"\n    },\n    {\n      \"Title\": \"Add request logging\",\n      \"Description\": \"Log all requests with correlation IDs\"\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/voyages",
@@ -1525,14 +1530,14 @@
                 "voyages"
               ]
             },
-            "description": "Creates a new voyage with optional missions. Missions are automatically dispatched to the target vessel. Auto-saves the ID to the voyageId collection variable."
+            "description": "Creates a new voyage with optional missions and ordered playbook selections. Each selected playbook includes its own DeliveryMode: InlineFullContent, InstructionWithReference, or AttachIntoWorktree. Missions are automatically dispatched to the target vessel. Auto-saves the ID to the voyageId collection variable."
           },
           "response": [
             {
               "name": "Created",
               "status": "Created",
               "code": 201,
-              "body": "{\n  \"Id\": \"vyg_abc123\",\n  \"Title\": \"API Hardening\",\n  \"Description\": \"Security improvements across the API\",\n  \"Status\": \"InProgress\",\n  \"CreatedUtc\": \"2026-03-07T12:00:00Z\",\n  \"CompletedUtc\": null,\n  \"LastUpdateUtc\": \"2026-03-07T12:00:00Z\"\n}"
+              "body": "{\n  \"Id\": \"vyg_abc123\",\n  \"Title\": \"API Hardening\",\n  \"Description\": \"Security improvements across the API\",\n  \"Status\": \"InProgress\",\n  \"SelectedPlaybooks\": [\n    {\n      \"PlaybookId\": \"pbk_abc123\",\n      \"DeliveryMode\": \"InlineFullContent\"\n    }\n  ],\n  \"CreatedUtc\": \"2026-03-07T12:00:00Z\",\n  \"CompletedUtc\": null,\n  \"LastUpdateUtc\": \"2026-03-07T12:00:00Z\"\n}"
             }
           ]
         },
@@ -1560,7 +1565,7 @@
               "name": "Voyage with Missions",
               "status": "OK",
               "code": 200,
-              "body": "{\n  \"Voyage\": {\n    \"Id\": \"vyg_abc123\",\n    \"Title\": \"API Hardening\",\n    \"Status\": \"InProgress\"\n  },\n  \"Missions\": [\n    {\n      \"Id\": \"msn_abc123\",\n      \"Title\": \"Add rate limiting\",\n      \"Status\": \"Pending\",\n      \"VoyageId\": \"vyg_abc123\"\n    }\n  ]\n}"
+              "body": "{\n  \"Voyage\": {\n    \"Id\": \"vyg_abc123\",\n    \"Title\": \"API Hardening\",\n    \"Status\": \"InProgress\",\n    \"SelectedPlaybooks\": [\n      {\n        \"PlaybookId\": \"pbk_abc123\",\n        \"DeliveryMode\": \"InlineFullContent\"\n      }\n    ]\n  },\n  \"Missions\": [\n    {\n      \"Id\": \"msn_abc123\",\n      \"Title\": \"Add rate limiting\",\n      \"Status\": \"Pending\",\n      \"VoyageId\": \"vyg_abc123\",\n      \"PlaybookSnapshots\": [\n        {\n          \"PlaybookId\": \"pbk_abc123\",\n          \"FileName\": \"CSHARP_BACKEND_ARCHITECTURE.md\",\n          \"DeliveryMode\": \"InlineFullContent\"\n        }\n      ]\n    }\n  ]\n}"
             }
           ]
         },
@@ -1658,6 +1663,183 @@
               "body": "{\n  \"Status\": \"deleted\",\n  \"Deleted\": 2,\n  \"Skipped\": []\n}"
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "Playbooks",
+      "description": "Tenant-scoped markdown playbook management. Playbooks are reusable instruction documents that can be selected during voyage and mission dispatch.",
+      "item": [
+        {
+          "name": "List Playbooks",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/playbooks?pageNumber=1&pageSize=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "playbooks"
+              ],
+              "query": [
+                {
+                  "key": "pageNumber",
+                  "value": "1",
+                  "description": "Page number (1-based)"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "100",
+                  "description": "Results per page (1-1000)"
+                }
+              ]
+            },
+            "description": "Returns tenant-scoped playbooks with pagination."
+          }
+        },
+        {
+          "name": "Enumerate Playbooks",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 100,\n  \"Status\": null\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/playbooks/enumerate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "playbooks",
+                "enumerate"
+              ]
+            },
+            "description": "Paginated enumeration of playbooks with JSON query body."
+          }
+        },
+        {
+          "name": "Create Playbook",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('playbookId', json.Id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"FileName\": \"CSHARP_BACKEND_ARCHITECTURE.md\",\n  \"Description\": \"Backend architecture and implementation rules for C# services.\",\n  \"Content\": \"# C# Backend Architecture\\n\\n## Requirements\\n- Use dependency injection\\n- Prefer async APIs\\n- Add tests for externally visible behavior\\n\",\n  \"Active\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/playbooks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "playbooks"
+              ]
+            },
+            "description": "Creates a tenant-scoped markdown playbook. Auto-saves the ID to the playbookId collection variable."
+          }
+        },
+        {
+          "name": "Get Playbook",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/playbooks/{{playbookId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "playbooks",
+                "{{playbookId}}"
+              ]
+            },
+            "description": "Returns a single playbook by ID."
+          }
+        },
+        {
+          "name": "Update Playbook",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"FileName\": \"CSHARP_BACKEND_ARCHITECTURE.md\",\n  \"Description\": \"Updated architecture rules for C# backend missions.\",\n  \"Content\": \"# C# Backend Architecture\\n\\n## Requirements\\n- Use dependency injection\\n- Prefer async APIs\\n- Keep controllers thin\\n\",\n  \"Active\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/playbooks/{{playbookId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "playbooks",
+                "{{playbookId}}"
+              ]
+            },
+            "description": "Updates the file name, description, content, or active state of a playbook."
+          }
+        },
+        {
+          "name": "Delete Playbook",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/playbooks/{{playbookId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "playbooks",
+                "{{playbookId}}"
+              ]
+            },
+            "description": "Deletes a playbook. Existing mission snapshots remain immutable."
+          }
         }
       ]
     },
@@ -3524,7 +3706,7 @@
                   "name": "Proxy Healthy",
                   "status": "OK",
                   "code": 200,
-                  "body": "{\n  \"healthy\": true,\n  \"product\": \"Armada.Proxy\",\n  \"version\": \"0.6.0\",\n  \"protocolVersion\": \"2026-04-03\",\n  \"port\": 7893,\n  \"startedUtc\": \"2026-04-03T21:00:00Z\",\n  \"instances\": {\n    \"total\": 2,\n    \"connected\": 1,\n    \"stale\": 1,\n    \"offline\": 0\n  }\n}"
+                  "body": "{\n  \"healthy\": true,\n  \"product\": \"Armada.Proxy\",\n  \"version\": \"0.7.0\",\n  \"protocolVersion\": \"2026-04-03\",\n  \"port\": 7893,\n  \"startedUtc\": \"2026-04-03T21:00:00Z\",\n  \"instances\": {\n    \"total\": 2,\n    \"connected\": 1,\n    \"stale\": 1,\n    \"offline\": 0\n  }\n}"
                 }
               ]
             },
@@ -3554,7 +3736,7 @@
                   "name": "Instance List",
                   "status": "OK",
                   "code": 200,
-                  "body": "{\n  \"count\": 1,\n  \"instances\": [\n    {\n      \"instanceId\": \"armada-1f2e3d4c5b6a\",\n      \"state\": \"connected\",\n      \"armadaVersion\": \"0.6.0\",\n      \"protocolVersion\": \"2026-04-03\",\n      \"capabilities\": [\n        \"remoteControl.handshake\",\n        \"remoteControl.heartbeat\",\n        \"remoteControl.events\",\n        \"remoteControl.requests\",\n        \"status.health\",\n        \"status.snapshot\",\n        \"settings.remoteControl\"\n      ],\n      \"remoteAddress\": \"127.0.0.1\",\n      \"firstSeenUtc\": \"2026-04-03T21:00:00Z\",\n      \"connectedUtc\": \"2026-04-03T21:00:00Z\",\n      \"lastSeenUtc\": \"2026-04-03T21:02:00Z\",\n      \"lastEventUtc\": \"2026-04-03T21:01:30Z\",\n      \"lastDisconnectUtc\": null,\n      \"lastError\": null,\n      \"recentEventCount\": 3,\n      \"pendingRequestCount\": 0\n    }\n  ]\n}"
+                  "body": "{\n  \"count\": 1,\n  \"instances\": [\n    {\n      \"instanceId\": \"armada-1f2e3d4c5b6a\",\n      \"state\": \"connected\",\n      \"armadaVersion\": \"0.7.0\",\n      \"protocolVersion\": \"2026-04-03\",\n      \"capabilities\": [\n        \"remoteControl.handshake\",\n        \"remoteControl.heartbeat\",\n        \"remoteControl.events\",\n        \"remoteControl.requests\",\n        \"status.health\",\n        \"status.snapshot\",\n        \"settings.remoteControl\"\n      ],\n      \"remoteAddress\": \"127.0.0.1\",\n      \"firstSeenUtc\": \"2026-04-03T21:00:00Z\",\n      \"connectedUtc\": \"2026-04-03T21:00:00Z\",\n      \"lastSeenUtc\": \"2026-04-03T21:02:00Z\",\n      \"lastEventUtc\": \"2026-04-03T21:01:30Z\",\n      \"lastDisconnectUtc\": null,\n      \"lastError\": null,\n      \"recentEventCount\": 3,\n      \"pendingRequestCount\": 0\n    }\n  ]\n}"
                 }
               ]
             },
@@ -3585,7 +3767,7 @@
                   "name": "Instance Detail",
                   "status": "OK",
                   "code": 200,
-                  "body": "{\n  \"summary\": {\n    \"instanceId\": \"armada-1f2e3d4c5b6a\",\n    \"state\": \"connected\",\n    \"armadaVersion\": \"0.6.0\",\n    \"protocolVersion\": \"2026-04-03\",\n    \"capabilities\": [\n      \"remoteControl.handshake\",\n      \"remoteControl.heartbeat\",\n      \"remoteControl.events\",\n      \"remoteControl.requests\",\n      \"status.health\",\n      \"status.snapshot\",\n      \"settings.remoteControl\"\n    ],\n    \"remoteAddress\": \"127.0.0.1\",\n    \"firstSeenUtc\": \"2026-04-03T21:00:00Z\",\n    \"connectedUtc\": \"2026-04-03T21:00:00Z\",\n    \"lastSeenUtc\": \"2026-04-03T21:02:00Z\",\n    \"lastEventUtc\": \"2026-04-03T21:01:30Z\",\n    \"lastDisconnectUtc\": null,\n    \"lastError\": null,\n    \"recentEventCount\": 1,\n    \"pendingRequestCount\": 0\n  },\n  \"recentEvents\": [\n    {\n      \"method\": \"mission.completed\",\n      \"correlationId\": \"b0f3d61d59d74e5a855f6b2e3953c64f\",\n      \"message\": null,\n      \"timestampUtc\": \"2026-04-03T21:01:30Z\",\n      \"payload\": {\n        \"message\": \"Mission completed: Update prompt templates\",\n        \"missionId\": \"msn_abc123\"\n      }\n    }\n  ]\n}"
+                  "body": "{\n  \"summary\": {\n    \"instanceId\": \"armada-1f2e3d4c5b6a\",\n    \"state\": \"connected\",\n    \"armadaVersion\": \"0.7.0\",\n    \"protocolVersion\": \"2026-04-03\",\n    \"capabilities\": [\n      \"remoteControl.handshake\",\n      \"remoteControl.heartbeat\",\n      \"remoteControl.events\",\n      \"remoteControl.requests\",\n      \"status.health\",\n      \"status.snapshot\",\n      \"settings.remoteControl\"\n    ],\n    \"remoteAddress\": \"127.0.0.1\",\n    \"firstSeenUtc\": \"2026-04-03T21:00:00Z\",\n    \"connectedUtc\": \"2026-04-03T21:00:00Z\",\n    \"lastSeenUtc\": \"2026-04-03T21:02:00Z\",\n    \"lastEventUtc\": \"2026-04-03T21:01:30Z\",\n    \"lastDisconnectUtc\": null,\n    \"lastError\": null,\n    \"recentEventCount\": 1,\n    \"pendingRequestCount\": 0\n  },\n  \"recentEvents\": [\n    {\n      \"method\": \"mission.completed\",\n      \"correlationId\": \"b0f3d61d59d74e5a855f6b2e3953c64f\",\n      \"message\": null,\n      \"timestampUtc\": \"2026-04-03T21:01:30Z\",\n      \"payload\": {\n        \"message\": \"Mission completed: Update prompt templates\",\n        \"missionId\": \"msn_abc123\"\n      }\n    }\n  ]\n}"
                 }
               ]
             },
@@ -3650,7 +3832,7 @@
                   "name": "Live Health",
                   "status": "OK",
                   "code": 200,
-                  "body": "{\n  \"correlationId\": \"a81ec0a5ee024679b719046d1bf8de85\",\n  \"success\": true,\n  \"statusCode\": 200,\n  \"errorCode\": null,\n  \"message\": \"Armada health snapshot captured.\",\n  \"payload\": {\n    \"status\": \"healthy\",\n    \"timestamp\": \"2026-04-03T21:02:00Z\",\n    \"startUtc\": \"2026-04-03T20:00:00Z\",\n    \"uptime\": \"0.01:02:00\",\n    \"version\": \"0.6.0\",\n    \"ports\": {\n      \"admiral\": 7890,\n      \"mcp\": 7891\n    },\n    \"remoteTunnel\": {\n      \"enabled\": true,\n      \"state\": \"Connected\",\n      \"tunnelUrl\": \"wss://proxy.example.com/tunnel\",\n      \"instanceId\": \"armada-1f2e3d4c5b6a\",\n      \"lastError\": null,\n      \"reconnectAttempts\": 0,\n      \"latencyMs\": 42\n    }\n  }\n}"
+                  "body": "{\n  \"correlationId\": \"a81ec0a5ee024679b719046d1bf8de85\",\n  \"success\": true,\n  \"statusCode\": 200,\n  \"errorCode\": null,\n  \"message\": \"Armada health snapshot captured.\",\n  \"payload\": {\n    \"status\": \"healthy\",\n    \"timestamp\": \"2026-04-03T21:02:00Z\",\n    \"startUtc\": \"2026-04-03T20:00:00Z\",\n    \"uptime\": \"0.01:02:00\",\n    \"version\": \"0.7.0\",\n    \"ports\": {\n      \"admiral\": 7890,\n      \"mcp\": 7891\n    },\n    \"remoteTunnel\": {\n      \"enabled\": true,\n      \"state\": \"Connected\",\n      \"tunnelUrl\": \"wss://proxy.example.com/tunnel\",\n      \"instanceId\": \"armada-1f2e3d4c5b6a\",\n      \"lastError\": null,\n      \"reconnectAttempts\": 0,\n      \"latencyMs\": 42\n    }\n  }\n}"
                 }
               ]
             },

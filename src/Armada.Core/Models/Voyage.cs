@@ -1,5 +1,6 @@
 namespace Armada.Core.Models
 {
+    using System.Collections.Generic;
     using System.Text.Json.Serialization;
     using Armada.Core.Enums;
 
@@ -91,6 +92,11 @@ namespace Armada.Core.Models
         /// When set, this takes precedence over per-voyage boolean overrides.
         /// </summary>
         public LandingModeEnum? LandingMode { get; set; } = null;
+
+        /// <summary>
+        /// Ordered list of playbooks selected for this voyage.
+        /// </summary>
+        public List<SelectedPlaybook> SelectedPlaybooks { get; set; } = new List<SelectedPlaybook>();
 
         #endregion
 

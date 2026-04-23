@@ -11,6 +11,7 @@ import CopyButton from '../components/shared/CopyButton';
 import RefreshButton from '../components/shared/RefreshButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
+import { useNotifications } from '../context/NotificationContext';
 
 type SortDir = 'asc' | 'desc';
 type SortField = 'name' | 'description' | 'promptTemplateName' | 'isBuiltIn' | 'active' | 'createdUtc';
@@ -18,6 +19,7 @@ type SortField = 'name' | 'description' | 'promptTemplateName' | 'isBuiltIn' | '
 export default function Personas() {
   const navigate = useNavigate();
   const { t, formatRelativeTime, formatDateTime } = useLocale();
+  const { pushToast } = useNotifications();
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -122,6 +124,9 @@ export default function Personas() {
       if (editing) await updatePersona(editing.name, payload);
       else await createPersona(payload as Partial<Persona>);
       setShowForm(false);
+      pushToast('success', editing
+        ? t('Persona "{{name}}" saved.', { name: editing.name })
+        : t('Persona "{{name}}" created.', { name: form.name }));
       load();
     } catch { setError(t('Save failed.')); }
   }
@@ -133,7 +138,11 @@ export default function Personas() {
       message: t('Delete persona "{{name}}"? This cannot be undone.', { name }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try { await deletePersona(name); load(); } catch { setError(t('Delete failed.')); }
+        try {
+          await deletePersona(name);
+          pushToast('warning', t('Persona "{{name}}" deleted.', { name }));
+          load();
+        } catch { setError(t('Delete failed.')); }
       },
     });
   }

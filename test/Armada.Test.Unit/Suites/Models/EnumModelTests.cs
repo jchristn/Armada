@@ -230,6 +230,31 @@ namespace Armada.Test.Unit.Suites.Models
                 VoyageStatusEnum deserialized = JsonSerializer.Deserialize<VoyageStatusEnum>(json);
                 AssertEqual(VoyageStatusEnum.Cancelled, deserialized);
             });
+
+            // PlaybookDeliveryModeEnum
+            await RunTest("PlaybookDeliveryModeEnum InlineFullContent SerializesAsString", () =>
+            {
+                string json = JsonSerializer.Serialize(PlaybookDeliveryModeEnum.InlineFullContent);
+                AssertEqual("\"InlineFullContent\"", json);
+                PlaybookDeliveryModeEnum deserialized = JsonSerializer.Deserialize<PlaybookDeliveryModeEnum>(json);
+                AssertEqual(PlaybookDeliveryModeEnum.InlineFullContent, deserialized);
+            });
+
+            await RunTest("PlaybookDeliveryModeEnum InstructionWithReference SerializesAsString", () =>
+            {
+                string json = JsonSerializer.Serialize(PlaybookDeliveryModeEnum.InstructionWithReference);
+                AssertEqual("\"InstructionWithReference\"", json);
+                PlaybookDeliveryModeEnum deserialized = JsonSerializer.Deserialize<PlaybookDeliveryModeEnum>(json);
+                AssertEqual(PlaybookDeliveryModeEnum.InstructionWithReference, deserialized);
+            });
+
+            await RunTest("PlaybookDeliveryModeEnum AttachIntoWorktree SerializesAsString", () =>
+            {
+                string json = JsonSerializer.Serialize(PlaybookDeliveryModeEnum.AttachIntoWorktree);
+                AssertEqual("\"AttachIntoWorktree\"", json);
+                PlaybookDeliveryModeEnum deserialized = JsonSerializer.Deserialize<PlaybookDeliveryModeEnum>(json);
+                AssertEqual(PlaybookDeliveryModeEnum.AttachIntoWorktree, deserialized);
+            });
         }
     }
 }

@@ -595,6 +595,18 @@ namespace Armada.Core.Services
                     "{ModelContext}\n"
             };
 
+            defaults["mission.playbooks_wrapper"] = new EmbeddedTemplate
+            {
+                Name = "mission.playbooks_wrapper",
+                Description = "Wrapper for selected playbooks injected into mission instructions",
+                Category = "structure",
+                Content =
+                    "## Playbooks\n" +
+                    "These playbooks are part of the required instructions for this mission. Read and follow them.\n" +
+                    "\n" +
+                    "{SelectedPlaybooksMarkdown}\n"
+            };
+
             defaults["mission.metadata"] = new EmbeddedTemplate
             {
                 Name = "mission.metadata",

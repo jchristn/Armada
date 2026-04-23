@@ -18,11 +18,13 @@ import JsonViewer from '../components/shared/JsonViewer';
 import StatusBadge from '../components/shared/StatusBadge';
 import CopyButton from '../components/shared/CopyButton';
 import { useLocale } from '../context/LocaleContext';
+import { useNotifications } from '../context/NotificationContext';
 
 const RUNTIMES = ['ClaudeCode', 'Codex', 'Gemini', 'Cursor', 'Custom'];
 
 export default function CaptainDetail() {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
+  const { pushToast } = useNotifications();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [captain, setCaptain] = useState<Captain | null>(null);
@@ -95,6 +97,7 @@ export default function CaptainDetail() {
       if (!payload.preferredPersona) delete payload.preferredPersona;
       await updateCaptain(captain.id, payload);
       setShowForm(false);
+      pushToast('success', t('Captain "{{name}}" saved.', { name: form.name }));
       load();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('Save failed.'));
@@ -127,6 +130,7 @@ export default function CaptainDetail() {
         setConfirm(c => ({ ...c, open: false }));
         try {
           await stopCaptain(captain.id);
+          pushToast('warning', t('Captain "{{name}}" stopped.', { name: captain.name }));
           load();
         } catch { setError(t('Failed to stop captain.')); }
       },
@@ -143,6 +147,7 @@ export default function CaptainDetail() {
         setConfirm(c => ({ ...c, open: false }));
         try {
           await recallCaptain(captain.id);
+          pushToast('warning', t('Captain "{{name}}" recalled.', { name: captain.name }));
           load();
         } catch { setError(t('Failed to recall captain.')); }
       },
@@ -159,6 +164,7 @@ export default function CaptainDetail() {
         setConfirm(c => ({ ...c, open: false }));
         try {
           await deleteCaptain(captain.id);
+          pushToast('warning', t('Captain "{{name}}" removed.', { name: captain.name }));
           navigate('/captains');
         } catch { setError(t('Remove failed.')); }
       },

@@ -806,6 +806,361 @@ tr.clickable { cursor: pointer; }
     flex-wrap: wrap;
 }
 
+/* Playbooks */
+.playbook-overview-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.playbook-overview-card {
+    display: grid;
+    gap: 0.25rem;
+    padding: 1rem 1.1rem;
+}
+
+.playbook-overview-card span {
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.playbook-overview-card strong {
+    font-size: 1.35rem;
+    color: var(--text);
+}
+
+.playbook-filter-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 200px;
+    gap: 0.75rem;
+}
+
+.playbook-empty-state {
+    padding: 2rem 1.5rem;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-card);
+    color: var(--text-dim);
+    display: grid;
+    gap: 0.25rem;
+    text-align: center;
+}
+
+.playbook-selector-shell {
+    margin: 1rem 0;
+    padding: 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-card);
+    display: grid;
+    gap: 1rem;
+}
+
+.playbook-selector-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+
+.playbook-selector-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    color: var(--text-dim);
+    font-size: 0.82rem;
+}
+
+.playbook-selector-link {
+    font-weight: 600;
+}
+
+.playbook-selector-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 1rem;
+    align-items: stretch;
+}
+
+.playbook-selector-pane {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-card);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.playbook-selector-pane-head {
+    padding: 0.9rem 1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.playbook-selector-pane-head h4 {
+    margin-bottom: 0.15rem;
+}
+
+.playbook-selector-pane-body {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-height: 0;
+}
+
+.playbook-selector-search {
+    margin: 0;
+}
+
+.playbook-selector-listbox {
+    width: 100%;
+    min-height: 18rem;
+    padding: 0.5rem;
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius);
+    background: var(--input-bg);
+    color: var(--text);
+    font: inherit;
+}
+
+.playbook-selector-listbox:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.playbook-selector-listbox option {
+    padding: 0.35rem 0.45rem;
+}
+
+.playbook-selector-toolbar {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.playbook-selector-toolbar .btn {
+    min-width: 6.5rem;
+}
+
+.playbook-selector-details {
+    min-height: 5.5rem;
+    padding: 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: calc(var(--radius) - 2px);
+    background: var(--bg-hover);
+    display: grid;
+    gap: 0.3rem;
+}
+
+.playbook-selector-detail-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    color: var(--text-dim);
+    font-size: 0.78rem;
+}
+
+.playbook-selector-empty {
+    margin: auto;
+    padding: 1.5rem;
+    text-align: center;
+    display: grid;
+    gap: 0.35rem;
+    color: var(--text-dim);
+}
+
+.playbook-selector-empty.emphasized {
+    max-width: 420px;
+}
+
+.playbook-voyage-item,
+.playbook-snapshot-card {
+    border: 1px solid var(--border);
+    border-radius: calc(var(--radius) - 2px);
+    background: var(--bg-card);
+}
+
+.playbook-voyage-item,
+.playbook-snapshot-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: flex-start;
+}
+
+.playbook-snapshot-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    color: var(--text-dim);
+    font-size: 0.78rem;
+}
+
+.playbook-mode-field {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.playbook-mode-field span {
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.playbook-editor-card {
+    padding: 1rem;
+    display: grid;
+    gap: 0.9rem;
+}
+
+.playbook-editor-field {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.playbook-editor-field span,
+.playbook-toggle span {
+    color: var(--text-dim);
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.playbook-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.playbook-toggle input {
+    width: auto;
+}
+
+.playbook-editor-textarea {
+    min-height: 540px;
+    resize: vertical;
+    font-family: var(--mono);
+    line-height: 1.55;
+}
+
+.playbook-editor-actions {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.playbook-side-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.playbook-side-stats div {
+    padding: 0.8rem;
+    border-radius: calc(var(--radius) - 2px);
+    background: var(--bg-hover);
+    display: grid;
+    gap: 0.2rem;
+}
+
+.playbook-side-stats span {
+    color: var(--text-dim);
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.playbook-side-stats strong {
+    font-size: 1rem;
+}
+
+.playbook-voyage-card {
+    padding: 1rem;
+}
+
+.playbook-voyage-header {
+    margin-bottom: 0.75rem;
+}
+
+.playbook-voyage-list,
+.playbook-snapshot-list {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.playbook-voyage-item {
+    padding: 0.9rem;
+}
+
+.playbook-voyage-item-meta {
+    display: grid;
+    gap: 0.35rem;
+    justify-items: end;
+}
+
+.playbook-snapshot-card {
+    padding: 1rem;
+    display: grid;
+    gap: 0.75rem;
+}
+
+.playbook-snapshot-content {
+    margin: 0;
+    padding: 0.9rem;
+    max-height: 320px;
+    overflow: auto;
+    border-radius: calc(var(--radius) - 2px);
+    background: var(--bg-hover);
+    font-family: var(--mono);
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--text);
+}
+
+@media (max-width: 1100px) {
+    .playbook-selector-layout,
+    .playbook-overview-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .playbook-selector-toolbar {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+}
+
+@media (max-width: 800px) {
+    .playbook-filter-row {
+        grid-template-columns: 1fr;
+    }
+
+    .playbook-selector-head,
+    .playbook-voyage-item,
+    .playbook-snapshot-header {
+        flex-direction: column;
+    }
+
+    .playbook-voyage-item-meta {
+        justify-items: start;
+    }
+
+    .playbook-side-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .playbook-selector-toolbar .btn {
+        min-width: 0;
+        flex: 1 1 calc(50% - 0.25rem);
+    }
+}
+
 /* Diff viewer */
 .diff-viewer {
     background: var(--diff-bg);

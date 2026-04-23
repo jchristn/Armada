@@ -275,6 +275,59 @@ namespace Armada.Core.Database.SqlServer.Queries
                     @"
                     IF COL_LENGTH('missions', 'total_runtime_ms') IS NULL
                         ALTER TABLE missions ADD total_runtime_ms BIGINT NULL;"
+                ),
+                new SchemaMigration(
+                    28,
+                    "Add playbooks and mission/voyage playbook associations",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'playbooks')
+                    CREATE TABLE playbooks (
+                        id NVARCHAR(450) NOT NULL PRIMARY KEY,
+                        tenant_id NVARCHAR(450),
+                        user_id NVARCHAR(450),
+                        file_name NVARCHAR(450) NOT NULL,
+                        description NVARCHAR(MAX),
+                        content NVARCHAR(MAX) NOT NULL,
+                        active BIT NOT NULL DEFAULT 1,
+                        created_utc NVARCHAR(450) NOT NULL,
+                        last_update_utc NVARCHAR(450) NOT NULL,
+                        CONSTRAINT FK_playbooks_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+                        CONSTRAINT FK_playbooks_user FOREIGN KEY (user_id) REFERENCES users(id)
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_playbooks_tenant_file_name') CREATE UNIQUE INDEX idx_playbooks_tenant_file_name ON playbooks(tenant_id, file_name);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_playbooks_tenant') CREATE INDEX idx_playbooks_tenant ON playbooks(tenant_id);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_playbooks_user') CREATE INDEX idx_playbooks_user ON playbooks(user_id);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_playbooks_active') CREATE INDEX idx_playbooks_active ON playbooks(active);",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'voyage_playbooks')
+                    CREATE TABLE voyage_playbooks (
+                        voyage_id NVARCHAR(450) NOT NULL,
+                        playbook_id NVARCHAR(450) NOT NULL,
+                        selection_order INT NOT NULL,
+                        delivery_mode NVARCHAR(450) NOT NULL,
+                        CONSTRAINT PK_voyage_playbooks PRIMARY KEY (voyage_id, selection_order),
+                        CONSTRAINT FK_voyage_playbooks_voyage FOREIGN KEY (voyage_id) REFERENCES voyages(id) ON DELETE CASCADE,
+                        CONSTRAINT FK_voyage_playbooks_playbook FOREIGN KEY (playbook_id) REFERENCES playbooks(id) ON DELETE CASCADE
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_voyage_playbooks_playbook') CREATE INDEX idx_voyage_playbooks_playbook ON voyage_playbooks(playbook_id);",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'mission_playbook_snapshots')
+                    CREATE TABLE mission_playbook_snapshots (
+                        mission_id NVARCHAR(450) NOT NULL,
+                        selection_order INT NOT NULL,
+                        playbook_id NVARCHAR(450),
+                        file_name NVARCHAR(450) NOT NULL,
+                        description NVARCHAR(MAX),
+                        content NVARCHAR(MAX) NOT NULL,
+                        delivery_mode NVARCHAR(450) NOT NULL,
+                        resolved_path NVARCHAR(MAX),
+                        worktree_relative_path NVARCHAR(MAX),
+                        source_last_update_utc NVARCHAR(450),
+                        CONSTRAINT PK_mission_playbook_snapshots PRIMARY KEY (mission_id, selection_order),
+                        CONSTRAINT FK_mission_playbook_snapshots_mission FOREIGN KEY (mission_id) REFERENCES missions(id) ON DELETE CASCADE,
+                        CONSTRAINT FK_mission_playbook_snapshots_playbook FOREIGN KEY (playbook_id) REFERENCES playbooks(id) ON DELETE SET NULL
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_mission_playbook_snapshots_playbook') CREATE INDEX idx_mission_playbook_snapshots_playbook ON mission_playbook_snapshots(playbook_id);"
                 )
             };
         }

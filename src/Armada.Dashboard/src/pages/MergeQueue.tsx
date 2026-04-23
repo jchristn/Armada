@@ -17,6 +17,7 @@ import ErrorModal from '../components/shared/ErrorModal';
 import RefreshButton from '../components/shared/RefreshButton';
 import CopyButton from '../components/shared/CopyButton';
 import { useLocale } from '../context/LocaleContext';
+import { useNotifications } from '../context/NotificationContext';
 
 type SortDir = 'asc' | 'desc';
 type SortField = 'branchName' | 'targetBranch' | 'status' | 'priority' | 'createdUtc';
@@ -24,6 +25,7 @@ type SortField = 'branchName' | 'targetBranch' | 'status' | 'priority' | 'create
 export default function MergeQueue() {
   const navigate = useNavigate();
   const { t } = useLocale();
+  const { pushToast } = useNotifications();
   const [entries, setEntries] = useState<MergeEntry[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -151,6 +153,7 @@ export default function MergeQueue() {
         priority: enqueueForm.priority,
       });
       setShowEnqueue(false);
+      pushToast('success', t('Merge entry enqueued.'));
       load();
     } catch { setError(t('Enqueue failed.')); }
   }
@@ -163,7 +166,11 @@ export default function MergeQueue() {
       message: t('Process all queued entries in the merge queue now?'),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try { await processAllMergeQueue(); load(); } catch { setError(t('Process all failed.')); }
+        try {
+          await processAllMergeQueue();
+          pushToast('success', t('Merge queue processing started.'));
+          load();
+        } catch { setError(t('Process all failed.')); }
       },
     });
   }
@@ -176,7 +183,11 @@ export default function MergeQueue() {
       message: t('Process merge entry {{id}} now?', { id }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try { await processMergeEntry(id); load(); } catch { setError(t('Process failed.')); }
+        try {
+          await processMergeEntry(id);
+          pushToast('success', t('Merge entry {{id}} processing started.', { id }));
+          load();
+        } catch { setError(t('Process failed.')); }
       },
     });
   }
@@ -189,7 +200,11 @@ export default function MergeQueue() {
       message: t('Cancel merge entry {{id}}?', { id }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try { await cancelMergeEntry(id); load(); } catch { setError(t('Cancel failed.')); }
+        try {
+          await cancelMergeEntry(id);
+          pushToast('warning', t('Merge entry {{id}} cancelled.', { id }));
+          load();
+        } catch { setError(t('Cancel failed.')); }
       },
     });
   }
@@ -202,7 +217,11 @@ export default function MergeQueue() {
       message: t('Delete merge entry {{id}}? This cannot be undone.', { id }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try { await deleteMergeEntry(id); load(); } catch { setError(t('Delete failed.')); }
+        try {
+          await deleteMergeEntry(id);
+          pushToast('warning', t('Merge entry {{id}} deleted.', { id }));
+          load();
+        } catch { setError(t('Delete failed.')); }
       },
     });
   }
@@ -219,6 +238,12 @@ export default function MergeQueue() {
         let failed = 0;
         for (const id of ids) {
           try { await deleteMergeEntry(id); } catch { failed++; }
+        }
+        const deleted = ids.length - failed;
+        if (deleted > 0) {
+          pushToast(failed > 0 ? 'warning' : 'success', failed > 0
+            ? t('Deleted {{deleted}} merge entries. {{failed}} failed.', { deleted, failed })
+            : t('Deleted {{deleted}} merge entries.', { deleted }));
         }
         if (failed > 0) setError(t('Deleted {{deleted}} entries, {{failed}} failed.', { deleted: ids.length - failed, failed }));
         load();

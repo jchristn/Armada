@@ -70,7 +70,22 @@ namespace Armada.Server.Mcp.Tools
                         description = new { type = "string", description = "Mission description/instructions" },
                         vesselId = new { type = "string", description = "Target vessel ID (vsl_ prefix)" },
                         voyageId = new { type = "string", description = "Optional voyage ID to associate with (vyg_ prefix)" },
-                        persona = new { type = "string", description = "Persona for this mission (e.g. Worker, Architect, Judge, TestEngineer)" }
+                        persona = new { type = "string", description = "Persona for this mission (e.g. Worker, Architect, Judge, TestEngineer)" },
+                        selectedPlaybooks = new
+                        {
+                            type = "array",
+                            description = "Ordered playbooks to apply during mission dispatch",
+                            items = new
+                            {
+                                type = "object",
+                                properties = new
+                                {
+                                    playbookId = new { type = "string", description = "Playbook ID (pbk_ prefix)" },
+                                    deliveryMode = new { type = "string", description = "InlineFullContent, InstructionWithReference, or AttachIntoWorktree" }
+                                },
+                                required = new[] { "playbookId", "deliveryMode" }
+                            }
+                        }
                     },
                     required = new[] { "title", "description", "vesselId" }
                 },
@@ -85,6 +100,7 @@ namespace Armada.Server.Mcp.Tools
                     if (request.VoyageId != null)
                         mission.VoyageId = request.VoyageId;
                     mission.Persona = request.Persona;
+                    mission.SelectedPlaybooks = request.SelectedPlaybooks ?? new List<SelectedPlaybook>();
                     mission = await admiral.DispatchMissionAsync(mission).ConfigureAwait(false);
                     if (mission.Status == Armada.Core.Enums.MissionStatusEnum.Pending)
                     {

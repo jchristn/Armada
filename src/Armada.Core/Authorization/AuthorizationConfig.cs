@@ -70,6 +70,7 @@ namespace Armada.Core.Authorization
             if (path.StartsWith("/api/v1/captains") && method != "GET") return PermissionLevel.TenantAdmin;
             if (path.StartsWith("/api/v1/voyages") && method != "GET") return PermissionLevel.TenantAdmin;
             if (path.StartsWith("/api/v1/missions") && method != "GET") return PermissionLevel.TenantAdmin;
+            if (path.StartsWith("/api/v1/playbooks") && method != "GET") return PermissionLevel.TenantAdmin;
             if (path.StartsWith("/api/v1/docks") && method != "GET") return PermissionLevel.TenantAdmin;
             if (path.StartsWith("/api/v1/signals") && method != "GET") return PermissionLevel.TenantAdmin;
             if (path.StartsWith("/api/v1/events") && method != "GET") return PermissionLevel.TenantAdmin;

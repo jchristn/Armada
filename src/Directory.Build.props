@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <Version>0.6.0</Version>
+    <Version>0.7.0</Version>
     <Authors>jchristn</Authors>
   </PropertyGroup>
 

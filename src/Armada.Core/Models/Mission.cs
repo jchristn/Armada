@@ -1,5 +1,6 @@
 namespace Armada.Core.Models
 {
+    using System.Collections.Generic;
     using System.Text.Json.Serialization;
     using Armada.Core.Enums;
 
@@ -136,6 +137,17 @@ namespace Armada.Core.Models
         /// Set when a mission transitions to Failed or LandingFailed status.
         /// </summary>
         public string? FailureReason { get; set; } = null;
+
+        /// <summary>
+        /// Selected playbooks supplied when creating or updating the mission.
+        /// This is request metadata and is not stored directly on the mission row.
+        /// </summary>
+        public List<SelectedPlaybook> SelectedPlaybooks { get; set; } = new List<SelectedPlaybook>();
+
+        /// <summary>
+        /// Immutable snapshots of playbooks used for this mission.
+        /// </summary>
+        public List<MissionPlaybookSnapshot> PlaybookSnapshots { get; set; } = new List<MissionPlaybookSnapshot>();
 
         /// <summary>
         /// Creation timestamp in UTC.

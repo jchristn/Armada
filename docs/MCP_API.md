@@ -1,6 +1,6 @@
 # Armada MCP API Reference
 
-**Version:** 0.6.0
+**Version:** 0.7.0
 **Default URL:** `http://localhost:7891`
 **Protocol:** [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) over HTTP
 **Server Library:** Voltaic (McpHttpServer)
@@ -8,7 +8,7 @@
 
 ## Remote Control Note
 
-`v0.6.0` does not proxy Armada MCP traffic through the new remote-control tunnel or `Armada.Proxy`.
+`v0.7.0` does not proxy Armada MCP traffic through the new remote-control tunnel or `Armada.Proxy`.
 
 Remote control in this release is limited to:
 
@@ -85,6 +85,11 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [armada_delete_dock](#armada_delete_dock)
     - [armada_purge_dock](#armada_purge_dock)
     - [armada_delete_docks](#armada_delete_docks)
+  - **Playbooks**
+    - [armada_get_playbook](#armada_get_playbook)
+    - [armada_create_playbook](#armada_create_playbook)
+    - [armada_update_playbook](#armada_update_playbook)
+    - [armada_delete_playbook](#armada_delete_playbook)
   - **Merge Queue**
     - [armada_get_merge_entry](#armada_get_merge_entry)
     - [armada_enqueue_merge](#armada_enqueue_merge)
@@ -132,6 +137,7 @@ Armada exposes a full MCP server that allows AI agents and MCP-compatible client
 - Read mission diffs and session logs (with pagination)
 - Read captain session logs (with pagination)
 - List and inspect docks (worktrees)
+- Manage reusable markdown playbooks and attach them to dispatches
 - Send signals to captains
 - Stop individual captains or all captains (emergency stop)
 - Manage the merge queue (enqueue, cancel, process, inspect)
@@ -262,7 +268,7 @@ No parameters required.
     "latencyMs": null,
     "capabilityManifest": {
       "protocolVersion": "2026-04-03",
-      "armadaVersion": "0.6.0",
+      "armadaVersion": "0.7.0",
       "features": [
         "remoteControl.handshake",
         "remoteControl.heartbeat",
@@ -305,7 +311,7 @@ No parameters required.
 
 ### armada_enumerate
 
-Paginated enumeration of any entity type with filtering and sorting. This is the MCP equivalent of the `POST /api/v1/{entity}/enumerate` REST endpoints. Returns paginated results with total counts, page metadata, and query timing. Supports: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines.
+Paginated enumeration of any entity type with filtering and sorting. This is the MCP equivalent of the `POST /api/v1/{entity}/enumerate` REST endpoints. Returns paginated results with total counts, page metadata, and query timing. Supports: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, playbooks, personas, prompt_templates, pipelines.
 
 **Input Schema:**
 
@@ -313,7 +319,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 {
   "type": "object",
   "properties": {
-    "entityType": { "type": "string", "description": "Entity type to enumerate (fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines)" },
+    "entityType": { "type": "string", "description": "Entity type to enumerate (fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, playbooks, personas, prompt_templates, pipelines)" },
     "pageNumber": { "type": "integer", "description": "Page number (1-based, default 1)" },
     "pageSize": { "type": "integer", "description": "Results per page (default 10, max 1000)" },
     "order": { "type": "string", "description": "Sort order: CreatedAscending, CreatedDescending" },
@@ -351,6 +357,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 | `events` | `eventType`, `captainId`, `missionId`, `vesselId`, `voyageId`, `createdAfter`, `createdBefore` |
 | `merge_queue` | `status` (Queued/Testing/Passed/Failed/Landed/Cancelled), `createdAfter`, `createdBefore` |
 | `personas` | `createdAfter`, `createdBefore` |
+| `playbooks` | `createdAfter`, `createdBefore` |
 | `prompt_templates` | `createdAfter`, `createdBefore` |
 | `pipelines` | `createdAfter`, `createdBefore` |
 
@@ -430,6 +437,18 @@ Dispatch a new voyage with missions to a vessel. This is the primary way to assi
     "pipeline": {
       "type": "string",
       "description": "Optional pipeline name to use for this voyage (convenience alias for pipelineId -- resolves by name)"
+    },
+    "selectedPlaybooks": {
+      "type": "array",
+      "description": "Optional ordered playbook selections to apply to every created mission",
+      "items": {
+        "type": "object",
+        "properties": {
+          "playbookId": { "type": "string" },
+          "deliveryMode": { "type": "string" }
+        },
+        "required": ["playbookId", "deliveryMode"]
+      }
     }
   },
   "required": ["title", "vesselId", "missions"]
@@ -444,6 +463,7 @@ Dispatch a new voyage with missions to a vessel. This is the primary way to assi
 | `missions` | array | Yes | Array of mission objects with `title` and optional `description` |
 | `pipelineId` | string | No | Pipeline ID to use for this voyage (overrides vessel/fleet default) |
 | `pipeline` | string | No | Pipeline name to use (convenience alias for `pipelineId` -- resolves by name) |
+| `selectedPlaybooks` | array | No | Ordered playbook selections with `playbookId` and `deliveryMode` |
 
 **Example Input:**
 
@@ -452,6 +472,12 @@ Dispatch a new voyage with missions to a vessel. This is the primary way to assi
   "title": "Implement authentication",
   "description": "Add JWT auth to the API",
   "vesselId": "vsl_abc123def456ghi789jk",
+  "selectedPlaybooks": [
+    {
+      "playbookId": "pbk_abc123",
+      "deliveryMode": "InlineFullContent"
+    }
+  ],
   "missions": [
     {
       "title": "Add JWT middleware",
@@ -1370,7 +1396,19 @@ Create and dispatch a standalone mission to a vessel. The Admiral assigns a capt
     "title": { "type": "string", "description": "Mission title" },
     "description": { "type": "string", "description": "Mission description/instructions" },
     "vesselId": { "type": "string", "description": "Target vessel ID (vsl_ prefix)" },
-    "voyageId": { "type": "string", "description": "Optional voyage ID to associate with (vyg_ prefix)" }
+    "voyageId": { "type": "string", "description": "Optional voyage ID to associate with (vyg_ prefix)" },
+    "selectedPlaybooks": {
+      "type": "array",
+      "description": "Optional ordered playbook selections for this mission",
+      "items": {
+        "type": "object",
+        "properties": {
+          "playbookId": { "type": "string" },
+          "deliveryMode": { "type": "string" }
+        },
+        "required": ["playbookId", "deliveryMode"]
+      }
+    }
   },
   "required": ["title", "description", "vesselId"]
 }
@@ -1878,6 +1916,97 @@ Permanently delete multiple docks and their git worktrees from the database by I
 ```
 
 Returns `{ "Error": "ids is required and must not be empty" }` if no IDs are provided.
+
+---
+
+### armada_get_playbook
+
+Get a playbook by ID.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "description": "Playbook ID (pbk_ prefix)" }
+  },
+  "required": ["id"]
+}
+```
+
+**Response:** [Playbook](#playbook) object, or `{ "Error": "Playbook not found: pbk_..." }`.
+
+---
+
+### armada_create_playbook
+
+Create a new markdown playbook in the default tenant context used by MCP.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "fileName": { "type": "string", "description": "Markdown filename (must end with .md)" },
+    "description": { "type": "string", "description": "Optional human-readable description" },
+    "content": { "type": "string", "description": "Markdown content" },
+    "active": { "type": "boolean", "description": "Whether the playbook is active" }
+  },
+  "required": ["fileName", "content"]
+}
+```
+
+**Response:** [Playbook](#playbook) object, or an error such as `{ "Error": "A playbook with that file name already exists." }`.
+
+---
+
+### armada_update_playbook
+
+Update an existing playbook by ID.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "description": "Playbook ID (pbk_ prefix)" },
+    "fileName": { "type": "string", "description": "Markdown filename (must end with .md)" },
+    "description": { "type": "string", "description": "Optional human-readable description" },
+    "content": { "type": "string", "description": "Markdown content" },
+    "active": { "type": "boolean", "description": "Whether the playbook is active" }
+  },
+  "required": ["id"]
+}
+```
+
+**Response:** Updated [Playbook](#playbook) object, or `{ "Error": "Playbook not found: pbk_..." }`.
+
+---
+
+### armada_delete_playbook
+
+Delete a playbook by ID. Existing mission snapshots remain immutable.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "description": "Playbook ID (pbk_ prefix)" }
+  },
+  "required": ["id"]
+}
+```
+
+**Response:**
+
+```json
+{ "Status": "deleted", "PlaybookId": "pbk_..." }
+```
 
 ---
 
@@ -2605,6 +2734,7 @@ Paginated result wrapper returned by `armada_enumerate`.
 | `title` | string | Voyage title |
 | `description` | string \| null | Voyage description |
 | `status` | string | [VoyageStatusEnum](#voyagestatusenum) value |
+| `selectedPlaybooks` | array\<[SelectedPlaybook](#selectedplaybook)\> | Ordered playbook selections recorded on the voyage |
 | `createdUtc` | string | ISO 8601 creation timestamp |
 | `completedUtc` | string \| null | ISO 8601 completion timestamp |
 | `lastUpdateUtc` | string | ISO 8601 last update timestamp |
@@ -2625,6 +2755,8 @@ Paginated result wrapper returned by `armada_enumerate`.
 | `description` | string \| null | Mission description |
 | `status` | string | [MissionStatusEnum](#missionstatusenum) value |
 | `priority` | int | Priority (lower = higher priority, default 100) |
+| `selectedPlaybooks` | array\<[SelectedPlaybook](#selectedplaybook)\> | Ordered playbook selections requested for the mission |
+| `playbookSnapshots` | array\<[MissionPlaybookSnapshot](#missionplaybooksnapshot)\> | Immutable playbook materialization used for execution |
 | `parentMissionId` | string \| null | Parent mission ID for sub-tasks |
 | `branchName` | string \| null | Git branch name created for this mission |
 | `dockId` | string \| null | Assigned dock (worktree) ID |
@@ -2695,6 +2827,40 @@ Paginated result wrapper returned by `armada_enumerate`.
 | `active` | bool | Whether the dock is active |
 | `createdUtc` | string | ISO 8601 creation timestamp |
 | `lastUpdateUtc` | string | ISO 8601 last update timestamp |
+
+#### Playbook
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Playbook ID (prefix `pbk_`) |
+| `tenantId` | string \| null | Owning tenant |
+| `userId` | string \| null | Owning user |
+| `fileName` | string | Markdown file name |
+| `description` | string \| null | Human-readable description |
+| `content` | string | Markdown body |
+| `active` | bool | Whether the playbook is available for new selections |
+| `createdUtc` | string | ISO 8601 creation timestamp |
+| `lastUpdateUtc` | string | ISO 8601 last update timestamp |
+
+#### SelectedPlaybook
+
+| Field | Type | Description |
+|---|---|---|
+| `playbookId` | string | Selected playbook ID |
+| `deliveryMode` | [PlaybookDeliveryModeEnum](#playbookdeliverymodeenum) | How the playbook is delivered to the model |
+
+#### MissionPlaybookSnapshot
+
+| Field | Type | Description |
+|---|---|---|
+| `playbookId` | string \| null | Source playbook ID |
+| `fileName` | string | Source file name |
+| `description` | string \| null | Source description |
+| `content` | string | Frozen markdown body used for execution |
+| `deliveryMode` | [PlaybookDeliveryModeEnum](#playbookdeliverymodeenum) | Resolved delivery mode |
+| `resolvedPath` | string \| null | Absolute runtime path when materialized outside the worktree |
+| `worktreeRelativePath` | string \| null | Relative dock path when attached into the worktree |
+| `sourceLastUpdateUtc` | string | ISO 8601 source update timestamp captured into the snapshot |
 
 #### MergeEntry
 
@@ -2803,6 +2969,14 @@ Paginated result wrapper returned by `armada_enumerate`.
 | `InProgress` | Has active missions in progress |
 | `Complete` | All missions completed |
 | `Cancelled` | Voyage was cancelled |
+
+#### PlaybookDeliveryModeEnum
+
+| Value | Description |
+|---|---|
+| `InlineFullContent` | Include the full markdown body directly in the rendered mission instructions |
+| `InstructionWithReference` | Materialize the playbook outside the worktree and instruct the model to read the resolved path |
+| `AttachIntoWorktree` | Materialize the playbook under the dock worktree and instruct the model to read it there |
 
 #### CaptainStateEnum
 

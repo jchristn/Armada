@@ -75,6 +75,7 @@ namespace Armada.Core.Services
         private IMissionService _Missions;
         private IVoyageService _Voyages;
         private IDockService _Docks;
+        private IPlaybookService _Playbooks;
         private IEscalationService? _Escalation;
         private bool _RetryDispatchNeeded = false;
 
@@ -110,6 +111,7 @@ namespace Armada.Core.Services
             _Missions = missions ?? throw new ArgumentNullException(nameof(missions));
             _Voyages = voyages ?? throw new ArgumentNullException(nameof(voyages));
             _Docks = docks ?? throw new ArgumentNullException(nameof(docks));
+            _Playbooks = new PlaybookService(_Database, _Logging);
             _Escalation = escalation;
         }
 
@@ -125,6 +127,18 @@ namespace Armada.Core.Services
             List<MissionDescription> missionDescriptions,
             CancellationToken token = default)
         {
+            return await DispatchVoyageAsync(title, description, vesselId, missionDescriptions, (List<SelectedPlaybook>?)null, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<Voyage> DispatchVoyageAsync(
+            string title,
+            string description,
+            string vesselId,
+            List<MissionDescription> missionDescriptions,
+            List<SelectedPlaybook>? selectedPlaybooks,
+            CancellationToken token = default)
+        {
             if (String.IsNullOrEmpty(title)) throw new ArgumentNullException(nameof(title));
             if (String.IsNullOrEmpty(vesselId)) throw new ArgumentNullException(nameof(vesselId));
             if (missionDescriptions == null || missionDescriptions.Count == 0)
@@ -133,6 +147,10 @@ namespace Armada.Core.Services
             // Verify vessel exists
             Vessel? vessel = await _Database.Vessels.ReadAsync(vesselId, token).ConfigureAwait(false);
             if (vessel == null) throw new InvalidOperationException("Vessel not found: " + vesselId);
+            if (selectedPlaybooks != null && selectedPlaybooks.Count > 0 && !String.IsNullOrEmpty(vessel.TenantId))
+            {
+                await _Playbooks.ResolveSelectionsAsync(vessel.TenantId, selectedPlaybooks, token).ConfigureAwait(false);
+            }
 
             // Create voyage
             Voyage voyage = new Voyage(title, description);
@@ -140,6 +158,11 @@ namespace Armada.Core.Services
             voyage.UserId = vessel.UserId;
             voyage.Status = VoyageStatusEnum.Open;
             voyage = await _Database.Voyages.CreateAsync(voyage, token).ConfigureAwait(false);
+            voyage.SelectedPlaybooks = ClonePlaybookSelections(selectedPlaybooks);
+            if (voyage.SelectedPlaybooks.Count > 0)
+            {
+                await _Database.Playbooks.SetVoyageSelectionsAsync(voyage.Id, voyage.SelectedPlaybooks, token).ConfigureAwait(false);
+            }
             _Logging.Info(_Header + "created voyage " + voyage.Id + ": " + title);
 
             // Create missions
@@ -151,6 +174,7 @@ namespace Armada.Core.Services
                 mission.VoyageId = voyage.Id;
                 mission.VesselId = vesselId;
                 mission = await _Database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
+                await PersistMissionPlaybooksAsync(mission, voyage.SelectedPlaybooks, token).ConfigureAwait(false);
                 _Logging.Info(_Header + "created mission " + mission.Id + ": " + md.Title);
 
                 // Try to auto-assign
@@ -183,6 +207,19 @@ namespace Armada.Core.Services
             string? pipelineId,
             CancellationToken token = default)
         {
+            return await DispatchVoyageAsync(title, description, vesselId, missionDescriptions, pipelineId, null, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<Voyage> DispatchVoyageAsync(
+            string title,
+            string description,
+            string vesselId,
+            List<MissionDescription> missionDescriptions,
+            string? pipelineId,
+            List<SelectedPlaybook>? selectedPlaybooks,
+            CancellationToken token = default)
+        {
             if (String.IsNullOrEmpty(title)) throw new ArgumentNullException(nameof(title));
             if (String.IsNullOrEmpty(vesselId)) throw new ArgumentNullException(nameof(vesselId));
             if (missionDescriptions == null || missionDescriptions.Count == 0)
@@ -191,6 +228,10 @@ namespace Armada.Core.Services
             // Verify vessel exists
             Vessel? vessel = await _Database.Vessels.ReadAsync(vesselId, token).ConfigureAwait(false);
             if (vessel == null) throw new InvalidOperationException("Vessel not found: " + vesselId);
+            if (selectedPlaybooks != null && selectedPlaybooks.Count > 0 && !String.IsNullOrEmpty(vessel.TenantId))
+            {
+                await _Playbooks.ResolveSelectionsAsync(vessel.TenantId, selectedPlaybooks, token).ConfigureAwait(false);
+            }
 
             // Resolve pipeline: explicit > vessel default > fleet default > WorkerOnly
             Pipeline? pipeline = await ResolvePipelineAsync(pipelineId, vessel, token).ConfigureAwait(false);
@@ -198,7 +239,7 @@ namespace Armada.Core.Services
             // If pipeline is single-stage Worker (or null), use the standard dispatch path
             if (pipeline == null || (pipeline.Stages.Count == 1 && pipeline.Stages[0].PersonaName == "Worker"))
             {
-                return await DispatchVoyageAsync(title, description, vesselId, missionDescriptions, token).ConfigureAwait(false);
+                return await DispatchVoyageAsync(title, description, vesselId, missionDescriptions, selectedPlaybooks, token).ConfigureAwait(false);
             }
 
             // Multi-stage pipeline: create voyage, then for each mission create a chain of persona stages
@@ -207,6 +248,11 @@ namespace Armada.Core.Services
             voyage.UserId = vessel.UserId;
             voyage.Status = VoyageStatusEnum.Open;
             voyage = await _Database.Voyages.CreateAsync(voyage, token).ConfigureAwait(false);
+            voyage.SelectedPlaybooks = ClonePlaybookSelections(selectedPlaybooks);
+            if (voyage.SelectedPlaybooks.Count > 0)
+            {
+                await _Database.Playbooks.SetVoyageSelectionsAsync(voyage.Id, voyage.SelectedPlaybooks, token).ConfigureAwait(false);
+            }
             _Logging.Info(_Header + "created pipeline voyage " + voyage.Id + ": " + title + " (pipeline: " + pipeline.Name + ")");
 
             foreach (MissionDescription md in missionDescriptions)
@@ -231,6 +277,7 @@ namespace Armada.Core.Services
                     // Only the first stage starts as Pending; dependent stages also start as Pending
                     // but won't be assigned until their dependency completes
                     mission = await _Database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
+                    await PersistMissionPlaybooksAsync(mission, voyage.SelectedPlaybooks, token).ConfigureAwait(false);
                     _Logging.Info(_Header + "created pipeline mission " + mission.Id + ": " + mission.Title +
                         " (stage " + stage.Order + "/" + pipeline.Stages.Count + ", persona: " + stage.PersonaName +
                         (previousMissionId != null ? ", depends on: " + previousMissionId : "") + ")");
@@ -266,8 +313,13 @@ namespace Armada.Core.Services
         public async Task<Mission> DispatchMissionAsync(Mission mission, CancellationToken token = default)
         {
             if (mission == null) throw new ArgumentNullException(nameof(mission));
+            if (mission.SelectedPlaybooks != null && mission.SelectedPlaybooks.Count > 0 && !String.IsNullOrEmpty(mission.TenantId))
+            {
+                await _Playbooks.ResolveSelectionsAsync(mission.TenantId, mission.SelectedPlaybooks, token).ConfigureAwait(false);
+            }
 
             mission = await _Database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
+            await PersistMissionPlaybooksAsync(mission, mission.SelectedPlaybooks, token).ConfigureAwait(false);
             _Logging.Info(_Header + "created mission " + mission.Id + ": " + mission.Title);
 
             if (!String.IsNullOrEmpty(mission.VesselId))
@@ -295,6 +347,36 @@ namespace Armada.Core.Services
             }
 
             return mission;
+        }
+
+        private List<SelectedPlaybook> ClonePlaybookSelections(List<SelectedPlaybook>? selections)
+        {
+            if (selections == null || selections.Count == 0) return new List<SelectedPlaybook>();
+
+            return selections.Select(s => new SelectedPlaybook
+            {
+                PlaybookId = s.PlaybookId,
+                DeliveryMode = s.DeliveryMode
+            }).ToList();
+        }
+
+        private async Task PersistMissionPlaybooksAsync(Mission mission, List<SelectedPlaybook>? selections, CancellationToken token)
+        {
+            if (mission == null) throw new ArgumentNullException(nameof(mission));
+
+            mission.SelectedPlaybooks = ClonePlaybookSelections(selections);
+            if (mission.SelectedPlaybooks.Count == 0 || String.IsNullOrEmpty(mission.TenantId))
+            {
+                mission.PlaybookSnapshots = new List<MissionPlaybookSnapshot>();
+                return;
+            }
+
+            List<MissionPlaybookSnapshot> snapshots = await _Playbooks.CreateSnapshotsAsync(
+                mission.TenantId,
+                mission.SelectedPlaybooks,
+                token).ConfigureAwait(false);
+            mission.PlaybookSnapshots = snapshots;
+            await _Database.Playbooks.SetMissionSnapshotsAsync(mission.Id, snapshots, token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />

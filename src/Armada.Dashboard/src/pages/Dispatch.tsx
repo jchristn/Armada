@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { listVessels, listPipelines, createVoyage } from '../api/client';
-import type { Vessel, Pipeline } from '../types/models';
+import type { Vessel, Pipeline, SelectedPlaybook } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
+import { useNotifications } from '../context/NotificationContext';
+import PlaybookSelector from '../components/shared/PlaybookSelector';
 
 export default function Dispatch() {
   const { t } = useLocale();
+  const { pushToast } = useNotifications();
   const navigate = useNavigate();
 
   const [vessels, setVessels] = useState<Vessel[]>([]);
@@ -15,6 +18,7 @@ export default function Dispatch() {
   const [vesselId, setVesselId] = useState('');
   const [prompt, setPrompt] = useState('');
   const [priority, setPriority] = useState(100);
+  const [selectedPlaybooks, setSelectedPlaybooks] = useState<SelectedPlaybook[]>([]);
   const [dispatching, setDispatching] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
 
@@ -56,11 +60,14 @@ export default function Dispatch() {
         vesselId,
         missions,
         ...(selectedPipeline ? { pipeline: selectedPipeline } : {}),
+        ...(selectedPlaybooks.length > 0 ? { selectedPlaybooks } : {}),
       });
       const missionCount = isMultiStage
         ? t('{{count}} pipeline stages', { count: selectedPipelineObj!.stages.length })
         : t('{{count}} mission(s)', { count: missions.length });
-      setResult({ ok: true, message: t('Dispatched voyage with {{missionCount}}', { missionCount }) });
+      const successMessage = t('Dispatched voyage with {{missionCount}}', { missionCount });
+      setResult({ ok: true, message: successMessage });
+      pushToast('success', successMessage);
       setPrompt('');
       setTimeout(() => {
         navigate(`/voyages/${voyage.id}`);
@@ -142,6 +149,8 @@ export default function Dispatch() {
 Armada will dispatch this request as a voyage on the selected vessel.`)}
             />
           </div>
+
+          <PlaybookSelector value={selectedPlaybooks} onChange={setSelectedPlaybooks} disabled={dispatching} />
 
           <div className="form-actions">
             <button

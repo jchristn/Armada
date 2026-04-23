@@ -10,6 +10,7 @@ import StatusBadge from '../components/shared/StatusBadge';
 import RefreshButton from '../components/shared/RefreshButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
+import { useNotifications } from '../context/NotificationContext';
 
 type SortDir = 'asc' | 'desc';
 type SortField = 'name' | 'description' | 'category' | 'isBuiltIn' | 'contentLength' | 'active' | 'lastUpdateUtc';
@@ -19,6 +20,7 @@ const CATEGORY_OPTIONS = ['all', 'mission', 'persona', 'structure', 'commit', 'l
 export default function PromptTemplates() {
   const navigate = useNavigate();
   const { t: translate, formatRelativeTime, formatDateTime } = useLocale();
+  const { pushToast } = useNotifications();
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -113,7 +115,11 @@ export default function PromptTemplates() {
       message: translate('Reset template "{{name}}" to its built-in default content? Any custom edits will be lost.', { name }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try { await resetPromptTemplate(name); load(); } catch { setError(translate('Reset failed.')); }
+        try {
+          await resetPromptTemplate(name);
+          pushToast('success', translate('Template "{{name}}" reset to default.', { name }));
+          load();
+        } catch { setError(translate('Reset failed.')); }
       },
     });
   }

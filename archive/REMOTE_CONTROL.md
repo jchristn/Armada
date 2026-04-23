@@ -1,6 +1,6 @@
 # Armada Remote Control
 
-> Archived on `2026-04-23` after the `v0.6.0` tunnel/proxy MVP shipped. Checked items reflect landed work; unchecked items remain deferred follow-on scope.
+> Archived on `2026-04-23` after the `v0.7.0` tunnel/proxy MVP shipped. Checked items reflect landed work; unchecked items remain deferred follow-on scope.
 
 ## Purpose
 

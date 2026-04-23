@@ -203,6 +203,7 @@ export default function MissionDetail() {
     try {
       await updateMission(mission.id, { title: editTitle, description: editDescription, priority: editPriority });
       setEditModal(false);
+      pushToast('success', t('Mission "{{title}}" saved.', { title: editTitle }));
       loadMission();
     } catch (e: unknown) {
       setError(t('Save failed: {{message}}', { message: e instanceof Error ? e.message : String(e) }));
@@ -217,6 +218,7 @@ export default function MissionDetail() {
       await transitionMission(mission.id, { status: transitionStatus });
       setShowTransition(false);
       setTransitionStatus('');
+      pushToast('success', t('Mission "{{title}}" moved to {{status}}.', { title: mission.title, status: transitionStatus }));
       loadMission();
     } catch (e: unknown) {
       setError(t('Transition failed: {{message}}', { message: e instanceof Error ? e.message : String(e) }));
@@ -233,6 +235,7 @@ export default function MissionDetail() {
         setConfirm(c => ({ ...c, open: false }));
         try {
           await restartMission(mission.id);
+          pushToast('success', t('Mission "{{title}}" restarted.', { title: mission.title }));
           loadMission();
         } catch (e: unknown) {
           setError(t('Restart failed: {{message}}', { message: e instanceof Error ? e.message : String(e) }));
@@ -251,6 +254,7 @@ export default function MissionDetail() {
         setConfirm(c => ({ ...c, open: false }));
         try {
           await purgeMission(mission.id);
+          pushToast('warning', t('Mission "{{title}}" purged.', { title: mission.title }));
           loadMission();
         } catch (e: unknown) {
           setError(t('Purge failed: {{message}}', { message: e instanceof Error ? e.message : String(e) }));
@@ -269,6 +273,7 @@ export default function MissionDetail() {
         setConfirm(c => ({ ...c, open: false }));
         try {
           await deleteMission(mission.id);
+          pushToast('warning', t('Mission "{{title}}" deleted.', { title: mission.title }));
           navigate('/missions');
         } catch (e: unknown) {
           setError(t('Delete failed: {{message}}', { message: e instanceof Error ? e.message : String(e) }));
@@ -506,6 +511,33 @@ export default function MissionDetail() {
         <div style={{ marginTop: '1rem' }}>
           <h3>{t('Description')}</h3>
           <div className="card" style={{ padding: '1rem', whiteSpace: 'pre-wrap' }}>{mission.description}</div>
+        </div>
+      )}
+
+      {mission.playbookSnapshots && mission.playbookSnapshots.length > 0 && (
+        <div style={{ marginTop: '1rem' }}>
+          <h3>{t('Playbooks')}</h3>
+          <div className="playbook-snapshot-list">
+            {mission.playbookSnapshots.map((snapshot, index) => (
+              <div key={`${snapshot.fileName}-${index}`} className="playbook-snapshot-card">
+                <div className="playbook-snapshot-header">
+                  <div>
+                    <strong>{snapshot.fileName}</strong>
+                    <div className="text-dim">{snapshot.description || t('No description')}</div>
+                  </div>
+                  <StatusBadge status={snapshot.deliveryMode.replace(/([a-z])([A-Z])/g, '$1 $2')} />
+                </div>
+
+                <div className="playbook-snapshot-meta">
+                  <span><strong>{t('Resolved Path')}:</strong> <span className="mono">{snapshot.resolvedPath || '-'}</span></span>
+                  <span><strong>{t('Worktree Path')}:</strong> <span className="mono">{snapshot.worktreeRelativePath || '-'}</span></span>
+                  <span><strong>{t('Source Updated')}:</strong> {snapshot.sourceLastUpdateUtc ? formatDateTime(snapshot.sourceLastUpdateUtc) : '-'}</span>
+                </div>
+
+                <pre className="playbook-snapshot-content">{snapshot.content}</pre>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

@@ -8,6 +8,7 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
+import { useNotifications } from '../context/NotificationContext';
 
 interface StageForm {
   personaName: string;
@@ -17,6 +18,7 @@ interface StageForm {
 
 export default function PipelineDetail() {
   const { t, formatDateTime } = useLocale();
+  const { pushToast } = useNotifications();
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
   const [pipeline, setPipeline] = useState<Pipeline | null>(null);
@@ -103,6 +105,7 @@ export default function PipelineDetail() {
       const payload = { description: form.description || null, stages: stagesPayload } as Partial<Pipeline>;
       await updatePipeline(pipeline.name, payload);
       setShowForm(false);
+      pushToast('success', t('Pipeline "{{name}}" saved.', { name: pipeline.name }));
       load();
     } catch { setError(t('Save failed.')); }
   }
@@ -121,6 +124,7 @@ export default function PipelineDetail() {
         setConfirm(c => ({ ...c, open: false }));
         try {
           await deletePipeline(pipeline.name);
+          pushToast('warning', t('Pipeline "{{name}}" deleted.', { name: pipeline.name }));
           navigate('/pipelines');
         } catch { setError(t('Delete failed.')); }
       },

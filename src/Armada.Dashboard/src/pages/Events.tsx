@@ -10,6 +10,7 @@ import CopyButton from '../components/shared/CopyButton';
 import RefreshButton from '../components/shared/RefreshButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
+import { useNotifications } from '../context/NotificationContext';
 
 type SortDir = 'asc' | 'desc';
 type SortField = 'eventType' | 'entityType' | 'createdUtc';
@@ -31,6 +32,7 @@ function entityRoute(entityId: string | null): string | null {
 export default function Events() {
   const navigate = useNavigate();
   const { t, formatRelativeTime, formatDateTime } = useLocale();
+  const { pushToast } = useNotifications();
   const [events, setEvents] = useState<ArmadaEvent[]>([]);
   const [captains, setCaptains] = useState<Captain[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
@@ -146,7 +148,11 @@ export default function Events() {
       message: t('Delete event {{id}}?', { id }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try { await deleteEventsBatch([id]); load(); } catch { setError(t('Delete failed.')); }
+        try {
+          await deleteEventsBatch([id]);
+          pushToast('warning', t('Event {{id}} deleted.', { id }));
+          load();
+        } catch { setError(t('Delete failed.')); }
       },
     });
   }
@@ -160,6 +166,7 @@ export default function Events() {
         setConfirm(c => ({ ...c, open: false }));
         try {
           await deleteEventsBatch(selected);
+          pushToast('warning', t('Deleted {{count}} event(s).', { count: selected.length }));
           setSelected([]);
           load();
         } catch { setError(t('Bulk delete failed.')); }

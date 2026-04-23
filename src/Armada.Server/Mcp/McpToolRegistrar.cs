@@ -10,6 +10,7 @@ namespace Armada.Server.Mcp
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
     using Armada.Server.Mcp.Tools;
+    using SyslogLogging;
 
     /// <summary>
     /// Delegate matching the RegisterTool signature shared by McpHttpServer and McpServer.
@@ -47,6 +48,7 @@ namespace Armada.Server.Mcp
         /// <param name="onStopCaptain">Callback to kill a captain's agent process by captain ID. Called before RecallCaptainAsync.</param>
         /// <param name="agentLifecycle">Agent lifecycle handler used for captain model validation.</param>
         /// <param name="templateService">Prompt template service for template operations.</param>
+        /// <param name="logging">Logging module for tools that need validation services.</param>
         public static void RegisterAll(
             RegisterToolDelegate register,
             DatabaseDriver database,
@@ -59,7 +61,8 @@ namespace Armada.Server.Mcp
             Action? onStop = null,
             Func<string, Task>? onStopCaptain = null,
             AgentLifecycleHandler? agentLifecycle = null,
-            IPromptTemplateService? templateService = null)
+            IPromptTemplateService? templateService = null,
+            LoggingModule? logging = null)
         {
             McpStatusTools.Register(register, admiral, onStop);
             McpEnumerateTools.Register(register, database, mergeQueue);
@@ -71,6 +74,7 @@ namespace Armada.Server.Mcp
             McpSignalTools.Register(register, database);
             McpEventTools.Register(register, database);
             McpDockTools.Register(register, database, dockService);
+            if (logging != null) McpPlaybookTools.Register(register, database, logging);
             if (mergeQueue != null) McpMergeQueueTools.Register(register, mergeQueue);
             if (templateService != null) McpPromptTemplateTools.Register(register, database, templateService);
             McpPersonaTools.Register(register, database);

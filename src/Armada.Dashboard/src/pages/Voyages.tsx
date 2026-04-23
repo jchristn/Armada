@@ -11,6 +11,7 @@ import CopyButton from '../components/shared/CopyButton';
 import RefreshButton from '../components/shared/RefreshButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
+import { useNotifications } from '../context/NotificationContext';
 
 type SortDir = 'asc' | 'desc';
 type SortField = 'title' | 'status' | 'createdUtc';
@@ -18,6 +19,7 @@ type SortField = 'title' | 'status' | 'createdUtc';
 export default function Voyages() {
   const navigate = useNavigate();
   const { t } = useLocale();
+  const { pushToast } = useNotifications();
   const [voyages, setVoyages] = useState<Voyage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -112,7 +114,11 @@ export default function Voyages() {
       message: t('Cancel voyage "{{title}}"? All pending missions will be cancelled.', { title }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try { await cancelVoyage(id); load(); } catch { setError(t('Cancel failed.')); }
+        try {
+          await cancelVoyage(id);
+          pushToast('warning', t('Voyage "{{title}}" cancelled.', { title }));
+          load();
+        } catch { setError(t('Cancel failed.')); }
       },
     });
   }
@@ -124,7 +130,11 @@ export default function Voyages() {
       message: t('Purge voyage "{{title}}"? This will permanently remove the voyage and all associated missions. This cannot be undone.', { title }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try { await purgeVoyage(id); load(); } catch { setError(t('Purge failed.')); }
+        try {
+          await purgeVoyage(id);
+          pushToast('warning', t('Voyage "{{title}}" purged.', { title }));
+          load();
+        } catch { setError(t('Purge failed.')); }
       },
     });
   }
@@ -141,6 +151,12 @@ export default function Voyages() {
         let failed = 0;
         for (const id of ids) {
           try { await cancelVoyage(id); } catch { failed++; }
+        }
+        const success = ids.length - failed;
+        if (success > 0) {
+          pushToast(failed > 0 ? 'warning' : 'success', failed > 0
+            ? t('Cancelled {{success}} voyages. {{failed}} failed.', { success, failed })
+            : t('Cancelled {{success}} voyages.', { success }));
         }
         if (failed > 0) setError(t('Cancelled {{success}} voyages, {{failed}} failed.', { success: ids.length - failed, failed }));
         load();

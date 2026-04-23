@@ -4,7 +4,7 @@ All notable changes to Armada are documented in this file.
 
 ---
 
-## v0.6.0
+## v0.7.0
 
 Focus: remote access.
 
@@ -29,6 +29,16 @@ Focus: remote access.
 - Reworked the setup wizard into a contained first-run workflow that uses dispatch directly instead of sending users into separate dashboard pages
 - Expanded server settings with remote tunnel controls, MCP client references, system path inspection, database backup actions, and clearer hover guidance
 - Added press-and-hold reveal controls for remote-control secrets and other protected login/setup inputs
+- Added a full playbook management surface in the dashboard with list, detail, editing, delete, and ordered selection UX on voyage dispatch flows
+- Added explicit success and warning toast feedback across dashboard mutation flows so save, delete, cancel, stop, and update actions acknowledge completion visibly
+
+### Playbooks
+- Added tenant-scoped markdown playbooks with CRUD across REST, MCP, proxy remote management, dashboard, CLI, SDK, and Postman
+- Voyages and standalone missions can now carry ordered playbook selections with per-selection delivery mode: `InlineFullContent`, `InstructionWithReference`, or `AttachIntoWorktree`
+- Mission dispatch now snapshots selected playbooks and injects them into mission instructions with resolved path metadata when file-based delivery is requested
+- Added playbook persistence tables and schema migration support for SQLite, PostgreSQL, SQL Server, and MySQL
+- Added reproducible mission-time storage of playbook filename, markdown content, selection order, and resolved delivery mode so later playbook edits do not rewrite historical execution context
+- Added dashboard selection tooling that scales to larger playbook libraries through filtering, batch add/remove, and explicit ordering controls instead of one-card-per-playbook dispatch UI
 
 ### Internationalization
 - Added a dashboard locale runtime, translation catalog, and persistent language selection available from login and the authenticated shell
@@ -37,11 +47,13 @@ Focus: remote access.
 - Expanded route-level coverage across list, detail, admin, and setup flows so Spanish no longer falls back to English on common table headers, filters, actions, and confirmations
 - Routed legacy dashboard confirms, alerts, toasts, pagination affordances, and key static view copy through the shared i18n runtime so non-React surfaces honor the selected locale
 - Added locale-aware date, time, and number formatting for dashboard runtime data
+- Extended localization coverage to newer operational pages and shared controls so the playbook, dispatch, and administrative flows follow the same runtime and persistence model as the rest of the dashboard
 
 ### Release and Docs
-- Updated shared release metadata, docker tags, Postman examples, REST docs, MCP docs, and WebSocket docs to `v0.6.0`
+- Updated shared release metadata, docker tags, Postman examples, REST docs, MCP docs, and WebSocket docs to `v0.7.0`
 - Promoted the shipped remote-management guide into `docs/REMOTE_MGMT.md` and archived the earlier planning doc
-- Added no-op `v0.5.0 -> v0.6.0` migration scripts to reflect the release even though no database schema change is required
+- Added no-op `v0.6.0 -> v0.7.0` migration scripts to reflect the release even though no database schema change is required
+- Updated README and operator docs for the new playbook lifecycle, delivery modes, remote playbook management flows, and internationalized dashboard behavior
 
 ---
 

@@ -16,6 +16,7 @@ import CopyButton from '../components/shared/CopyButton';
 import RefreshButton from '../components/shared/RefreshButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
+import { useNotifications } from '../context/NotificationContext';
 
 const SIGNAL_TYPES = ['Nudge', 'Mail', 'Assignment', 'Progress', 'Completion', 'Error'] as const;
 
@@ -24,6 +25,7 @@ type SortDir = 'asc' | 'desc';
 export default function Signals() {
   const navigate = useNavigate();
   const { t, formatRelativeTime, formatDateTime } = useLocale();
+  const { pushToast } = useNotifications();
 
   // Data
   const [signals, setSignals] = useState<Signal[]>([]);
@@ -147,6 +149,7 @@ export default function Signals() {
         toCaptainId: sendForm.toCaptainId || undefined,
       });
       setShowSendModal(false);
+      pushToast('success', t('Signal sent.'));
       load();
     } catch {
       setError(t('Failed to send signal.'));
@@ -158,6 +161,7 @@ export default function Signals() {
   async function handleMarkRead(id: string) {
     try {
       await markSignalRead(id);
+      pushToast('success', t('Signal marked as read.'));
       load();
     } catch {
       setError(t('Failed to mark signal as read.'));
@@ -170,6 +174,7 @@ export default function Signals() {
       action: async () => {
         try {
           await deleteSignalsBatch(selected);
+          pushToast('warning', t('Deleted {{count}} signal(s).', { count: selected.length }));
           setConfirmAction(null);
           load();
         } catch {
@@ -301,7 +306,7 @@ export default function Signals() {
                       { label: 'View Detail', onClick: () => navigate(`/signals/${sig.id}`) },
                       ...(!sig.read ? [{ label: 'Mark Read', onClick: () => handleMarkRead(sig.id) }] : []),
                       { label: 'View JSON', onClick: () => setJsonView({ title: `${t('Signal')}: ${sig.id}`, data: sig }) },
-                      { label: 'Delete', danger: true, onClick: () => setConfirmAction({ message: t('Delete signal {{id}}?', { id: sig.id }), action: async () => { try { await deleteSignalsBatch([sig.id]); setConfirmAction(null); load(); } catch { setError(t('Delete failed.')); setConfirmAction(null); } } }) },
+                      { label: 'Delete', danger: true, onClick: () => setConfirmAction({ message: t('Delete signal {{id}}?', { id: sig.id }), action: async () => { try { await deleteSignalsBatch([sig.id]); pushToast('warning', t('Signal {{id}} deleted.', { id: sig.id })); setConfirmAction(null); load(); } catch { setError(t('Delete failed.')); setConfirmAction(null); } } }) },
                     ]} />
                   </td>
                 </tr>

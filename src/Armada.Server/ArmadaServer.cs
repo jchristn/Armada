@@ -214,6 +214,7 @@ namespace Armada.Server
                 openApi.Tags.Add(new OpenApiTag { Name = "Vessels", Description = "Vessel (git repository) management" });
                 openApi.Tags.Add(new OpenApiTag { Name = "Voyages", Description = "Voyage (mission batch) management" });
                 openApi.Tags.Add(new OpenApiTag { Name = "Missions", Description = "Mission (atomic work unit) management" });
+                openApi.Tags.Add(new OpenApiTag { Name = "Playbooks", Description = "Markdown playbook management" });
                 openApi.Tags.Add(new OpenApiTag { Name = "Captains", Description = "Captain (AI agent) management" });
                 openApi.Tags.Add(new OpenApiTag { Name = "Signals", Description = "Signal (inter-agent messaging) management" });
                 openApi.Tags.Add(new OpenApiTag { Name = "Events", Description = "System event log" });
@@ -421,6 +422,10 @@ namespace Armada.Server
             new PromptTemplateRoutes(_Database, _PromptTemplateService, _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);
 
+            // Playbooks
+            new PlaybookRoutes(_Database, _Logging, _JsonOptions)
+                .Register(_App, authenticate, _AuthorizationService);
+
             // Personas
             new PersonaRoutes(_Database, _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);
@@ -566,7 +571,8 @@ namespace Armada.Server
                         await _AgentLifecycle.HandleStopAgentAsync(captain).ConfigureAwait(false);
                 },
                 _AgentLifecycle,
-                _PromptTemplateService);
+                _PromptTemplateService,
+                _Logging);
         }
 
         private async Task EmitEventAsync(string eventType, string message,
@@ -687,6 +693,11 @@ namespace Armada.Server
                 case "armada.vessel.create":
                 case "armada.vessel.update":
                 case "armada.pipelines.list":
+                case "armada.playbooks.list":
+                case "armada.playbook.detail":
+                case "armada.playbook.create":
+                case "armada.playbook.update":
+                case "armada.playbook.delete":
                 case "armada.voyages.list":
                 case "armada.voyage.dispatch":
                 case "armada.voyage.cancel":

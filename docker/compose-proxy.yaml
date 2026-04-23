@@ -1,6 +1,6 @@
 services:
   armada-proxy:
-    image: jchristn77/armada-proxy:v0.6.0
+    image: jchristn77/armada-proxy:v0.7.0
     ports:
       - "7893:7893"
     environment:

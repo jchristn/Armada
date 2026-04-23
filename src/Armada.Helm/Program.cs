@@ -134,6 +134,19 @@ namespace Armada.Helm
                         .WithDescription("Retry failed missions in a voyage");
                 });
 
+                config.AddBranch("playbook", playbook =>
+                {
+                    playbook.SetDescription("Manage reusable markdown playbooks");
+                    playbook.AddCommand<PlaybookListCommand>("list")
+                        .WithDescription("List all playbooks");
+                    playbook.AddCommand<PlaybookAddCommand>("add")
+                        .WithDescription("Create a new playbook");
+                    playbook.AddCommand<PlaybookShowCommand>("show")
+                        .WithDescription("Show playbook details (accepts ID or file name)");
+                    playbook.AddCommand<PlaybookRemoveCommand>("remove")
+                        .WithDescription("Delete a playbook (accepts ID or file name)");
+                });
+
                 config.AddBranch("vessel", vessel =>
                 {
                     vessel.SetDescription("Manage vessels (repositories)");

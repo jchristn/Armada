@@ -34,5 +34,12 @@ namespace Armada.Helm.Commands
         [Description("Mission description (repeatable)")]
         [CommandOption("--mission|-m")]
         public string[]? Missions { get; set; }
+
+        /// <summary>
+        /// Playbook selections in the form id-or-file-name[:DeliveryMode].
+        /// </summary>
+        [Description("Playbook selection (repeatable): id-or-file-name[:InlineFullContent|InstructionWithReference|AttachIntoWorktree]")]
+        [CommandOption("--playbook|-p")]
+        public string[]? Playbooks { get; set; }
     }
 }

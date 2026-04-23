@@ -9,6 +9,7 @@ import StatusBadge from '../components/shared/StatusBadge';
 import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
+import { useNotifications } from '../context/NotificationContext';
 
 interface VesselForm {
   name: string;
@@ -26,6 +27,7 @@ interface VesselForm {
 
 export default function VesselDetail() {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
+  const { pushToast } = useNotifications();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [vessel, setVessel] = useState<Vessel | null>(null);
@@ -104,6 +106,7 @@ export default function VesselDetail() {
       if (!payload.defaultPipelineId) delete payload.defaultPipelineId;
       await updateVessel(vessel.id, payload);
       setShowForm(false);
+      pushToast('success', t('Vessel "{{name}}" saved.', { name: form.name }));
       load();
     } catch { setError(t('Save failed.')); }
   }
@@ -118,6 +121,7 @@ export default function VesselDetail() {
         setConfirm(c => ({ ...c, open: false }));
         try {
           await deleteVessel(vessel.id);
+          pushToast('warning', t('Vessel "{{name}}" deleted.', { name: vessel.name }));
           navigate('/vessels');
         } catch { setError(t('Delete failed.')); }
       },

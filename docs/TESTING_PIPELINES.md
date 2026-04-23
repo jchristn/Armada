@@ -6,7 +6,7 @@ This document walks through concrete examples for testing Armada pipelines end-t
 
 ## Prerequisites
 
-- Armada server running (v0.6.0+)
+- Armada server running (v0.7.0+)
 - At least one vessel registered with a valid git repository
 - At least one captain running (idle state)
 - Built-in personas and pipelines are seeded automatically on startup

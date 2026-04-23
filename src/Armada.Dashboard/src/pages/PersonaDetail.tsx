@@ -9,9 +9,11 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
+import { useNotifications } from '../context/NotificationContext';
 
 export default function PersonaDetail() {
   const { t, formatDateTime } = useLocale();
+  const { pushToast } = useNotifications();
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
   const [persona, setPersona] = useState<Persona | null>(null);
@@ -61,6 +63,7 @@ export default function PersonaDetail() {
     try {
       await updatePersona(persona.name, { description: form.description, promptTemplateName: form.promptTemplateName });
       setShowForm(false);
+      pushToast('success', t('Persona "{{name}}" saved.', { name: persona.name }));
       load();
     } catch { setError(t('Save failed.')); }
   }
@@ -79,6 +82,7 @@ export default function PersonaDetail() {
         setConfirm(c => ({ ...c, open: false }));
         try {
           await deletePersona(persona.name);
+          pushToast('warning', t('Persona "{{name}}" deleted.', { name: persona.name }));
           navigate('/personas');
         } catch { setError(t('Delete failed.')); }
       },

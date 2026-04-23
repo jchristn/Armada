@@ -10,6 +10,7 @@ import CopyButton from '../components/shared/CopyButton';
 import RefreshButton from '../components/shared/RefreshButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
+import { useNotifications } from '../context/NotificationContext';
 
 type SortDir = 'asc' | 'desc';
 type SortField = 'branchName' | 'active' | 'createdUtc';
@@ -17,6 +18,7 @@ type SortField = 'branchName' | 'active' | 'createdUtc';
 export default function Docks() {
   const navigate = useNavigate();
   const { t, formatRelativeTime, formatDateTime } = useLocale();
+  const { pushToast } = useNotifications();
   const [docks, setDocks] = useState<Dock[]>([]);
   const [captains, setCaptains] = useState<Captain[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
@@ -131,7 +133,11 @@ export default function Docks() {
       message: t('Delete dock {{id}}? This will clean up the git worktree and cannot be undone.', { id }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try { await deleteDock(id); load(); } catch { setError(t('Delete failed.')); }
+        try {
+          await deleteDock(id);
+          pushToast('warning', t('Dock {{id}} deleted.', { id }));
+          load();
+        } catch { setError(t('Delete failed.')); }
       },
     });
   }
@@ -148,6 +154,12 @@ export default function Docks() {
         let failed = 0;
         for (const id of ids) {
           try { await deleteDock(id); } catch { failed++; }
+        }
+        const deleted = ids.length - failed;
+        if (deleted > 0) {
+          pushToast(failed > 0 ? 'warning' : 'success', failed > 0
+            ? t('Deleted {{deleted}} docks. {{failed}} failed.', { deleted, failed })
+            : t('Deleted {{deleted}} docks.', { deleted }));
         }
         if (failed > 0) setError(t('Deleted {{deleted}} docks, {{failed}} failed.', { deleted: ids.length - failed, failed }));
         load();

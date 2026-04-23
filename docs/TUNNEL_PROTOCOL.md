@@ -1,10 +1,10 @@
 # Tunnel Protocol
 
-**Version:** 0.6.0
+**Version:** 0.7.0
 
-This document describes the shipped tunnel contract between `Armada.Server` and `Armada.Proxy` in `v0.6.0`.
+This document describes the shipped tunnel contract between `Armada.Server` and `Armada.Proxy` in `v0.7.0`.
 
-`v0.6.0` now ships:
+`v0.7.0` now ships:
 
 - outbound websocket tunnel initiation from Armada
 - proxy websocket termination at `/tunnel`
@@ -75,7 +75,7 @@ The first message from Armada must be:
   "timestampUtc": "2026-04-04T18:30:00Z",
   "payload": {
     "protocolVersion": "2026-04-04",
-    "armadaVersion": "0.6.0",
+    "armadaVersion": "0.7.0",
     "instanceId": "armada-1f2e3d4c5b6a",
     "enrollmentToken": "optional-token",
     "passwordProofSha256": "9c9be4bdc9b3d11f2c4a9a482d0f36d93fb7357db10ee3119af7c0a0c38e4d54",
@@ -147,7 +147,7 @@ Accepted handshake response:
   "message": "Handshake accepted.",
   "payload": {
     "accepted": true,
-    "proxyVersion": "0.6.0",
+    "proxyVersion": "0.7.0",
     "protocolVersion": "2026-04-04",
     "instanceId": "armada-1f2e3d4c5b6a",
     "message": "Handshake accepted.",

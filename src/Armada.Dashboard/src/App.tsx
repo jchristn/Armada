@@ -44,6 +44,8 @@ import Pipelines from './pages/Pipelines';
 import PipelineDetail from './pages/PipelineDetail';
 import PromptTemplates from './pages/PromptTemplates';
 import PromptTemplateDetail from './pages/PromptTemplateDetail';
+import Playbooks from './pages/Playbooks';
+import PlaybookDetail from './pages/PlaybookDetail';
 
 export default function App() {
   return (
@@ -98,6 +100,8 @@ export default function App() {
                   <Route path="pipelines/:name" element={<PipelineDetail />} />
                   <Route path="prompt-templates" element={<PromptTemplates />} />
                   <Route path="prompt-templates/:name" element={<PromptTemplateDetail />} />
+                  <Route path="playbooks" element={<Playbooks />} />
+                  <Route path="playbooks/:id" element={<PlaybookDetail />} />
 
                   <Route path="notifications" element={<Notifications />} />
 

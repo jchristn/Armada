@@ -454,7 +454,17 @@ namespace Armada.Test.Unit.Suites.Services
                 throw new NotImplementedException();
             }
 
+            public Task<Voyage> DispatchVoyageAsync(string title, string description, string vesselId, List<MissionDescription> missionDescriptions, List<SelectedPlaybook>? selectedPlaybooks, CancellationToken token = default)
+            {
+                throw new NotImplementedException();
+            }
+
             public Task<Voyage> DispatchVoyageAsync(string title, string description, string vesselId, List<MissionDescription> missionDescriptions, string? pipelineId, CancellationToken token = default)
+            {
+                throw new NotImplementedException();
+            }
+
+            public Task<Voyage> DispatchVoyageAsync(string title, string description, string vesselId, List<MissionDescription> missionDescriptions, string? pipelineId, List<SelectedPlaybook>? selectedPlaybooks, CancellationToken token = default)
             {
                 throw new NotImplementedException();
             }

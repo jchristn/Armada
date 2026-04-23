@@ -533,9 +533,9 @@ namespace Armada.Test.Unit.Suites.Services
                         "2. **Runtime model pass-through + model validation on captain update** (MEDIUM) -- Add model param to IAgentRuntime.StartAsync, propagate through all runtimes, add validation logic in AgentLifecycleHandler\n" +
                         "3. **REST + MCP API updates for captain model and mission total runtime** (MEDIUM) -- Wire new fields through CaptainRoutes, MissionRoutes, MCP tools, args classes, and registrar\n" +
                         "4. **Dashboard: captain model field, mission detail 4-column + runtime, dispatch cleanup, error modal** (MEDIUM) -- TypeScript types, CaptainDetail model input, MissionDetail 4-col grid + runtime display, Dispatch task detection removal\n" +
-                        "5. **Version bump to 0.6.0 across all version locations** (LOW) -- Helm csproj, compose.yaml, Postman, REST_API.md, MCP_API.md\n" +
+                        "5. **Version bump to 0.7.0 across all version locations** (LOW) -- Helm csproj, compose.yaml, Postman, REST_API.md, MCP_API.md\n" +
                         "6. **Documentation updates: REST_API.md, MCP_API.md, Postman collection for new fields** (MEDIUM) -- API docs for model and totalRuntimeMs fields\n" +
-                        "7. **README and CHANGELOG updates for v0.6.0** (LOW) -- Release notes and feature documentation\n" +
+                        "7. **README and CHANGELOG updates for v0.7.0** (LOW) -- Release notes and feature documentation\n" +
                         "Missions 1 and 2 are foundational. Missions 3-4 depend on 1. Missions 5-7 can run in parallel with each other and with 3-4.";
 
                     await missionService.HandleCompletionAsync(architectCaptain, architect.Id).ConfigureAwait(false);

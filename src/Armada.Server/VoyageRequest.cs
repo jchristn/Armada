@@ -55,5 +55,10 @@ namespace Armada.Server
         /// List of missions to create.
         /// </summary>
         public List<MissionRequest> Missions { get; set; } = new List<MissionRequest>();
+
+        /// <summary>
+        /// Ordered playbooks to apply to every mission in the voyage.
+        /// </summary>
+        public List<SelectedPlaybook> SelectedPlaybooks { get; set; } = new List<SelectedPlaybook>();
     }
 }

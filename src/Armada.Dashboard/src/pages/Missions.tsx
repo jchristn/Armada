@@ -169,6 +169,7 @@ export default function Missions() {
     try {
       await createMission(formData);
       setShowForm(false);
+      pushToast('success', t('Mission "{{title}}" created.', { title: formData.title }));
       load();
     } catch { setError(t('Create failed.')); }
   }
@@ -181,7 +182,11 @@ export default function Missions() {
       message: t('Cancel mission "{{title}}"? The mission will be set to Cancelled status but remains in the database. Use Purge to permanently remove it.', { title }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try { await deleteMission(id); load(); } catch { setError(t('Cancel failed.')); }
+        try {
+          await deleteMission(id);
+          pushToast('warning', t('Mission "{{title}}" cancelled.', { title }));
+          load();
+        } catch { setError(t('Cancel failed.')); }
       },
     });
   }
@@ -193,7 +198,11 @@ export default function Missions() {
       message: t('Purge mission "{{title}}"? This will permanently remove it and clean up all associated resources. This cannot be undone.', { title }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try { await purgeMission(id); load(); } catch { setError(t('Purge failed.')); }
+        try {
+          await purgeMission(id);
+          pushToast('warning', t('Mission "{{title}}" purged.', { title }));
+          load();
+        } catch { setError(t('Purge failed.')); }
       },
     });
   }
@@ -211,6 +220,12 @@ export default function Missions() {
         for (const id of ids) {
           try { await purgeMission(id); } catch { failed++; }
         }
+        const success = ids.length - failed;
+        if (success > 0) {
+          pushToast(failed > 0 ? 'warning' : 'success', failed > 0
+            ? t('Purged {{success}} missions. {{failed}} failed.', { success, failed })
+            : t('Purged {{success}} missions.', { success }));
+        }
         if (failed > 0) setError(t('Deleted {{success}} missions, {{failed}} failed.', { success: ids.length - failed, failed }));
         load();
       },
@@ -218,7 +233,11 @@ export default function Missions() {
   }
 
   async function handleRestart(m: Mission) {
-    try { await restartMission(m.id); load(); } catch { setError(t('Restart failed.')); }
+    try {
+      await restartMission(m.id);
+      pushToast('success', t('Mission "{{title}}" restarted.', { title: m.title }));
+      load();
+    } catch { setError(t('Restart failed.')); }
   }
 
   async function handleRetryLanding(m: Mission) {
@@ -252,8 +271,12 @@ export default function Missions() {
     if (!transitionModal || !transitionTarget) return;
     try {
       await transitionMission(transitionModal.missionId, { status: transitionTarget });
+      const missionTitle = missions.find(m => m.id === transitionModal.missionId)?.title;
       setTransitionModal(null);
       setTransitionTarget('');
+      pushToast('success', missionTitle
+        ? t('Mission "{{title}}" moved to {{status}}.', { title: missionTitle, status: transitionTarget })
+        : t('Mission status changed to {{status}}.', { status: transitionTarget }));
       load();
     } catch { setError(t('Transition failed.')); }
   }

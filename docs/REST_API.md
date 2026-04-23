@@ -1,6 +1,6 @@
 # Armada REST API Reference
 
-**Version:** 0.6.0
+**Version:** 0.7.0
 **Base URL:** `http://localhost:7890`
 **Content-Type:** `application/json`
 
@@ -31,6 +31,7 @@
   - [Events](#events)
   - [Docks](#docks)
   - [Merge Queue](#merge-queue)
+  - [Playbooks](#playbooks)
   - [Prompt Templates](#prompt-templates)
   - [Personas](#personas)
   - [Pipelines](#pipelines)
@@ -115,6 +116,7 @@ Operational entities persist both `TenantId` and `UserId`. Those ownership colum
 | `/api/v1/signals` | ALL | Authenticated | Tenant-scoped |
 | `/api/v1/events` | ALL | Authenticated | Tenant-scoped |
 | `/api/v1/merge-queue` | ALL | Authenticated | Tenant-scoped |
+| `/api/v1/playbooks` | GET/POST/PUT/DELETE | Authenticated / TenantAdmin | Reads are tenant-scoped for any authenticated user. Mutations require tenant admin. |
 | `/api/v1/prompt-templates` | ALL | Authenticated | Tenant-scoped |
 | `/api/v1/personas` | ALL | Authenticated | Tenant-scoped |
 | `/api/v1/pipelines` | ALL | Authenticated | Tenant-scoped |
@@ -681,7 +683,7 @@ Returns aggregate status including captain counts, mission breakdown, active voy
     "LatencyMs": null,
     "CapabilityManifest": {
       "ProtocolVersion": "2026-04-03",
-      "ArmadaVersion": "0.6.0",
+      "ArmadaVersion": "0.7.0",
       "Features": [
         "remoteControl.handshake",
         "remoteControl.heartbeat",
@@ -709,7 +711,7 @@ Health check endpoint. **Does not require authentication.**
   "Timestamp": "2026-03-07T12:00:00Z",
   "StartUtc": "2026-03-07T08:00:00Z",
   "Uptime": "0.04:00:00",
-  "Version": "0.6.0",
+  "Version": "0.7.0",
   "Ports": {
     "Admiral": 7890,
     "Mcp": 7891
@@ -1148,6 +1150,7 @@ Create a new voyage with optional missions. Missions are automatically dispatche
 | `Description` | string | no | Voyage description |
 | `VesselId` | string | yes | Target vessel ID |
 | `Missions` | array | no | List of [MissionRequest](#missionrequest) objects |
+| `SelectedPlaybooks` | array | no | Ordered [SelectedPlaybook](#selectedplaybook) rows to apply to all created missions |
 | `PipelineId` | string | no | Pipeline ID to use for this voyage (overrides vessel/fleet default) |
 | `Pipeline` | string | no | Pipeline name to use for this voyage (alternative to `PipelineId`) |
 
@@ -1160,6 +1163,9 @@ curl -X POST http://localhost:7890/api/v1/voyages \
     "Title": "API Hardening",
     "Description": "Security improvements",
     "VesselId": "vsl_abc123",
+    "SelectedPlaybooks": [
+      {"PlaybookId": "pbk_abc123", "DeliveryMode": "InlineFullContent"}
+    ],
     "Missions": [
       {"Title": "Add rate limiting", "Description": "Add rate limiting middleware"},
       {"Title": "Add input validation", "Description": "Validate all POST endpoints"}
@@ -1318,6 +1324,7 @@ Create and dispatch a new mission. If a `VesselId` is provided, the Admiral will
 | `VesselId` | string | no | Target vessel (required for auto-dispatch) |
 | `VoyageId` | string | no | Parent voyage ID |
 | `Priority` | int | no | Priority (lower = higher priority, default: 100) |
+| `SelectedPlaybooks` | array | no | Ordered [SelectedPlaybook](#selectedplaybook) rows for this standalone mission |
 
 **Response:** `201 Created` - [Mission](#mission)
 
@@ -2214,6 +2221,48 @@ Skipped entries include the entry ID and the reason (e.g., "Not found" or "Not i
 
 ---
 
+### Playbooks
+
+Playbooks are tenant-scoped markdown documents that can be attached to voyages or standalone missions. Each selection carries its own delivery mode so the model receives either the full content inline or a file path it should read.
+
+#### GET /api/v1/playbooks
+
+List playbooks with pagination.
+
+**Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<[Playbook](#playbook)\>
+
+#### POST /api/v1/playbooks/enumerate
+
+Paginated enumeration of playbooks with optional filtering and sorting.
+
+**Request Body:** [EnumerationQuery](#enumerationquery) (optional)
+
+#### POST /api/v1/playbooks
+
+Create a playbook.
+
+**Request Body:** [Playbook](#playbook)
+
+#### GET /api/v1/playbooks/{id}
+
+Return a single playbook by ID.
+
+**Response:** `200 OK` - [Playbook](#playbook)
+
+#### PUT /api/v1/playbooks/{id}
+
+Update a playbook's file name, description, content, or active state.
+
+**Request Body:** [Playbook](#playbook)
+
+#### DELETE /api/v1/playbooks/{id}
+
+Delete a playbook. Existing mission snapshots remain immutable.
+
+**Response:** `200 OK`
+
+---
+
 ### Prompt Templates
 
 Prompt templates define the instruction text used when generating captain mission briefs. Armada ships with built-in templates that can be customized. Custom templates can also be created per tenant.
@@ -2922,6 +2971,12 @@ A batch of related missions tracked together.
   "Title": "API Hardening",
   "Description": "Security improvements across the API",
   "Status": "InProgress",
+  "SelectedPlaybooks": [
+    {
+      "PlaybookId": "pbk_abc123",
+      "DeliveryMode": "InlineFullContent"
+    }
+  ],
   "CreatedUtc": "2026-03-07T12:00:00Z",
   "CompletedUtc": null,
   "LastUpdateUtc": "2026-03-07T12:00:00Z",
@@ -2938,6 +2993,7 @@ A batch of related missions tracked together.
 | `Title` | string | `"New Voyage"` | Voyage title |
 | `Description` | string? | null | Voyage description |
 | `Status` | [VoyageStatusEnum](#voyagestatusenum) | `Open` | Current status |
+| `SelectedPlaybooks` | array\<[SelectedPlaybook](#selectedplaybook)\> | `[]` | Ordered playbook selections recorded on the voyage |
 | `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
 | `CompletedUtc` | datetime? | null | Completion timestamp (UTC) |
 | `LastUpdateUtc` | datetime | now | Last update timestamp (UTC) |
@@ -2962,6 +3018,20 @@ An atomic unit of work assigned to a captain.
   "Description": "The login form does not validate email addresses",
   "Status": "InProgress",
   "Priority": 100,
+  "SelectedPlaybooks": [
+    {
+      "PlaybookId": "pbk_abc123",
+      "DeliveryMode": "InstructionWithReference"
+    }
+  ],
+  "PlaybookSnapshots": [
+    {
+      "PlaybookId": "pbk_abc123",
+      "FileName": "CSHARP_BACKEND_ARCHITECTURE.md",
+      "DeliveryMode": "InstructionWithReference",
+      "ResolvedPath": "C:\\Armada\\runtime\\playbooks\\msn_abc123\\01_CSHARP_BACKEND_ARCHITECTURE.md"
+    }
+  ],
   "ParentMissionId": null,
   "BranchName": "armada/msn_abc123",
   "DockId": null,
@@ -2986,6 +3056,8 @@ An atomic unit of work assigned to a captain.
 | `Description` | string? | null | Detailed instructions for the AI agent |
 | `Status` | [MissionStatusEnum](#missionstatusenum) | `Pending` | Current status |
 | `Priority` | int | 100 | Priority (lower number = higher priority) |
+| `SelectedPlaybooks` | array\<[SelectedPlaybook](#selectedplaybook)\> | `[]` | Ordered playbook selections requested for the mission |
+| `PlaybookSnapshots` | array\<[MissionPlaybookSnapshot](#missionplaybooksnapshot)\> | `[]` | Immutable playbook materialization used for execution |
 | `ParentMissionId` | string? | null | Parent mission ID for sub-tasks |
 | `BranchName` | string? | null | Git branch name |
 | `DockId` | string? | null | Dock identifier for the mission's worktree |
@@ -3197,7 +3269,7 @@ Aggregate status summary returned by the status endpoint.
     "LatencyMs": null,
     "CapabilityManifest": {
       "ProtocolVersion": "2026-04-03",
-      "ArmadaVersion": "0.6.0",
+      "ArmadaVersion": "0.7.0",
       "Features": [
         "remoteControl.handshake",
         "remoteControl.heartbeat",
@@ -3278,6 +3350,52 @@ A git worktree provisioned for a captain. Docks are managed internally by the Ad
 
 ---
 
+#### Playbook
+
+A reusable tenant-scoped markdown document selected during dispatch.
+
+| Field | Type | Description |
+|---|---|---|
+| `Id` | string | Playbook ID (prefix `pbk_`) |
+| `TenantId` | string \| null | Owning tenant |
+| `UserId` | string \| null | Owning user |
+| `FileName` | string | Markdown file name, typically ending in `.md` |
+| `Description` | string \| null | Human-readable description |
+| `Content` | string | Markdown body |
+| `Active` | bool | Whether the playbook is available for new selections |
+| `CreatedUtc` | datetime | Creation timestamp |
+| `LastUpdateUtc` | datetime | Last update timestamp |
+
+---
+
+#### SelectedPlaybook
+
+Playbook selection metadata stored on a voyage or mission request.
+
+| Field | Type | Description |
+|---|---|---|
+| `PlaybookId` | string | Selected playbook ID |
+| `DeliveryMode` | [PlaybookDeliveryModeEnum](#playbookdeliverymodeenum) | How the playbook is delivered to the model |
+
+---
+
+#### MissionPlaybookSnapshot
+
+Immutable mission-time snapshot of a selected playbook.
+
+| Field | Type | Description |
+|---|---|---|
+| `PlaybookId` | string \| null | Source playbook ID |
+| `FileName` | string | Source file name |
+| `Description` | string \| null | Source description |
+| `Content` | string | Frozen markdown body used for this mission |
+| `DeliveryMode` | [PlaybookDeliveryModeEnum](#playbookdeliverymodeenum) | Resolved delivery mode |
+| `ResolvedPath` | string \| null | Absolute runtime path when the playbook is materialized as a file |
+| `WorktreeRelativePath` | string \| null | Relative dock path when attached into the worktree |
+| `SourceLastUpdateUtc` | datetime | Source playbook update timestamp captured into the snapshot |
+
+---
+
 ### Enumerations
 
 All enumerations serialize as strings in JSON (e.g., `"InProgress"`, not `2`).
@@ -3329,6 +3447,16 @@ All enumerations serialize as strings in JSON (e.g., `"InProgress"`, not `2`).
 | `InProgress` | Has active missions in progress |
 | `Complete` | All missions completed |
 | `Cancelled` | Voyage was cancelled |
+
+---
+
+#### PlaybookDeliveryModeEnum
+
+| Value | Description |
+|---|---|
+| `InlineFullContent` | Include the entire markdown body directly in the rendered mission instructions |
+| `InstructionWithReference` | Materialize the playbook outside the worktree and instruct the model to read the resolved path |
+| `AttachIntoWorktree` | Materialize the playbook under the dock worktree and instruct the model to read it there |
 
 ---
 
@@ -3430,6 +3558,10 @@ Request body for creating a voyage with missions.
   "Title": "API Hardening",
   "Description": "Security improvements",
   "VesselId": "vsl_abc123",
+  "SelectedPlaybooks": [
+    {"PlaybookId": "pbk_abc123", "DeliveryMode": "InlineFullContent"}
+  ],
+  "Pipeline": "FullPipeline",
   "Missions": [
     {"Title": "Add rate limiting", "Description": "Add rate limiting middleware"},
     {"Title": "Add input validation", "Description": "Validate all POST endpoints"}
@@ -3443,6 +3575,9 @@ Request body for creating a voyage with missions.
 | `Description` | string | no | Voyage description |
 | `VesselId` | string | yes | Target vessel ID |
 | `Missions` | array | no | List of MissionRequest objects |
+| `SelectedPlaybooks` | array | no | Ordered [SelectedPlaybook](#selectedplaybook) rows to apply to the voyage |
+| `PipelineId` | string | no | Pipeline ID override |
+| `Pipeline` | string | no | Pipeline name override |
 
 ---
 

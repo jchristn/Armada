@@ -59,7 +59,22 @@ namespace Armada.Server.Mcp.Tools
                             }
                         },
                         pipelineId = new { type = "string", description = "Pipeline ID to use for this dispatch (overrides vessel/fleet default)" },
-                        pipeline = new { type = "string", description = "Pipeline name to use (convenience alias for pipelineId -- resolves by name)" }
+                        pipeline = new { type = "string", description = "Pipeline name to use (convenience alias for pipelineId -- resolves by name)" },
+                        selectedPlaybooks = new
+                        {
+                            type = "array",
+                            description = "Ordered playbooks to apply during dispatch",
+                            items = new
+                            {
+                                type = "object",
+                                properties = new
+                                {
+                                    playbookId = new { type = "string", description = "Playbook ID (pbk_ prefix)" },
+                                    deliveryMode = new { type = "string", description = "InlineFullContent, InstructionWithReference, or AttachIntoWorktree" }
+                                },
+                                required = new[] { "playbookId", "deliveryMode" }
+                            }
+                        }
                     },
                     required = new[] { "title", "vesselId", "missions" }
                 },
@@ -70,6 +85,7 @@ namespace Armada.Server.Mcp.Tools
                     string description = request.Description ?? "";
                     string vesselId = request.VesselId;
                     List<MissionDescription> missions = request.Missions;
+                    List<SelectedPlaybook> selectedPlaybooks = request.SelectedPlaybooks ?? new List<SelectedPlaybook>();
 
                     // Use pipeline-aware dispatch if pipelineId is provided
                     string? pipelineId = request.PipelineId;
@@ -80,7 +96,7 @@ namespace Armada.Server.Mcp.Tools
                         if (namedPipeline != null) pipelineId = namedPipeline.Id;
                         else return (object)new { Error = "Pipeline not found: " + request.Pipeline };
                     }
-                    Voyage voyage = await admiral.DispatchVoyageAsync(title, description, vesselId, missions, pipelineId).ConfigureAwait(false);
+                    Voyage voyage = await admiral.DispatchVoyageAsync(title, description, vesselId, missions, pipelineId, selectedPlaybooks).ConfigureAwait(false);
                     return (object)voyage;
                 });
 

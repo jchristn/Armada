@@ -12,6 +12,7 @@ import JsonViewer from '../components/shared/JsonViewer';
 import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
+import { useNotifications } from '../context/NotificationContext';
 
 // The API may return missionId on signals even though the base type doesn't include it
 interface SignalWithMission extends Signal {
@@ -30,6 +31,7 @@ function formatPayload(payload: string | null, emptyText: string): { isJson: boo
 
 export default function SignalDetail() {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
+  const { pushToast } = useNotifications();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
@@ -57,6 +59,7 @@ export default function SignalDetail() {
       await markSignalRead(id);
       const updated = await getSignal(id);
       setSignal(updated);
+      pushToast('success', t('Signal marked as read.'));
     } catch {
       setError(t('Failed to mark signal as read.'));
     }
@@ -69,6 +72,7 @@ export default function SignalDetail() {
         try {
           await deleteSignalsBatch([id!]);
           setConfirmAction(null);
+          pushToast('warning', t('Signal {{id}} deleted.', { id: id ?? '' }));
           navigate('/signals');
         } catch {
           setError(t('Delete failed.'));

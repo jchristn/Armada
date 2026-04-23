@@ -33,13 +33,13 @@ namespace Armada.Server.Mcp.Tools
         {
             register(
                 "armada_enumerate",
-                "Find and browse entities with paginated, filtered, sorted access to: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines. Returns paginated results with total counts. Filter by vesselId, fleetId, captainId, voyageId, status, date range, and more.",
+                "Find and browse entities with paginated, filtered, sorted access to: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks. Returns paginated results with total counts. Filter by vesselId, fleetId, captainId, voyageId, status, date range, and more.",
                 new
                 {
                     type = "object",
                     properties = new
                     {
-                        entityType = new { type = "string", description = "Entity type to enumerate: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines" },
+                        entityType = new { type = "string", description = "Entity type to enumerate: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks" },
                         pageNumber = new { type = "integer", description = "Page number (1-based, default 1)" },
                         pageSize = new { type = "integer", description = "Results per page (default 10, max 1000)" },
                         order = new { type = "string", description = "Sort order: CreatedAscending, CreatedDescending (default)" },
@@ -280,8 +280,31 @@ namespace Armada.Server.Mcp.Tools
                         case "pipeline":
                             EnumerationResult<Pipeline> pipelines = await database.Pipelines.EnumerateAsync(query).ConfigureAwait(false);
                             return (object)pipelines;
+                        case "playbooks":
+                        case "playbook":
+                            EnumerationResult<Playbook> playbooks = await database.Playbooks.EnumerateAsync(query).ConfigureAwait(false);
+                            if (request.IncludeDescription != true)
+                            {
+                                object projectedPlaybooks = new
+                                {
+                                    playbooks.Success,
+                                    playbooks.PageNumber,
+                                    playbooks.PageSize,
+                                    playbooks.TotalPages,
+                                    playbooks.TotalRecords,
+                                    Objects = playbooks.Objects.Select(p => new
+                                    {
+                                        p.Id, p.TenantId, p.UserId, p.FileName, p.Description, p.Active,
+                                        p.CreatedUtc, p.LastUpdateUtc,
+                                        ContentLength = p.Content?.Length ?? 0
+                                    }).ToList(),
+                                    playbooks.TotalMs
+                                };
+                                return (object)projectedPlaybooks;
+                            }
+                            return (object)playbooks;
                         default:
-                            return (object)new { Error = "Unknown entity type: " + entityType + ". Valid types: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines" };
+                            return (object)new { Error = "Unknown entity type: " + entityType + ". Valid types: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks" };
                     }
                 });
         }

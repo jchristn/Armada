@@ -11,7 +11,7 @@ import {
   listVessels,
   listCaptains,
 } from '../api/client';
-import type { Voyage, Mission, Vessel, Captain } from '../types/models';
+import type { Voyage, Mission, Vessel, Captain, MissionPlaybookSnapshot, SelectedPlaybook } from '../types/models';
 import StatusBadge from '../components/shared/StatusBadge';
 import ErrorModal from '../components/shared/ErrorModal';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
@@ -20,6 +20,7 @@ import DiffViewer from '../components/shared/DiffViewer';
 import LogViewer from '../components/shared/LogViewer';
 import CopyButton from '../components/shared/CopyButton';
 import { useLocale } from '../context/LocaleContext';
+import { useNotifications } from '../context/NotificationContext';
 
 // ── Helper utilities ──
 
@@ -38,10 +39,18 @@ function formatTimeRelative(utc: string | null | undefined): string {
   return Math.floor(diff / 86400000) + 'd ago';
 }
 
+function formatDeliveryMode(value: string): string {
+  return value
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace('Into Worktree', 'Into Worktree')
+    .trim();
+}
+
 // ── Main component ──
 
 export default function VoyageDetail() {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
+  const { pushToast } = useNotifications();
   const { id } = useParams<{ id: string }>();
   const nav = useNavigate();
 
@@ -112,6 +121,8 @@ export default function VoyageDetail() {
   const completedCount = missions.filter(m => m.status === 'Complete').length;
   const failedCount = missions.filter(m => m.status === 'Failed').length;
   const progressPct = missions.length > 0 ? Math.round((completedCount / missions.length) * 100) : 0;
+  const voyageSnapshots: MissionPlaybookSnapshot[] = missions[0]?.playbookSnapshots || [];
+  const voyageSelections: SelectedPlaybook[] = voyage?.selectedPlaybooks || [];
 
   // Actions
   function handleCancel() {
@@ -125,6 +136,7 @@ export default function VoyageDetail() {
         setConfirm(c => ({ ...c, open: false }));
         try {
           await cancelVoyage(voyage.id);
+          pushToast('warning', t('Voyage "{{title}}" cancelled.', { title: voyage.title || voyage.id }));
           loadVoyage();
         } catch (e: unknown) {
           setError(t('Cancel failed: {{message}}', { message: e instanceof Error ? e.message : String(e) }));
@@ -144,6 +156,7 @@ export default function VoyageDetail() {
         setConfirm(c => ({ ...c, open: false }));
         try {
           await purgeVoyage(voyage.id);
+          pushToast('warning', t('Voyage "{{title}}" deleted.', { title: voyage.title || voyage.id }));
           nav('/voyages');
         } catch (e: unknown) {
           setError(t('Delete failed: {{message}}', { message: e instanceof Error ? e.message : String(e) }));
@@ -173,6 +186,7 @@ export default function VoyageDetail() {
               priority: m.priority,
             });
           }
+          pushToast('success', t('Retried {{count}} failed mission(s).', { count: failed.length }));
           loadVoyage();
         } catch (e: unknown) {
           setError(t('Retry failed: {{message}}', { message: e instanceof Error ? e.message : String(e) }));
@@ -310,6 +324,46 @@ export default function VoyageDetail() {
           <span className="text-muted" style={{ fontSize: 12, marginTop: 4, display: 'inline-block' }}>
             {t('{{completed}}/{{total}} complete, {{failed}} failed', { completed: completedCount, total: missions.length, failed: failedCount })}
           </span>
+        </div>
+      )}
+
+      {(voyageSnapshots.length > 0 || voyageSelections.length > 0) && (
+        <div className="card playbook-voyage-card" style={{ marginBottom: 20 }}>
+          <div className="playbook-voyage-header">
+            <div>
+              <h3>{t('Playbooks')}</h3>
+              <p className="text-dim">
+                {voyageSnapshots.length > 0
+                  ? t('These snapshots show the actual playbook content and delivery mode that were applied to the voyage missions.')
+                  : t('This voyage has playbook selections recorded, but mission snapshots are not available yet.')}
+              </p>
+            </div>
+          </div>
+
+          <div className="playbook-voyage-list">
+            {voyageSnapshots.length > 0 ? voyageSnapshots.map((snapshot, index) => (
+              <div key={`${snapshot.fileName}-${index}`} className="playbook-voyage-item">
+                <div>
+                  <strong>{snapshot.fileName}</strong>
+                  <div className="text-dim">{snapshot.description || t('No description')}</div>
+                </div>
+                <div className="playbook-voyage-item-meta">
+                  <StatusBadge status={formatDeliveryMode(snapshot.deliveryMode)} />
+                  <span className="mono text-dim">{snapshot.worktreeRelativePath || snapshot.resolvedPath || '-'}</span>
+                </div>
+              </div>
+            )) : voyageSelections.map((selection, index) => (
+              <div key={`${selection.playbookId}-${index}`} className="playbook-voyage-item">
+                <div>
+                  <strong>{selection.playbookId}</strong>
+                  <div className="text-dim">{t('Playbook details are available after mission snapshots are created.')}</div>
+                </div>
+                <div className="playbook-voyage-item-meta">
+                  <StatusBadge status={formatDeliveryMode(selection.deliveryMode)} />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

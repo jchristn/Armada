@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "Armada v0.6.0 does not require any database schema changes."
+echo "Armada v0.7.0 does not require any database schema changes."
 echo "This release adds the remote-control tunnel foundation in Armada.Server and settings.json."
 echo "No SQL migration steps are necessary."

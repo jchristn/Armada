@@ -1,6 +1,6 @@
 services:
   armada-server:
-    image: jchristn77/armada-server:v0.6.0
+    image: jchristn77/armada-server:v0.7.0
     ports:
       - "7890:7890"
       - "7891:7891"
@@ -10,7 +10,7 @@ services:
       - ./armada/logs:/app/data/logs
 
   armada-dashboard:
-    image: jchristn77/armada-dashboard:v0.6.0
+    image: jchristn77/armada-dashboard:v0.7.0
     ports:
       - "3000:80"
     environment:

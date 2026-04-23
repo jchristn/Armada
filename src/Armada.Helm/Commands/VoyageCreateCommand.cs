@@ -32,6 +32,11 @@ namespace Armada.Helm.Commands
             }
 
             List<object> missions = new List<object>();
+            List<SelectedPlaybook> selectedPlaybooks = await ResolvePlaybookSelectionsAsync(settings.Playbooks).ConfigureAwait(false);
+            if (settings.Playbooks != null && selectedPlaybooks.Count != settings.Playbooks.Length)
+            {
+                return 1;
+            }
 
             if (settings.Missions != null)
             {
@@ -50,7 +55,8 @@ namespace Armada.Helm.Commands
             {
                 Title = settings.Title,
                 VesselId = vesselId,
-                Missions = missions
+                Missions = missions,
+                SelectedPlaybooks = selectedPlaybooks
             };
 
             Voyage? voyage = await PostAsync<Voyage>("/api/v1/voyages", body).ConfigureAwait(false);
@@ -63,6 +69,51 @@ namespace Armada.Helm.Commands
             }
 
             return 0;
+        }
+
+        private async Task<List<SelectedPlaybook>> ResolvePlaybookSelectionsAsync(string[]? selections)
+        {
+            List<SelectedPlaybook> results = new List<SelectedPlaybook>();
+            if (selections == null || selections.Length == 0) return results;
+
+            EnumerationResult<Playbook>? playbookResult = await GetAsync<EnumerationResult<Playbook>>("/api/v1/playbooks").ConfigureAwait(false);
+            List<Playbook> playbooks = playbookResult?.Objects ?? new List<Playbook>();
+
+            foreach (string rawSelection in selections)
+            {
+                if (string.IsNullOrWhiteSpace(rawSelection)) continue;
+
+                string token = rawSelection.Trim();
+                PlaybookDeliveryModeEnum mode = PlaybookDeliveryModeEnum.InlineFullContent;
+                int modeSeparator = token.LastIndexOf(':');
+                if (modeSeparator > 0)
+                {
+                    string candidateMode = token.Substring(modeSeparator + 1);
+                    if (Enum.TryParse(candidateMode, true, out PlaybookDeliveryModeEnum parsedMode))
+                    {
+                        mode = parsedMode;
+                        token = token.Substring(0, modeSeparator);
+                    }
+                }
+
+                Playbook? playbook = playbooks.FirstOrDefault(p =>
+                    string.Equals(p.Id, token, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(p.FileName, token, StringComparison.OrdinalIgnoreCase));
+
+                if (playbook == null)
+                {
+                    AnsiConsole.MarkupLine($"[red]Playbook not found:[/] {Markup.Escape(token)}");
+                    return new List<SelectedPlaybook>();
+                }
+
+                results.Add(new SelectedPlaybook
+                {
+                    PlaybookId = playbook.Id,
+                    DeliveryMode = mode
+                });
+            }
+
+            return results;
         }
     }
 }

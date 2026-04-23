@@ -63,6 +63,7 @@ namespace Armada.Core.Database.Mysql
             Users = new UserMethods(_ConnectionString);
             Credentials = new CredentialMethods(_ConnectionString);
             PromptTemplates = new PromptTemplateMethods(_ConnectionString);
+            Playbooks = new PlaybookMethods(_ConnectionString);
             Personas = new PersonaMethods(_ConnectionString);
             Pipelines = new PipelineMethods(_ConnectionString);
         }
@@ -423,6 +424,11 @@ namespace Armada.Core.Database.Mysql
                     27,
                     "Add total_runtime_ms to missions",
                     TableQueries.MigrationV27Statements
+                ),
+                new SchemaMigration(
+                    28,
+                    "Add playbooks and mission/voyage playbook associations",
+                    TableQueries.MigrationV28Statements
                 )
             };
         }

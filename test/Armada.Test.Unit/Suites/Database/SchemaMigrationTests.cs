@@ -115,11 +115,11 @@ namespace Armada.Test.Unit.Suites.Database
                 AssertContains("VALUES ^(27, 'Add total_runtime_ms to missions'", batchScript, "Batch script migration version 27");
             });
 
-            await RunTest("Versioned migration scripts include v060 no-op release handoff", async () =>
+            await RunTest("Versioned migration scripts include v070 no-op release handoff", async () =>
             {
                 string repoRoot = FindRepositoryRoot();
-                string shellScript = await File.ReadAllTextAsync(Path.Combine(repoRoot, "migrations", "migrate_v0.5.0_to_v0.6.0.sh")).ConfigureAwait(false);
-                string batchScript = await File.ReadAllTextAsync(Path.Combine(repoRoot, "migrations", "migrate_v0.5.0_to_v0.6.0.bat")).ConfigureAwait(false);
+                string shellScript = await File.ReadAllTextAsync(Path.Combine(repoRoot, "migrations", "migrate_v0.6.0_to_v0.7.0.sh")).ConfigureAwait(false);
+                string batchScript = await File.ReadAllTextAsync(Path.Combine(repoRoot, "migrations", "migrate_v0.6.0_to_v0.7.0.bat")).ConfigureAwait(false);
 
                 AssertContains("does not require any database schema changes", shellScript, "Shell script should explain the no-op release migration");
                 AssertContains("No SQL migration steps are necessary", shellScript, "Shell script should explain the no-op release migration");

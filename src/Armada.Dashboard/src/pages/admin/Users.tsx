@@ -10,6 +10,7 @@ import RefreshButton from '../../components/shared/RefreshButton';
 import { useAuth } from '../../context/AuthContext';
 import ErrorModal from '../../components/shared/ErrorModal';
 import { useLocale } from '../../context/LocaleContext';
+import { useNotifications } from '../../context/NotificationContext';
 
 type SortField = 'email' | 'firstName' | 'isAdmin' | 'active' | 'createdUtc';
 type SortDir = 'asc' | 'desc';
@@ -17,6 +18,7 @@ type SortDir = 'asc' | 'desc';
 export default function Users() {
   const { user, isAdmin, isTenantAdmin } = useAuth();
   const { t, formatRelativeTime, formatDateTime } = useLocale();
+  const { pushToast } = useNotifications();
   const [items, setItems] = useState<UserMaster[]>([]);
   const [tenants, setTenants] = useState<TenantMetadata[]>([]);
   const [loading, setLoading] = useState(true);
@@ -163,6 +165,9 @@ export default function Users() {
       else await createUser(payload);
       setShowForm(false);
       setError('');
+      pushToast('success', editing
+        ? t('User "{{email}}" saved.', { email: form.email })
+        : t('User "{{email}}" created.', { email: form.email }));
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('Save failed.'));
@@ -176,7 +181,11 @@ export default function Users() {
       resourceName: email,
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try { await deleteUser(id); load(); } catch { setError(t('Delete failed.')); }
+        try {
+          await deleteUser(id);
+          pushToast('warning', t('User "{{email}}" deleted.', { email }));
+          load();
+        } catch { setError(t('Delete failed.')); }
       },
     });
   }
@@ -191,6 +200,12 @@ export default function Users() {
         const ids = [...selected]; setSelected([]);
         let failed = 0;
         for (const id of ids) { try { await deleteUser(id); } catch { failed++; } }
+        const success = ids.length - failed;
+        if (success > 0) {
+          pushToast(failed > 0 ? 'warning' : 'success', failed > 0
+            ? t('Deleted {{success}} users. {{failed}} failed.', { success, failed })
+            : t('Deleted {{success}} users.', { success }));
+        }
         if (failed > 0) setError(t('Deleted {{success}}, {{failed}} failed.', { success: ids.length - failed, failed }));
         load();
       },

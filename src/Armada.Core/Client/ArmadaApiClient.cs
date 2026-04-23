@@ -398,6 +398,15 @@ namespace Armada.Core.Client
         }
 
         /// <summary>
+        /// Dispatch a voyage with mission descriptions and optional playbooks.
+        /// </summary>
+        public async Task<Voyage?> DispatchVoyageAsync(VoyageDispatchRequest request, CancellationToken token = default)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            return await PostAsync<Voyage, VoyageDispatchRequest>("/api/v1/voyages", request, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
         /// Cancel a voyage and its pending missions.
         /// </summary>
         public async Task CancelVoyageAsync(string id, CancellationToken token = default)
@@ -543,6 +552,58 @@ namespace Armada.Core.Client
         public async Task ProcessMergeQueueAsync(CancellationToken token = default)
         {
             await PostAsync("/api/v1/merge-queue/process", token).ConfigureAwait(false);
+        }
+
+        #endregion
+
+        #region Public-Methods-Playbooks
+
+        /// <summary>
+        /// List playbooks.
+        /// </summary>
+        public async Task<EnumerationResult<Playbook>?> ListPlaybooksAsync(CancellationToken token = default)
+        {
+            return await GetAsync<EnumerationResult<Playbook>>("/api/v1/playbooks", token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Enumerate playbooks with pagination and filtering.
+        /// </summary>
+        public async Task<EnumerationResult<Playbook>?> EnumeratePlaybooksAsync(EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return await PostAsync<EnumerationResult<Playbook>, EnumerationQuery>("/api/v1/playbooks/enumerate", query ?? new EnumerationQuery(), token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Get a playbook by ID.
+        /// </summary>
+        public async Task<Playbook?> GetPlaybookAsync(string id, CancellationToken token = default)
+        {
+            return await GetAsync<Playbook>("/api/v1/playbooks/" + id, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Create a playbook.
+        /// </summary>
+        public async Task<Playbook?> CreatePlaybookAsync(Playbook playbook, CancellationToken token = default)
+        {
+            return await PostAsync<Playbook, Playbook>("/api/v1/playbooks", playbook, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Update a playbook.
+        /// </summary>
+        public async Task<Playbook?> UpdatePlaybookAsync(string id, Playbook playbook, CancellationToken token = default)
+        {
+            return await PutAsync<Playbook, Playbook>("/api/v1/playbooks/" + id, playbook, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Delete a playbook.
+        /// </summary>
+        public async Task DeletePlaybookAsync(string id, CancellationToken token = default)
+        {
+            await DeleteAsync("/api/v1/playbooks/" + id, token).ConfigureAwait(false);
         }
 
         #endregion

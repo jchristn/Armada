@@ -12,9 +12,11 @@ import JsonViewer from '../components/shared/JsonViewer';
 import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
+import { useNotifications } from '../context/NotificationContext';
 
 export default function DockDetail() {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
+  const { pushToast } = useNotifications();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
@@ -51,6 +53,7 @@ export default function DockDetail() {
         try {
           await deleteDock(id!);
           setConfirmAction(null);
+          pushToast('warning', t('Dock {{id}} deleted.', { id: id ?? '' }));
           navigate('/docks');
         } catch {
           setError(t('Delete failed.'));

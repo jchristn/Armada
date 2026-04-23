@@ -7,7 +7,7 @@
 <p align="center">
   <strong>Reduce context switching across projects. Keep agent work in queryable memory.</strong>
   <br />
-  <em>v0.6.0 alpha -- APIs and schemas may change</em>
+  <em>v0.7.0 alpha -- APIs and schemas may change</em>
 </p>
 
 <p align="center">
@@ -50,6 +50,7 @@ Everything else in Armada exists to support that: isolated worktrees, parallel d
 - **Quality gates that run automatically.** Every piece of work can flow through a pipeline: plan it, implement it, test it, review it. No manual intervention between steps.
 - **Git isolation by default.** Every agent works in its own worktree on its own branch. Agents can't step on each other. Your main branch stays clean until you merge.
 - **Configurable and extensible workflows.** Prompt templates, personas, and pipelines are user-controlled, so you can adapt the system to your project instead of fitting your project to the built-ins.
+- **Reusable playbooks at dispatch time.** Store markdown guidance such as `CSHARP_BACKEND_ARCHITECTURE.md`, manage it in the dashboard, and select it per voyage or mission with inline or file-based delivery modes.
 - **Works with the agents you already have.** Claude Code, Codex, Gemini, Cursor -- pluggable runtime system.
 - **Guided setup in the dashboard.** First-run configuration can stay inside the setup wizard instead of bouncing between unrelated pages.
 - **Internationalized dashboard UX.** Login, shared shell UI, list/detail/admin routes, setup flows, notifications, pagination, server management, and legacy embedded dashboard surfaces support live language selection and locale-aware formatting.
@@ -233,6 +234,29 @@ Every prompt Armada sends is backed by an editable template. You can change agen
 Pipelines are not limited to planning, implementation, testing, and review. If a project needs a SecurityAuditor, PerformanceAnalyst, MigrationPlanner, DocsWriter, ReleaseManager, or some internal role with custom instructions and handoff rules, Armada can support that by adding the persona and inserting it into the pipeline.
 
 For the full pipeline reference, see [docs/PIPELINES.md](docs/PIPELINES.md).
+
+## Playbooks
+
+Playbooks are tenant-scoped markdown instruction documents that you can manage in the dashboard and attach to work at dispatch time.
+
+- Create, edit, delete, and browse playbooks from the `Playbooks` area in the dashboard.
+- Select any number of playbooks when creating a voyage or standalone mission.
+- Choose delivery per selection: `InlineFullContent`, `InstructionWithReference`, or `AttachIntoWorktree`.
+- Armada snapshots the exact playbook content, filename, order, and resolved delivery mode used for a mission so later edits do not change historical execution context.
+- REST, MCP, proxy remote-management, dashboard, CLI, SDK, and Postman surfaces all use the same playbook selection model.
+- File-based delivery resolves readable playbook files for the agent without polluting repository history, while inline delivery embeds the full markdown body directly into the rendered instruction set.
+
+This is useful for architecture rules, coding standards, migration checklists, release procedures, security review requirements, or any other reusable instruction set that should travel with the work.
+
+## Internationalization
+
+The dashboard supports live language selection and locale-aware formatting across both the React shell and the legacy embedded surfaces.
+
+- Supported locales: English, Spanish, Mandarin (Simplified), Mandarin (Traditional), Cantonese, Japanese, German, French, and Italian.
+- Language selection is available from login, setup, and the authenticated shell, and the active locale persists between sessions.
+- Shared UI elements such as notifications, pagination, dialogs, labels, date/time formatting, and numeric formatting honor the selected locale.
+- Route-level coverage includes list pages, detail pages, admin screens, setup flows, and server-management views so common actions do not fall back to English unexpectedly.
+- Legacy dashboard confirms, alerts, toasts, and static shell copy are routed through the same runtime so mixed old/new surfaces stay consistent.
 
 ## Use Cases
 
@@ -457,6 +481,7 @@ armada doctor                System health check
 ```
 armada mission list|create|show|cancel|retry
 armada voyage list|create|show|cancel|retry
+armada playbook list|add|show|remove
 ```
 
 ### Entity Management
@@ -569,7 +594,7 @@ curl -H "$AUTH" $API/captains            # List captains
 curl $API/status/health                  # Health check (no auth required)
 ```
 
-Full CRUD endpoints are available for fleets, vessels, missions, voyages, captains, signals, events, tenants, users, and credentials.
+Full CRUD endpoints are available for fleets, vessels, missions, voyages, captains, signals, events, playbooks, prompt templates, personas, pipelines, tenants, users, and credentials.
 
 Start the Admiral as a standalone server:
 
@@ -588,7 +613,7 @@ armada mcp remove     # Remove those Armada MCP entries again
 
 If you are working from source, repo-root helpers are also available: `install-mcp.bat/.sh` and `remove-mcp.bat/.sh`.
 
-Once installed, your MCP client can call tools like `armada_status`, `armada_dispatch`, `armada_enumerate`, `armada_voyage_status`, and `armada_cancel_voyage`. There are also tool groups for persona, pipeline, and prompt-template management.
+Once installed, your MCP client can call tools like `armada_status`, `armada_dispatch`, `armada_enumerate`, `armada_voyage_status`, and `armada_cancel_voyage`. There are also tool groups for playbook, persona, pipeline, and prompt-template management.
 
 ### AI-Powered Orchestration
 
@@ -901,9 +926,9 @@ v0.5.0 is focused on dispatch and pipeline stability. It adds captain model sele
 - Mission detail now shows total runtime, and dispatch cleanup removes the redundant parsed-task UI
 - Docker image tags, release metadata, and API documentation are updated for `v0.5.0`
 
-### v0.5.0 to v0.6.0
+### v0.6.0 to v0.7.0
 
-v0.6.0 is focused on remote access. This release adds the local outbound tunnel client, the first shipped `Armada.Proxy` service, tunnel telemetry, server/dashboard configuration surfaces, and a bounded remote management shell for day-one operator workflows. No database schema migration is required for this release.
+v0.7.0 is focused on remote access. This release adds the local outbound tunnel client, the first shipped `Armada.Proxy` service, tunnel telemetry, server/dashboard configuration surfaces, and a bounded remote management shell for day-one operator workflows. No database schema migration is required for this release.
 
 Key changes:
 
@@ -915,8 +940,8 @@ Key changes:
 - The dashboard setup wizard was rebuilt into a contained first-run workflow with direct dispatch, richer guidance, and improved server/settings ergonomics
 - Dashboard internationalization now includes login language selection, persistent locale preference, route-level React coverage, legacy embedded dashboard coverage, and locale-aware date/time/number formatting
 - New operator docs: `docs/REMOTE_MGMT.md`, `docs/TUNNEL_PROTOCOL.md`, `docs/PROXY_API.md`, and `docs/TUNNEL_OPERATIONS.md`
-- Release metadata, Docker image tags, Postman examples, and API documentation are updated for `v0.6.0`
-- Standalone no-op release scripts are available in `migrations/` for `v0.5.0 -> v0.6.0`
+- Release metadata, Docker image tags, Postman examples, and API documentation are updated for `v0.7.0`
+- Standalone no-op release scripts are available in `migrations/` for `v0.6.0 -> v0.7.0`
 
 ## Issues and Discussions
 

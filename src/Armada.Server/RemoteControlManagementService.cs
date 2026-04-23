@@ -6,6 +6,7 @@ namespace Armada.Server
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
 
     /// <summary>
@@ -61,6 +62,16 @@ namespace Armada.Server
                     return await UpdateVesselAsync(envelope, token).ConfigureAwait(false);
                 case "armada.pipelines.list":
                     return await ListPipelinesAsync(DeserializeQueryRequest(envelope), token).ConfigureAwait(false);
+                case "armada.playbooks.list":
+                    return await ListPlaybooksAsync(DeserializeQueryRequest(envelope), token).ConfigureAwait(false);
+                case "armada.playbook.detail":
+                    return await GetPlaybookDetailAsync(DeserializeQueryRequest(envelope), token).ConfigureAwait(false);
+                case "armada.playbook.create":
+                    return await CreatePlaybookAsync(envelope, token).ConfigureAwait(false);
+                case "armada.playbook.update":
+                    return await UpdatePlaybookAsync(envelope, token).ConfigureAwait(false);
+                case "armada.playbook.delete":
+                    return await DeletePlaybookAsync(DeserializeQueryRequest(envelope), token).ConfigureAwait(false);
                 case "armada.voyages.list":
                     return await ListVoyagesAsync(DeserializeQueryRequest(envelope), token).ConfigureAwait(false);
                 case "armada.voyage.dispatch":
@@ -299,6 +310,128 @@ namespace Armada.Server
             return Ok(updated, "Vessel updated.");
         }
 
+        private async Task<RemoteTunnelRequestResult> ListPlaybooksAsync(RemoteTunnelQueryRequest request, CancellationToken token)
+        {
+            int limit = Clamp(request.Limit, 24, 1, 200);
+            List<Playbook> rows = (await _Database.Playbooks.EnumerateAsync(token).ConfigureAwait(false))
+                .OrderByDescending(p => p.LastUpdateUtc)
+                .ThenByDescending(p => p.CreatedUtc)
+                .Take(limit)
+                .ToList();
+
+            return Ok(new
+            {
+                limit = limit,
+                count = rows.Count,
+                playbooks = rows
+            }, "Playbook list captured.");
+        }
+
+        private async Task<RemoteTunnelRequestResult> GetPlaybookDetailAsync(RemoteTunnelQueryRequest request, CancellationToken token)
+        {
+            string playbookId = request.PlaybookId?.Trim() ?? String.Empty;
+            if (String.IsNullOrWhiteSpace(playbookId))
+            {
+                return BadRequest("missing_playbook_id", "PlaybookId is required.");
+            }
+
+            Playbook? playbook = await _Database.Playbooks.ReadAsync(playbookId, token).ConfigureAwait(false);
+            if (playbook == null)
+            {
+                return NotFound("Playbook not found.");
+            }
+
+            return Ok(new
+            {
+                playbook = playbook
+            }, "Playbook detail captured.");
+        }
+
+        private async Task<RemoteTunnelRequestResult> CreatePlaybookAsync(RemoteTunnelEnvelope envelope, CancellationToken token)
+        {
+            Playbook? playbook = DeserializePayload<Playbook>(envelope);
+            if (playbook == null || String.IsNullOrWhiteSpace(playbook.FileName) || String.IsNullOrWhiteSpace(playbook.Content))
+            {
+                return BadRequest("invalid_playbook", "A playbook payload with fileName and content is required.");
+            }
+
+            PlaybookService service = new PlaybookService(_Database, new SyslogLogging.LoggingModule());
+            playbook.TenantId = Constants.DefaultTenantId;
+            playbook.UserId = Constants.DefaultUserId;
+            service.Validate(playbook);
+
+            if (await _Database.Playbooks.ExistsByFileNameAsync(Constants.DefaultTenantId, playbook.FileName, token).ConfigureAwait(false))
+            {
+                return BadRequest("duplicate_playbook", "A playbook with that file name already exists.");
+            }
+
+            playbook.LastUpdateUtc = _UtcNow();
+            playbook = await _Database.Playbooks.CreateAsync(playbook, token).ConfigureAwait(false);
+            await _EmitEventAsync("playbook.created", "Playbook created from proxy: " + playbook.FileName, "playbook", playbook.Id, null, null, null, null).ConfigureAwait(false);
+            return Created(playbook, "Playbook created.");
+        }
+
+        private async Task<RemoteTunnelRequestResult> UpdatePlaybookAsync(RemoteTunnelEnvelope envelope, CancellationToken token)
+        {
+            PlaybookUpdateRequest? request = DeserializePayload<PlaybookUpdateRequest>(envelope);
+            string playbookId = request?.PlaybookId?.Trim() ?? String.Empty;
+            if (String.IsNullOrWhiteSpace(playbookId))
+            {
+                return BadRequest("missing_playbook_id", "PlaybookId is required.");
+            }
+
+            if (request?.Playbook == null || String.IsNullOrWhiteSpace(request.Playbook.FileName) || String.IsNullOrWhiteSpace(request.Playbook.Content))
+            {
+                return BadRequest("invalid_playbook", "A playbook payload with fileName and content is required.");
+            }
+
+            Playbook? existing = await _Database.Playbooks.ReadAsync(playbookId, token).ConfigureAwait(false);
+            if (existing == null)
+            {
+                return NotFound("Playbook not found.");
+            }
+            existing.TenantId ??= Constants.DefaultTenantId;
+            existing.UserId ??= Constants.DefaultUserId;
+
+            existing.FileName = request.Playbook.FileName;
+            existing.Description = request.Playbook.Description;
+            existing.Content = request.Playbook.Content;
+            existing.Active = request.Playbook.Active;
+            existing.LastUpdateUtc = _UtcNow();
+
+            PlaybookService service = new PlaybookService(_Database, new SyslogLogging.LoggingModule());
+            service.Validate(existing);
+
+            Playbook? duplicate = await _Database.Playbooks.ReadByFileNameAsync(existing.TenantId ?? Constants.DefaultTenantId, existing.FileName, token).ConfigureAwait(false);
+            if (duplicate != null && !String.Equals(duplicate.Id, existing.Id, StringComparison.Ordinal))
+            {
+                return BadRequest("duplicate_playbook", "A playbook with that file name already exists.");
+            }
+
+            Playbook updated = await _Database.Playbooks.UpdateAsync(existing, token).ConfigureAwait(false);
+            await _EmitEventAsync("playbook.updated", "Playbook updated from proxy: " + updated.FileName, "playbook", updated.Id, null, null, null, null).ConfigureAwait(false);
+            return Ok(updated, "Playbook updated.");
+        }
+
+        private async Task<RemoteTunnelRequestResult> DeletePlaybookAsync(RemoteTunnelQueryRequest request, CancellationToken token)
+        {
+            string playbookId = request.PlaybookId?.Trim() ?? String.Empty;
+            if (String.IsNullOrWhiteSpace(playbookId))
+            {
+                return BadRequest("missing_playbook_id", "PlaybookId is required.");
+            }
+
+            Playbook? existing = await _Database.Playbooks.ReadAsync(playbookId, token).ConfigureAwait(false);
+            if (existing == null)
+            {
+                return NotFound("Playbook not found.");
+            }
+
+            await _Database.Playbooks.DeleteAsync(playbookId, token).ConfigureAwait(false);
+            await _EmitEventAsync("playbook.deleted", "Playbook deleted from proxy: " + existing.FileName, "playbook", playbookId, null, null, null, null).ConfigureAwait(false);
+            return Ok(new { status = "deleted", playbookId = playbookId }, "Playbook deleted.");
+        }
+
         private async Task<RemoteTunnelRequestResult> ListVoyagesAsync(RemoteTunnelQueryRequest request, CancellationToken token)
         {
             int limit = Clamp(request.Limit, 12, 1, 200);
@@ -364,8 +497,13 @@ namespace Armada.Server
             if (String.IsNullOrWhiteSpace(request.VesselId) || missions.Count == 0)
             {
                 voyage = new Voyage(request.Title, request.Description);
+                voyage.SelectedPlaybooks = request.SelectedPlaybooks ?? new List<SelectedPlaybook>();
                 voyage.LastUpdateUtc = _UtcNow();
                 voyage = await _Database.Voyages.CreateAsync(voyage, token).ConfigureAwait(false);
+                if (voyage.SelectedPlaybooks.Count > 0)
+                {
+                    await _Database.Playbooks.SetVoyageSelectionsAsync(voyage.Id, voyage.SelectedPlaybooks, token).ConfigureAwait(false);
+                }
             }
             else
             {
@@ -375,6 +513,7 @@ namespace Armada.Server
                     request.VesselId,
                     missions,
                     pipelineId,
+                    request.SelectedPlaybooks ?? new List<SelectedPlaybook>(),
                     token).ConfigureAwait(false);
             }
 
@@ -764,6 +903,12 @@ namespace Armada.Server
         {
             public string VesselId { get; set; } = String.Empty;
             public Vessel? Vessel { get; set; } = null;
+        }
+
+        private sealed class PlaybookUpdateRequest
+        {
+            public string PlaybookId { get; set; } = String.Empty;
+            public Playbook? Playbook { get; set; } = null;
         }
 
         private sealed class MissionUpdateRequest

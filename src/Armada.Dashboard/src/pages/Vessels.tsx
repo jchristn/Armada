@@ -11,6 +11,7 @@ import CopyButton from '../components/shared/CopyButton';
 import RefreshButton from '../components/shared/RefreshButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
+import { useNotifications } from '../context/NotificationContext';
 
 type SortDir = 'asc' | 'desc';
 type SortField = 'name' | 'fleetId' | 'defaultBranch' | 'createdUtc';
@@ -40,6 +41,7 @@ const emptyForm: VesselForm = {
 export default function Vessels() {
   const navigate = useNavigate();
   const { t } = useLocale();
+  const { pushToast } = useNotifications();
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [fleets, setFleets] = useState<Fleet[]>([]);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
@@ -204,6 +206,9 @@ export default function Vessels() {
       if (editing) await updateVessel(editing.id, payload);
       else await createVessel(payload);
       setShowForm(false);
+      pushToast('success', editing
+        ? t('Vessel "{{name}}" saved.', { name: form.name })
+        : t('Vessel "{{name}}" created.', { name: form.name }));
       load();
     } catch { setError(t('Save failed.')); }
   }
@@ -215,7 +220,11 @@ export default function Vessels() {
       message: t('Delete vessel "{{name}}"? This cannot be undone.', { name }),
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false }));
-        try { await deleteVessel(id); load(); } catch { setError(t('Delete failed.')); }
+        try {
+          await deleteVessel(id);
+          pushToast('warning', t('Vessel "{{name}}" deleted.', { name }));
+          load();
+        } catch { setError(t('Delete failed.')); }
       },
     });
   }
@@ -232,6 +241,12 @@ export default function Vessels() {
         let failed = 0;
         for (const id of ids) {
           try { await deleteVessel(id); } catch { failed++; }
+        }
+        const success = ids.length - failed;
+        if (success > 0) {
+          pushToast(failed > 0 ? 'warning' : 'success', failed > 0
+            ? t('Deleted {{success}} vessels. {{failed}} failed.', { success, failed })
+            : t('Deleted {{success}} vessels.', { success }));
         }
         if (failed > 0) setError(t('Deleted {{success}} vessels, {{failed}} failed.', { success: ids.length - failed, failed }));
         load();

@@ -1,5 +1,8 @@
 namespace Armada.Server.Mcp
 {
+    using System.Collections.Generic;
+    using Armada.Core.Models;
+
     /// <summary>
     /// MCP tool arguments for creating a standalone mission.
     /// </summary>
@@ -29,5 +32,10 @@ namespace Armada.Server.Mcp
         /// Persona for this mission (e.g. Worker, Architect, Judge, TestEngineer).
         /// </summary>
         public string? Persona { get; set; }
+
+        /// <summary>
+        /// Ordered playbooks to apply during mission dispatch.
+        /// </summary>
+        public List<SelectedPlaybook> SelectedPlaybooks { get; set; } = new List<SelectedPlaybook>();
     }
 }

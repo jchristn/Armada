@@ -10,6 +10,7 @@ namespace Armada.Server.Routes
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
     using Armada.Server.WebSocket;
     using SyslogLogging;
@@ -154,12 +155,24 @@ namespace Armada.Server.Routes
                     voyage.TenantId = ctx.TenantId;
                     voyage.UserId = ctx.UserId;
                     voyage = await _database.Voyages.CreateAsync(voyage).ConfigureAwait(false);
+                    voyage.SelectedPlaybooks = voyageReq.SelectedPlaybooks ?? new List<SelectedPlaybook>();
+                    if (voyage.SelectedPlaybooks.Count > 0)
+                    {
+                        PlaybookService playbookService = new PlaybookService(_database, _logging);
+                        await playbookService.ResolveSelectionsAsync(ctx.TenantId!, voyage.SelectedPlaybooks).ConfigureAwait(false);
+                        await _database.Playbooks.SetVoyageSelectionsAsync(voyage.Id, voyage.SelectedPlaybooks).ConfigureAwait(false);
+                    }
                     _logging.Info(_Header + "created bare voyage " + voyage.Id + ": " + voyageReq.Title);
                 }
                 else
                 {
                     voyage = await _admiral.DispatchVoyageAsync(
-                        voyageReq.Title, voyageReq.Description, voyageReq.VesselId, missions, pipelineId).ConfigureAwait(false);
+                        voyageReq.Title,
+                        voyageReq.Description,
+                        voyageReq.VesselId,
+                        missions,
+                        pipelineId,
+                        voyageReq.SelectedPlaybooks).ConfigureAwait(false);
                 }
 
                 req.Http.Response.StatusCode = 201;
@@ -188,9 +201,14 @@ namespace Armada.Server.Routes
                         ? await _database.Voyages.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
                         : await _database.Voyages.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (voyage == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Voyage not found" }; }
+                voyage.SelectedPlaybooks = await _database.Playbooks.GetVoyageSelectionsAsync(id).ConfigureAwait(false);
                 List<Mission> missions = ctx.IsAdmin
                     ? await _database.Missions.EnumerateByVoyageAsync(id).ConfigureAwait(false)
                     : await _database.Missions.EnumerateByVoyageAsync(ctx.TenantId!, id).ConfigureAwait(false);
+                foreach (Mission mission in missions)
+                {
+                    mission.PlaybookSnapshots = await _database.Playbooks.GetMissionSnapshotsAsync(mission.Id).ConfigureAwait(false);
+                }
                 return (object)new { Voyage = voyage, Missions = missions };
             },
             api => api

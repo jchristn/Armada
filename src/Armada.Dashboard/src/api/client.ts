@@ -31,6 +31,7 @@ import type {
   PromptTemplate,
   Persona,
   Pipeline,
+  Playbook,
 } from '../types/models';
 
 const BASE_URL = import.meta.env.VITE_ARMADA_SERVER_URL || '';
@@ -259,6 +260,14 @@ export const getPromptTemplate = (name: string) => get<PromptTemplate>(`/api/v1/
 export const updatePromptTemplate = (name: string, data: { content: string; description?: string }) => put<PromptTemplate>(`/api/v1/prompt-templates/${encodeURIComponent(name)}`, data);
 export const resetPromptTemplate = (name: string) => post<PromptTemplate>(`/api/v1/prompt-templates/${encodeURIComponent(name)}/reset`);
 
+// ==================== Playbooks ====================
+export const listPlaybooks = (params?: { pageNumber?: number; pageSize?: number; filters?: Record<string, string> }) =>
+  get<EnumerationResult<Playbook>>(`/api/v1/playbooks${buildQuery(params)}`);
+export const getPlaybook = (id: string) => get<Playbook>(`/api/v1/playbooks/${id}`);
+export const createPlaybook = (data: Partial<Playbook>) => post<Playbook>('/api/v1/playbooks', data);
+export const updatePlaybook = (id: string, data: Partial<Playbook>) => put<Playbook>(`/api/v1/playbooks/${id}`, data);
+export const deletePlaybook = (id: string) => del<void>(`/api/v1/playbooks/${id}`);
+
 // ==================== Personas ====================
 export const listPersonas = (params?: { pageNumber?: number; pageSize?: number; filters?: Record<string, string> }) =>
   get<EnumerationResult<Persona>>(`/api/v1/personas${buildQuery(params)}`);
@@ -349,6 +358,7 @@ export function getEntity(type: string, id: string): Promise<unknown> {
     events: 'events',
     docks: 'docks',
     'merge-queue': 'merge-queue',
+    playbooks: 'playbooks',
   };
   const endpoint = typeMap[type];
   if (!endpoint) throw new Error(`Unknown entity type: ${type}`);

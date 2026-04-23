@@ -777,6 +777,7 @@ namespace Armada.Core.Services
             string instructionsPath = Path.Combine(worktreePath, instructionsFileName);
 
             Dictionary<string, string> templateParams = MissionPromptBuilder.BuildTemplateParams(mission, vessel, captain);
+            List<MissionPlaybookSnapshot> playbookSnapshots = await LoadMissionPlaybookSnapshotsAsync(mission, token).ConfigureAwait(false);
 
             string content = "";
 
@@ -803,6 +804,17 @@ namespace Armada.Core.Services
             if (vessel.EnableModelContext && !String.IsNullOrEmpty(vessel.ModelContext))
             {
                 content += await ResolveSectionAsync("mission.model_context_wrapper", templateParams, token).ConfigureAwait(false);
+                content += "\n";
+            }
+
+            if (playbookSnapshots.Count > 0)
+            {
+                templateParams["SelectedPlaybooksMarkdown"] = await RenderSelectedPlaybooksMarkdownAsync(
+                    worktreePath,
+                    mission,
+                    playbookSnapshots,
+                    token).ConfigureAwait(false);
+                content += await ResolveSectionAsync("mission.playbooks_wrapper", templateParams, token).ConfigureAwait(false);
                 content += "\n";
             }
 
@@ -891,6 +903,163 @@ namespace Armada.Core.Services
             }
 
             _Logging.Info(_Header + "generated mission instructions at " + instructionsPath);
+        }
+
+        private async Task<List<MissionPlaybookSnapshot>> LoadMissionPlaybookSnapshotsAsync(Mission mission, CancellationToken token)
+        {
+            if (mission == null) throw new ArgumentNullException(nameof(mission));
+            if (mission.PlaybookSnapshots != null && mission.PlaybookSnapshots.Count > 0)
+                return mission.PlaybookSnapshots;
+
+            if (String.IsNullOrEmpty(mission.Id))
+                return new List<MissionPlaybookSnapshot>();
+
+            List<MissionPlaybookSnapshot> snapshots = await _Database.Playbooks
+                .GetMissionSnapshotsAsync(mission.Id, token)
+                .ConfigureAwait(false);
+            mission.PlaybookSnapshots = snapshots;
+            return snapshots;
+        }
+
+        private async Task<string> RenderSelectedPlaybooksMarkdownAsync(
+            string worktreePath,
+            Mission mission,
+            List<MissionPlaybookSnapshot> snapshots,
+            CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(worktreePath)) throw new ArgumentNullException(nameof(worktreePath));
+            if (mission == null) throw new ArgumentNullException(nameof(mission));
+            if (snapshots == null || snapshots.Count == 0) return String.Empty;
+
+            List<string> sections = new List<string>();
+            bool snapshotStateChanged = false;
+
+            for (int i = 0; i < snapshots.Count; i++)
+            {
+                MissionPlaybookSnapshot snapshot = snapshots[i];
+                string header = "### " + snapshot.FileName;
+                string? description = String.IsNullOrWhiteSpace(snapshot.Description) ? null : snapshot.Description.Trim();
+
+                switch (snapshot.DeliveryMode)
+                {
+                    case PlaybookDeliveryModeEnum.InstructionWithReference:
+                        string resolvedPath = await MaterializeReferencePlaybookAsync(mission, snapshot, i, token).ConfigureAwait(false);
+                        if (!String.Equals(snapshot.ResolvedPath, resolvedPath, StringComparison.Ordinal))
+                        {
+                            snapshot.ResolvedPath = resolvedPath;
+                            snapshot.WorktreeRelativePath = null;
+                            snapshotStateChanged = true;
+                        }
+
+                        sections.Add(
+                            header + "\n" +
+                            (description != null ? description + "\n" : "") +
+                            "Read and follow this playbook at `" + resolvedPath + "`.");
+                        break;
+
+                    case PlaybookDeliveryModeEnum.AttachIntoWorktree:
+                        (string attachedPath, string relativePath) = await MaterializeWorktreePlaybookAsync(
+                            worktreePath,
+                            snapshot,
+                            i,
+                            token).ConfigureAwait(false);
+                        if (!String.Equals(snapshot.ResolvedPath, attachedPath, StringComparison.Ordinal) ||
+                            !String.Equals(snapshot.WorktreeRelativePath, relativePath, StringComparison.Ordinal))
+                        {
+                            snapshot.ResolvedPath = attachedPath;
+                            snapshot.WorktreeRelativePath = relativePath;
+                            snapshotStateChanged = true;
+                        }
+
+                        sections.Add(
+                            header + "\n" +
+                            (description != null ? description + "\n" : "") +
+                            "Read and follow this attached playbook at `" + relativePath.Replace("\\", "/") + "`.");
+                        break;
+
+                    default:
+                        sections.Add(
+                            header + "\n" +
+                            (description != null ? description + "\n\n" : "") +
+                            snapshot.Content.TrimEnd());
+                        break;
+                }
+            }
+
+            if (snapshotStateChanged)
+            {
+                await _Database.Playbooks.SetMissionSnapshotsAsync(mission.Id, snapshots, token).ConfigureAwait(false);
+            }
+
+            return String.Join("\n\n", sections);
+        }
+
+        private async Task<string> MaterializeReferencePlaybookAsync(
+            Mission mission,
+            MissionPlaybookSnapshot snapshot,
+            int selectionOrder,
+            CancellationToken token)
+        {
+            string playbookDir = Path.Combine(_Settings.LogDirectory, "playbooks", mission.Id);
+            Directory.CreateDirectory(playbookDir);
+
+            string fileName = BuildMaterializedPlaybookFileName(selectionOrder, snapshot.FileName);
+            string resolvedPath = Path.Combine(playbookDir, fileName);
+            await File.WriteAllTextAsync(resolvedPath, snapshot.Content, token).ConfigureAwait(false);
+            return resolvedPath;
+        }
+
+        private async Task<(string ResolvedPath, string RelativePath)> MaterializeWorktreePlaybookAsync(
+            string worktreePath,
+            MissionPlaybookSnapshot snapshot,
+            int selectionOrder,
+            CancellationToken token)
+        {
+            string relativeDir = Path.Combine(".armada", "playbooks");
+            string absoluteDir = Path.Combine(worktreePath, relativeDir);
+            Directory.CreateDirectory(absoluteDir);
+
+            string fileName = BuildMaterializedPlaybookFileName(selectionOrder, snapshot.FileName);
+            string absolutePath = Path.Combine(absoluteDir, fileName);
+            await File.WriteAllTextAsync(absolutePath, snapshot.Content, token).ConfigureAwait(false);
+
+            string? excludePath = ResolveGitInfoExcludePath(worktreePath);
+            if (!String.IsNullOrEmpty(excludePath))
+            {
+                await EnsureGitExcludeEntryAsync(excludePath, ".armada/playbooks/", token).ConfigureAwait(false);
+            }
+
+            return (absolutePath, Path.Combine(relativeDir, fileName));
+        }
+
+        private async Task EnsureGitExcludeEntryAsync(string excludePath, string entry, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(excludePath)) return;
+            if (String.IsNullOrEmpty(entry)) return;
+
+            Directory.CreateDirectory(Path.GetDirectoryName(excludePath)!);
+            string excludeContent = File.Exists(excludePath)
+                ? await File.ReadAllTextAsync(excludePath, token).ConfigureAwait(false)
+                : "";
+            bool hasEntry = excludeContent
+                .Split('\n')
+                .Select(l => l.Trim())
+                .Any(l => String.Equals(l, entry, StringComparison.Ordinal));
+            if (hasEntry) return;
+
+            string suffix = excludeContent.Length > 0 && !excludeContent.EndsWith("\n", StringComparison.Ordinal) ? "\n" : "";
+            await File.AppendAllTextAsync(excludePath, suffix + entry + "\n", token).ConfigureAwait(false);
+        }
+
+        private static string BuildMaterializedPlaybookFileName(int selectionOrder, string? originalFileName)
+        {
+            string safeName = String.IsNullOrWhiteSpace(originalFileName) ? "PLAYBOOK.md" : originalFileName.Trim();
+            foreach (char invalid in Path.GetInvalidFileNameChars())
+            {
+                safeName = safeName.Replace(invalid, '_');
+            }
+
+            return (selectionOrder + 1).ToString("D2") + "_" + safeName;
         }
 
         /// <summary>
@@ -1056,6 +1225,13 @@ namespace Armada.Core.Services
                         "and organize it clearly with sections or headings.\n" +
                         "\n" +
                         "If you have nothing to add, skip this step.\n";
+
+                case "mission.playbooks_wrapper":
+                    return
+                        "## Playbooks\n" +
+                        "These playbooks are part of the required instructions for this mission. Read and follow them.\n" +
+                        "\n" +
+                        "{SelectedPlaybooksMarkdown}\n";
 
                 case "mission.captain_instructions_wrapper":
                     return

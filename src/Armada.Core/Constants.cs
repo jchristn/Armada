@@ -20,7 +20,7 @@ namespace Armada.Core
         /// <summary>
         /// Product version.
         /// </summary>
-        public static readonly string ProductVersion = "0.6.0";
+        public static readonly string ProductVersion = "0.7.0";
 
         /// <summary>
         /// Default data directory.
@@ -103,6 +103,11 @@ namespace Armada.Core
         /// Voyage ID prefix.
         /// </summary>
         public static readonly string VoyageIdPrefix = "vyg_";
+
+        /// <summary>
+        /// Playbook ID prefix.
+        /// </summary>
+        public static readonly string PlaybookIdPrefix = "pbk_";
 
         /// <summary>
         /// Dock ID prefix.

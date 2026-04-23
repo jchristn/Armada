@@ -37,5 +37,10 @@ namespace Armada.Server.Mcp
         /// Pipeline name to use (convenience alias for pipelineId -- resolves by name).
         /// </summary>
         public string? Pipeline { get; set; }
+
+        /// <summary>
+        /// Ordered playbooks to apply during dispatch.
+        /// </summary>
+        public List<SelectedPlaybook> SelectedPlaybooks { get; set; } = new List<SelectedPlaybook>();
     }
 }

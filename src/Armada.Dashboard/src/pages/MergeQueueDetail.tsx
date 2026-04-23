@@ -11,9 +11,11 @@ import StatusBadge from '../components/shared/StatusBadge';
 import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
+import { useNotifications } from '../context/NotificationContext';
 
 export default function MergeQueueDetail() {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
+  const { pushToast } = useNotifications();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [entry, setEntry] = useState<MergeEntry | null>(null);
@@ -66,6 +68,7 @@ export default function MergeQueueDetail() {
         setConfirm(c => ({ ...c, open: false }));
         try {
           await processMergeEntry(entry.id);
+          pushToast('success', t('Merge entry {{id}} processing started.', { id: entry.id }));
           load();
         } catch { setError(t('Process failed.')); }
       },
@@ -82,6 +85,7 @@ export default function MergeQueueDetail() {
         setConfirm(c => ({ ...c, open: false }));
         try {
           await cancelMergeEntry(entry.id);
+          pushToast('warning', t('Merge entry {{id}} cancelled.', { id: entry.id }));
           load();
         } catch { setError(t('Cancel failed.')); }
       },
@@ -98,6 +102,7 @@ export default function MergeQueueDetail() {
         setConfirm(c => ({ ...c, open: false }));
         try {
           await deleteMergeEntry(entry.id);
+          pushToast('warning', t('Merge entry {{id}} deleted.', { id: entry.id }));
           navigate('/merge-queue');
         } catch { setError(t('Delete failed.')); }
       },

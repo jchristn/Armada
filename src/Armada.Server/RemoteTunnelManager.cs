@@ -14,7 +14,7 @@ namespace Armada.Server
 
     /// <summary>
     /// Maintains Armada's outbound remote-control tunnel connection.
-    /// v0.6.0 ships the Armada-side tunnel foundation only: URL normalization,
+    /// v0.7.0 ships the Armada-side tunnel foundation only: URL normalization,
     /// capability handshake, heartbeat/ping, reconnect, and status telemetry.
     /// </summary>
     public class RemoteTunnelManager : IDisposable

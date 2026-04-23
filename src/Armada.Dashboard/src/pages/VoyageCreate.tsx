@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { listVessels, listPipelines, createVoyage } from '../api/client';
-import type { Vessel, Pipeline } from '../types/models';
+import type { Vessel, Pipeline, SelectedPlaybook } from '../types/models';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
+import { useNotifications } from '../context/NotificationContext';
+import PlaybookSelector from '../components/shared/PlaybookSelector';
 
 interface MissionRow {
   title: string;
@@ -13,6 +15,7 @@ interface MissionRow {
 
 export default function VoyageCreate() {
   const { t } = useLocale();
+  const { pushToast } = useNotifications();
   const navigate = useNavigate();
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
@@ -25,6 +28,7 @@ export default function VoyageCreate() {
   const [autoPush, setAutoPush] = useState(false);
   const [autoCreatePRs, setAutoCreatePRs] = useState(false);
   const [autoMergePRs, setAutoMergePRs] = useState(false);
+  const [selectedPlaybooks, setSelectedPlaybooks] = useState<SelectedPlaybook[]>([]);
 
   // Mission rows
   const [missions, setMissions] = useState<MissionRow[]>([
@@ -78,8 +82,10 @@ export default function VoyageCreate() {
         vesselId,
         ...(selectedPipeline ? { pipeline: selectedPipeline } : {}),
         missions: missionPayloads,
+        ...(selectedPlaybooks.length > 0 ? { selectedPlaybooks } : {}),
       });
 
+      pushToast('success', t('Voyage "{{title}}" created.', { title: title.trim() }));
       navigate(`/voyages/${voyage.id}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t('Failed to create voyage.'));
@@ -157,6 +163,8 @@ export default function VoyageCreate() {
             </label>
           </div>
         </div>
+
+        <PlaybookSelector value={selectedPlaybooks} onChange={setSelectedPlaybooks} disabled={submitting} />
 
         {/* Mission rows */}
         <div style={{ marginBottom: 16 }}>

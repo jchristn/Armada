@@ -84,6 +84,11 @@ namespace Armada.Core.Database
         /// </summary>
         public IPipelineMethods Pipelines { get; protected set; } = null!;
 
+        /// <summary>
+        /// Playbook operations.
+        /// </summary>
+        public IPlaybookMethods Playbooks { get; protected set; } = null!;
+
         #endregion
 
         #region Constructors-and-Factories
