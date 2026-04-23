@@ -242,9 +242,21 @@ Playbooks are tenant-scoped markdown instruction documents that you can manage i
 - Create, edit, delete, and browse playbooks from the `Playbooks` area in the dashboard.
 - Select any number of playbooks when creating a voyage or standalone mission.
 - Choose delivery per selection: `InlineFullContent`, `InstructionWithReference`, or `AttachIntoWorktree`.
-- Armada snapshots the exact playbook content used for a mission so later edits do not change historical execution context.
+- Armada snapshots the exact playbook content, filename, order, and resolved delivery mode used for a mission so later edits do not change historical execution context.
+- REST, MCP, proxy remote-management, dashboard, CLI, SDK, and Postman surfaces all use the same playbook selection model.
+- File-based delivery resolves readable playbook files for the agent without polluting repository history, while inline delivery embeds the full markdown body directly into the rendered instruction set.
 
 This is useful for architecture rules, coding standards, migration checklists, release procedures, security review requirements, or any other reusable instruction set that should travel with the work.
+
+## Internationalization
+
+The dashboard supports live language selection and locale-aware formatting across both the React shell and the legacy embedded surfaces.
+
+- Supported locales: English, Spanish, Mandarin (Simplified), Mandarin (Traditional), Cantonese, Japanese, German, French, and Italian.
+- Language selection is available from login, setup, and the authenticated shell, and the active locale persists between sessions.
+- Shared UI elements such as notifications, pagination, dialogs, labels, date/time formatting, and numeric formatting honor the selected locale.
+- Route-level coverage includes list pages, detail pages, admin screens, setup flows, and server-management views so common actions do not fall back to English unexpectedly.
+- Legacy dashboard confirms, alerts, toasts, and static shell copy are routed through the same runtime so mixed old/new surfaces stay consistent.
 
 ## Use Cases
 
