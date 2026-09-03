@@ -496,13 +496,17 @@ namespace Armada.Server.Routes
                     if (formatted)
                     {
                         List<string> formattedLines = new List<string>();
+                        List<object> entries = new List<object>();
                         foreach (string raw in slice)
                         {
                             Armada.Core.Services.FormattedLogLine fl = Armada.Core.Services.RuntimeLogFormatter.Format(raw, captain.Runtime);
                             if (fl.Dropped) continue;
                             formattedLines.Add(fl.Text);
+                            entries.Add(new { Text = fl.Text, IsToolCall = fl.IsToolCall, ToolName = fl.ToolName, Redacted = fl.Redacted, Truncated = fl.Truncated });
                         }
-                        return (object)new { CaptainId = id, Log = String.Join("\n", formattedLines), Lines = formattedLines.Count, TotalLines = totalLines };
+                        // Log preserves the joined text for existing consumers; Entries carries structured
+                        // lines (tool name, redaction/truncation flags) so the dashboard can render chips.
+                        return (object)new { CaptainId = id, Log = String.Join("\n", formattedLines), Entries = entries, Lines = formattedLines.Count, TotalLines = totalLines };
                     }
 
                     string log = String.Join("\n", slice);

@@ -13,7 +13,7 @@ import {
   updateCaptain,
   deleteCaptain,
 } from '../api/client';
-import type { Captain, Mission, MissionSummary, LogResult, CaptainToolAccessResult } from '../types/models';
+import type { Captain, Mission, MissionSummary, LogResult, FormattedLogEntry, CaptainToolAccessResult } from '../types/models';
 import ActionMenu from '../components/shared/ActionMenu';
 import MuxRuntimeFields from '../components/captains/MuxRuntimeFields';
 import CaptainToolViewer from '../components/captains/CaptainToolViewer';
@@ -57,6 +57,7 @@ export default function CaptainDetail() {
 
   // Log viewer
   const [logText, setLogText] = useState<string | null>(null);
+  const [logEntries, setLogEntries] = useState<FormattedLogEntry[] | null>(null);
   const [logLoading, setLogLoading] = useState(false);
   const [showLog, setShowLog] = useState(false);
   const [logReadable, setLogReadable] = useState(true);
@@ -162,9 +163,11 @@ export default function CaptainDetail() {
     try {
       const result: LogResult = await getCaptainLog(id, 500, formatted);
       setLogText(result.log || t('(empty log)'));
+      setLogEntries(formatted && result.entries ? result.entries : null);
       setLogInfo(t('({{lines}} of {{totalLines}} lines)', { lines: result.lines || 0, totalLines: result.totalLines || 0 }));
     } catch {
       setLogText(t('Failed to load log.'));
+      setLogEntries(null);
       setLogInfo('');
     } finally {
       setLogLoading(false);
@@ -537,6 +540,27 @@ export default function CaptainDetail() {
           </div>
           {logLoading ? (
             <p className="text-dim">{t('Loading log...')}</p>
+          ) : logEntries && logEntries.length > 0 ? (
+            <div style={{
+              background: '#1a1a2e',
+              color: '#e0e0e0',
+              padding: 16,
+              borderRadius: 'var(--radius)',
+              overflow: 'auto',
+              fontSize: 12,
+              fontFamily: 'var(--mono)',
+              maxHeight: '60vh',
+            }}>
+              {logEntries.map((entry, i) => (
+                <div key={i} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', padding: '1px 0' }}>
+                  {entry.isToolCall && entry.toolName ? (
+                    <span className="tag" style={{ background: '#2a2a4a', color: '#9ad', marginRight: 6 }}>{t('tool')}: {entry.toolName}</span>
+                  ) : null}
+                  <span>{entry.text}</span>
+                  {entry.redacted ? <span className="tag stalled" style={{ marginLeft: 6 }}>{t('redacted')}</span> : null}
+                </div>
+              ))}
+            </div>
           ) : (
             <pre style={{
               background: '#1a1a2e',

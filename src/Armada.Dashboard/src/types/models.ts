@@ -1721,10 +1721,19 @@ export interface DiffResult {
   error?: string;
 }
 
+export interface FormattedLogEntry {
+  text: string;
+  isToolCall: boolean;
+  toolName: string | null;
+  redacted: boolean;
+  truncated: boolean;
+}
+
 export interface LogResult {
   log: string;
   lines: number;
   totalLines: number;
+  entries?: FormattedLogEntry[];
 }
 
 export interface InstructionsResult {
