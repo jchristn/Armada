@@ -58,6 +58,7 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [delete_voyages](#delete_voyages)
   - **Missions**
     - [mission_status](#mission_status)
+    - [evaluate_autoland](#evaluate_autoland)
     - [create_mission](#create_mission)
     - [update_mission](#update_mission)
     - [cancel_mission](#cancel_mission)
@@ -814,6 +815,26 @@ Get status of a specific mission.
 **Response:** [Mission](#mission) object, or `{"error": "Mission not found"}` if the ID does not exist.
 
 > **Note:** The `DiffSnapshot` field is excluded from status responses to keep payloads compact. Use `get_mission_diff` to retrieve the full diff.
+
+---
+
+### evaluate_autoland
+
+Dry-run the vessel's auto-land predicate against a mission's captured diff without landing it. Returns whether the change would auto-land unattended and, if not, the hold reason.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "missionId": { "type": "string", "description": "Mission ID (msn_ prefix)" }
+  },
+  "required": ["missionId"]
+}
+```
+
+**Response:** `{ "Land": true }` or `{ "Land": false, "HoldReason": "..." }`, or `{ "Error": "Mission not found" }` / `{ "Error": "Mission does not have an associated vessel" }`.
 
 ---
 

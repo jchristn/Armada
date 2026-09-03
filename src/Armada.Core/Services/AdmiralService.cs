@@ -658,6 +658,12 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
+        /// <inheritdoc />
+        public Task<AutoLandDecision?> EvaluateAutoLandAsync(string missionId, CancellationToken token = default)
+        {
+            return _Missions.EvaluateAutoLandAsync(missionId, token);
+        }
+
         public async Task HandleProcessExitAsync(int processId, int? exitCode, string captainId, string missionId, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));

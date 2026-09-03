@@ -184,5 +184,13 @@ namespace Armada.Core.Services.Interfaces
         /// <param name="missionId">Mission identifier.</param>
         /// <param name="token">Cancellation token.</param>
         Task HandleProcessExitAsync(int processId, int? exitCode, string captainId, string missionId, CancellationToken token = default);
+
+        /// <summary>
+        /// Dry-run the vessel's auto-land predicate against a mission's captured diff without landing it.
+        /// </summary>
+        /// <param name="missionId">Mission identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The auto-land decision, or null when the mission/vessel is missing.</returns>
+        Task<AutoLandDecision?> EvaluateAutoLandAsync(string missionId, CancellationToken token = default);
     }
 }

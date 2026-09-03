@@ -59,6 +59,28 @@ namespace Armada.Server.Mcp.Tools
                 });
 
             register(
+                "evaluate_autoland",
+                "Dry-run the vessel's auto-land predicate against a mission's captured diff without landing it. Returns whether the change would auto-land and, if not, the hold reason.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        missionId = new { type = "string", description = "Mission ID (msn_ prefix)" }
+                    },
+                    required = new[] { "missionId" }
+                },
+                async (args) =>
+                {
+                    MissionIdArgs request = JsonSerializer.Deserialize<MissionIdArgs>(args!.Value, _JsonOptions)!;
+                    Mission? mission = await database.Missions.ReadAsync(request.MissionId).ConfigureAwait(false);
+                    if (mission == null) return (object)new { Error = "Mission not found" };
+                    Armada.Core.Services.AutoLandDecision? decision = await admiral.EvaluateAutoLandAsync(request.MissionId).ConfigureAwait(false);
+                    if (decision == null) return (object)new { Error = "Mission does not have an associated vessel" };
+                    return (object)decision;
+                });
+
+            register(
                 "create_mission",
                 "Create and dispatch a standalone mission to a vessel",
                 new

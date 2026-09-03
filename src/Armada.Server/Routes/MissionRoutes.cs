@@ -544,6 +544,46 @@ namespace Armada.Server.Routes
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
+            app.Get("/api/v1/missions/{id}/evaluate-autoland", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
+                {
+                    req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                }
+
+                string id = req.Parameters["id"];
+                Mission? mission = ctx.IsAdmin
+                    ? await _database.Missions.ReadAsync(id).ConfigureAwait(false)
+                    : ctx.IsTenantAdmin
+                        ? await _database.Missions.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
+                        : await _database.Missions.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
+                if (mission == null)
+                {
+                    req.Http.Response.StatusCode = 404;
+                    return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Mission not found" };
+                }
+
+                AutoLandDecision? decision = await _missionService.EvaluateAutoLandAsync(id).ConfigureAwait(false);
+                if (decision == null)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Mission does not have an associated vessel" };
+                }
+
+                return decision;
+            },
+            api => api
+                .WithTag("Missions")
+                .WithSummary("Dry-run the auto-land predicate for a mission")
+                .WithDescription("Evaluates the vessel's auto-land rules against this mission's captured diff without landing it, returning whether it would auto-land and, if not, the hold reason.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
+                .WithResponse(200, OpenApiJson.For<AutoLandDecision>("Auto-land decision"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
             app.Put<Mission>("/api/v1/missions/{id}", async (ApiRequest req) =>
             {
                 AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);

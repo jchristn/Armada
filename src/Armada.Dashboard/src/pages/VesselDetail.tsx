@@ -488,6 +488,15 @@ export default function VesselDetail() {
         <div className="detail-field"><span className="detail-label">{t('Require PR For Protected Branches')}</span><span>{vessel.requirePullRequestForProtectedBranches ? t('Yes') : t('No')}</span></div>
         <div className="detail-field"><span className="detail-label">{t('Require Merge Queue For Release Branches')}</span><span>{vessel.requireMergeQueueForReleaseBranches ? t('Yes') : t('No')}</span></div>
         <div className="detail-field"><span className="detail-label">{t('Allow Concurrent Missions')}</span><span>{vessel.allowConcurrentMissions ? t('Yes') : t('No')}</span></div>
+        <div className="detail-field"><span className="detail-label">{t('Auto-Land Gate')}</span><span>{vessel.autoLandEnabled ? t('Enabled') : t('Disabled')}</span></div>
+        {vessel.autoLandEnabled && (
+          <>
+            <div className="detail-field"><span className="detail-label">{t('Auto-Land Max Files')}</span><span>{vessel.autoLandMaxFiles ?? 0}</span></div>
+            <div className="detail-field"><span className="detail-label">{t('Auto-Land Max Lines')}</span><span>{vessel.autoLandMaxLines ?? 0}</span></div>
+            <div className="detail-field"><span className="detail-label">{t('Auto-Land Allowed Paths')}</span><span className="mono">{(vessel.autoLandPathAllowGlobs && vessel.autoLandPathAllowGlobs.length) ? vessel.autoLandPathAllowGlobs.join(', ') : '-'}</span></div>
+            <div className="detail-field"><span className="detail-label">{t('Auto-Land Denied Paths')}</span><span className="mono">{(vessel.autoLandPathDenyGlobs && vessel.autoLandPathDenyGlobs.length) ? vessel.autoLandPathDenyGlobs.join(', ') : '-'}</span></div>
+          </>
+        )}
         <div className="detail-field"><span className="detail-label">{t('Definition-of-Done Gate')}</span><span>{vessel.definitionOfDoneEnabled ? t('Enabled') : t('Disabled')}</span></div>
         {vessel.definitionOfDoneEnabled && (
           <>

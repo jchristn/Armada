@@ -814,6 +814,30 @@ namespace Armada.Core.Services
             return true;
         }
 
+        /// <inheritdoc />
+        public async Task<AutoLandDecision?> EvaluateAutoLandAsync(string missionId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));
+
+            Mission? mission = await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
+            if (mission == null || String.IsNullOrEmpty(mission.VesselId)) return null;
+
+            Vessel? vessel = await _Database.Vessels.ReadAsync(mission.VesselId!, token).ConfigureAwait(false);
+            if (vessel == null) return null;
+
+            List<string> changedPaths = ExtractChangedPathsFromDiff(mission.DiffSnapshot);
+            AutoLandPolicy policy = new AutoLandPolicy
+            {
+                Enabled = vessel.AutoLandEnabled,
+                MaxFiles = vessel.AutoLandMaxFiles,
+                MaxLines = vessel.AutoLandMaxLines,
+                PathAllowGlobs = vessel.AutoLandPathAllowGlobs ?? new List<string>(),
+                PathDenyGlobs = vessel.AutoLandPathDenyGlobs ?? new List<string>(),
+            };
+
+            return AutoLandPredicate.Evaluate(changedPaths.Count, CountChangedDiffLines(mission.DiffSnapshot), changedPaths, policy);
+        }
+
         private async Task<bool> TryHoldForAutoLandAsync(Mission mission, CancellationToken token)
         {
             if (String.IsNullOrEmpty(mission.VesselId)) return false;

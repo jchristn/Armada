@@ -754,6 +754,11 @@ namespace Test.Shared.Suites.Services
             {
                 return Task.CompletedTask;
             }
+
+            public Task<Armada.Core.Services.AutoLandDecision?> EvaluateAutoLandAsync(string missionId, CancellationToken token = default)
+            {
+                return Task.FromResult<Armada.Core.Services.AutoLandDecision?>(null);
+            }
         }
 
         /// <summary>

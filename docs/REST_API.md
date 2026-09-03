@@ -213,6 +213,7 @@ Operational entities persist both `TenantId` and `UserId`. Those ownership colum
 | `/api/v1/token-usage` | GET | Authenticated | Paginated token-usage records within scope |
 | `/api/v1/token-usage/delete/by-filter` | POST | AdminOnly | Tenant admin or global admin only |
 | `/api/v1/missions/{id}/github/pull-request` | GET | Authenticated | Read GitHub PR review, comment, and required-check evidence for one mission |
+| `/api/v1/missions/{id}/evaluate-autoland` | GET | Authenticated | Dry-run the vessel's auto-land predicate against the mission diff |
 | `/api/v1/runtimes/mux/endpoints` | GET | Authenticated | List saved Mux endpoints, optionally from `configDirectory` |
 | `/api/v1/runtimes/mux/endpoints/{name}` | GET | Authenticated | Show one saved Mux endpoint |
 | `/api/v1/playbooks` | GET/POST/PUT/DELETE | Authenticated / TenantAdmin | Reads are tenant-scoped for any authenticated user. Mutations require tenant admin. |
@@ -1600,6 +1601,20 @@ Restart a failed or cancelled mission by resetting it to `Pending` for re-dispat
 **Errors:**
 - `400` - Mission is not in `Failed` or `Cancelled` status
 - `404` - Mission not found
+
+---
+
+#### GET /api/v1/missions/{id}/evaluate-autoland
+
+Dry-run the vessel's auto-land predicate against the mission's captured diff without landing it.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Mission ID (`msn_` prefix) |
+
+**Response:** `200 OK` -- `{ "Land": true }` or `{ "Land": false, "HoldReason": "..." }`
+**Errors:** `404` mission not found; `400` mission has no associated vessel
 
 ---
 
