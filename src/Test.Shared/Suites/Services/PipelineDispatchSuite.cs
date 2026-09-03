@@ -2100,6 +2100,79 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("handoff_force_advances_shared_branch_to_dock_head", "Pipeline handoff force-advances the shared branch to the prior dock's live HEAD", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    DirCreatingGitStub git = new DirCreatingGitStub();
+                    IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
+                    ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
+                    MissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService, git: git);
+
+                    Vessel vessel = new Vessel("stage-lag-vessel", "https://github.com/test/repo.git");
+                    vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
+                    vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
+                    vessel.DefaultBranch = "main";
+                    vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    Captain workerCaptain = new Captain("stage-lag-worker");
+                    workerCaptain.State = CaptainStateEnum.Working;
+                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+
+                    Voyage voyage = new Voyage("stage-lag-voyage");
+                    voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
+
+                    Mission worker = new Mission("[Worker] Implement change", "Implement the change");
+                    worker.VesselId = vessel.Id;
+                    worker.VoyageId = voyage.Id;
+                    worker.Persona = "Worker";
+                    worker.Status = MissionStatusEnum.InProgress;
+                    worker.CaptainId = workerCaptain.Id;
+                    worker.BranchName = "armada/stage-lag/pipeline";
+                    worker = await testDb.Driver.Missions.CreateAsync(worker).ConfigureAwait(false);
+
+                    Dock workerDock = new Dock(vessel.Id);
+                    workerDock.CaptainId = workerCaptain.Id;
+                    workerDock.WorktreePath = Path.Combine(settings.DocksDirectory, vessel.Name, worker.Id);
+                    workerDock.BranchName = worker.BranchName;
+                    workerDock.Active = true;
+                    workerDock = await testDb.Driver.Docks.CreateAsync(workerDock).ConfigureAwait(false);
+                    Directory.CreateDirectory(workerDock.WorktreePath);
+
+                    worker.DockId = workerDock.Id;
+                    await testDb.Driver.Missions.UpdateAsync(worker).ConfigureAwait(false);
+
+                    workerCaptain.CurrentMissionId = worker.Id;
+                    workerCaptain.CurrentDockId = workerDock.Id;
+                    await testDb.Driver.Captains.UpdateAsync(workerCaptain).ConfigureAwait(false);
+
+                    // A dependent Judge stage that reuses the same branch -- this is the stage that would read
+                    // stale code if the shared branch ref were not advanced to the worker dock's produced commit.
+                    Mission judge = new Mission("[Judge] Review", "Review the change");
+                    judge.VesselId = vessel.Id;
+                    judge.VoyageId = voyage.Id;
+                    judge.Persona = "Judge";
+                    judge.Status = MissionStatusEnum.Pending;
+                    judge.DependsOnMissionId = worker.Id;
+                    judge = await testDb.Driver.Missions.CreateAsync(judge).ConfigureAwait(false);
+
+                    missionService.OnGetMissionOutput = _ =>
+                        "Implemented the requested change across the touched files and verified the build locally.\n" +
+                        "[ARMADA:RESULT] COMPLETE\nDone.";
+
+                    await missionService.HandleCompletionAsync(workerCaptain, worker.Id).ConfigureAwait(false);
+
+                    AssertTrue(
+                        git.ForceAdvancedBranches.Any(entry => entry.StartsWith("armada/stage-lag/pipeline=", StringComparison.Ordinal)),
+                        "handoff should force-advance the shared branch to the prior dock's live HEAD");
+                    AssertTrue(
+                        git.ForceAdvancedBranches.Contains("armada/stage-lag/pipeline=abc123def456"),
+                        "the branch should be advanced to the dock's resolved HEAD commit");
+                }
+            }));
+
             cases.Add(CaseAsync("completion_backfills_missing_branch_from_dock_before_handoff", "Completion backfills missing branch from dock before handoff", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
@@ -2678,6 +2751,16 @@ namespace Test.Shared.Suites.Services
 
             /// <inheritdoc />
             public Task<bool> IsWorktreeRegisteredAsync(string repoPath, string worktreePath, CancellationToken token = default) => Task.FromResult(false);
+
+            /// <summary>Branch ref force-advances recorded as "branchName=commitHash".</summary>
+            public List<string> ForceAdvancedBranches { get; } = new List<string>();
+
+            /// <inheritdoc />
+            public Task<bool> ForceAdvanceBranchAsync(string worktreePath, string branchName, string commitHash, CancellationToken token = default)
+            {
+                ForceAdvancedBranches.Add(branchName + "=" + commitHash);
+                return Task.FromResult(true);
+            }
         }
 
         #endregion

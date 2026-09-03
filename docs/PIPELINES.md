@@ -278,6 +278,22 @@ When a mission reaches `WorkProduced` status, `TryHandoffToNextStageAsync` runs:
    c. Attempt to assign the mission (dependency check will now pass)
 ```
 
+### Stage-lag branch hardening
+
+Before handing off, the handoff force-advances the shared branch to the prior
+stage's produced commit. A stage's dock can end on a **detached HEAD** -- its
+commit lives at the dock's live `HEAD` but the shared branch ref still points at
+the older commit. Because the next stage reuses that same branch, it would
+otherwise check out stale code and miss the prior stage's work.
+
+`HardenStageBranchAsync` resolves the completed stage's dock's live `HEAD`
+(`IGitService.GetHeadCommitHashAsync`) and lifts it onto the branch ref via
+`IGitService.ForceAdvanceBranchAsync` (a `git update-ref`, which -- unlike
+`git branch -f` -- tolerates a branch that is checked out or detached in a
+worktree sharing the repository). The step is best-effort: a git failure is
+logged and the handoff continues. Architect fan-out does not use it, because the
+worker missions it produces start on fresh branches.
+
 The handoff context is appended to the mission description as a markdown section:
 
 ```markdown

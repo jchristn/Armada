@@ -142,5 +142,6 @@ namespace Test.Shared.Infrastructure
         public Task<bool> EnsureLocalBranchAsync(string repoPath, string branchName, CancellationToken token = default)
             => BranchExistsAsync(repoPath, branchName, token);
         public Task<bool> IsWorktreeRegisteredAsync(string repoPath, string worktreePath, CancellationToken token = default) => Task.FromResult(false);
+        public Task<bool> ForceAdvanceBranchAsync(string worktreePath, string branchName, string commitHash, CancellationToken token = default) => Task.FromResult(true);
     }
 }

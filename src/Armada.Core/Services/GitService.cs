@@ -452,6 +452,25 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
+        public async Task<bool> ForceAdvanceBranchAsync(string worktreePath, string branchName, string commitHash, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(worktreePath) || String.IsNullOrEmpty(branchName) || String.IsNullOrEmpty(commitHash))
+                return false;
+
+            try
+            {
+                await RunGitAsync(worktreePath, token, "update-ref", "refs/heads/" + branchName, commitHash).ConfigureAwait(false);
+                _Logging.Debug(_Header + "force-advanced branch " + branchName + " to " + commitHash + " via " + worktreePath);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "force-advance of branch " + branchName + " to " + commitHash + " failed: " + ex.Message);
+                return false;
+            }
+        }
+
+        /// <inheritdoc />
         public async Task<IReadOnlyList<string>> GetChangedFilesSinceAsync(string worktreePath, string startCommit, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(worktreePath)) throw new ArgumentNullException(nameof(worktreePath));

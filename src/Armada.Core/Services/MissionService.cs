@@ -2152,6 +2152,12 @@ namespace Armada.Core.Services
                 return false;
             }
 
+            // Stage-lag hardening: the just-completed stage's dock may have committed on a detached HEAD,
+            // leaving its produced commit off the shared branch ref. The next stage reuses that same branch,
+            // so resolve the dock's live HEAD and force-advance the branch ref before handing off, otherwise
+            // the next stage would check out stale code. Best-effort: a git failure is logged, not fatal.
+            await HardenStageBranchAsync(completedMission, token).ConfigureAwait(false);
+
             foreach (Mission nextMission in dependentMissions)
             {
                 // Build persona-specific preamble for the next stage
@@ -2249,6 +2255,40 @@ namespace Armada.Core.Services
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Force-advance the shared pipeline branch to the just-completed stage's produced commit. A prior
+        /// stage's dock can end on a detached HEAD (its commit is not on the branch ref), so the next stage --
+        /// which reuses the same branch -- would otherwise check out stale code. Resolve the dock's live HEAD
+        /// and lift it onto the branch ref. Best-effort: any failure is logged and the handoff continues.
+        /// </summary>
+        private async Task HardenStageBranchAsync(Mission completedMission, CancellationToken token)
+        {
+            if (_Git == null) return;
+            if (String.IsNullOrEmpty(completedMission.BranchName) || String.IsNullOrEmpty(completedMission.DockId)) return;
+
+            Dock? dock = !String.IsNullOrEmpty(completedMission.TenantId)
+                ? await _Database.Docks.ReadAsync(completedMission.TenantId, completedMission.DockId!, token).ConfigureAwait(false)
+                : await _Database.Docks.ReadAsync(completedMission.DockId!, token).ConfigureAwait(false);
+            if (dock == null || String.IsNullOrEmpty(dock.WorktreePath) || !Directory.Exists(dock.WorktreePath)) return;
+
+            try
+            {
+                string? headCommit = await _Git.GetHeadCommitHashAsync(dock.WorktreePath!, token).ConfigureAwait(false);
+                if (String.IsNullOrEmpty(headCommit)) return;
+
+                bool advanced = await _Git.ForceAdvanceBranchAsync(dock.WorktreePath!, completedMission.BranchName!, headCommit!, token).ConfigureAwait(false);
+                if (advanced)
+                {
+                    _Logging.Info(_Header + "stage-lag hardening: advanced branch " + completedMission.BranchName +
+                        " to " + headCommit + " from dock " + dock.Id + " before handoff from mission " + completedMission.Id);
+                }
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "stage-lag hardening failed for mission " + completedMission.Id + ": " + ex.Message);
+            }
         }
 
         private async Task CancelDependentPipelineStagesAsync(Mission failedMission, CancellationToken token)
