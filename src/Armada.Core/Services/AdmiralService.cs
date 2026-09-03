@@ -74,6 +74,8 @@ namespace Armada.Core.Services
         private ArmadaSettings _Settings;
         private ISystemResourceProbe _ResourceProbe = new SystemResourceProbe();
         private long _MemoryPressureDeferrals = 0;
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, List<DateTime>> _CaptainCrashTimes =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, List<DateTime>>();
         private ICaptainService _Captains;
         private IMissionService _Missions;
         private IVoyageService _Voyages;
@@ -739,7 +741,13 @@ namespace Armada.Core.Services
                 RuntimeFailureKindEnum failureKind = RuntimeFailureClassifier.Classify(exitCode, failureReason);
                 if (failureKind == RuntimeFailureKindEnum.UsageLimit || failureKind == RuntimeFailureKindEnum.AuthFailure)
                 {
-                    await QuarantineCaptainAsync(captainId, failureKind, token).ConfigureAwait(false);
+                    await QuarantineCaptainAsync(captainId, failureKind, token, failureReason).ConfigureAwait(false);
+                }
+                else if (failureKind == RuntimeFailureKindEnum.Crash && RecordCrashAndCheckLoop(captainId))
+                {
+                    // Crash-loop detection: N non-clean failures inside the window means this captain keeps
+                    // dying on work rather than doing it; quarantine it so tier selection stops handing it more.
+                    await QuarantineCaptainAsync(captainId, RuntimeFailureKindEnum.Crash, token, failureReason).ConfigureAwait(false);
                 }
             }
 
@@ -773,15 +781,59 @@ namespace Armada.Core.Services
         /// handing it work until its provider condition clears. Re-reads the captain to override any
         /// release-to-Idle that just happened during failure handling.
         /// </summary>
-        private async Task QuarantineCaptainAsync(string captainId, RuntimeFailureKindEnum kind, CancellationToken token)
+        /// <summary>
+        /// Record a captain crash and report whether it has now crashed at least the configured threshold of
+        /// times within the configured window (a crash loop). Clears the record once the loop is detected so
+        /// the counter restarts after quarantine. Tracking is in-memory: a restart resets the counter, which
+        /// is the intended behavior for a fresh process.
+        /// </summary>
+        private bool RecordCrashAndCheckLoop(string captainId)
+        {
+            int threshold = _Settings.CaptainCrashLoopThreshold;
+            if (threshold <= 0) return false;
+
+            DateTime nowUtc = DateTime.UtcNow;
+            DateTime windowStart = nowUtc.AddMinutes(-Math.Max(1, _Settings.CaptainCrashLoopWindowMinutes));
+
+            List<DateTime> times = _CaptainCrashTimes.GetOrAdd(captainId, _ => new List<DateTime>());
+            lock (times)
+            {
+                times.RemoveAll(t => t < windowStart);
+                times.Add(nowUtc);
+                if (times.Count >= threshold)
+                {
+                    times.Clear();
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        private async Task QuarantineCaptainAsync(string captainId, RuntimeFailureKindEnum kind, CancellationToken token, string? providerOutput = null)
         {
             Captain? captain = await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false);
             if (captain == null) return;
 
-            string reason = kind == RuntimeFailureKindEnum.AuthFailure ? "provider auth failure" : "provider usage limit";
+            string reason = kind switch
+            {
+                RuntimeFailureKindEnum.AuthFailure => "provider auth failure",
+                RuntimeFailureKindEnum.Crash => "crash loop",
+                _ => "provider usage limit"
+            };
+
+            // Prefer the provider's stated reset time (parsed from output) over the configured backoff, but
+            // never trust an unparseable or out-of-range value into the quarantine window.
+            DateTime nowUtc = DateTime.UtcNow;
+            DateTime until = nowUtc.AddMinutes(_Settings.CaptainQuarantineMinutes);
+            if (ProviderResetParser.TryParseResetUtc(providerOutput, nowUtc, out DateTime? resetUtc) && resetUtc.HasValue)
+            {
+                until = resetUtc.Value;
+                reason += " (provider reset time)";
+            }
+
             captain.State = CaptainStateEnum.Quarantined;
             captain.QuarantineReason = reason;
-            captain.QuarantineUntilUtc = DateTime.UtcNow.AddMinutes(_Settings.CaptainQuarantineMinutes);
+            captain.QuarantineUntilUtc = until;
             captain.CurrentMissionId = null;
             captain.CurrentDockId = null;
             captain.ProcessId = null;

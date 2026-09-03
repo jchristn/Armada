@@ -73,6 +73,7 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [create_captain](#create_captain)
     - [update_captain](#update_captain)
     - [stop_captain](#stop_captain)
+    - [release_captain](#release_captain)
     - [stop_all](#stop_all)
     - [delete_captain](#delete_captain)
     - [delete_captains](#delete_captains)
@@ -1147,6 +1148,26 @@ Stop a specific captain agent.
   "captainId": "cpt_abc123def456ghi789jk"
 }
 ```
+
+---
+
+### release_captain
+
+Lift a captain's quarantine, returning it to the Idle pool so tier selection can hand it work again. Captains are auto-quarantined on provider usage-limit / auth failures (until the parsed reset time or a configured backoff) and on crash loops; this manually clears that state.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "captainId": { "type": "string", "description": "Captain ID (cpt_ prefix)" }
+  },
+  "required": ["captainId"]
+}
+```
+
+**Response:** The updated [Captain](#captain) object, or `{ "Status": "not_quarantined", "CaptainId": "..." }` when the captain was not quarantined, or `{ "Error": "Captain not found" }`.
 
 ---
 

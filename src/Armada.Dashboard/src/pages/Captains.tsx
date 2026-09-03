@@ -514,7 +514,14 @@ export default function Captains() {
                       </span>
                     </td>
                     <td className="text-dim">{c.runtime}</td>
-                    <td><StatusBadge status={c.state} /></td>
+                    <td>
+                      <StatusBadge status={c.state} />
+                      {c.state === 'Quarantined' && (
+                        <span className="tag stalled" title={c.quarantineReason || undefined} style={{ marginLeft: '0.35rem' }}>
+                          {c.quarantineUntilUtc ? t('until {{time}}', { time: formatRelativeTime(c.quarantineUntilUtc) }) : t('quarantined')}
+                        </span>
+                      )}
+                    </td>
                     <td className="mono text-dim" onClick={e => e.stopPropagation()}>
                       {c.currentMissionId ? (
                         <a href="#" onClick={e => { e.preventDefault(); navigate(`/missions/${c.currentMissionId}`); }}>

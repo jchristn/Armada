@@ -143,6 +143,27 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
+        /// Number of non-clean captain crashes within <see cref="CaptainCrashLoopWindowMinutes"/> that trips
+        /// crash-loop detection and quarantines the captain. Set to 0 to disable crash-loop quarantine.
+        /// Clamped to [0, 20]. Defaults to 3.
+        /// </summary>
+        public int CaptainCrashLoopThreshold
+        {
+            get => _CaptainCrashLoopThreshold;
+            set => _CaptainCrashLoopThreshold = value < 0 ? 0 : (value > 20 ? 20 : value);
+        }
+
+        /// <summary>
+        /// The sliding window, in minutes, over which captain crashes are counted for crash-loop detection.
+        /// Clamped to a minimum of 1. Defaults to 15.
+        /// </summary>
+        public int CaptainCrashLoopWindowMinutes
+        {
+            get => _CaptainCrashLoopWindowMinutes;
+            set => _CaptainCrashLoopWindowMinutes = value < 1 ? 1 : value;
+        }
+
+        /// <summary>
         /// Heartbeat check interval in seconds. Must be >= 5.
         /// </summary>
         public int HeartbeatIntervalSeconds
@@ -626,6 +647,8 @@ namespace Armada.Core.Settings
         private int _McpPort = Constants.DefaultMcpPort;
         private long _MinAvailableMemoryBytesForLaunch = Constants.DefaultMinAvailableMemoryBytesForLaunch;
         private int _CaptainQuarantineMinutes = 15;
+        private int _CaptainCrashLoopThreshold = 3;
+        private int _CaptainCrashLoopWindowMinutes = 15;
         private int _HeartbeatIntervalSeconds = Constants.DefaultHeartbeatIntervalSeconds;
         private int _StallThresholdMinutes = Constants.DefaultStallThresholdMinutes;
         private int _MaxRecoveryAttempts = Constants.DefaultMaxRecoveryAttempts;

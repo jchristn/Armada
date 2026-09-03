@@ -60,6 +60,34 @@ namespace Armada.Server.Mcp.Tools
                     return (object)captain;
                 });
 
+            register(
+                "release_captain",
+                "Lift a captain's quarantine, returning it to the Idle pool so tier selection can hand it work again.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        captainId = new { type = "string", description = "Captain ID (cpt_ prefix)" }
+                    },
+                    required = new[] { "captainId" }
+                },
+                async (args) =>
+                {
+                    CaptainIdArgs request = JsonSerializer.Deserialize<CaptainIdArgs>(args!.Value, _JsonOptions)!;
+                    Captain? captain = await database.Captains.ReadAsync(request.CaptainId).ConfigureAwait(false);
+                    if (captain == null) return (object)new { Error = "Captain not found" };
+                    if (captain.State != CaptainStateEnum.Quarantined)
+                        return (object)new { Status = "not_quarantined", CaptainId = captain.Id };
+
+                    captain.State = CaptainStateEnum.Idle;
+                    captain.QuarantineUntilUtc = null;
+                    captain.QuarantineReason = null;
+                    captain.LastUpdateUtc = DateTime.UtcNow;
+                    captain = await database.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                    return (object)captain;
+                });
+
             if (captainToolService != null)
             {
                 register(
