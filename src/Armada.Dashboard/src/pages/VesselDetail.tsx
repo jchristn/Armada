@@ -488,6 +488,14 @@ export default function VesselDetail() {
         <div className="detail-field"><span className="detail-label">{t('Require PR For Protected Branches')}</span><span>{vessel.requirePullRequestForProtectedBranches ? t('Yes') : t('No')}</span></div>
         <div className="detail-field"><span className="detail-label">{t('Require Merge Queue For Release Branches')}</span><span>{vessel.requireMergeQueueForReleaseBranches ? t('Yes') : t('No')}</span></div>
         <div className="detail-field"><span className="detail-label">{t('Allow Concurrent Missions')}</span><span>{vessel.allowConcurrentMissions ? t('Yes') : t('No')}</span></div>
+        <div className="detail-field"><span className="detail-label">{t('Definition-of-Done Gate')}</span><span>{vessel.definitionOfDoneEnabled ? t('Enabled') : t('Disabled')}</span></div>
+        {vessel.definitionOfDoneEnabled && (
+          <>
+            <div className="detail-field"><span className="detail-label">{t('DoD Build Command')}</span><span className="mono">{vessel.definitionOfDoneBuildCommand || '-'}</span></div>
+            <div className="detail-field"><span className="detail-label">{t('DoD Test Command')}</span><span className="mono">{vessel.definitionOfDoneTestCommand || '-'}</span></div>
+            <div className="detail-field"><span className="detail-label">{t('DoD Timeout (s)')}</span><span>{vessel.definitionOfDoneTimeoutSeconds ?? 1800}</span></div>
+          </>
+        )}
         <div className="detail-field"><span className="detail-label">GitHub Token Override</span><span>{vessel.hasGitHubTokenOverride ? 'Configured' : 'Inherited / None'}</span></div>
         <div className="detail-field">
           <span className="detail-label">{t('Default Pipeline')}</span>

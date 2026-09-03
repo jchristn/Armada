@@ -158,6 +158,14 @@ namespace Armada.Server.Mcp.Tools
                         vessel.AutoLandPathAllowGlobs = request.AutoLandPathAllowGlobs;
                     if (request.AutoLandPathDenyGlobs != null)
                         vessel.AutoLandPathDenyGlobs = request.AutoLandPathDenyGlobs;
+                    if (request.DefinitionOfDoneEnabled.HasValue)
+                        vessel.DefinitionOfDoneEnabled = request.DefinitionOfDoneEnabled.Value;
+                    if (request.DefinitionOfDoneBuildCommand != null)
+                        vessel.DefinitionOfDoneBuildCommand = request.DefinitionOfDoneBuildCommand;
+                    if (request.DefinitionOfDoneTestCommand != null)
+                        vessel.DefinitionOfDoneTestCommand = request.DefinitionOfDoneTestCommand;
+                    if (request.DefinitionOfDoneTimeoutSeconds.HasValue)
+                        vessel.DefinitionOfDoneTimeoutSeconds = request.DefinitionOfDoneTimeoutSeconds.Value;
                     vessel = await database.Vessels.UpdateAsync(vessel).ConfigureAwait(false);
                     return (object)vessel;
                 });

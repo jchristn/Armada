@@ -154,7 +154,8 @@ namespace Armada.Server
             // Prompt template service must be created before MissionService so it can resolve templates
             _PromptTemplateService = new PromptTemplateService(_Database, _Logging);
 
-            MissionService missionService = new MissionService(_Logging, _Database, _Settings, dockService, captainService, _PromptTemplateService, _Git);
+            IDefinitionOfDoneGate definitionOfDoneGate = new DefinitionOfDoneGate(_Logging);
+            MissionService missionService = new MissionService(_Logging, _Database, _Settings, dockService, captainService, _PromptTemplateService, _Git, definitionOfDoneGate);
             _MissionService = missionService;
             IVoyageService voyageService = new VoyageService(_Logging, _Database);
             IEscalationService escalationService = new EscalationService(_Logging, _Database, _Settings);

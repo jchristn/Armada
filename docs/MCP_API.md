@@ -1472,7 +1472,11 @@ Update an existing vessel's properties.
     "gitHubTokenOverride": { "type": "string", "description": "Optional per-vessel GitHub token override. Empty string clears the existing override." },
     "enableModelContext": { "type": "boolean", "description": "Enable or disable model context accumulation" },
     "modelContext": { "type": "string", "description": "Agent-accumulated context about this repository" },
-    "defaultPipelineId": { "type": "string", "description": "Default pipeline ID for voyages dispatched to this vessel" }
+    "defaultPipelineId": { "type": "string", "description": "Default pipeline ID for voyages dispatched to this vessel" },
+    "definitionOfDoneEnabled": { "type": "boolean", "description": "Run the in-dock build + unit tests before acceptance; a failure blocks landing with a classified reason (Compile/TestFail/Timeout/Infra)" },
+    "definitionOfDoneBuildCommand": { "type": "string", "description": "Shell command that builds the project inside the mission checkout (e.g. dotnet build)" },
+    "definitionOfDoneTestCommand": { "type": "string", "description": "Shell command that runs unit tests inside the mission checkout (e.g. dotnet test)" },
+    "definitionOfDoneTimeoutSeconds": { "type": "integer", "description": "Per-phase timeout in seconds, clamped to [30, 7200] (default 1800)" }
   },
   "required": ["vesselId"]
 }

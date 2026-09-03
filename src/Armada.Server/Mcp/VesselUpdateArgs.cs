@@ -89,5 +89,25 @@ namespace Armada.Server.Mcp
         /// Glob patterns that force a hold: a change touching any matching path never auto-lands.
         /// </summary>
         public System.Collections.Generic.List<string>? AutoLandPathDenyGlobs { get; set; }
+
+        /// <summary>
+        /// Whether the in-dock Definition-of-Done gate runs build + unit tests before acceptance.
+        /// </summary>
+        public bool? DefinitionOfDoneEnabled { get; set; }
+
+        /// <summary>
+        /// Shell command that builds the project inside the mission checkout (e.g. "dotnet build").
+        /// </summary>
+        public string? DefinitionOfDoneBuildCommand { get; set; }
+
+        /// <summary>
+        /// Shell command that runs unit tests inside the mission checkout (e.g. "dotnet test").
+        /// </summary>
+        public string? DefinitionOfDoneTestCommand { get; set; }
+
+        /// <summary>
+        /// Per-phase timeout, in seconds, for each Definition-of-Done command (clamped to [30, 7200]).
+        /// </summary>
+        public int? DefinitionOfDoneTimeoutSeconds { get; set; }
     }
 }

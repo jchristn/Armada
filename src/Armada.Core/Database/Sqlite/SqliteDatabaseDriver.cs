@@ -530,6 +530,10 @@ namespace Armada.Core.Database.Sqlite
                     vessel.AutoLandPathDenyGlobs = JsonSerializer.Deserialize<List<string>>(denyGlobsJson) ?? new List<string>();
             }
             catch { }
+            try { vessel.DefinitionOfDoneEnabled = Convert.ToInt64(reader["definition_of_done_enabled"]) == 1; } catch { }
+            try { vessel.DefinitionOfDoneBuildCommand = NullableString(reader["definition_of_done_build_command"]); } catch { }
+            try { vessel.DefinitionOfDoneTestCommand = NullableString(reader["definition_of_done_test_command"]); } catch { }
+            try { vessel.DefinitionOfDoneTimeoutSeconds = Convert.ToInt32(reader["definition_of_done_timeout_seconds"]); } catch { }
             try { vessel.ReleaseBranchPrefix = NullableString(reader["release_branch_prefix"]) ?? "release/"; } catch { vessel.ReleaseBranchPrefix = "release/"; }
             try { vessel.HotfixBranchPrefix = NullableString(reader["hotfix_branch_prefix"]) ?? "hotfix/"; } catch { vessel.HotfixBranchPrefix = "hotfix/"; }
             try { vessel.RequirePullRequestForProtectedBranches = Convert.ToInt64(reader["require_pull_request_for_protected_branches"]) == 1; }

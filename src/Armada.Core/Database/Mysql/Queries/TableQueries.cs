@@ -1286,6 +1286,17 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration statements for schema version 58.
+        /// </summary>
+        public static readonly string[] MigrationV58Statements = new string[]
+        {
+            @"ALTER TABLE vessels ADD COLUMN definition_of_done_enabled TINYINT(1) NOT NULL DEFAULT 0;",
+            @"ALTER TABLE vessels ADD COLUMN definition_of_done_build_command TEXT;",
+            @"ALTER TABLE vessels ADD COLUMN definition_of_done_test_command TEXT;",
+            @"ALTER TABLE vessels ADD COLUMN definition_of_done_timeout_seconds INT NOT NULL DEFAULT 1800;"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

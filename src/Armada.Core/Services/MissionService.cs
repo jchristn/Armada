@@ -42,6 +42,7 @@ namespace Armada.Core.Services
         private IDockService _Docks;
         private ICaptainService _Captains;
         private IPromptTemplateService? _PromptTemplates;
+        private IDefinitionOfDoneGate? _DefinitionOfDone;
         private const string ArchitectHandoffMarker = "<!-- ARMADA:ARCHITECT-HANDOFF -->";
         private const string ReviewFeedbackMarker = "<!-- ARMADA:REVIEW-FEEDBACK -->";
         private const string ReviewerGuidanceMarker = "<!-- ARMADA:REVIEWER-GUIDANCE -->";
@@ -156,7 +157,8 @@ namespace Armada.Core.Services
             IDockService docks,
             ICaptainService captains,
             IPromptTemplateService? promptTemplates = null,
-            IGitService? git = null)
+            IGitService? git = null,
+            IDefinitionOfDoneGate? definitionOfDone = null)
         {
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _Database = database ?? throw new ArgumentNullException(nameof(database));
@@ -165,6 +167,7 @@ namespace Armada.Core.Services
             _Docks = docks ?? throw new ArgumentNullException(nameof(docks));
             _Captains = captains ?? throw new ArgumentNullException(nameof(captains));
             _PromptTemplates = promptTemplates;
+            _DefinitionOfDone = definitionOfDone;
         }
 
         #endregion
@@ -781,6 +784,36 @@ namespace Armada.Core.Services
         /// the caller holds instead of landing. Returns false when auto-land is disabled or the change is
         /// within the rules.
         /// </summary>
+        /// <summary>
+        /// Run the vessel's in-dock Definition-of-Done gate for a mission about to land. On a classified
+        /// failure (Compile/TestFail/Timeout/Infra), fail the mission with the classified reason, cancel
+        /// dependent pipeline stages, and return true so the caller does not land. Returns false when the
+        /// gate is disabled/unconfigured or the change passed.
+        /// </summary>
+        private async Task<bool> TryFailForDefinitionOfDoneAsync(Mission mission, Dock? dock, CancellationToken token)
+        {
+            if (_DefinitionOfDone == null) return false;
+            if (String.IsNullOrEmpty(mission.VesselId)) return false;
+            if (dock == null || String.IsNullOrEmpty(dock.WorktreePath)) return false;
+
+            Vessel? vessel = await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
+            if (vessel == null || !vessel.DefinitionOfDoneEnabled) return false;
+
+            DefinitionOfDoneResult result = await _DefinitionOfDone.EvaluateAsync(vessel, dock.WorktreePath!, token).ConfigureAwait(false);
+            if (result.Passed) return false;
+
+            mission.Status = MissionStatusEnum.Failed;
+            mission.FailureReason = "definition_of_done_" + result.Outcome.ToString().ToLowerInvariant() + ": " + result.Detail;
+            mission.CompletedUtc = DateTime.UtcNow;
+            mission.LastUpdateUtc = DateTime.UtcNow;
+            await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+            _Logging.Warn(_Header + "mission " + mission.Id + " failed the Definition-of-Done gate (" + result.Outcome + ")");
+
+            await CancelDependentPipelineStagesAsync(mission, token).ConfigureAwait(false);
+            await UpdateVoyageTerminalStatusAsync(mission.VoyageId, token).ConfigureAwait(false);
+            return true;
+        }
+
         private async Task<bool> TryHoldForAutoLandAsync(Mission mission, CancellationToken token)
         {
             if (String.IsNullOrEmpty(mission.VesselId)) return false;
@@ -1123,6 +1156,14 @@ namespace Armada.Core.Services
                 await UpdateVoyageTerminalStatusAsync(mission.VoyageId, token).ConfigureAwait(false);
                 _Logging.Info(_Header + "read-only " + mission.Mode + " mission " + mission.Id +
                     " completed without landing (no commit expected)");
+            }
+
+            // In-dock Definition-of-Done gate: run the vessel's build + unit tests inside the mission's own
+            // checkout before acceptance. A classified failure (Compile/TestFail/Timeout/Infra) blocks
+            // landing and fails the mission so it surfaces (and can be recovered).
+            if (shouldAttemptLanding && await TryFailForDefinitionOfDoneAsync(mission, dock, token).ConfigureAwait(false))
+            {
+                shouldAttemptLanding = false;
             }
 
             // Per-vessel auto-land predicate: a change that is too large or touches denied/out-of-scope

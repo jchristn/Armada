@@ -449,6 +449,14 @@ namespace Armada.Core.Database.SqlServer
                     vessel.AutoLandPathDenyGlobs = JsonSerializer.Deserialize<List<string>>(autoLandPathDenyGlobsJson) ?? new List<string>();
             }
             catch { }
+            try { vessel.DefinitionOfDoneEnabled = Convert.ToBoolean(reader["definition_of_done_enabled"]); }
+            catch { vessel.DefinitionOfDoneEnabled = false; }
+            try { vessel.DefinitionOfDoneBuildCommand = NullableString(reader["definition_of_done_build_command"]); }
+            catch { vessel.DefinitionOfDoneBuildCommand = null; }
+            try { vessel.DefinitionOfDoneTestCommand = NullableString(reader["definition_of_done_test_command"]); }
+            catch { vessel.DefinitionOfDoneTestCommand = null; }
+            try { vessel.DefinitionOfDoneTimeoutSeconds = Convert.ToInt32(reader["definition_of_done_timeout_seconds"]); }
+            catch { vessel.DefinitionOfDoneTimeoutSeconds = 1800; }
             vessel.DefaultBranch = reader["default_branch"].ToString()!;
             vessel.Active = Convert.ToBoolean(reader["active"]);
             vessel.CreatedUtc = FromIso8601(reader["created_utc"].ToString()!);

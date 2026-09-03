@@ -124,6 +124,11 @@ namespace Armada.Core
         public static readonly string TokenUsageIdPrefix = "tku_";
 
         /// <summary>
+        /// Default per-phase timeout, in seconds, for the in-dock Definition-of-Done gate (30 minutes).
+        /// </summary>
+        public const int DefaultDefinitionOfDoneTimeoutSeconds = 1800;
+
+        /// <summary>
         /// Fleet ID prefix.
         /// </summary>
         public static readonly string FleetIdPrefix = "flt_";

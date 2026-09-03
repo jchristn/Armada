@@ -1385,7 +1385,12 @@ namespace Armada.Core.Database.Sqlite.Queries
                     @"CREATE INDEX IF NOT EXISTS idx_token_usage_tenant_created ON token_usage(tenant_id, created_utc);",
                     @"CREATE INDEX IF NOT EXISTS idx_token_usage_model ON token_usage(model);"),
                 new SchemaMigration(57, "Add mission execution mode (Implementation/Audit/Research)",
-                    @"ALTER TABLE missions ADD COLUMN mode TEXT NOT NULL DEFAULT 'Implementation';")
+                    @"ALTER TABLE missions ADD COLUMN mode TEXT NOT NULL DEFAULT 'Implementation';"),
+                new SchemaMigration(58, "Add in-dock Definition-of-Done gate config to vessels",
+                    @"ALTER TABLE vessels ADD COLUMN definition_of_done_enabled INTEGER NOT NULL DEFAULT 0;",
+                    @"ALTER TABLE vessels ADD COLUMN definition_of_done_build_command TEXT;",
+                    @"ALTER TABLE vessels ADD COLUMN definition_of_done_test_command TEXT;",
+                    @"ALTER TABLE vessels ADD COLUMN definition_of_done_timeout_seconds INTEGER NOT NULL DEFAULT 1800;")
             };
         }
 

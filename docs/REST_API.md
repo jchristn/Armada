@@ -4248,6 +4248,10 @@ A git repository registered with Armada.
 | `HasGitHubTokenOverride` | bool | false | Indicates whether a per-vessel GitHub token override is stored. The raw override value is never returned by the API. |
 | `LandingMode` | [LandingModeEnum](#landingmodeenum)? | null | Per-vessel landing policy override (null = use global setting) |
 | `BranchCleanupPolicy` | [BranchCleanupPolicyEnum](#branchcleanuppolicyenum)? | null | Per-vessel branch cleanup policy override (null = use global setting) |
+| `DefinitionOfDoneEnabled` | bool | false | When true, the build and unit-test commands below run inside a mission's own checkout before acceptance; a failure blocks landing with a classified reason (Compile/TestFail/Timeout/Infra) |
+| `DefinitionOfDoneBuildCommand` | string? | null | Shell command that builds the project inside the mission checkout (e.g. `dotnet build`); a non-zero exit classifies as Compile |
+| `DefinitionOfDoneTestCommand` | string? | null | Shell command that runs unit tests inside the mission checkout (e.g. `dotnet test`); a non-zero exit classifies as TestFail |
+| `DefinitionOfDoneTimeoutSeconds` | int | 1800 | Per-phase timeout in seconds (clamped to [30, 7200]); exceeding it classifies as Timeout |
 | `Active` | bool | true | Whether vessel is active |
 | `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
 | `LastUpdateUtc` | datetime | now | Last update timestamp (UTC) |

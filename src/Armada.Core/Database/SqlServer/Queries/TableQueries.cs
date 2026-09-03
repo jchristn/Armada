@@ -929,6 +929,14 @@ namespace Armada.Core.Database.SqlServer.Queries
                     57,
                     "Add mission execution mode (Implementation/Audit/Research)",
                     @"IF COL_LENGTH('missions', 'mode') IS NULL ALTER TABLE missions ADD mode NVARCHAR(32) NOT NULL CONSTRAINT DF_missions_mode DEFAULT 'Implementation';"
+                ),
+                new SchemaMigration(
+                    58,
+                    "Add in-dock Definition-of-Done gate config to vessels",
+                    @"IF COL_LENGTH('vessels', 'definition_of_done_enabled') IS NULL ALTER TABLE vessels ADD definition_of_done_enabled BIT NOT NULL CONSTRAINT DF_vessels_dod_enabled DEFAULT 0;",
+                    @"IF COL_LENGTH('vessels', 'definition_of_done_build_command') IS NULL ALTER TABLE vessels ADD definition_of_done_build_command NVARCHAR(MAX) NULL;",
+                    @"IF COL_LENGTH('vessels', 'definition_of_done_test_command') IS NULL ALTER TABLE vessels ADD definition_of_done_test_command NVARCHAR(MAX) NULL;",
+                    @"IF COL_LENGTH('vessels', 'definition_of_done_timeout_seconds') IS NULL ALTER TABLE vessels ADD definition_of_done_timeout_seconds INT NOT NULL CONSTRAINT DF_vessels_dod_timeout DEFAULT 1800;"
                 )
             };
         }

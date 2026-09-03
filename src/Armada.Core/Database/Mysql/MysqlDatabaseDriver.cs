@@ -561,6 +561,11 @@ namespace Armada.Core.Database.Mysql
                     57,
                     "Add mission execution mode (Implementation/Audit/Research)",
                     TableQueries.MigrationV57Statements
+                ),
+                new SchemaMigration(
+                    58,
+                    "Add in-dock Definition-of-Done gate config to vessels",
+                    TableQueries.MigrationV58Statements
                 )
             };
         }

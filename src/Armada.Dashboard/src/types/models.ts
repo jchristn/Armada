@@ -131,6 +131,10 @@ export interface Vessel {
   autoLandMaxLines?: number;
   autoLandPathAllowGlobs?: string[];
   autoLandPathDenyGlobs?: string[];
+  definitionOfDoneEnabled?: boolean;
+  definitionOfDoneBuildCommand?: string | null;
+  definitionOfDoneTestCommand?: string | null;
+  definitionOfDoneTimeoutSeconds?: number;
   allowConcurrentMissions: boolean;
   defaultPipelineId: string | null;
   active: boolean;

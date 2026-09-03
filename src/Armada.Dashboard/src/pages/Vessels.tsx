@@ -44,6 +44,10 @@ interface VesselForm {
   autoLandMaxLines: string;
   autoLandPathAllowGlobs: string;
   autoLandPathDenyGlobs: string;
+  definitionOfDoneEnabled: boolean;
+  definitionOfDoneBuildCommand: string;
+  definitionOfDoneTestCommand: string;
+  definitionOfDoneTimeoutSeconds: string;
 }
 
 const emptyForm: VesselForm = {
@@ -51,6 +55,7 @@ const emptyForm: VesselForm = {
   projectContext: '', styleGuide: '', enableModelContext: true, modelContext: '', gitHubTokenOverride: '', clearGitHubTokenOverride: false, landingMode: 'LocalMerge', branchCleanupPolicy: 'LocalAndRemote', allowConcurrentMissions: false, defaultPipelineId: '',
   secretScanEnabled: false, protectedPathPatterns: '', privateIdentifierDenylist: '',
   autoLandEnabled: false, autoLandMaxFiles: '', autoLandMaxLines: '', autoLandPathAllowGlobs: '', autoLandPathDenyGlobs: '',
+  definitionOfDoneEnabled: false, definitionOfDoneBuildCommand: '', definitionOfDoneTestCommand: '', definitionOfDoneTimeoutSeconds: '',
 };
 
 export default function Vessels() {
@@ -172,6 +177,10 @@ export default function Vessels() {
       autoLandMaxLines: v.autoLandMaxLines ? String(v.autoLandMaxLines) : '',
       autoLandPathAllowGlobs: (v.autoLandPathAllowGlobs || []).join('\n'),
       autoLandPathDenyGlobs: (v.autoLandPathDenyGlobs || []).join('\n'),
+      definitionOfDoneEnabled: v.definitionOfDoneEnabled ?? false,
+      definitionOfDoneBuildCommand: v.definitionOfDoneBuildCommand || '',
+      definitionOfDoneTestCommand: v.definitionOfDoneTestCommand || '',
+      definitionOfDoneTimeoutSeconds: v.definitionOfDoneTimeoutSeconds ? String(v.definitionOfDoneTimeoutSeconds) : '',
     });
     setEditing(v);
     setShowForm(true);
@@ -195,6 +204,9 @@ export default function Vessels() {
       payload.autoLandMaxLines = form.autoLandMaxLines.trim() ? Math.max(0, parseInt(form.autoLandMaxLines, 10) || 0) : 0;
       payload.autoLandPathAllowGlobs = form.autoLandPathAllowGlobs.split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0);
       payload.autoLandPathDenyGlobs = form.autoLandPathDenyGlobs.split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0);
+      payload.definitionOfDoneBuildCommand = form.definitionOfDoneBuildCommand.trim();
+      payload.definitionOfDoneTestCommand = form.definitionOfDoneTestCommand.trim();
+      payload.definitionOfDoneTimeoutSeconds = form.definitionOfDoneTimeoutSeconds.trim() ? Math.max(30, parseInt(form.definitionOfDoneTimeoutSeconds, 10) || 1800) : 1800;
       delete payload.clearGitHubTokenOverride;
       if (editing)
       {
@@ -440,6 +452,28 @@ export default function Vessels() {
                 <label style={{ display: 'flex', flexDirection: 'column' }}>
                   {t('Auto-land Denied Paths')}
                   <textarea value={form.autoLandPathDenyGlobs} onChange={e => setForm({ ...form, autoLandPathDenyGlobs: e.target.value })} rows={2} placeholder={t('One glob per line, e.g. infra/**')} style={{ resize: 'vertical' }} />
+                </label>
+              </div>
+            </div>
+
+            {/* In-dock Definition-of-Done gate */}
+            <div style={{ marginBottom: '0.5rem' }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem', lineHeight: 1, cursor: 'pointer' }} title={t('When enabled, the build and unit-test commands below run inside the mission checkout before landing; a failure blocks acceptance.')}>
+                <input type="checkbox" checked={form.definitionOfDoneEnabled} onChange={e => setForm({ ...form, definitionOfDoneEnabled: e.target.checked })} style={{ width: 'auto', margin: 0, verticalAlign: 'middle' }} />
+                <span style={{ verticalAlign: 'middle' }}>{t('Run in-dock build + tests before acceptance')}</span>
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 1.5rem' }}>
+                <label style={{ display: 'flex', flexDirection: 'column' }}>
+                  {t('Build Command')}
+                  <input value={form.definitionOfDoneBuildCommand} onChange={e => setForm({ ...form, definitionOfDoneBuildCommand: e.target.value })} placeholder={t('e.g. dotnet build')} />
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column' }}>
+                  {t('Test Command')}
+                  <input value={form.definitionOfDoneTestCommand} onChange={e => setForm({ ...form, definitionOfDoneTestCommand: e.target.value })} placeholder={t('e.g. dotnet test')} />
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column' }}>
+                  {t('Per-phase Timeout (seconds)')}
+                  <input type="number" min={30} max={7200} value={form.definitionOfDoneTimeoutSeconds} onChange={e => setForm({ ...form, definitionOfDoneTimeoutSeconds: e.target.value })} placeholder="1800" />
                 </label>
               </div>
             </div>
