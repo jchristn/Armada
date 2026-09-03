@@ -317,6 +317,21 @@ namespace Armada.Server
                                         EmitChunk(turnId, deltaText);
                                     }
                                 }
+                                else if (ocType == "reasoning" && part.ValueKind == JsonValueKind.Object
+                                    && part.TryGetProperty("text", out JsonElement rtxt) && rtxt.ValueKind == JsonValueKind.String)
+                                {
+                                    // OpenCode --thinking streams reasoning on a separate channel; surface it as
+                                    // thinking (never as reply text).
+                                    string thinkingDelta = rtxt.GetString() ?? String.Empty;
+                                    if (!String.IsNullOrEmpty(thinkingDelta) && request.ShowThinking)
+                                    {
+                                        lock (outputLock)
+                                        {
+                                            if (thinking.Length < _MaxOutputChars) thinking.Append(thinkingDelta);
+                                        }
+                                        EmitThinking(turnId, thinkingDelta);
+                                    }
+                                }
                                 else if (ocType == "tool_use" && part.ValueKind == JsonValueKind.Object)
                                 {
                                     string? toolName = part.TryGetProperty("tool", out JsonElement tnm) && tnm.ValueKind == JsonValueKind.String ? tnm.GetString() : null;

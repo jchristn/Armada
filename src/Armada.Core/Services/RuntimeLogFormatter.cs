@@ -89,9 +89,9 @@ namespace Armada.Core.Services
                         result.Text = "-> tool " + (result.ToolName ?? "unknown") + (String.IsNullOrEmpty(status) ? "" : " (" + status + ")");
                         return true;
                     }
-                    if (type == "text" && ocPart.TryGetProperty("text", out JsonElement ocText) && ocText.ValueKind == JsonValueKind.String)
+                    if ((type == "text" || type == "reasoning") && ocPart.TryGetProperty("text", out JsonElement ocText) && ocText.ValueKind == JsonValueKind.String)
                     {
-                        result.Text = ocText.GetString() ?? "";
+                        result.Text = (type == "reasoning" ? "(thinking) " : "") + (ocText.GetString() ?? "");
                         return true;
                     }
                     // A step/other OpenCode event with no display text: drop it rather than echo raw JSON.

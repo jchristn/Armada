@@ -114,6 +114,11 @@ namespace Armada.Runtimes
                     System.Text.Json.JsonElement root = document.RootElement;
                     if (root.ValueKind != System.Text.Json.JsonValueKind.Object) return null;
 
+                    // Reasoning is thinking, not reply text: never surface it as assistant text.
+                    string type = root.TryGetProperty("type", out System.Text.Json.JsonElement ty) && ty.ValueKind == System.Text.Json.JsonValueKind.String
+                        ? ty.GetString() ?? String.Empty : String.Empty;
+                    if (type == "reasoning") return null;
+
                     if (TryGetString(root, "text", out string? direct)) return direct;
                     if (root.TryGetProperty("part", out System.Text.Json.JsonElement part) && part.ValueKind == System.Text.Json.JsonValueKind.Object
                         && TryGetString(part, "text", out string? partText)) return partText;

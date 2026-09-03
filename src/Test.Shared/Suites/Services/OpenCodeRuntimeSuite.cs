@@ -129,6 +129,21 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(line.Dropped, "a step marker should be dropped, not echoed as raw JSON");
             }));
 
+            const string realReasoningEvent = "{\"type\":\"reasoning\",\"timestamp\":1,\"sessionID\":\"ses_r\",\"part\":{\"type\":\"reasoning\",\"text\":\"Let me think about this.\"}}";
+
+            cases.Add(Case("reasoning_is_not_reply_text", "A reasoning event is not surfaced as assistant reply text", TestTags.Negative, () =>
+            {
+                AssertNull(OpenCodeRuntime.TryExtractAssistantText(realReasoningEvent), "reasoning must not become reply text");
+            }));
+
+            cases.Add(Case("formatter_marks_reasoning_as_thinking", "The runtime-log formatter marks reasoning as thinking, not raw JSON", TestTags.Positive, () =>
+            {
+                FormattedLogLine line = RuntimeLogFormatter.Format(realReasoningEvent, AgentRuntimeEnum.OpenCode);
+                AssertFalse(line.Dropped, "reasoning should render");
+                AssertTrue(line.Text.Contains("thinking"), "reasoning should be marked as thinking");
+                AssertTrue(line.Text.Contains("Let me think"), "the reasoning text should be present");
+            }));
+
             // ---- Tier recognition ----
             cases.Add(Case("opencode_models_classify_to_standard", "Common OpenCode model families classify to a real tier", TestTags.Positive, () =>
             {
