@@ -211,5 +211,28 @@ namespace Armada.Core.Services.Interfaces
         /// <param name="token">Cancellation token.</param>
         /// <returns>True when the ref was updated; false when inputs were missing or the update failed.</returns>
         Task<bool> ForceAdvanceBranchAsync(string worktreePath, string branchName, string commitHash, CancellationToken token = default);
+
+        /// <summary>
+        /// Return recent commit summaries touching the given repository paths, as "path: shorthash subject"
+        /// lines, so a mission brief can state what changed under the paths it names. Best-effort: unknown
+        /// paths and git failures yield fewer (or no) entries rather than throwing.
+        /// </summary>
+        /// <param name="worktreePath">Worktree/repository path.</param>
+        /// <param name="paths">Repository-relative paths the mission names.</param>
+        /// <param name="maxPerPath">Maximum commits to report per path.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Formatted recent-commit lines.</returns>
+        Task<IReadOnlyList<string>> GetRecentCommitsForPathsAsync(string worktreePath, IReadOnlyList<string> paths, int maxPerPath, CancellationToken token = default);
+
+        /// <summary>
+        /// Return the subset of the given subject terms that already appear in the tracked tree (as a path
+        /// substring or in file contents), so a mission brief can tell a captain which terms already exist.
+        /// Best-effort: git failures yield an empty set rather than throwing.
+        /// </summary>
+        /// <param name="worktreePath">Worktree/repository path.</param>
+        /// <param name="terms">Candidate subject terms.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The terms found in the tree.</returns>
+        Task<IReadOnlyList<string>> FindExistingSubjectTermsAsync(string worktreePath, IReadOnlyList<string> terms, CancellationToken token = default);
     }
 }

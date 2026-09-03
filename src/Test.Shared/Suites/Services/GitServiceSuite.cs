@@ -657,6 +657,50 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(await service.ForceAdvanceBranchAsync("/tmp/repo", "b", "").ConfigureAwait(false), "empty commit hash should return false");
             }));
 
+            cases.Add(CaseAsync("recent_commits_for_paths_reports_changes", "GetRecentCommitsForPathsAsync reports commits touching a path", TestTags.Positive, async () =>
+            {
+                GitService service = CreateService();
+                string repo = TestGitRepoHelper.CreateWorkingRepoCopy();
+                try
+                {
+                    string dir = Path.Combine(repo, "anchors");
+                    Directory.CreateDirectory(dir);
+                    await File.WriteAllTextAsync(Path.Combine(dir, "widget.cs").Replace('/', Path.DirectorySeparatorChar), "class Widget {}").ConfigureAwait(false);
+                    await RunGitAsync(repo, "add", "-A").ConfigureAwait(false);
+                    await RunGitAsync(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-m", "add widget").ConfigureAwait(false);
+
+                    System.Collections.Generic.IReadOnlyList<string> commits =
+                        await service.GetRecentCommitsForPathsAsync(repo, new System.Collections.Generic.List<string> { "anchors/widget.cs" }, 3).ConfigureAwait(false);
+                    AssertTrue(commits.Count >= 1, "expected at least one commit for the changed path");
+                    AssertTrue(commits[0].Contains("add widget"), "the commit subject should be reported");
+                }
+                finally
+                {
+                    if (Directory.Exists(repo)) { try { Directory.Delete(repo, true); } catch { } }
+                }
+            }));
+
+            cases.Add(CaseAsync("subject_terms_found_in_tree", "FindExistingSubjectTermsAsync finds a term present in the tree", TestTags.Positive, async () =>
+            {
+                GitService service = CreateService();
+                string repo = TestGitRepoHelper.CreateWorkingRepoCopy();
+                try
+                {
+                    await File.WriteAllTextAsync(Path.Combine(repo, "QuarantineReason.cs"), "public class QuarantineReason {}").ConfigureAwait(false);
+                    await RunGitAsync(repo, "add", "-A").ConfigureAwait(false);
+                    await RunGitAsync(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-m", "add term").ConfigureAwait(false);
+
+                    System.Collections.Generic.IReadOnlyList<string> found =
+                        await service.FindExistingSubjectTermsAsync(repo, new System.Collections.Generic.List<string> { "QuarantineReason", "TotallyAbsentTerm" }).ConfigureAwait(false);
+                    AssertTrue(found.Contains("QuarantineReason"), "a present term should be reported");
+                    AssertFalse(found.Contains("TotallyAbsentTerm"), "an absent term should not be reported");
+                }
+                finally
+                {
+                    if (Directory.Exists(repo)) { try { Directory.Delete(repo, true); } catch { } }
+                }
+            }));
+
             cases.Add(CaseAsync("force_advance_branch_invalid_commit_returns_false", "ForceAdvanceBranchAsync returns false when the commit does not exist", TestTags.Negative, async () =>
             {
                 GitService service = CreateService();

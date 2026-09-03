@@ -2761,6 +2761,8 @@ namespace Test.Shared.Suites.Services
                 ForceAdvancedBranches.Add(branchName + "=" + commitHash);
                 return Task.FromResult(true);
             }
+            public Task<IReadOnlyList<string>> GetRecentCommitsForPathsAsync(string worktreePath, IReadOnlyList<string> paths, int maxPerPath, CancellationToken token = default) => Task.FromResult<IReadOnlyList<string>>(new List<string>());
+            public Task<IReadOnlyList<string>> FindExistingSubjectTermsAsync(string worktreePath, IReadOnlyList<string> terms, CancellationToken token = default) => Task.FromResult<IReadOnlyList<string>>(new List<string>());
         }
 
         #endregion

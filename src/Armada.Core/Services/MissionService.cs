@@ -1376,15 +1376,35 @@ namespace Armada.Core.Services
                 content += "\n";
             }
 
-            // Resolved git anchors (start commit, target branch, working branch) so the captain does not
-            // burn opening turns deriving them. Best-effort: a git failure degrades to no section.
+            // Resolved git anchors (start commit, target branch, working branch, recent commits on the paths
+            // the mission names, and which subject terms already exist in the tree) so the captain does not
+            // burn opening turns deriving them. Best-effort: a git failure degrades to a smaller section.
             string? headCommit = null;
+            IReadOnlyList<string>? recentPathCommits = null;
+            IReadOnlyList<string>? subjectTermsPresent = null;
             if (_Git != null)
             {
                 try { headCommit = await _Git.GetHeadCommitHashAsync(worktreePath, token).ConfigureAwait(false); }
                 catch { headCommit = null; }
+
+                string missionText = (mission.Title ?? "") + "\n" + (mission.Description ?? "");
+                try
+                {
+                    IReadOnlyList<string> namedPaths = GitAnchorInputs.ExtractPaths(missionText);
+                    if (namedPaths.Count > 0)
+                        recentPathCommits = await _Git.GetRecentCommitsForPathsAsync(worktreePath, namedPaths, 3, token).ConfigureAwait(false);
+                }
+                catch { recentPathCommits = null; }
+
+                try
+                {
+                    IReadOnlyList<string> terms = GitAnchorInputs.ExtractSubjectTerms(mission.Title, mission.Description);
+                    if (terms.Count > 0)
+                        subjectTermsPresent = await _Git.FindExistingSubjectTermsAsync(worktreePath, terms, token).ConfigureAwait(false);
+                }
+                catch { subjectTermsPresent = null; }
             }
-            string gitAnchors = GitAnchorsFormatter.Render(headCommit, vessel.DefaultBranch, mission.BranchName);
+            string gitAnchors = GitAnchorsFormatter.Render(headCommit, vessel.DefaultBranch, mission.BranchName, recentPathCommits, subjectTermsPresent);
             if (!String.IsNullOrEmpty(gitAnchors))
             {
                 content += gitAnchors;

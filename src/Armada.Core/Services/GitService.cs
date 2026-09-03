@@ -471,6 +471,70 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
+        public async Task<IReadOnlyList<string>> GetRecentCommitsForPathsAsync(string worktreePath, IReadOnlyList<string> paths, int maxPerPath, CancellationToken token = default)
+        {
+            List<string> results = new List<string>();
+            if (String.IsNullOrEmpty(worktreePath) || paths == null || paths.Count == 0) return results;
+
+            int perPath = Math.Max(1, maxPerPath);
+            foreach (string path in paths)
+            {
+                if (String.IsNullOrWhiteSpace(path)) continue;
+                try
+                {
+                    string output = await RunGitAsync(worktreePath, token,
+                        "log", "-n", perPath.ToString(), "--pretty=format:%h %s", "--", path).ConfigureAwait(false);
+                    foreach (string raw in output.Replace("\r\n", "\n").Split('\n'))
+                    {
+                        string line = raw.Trim();
+                        if (line.Length == 0) continue;
+                        results.Add(path.Trim() + ": " + line);
+                    }
+                }
+                catch
+                {
+                    // Best-effort: an unknown path or a git failure contributes no entries.
+                }
+            }
+            return results;
+        }
+
+        /// <inheritdoc />
+        public async Task<IReadOnlyList<string>> FindExistingSubjectTermsAsync(string worktreePath, IReadOnlyList<string> terms, CancellationToken token = default)
+        {
+            List<string> found = new List<string>();
+            if (String.IsNullOrEmpty(worktreePath) || terms == null || terms.Count == 0) return found;
+
+            foreach (string term in terms)
+            {
+                if (String.IsNullOrWhiteSpace(term)) continue;
+                bool present = false;
+
+                // A tracked filename containing the term.
+                try
+                {
+                    string files = await RunGitAsync(worktreePath, token, "ls-files", "*" + term + "*").ConfigureAwait(false);
+                    if (!String.IsNullOrWhiteSpace(files)) present = true;
+                }
+                catch { }
+
+                // Or the term appears in tracked file contents.
+                if (!present)
+                {
+                    try
+                    {
+                        string grep = await RunGitAsync(worktreePath, token, "grep", "-l", "-F", "-e", term).ConfigureAwait(false);
+                        if (!String.IsNullOrWhiteSpace(grep)) present = true;
+                    }
+                    catch { }
+                }
+
+                if (present) found.Add(term.Trim());
+            }
+            return found;
+        }
+
+        /// <inheritdoc />
         public async Task<IReadOnlyList<string>> GetChangedFilesSinceAsync(string worktreePath, string startCommit, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(worktreePath)) throw new ArgumentNullException(nameof(worktreePath));
