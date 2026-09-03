@@ -34,6 +34,12 @@ namespace Armada.Server.Mcp
         public string? Persona { get; set; }
 
         /// <summary>
+        /// Execution mode: Implementation (default write mission), Audit, or Research (read-only modes that
+        /// produce a written report instead of a commit). Null defaults to Implementation.
+        /// </summary>
+        public string? Mode { get; set; }
+
+        /// <summary>
         /// Optional required capability tier for dispatch routing: Economy, Standard, or Premium.
         /// Null routes to any idle captain (default behavior).
         /// </summary>

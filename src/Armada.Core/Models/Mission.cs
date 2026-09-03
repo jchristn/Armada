@@ -84,6 +84,13 @@ namespace Armada.Core.Models
         public MissionStatusEnum Status { get; set; } = MissionStatusEnum.Pending;
 
         /// <summary>
+        /// Execution mode. Implementation (default) is a write mission that lands its diff; Audit and
+        /// Research are read-only modes that produce a written report and whose empty diff is treated as
+        /// success rather than a no-op failure.
+        /// </summary>
+        public MissionModeEnum Mode { get; set; } = MissionModeEnum.Implementation;
+
+        /// <summary>
         /// Mission priority (lower is higher priority).
         /// </summary>
         public int Priority { get; set; } = 100;

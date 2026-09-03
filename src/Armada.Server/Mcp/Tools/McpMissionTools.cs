@@ -71,6 +71,7 @@ namespace Armada.Server.Mcp.Tools
                         vesselId = new { type = "string", description = "Target vessel ID (vsl_ prefix)" },
                         voyageId = new { type = "string", description = "Optional voyage ID to associate with (vyg_ prefix)" },
                         persona = new { type = "string", description = "Persona for this mission (e.g. Worker, Architect, Judge, Test Engineer)" },
+                        mode = new { type = "string", description = "Execution mode: Implementation (default), Audit, or Research. Audit and Research are read-only modes that produce a written report instead of a commit; their empty diff is treated as success." },
                         selectedPlaybooks = new
                         {
                             type = "array",
@@ -102,6 +103,8 @@ namespace Armada.Server.Mcp.Tools
                     mission.Persona = request.Persona;
                     if (!String.IsNullOrWhiteSpace(request.Tier) && Enum.TryParse<CaptainTierEnum>(request.Tier.Trim(), true, out CaptainTierEnum missionTier))
                         mission.Tier = missionTier;
+                    if (!String.IsNullOrWhiteSpace(request.Mode) && Enum.TryParse<MissionModeEnum>(request.Mode.Trim(), true, out MissionModeEnum missionMode))
+                        mission.Mode = missionMode;
                     mission.SelectedPlaybooks = request.SelectedPlaybooks ?? new List<SelectedPlaybook>();
                     mission = await admiral.DispatchMissionAsync(mission).ConfigureAwait(false);
                     if (mission.Status == Armada.Core.Enums.MissionStatusEnum.Pending)
@@ -132,7 +135,8 @@ namespace Armada.Server.Mcp.Tools
                         branchName = new { type = "string", description = "Git branch name for this mission" },
                         prUrl = new { type = "string", description = "Pull request URL" },
                         parentMissionId = new { type = "string", description = "Parent mission ID for sub-tasks (msn_ prefix)" },
-                        persona = new { type = "string", description = "Persona for this mission (e.g. Worker, Architect, Judge, Test Engineer)" }
+                        persona = new { type = "string", description = "Persona for this mission (e.g. Worker, Architect, Judge, Test Engineer)" },
+                        mode = new { type = "string", description = "Execution mode: Implementation, Audit, or Research (read-only report modes)" }
                     },
                     required = new[] { "missionId" }
                 },
@@ -160,6 +164,8 @@ namespace Armada.Server.Mcp.Tools
                         mission.ParentMissionId = request.ParentMissionId;
                     if (request.Persona != null)
                         mission.Persona = request.Persona;
+                    if (!String.IsNullOrWhiteSpace(request.Mode) && Enum.TryParse<MissionModeEnum>(request.Mode.Trim(), true, out MissionModeEnum updatedMode))
+                        mission.Mode = updatedMode;
                     mission.LastUpdateUtc = DateTime.UtcNow;
                     mission = await database.Missions.UpdateAsync(mission).ConfigureAwait(false);
                     return (object)mission;

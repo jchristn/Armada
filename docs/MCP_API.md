@@ -1588,6 +1588,8 @@ Create and dispatch a standalone mission to a vessel. The Admiral assigns a capt
     "description": { "type": "string", "description": "Mission description/instructions" },
     "vesselId": { "type": "string", "description": "Target vessel ID (vsl_ prefix)" },
     "voyageId": { "type": "string", "description": "Optional voyage ID to associate with (vyg_ prefix)" },
+    "persona": { "type": "string", "description": "Persona for this mission (e.g. Worker, Architect, Judge, Test Engineer)" },
+    "mode": { "type": "string", "description": "Execution mode: Implementation (default), Audit, or Research. Audit and Research are read-only modes that produce a written report instead of a commit; their empty diff is treated as success, not a no-op failure." },
     "selectedPlaybooks": {
       "type": "array",
       "description": "Optional ordered playbook selections for this mission",
@@ -1627,7 +1629,9 @@ Update an existing mission's metadata fields. Operational fields (status, timest
     "priority": { "type": "integer", "description": "New priority (lower is higher priority)" },
     "branchName": { "type": "string", "description": "Git branch name for this mission" },
     "prUrl": { "type": "string", "description": "Pull request URL" },
-    "parentMissionId": { "type": "string", "description": "Parent mission ID for sub-tasks (msn_ prefix)" }
+    "parentMissionId": { "type": "string", "description": "Parent mission ID for sub-tasks (msn_ prefix)" },
+    "persona": { "type": "string", "description": "Persona for this mission (e.g. Worker, Architect, Judge, Test Engineer)" },
+    "mode": { "type": "string", "description": "Execution mode: Implementation, Audit, or Research (read-only report modes)" }
   },
   "required": ["missionId"]
 }
@@ -1644,6 +1648,8 @@ Update an existing mission's metadata fields. Operational fields (status, timest
 | `branchName` | No | Git branch name |
 | `prUrl` | No | Pull request URL |
 | `parentMissionId` | No | Parent mission ID for sub-tasks |
+| `persona` | No | Persona for this mission |
+| `mode` | No | Execution mode: Implementation, Audit, or Research |
 
 **Response:** Updated [Mission](#mission) object, or `{ "Error": "Mission not found" }`.
 

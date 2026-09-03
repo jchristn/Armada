@@ -650,6 +650,10 @@ export default function MissionDetail() {
           <StatusBadge status={mission.status} />
         </div>
         <div className="detail-field">
+          <span className="detail-label">{t('Mode')}</span>
+          <span>{t(mission.mode || 'Implementation')}</span>
+        </div>
+        <div className="detail-field">
           <span className="detail-label">{t('Review Gate')}</span>
           <span>
             {mission.requiresReview

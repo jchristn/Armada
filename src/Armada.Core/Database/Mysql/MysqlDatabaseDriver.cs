@@ -556,6 +556,11 @@ namespace Armada.Core.Database.Mysql
                     56,
                     "Add token_usage table for per-model token accounting",
                     TableQueries.MigrationV56Statements
+                ),
+                new SchemaMigration(
+                    57,
+                    "Add mission execution mode (Implementation/Audit/Research)",
+                    TableQueries.MigrationV57Statements
                 )
             };
         }

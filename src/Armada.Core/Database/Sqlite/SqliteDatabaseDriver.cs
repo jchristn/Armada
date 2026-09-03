@@ -607,6 +607,13 @@ namespace Armada.Core.Database.Sqlite
             mission.Title = reader["title"].ToString()!;
             mission.Description = NullableString(reader["description"]);
             mission.Status = Enum.Parse<MissionStatusEnum>(reader["status"].ToString()!);
+            try
+            {
+                string? missionMode = NullableString(reader["mode"]);
+                if (!String.IsNullOrEmpty(missionMode) && Enum.TryParse<MissionModeEnum>(missionMode, out MissionModeEnum parsedMissionMode))
+                    mission.Mode = parsedMissionMode;
+            }
+            catch { }
             mission.Priority = Convert.ToInt32(reader["priority"]);
             mission.ParentMissionId = NullableString(reader["parent_mission_id"]);
             mission.BranchName = NullableString(reader["branch_name"]);

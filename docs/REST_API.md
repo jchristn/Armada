@@ -1426,6 +1426,8 @@ Create and dispatch a new mission. If a `VesselId` is provided, the Admiral will
 | `VesselId` | string | no | Target vessel (required for auto-dispatch) |
 | `VoyageId` | string | no | Parent voyage ID |
 | `Priority` | int | no | Priority (lower = higher priority, default: 100) |
+| `Persona` | string | no | Persona for this mission (e.g. Worker, Architect, Judge) |
+| `Mode` | string | no | Execution mode: `Implementation` (default), `Audit`, or `Research`. Audit and Research are read-only modes that produce a written report instead of a commit; their empty diff is treated as success rather than a no-op failure. |
 | `SelectedPlaybooks` | array | no | Ordered [SelectedPlaybook](#selectedplaybook) rows for this standalone mission |
 
 **Response:** `201 Created` - [Mission](#mission)
@@ -4308,6 +4310,7 @@ An atomic unit of work assigned to a captain.
   "Title": "Fix login bug",
   "Description": "The login form does not validate email addresses",
   "Status": "InProgress",
+  "Mode": "Implementation",
   "Priority": 100,
   "SelectedPlaybooks": [
     {
@@ -4346,6 +4349,7 @@ An atomic unit of work assigned to a captain.
 | `Title` | string | `"New Mission"` | Mission title |
 | `Description` | string? | null | Detailed instructions for the AI agent |
 | `Status` | [MissionStatusEnum](#missionstatusenum) | `Pending` | Current status |
+| `Mode` | [MissionModeEnum](#missionmodeenum) | `Implementation` | Execution mode. `Audit` and `Research` are read-only modes whose empty diff is treated as success |
 | `Priority` | int | 100 | Priority (lower number = higher priority) |
 | `SelectedPlaybooks` | array\<[SelectedPlaybook](#selectedplaybook)\> | `[]` | Ordered playbook selections requested for the mission |
 | `PlaybookSnapshots` | array\<[MissionPlaybookSnapshot](#missionplaybooksnapshot)\> | `[]` | Immutable playbook materialization used for execution |
@@ -4762,6 +4766,16 @@ All enumerations serialize as strings in JSON (e.g., `"InProgress"`, not `2`).
 | `Failed` | Mission failed (terminal) |
 | `LandingFailed` | Landing (merge/PR) failed; may be retried |
 | `Cancelled` | Mission cancelled (terminal) |
+
+---
+
+#### MissionModeEnum
+
+| Value | Description |
+|---|---|
+| `Implementation` | Standard write mission: the captain changes the repository and the result lands or holds for review. An empty diff is treated as a no-op failure. This is the default. |
+| `Audit` | Read-only audit: the captain inspects the repository and reports findings without modifying files. The landing gate treats "no commit" as success. |
+| `Research` | Read-only research: the captain investigates a question and reports its conclusions without modifying files. The landing gate treats "no commit" as success. |
 
 ---
 

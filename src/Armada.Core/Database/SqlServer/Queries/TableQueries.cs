@@ -924,6 +924,11 @@ namespace Armada.Core.Database.SqlServer.Queries
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_token_usage_created') CREATE INDEX idx_token_usage_created ON token_usage(created_utc DESC);",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_token_usage_tenant_created') CREATE INDEX idx_token_usage_tenant_created ON token_usage(tenant_id, created_utc DESC);",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_token_usage_model') CREATE INDEX idx_token_usage_model ON token_usage(model);"
+                ),
+                new SchemaMigration(
+                    57,
+                    "Add mission execution mode (Implementation/Audit/Research)",
+                    @"IF COL_LENGTH('missions', 'mode') IS NULL ALTER TABLE missions ADD mode NVARCHAR(32) NOT NULL CONSTRAINT DF_missions_mode DEFAULT 'Implementation';"
                 )
             };
         }

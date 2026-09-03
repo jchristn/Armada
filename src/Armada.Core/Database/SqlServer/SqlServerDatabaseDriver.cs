@@ -520,6 +520,13 @@ namespace Armada.Core.Database.SqlServer
             mission.Title = reader["title"].ToString()!;
             mission.Description = NullableString(reader["description"]);
             mission.Status = Enum.Parse<MissionStatusEnum>(reader["status"].ToString()!);
+            try
+            {
+                string? missionMode = NullableString(reader["mode"]);
+                if (!String.IsNullOrEmpty(missionMode) && Enum.TryParse<MissionModeEnum>(missionMode, out MissionModeEnum parsedMissionMode))
+                    mission.Mode = parsedMissionMode;
+            }
+            catch { }
             mission.Priority = Convert.ToInt32(reader["priority"]);
             try { mission.RedispatchAttempts = Convert.ToInt32(reader["redispatch_attempts"]); } catch { }
             try

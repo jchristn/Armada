@@ -1383,7 +1383,9 @@ namespace Armada.Core.Database.Sqlite.Queries
                     );",
                     @"CREATE INDEX IF NOT EXISTS idx_token_usage_created ON token_usage(created_utc DESC);",
                     @"CREATE INDEX IF NOT EXISTS idx_token_usage_tenant_created ON token_usage(tenant_id, created_utc);",
-                    @"CREATE INDEX IF NOT EXISTS idx_token_usage_model ON token_usage(model);")
+                    @"CREATE INDEX IF NOT EXISTS idx_token_usage_model ON token_usage(model);"),
+                new SchemaMigration(57, "Add mission execution mode (Implementation/Audit/Research)",
+                    @"ALTER TABLE missions ADD COLUMN mode TEXT NOT NULL DEFAULT 'Implementation';")
             };
         }
 

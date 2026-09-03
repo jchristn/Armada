@@ -903,6 +903,10 @@ namespace Armada.Core.Services
                 return;
             }
 
+            // Read-only modes (Audit/Research) produce a written report, not a commit. Their empty diff is a
+            // successful outcome, so they skip no-op rejection and never attempt landing.
+            bool isReadOnlyMission = MissionModeContract.IsReadOnly(mission.Mode);
+
             // Mark mission as work produced (agent finished, landing not yet attempted)
             mission.Status = MissionStatusEnum.WorkProduced;
             mission.ProcessId = null;
@@ -986,7 +990,7 @@ namespace Armada.Core.Services
             // Reject a no-op false-complete (fast exit, empty diff, trivial output): re-dispatch to a
             // fresh captain up to a bounded number of times, then fail to the operator inbox. Skipped
             // when the mission already failed scope validation.
-            if (!failedForScopeViolation &&
+            if (!failedForScopeViolation && !isReadOnlyMission &&
                 await TryRejectNoOpCompletionAsync(mission, dock, token).ConfigureAwait(false))
             {
                 return;
@@ -1073,8 +1077,26 @@ namespace Armada.Core.Services
                 !awaitingManualReview &&
                 !preparedDownstreamStages &&
                 !hasDependentPipelineStages &&
+                !isReadOnlyMission &&
                 (mission.Status == MissionStatusEnum.WorkProduced ||
                 mission.Status == MissionStatusEnum.PullRequestOpen);
+
+            // Read-only missions (Audit/Research) that are not held for review or feeding a pipeline stage
+            // complete directly: there is nothing to land, and an empty diff is the expected outcome.
+            if (isReadOnlyMission &&
+                !awaitingManualReview &&
+                !preparedDownstreamStages &&
+                !hasDependentPipelineStages &&
+                mission.Status == MissionStatusEnum.WorkProduced)
+            {
+                mission.Status = MissionStatusEnum.Complete;
+                mission.CompletedUtc = DateTime.UtcNow;
+                mission.LastUpdateUtc = DateTime.UtcNow;
+                await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                await UpdateVoyageTerminalStatusAsync(mission.VoyageId, token).ConfigureAwait(false);
+                _Logging.Info(_Header + "read-only " + mission.Mode + " mission " + mission.Id +
+                    " completed without landing (no commit expected)");
+            }
 
             // Per-vessel auto-land predicate: a change that is too large or touches denied/out-of-scope
             // paths holds for review instead of landing unattended.
@@ -1252,6 +1274,15 @@ namespace Armada.Core.Services
             templateParams["PersonaPrompt"] = personaPrompt;
             content += await ResolveSectionAsync("mission.metadata", templateParams, token).ConfigureAwait(false);
             content += "\n";
+
+            // Mission-mode contract: read-only modes (Audit/Research) get a report-shaped brief that forbids
+            // repository changes and states that an empty diff is a successful outcome. Write missions add nothing.
+            string missionModeSection = MissionModeContract.BuildBriefSection(mission.Mode);
+            if (!String.IsNullOrEmpty(missionModeSection))
+            {
+                content += missionModeSection;
+                content += "\n";
+            }
 
             // Resolved git anchors (start commit, target branch, working branch) so the captain does not
             // burn opening turns deriving them. Best-effort: a git failure degrades to no section.

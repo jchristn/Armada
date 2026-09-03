@@ -54,5 +54,11 @@ namespace Armada.Server.Mcp
         /// Persona for this mission (e.g. Worker, Architect, Judge, Test Engineer).
         /// </summary>
         public string? Persona { get; set; }
+
+        /// <summary>
+        /// Execution mode: Implementation, Audit, or Research. Read-only modes (Audit, Research) produce a
+        /// written report instead of a commit.
+        /// </summary>
+        public string? Mode { get; set; }
     }
 }

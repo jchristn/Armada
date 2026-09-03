@@ -211,6 +211,9 @@ export interface CaptainToolAccessResult {
   tools: CaptainToolSummary[];
 }
 
+/** Execution mode of a mission. Audit and Research are read-only modes that produce a report, not a commit. */
+export type MissionMode = 'Implementation' | 'Audit' | 'Research';
+
 export interface Mission {
   id: string;
   tenantId: string | null;
@@ -222,6 +225,7 @@ export interface Mission {
   title: string;
   description: string | null;
   status: string;
+  mode: MissionMode;
   priority: number;
   parentMissionId: string | null;
   persona: string | null;

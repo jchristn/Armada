@@ -64,10 +64,10 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 {
                     cmd.Connection = conn;
                     cmd.CommandText = @"INSERT INTO missions (id, tenant_id, user_id, voyage_id, vessel_id, captain_id, requested_captain_id, title, description,
-                        status, priority, parent_mission_id, branch_name, dock_id, process_id,
+                        status, mode, priority, parent_mission_id, branch_name, dock_id, process_id,
                         pr_url, commit_hash, diff_snapshot, agent_output, persona, depends_on_mission_id, failure_reason, requires_review, review_deny_action, review_comment, reviewed_by_user_id, review_requested_utc, reviewed_utc, review_deadline_utc, total_runtime_ms, redispatch_attempts, tier, created_utc, started_utc, completed_utc, last_update_utc)
                         VALUES (@id, @tenant_id, @user_id, @voyage_id, @vessel_id, @captain_id, @requested_captain_id, @title, @description,
-                        @status, @priority, @parent_mission_id, @branch_name, @dock_id, @process_id,
+                        @status, @mode, @priority, @parent_mission_id, @branch_name, @dock_id, @process_id,
                         @pr_url, @commit_hash, @diff_snapshot, @agent_output, @persona, @depends_on_mission_id, @failure_reason, @requires_review, @review_deny_action, @review_comment, @reviewed_by_user_id, @review_requested_utc, @reviewed_utc, @review_deadline_utc, @total_runtime_ms, @redispatch_attempts, @tier, @created_utc, @started_utc, @completed_utc, @last_update_utc);";
                     AddMissionParameters(cmd, mission);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
@@ -131,6 +131,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         voyage_id = @voyage_id, vessel_id = @vessel_id, captain_id = @captain_id,
                         requested_captain_id = @requested_captain_id,
                         title = @title, description = @description, status = @status,
+                        mode = @mode,
                         priority = @priority, parent_mission_id = @parent_mission_id,
                         branch_name = @branch_name, dock_id = @dock_id, process_id = @process_id,
                         pr_url = @pr_url, commit_hash = @commit_hash, diff_snapshot = @diff_snapshot,
@@ -697,6 +698,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@title", mission.Title);
             cmd.Parameters.AddWithValue("@description", (object?)mission.Description ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@status", mission.Status.ToString());
+            cmd.Parameters.AddWithValue("@mode", mission.Mode.ToString());
             cmd.Parameters.AddWithValue("@priority", mission.Priority);
             cmd.Parameters.AddWithValue("@parent_mission_id", (object?)mission.ParentMissionId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@branch_name", (object?)mission.BranchName ?? DBNull.Value);
@@ -798,6 +800,13 @@ namespace Armada.Core.Database.Postgresql.Implementations
             mission.Title = reader["title"].ToString()!;
             mission.Description = NullableString(reader["description"]);
             mission.Status = Enum.Parse<MissionStatusEnum>(reader["status"].ToString()!);
+            try
+            {
+                string? missionMode = NullableString(reader["mode"]);
+                if (!String.IsNullOrEmpty(missionMode) && Enum.TryParse<MissionModeEnum>(missionMode, out MissionModeEnum parsedMissionMode))
+                    mission.Mode = parsedMissionMode;
+            }
+            catch { }
             mission.Priority = Convert.ToInt32(reader["priority"]);
             mission.ParentMissionId = NullableString(reader["parent_mission_id"]);
             mission.BranchName = NullableString(reader["branch_name"]);

@@ -1278,6 +1278,14 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration v57 statements: add the mission execution mode column (Implementation/Audit/Research).
+        /// </summary>
+        public static readonly string[] MigrationV57Statements = new string[]
+        {
+            @"ALTER TABLE missions ADD COLUMN mode VARCHAR(32) NOT NULL DEFAULT 'Implementation';"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]
