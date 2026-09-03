@@ -61,9 +61,11 @@ namespace Armada.Core.Services
 
         private static bool TryFormatRuntimeSpecificEvent(string json, Armada.Core.Enums.AgentRuntimeEnum runtime, FormattedLogLine result)
         {
-            // Claude Code / Codex stream a "type"-tagged event with tool_use content blocks; other runtimes
-            // use the shared eventType shape handled by TryFormatJsonEvent.
-            if (runtime != Armada.Core.Enums.AgentRuntimeEnum.ClaudeCode && runtime != Armada.Core.Enums.AgentRuntimeEnum.Codex)
+            // Claude Code / Codex stream a "type"-tagged event with tool_use content blocks; OpenCode streams
+            // its own "type"-tagged events with a nested "part"; other runtimes use the shared eventType shape.
+            if (runtime != Armada.Core.Enums.AgentRuntimeEnum.ClaudeCode
+                && runtime != Armada.Core.Enums.AgentRuntimeEnum.Codex
+                && runtime != Armada.Core.Enums.AgentRuntimeEnum.OpenCode)
                 return false;
 
             try
@@ -73,6 +75,32 @@ namespace Armada.Core.Services
                 if (root.ValueKind != JsonValueKind.Object) return false;
 
                 string type = root.TryGetProperty("type", out JsonElement ty) && ty.ValueKind == JsonValueKind.String ? ty.GetString() ?? "" : "";
+
+                // OpenCode events: a nested "part" carries the tool name / assistant text.
+                if (runtime == Armada.Core.Enums.AgentRuntimeEnum.OpenCode
+                    && root.TryGetProperty("part", out JsonElement ocPart) && ocPart.ValueKind == JsonValueKind.Object)
+                {
+                    if (type == "tool_use" && ocPart.TryGetProperty("tool", out JsonElement ocTool) && ocTool.ValueKind == JsonValueKind.String)
+                    {
+                        string? status = ocPart.TryGetProperty("state", out JsonElement st) && st.ValueKind == JsonValueKind.Object
+                            && st.TryGetProperty("status", out JsonElement ss) && ss.ValueKind == JsonValueKind.String ? ss.GetString() : null;
+                        result.IsToolCall = true;
+                        result.ToolName = ocTool.GetString();
+                        result.Text = "-> tool " + (result.ToolName ?? "unknown") + (String.IsNullOrEmpty(status) ? "" : " (" + status + ")");
+                        return true;
+                    }
+                    if (type == "text" && ocPart.TryGetProperty("text", out JsonElement ocText) && ocText.ValueKind == JsonValueKind.String)
+                    {
+                        result.Text = ocText.GetString() ?? "";
+                        return true;
+                    }
+                    // A step/other OpenCode event with no display text: drop it rather than echo raw JSON.
+                    if (type == "step_start" || type == "step_finish")
+                    {
+                        result.Dropped = true;
+                        return true;
+                    }
+                }
 
                 // A bare tool_use event.
                 if (type == "tool_use" && root.TryGetProperty("name", out JsonElement directName) && directName.ValueKind == JsonValueKind.String)

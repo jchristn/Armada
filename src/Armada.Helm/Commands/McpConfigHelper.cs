@@ -82,11 +82,15 @@ namespace Armada.Helm.Commands
         }
 
         /// <summary>
-        /// Path to OpenCode's global config file (opencode.json).
+        /// Path to OpenCode's global config file. Prefers an existing opencode.jsonc (which OpenCode reads)
+        /// so we update the active file; otherwise targets opencode.json.
         /// </summary>
         internal static string GetOpenCodeConfigPath()
         {
-            return Path.Combine(GetOpenCodeConfigDirectory(), "opencode.json");
+            string dir = GetOpenCodeConfigDirectory();
+            string jsonc = Path.Combine(dir, "opencode.jsonc");
+            if (File.Exists(jsonc)) return jsonc;
+            return Path.Combine(dir, "opencode.json");
         }
 
         /// <summary>
@@ -869,7 +873,12 @@ namespace Armada.Helm.Commands
                 return new JsonObject();
             }
 
-            JsonNode? node = JsonNode.Parse(text);
+            // Tolerate JSONC (comments / trailing commas) so config files like opencode.jsonc parse cleanly.
+            JsonNode? node = JsonNode.Parse(text, null, new System.Text.Json.JsonDocumentOptions
+            {
+                CommentHandling = System.Text.Json.JsonCommentHandling.Skip,
+                AllowTrailingCommas = true,
+            });
             return node as JsonObject ?? new JsonObject();
         }
 

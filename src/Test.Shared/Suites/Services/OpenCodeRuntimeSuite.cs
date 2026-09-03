@@ -87,10 +87,16 @@ namespace Test.Shared.Suites.Services
                 AssertNull(ReasoningEffortTranslator.ToOpenCodeVariant(null));
             }));
 
-            // ---- JSONL protocol handling ----
-            cases.Add(Case("protocol_event_recognized", "A JSON object event with a type is a protocol line", TestTags.Positive, () =>
+            // ---- JSONL protocol handling (fixtures match real OpenCode 1.18 --format json output) ----
+            const string realTextEvent = "{\"type\":\"text\",\"timestamp\":1788469553125,\"sessionID\":\"ses_x\",\"part\":{\"id\":\"prt_x\",\"type\":\"text\",\"text\":\"Hi there!\"}}";
+            const string realToolEvent = "{\"type\":\"tool_use\",\"timestamp\":1788469590116,\"sessionID\":\"ses_y\",\"part\":{\"type\":\"tool\",\"tool\":\"bash\",\"callID\":\"call-1\",\"state\":{\"status\":\"completed\",\"input\":{\"command\":\"echo hi\"},\"output\":\"hi\\n\",\"metadata\":{\"exit\":0}}}}";
+            const string realStepEvent = "{\"type\":\"step_start\",\"timestamp\":1788469550801,\"sessionID\":\"ses_z\",\"part\":{\"type\":\"step-start\"}}";
+
+            cases.Add(Case("protocol_event_recognized", "Real OpenCode text/tool/step events are protocol lines", TestTags.Positive, () =>
             {
-                AssertTrue(OpenCodeRuntime.IsProtocolEventLine("{\"type\":\"message\",\"part\":{\"text\":\"hello\"}}"), "a typed JSON object is a protocol event");
+                AssertTrue(OpenCodeRuntime.IsProtocolEventLine(realTextEvent), "a text event is a protocol event");
+                AssertTrue(OpenCodeRuntime.IsProtocolEventLine(realToolEvent), "a tool_use event is a protocol event");
+                AssertTrue(OpenCodeRuntime.IsProtocolEventLine(realStepEvent), "a step_start event is a protocol event");
             }));
 
             cases.Add(Case("plain_text_is_not_protocol", "A plain text line is not a protocol event", TestTags.Negative, () =>
@@ -99,15 +105,28 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(OpenCodeRuntime.IsProtocolEventLine("{ not json"), "malformed JSON is not a protocol event");
             }));
 
-            cases.Add(Case("assistant_text_extracted", "Human-visible text is extracted from a protocol event", TestTags.Positive, () =>
+            cases.Add(Case("assistant_text_extracted", "Human-visible text is extracted from a real text event", TestTags.Positive, () =>
             {
-                AssertEqual("hello", OpenCodeRuntime.TryExtractAssistantText("{\"type\":\"message\",\"part\":{\"text\":\"hello\"}}"));
-                AssertEqual("hi", OpenCodeRuntime.TryExtractAssistantText("{\"type\":\"message\",\"text\":\"hi\"}"));
+                AssertEqual("Hi there!", OpenCodeRuntime.TryExtractAssistantText(realTextEvent));
             }));
 
-            cases.Add(Case("tool_event_has_no_text", "A tool-only event yields no assistant text", TestTags.Negative, () =>
+            cases.Add(Case("tool_event_has_no_text", "A tool_use event yields no assistant text", TestTags.Negative, () =>
             {
-                AssertNull(OpenCodeRuntime.TryExtractAssistantText("{\"type\":\"tool\",\"name\":\"bash\"}"));
+                AssertNull(OpenCodeRuntime.TryExtractAssistantText(realToolEvent));
+            }));
+
+            cases.Add(Case("formatter_resolves_opencode_tool", "The runtime-log formatter resolves an OpenCode tool_use event", TestTags.Positive, () =>
+            {
+                FormattedLogLine line = RuntimeLogFormatter.Format(realToolEvent, AgentRuntimeEnum.OpenCode);
+                AssertTrue(line.IsToolCall, "expected a tool call");
+                AssertEqual("bash", line.ToolName);
+                AssertTrue(line.Text.Contains("bash"), "the tool name should appear in the text");
+            }));
+
+            cases.Add(Case("formatter_drops_opencode_step", "The runtime-log formatter drops OpenCode step markers", TestTags.Negative, () =>
+            {
+                FormattedLogLine line = RuntimeLogFormatter.Format(realStepEvent, AgentRuntimeEnum.OpenCode);
+                AssertTrue(line.Dropped, "a step marker should be dropped, not echoed as raw JSON");
             }));
 
             // ---- Tier recognition ----

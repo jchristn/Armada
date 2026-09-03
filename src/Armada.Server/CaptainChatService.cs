@@ -293,18 +293,53 @@ namespace Armada.Server
 
                     if (isOpenCode && OpenCodeRuntime.IsProtocolEventLine(line))
                     {
-                        // OpenCode --format json streams protocol events; surface any human-visible text and
-                        // drop the raw JSON envelope so it never leaks into the reply.
-                        string? openCodeText = OpenCodeRuntime.TryExtractAssistantText(line);
-                        if (!String.IsNullOrEmpty(openCodeText))
+                        // OpenCode --format json streams "type"-tagged events with a nested "part". Surface
+                        // assistant text and tool-call chips; drop the raw JSON envelope so it never leaks.
+                        try
                         {
-                            lock (outputLock)
+                            using (JsonDocument doc = JsonDocument.Parse(line.Trim()))
                             {
-                                if (firstOutputUtc == null) firstOutputUtc = DateTime.UtcNow;
-                                if (output.Length < _MaxOutputChars) output.Append(openCodeText);
+                                JsonElement root = doc.RootElement;
+                                string ocType = root.TryGetProperty("type", out JsonElement oct) && oct.ValueKind == JsonValueKind.String ? oct.GetString() ?? "" : "";
+                                JsonElement part = root.TryGetProperty("part", out JsonElement p) && p.ValueKind == JsonValueKind.Object ? p : default;
+
+                                if (ocType == "text" && part.ValueKind == JsonValueKind.Object
+                                    && part.TryGetProperty("text", out JsonElement txt) && txt.ValueKind == JsonValueKind.String)
+                                {
+                                    string deltaText = txt.GetString() ?? String.Empty;
+                                    if (!String.IsNullOrEmpty(deltaText))
+                                    {
+                                        lock (outputLock)
+                                        {
+                                            if (firstOutputUtc == null) firstOutputUtc = DateTime.UtcNow;
+                                            if (output.Length < _MaxOutputChars) output.Append(deltaText);
+                                        }
+                                        EmitChunk(turnId, deltaText);
+                                    }
+                                }
+                                else if (ocType == "tool_use" && part.ValueKind == JsonValueKind.Object)
+                                {
+                                    string? toolName = part.TryGetProperty("tool", out JsonElement tnm) && tnm.ValueKind == JsonValueKind.String ? tnm.GetString() : null;
+                                    string? toolId = part.TryGetProperty("callID", out JsonElement cid) && cid.ValueKind == JsonValueKind.String ? cid.GetString() : null;
+                                    string? status = null;
+                                    string? argsJson = null;
+                                    string? resultJson = null;
+                                    bool? ok = null;
+                                    if (part.TryGetProperty("state", out JsonElement state) && state.ValueKind == JsonValueKind.Object)
+                                    {
+                                        status = state.TryGetProperty("status", out JsonElement stt) && stt.ValueKind == JsonValueKind.String ? stt.GetString() : null;
+                                        if (state.TryGetProperty("input", out JsonElement inp)) argsJson = Truncate(inp.GetRawText(), 4000);
+                                        if (state.TryGetProperty("output", out JsonElement outp) && outp.ValueKind == JsonValueKind.String) resultJson = Truncate(outp.GetString() ?? "", 16000);
+                                        if (state.TryGetProperty("metadata", out JsonElement md) && md.ValueKind == JsonValueKind.Object
+                                            && md.TryGetProperty("exit", out JsonElement ex) && ex.ValueKind == JsonValueKind.Number)
+                                            ok = ex.GetInt32() == 0;
+                                    }
+                                    string phase = String.Equals(status, "completed", StringComparison.OrdinalIgnoreCase) ? "completed" : "started";
+                                    EmitTool(turnId, new { turnId, phase, id = toolId, name = toolName, arguments = argsJson, ok, result = resultJson });
+                                }
                             }
-                            EmitChunk(turnId, openCodeText!);
                         }
+                        catch (JsonException) { }
                         return;
                     }
 
