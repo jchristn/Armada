@@ -635,7 +635,7 @@ Dispatch a new voyage with missions to a vessel. This is the primary way to assi
       }
     }
   },
-  "required": ["title", "vesselId", "missions"]
+  "required": ["title"]
 }
 ```
 
@@ -643,11 +643,18 @@ Dispatch a new voyage with missions to a vessel. This is the primary way to assi
 |---|---|---|---|
 | `title` | string | Yes | Voyage title |
 | `description` | string | No | Voyage description |
-| `vesselId` | string | Yes | Target vessel ID (prefix `vsl_`) |
-| `missions` | array | Yes | Array of mission objects with `title` and optional `description` |
+| `vesselId` | string | No | Target vessel ID (prefix `vsl_`). Omit (with no `missions`) to create a bare voyage; missions are added later. |
+| `missions` | array | No | Array of mission objects with `title` and optional `description`. Omit for a bare voyage. |
 | `pipelineId` | string | No | Pipeline ID to use for this voyage (overrides vessel/fleet default) |
-| `pipeline` | string | No | Pipeline name to use (convenience alias for `pipelineId` -- resolves by name) |
+| `pipeline` | string | No | Pipeline name to use (convenience alias for `pipelineId` -- resolves by name; a bad name is rejected) |
+| `objectiveId` | string | No | Objective (prefix `obj_`) to link this voyage to; must exist |
 | `selectedPlaybooks` | array | No | Ordered playbook selections with `playbookId` and `deliveryMode` |
+| `captainAssignments` | array | No | Per-persona captain overrides (preferred captain + fallback tier) |
+
+> **Parity with REST.** This tool and `POST /api/v1/voyages` funnel through the same validation: a linked
+> objective must exist, a pipeline name must resolve, and a request with no vessel or no missions is created
+> as a **bare voyage** rather than dispatched. Both surfaces accept and reject the same inputs; only the error
+> shape differs (structured `{ "Error": ..., "Code": ... }` here, HTTP status codes over REST).
 
 **Example Input:**
 

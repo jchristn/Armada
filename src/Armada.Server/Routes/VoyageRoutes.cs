@@ -133,15 +133,6 @@ namespace Armada.Server.Routes
                 }
                 VoyageRequest voyageReq = JsonSerializer.Deserialize<VoyageRequest>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as VoyageRequest.");
-                if (!String.IsNullOrWhiteSpace(voyageReq.ObjectiveId))
-                {
-                    Objective? objective = await _objectives.ReadAsync(ctx, voyageReq.ObjectiveId).ConfigureAwait(false);
-                    if (objective == null)
-                    {
-                        req.Http.Response.StatusCode = 404;
-                        return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Objective not found" };
-                    }
-                }
                 List<MissionDescription> missions = new List<MissionDescription>();
                 if (voyageReq.Missions != null)
                 {
@@ -151,17 +142,21 @@ namespace Armada.Server.Routes
                     }
                 }
 
-                // Resolve pipeline: explicit ID > name lookup > null (falls through to vessel/fleet default)
-                string? pipelineId = voyageReq.PipelineId;
-                if (String.IsNullOrEmpty(pipelineId) && !String.IsNullOrEmpty(voyageReq.Pipeline))
+                // Shared validation: objective existence, pipeline-by-name resolution, and bare-voyage
+                // detection all live in one place so REST and MCP accept and reject the same inputs.
+                DispatchValidationResult validation = await _admiral.ValidateDispatchAsync(
+                    voyageReq.ObjectiveId, voyageReq.PipelineId, voyageReq.Pipeline, voyageReq.VesselId, missions.Count, allowBareVoyage: true).ConfigureAwait(false);
+                if (!validation.IsValid)
                 {
-                    Pipeline? namedPipeline = await _database.Pipelines.ReadByNameAsync(voyageReq.Pipeline).ConfigureAwait(false);
-                    if (namedPipeline != null) pipelineId = namedPipeline.Id;
-                    else { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Pipeline not found: " + voyageReq.Pipeline }; }
+                    bool notFound = validation.Error == DispatchValidationErrorEnum.ObjectiveNotFound;
+                    req.Http.Response.StatusCode = notFound ? 404 : 400;
+                    return new ApiErrorResponse { Error = notFound ? ApiResultEnum.NotFound : ApiResultEnum.BadRequest, Message = validation.Message ?? "Invalid dispatch request" };
                 }
 
+                string? pipelineId = validation.ResolvedPipelineId;
+
                 Voyage voyage;
-                if (String.IsNullOrEmpty(voyageReq.VesselId) || missions.Count == 0)
+                if (validation.IsBareVoyage)
                 {
                     // Bare voyage creation (missions added separately)
                     voyage = new Voyage(voyageReq.Title, voyageReq.Description);

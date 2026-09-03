@@ -759,6 +759,11 @@ namespace Test.Shared.Suites.Services
             {
                 return Task.FromResult<Armada.Core.Services.AutoLandDecision?>(null);
             }
+
+            public Task<Armada.Core.Services.DispatchValidationResult> ValidateDispatchAsync(string? objectiveId, string? pipelineId, string? pipelineName, string? vesselId, int missionCount, bool allowBareVoyage, CancellationToken token = default)
+            {
+                return Task.FromResult(Armada.Core.Services.DispatchValidationResult.Valid(pipelineId, allowBareVoyage && (string.IsNullOrEmpty(vesselId) || missionCount == 0)));
+            }
         }
 
         /// <summary>

@@ -668,6 +668,46 @@ namespace Armada.Core.Services
             return _Missions.EvaluateAutoLandAsync(missionId, token);
         }
 
+        /// <inheritdoc />
+        public async Task<DispatchValidationResult> ValidateDispatchAsync(
+            string? objectiveId,
+            string? pipelineId,
+            string? pipelineName,
+            string? vesselId,
+            int missionCount,
+            bool allowBareVoyage,
+            CancellationToken token = default)
+        {
+            // Objective link must exist when supplied.
+            if (!String.IsNullOrWhiteSpace(objectiveId))
+            {
+                Objective? objective = await _Database.Objectives.ReadAsync(objectiveId!, token).ConfigureAwait(false);
+                if (objective == null)
+                    return DispatchValidationResult.Invalid(DispatchValidationErrorEnum.ObjectiveNotFound, "Objective not found: " + objectiveId);
+            }
+
+            // Resolve a pipeline by explicit id, else by name.
+            string? resolvedPipelineId = pipelineId;
+            if (String.IsNullOrWhiteSpace(resolvedPipelineId) && !String.IsNullOrWhiteSpace(pipelineName))
+            {
+                Pipeline? namedPipeline = await _Database.Pipelines.ReadByNameAsync(pipelineName!, token).ConfigureAwait(false);
+                if (namedPipeline == null)
+                    return DispatchValidationResult.Invalid(DispatchValidationErrorEnum.PipelineNotFound, "Pipeline not found: " + pipelineName);
+                resolvedPipelineId = namedPipeline.Id;
+            }
+
+            // A missing vessel or zero missions is a bare voyage when allowed, otherwise an error.
+            bool isBareVoyage = String.IsNullOrWhiteSpace(vesselId) || missionCount == 0;
+            if (isBareVoyage && !allowBareVoyage)
+            {
+                if (String.IsNullOrWhiteSpace(vesselId))
+                    return DispatchValidationResult.Invalid(DispatchValidationErrorEnum.MissingVessel, "A vessel id is required to dispatch a voyage.");
+                return DispatchValidationResult.Invalid(DispatchValidationErrorEnum.NoMissions, "At least one mission is required to dispatch a voyage.");
+            }
+
+            return DispatchValidationResult.Valid(resolvedPipelineId, isBareVoyage);
+        }
+
         public async Task HandleProcessExitAsync(int processId, int? exitCode, string captainId, string missionId, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));

@@ -732,6 +732,79 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("validate_dispatch_full_request_is_valid", "ValidateDispatchAsync accepts a full vessel+missions request", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), testDb.Driver, CreateSettings(), new StubGitService());
+                    Vessel vessel = await testDb.Driver.Vessels.CreateAsync(new Vessel("v", "https://github.com/test/repo.git"));
+
+                    DispatchValidationResult result = await service.ValidateDispatchAsync(null, null, null, vessel.Id, 2, allowBareVoyage: true);
+                    AssertTrue(result.IsValid, "a full request should be valid");
+                    AssertFalse(result.IsBareVoyage, "a vessel with missions is not a bare voyage");
+                }
+            }));
+
+            cases.Add(CaseAsync("validate_dispatch_unknown_objective_is_rejected", "ValidateDispatchAsync rejects an unknown objective", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), testDb.Driver, CreateSettings(), new StubGitService());
+                    Vessel vessel = await testDb.Driver.Vessels.CreateAsync(new Vessel("v", "https://github.com/test/repo.git"));
+
+                    DispatchValidationResult result = await service.ValidateDispatchAsync("obj_missing", null, null, vessel.Id, 1, allowBareVoyage: true);
+                    AssertFalse(result.IsValid, "an unknown objective should reject");
+                    AssertEqual(DispatchValidationErrorEnum.ObjectiveNotFound, result.Error);
+                }
+            }));
+
+            cases.Add(CaseAsync("validate_dispatch_unknown_pipeline_name_is_rejected", "ValidateDispatchAsync rejects an unknown pipeline name", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), testDb.Driver, CreateSettings(), new StubGitService());
+                    Vessel vessel = await testDb.Driver.Vessels.CreateAsync(new Vessel("v", "https://github.com/test/repo.git"));
+
+                    DispatchValidationResult result = await service.ValidateDispatchAsync(null, null, "NoSuchPipeline", vessel.Id, 1, allowBareVoyage: true);
+                    AssertFalse(result.IsValid, "an unknown pipeline name should reject");
+                    AssertEqual(DispatchValidationErrorEnum.PipelineNotFound, result.Error);
+                }
+            }));
+
+            cases.Add(CaseAsync("validate_dispatch_missing_vessel_bare_allowed_is_bare", "ValidateDispatchAsync treats a missing vessel as a bare voyage when allowed", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), testDb.Driver, CreateSettings(), new StubGitService());
+                    DispatchValidationResult result = await service.ValidateDispatchAsync(null, null, null, null, 0, allowBareVoyage: true);
+                    AssertTrue(result.IsValid, "a bare voyage is valid when allowed");
+                    AssertTrue(result.IsBareVoyage, "no vessel / no missions is a bare voyage");
+                }
+            }));
+
+            cases.Add(CaseAsync("validate_dispatch_missing_vessel_bare_disallowed_rejects", "ValidateDispatchAsync rejects a missing vessel when bare voyages are disallowed", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), testDb.Driver, CreateSettings(), new StubGitService());
+                    DispatchValidationResult result = await service.ValidateDispatchAsync(null, null, null, null, 1, allowBareVoyage: false);
+                    AssertFalse(result.IsValid, "a missing vessel should reject when bare is disallowed");
+                    AssertEqual(DispatchValidationErrorEnum.MissingVessel, result.Error);
+                }
+            }));
+
+            cases.Add(CaseAsync("validate_dispatch_zero_missions_bare_disallowed_rejects", "ValidateDispatchAsync rejects zero missions when bare voyages are disallowed", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), testDb.Driver, CreateSettings(), new StubGitService());
+                    Vessel vessel = await testDb.Driver.Vessels.CreateAsync(new Vessel("v", "https://github.com/test/repo.git"));
+                    DispatchValidationResult result = await service.ValidateDispatchAsync(null, null, null, vessel.Id, 0, allowBareVoyage: false);
+                    AssertFalse(result.IsValid, "zero missions should reject when bare is disallowed");
+                    AssertEqual(DispatchValidationErrorEnum.NoMissions, result.Error);
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Admiral Service",
