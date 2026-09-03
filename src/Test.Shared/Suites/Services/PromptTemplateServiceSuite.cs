@@ -122,9 +122,10 @@ namespace Test.Shared.Suites.Services
 
                     PromptTemplate? judge = await service.ResolveAsync("persona.judge").ConfigureAwait(false);
                     AssertNotNull(judge, "Judge template should resolve");
-                    AssertContains("## Completeness", judge!.Content, "Judge template should require a Completeness section");
-                    AssertContains("## Failure Modes", judge.Content, "Judge template should require a Failure Modes section");
-                    AssertContains("PASS is not allowed", judge.Content, "Judge template should constrain PASS when review is incomplete");
+                    AssertContains("## Correctness", judge!.Content, "Judge template should require a Correctness lens section");
+                    AssertContains("## Blast Radius", judge.Content, "Judge template should require a Blast Radius lens section");
+                    AssertContains("## Source Fidelity", judge.Content, "Judge template should require a Source Fidelity lens section");
+                    AssertContains("## Affected Case", judge.Content, "Judge template should require a concrete affected case to block");
 
                     PromptTemplate? testEngineer = await service.ResolveAsync("persona.test_engineer").ConfigureAwait(false);
                     AssertNotNull(testEngineer, "Test engineer template should resolve");

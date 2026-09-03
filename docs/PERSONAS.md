@@ -242,7 +242,7 @@ CREATE INDEX idx_personas_prompt_template ON personas(prompt_template_name);
 - [x] On startup, seed default personas if they don't exist:
   - `Worker` -- standard mission executor (current behavior)
   - `Architect` -- plans voyages and decomposes work into missions
-  - `Judge` -- reviews completed mission diffs for correctness and completeness
+  - `Judge` -- reviews completed mission diffs through three lenses (correctness, blast radius, source fidelity); must exhibit a concrete affected case to block
   - `Test Engineer` -- writes/updates tests for mission changes
 - [x] Built-in personas reference built-in prompt templates (`persona.worker`, etc.)
 

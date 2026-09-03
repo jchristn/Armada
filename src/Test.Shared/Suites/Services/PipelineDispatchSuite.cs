@@ -861,11 +861,11 @@ namespace Test.Shared.Suites.Services
 
                     Captain? judgeCaptain = await testDb.Driver.Captains.ReadAsync(apiJudge.CaptainId!).ConfigureAwait(false);
                     missionService.OnGetMissionOutput = _ =>
-                        "## Completeness\n" +
+                        "## Blast Radius\n" +
                         "The staged work covers the assigned requirements and there are no missing deliverables in this chain.\n\n" +
                         "## Correctness\n" +
                         "The implementation and test updates are coherent, and I do not see logic or scope defects in the reviewed diff.\n\n" +
-                        "## Tests\n" +
+                        "## Source Fidelity\n" +
                         "The automated tests added in the prior stage cover the reviewed behavior adequately for this mission.\n\n" +
                         "## Failure Modes\n" +
                         "I reviewed the relevant edge and failure behavior for this scope and did not find any unresolved blockers.\n\n" +
@@ -1021,11 +1021,11 @@ namespace Test.Shared.Suites.Services
 
                     Captain? activeJudgeCaptain = await testDb.Driver.Captains.ReadAsync(coreJudge.CaptainId!).ConfigureAwait(false);
                     missionService.OnGetMissionOutput = _ =>
-                        "## Completeness\n" +
+                        "## Blast Radius\n" +
                         "The upstream worker and test stages completed the requested scope and nothing material is missing.\n\n" +
                         "## Correctness\n" +
                         "I reviewed the diff and prior output and did not find correctness issues in the completed upstream chain.\n\n" +
-                        "## Tests\n" +
+                        "## Source Fidelity\n" +
                         "The upstream tests cover the changed behavior and are sufficient for this dependency chain.\n\n" +
                         "## Failure Modes\n" +
                         "Relevant error and edge paths were reviewed for this scope and I do not see unresolved safety concerns.\n\n" +
@@ -1633,7 +1633,7 @@ namespace Test.Shared.Suites.Services
                     Mission? reloadedJudge = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
                     AssertNotNull(reloadedJudge, "Judge mission should remain readable");
                     AssertEqual(MissionStatusEnum.Failed, reloadedJudge!.Status, "Judge NEEDS_REVISION should block landing");
-                    AssertEqual("Judge verdict: NEEDS_REVISION", reloadedJudge.FailureReason, "Judge failure reason should preserve verdict");
+                    AssertContains("Judge verdict: NEEDS_REVISION", reloadedJudge.FailureReason!, "Judge failure reason should preserve verdict");
                     AssertEqual(0, landingCalls, "Judge NEEDS_REVISION must not invoke landing");
                 }
             }));
@@ -1704,7 +1704,7 @@ namespace Test.Shared.Suites.Services
                     Mission? reloadedJudge = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
                     AssertNotNull(reloadedJudge, "Judge mission should remain readable");
                     AssertEqual(MissionStatusEnum.Failed, reloadedJudge!.Status, "Judge should honor the final NEEDS_REVISION verdict instead of the legend");
-                    AssertEqual("Judge verdict: NEEDS_REVISION", reloadedJudge.FailureReason, "Judge failure reason should preserve verdict");
+                    AssertContains("Judge verdict: NEEDS_REVISION", reloadedJudge.FailureReason!, "Judge failure reason should preserve verdict");
                     AssertEqual(0, landingCalls, "Judge NEEDS_REVISION must not invoke landing");
                 }
             }));
@@ -1766,11 +1766,11 @@ namespace Test.Shared.Suites.Services
                     await testDb.Driver.Captains.UpdateAsync(judgeCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
-                        "## Completeness\n" +
+                        "## Blast Radius\n" +
                         "The mission requirements are fully implemented with no missing scope items.\n\n" +
                         "## Correctness\n" +
                         "The reviewed changes are logically consistent and I do not see defects in the touched paths.\n\n" +
-                        "## Tests\n" +
+                        "## Source Fidelity\n" +
                         "Automated coverage exists for the new behavior and the affected scenarios are exercised.\n\n" +
                         "## Failure Modes\n" +
                         "I reviewed error and edge behavior for this scope and found no unaddressed safety issues.\n\n" +
@@ -1844,11 +1844,11 @@ namespace Test.Shared.Suites.Services
                     await testDb.Driver.Captains.UpdateAsync(judgeCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
-                        "## Completeness\n" +
+                        "## Blast Radius\n" +
                         "Everything required by the mission is present and stays within the assigned scope.\n\n" +
                         "## Correctness\n" +
                         "The implementation follows the intended behavior and I did not find logic errors in the reviewed diff.\n\n" +
-                        "## Tests\n" +
+                        "## Source Fidelity\n" +
                         "The updated tests cover the changed behavior and are sufficient for this mission.\n\n" +
                         "## Failure Modes\n" +
                         "I explicitly reviewed edge and failure paths relevant to this change and found no remaining blockers.\n\n" +
@@ -1921,11 +1921,11 @@ namespace Test.Shared.Suites.Services
                     await testDb.Driver.Captains.UpdateAsync(judgeCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
-                        "## Completeness\n" +
+                        "## Blast Radius\n" +
                         "Everything required by the mission is present and stays within the assigned scope.\n\n" +
                         "## Correctness\n" +
                         "The implementation follows the intended behavior and I did not find logic errors in the reviewed diff.\n\n" +
-                        "## Tests\n" +
+                        "## Source Fidelity\n" +
                         "The updated tests cover the changed behavior and are sufficient for this mission.\n\n" +
                         "## Failure Modes\n" +
                         "I explicitly reviewed edge and failure paths relevant to this change and found no remaining blockers.\n\n" +
@@ -1994,11 +1994,11 @@ namespace Test.Shared.Suites.Services
                     await testDb.Driver.Captains.UpdateAsync(judgeCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
-                        "## Completeness\n" +
+                        "## Blast Radius\n" +
                         "The reviewed work is missing part of the required contract alignment.\n\n" +
                         "## Correctness\n" +
                         "The update path can still drop omitted settings, so I cannot approve it yet.\n\n" +
-                        "## Tests\n" +
+                        "## Source Fidelity\n" +
                         "Coverage is still missing for the omitted-field preservation path.\n\n" +
                         "## Failure Modes\n" +
                         "This can silently erase stored captain configuration during partial updates.\n\n" +
@@ -2009,7 +2009,7 @@ namespace Test.Shared.Suites.Services
                     Mission? reloadedJudge = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
                     AssertNotNull(reloadedJudge, "Judge mission should remain readable");
                     AssertEqual(MissionStatusEnum.Failed, reloadedJudge!.Status, "Judge failure should block landing");
-                    AssertEqual("Judge verdict: NEEDS_REVISION", reloadedJudge.FailureReason, "Failure reason should preserve the verdict");
+                    AssertContains("Judge verdict: NEEDS_REVISION", reloadedJudge.FailureReason!, "Failure reason should preserve the verdict");
                     AssertEqual(0, landingCalls, "Judge failure must not invoke landing");
 
                     List<Signal> signals = await testDb.Driver.Signals.EnumerateRecentAsync(10).ConfigureAwait(false);
@@ -2096,7 +2096,7 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(reloadedJudge, "Judge mission should remain readable");
                     AssertEqual(MissionStatusEnum.Failed, reloadedJudge!.Status, "PASS without structured review sections should be rejected");
                     AssertEqual(0, landingCalls, "Rejected PASS review should not invoke landing");
-                    AssertContains("missing required review sections", reloadedJudge.FailureReason, "Failure reason should explain why the PASS review was rejected");
+                    AssertContains("missing required lens sections", reloadedJudge.FailureReason!, "Failure reason should explain why the PASS review was rejected");
                 }
             }));
 

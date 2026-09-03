@@ -545,9 +545,10 @@ namespace Test.Shared.Suites.Services
                         await service.GenerateClaudeMdAsync(tempDir, judgeMission, vessel);
 
                         string judgeContent = await File.ReadAllTextAsync(Path.Combine(tempDir, "CLAUDE.md"));
-                        AssertContains("## Completeness", judgeContent, "Judge prompt should require a Completeness section");
-                        AssertContains("## Failure Modes", judgeContent, "Judge prompt should require a Failure Modes section");
-                        AssertContains("PASS is not allowed", judgeContent, "Judge prompt should constrain PASS approvals");
+                        AssertContains("## Correctness", judgeContent, "Judge prompt should require a Correctness lens section");
+                        AssertContains("## Blast Radius", judgeContent, "Judge prompt should require a Blast Radius lens section");
+                        AssertContains("## Source Fidelity", judgeContent, "Judge prompt should require a Source Fidelity lens section");
+                        AssertContains("## Affected Case", judgeContent, "Judge prompt should require a concrete affected case to block");
 
                         Mission testMission = new Mission();
                         testMission.Title = "Test coverage structure test";
@@ -601,8 +602,9 @@ namespace Test.Shared.Suites.Services
                         AssertContains("## Captain Instructions", content, "Custom captain instructions should still be included");
                         AssertContains("brief explanation", content, "Original captain instruction text should be preserved");
                         AssertContains("## Required Output Contract", content, "Generated instructions should append a structured output contract");
-                        AssertContains("## Completeness", content, "Judge output contract should require Completeness");
-                        AssertContains("## Failure Modes", content, "Judge output contract should require Failure Modes");
+                        AssertContains("## Correctness", content, "Judge output contract should require the Correctness lens");
+                        AssertContains("## Blast Radius", content, "Judge output contract should require the Blast Radius lens");
+                        AssertContains("## Affected Case", content, "Judge output contract should require a concrete affected case to block");
                         AssertContains("[ARMADA:VERDICT] PASS", content, "Judge output contract should preserve the standalone verdict signal");
                     }
                     finally
@@ -936,8 +938,8 @@ namespace Test.Shared.Suites.Services
                     string prompt = await MissionPromptBuilder.BuildLaunchPromptAsync(
                         mission, vessel, captain, dock, templateService).ConfigureAwait(false);
 
-                    AssertContains("## Completeness", prompt);
-                    AssertContains("## Failure Modes", prompt);
+                    AssertContains("## Correctness", prompt);
+                    AssertContains("## Blast Radius", prompt);
                     AssertContains("[ARMADA:VERDICT] PASS", prompt);
                     AssertContains("follow it exactly", prompt);
                 }

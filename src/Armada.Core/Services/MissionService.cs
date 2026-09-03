@@ -1008,24 +1008,51 @@ namespace Armada.Core.Services
             {
                 JudgeVerdict verdict = ParseJudgeVerdict(mission.AgentOutput);
                 string? verdictFailureReason = null;
+                bool rejectedPass = false;
+
+                // A PASS must be substantiated (three lenses + real narrative). A rejected PASS is not
+                // silently re-run: it is downgraded to a blocking verdict and the mission fails terminally
+                // with an explicit reason so an operator sees it rather than a quiet re-dispatch.
                 if (verdict == JudgeVerdict.Pass && !TryValidateJudgePassOutput(mission.AgentOutput, out verdictFailureReason))
                 {
                     verdict = JudgeVerdict.NeedsRevision;
+                    rejectedPass = true;
                 }
 
                 if (verdict != JudgeVerdict.Pass)
                 {
+                    // To block, the Judge must exhibit a concrete affected case. A block without one is a
+                    // contract violation: the mission still fails terminally, but the reason makes clear the
+                    // Judge did not substantiate the block rather than the work being definitively wrong.
+                    bool isBlockingVerdict = verdict == JudgeVerdict.Fail || verdict == JudgeVerdict.NeedsRevision;
+                    bool exhibitsAffectedCase = JudgeContract.ExhibitsAffectedCase(mission.AgentOutput);
+
+                    string blockingReason;
+                    if (rejectedPass)
+                    {
+                        blockingReason = "Judge PASS rejected (" + (verdictFailureReason ?? "unsubstantiated approval") + ")";
+                    }
+                    else if (isBlockingVerdict && !exhibitsAffectedCase)
+                    {
+                        blockingReason = "Judge verdict: " + (verdict == JudgeVerdict.Fail ? "FAIL" : "NEEDS_REVISION") +
+                            " but did not exhibit a concrete affected case; a block must cite a real affected file, line, or scenario";
+                    }
+                    else
+                    {
+                        blockingReason = verdict switch
+                        {
+                            JudgeVerdict.Fail => "Judge verdict: FAIL",
+                            JudgeVerdict.NeedsRevision => "Judge verdict: NEEDS_REVISION",
+                            _ => "Judge mission did not emit an explicit PASS verdict"
+                        };
+                    }
+
                     mission.Status = MissionStatusEnum.Failed;
                     mission.CompletedUtc = DateTime.UtcNow;
                     mission.LastUpdateUtc = DateTime.UtcNow;
-                    mission.FailureReason = verdictFailureReason ?? verdict switch
-                    {
-                        JudgeVerdict.Fail => "Judge verdict: FAIL",
-                        JudgeVerdict.NeedsRevision => "Judge verdict: NEEDS_REVISION",
-                        _ => "Judge mission did not emit an explicit PASS verdict"
-                    };
+                    mission.FailureReason = blockingReason;
                     await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
-                    _Logging.Warn(_Header + "judge mission " + mission.Id + " blocked landing with verdict " + verdict);
+                    _Logging.Warn(_Header + "judge mission " + mission.Id + " blocked landing: " + blockingReason);
                 }
             }
 
@@ -2164,13 +2191,13 @@ namespace Armada.Core.Services
                         break;
                     case PersonaCatalog.Judge:
                         personaPreamble = "## Your Role: Judge (Review)\n\n" +
-                            "You are reviewing the completed work for correctness, completeness, scope compliance, " +
-                            "test adequacy, and failure-mode safety. Examine the diff below against the current mission " +
-                            "description only, not sibling missions in the same voyage. Assume there may be at least " +
-                            "one hidden bug. Your response must include `## Completeness`, `## Correctness`, `## Tests`, " +
-                            "`## Failure Modes`, and `## Verdict` sections. A PASS is only allowed when tests are adequate, " +
-                            "negative-path coverage for validation, timeout, cancellation, retry, cleanup, and error-handling " +
-                            "changes is present or justified, and failure modes were explicitly reviewed. End with a standalone line " +
+                            "You are reviewing the completed work through three lenses: correctness, blast radius, and " +
+                            "source fidelity. Examine the diff below against the current mission description only, not " +
+                            "sibling missions in the same voyage. Assume there may be at least one hidden defect. " +
+                            "Your response must include `## Correctness`, `## Blast Radius`, `## Source Fidelity`, and " +
+                            "`## Verdict` sections. To block (FAIL or NEEDS_REVISION) you MUST add a `## Affected Case` " +
+                            "section exhibiting one concrete affected case (a specific file, line, or scenario); a block " +
+                            "without a concrete affected case is not accepted. End with a standalone line " +
                             "`[ARMADA:VERDICT] PASS`, `[ARMADA:VERDICT] FAIL`, or `[ARMADA:VERDICT] NEEDS_REVISION`.\n\n";
                         break;
                 }
@@ -3117,46 +3144,15 @@ namespace Armada.Core.Services
 
         private bool TryValidateJudgePassOutput(string? agentOutput, out string? failureReason)
         {
-            failureReason = null;
-
-            if (String.IsNullOrWhiteSpace(agentOutput))
+            // Delegate the bounded three-lens PASS contract to the pure JudgeContract so the prompt builders,
+            // this gate, and the tests share one definition.
+            string narrative = ExtractJudgeNarrative(agentOutput ?? String.Empty);
+            if (JudgeContract.ValidatePass(agentOutput, narrative, out failureReason))
             {
-                failureReason = "Judge PASS verdict missing review output";
-                return false;
+                return true;
             }
 
-            List<string> missingSections = new List<string>();
-            if (!ContainsJudgeReviewSection(agentOutput, "Completeness")) missingSections.Add("Completeness");
-            if (!ContainsJudgeReviewSection(agentOutput, "Correctness")) missingSections.Add("Correctness");
-            if (!ContainsJudgeReviewSection(agentOutput, "Tests")) missingSections.Add("Tests");
-            if (!ContainsJudgeReviewSection(agentOutput, "Failure Modes")) missingSections.Add("Failure Modes");
-
-            if (missingSections.Count > 0)
-            {
-                failureReason = "Judge PASS verdict missing required review sections: " + String.Join(", ", missingSections);
-                return false;
-            }
-
-            string substantiveReview = ExtractJudgeNarrative(agentOutput);
-            if (substantiveReview.Length < 120)
-            {
-                failureReason = "Judge PASS verdict review is too short to justify approval";
-                return false;
-            }
-
-            return true;
-        }
-
-        private static bool ContainsJudgeReviewSection(string agentOutput, string sectionName)
-        {
-            if (String.IsNullOrWhiteSpace(agentOutput) || String.IsNullOrWhiteSpace(sectionName)) return false;
-
-            string pattern =
-                @"(?im)^\s*(?:#{1,6}\s*)?(?:[-*]\s*)?(?:\d+\.\s*)?(?:\*\*|__|`)?"
-                + System.Text.RegularExpressions.Regex.Escape(sectionName)
-                + @"(?:\*\*|__|`)?\s*(?::|-)?(?:\s|$)";
-
-            return System.Text.RegularExpressions.Regex.IsMatch(agentOutput, pattern);
+            return false;
         }
 
         private static string ExtractJudgeNarrative(string agentOutput)

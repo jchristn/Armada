@@ -534,53 +534,45 @@ namespace Armada.Core.Services
                     "belongs to a different sibling mission in the same voyage.\n" +
                     "Assume there may be at least one hidden defect. Actively try to find it before concluding PASS.\n" +
                     "\n" +
-                    "## Review Criteria\n" +
+                    "## Review Lenses\n" +
                     "\n" +
-                    "1. **Completeness.** Does the diff address every requirement in the mission description? " +
-                    "List any missing items.\n" +
+                    "Review the work through exactly these three lenses. Each is a required section.\n" +
                     "\n" +
-                    "2. **Correctness.** Is the implementation logically correct? Look for bugs, off-by-one " +
-                    "errors, null reference risks, race conditions, and incorrect assumptions.\n" +
+                    "1. **Correctness.** Is the change logically correct for every input it can receive? Look for " +
+                    "bugs, off-by-one errors, null reference risks, race conditions, incorrect assumptions, and " +
+                    "unhandled error or edge paths (invalid input, timeouts, cancellation, retries, cleanup).\n" +
                     "\n" +
-                    "3. **Scope compliance.** Does the diff ONLY modify files mentioned in the mission " +
-                    "description? Flag any out-of-scope changes. Captains must not make \"helpful\" edits " +
-                    "to files they were not asked to touch.\n" +
+                    "2. **Blast Radius.** What else could this change break, and how far do its effects reach? " +
+                    "Consider callers and dependents, shared state, existing behavior that could regress, missing " +
+                    "test coverage for the changed behavior, and potential merge conflicts.\n" +
                     "\n" +
-                    "4. **Tests and coverage.** Determine whether automated tests adequately cover the changed " +
-                    "behavior. If the diff introduces validation, timeout, cancellation, retry, cleanup, or other " +
-                    "error-handling branches, PASS is not allowed unless you explicitly confirm negative-path " +
-                    "coverage or clearly justify why automation is not feasible.\n" +
-                    "\n" +
-                    "5. **Failure modes and operational safety.** Review edge and failure paths such as invalid " +
-                    "input, null handling, timeouts, cancellation, retries, cleanup, and error propagation when " +
-                    "applicable. If these paths were not explicitly reviewed, PASS is not allowed.\n" +
-                    "\n" +
-                    "6. **Style compliance.** Does the code follow the style guide? Check naming conventions, " +
-                    "documentation requirements, language restrictions (for example, explicit local types and no deconstruction-based multi-value returns), and " +
-                    "structural patterns.\n" +
-                    "\n" +
-                    "7. **Risk assessment.** Could these changes break existing functionality? Are there " +
-                    "missing null checks, unhandled edge cases, or potential merge conflicts?\n" +
+                    "3. **Source Fidelity.** Does the change faithfully implement the mission and match the real " +
+                    "codebase? Confirm it addresses every requirement, modifies ONLY files in scope (no " +
+                    "\"helpful\" out-of-scope edits), invents no behavior or APIs that do not exist, and follows the " +
+                    "project's style and structural conventions.\n" +
                     "\n" +
                     "## Required Response Format\n" +
                     "\n" +
                     "Use these exact section headings, even when you have no findings:\n" +
-                    "- `## Completeness`\n" +
                     "- `## Correctness`\n" +
-                    "- `## Tests`\n" +
-                    "- `## Failure Modes`\n" +
+                    "- `## Blast Radius`\n" +
+                    "- `## Source Fidelity`\n" +
                     "- `## Verdict`\n" +
                     "\n" +
-                    "If you choose PASS, each section must contain concrete review reasoning. A shallow approval " +
-                    "or a verdict-only response is not acceptable.\n" +
+                    "If you choose PASS, each lens section must contain concrete review reasoning. A shallow " +
+                    "approval or a verdict-only response is not acceptable.\n" +
                     "\n" +
                     "## Verdict\n" +
                     "\n" +
                     "After your analysis, produce one of these verdicts:\n" +
-                    "- **PASS** -- The mission is complete and correct. No changes needed.\n" +
-                    "- **FAIL** -- The mission has critical issues that cannot be easily fixed. Explain why.\n" +
-                    "- **NEEDS_REVISION** -- The mission is partially complete or has fixable issues. Provide " +
-                    "specific, actionable feedback for each item that needs revision.\n" +
+                    "- **PASS** -- The change is correct, its blast radius is safe, and it faithfully implements the mission.\n" +
+                    "- **FAIL** -- The change has a critical problem that cannot be easily fixed. Explain why.\n" +
+                    "- **NEEDS_REVISION** -- The change has fixable issues. Provide specific, actionable feedback.\n" +
+                    "\n" +
+                    "To block (FAIL or NEEDS_REVISION) you MUST add a `## Affected Case` section that exhibits one " +
+                    "concrete affected case: a specific file, line, or scenario where the change is wrong or unsafe, " +
+                    "with enough detail to reproduce or locate it. A blocking verdict without a concrete affected " +
+                    "case is not accepted -- if you cannot exhibit one, you do not have grounds to block.\n" +
                     "\n" +
                     "End your response with a standalone signal line exactly in one of these forms:\n" +
                     "- `[ARMADA:VERDICT] PASS`\n" +
