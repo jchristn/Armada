@@ -1133,10 +1133,23 @@ namespace Armada.Server
 
             runtime.OnStdoutReceived += (processId, line) =>
             {
-                // Drop Mux structured protocol events so only assistant/summary text is captured. Subscribing
+                // Drop structured protocol events so only assistant/summary text is captured. Subscribing
                 // to stdout-only keeps CLI stderr banners (e.g. Codex's stdin/version preamble) out of the
                 // captured reply.
                 if (captain.Runtime == AgentRuntimeEnum.Mux && MuxRuntime.IsProtocolEventLine(line)) return;
+                if (captain.Runtime == AgentRuntimeEnum.OpenCode && OpenCodeRuntime.IsProtocolEventLine(line))
+                {
+                    // Surface any human-visible text from the OpenCode event; drop the raw JSON envelope.
+                    string? openCodeText = OpenCodeRuntime.TryExtractAssistantText(line);
+                    if (!String.IsNullOrEmpty(openCodeText))
+                    {
+                        lock (outputLock)
+                        {
+                            BoundedTextBuffer.AppendLine(output, openCodeText!, _MaxPlanningOutputChars);
+                        }
+                    }
+                    return;
+                }
 
                 lock (outputLock)
                 {

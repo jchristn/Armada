@@ -10,7 +10,7 @@ Connect [OpenCode](https://opencode.ai) to Armada's MCP server and use natural l
 
 ## Setup
 
-`armada mcp install` wires up Claude Code, Codex, Gemini, and Cursor automatically, but it does not configure OpenCode. Point OpenCode at Armada's MCP server yourself. The recommended transport is Armada's Streamable HTTP endpoint at `http://localhost:7891/mcp`, which OpenCode connects to as a remote MCP server. Add it with one command:
+`armada mcp install` wires up Claude Code, Codex, Gemini, Cursor, Mux, and -- when OpenCode is present on the machine -- OpenCode automatically. It writes a remote MCP server entry (`{ "type": "remote", "url": "http://localhost:7891/mcp", "enabled": true }`) under the `mcp` block of `~/.config/opencode/opencode.json`. To configure OpenCode yourself instead, point it at Armada's Streamable HTTP endpoint at `http://localhost:7891/mcp` as a remote MCP server with one command:
 
 ```bash
 opencode mcp add armada --url http://localhost:7891/mcp

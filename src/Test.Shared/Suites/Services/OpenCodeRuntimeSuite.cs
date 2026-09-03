@@ -6,6 +6,7 @@ namespace Test.Shared.Suites.Services
     using System.Threading.Tasks;
     using Armada.Core.Enums;
     using Armada.Core.Services;
+    using Armada.Runtimes;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
@@ -84,6 +85,38 @@ namespace Test.Shared.Suites.Services
             {
                 AssertNull(ReasoningEffortTranslator.ToOpenCodeVariant(ReasoningEffortEnum.Off));
                 AssertNull(ReasoningEffortTranslator.ToOpenCodeVariant(null));
+            }));
+
+            // ---- JSONL protocol handling ----
+            cases.Add(Case("protocol_event_recognized", "A JSON object event with a type is a protocol line", TestTags.Positive, () =>
+            {
+                AssertTrue(OpenCodeRuntime.IsProtocolEventLine("{\"type\":\"message\",\"part\":{\"text\":\"hello\"}}"), "a typed JSON object is a protocol event");
+            }));
+
+            cases.Add(Case("plain_text_is_not_protocol", "A plain text line is not a protocol event", TestTags.Negative, () =>
+            {
+                AssertFalse(OpenCodeRuntime.IsProtocolEventLine("Building the project..."), "plain text is not a protocol event");
+                AssertFalse(OpenCodeRuntime.IsProtocolEventLine("{ not json"), "malformed JSON is not a protocol event");
+            }));
+
+            cases.Add(Case("assistant_text_extracted", "Human-visible text is extracted from a protocol event", TestTags.Positive, () =>
+            {
+                AssertEqual("hello", OpenCodeRuntime.TryExtractAssistantText("{\"type\":\"message\",\"part\":{\"text\":\"hello\"}}"));
+                AssertEqual("hi", OpenCodeRuntime.TryExtractAssistantText("{\"type\":\"message\",\"text\":\"hi\"}"));
+            }));
+
+            cases.Add(Case("tool_event_has_no_text", "A tool-only event yields no assistant text", TestTags.Negative, () =>
+            {
+                AssertNull(OpenCodeRuntime.TryExtractAssistantText("{\"type\":\"tool\",\"name\":\"bash\"}"));
+            }));
+
+            // ---- Tier recognition ----
+            cases.Add(Case("opencode_models_classify_to_standard", "Common OpenCode model families classify to a real tier", TestTags.Positive, () =>
+            {
+                AssertEqual(CaptainTierEnum.Standard, CaptainTierSelector.ClassifyModel("glm-4.6"));
+                AssertEqual(CaptainTierEnum.Standard, CaptainTierSelector.ClassifyModel("qwen2.5-coder"));
+                AssertEqual(CaptainTierEnum.Standard, CaptainTierSelector.ClassifyModel("deepseek-chat"));
+                AssertEqual(CaptainTierEnum.Standard, CaptainTierSelector.ClassifyModel("kimi-k2"));
             }));
 
             return new TestSuiteDescriptor(

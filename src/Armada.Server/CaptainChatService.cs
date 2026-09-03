@@ -132,6 +132,7 @@ namespace Armada.Server
                 // events (run_started/assistant_text/run_completed) carrying model, duration, and token
                 // estimates; CLI runtimes that only stream text still yield wall-clock timing.
                 bool isMux = captain.Runtime == AgentRuntimeEnum.Mux;
+                bool isOpenCode = captain.Runtime == AgentRuntimeEnum.OpenCode;
                 bool isClaude = captain.Runtime == AgentRuntimeEnum.ClaudeCode;
                 double? reportedDurationMs = null;
                 int? reportedTokens = null;
@@ -287,6 +288,23 @@ namespace Armada.Server
                             }
                         }
                         catch (JsonException) { }
+                        return;
+                    }
+
+                    if (isOpenCode && OpenCodeRuntime.IsProtocolEventLine(line))
+                    {
+                        // OpenCode --format json streams protocol events; surface any human-visible text and
+                        // drop the raw JSON envelope so it never leaks into the reply.
+                        string? openCodeText = OpenCodeRuntime.TryExtractAssistantText(line);
+                        if (!String.IsNullOrEmpty(openCodeText))
+                        {
+                            lock (outputLock)
+                            {
+                                if (firstOutputUtc == null) firstOutputUtc = DateTime.UtcNow;
+                                if (output.Length < _MaxOutputChars) output.Append(openCodeText);
+                            }
+                            EmitChunk(turnId, openCodeText!);
+                        }
                         return;
                     }
 

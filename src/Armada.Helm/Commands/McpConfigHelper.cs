@@ -18,7 +18,8 @@ namespace Armada.Helm.Commands
             string? RemoveBeforeInstallName = null,
             string? ManualInstallCommand = null,
             string? ManualRemoveCommand = null,
-            bool IsMuxServers = false);
+            bool IsMuxServers = false,
+            bool IsOpenCodeConfig = false);
 
         internal sealed record ApplyResult(string ClientName, string FilePath, bool Changed, string Message, bool IsProjectScoped = false);
         internal sealed record InstructionTarget(string ClientName, string FilePath, string Content, bool IsProjectScoped = false);
@@ -70,6 +71,65 @@ namespace Armada.Helm.Commands
         internal static string GetCursorConfigPath()
         {
             return Path.Combine(Environment.CurrentDirectory, ".cursor", "mcp.json");
+        }
+
+        /// <summary>
+        /// Resolve OpenCode's global config directory (~/.config/opencode) and its opencode.json file.
+        /// </summary>
+        internal static string GetOpenCodeConfigDirectory()
+        {
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config", "opencode");
+        }
+
+        /// <summary>
+        /// Path to OpenCode's global config file (opencode.json).
+        /// </summary>
+        internal static string GetOpenCodeConfigPath()
+        {
+            return Path.Combine(GetOpenCodeConfigDirectory(), "opencode.json");
+        }
+
+        /// <summary>
+        /// Whether OpenCode appears to be installed, so `armada mcp install` can configure it. True when
+        /// OpenCode's config directory exists or an `opencode` executable is resolvable on PATH.
+        /// </summary>
+        internal static bool IsOpenCodeAvailable()
+        {
+            try
+            {
+                if (Directory.Exists(GetOpenCodeConfigDirectory()))
+                    return true;
+            }
+            catch
+            {
+            }
+
+            return ResolveExecutableOnPath(OperatingSystem.IsWindows()
+                ? new[] { "opencode.exe", "opencode.cmd", "opencode" }
+                : new[] { "opencode" }) != null;
+        }
+
+        private static string? ResolveExecutableOnPath(string[] names)
+        {
+            string? pathEnv = Environment.GetEnvironmentVariable("PATH");
+            if (String.IsNullOrEmpty(pathEnv)) return null;
+
+            foreach (string dir in pathEnv.Split(Path.PathSeparator))
+            {
+                if (String.IsNullOrWhiteSpace(dir)) continue;
+                foreach (string name in names)
+                {
+                    try
+                    {
+                        string candidate = Path.Combine(dir.Trim(), name);
+                        if (File.Exists(candidate)) return candidate;
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+            return null;
         }
 
         /// <summary>
@@ -210,6 +270,23 @@ namespace Armada.Helm.Commands
                     IsMuxServers: true));
             }
 
+            // OpenCode reads MCP servers under an "mcp" object (not "mcpServers") in opencode.json, using a
+            // "remote" type for HTTP servers. Only offer it when OpenCode is present so we do not create a
+            // stray config directory on machines without OpenCode.
+            if (IsOpenCodeAvailable())
+            {
+                targets.Add(new(
+                    "OpenCode",
+                    GetOpenCodeConfigPath(),
+                    new JsonObject
+                    {
+                        ["type"] = "remote",
+                        ["url"] = mcpUrl,
+                        ["enabled"] = true,
+                    },
+                    IsOpenCodeConfig: true));
+            }
+
             return targets;
         }
 
@@ -234,6 +311,9 @@ namespace Armada.Helm.Commands
         {
             if (target.IsMuxServers)
                 return await InstallMuxServerAsync(target).ConfigureAwait(false);
+
+            if (target.IsOpenCodeConfig)
+                return await InstallOpenCodeServerAsync(target).ConfigureAwait(false);
 
             if (!String.IsNullOrEmpty(target.CliCommand) && target.InstallArgs != null)
             {
@@ -280,6 +360,9 @@ namespace Armada.Helm.Commands
         {
             if (target.IsMuxServers)
                 return await RemoveMuxServerAsync(target).ConfigureAwait(false);
+
+            if (target.IsOpenCodeConfig)
+                return await RemoveOpenCodeServerAsync(target).ConfigureAwait(false);
 
             if (!String.IsNullOrEmpty(target.CliCommand) && target.RemoveArgs != null)
             {
@@ -426,6 +509,66 @@ namespace Armada.Helm.Commands
                 target.FilePath,
                 true,
                 "Removed Armada MCP server.",
+                target.IsProjectScoped);
+        }
+
+        private static async Task<ApplyResult> InstallOpenCodeServerAsync(ConfigTarget target)
+        {
+            if (target.ArmadaConfig == null)
+                throw new InvalidOperationException("OpenCode config target does not define ArmadaConfig.");
+
+            JsonObject root = await ReadOrCreateRootAsync(target.FilePath).ConfigureAwait(false);
+            if (root["mcp"] is not JsonObject)
+                root["mcp"] = new JsonObject();
+
+            JsonObject mcp = root["mcp"]!.AsObject();
+            JsonNode? existing = mcp["armada"];
+            bool changed = existing == null || !JsonNode.DeepEquals(existing, target.ArmadaConfig);
+            mcp["armada"] = target.ArmadaConfig.DeepClone();
+
+            Directory.CreateDirectory(Path.GetDirectoryName(target.FilePath)!);
+            await File.WriteAllTextAsync(target.FilePath, root.ToJsonString(JsonOptions)).ConfigureAwait(false);
+
+            return new ApplyResult(
+                target.ClientName,
+                target.FilePath,
+                changed,
+                changed ? "Configured Armada MCP entry." : "Armada MCP entry already matched the expected configuration.",
+                target.IsProjectScoped);
+        }
+
+        private static async Task<ApplyResult> RemoveOpenCodeServerAsync(ConfigTarget target)
+        {
+            if (!File.Exists(target.FilePath))
+            {
+                return new ApplyResult(
+                    target.ClientName,
+                    target.FilePath,
+                    false,
+                    "Configuration file does not exist; nothing to remove.",
+                    target.IsProjectScoped);
+            }
+
+            JsonObject root = await ReadOrCreateRootAsync(target.FilePath).ConfigureAwait(false);
+            JsonObject? mcp = root["mcp"] as JsonObject;
+            if (mcp == null || !mcp.ContainsKey("armada"))
+            {
+                return new ApplyResult(
+                    target.ClientName,
+                    target.FilePath,
+                    false,
+                    "No Armada MCP entry was present.",
+                    target.IsProjectScoped);
+            }
+
+            mcp.Remove("armada");
+            await File.WriteAllTextAsync(target.FilePath, root.ToJsonString(JsonOptions)).ConfigureAwait(false);
+
+            return new ApplyResult(
+                target.ClientName,
+                target.FilePath,
+                true,
+                "Removed Armada MCP entry.",
                 target.IsProjectScoped);
         }
 
