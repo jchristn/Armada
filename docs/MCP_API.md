@@ -1848,7 +1848,8 @@ Get the session log for a mission. Supports pagination.
   "properties": {
     "missionId": { "type": "string", "description": "Mission ID (msn_ prefix)" },
     "lines": { "type": "integer", "description": "Number of lines to return (default 100)" },
-    "offset": { "type": "integer", "description": "Line offset to start from (default 0)" }
+    "offset": { "type": "integer", "description": "Line offset to start from (default 0)" },
+    "formatted": { "type": "boolean", "description": "Apply the readable runtime-log formatter (resolve tool names per runtime, redact secret-shaped values, drop noise) instead of returning raw lines (default false)" }
   },
   "required": ["missionId"]
 }

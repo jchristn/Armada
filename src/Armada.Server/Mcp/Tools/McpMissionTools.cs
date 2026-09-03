@@ -566,7 +566,8 @@ namespace Armada.Server.Mcp.Tools
                         {
                             missionId = new { type = "string", description = "Mission ID (msn_ prefix)" },
                             lines = new { type = "integer", description = "Number of lines to return (default 100)" },
-                            offset = new { type = "integer", description = "Line offset to start from (default 0)" }
+                            offset = new { type = "integer", description = "Line offset to start from (default 0)" },
+                            formatted = new { type = "boolean", description = "Apply the readable runtime-log formatter (tool names, secret redaction, noise removal) instead of raw lines (default false)" }
                         },
                         required = new[] { "missionId" }
                     },
@@ -588,6 +589,29 @@ namespace Armada.Server.Mcp.Tools
                         int lineCount = Math.Max(1, request.Lines ?? 100);
 
                         string[] slice = allLines.Skip(offset).Take(lineCount).ToArray();
+
+                        if (request.Formatted == true)
+                        {
+                            // Resolve the mission's captain runtime so per-runtime tool-name resolution applies;
+                            // default to Claude Code when the captain is unknown.
+                            Armada.Core.Enums.AgentRuntimeEnum runtime = Armada.Core.Enums.AgentRuntimeEnum.ClaudeCode;
+                            if (!String.IsNullOrEmpty(mission.CaptainId))
+                            {
+                                Captain? logCaptain = await database.Captains.ReadAsync(mission.CaptainId).ConfigureAwait(false);
+                                if (logCaptain != null) runtime = logCaptain.Runtime;
+                            }
+
+                            List<string> formattedLines = new List<string>();
+                            foreach (string raw in slice)
+                            {
+                                Armada.Core.Services.FormattedLogLine formatted = Armada.Core.Services.RuntimeLogFormatter.Format(raw, runtime);
+                                if (formatted.Dropped) continue;
+                                formattedLines.Add(formatted.Text);
+                            }
+                            string formattedLog = String.Join("\n", formattedLines);
+                            return (object)new { MissionId = missionId, Log = formattedLog, Lines = formattedLines.Count, TotalLines = totalLines, Formatted = true };
+                        }
+
                         string log = String.Join("\n", slice);
                         return (object)new { MissionId = missionId, Log = log, Lines = slice.Length, TotalLines = totalLines };
                     });
