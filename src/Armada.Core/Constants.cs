@@ -129,6 +129,12 @@ namespace Armada.Core
         public const int DefaultDefinitionOfDoneTimeoutSeconds = 1800;
 
         /// <summary>
+        /// Default minimum available physical memory, in bytes, required to launch a captain. 0 disables the
+        /// resource-pressure admission gate (the default: opt in by raising it).
+        /// </summary>
+        public const long DefaultMinAvailableMemoryBytesForLaunch = 0;
+
+        /// <summary>
         /// Fleet ID prefix.
         /// </summary>
         public static readonly string FleetIdPrefix = "flt_";

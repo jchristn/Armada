@@ -73,6 +73,7 @@ namespace Armada.Core.Services
         private DatabaseDriver _Database;
         private ArmadaSettings _Settings;
         private ISystemResourceProbe _ResourceProbe = new SystemResourceProbe();
+        private long _MemoryPressureDeferrals = 0;
         private ICaptainService _Captains;
         private IMissionService _Missions;
         private IVoyageService _Voyages;
@@ -434,6 +435,7 @@ namespace Armada.Core.Services
             List<Voyage> activeVoyages = await _Database.Voyages.EnumerateByStatusAsync(VoyageStatusEnum.InProgress, token).ConfigureAwait(false);
             List<Voyage> openVoyages = await _Database.Voyages.EnumerateByStatusAsync(VoyageStatusEnum.Open, token).ConfigureAwait(false);
             status.ActiveVoyages = activeVoyages.Count + openVoyages.Count;
+            status.MemoryPressureDeferrals = System.Threading.Interlocked.Read(ref _MemoryPressureDeferrals);
 
             foreach (Voyage voyage in activeVoyages.Concat(openVoyages))
             {
@@ -1414,6 +1416,7 @@ namespace Armada.Core.Services
                 AdmissionDecision admission = ResourceAdmission.Evaluate(available, total, _Settings.MinAvailableMemoryBytesForLaunch);
                 if (!admission.Admit)
                 {
+                    System.Threading.Interlocked.Increment(ref _MemoryPressureDeferrals);
                     _Logging.Info(_Header + "capacity gate " + (admission.DeferReason ?? "deferred for memory pressure"));
                     return false;
                 }

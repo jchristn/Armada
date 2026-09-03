@@ -36,6 +36,12 @@ namespace Armada.Core.Models
         public int ActiveVoyages { get; set; } = 0;
 
         /// <summary>
+        /// Cumulative number of dispatch attempts deferred because the host was under memory pressure
+        /// (the resource-pressure admission gate declined to launch a captain).
+        /// </summary>
+        public long MemoryPressureDeferrals { get; set; } = 0;
+
+        /// <summary>
         /// Missions grouped by status.
         /// </summary>
         public Dictionary<string, int> MissionsByStatus

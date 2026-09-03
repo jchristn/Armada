@@ -624,7 +624,7 @@ namespace Armada.Core.Settings
 
         private int _AdmiralPort = Constants.DefaultAdmiralPort;
         private int _McpPort = Constants.DefaultMcpPort;
-        private long _MinAvailableMemoryBytesForLaunch = 0;
+        private long _MinAvailableMemoryBytesForLaunch = Constants.DefaultMinAvailableMemoryBytesForLaunch;
         private int _CaptainQuarantineMinutes = 15;
         private int _HeartbeatIntervalSeconds = Constants.DefaultHeartbeatIntervalSeconds;
         private int _StallThresholdMinutes = Constants.DefaultStallThresholdMinutes;

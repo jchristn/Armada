@@ -45,6 +45,7 @@ interface StatusData {
   workingCaptains: number;
   stalledCaptains: number;
   activeVoyages: number;
+  memoryPressureDeferrals?: number;
   missionsByStatus: Record<string, number>;
   voyages: VoyageProgress[];
   recentSignals: Array<{
@@ -386,6 +387,11 @@ export default function Dashboard() {
         >
           <div className="card-label">{t('Active Voyages')}</div>
           <div className="card-value">{status?.activeVoyages ?? 0}</div>
+          {(status?.memoryPressureDeferrals ?? 0) > 0 && (
+            <div className="card-detail">
+              <span className="tag stalled">{t('{{count}} deferred for memory pressure', { count: status?.memoryPressureDeferrals ?? 0 })}</span>
+            </div>
+          )}
         </div>
 
         <div
