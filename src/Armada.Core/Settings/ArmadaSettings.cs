@@ -200,6 +200,22 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
+        /// Maximum number of bounded rescue missions the autonomous-recovery coordinator dispatches for a
+        /// single incident before it stops and leaves the incident open for a human. Set to 0 to disable
+        /// autonomous rescue (incidents are still opened for visibility). Clamped to [0, 5].
+        /// </summary>
+        public int MaxMissionRecoveryAttempts
+        {
+            get => _MaxMissionRecoveryAttempts;
+            set
+            {
+                if (value < 0) value = 0;
+                if (value > 5) value = 5;
+                _MaxMissionRecoveryAttempts = value;
+            }
+        }
+
+        /// <summary>
         /// Global landing mode for completed missions. Determines how work is integrated.
         /// When set, takes precedence over the legacy boolean flags (AutoPush, AutoCreatePullRequests, AutoMergePullRequests).
         /// Can be overridden per-vessel or per-voyage.
@@ -625,6 +641,7 @@ namespace Armada.Core.Settings
         private int _PlanningSessionAbandonmentTimeoutMinutes = Constants.DefaultPlanningSessionAbandonmentTimeoutMinutes;
         private int _MaxLandingRetries = 3;
         private int _MaxNoOpRedispatchAttempts = 1;
+        private int _MaxMissionRecoveryAttempts = 2;
         private int _MinIdleCaptains = 0;
         private int _MaxCaptains = 0;
         private int _MaxConcurrentMissions = Constants.DefaultMaxConcurrentMissions;

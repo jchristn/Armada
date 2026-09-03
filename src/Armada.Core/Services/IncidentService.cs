@@ -139,6 +139,9 @@ namespace Armada.Core.Services
                 RootCause = Normalize(request.RootCause),
                 RecoveryNotes = Normalize(request.RecoveryNotes),
                 Postmortem = Normalize(request.Postmortem),
+                FailureKind = Normalize(request.FailureKind),
+                RecoveryAttempts = request.RecoveryAttempts.HasValue ? Math.Max(0, request.RecoveryAttempts.Value) : 0,
+                RescueMissionIds = request.RescueMissionIds ?? new List<string>(),
                 DetectedUtc = request.DetectedUtc?.ToUniversalTime() ?? DateTime.UtcNow,
                 MitigatedUtc = request.MitigatedUtc?.ToUniversalTime(),
                 ClosedUtc = request.ClosedUtc?.ToUniversalTime(),
@@ -179,6 +182,9 @@ namespace Armada.Core.Services
             incident.RootCause = request.RootCause != null ? Normalize(request.RootCause) : incident.RootCause;
             incident.RecoveryNotes = request.RecoveryNotes != null ? Normalize(request.RecoveryNotes) : incident.RecoveryNotes;
             incident.Postmortem = request.Postmortem != null ? Normalize(request.Postmortem) : incident.Postmortem;
+            incident.FailureKind = request.FailureKind != null ? Normalize(request.FailureKind) : incident.FailureKind;
+            incident.RecoveryAttempts = request.RecoveryAttempts.HasValue ? Math.Max(0, request.RecoveryAttempts.Value) : incident.RecoveryAttempts;
+            incident.RescueMissionIds = request.RescueMissionIds ?? incident.RescueMissionIds;
             incident.MitigatedUtc = request.MitigatedUtc.HasValue ? request.MitigatedUtc.Value.ToUniversalTime() : incident.MitigatedUtc;
             incident.ClosedUtc = request.ClosedUtc.HasValue ? request.ClosedUtc.Value.ToUniversalTime() : incident.ClosedUtc;
             incident.LastUpdateUtc = DateTime.UtcNow;

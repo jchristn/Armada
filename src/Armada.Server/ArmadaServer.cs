@@ -60,6 +60,7 @@ namespace Armada.Server
 
         private IMergeQueueService _MergeQueue = null!;
         private Armada.Core.Services.JobService _JobService = null!;
+        private Armada.Core.Services.MissionRecoveryCoordinator _MissionRecovery = null!;
         private LandingService _LandingService = null!;
         private IMessageTemplateService _TemplateService = null!;
         private IPromptTemplateService _PromptTemplateService = null!;
@@ -163,6 +164,7 @@ namespace Armada.Server
             _Admiral = admiralService;
             _MergeQueue = new MergeQueueService(_Logging, _Database, _Settings, _Git);
             _JobService = new Armada.Core.Services.JobService(_Database, _Logging);
+            _MissionRecovery = new Armada.Core.Services.MissionRecoveryCoordinator(_Logging, _Database, _Settings);
             _LandingService = new LandingService(_Logging, _Database, _Settings, _Git);
             _TemplateService = new MessageTemplateService(_Logging, _PromptTemplateService);
             _RuntimeFactory = new AgentRuntimeFactory(_Logging);
@@ -1108,6 +1110,11 @@ namespace Armada.Server
                     // Reap background jobs whose worker died so they do not hang in Running.
                     try { await _JobService.MaintainAsync(token).ConfigureAwait(false); }
                     catch (Exception jobEx) { _Logging.Warn(_Header + "job maintenance error: " + jobEx.Message); }
+
+                    // Autonomous mission recovery: classify failures, open/link incidents, dispatch bounded
+                    // rescue missions, and advance incidents Open -> Mitigated -> Closed from mission evidence.
+                    try { await _MissionRecovery.MaintainAsync(token).ConfigureAwait(false); }
+                    catch (Exception recoveryEx) { _Logging.Warn(_Header + "mission recovery error: " + recoveryEx.Message); }
 
                     // Run log rotation every 10 health check cycles
                     _HealthCheckCycles++;

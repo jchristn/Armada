@@ -1385,6 +1385,9 @@ export interface Incident {
   rootCause: string | null;
   recoveryNotes: string | null;
   postmortem: string | null;
+  failureKind: string | null;
+  recoveryAttempts: number;
+  rescueMissionIds: string[];
   detectedUtc: string;
   mitigatedUtc: string | null;
   closedUtc: string | null;

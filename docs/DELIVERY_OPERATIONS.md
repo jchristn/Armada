@@ -162,6 +162,28 @@ The incident record should be the durable answer to:
 - how recovery happened
 - what follow-up work is still required
 
+### 6.1 Autonomous Mission Recovery
+
+Armada also opens and drives incidents on its own for failed missions, with no operator
+action. On each health cycle the recovery coordinator:
+
+1. **Classifies** each recently failed mission from its status and failure reason into a
+   `FailureKind` (Compile, TestFail, Timeout, LandingConflict, Crash for mechanical
+   failures; NoOp, Boundary, ScopeViolation, JudgeRejected, Infra, Unknown otherwise).
+2. **Opens an incident** for the mechanical (recoverable) kinds, linked to the mission,
+   vessel, and voyage, recording the classified `FailureKind`. Non-recoverable kinds are
+   left to the existing escalation/inbox path -- they need a human, not a retry.
+3. **Dispatches a bounded rescue mission**: a fresh Worker mission carrying the original
+   brief plus the failure evidence (classified kind, failure reason, prior diff). Rescues
+   are capped per incident by `MaxMissionRecoveryAttempts` (default 2); a failed rescue
+   re-dispatches until the cap, after which the incident is left **Open** with a note for a
+   human.
+4. **Advances the incident from evidence alone**: `Open -> Mitigated` when a rescue mission
+   lands (Complete), then `Mitigated -> Closed` once the fix has held. The `RecoveryAttempts`
+   count and the linked `RescueMissionIds` are visible on the incident detail page.
+
+Set `MaxMissionRecoveryAttempts` to 0 to disable autonomous rescue.
+
 ## 7. Use Runbooks For Repeated Operations
 
 Use `Delivery > Runbooks` when the same release, deploy, rollback, migration, or incident response steps should be guided and repeatable.

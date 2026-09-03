@@ -590,6 +590,13 @@ export default function IncidentDetail() {
             <div className="detail-field"><span className="detail-label">{t('Release')}</span><span>{releaseId || '-'}</span></div>
             <div className="detail-field"><span className="detail-label">{t('Detected')}</span><span>{detectedUtc ? formatDateTime(toUtcValue(detectedUtc) || detectedUtc) : '-'}</span></div>
             <div className="detail-field"><span className="detail-label">{t('Last Updated')}</span><span>{incident?.lastUpdateUtc ? formatRelativeTime(incident.lastUpdateUtc) : '-'}</span></div>
+            {incident?.failureKind && (
+              <>
+                <div className="detail-field"><span className="detail-label">{t('Failure Kind')}</span><span>{incident.failureKind}</span></div>
+                <div className="detail-field"><span className="detail-label">{t('Rescue Attempts')}</span><span>{incident.recoveryAttempts ?? 0}</span></div>
+                <div className="detail-field"><span className="detail-label">{t('Rescue Missions')}</span><span>{(incident.rescueMissionIds && incident.rescueMissionIds.length) ? incident.rescueMissionIds.length : 0}</span></div>
+              </>
+            )}
           </div>
 
           {!createMode && incident && (
