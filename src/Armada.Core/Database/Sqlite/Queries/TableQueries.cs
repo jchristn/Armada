@@ -1390,7 +1390,9 @@ namespace Armada.Core.Database.Sqlite.Queries
                     @"ALTER TABLE vessels ADD COLUMN definition_of_done_enabled INTEGER NOT NULL DEFAULT 0;",
                     @"ALTER TABLE vessels ADD COLUMN definition_of_done_build_command TEXT;",
                     @"ALTER TABLE vessels ADD COLUMN definition_of_done_test_command TEXT;",
-                    @"ALTER TABLE vessels ADD COLUMN definition_of_done_timeout_seconds INTEGER NOT NULL DEFAULT 1800;")
+                    @"ALTER TABLE vessels ADD COLUMN definition_of_done_timeout_seconds INTEGER NOT NULL DEFAULT 1800;"),
+                new SchemaMigration(59, "Add git_anchors_json to docks",
+                    @"ALTER TABLE docks ADD COLUMN git_anchors_json TEXT;")
             };
         }
 

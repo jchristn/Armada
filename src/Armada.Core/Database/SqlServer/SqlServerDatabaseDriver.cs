@@ -630,6 +630,7 @@ namespace Armada.Core.Database.SqlServer
             catch { }
             try { dock.LeaseExpiresUtc = NullableDateTime(reader["lease_expires_utc"]); } catch { }
             try { dock.OwnerToken = NullableString(reader["owner_token"]); } catch { }
+            try { dock.GitAnchorsJson = NullableString(reader["git_anchors_json"]); } catch { }
             dock.CreatedUtc = FromIso8601(reader["created_utc"].ToString()!);
             dock.LastUpdateUtc = FromIso8601(reader["last_update_utc"].ToString()!);
             return dock;

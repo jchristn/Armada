@@ -771,6 +771,7 @@ namespace Armada.Core.Database.Sqlite
             catch { }
             try { dock.LeaseExpiresUtc = FromIso8601Nullable(reader["lease_expires_utc"]); } catch { }
             try { dock.OwnerToken = NullableString(reader["owner_token"]); } catch { }
+            try { dock.GitAnchorsJson = NullableString(reader["git_anchors_json"]); } catch { }
             return dock;
         }
 

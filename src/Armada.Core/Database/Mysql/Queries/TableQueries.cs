@@ -1297,6 +1297,14 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration statements for schema version 59.
+        /// </summary>
+        public static readonly string[] MigrationV59Statements = new string[]
+        {
+            @"ALTER TABLE docks ADD COLUMN git_anchors_json TEXT;"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

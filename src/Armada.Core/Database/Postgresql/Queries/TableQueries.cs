@@ -1105,7 +1105,9 @@ namespace Armada.Core.Database.Postgresql.Queries
                     @"ALTER TABLE vessels ADD COLUMN definition_of_done_enabled BOOLEAN NOT NULL DEFAULT FALSE;",
                     @"ALTER TABLE vessels ADD COLUMN definition_of_done_build_command TEXT;",
                     @"ALTER TABLE vessels ADD COLUMN definition_of_done_test_command TEXT;",
-                    @"ALTER TABLE vessels ADD COLUMN definition_of_done_timeout_seconds INTEGER NOT NULL DEFAULT 1800;")
+                    @"ALTER TABLE vessels ADD COLUMN definition_of_done_timeout_seconds INTEGER NOT NULL DEFAULT 1800;"),
+                new SchemaMigration(59, "Add git_anchors_json to docks",
+                    @"ALTER TABLE docks ADD COLUMN git_anchors_json TEXT;")
             };
         }
 

@@ -144,6 +144,47 @@ export default function DockDetail() {
         </div>
       </div>
 
+      {/* Git anchors resolved at provisioning */}
+      {(() => {
+        if (!dock.gitAnchorsJson) return null;
+        let anchors: { startCommit?: string | null; targetBranch?: string | null; workingBranch?: string | null; recentPathCommits?: string[]; subjectTermsPresent?: string[] } | null = null;
+        try { anchors = JSON.parse(dock.gitAnchorsJson); } catch { anchors = null; }
+        if (!anchors) return null;
+        return (
+          <div className="detail-card" style={{ marginTop: 16 }}>
+            <h3>{t('Starting Point')}</h3>
+            <div className="detail-grid">
+              <div>
+                <div className="text-muted" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>{t('Start Commit')}</div>
+                <div className="mono">{anchors.startCommit || '-'}</div>
+              </div>
+              <div>
+                <div className="text-muted" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>{t('Target Branch')}</div>
+                <div className="mono">{anchors.targetBranch || '-'}</div>
+              </div>
+              <div>
+                <div className="text-muted" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>{t('Working Branch')}</div>
+                <div className="mono">{anchors.workingBranch || '-'}</div>
+              </div>
+            </div>
+            {anchors.recentPathCommits && anchors.recentPathCommits.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <div className="text-muted" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>{t('Recent Commits On Relevant Paths')}</div>
+                <ul className="mono" style={{ margin: 0, paddingLeft: 18 }}>
+                  {anchors.recentPathCommits.map((c, i) => <li key={i}>{c}</li>)}
+                </ul>
+              </div>
+            )}
+            {anchors.subjectTermsPresent && anchors.subjectTermsPresent.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <div className="text-muted" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>{t('Subject Terms Already In Tree')}</div>
+                <div>{anchors.subjectTermsPresent.map((term, i) => <span key={i} className="tag" style={{ marginRight: 4 }}>{term}</span>)}</div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* JSON Viewer */}
       <JsonViewer open={jsonView !== null} title={jsonView?.title ?? ''} data={jsonView?.data ?? null} onClose={() => setJsonView(null)} />
 

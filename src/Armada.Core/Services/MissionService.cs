@@ -1409,6 +1409,34 @@ namespace Armada.Core.Services
             {
                 content += gitAnchors;
                 content += "\n";
+
+                // Persist the resolved anchors on the dock (documented raw-JSON snapshot) so the dashboard
+                // and a resuming captain can read them without re-deriving. Best-effort.
+                if (!String.IsNullOrEmpty(mission.DockId))
+                {
+                    try
+                    {
+                        GitAnchorsSnapshot snapshot = new GitAnchorsSnapshot
+                        {
+                            StartCommit = headCommit,
+                            TargetBranch = vessel.DefaultBranch,
+                            WorkingBranch = mission.BranchName,
+                            RecentPathCommits = recentPathCommits != null ? new List<string>(recentPathCommits) : new List<string>(),
+                            SubjectTermsPresent = subjectTermsPresent != null ? new List<string>(subjectTermsPresent) : new List<string>(),
+                        };
+                        Dock? anchorDock = await _Database.Docks.ReadAsync(mission.DockId!, token).ConfigureAwait(false);
+                        if (anchorDock != null)
+                        {
+                            anchorDock.GitAnchorsJson = System.Text.Json.JsonSerializer.Serialize(snapshot);
+                            anchorDock.LastUpdateUtc = DateTime.UtcNow;
+                            await _Database.Docks.UpdateAsync(anchorDock, token).ConfigureAwait(false);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _Logging.Debug(_Header + "could not persist git anchors on dock " + mission.DockId + ": " + ex.Message);
+                    }
+                }
             }
 
             // Rules, context conservation, merge conflicts, progress signals -- from templates or hardcoded fallback

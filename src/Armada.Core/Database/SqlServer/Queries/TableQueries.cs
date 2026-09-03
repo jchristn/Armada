@@ -937,6 +937,11 @@ namespace Armada.Core.Database.SqlServer.Queries
                     @"IF COL_LENGTH('vessels', 'definition_of_done_build_command') IS NULL ALTER TABLE vessels ADD definition_of_done_build_command NVARCHAR(MAX) NULL;",
                     @"IF COL_LENGTH('vessels', 'definition_of_done_test_command') IS NULL ALTER TABLE vessels ADD definition_of_done_test_command NVARCHAR(MAX) NULL;",
                     @"IF COL_LENGTH('vessels', 'definition_of_done_timeout_seconds') IS NULL ALTER TABLE vessels ADD definition_of_done_timeout_seconds INT NOT NULL CONSTRAINT DF_vessels_dod_timeout DEFAULT 1800;"
+                ),
+                new SchemaMigration(
+                    59,
+                    "Add git_anchors_json to docks",
+                    @"IF COL_LENGTH('docks','git_anchors_json') IS NULL ALTER TABLE docks ADD git_anchors_json NVARCHAR(MAX) NULL;"
                 )
             };
         }

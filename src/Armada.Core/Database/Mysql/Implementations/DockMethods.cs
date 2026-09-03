@@ -53,8 +53,8 @@ namespace Armada.Core.Database.Mysql.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (MySqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = @"INSERT INTO docks (id, tenant_id, user_id, vessel_id, captain_id, worktree_path, branch_name, state, lease_expires_utc, owner_token, active, created_utc, last_update_utc)
-                        VALUES (@id, @tenant_id, @user_id, @vessel_id, @captain_id, @worktree_path, @branch_name, @state, @lease_expires_utc, @owner_token, @active, @created_utc, @last_update_utc);";
+                    cmd.CommandText = @"INSERT INTO docks (id, tenant_id, user_id, vessel_id, captain_id, worktree_path, branch_name, state, lease_expires_utc, owner_token, git_anchors_json, active, created_utc, last_update_utc)
+                        VALUES (@id, @tenant_id, @user_id, @vessel_id, @captain_id, @worktree_path, @branch_name, @state, @lease_expires_utc, @owner_token, @git_anchors_json, @active, @created_utc, @last_update_utc);";
                     cmd.Parameters.AddWithValue("@id", dock.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)dock.TenantId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@user_id", (object?)dock.UserId ?? DBNull.Value);
@@ -65,6 +65,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                     cmd.Parameters.AddWithValue("@state", dock.State.ToString());
                     cmd.Parameters.AddWithValue("@lease_expires_utc", dock.LeaseExpiresUtc.HasValue ? (object)ToIso8601(dock.LeaseExpiresUtc.Value) : DBNull.Value);
                     cmd.Parameters.AddWithValue("@owner_token", (object?)dock.OwnerToken ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@git_anchors_json", (object?)dock.GitAnchorsJson ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@active", dock.Active ? 1 : 0);
                     cmd.Parameters.AddWithValue("@created_utc", ToIso8601(dock.CreatedUtc));
                     cmd.Parameters.AddWithValue("@last_update_utc", ToIso8601(dock.LastUpdateUtc));
@@ -129,6 +130,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                         state = @state,
                         lease_expires_utc = @lease_expires_utc,
                         owner_token = @owner_token,
+                        git_anchors_json = @git_anchors_json,
                         active = @active,
                         last_update_utc = @last_update_utc
                         WHERE id = @id;";
@@ -142,6 +144,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                     cmd.Parameters.AddWithValue("@state", dock.State.ToString());
                     cmd.Parameters.AddWithValue("@lease_expires_utc", dock.LeaseExpiresUtc.HasValue ? (object)ToIso8601(dock.LeaseExpiresUtc.Value) : DBNull.Value);
                     cmd.Parameters.AddWithValue("@owner_token", (object?)dock.OwnerToken ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@git_anchors_json", (object?)dock.GitAnchorsJson ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@active", dock.Active ? 1 : 0);
                     cmd.Parameters.AddWithValue("@last_update_utc", ToIso8601(dock.LastUpdateUtc));
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
@@ -728,6 +731,7 @@ namespace Armada.Core.Database.Mysql.Implementations
             catch { }
             try { dock.LeaseExpiresUtc = FromIso8601Nullable(reader["lease_expires_utc"]); } catch { }
             try { dock.OwnerToken = NullableString(reader["owner_token"]); } catch { }
+            try { dock.GitAnchorsJson = NullableString(reader["git_anchors_json"]); } catch { }
             dock.Active = Convert.ToInt64(reader["active"]) == 1;
             dock.CreatedUtc = DateTime.SpecifyKind(Convert.ToDateTime(reader["created_utc"]), DateTimeKind.Utc);
             dock.LastUpdateUtc = DateTime.SpecifyKind(Convert.ToDateTime(reader["last_update_utc"]), DateTimeKind.Utc);

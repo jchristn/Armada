@@ -88,6 +88,14 @@ namespace Armada.Core.Models
         public string? OwnerToken { get; set; } = null;
 
         /// <summary>
+        /// Resolved git anchors captured at dock provisioning, serialized as JSON (start commit, target
+        /// branch, working branch, recent-commit and subject-term summaries). This is a documented,
+        /// intentional raw-JSON snapshot for the dashboard and for a resuming captain -- not a general
+        /// data blob. Null when anchors were not resolved.
+        /// </summary>
+        public string? GitAnchorsJson { get; set; } = null;
+
+        /// <summary>
         /// Creation timestamp in UTC.
         /// </summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;

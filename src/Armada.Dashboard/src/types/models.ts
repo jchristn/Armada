@@ -1694,6 +1694,7 @@ export interface Dock {
   worktreePath: string | null;
   branchName: string | null;
   active: boolean;
+  gitAnchorsJson?: string | null;
   createdUtc: string;
   lastUpdateUtc: string;
 }

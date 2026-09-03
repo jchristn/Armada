@@ -566,6 +566,11 @@ namespace Armada.Core.Database.Mysql
                     58,
                     "Add in-dock Definition-of-Done gate config to vessels",
                     TableQueries.MigrationV58Statements
+                ),
+                new SchemaMigration(
+                    59,
+                    "Add git_anchors_json to docks",
+                    TableQueries.MigrationV59Statements
                 )
             };
         }
