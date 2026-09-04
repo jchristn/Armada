@@ -322,7 +322,7 @@ export default function Vessels() {
       {/* Create/Edit Modal */}
       {showForm && (
         <div className="modal-overlay" onClick={() => setShowForm(false)}>
-          <form className="modal" style={{ width: 'min(1080px, 95vw)', maxWidth: 'min(1080px, 95vw)', maxHeight: '92vh', overflowY: 'auto', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()} onSubmit={handleSubmit}>
+          <form className="modal" style={{ width: 'min(1080px, 95vw)', maxWidth: 'min(1080px, 95vw)', maxHeight: '92vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()} onSubmit={handleSubmit}>
             <h3>{editing ? t('Edit Vessel') : t('Create Vessel')}</h3>
 
             {/* Row 1: Name + Fleet + Repo URL (3 cols) */}
@@ -479,18 +479,18 @@ export default function Vessels() {
             </div>
 
             {/* Context textareas always 3 cols -- fills remaining vertical space */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 1.5rem', flex: 1, minHeight: 0 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 1.5rem' }}>
               <label style={{ display: 'flex', flexDirection: 'column' }}>
                 {t('Project Context')}
-                <textarea value={form.projectContext} onChange={e => setForm({ ...form, projectContext: e.target.value })} style={{ flex: 1, minHeight: '150px', resize: 'none' }} />
+                <textarea value={form.projectContext} onChange={e => setForm({ ...form, projectContext: e.target.value })} style={{ minHeight: '150px', resize: 'vertical' }} />
               </label>
               <label style={{ display: 'flex', flexDirection: 'column' }}>
                 {t('Style Guide')}
-                <textarea value={form.styleGuide} onChange={e => setForm({ ...form, styleGuide: e.target.value })} style={{ flex: 1, minHeight: '150px', resize: 'none' }} />
+                <textarea value={form.styleGuide} onChange={e => setForm({ ...form, styleGuide: e.target.value })} style={{ minHeight: '150px', resize: 'vertical' }} />
               </label>
               <label style={{ display: 'flex', flexDirection: 'column' }}>
                 {t('Model Context')}
-                <textarea value={form.modelContext} onChange={e => setForm({ ...form, modelContext: e.target.value })} placeholder={form.enableModelContext ? t('Agent-accumulated context...') : t('Enable Model Context to use')} disabled={!form.enableModelContext} style={{ flex: 1, minHeight: '150px', resize: 'none', ...(form.enableModelContext ? {} : { opacity: 0.4 }) }} />
+                <textarea value={form.modelContext} onChange={e => setForm({ ...form, modelContext: e.target.value })} placeholder={form.enableModelContext ? t('Agent-accumulated context...') : t('Enable Model Context to use')} disabled={!form.enableModelContext} style={{ minHeight: '150px', resize: 'vertical', ...(form.enableModelContext ? {} : { opacity: 0.4 }) }} />
               </label>
             </div>
 

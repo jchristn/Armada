@@ -4809,19 +4809,14 @@ tr.clickable { cursor: pointer; }
 /* Mux captains expose many more fields; give their config modal 50% more width (440px -> 660px). */
 .modal-mux { max-width: 660px; }
 
-/* Captain create/edit modal: 100% wider than the base modal and ~50% taller so the
-   runtime/instruction/endpoint fields have room. Doubles the base 440px (and the 660px mux). */
-.modal-captain { max-width: 880px; min-height: 82.5vh; display: flex; flex-direction: column; }
+/* Captain create/edit modal: 100% wider than the base modal so the runtime/instruction/endpoint
+   fields have room. The modal scrolls as a normal column (inherits .modal's max-height:90vh +
+   overflow-y:auto), so the Save/Cancel footer always sits below the content and never overlaps it.
+   (It previously used display:flex + a flex:1 instructions field, which overlapped the footer once
+   the fields overflowed -- especially for Mux, which adds many fields.) */
+.modal-captain { max-width: 880px; }
 .modal-captain.modal-mux { max-width: 1320px; }
-/* Let the System Instructions field consume the modal's remaining vertical space. */
-.modal-captain > .captain-instructions-field {
-    flex: 1 1 auto;
-    display: flex;
-    flex-direction: column;
-    min-height: 140px;
-}
-.modal-captain > .captain-instructions-field textarea {
-    flex: 1 1 auto;
+.modal-captain .captain-instructions-field textarea {
     min-height: 120px;
     resize: vertical;
 }
@@ -4956,6 +4951,8 @@ tr.clickable { cursor: pointer; }
     justify-content: flex-end;
     gap: 0.5rem;
     margin-top: 1rem;
+    /* Never let the action footer be shrunk or overlapped inside a flex-column modal. */
+    flex-shrink: 0;
 }
 
 .modal label {
