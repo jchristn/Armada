@@ -4990,6 +4990,20 @@ tr.clickable { cursor: pointer; }
     margin-top: 0.3rem;
 }
 
+/* Inline checkbox + label text on a single centered row (used in create/edit modals). */
+.checkbox-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.checkbox-row input[type="checkbox"] {
+    margin-top: 0;
+    width: auto;
+    flex: 0 0 auto;
+}
+
 .btn-link {
     padding: 0;
     border: 0;
