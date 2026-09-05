@@ -62,6 +62,7 @@ namespace Armada.Core.Database.Mysql
             PlanningSessionMessages = new PlanningSessionMessageMethods(_ConnectionString);
             Objectives = new ObjectiveMethods(_ConnectionString);
             Jobs = new JobMethods(_ConnectionString);
+            ModelEndpoints = new ModelEndpointMethods(_ConnectionString);
             ObjectiveRefinementSessions = new ObjectiveRefinementSessionMethods(_ConnectionString);
             ObjectiveRefinementMessages = new ObjectiveRefinementMessageMethods(_ConnectionString);
             Docks = new DockMethods(_ConnectionString);
@@ -571,6 +572,11 @@ namespace Armada.Core.Database.Mysql
                     59,
                     "Add git_anchors_json to docks",
                     TableQueries.MigrationV59Statements
+                ),
+                new SchemaMigration(
+                    60,
+                    "Add model_endpoints table for managed embedding/inference endpoints",
+                    TableQueries.MigrationV60Statements
                 )
             };
         }

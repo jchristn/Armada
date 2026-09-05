@@ -51,6 +51,7 @@ Machine-readable OpenAPI is available at `/openapi.json`, and the interactive Sw
   - [Prompt Templates](#prompt-templates)
   - [Personas](#personas)
   - [Pipelines](#pipelines)
+  - [Model Endpoints](#model-endpoints)
   - [Backup and Restore](#backup-and-restore)
   - [OpenAPI Discovery](#openapi-discovery)
 - [Data Types](#data-types)
@@ -220,6 +221,9 @@ Operational entities persist both `TenantId` and `UserId`. Those ownership colum
 | `/api/v1/prompt-templates` | ALL | Authenticated | Tenant-scoped |
 | `/api/v1/personas` | ALL | Authenticated | Tenant-scoped |
 | `/api/v1/pipelines` | ALL | Authenticated | Tenant-scoped |
+| `/api/v1/model-endpoints` | GET/POST/PUT/DELETE | Authenticated | Tenant-scoped. The stored `ApiKey` is write-only and never returned on reads. |
+| `/api/v1/model-endpoints/{id}/validate` | POST | Authenticated | Issue a real embedding or completion request against one endpoint and persist its health status |
+| `/api/v1/model-endpoints/health-check` | POST | Authenticated | Probe all enabled endpoints, deduplicated by base URL |
 | `/api/v1/tenants` | GET (list) | AdminOnly | Global admin only |
 | `/api/v1/tenants` | POST | AdminOnly | Global admin only |
 | `/api/v1/tenants/{id}` | GET | Authenticated | Global admin: any; tenant admin or regular user: own tenant only |
@@ -2808,6 +2812,210 @@ curl -X DELETE http://localhost:7890/api/v1/pipelines/review-pipeline
 
 ---
 
+### Model Endpoints
+
+A model endpoint is a managed reference to an external embedding or inference (chat/completion) model behind a provider API. Armada stores the endpoint, health-checks it (deduplicated by base URL), and can validate one with a real request. The stored `ApiKey` is write-only: it is accepted on create and update but is never returned on reads. Reads expose `HasApiKey` instead.
+
+Two capability constraints are enforced:
+
+- `Anthropic` cannot be used with `Kind` `Embedding` (no embeddings API).
+- `VoyageAI` cannot be used with `Kind` `Inference` (embeddings only).
+
+Requests that violate either constraint are rejected with `400 Bad Request`.
+
+#### GET /api/v1/model-endpoints
+
+List all model endpoints in the caller scope. This route returns a plain array, **not** a paginated `EnumerationResult` envelope.
+
+**Response:** `200 OK` - [ModelEndpoint](#modelendpoint)[]
+
+```json
+[
+  {
+    "Id": "mep_abc123",
+    "TenantId": "default",
+    "UserId": "default",
+    "Name": "Primary embeddings",
+    "Kind": "Embedding",
+    "Provider": "OpenAI",
+    "BaseUrl": "https://api.openai.com/v1",
+    "Model": "text-embedding-3-small",
+    "Dimensionality": 1536,
+    "TimeoutMs": 120000,
+    "Enabled": true,
+    "HasApiKey": true,
+    "HealthStatus": "Healthy",
+    "LastHealthCheckUtc": "2026-03-07T12:00:00Z",
+    "LastHealthError": null,
+    "LastLatencyMs": 84,
+    "CreatedUtc": "2026-03-07T12:00:00Z",
+    "LastUpdateUtc": "2026-03-07T12:00:00Z"
+  }
+]
+```
+
+```bash
+curl -H "Authorization: Bearer default" http://localhost:7890/api/v1/model-endpoints
+```
+
+---
+
+#### POST /api/v1/model-endpoints
+
+Create a model endpoint. Supply `ApiKey` to store a provider key; it is write-only and is never returned on subsequent reads.
+
+**Request Body:** [ModelEndpoint](#modelendpoint)
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `Name` | string | yes | Display name |
+| `BaseUrl` | string | yes | Provider API base URL |
+| `Kind` | string | no | `Embedding` (default) or `Inference` |
+| `Provider` | string | no | `Ollama`, `OpenAI`, `OpenAICompatible`, `Anthropic`, `Gemini`, or `VoyageAI` |
+| `Model` | string | no | Model name to target |
+| `Dimensionality` | int | no | Embedding dimensionality (default 0) |
+| `TimeoutMs` | int | no | Request timeout in milliseconds (default 120000, clamped to 1000..600000) |
+| `Enabled` | bool | no | Whether the endpoint participates in health sweeps (default true) |
+| `ApiKey` | string | no | Provider API key. Write-only: accepted here, never returned on reads. |
+
+```json
+{
+  "Name": "Primary embeddings",
+  "Kind": "Embedding",
+  "Provider": "OpenAI",
+  "BaseUrl": "https://api.openai.com/v1",
+  "Model": "text-embedding-3-small",
+  "Dimensionality": 1536,
+  "TimeoutMs": 120000,
+  "Enabled": true,
+  "ApiKey": "sk-example-key"
+}
+```
+
+**Response:** `201 Created` - [ModelEndpoint](#modelendpoint) (note `HasApiKey: true`, and no `ApiKey` field)
+
+```json
+{
+  "Id": "mep_abc123",
+  "Name": "Primary embeddings",
+  "Kind": "Embedding",
+  "Provider": "OpenAI",
+  "BaseUrl": "https://api.openai.com/v1",
+  "Model": "text-embedding-3-small",
+  "Dimensionality": 1536,
+  "TimeoutMs": 120000,
+  "Enabled": true,
+  "HasApiKey": true,
+  "HealthStatus": "Unknown",
+  "LastHealthCheckUtc": null,
+  "LastHealthError": null,
+  "LastLatencyMs": null,
+  "CreatedUtc": "2026-03-07T12:00:00Z",
+  "LastUpdateUtc": "2026-03-07T12:00:00Z"
+}
+```
+
+**Errors:**
+- `400 Bad Request` - Missing `Name` or `BaseUrl`, or a rejected provider/kind combination (`Anthropic` + `Embedding`, or `VoyageAI` + `Inference`)
+
+---
+
+#### GET /api/v1/model-endpoints/{id}
+
+Get a single model endpoint by ID.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Model endpoint ID (`mep_` prefix) |
+
+**Response:** `200 OK` - [ModelEndpoint](#modelendpoint)
+**Error:** `404` - Model endpoint not found
+
+---
+
+#### PUT /api/v1/model-endpoints/{id}
+
+Update a model endpoint. Omit `ApiKey` to keep the stored key; send `ApiKey` to replace it.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Model endpoint ID (`mep_` prefix) |
+
+**Request Body:** [ModelEndpoint](#modelendpoint) (fields to update)
+
+```json
+{
+  "Name": "Primary embeddings (updated)",
+  "Model": "text-embedding-3-large",
+  "Dimensionality": 3072,
+  "Enabled": true
+}
+```
+
+**Response:** `200 OK` - [ModelEndpoint](#modelendpoint)
+**Error:** `400` - Rejected provider/kind combination
+**Error:** `404` - Model endpoint not found
+
+---
+
+#### DELETE /api/v1/model-endpoints/{id}
+
+Delete a model endpoint.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Model endpoint ID (`mep_` prefix) |
+
+**Response:** `204 No Content`
+**Error:** `404` - Model endpoint not found
+
+---
+
+#### POST /api/v1/model-endpoints/{id}/validate
+
+Validate one endpoint by issuing a real request against the provider: an embedding request for `Embedding` endpoints, or a completion request for `Inference` endpoints. The resulting health status, timestamp, latency, and any error are persisted on the endpoint.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Model endpoint ID (`mep_` prefix) |
+
+**Response:** `200 OK` - [ModelEndpointProbeResult](#modelendpointproberesult)
+
+```json
+{
+  "Success": true,
+  "BaseUrl": "https://api.openai.com/v1",
+  "LatencyMs": 92,
+  "StatusCode": 200,
+  "Error": null,
+  "EmbeddingDimensions": 1536,
+  "SampleText": null,
+  "TimestampUtc": "2026-03-07T12:00:00Z"
+}
+```
+
+**Error:** `404` - Model endpoint not found
+
+---
+
+#### POST /api/v1/model-endpoints/health-check
+
+Probe all enabled model endpoints, deduplicated by base URL, and persist each endpoint's health status. Returns the number of distinct base URLs that were probed.
+
+**Response:** `200 OK` - [ModelEndpointHealthSweepResponse](#modelendpointhealthsweepresponse)
+
+```json
+{
+  "DistinctBaseUrlsProbed": 3
+}
+```
+
+---
+
 ### Backup and Restore
 
 #### GET /api/v1/backup
@@ -4766,6 +4974,59 @@ Immutable mission-time snapshot of a selected playbook.
 
 ---
 
+#### ModelEndpoint
+
+A managed reference to an external embedding or inference model behind a provider API.
+
+```json
+{
+  "Id": "mep_abc123",
+  "TenantId": "default",
+  "UserId": "default",
+  "Name": "Primary embeddings",
+  "Kind": "Embedding",
+  "Provider": "OpenAI",
+  "BaseUrl": "https://api.openai.com/v1",
+  "Model": "text-embedding-3-small",
+  "Dimensionality": 1536,
+  "TimeoutMs": 120000,
+  "Enabled": true,
+  "HasApiKey": true,
+  "HealthStatus": "Healthy",
+  "LastHealthCheckUtc": "2026-03-07T12:00:00Z",
+  "LastHealthError": null,
+  "LastLatencyMs": 84,
+  "CreatedUtc": "2026-03-07T12:00:00Z",
+  "LastUpdateUtc": "2026-03-07T12:00:00Z"
+}
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `Id` | string | auto-generated | Unique ID with `mep_` prefix |
+| `TenantId` | string? | null | Owning tenant ID |
+| `UserId` | string? | null | Owning user ID |
+| `Name` | string | required | Display name |
+| `Kind` | string | `Embedding` | `Embedding` or `Inference` |
+| `Provider` | string | `Ollama` | `Ollama`, `OpenAI`, `OpenAICompatible`, `Anthropic`, `Gemini`, or `VoyageAI` |
+| `BaseUrl` | string | required | Provider API base URL |
+| `Model` | string? | null | Model name to target |
+| `Dimensionality` | int | 0 | Embedding dimensionality |
+| `TimeoutMs` | int | 120000 | Request timeout in milliseconds (clamped to [1000, 600000]) |
+| `Enabled` | bool | true | Whether the endpoint participates in health sweeps |
+| `ApiKey` | string | -- | Write-only input. Accepted on create/update; never returned on reads. |
+| `HasApiKey` | bool | false | Read-only. Indicates whether a provider key is stored. |
+| `HealthStatus` | string | `Unknown` | `Unknown`, `Healthy`, or `Unhealthy` |
+| `LastHealthCheckUtc` | datetime? | null | Timestamp of the last probe (UTC) |
+| `LastHealthError` | string? | null | Error text from the last failed probe |
+| `LastLatencyMs` | int? | null | Latency of the last probe in milliseconds |
+| `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
+| `LastUpdateUtc` | datetime | now | Last update timestamp (UTC) |
+
+The `Anthropic` provider cannot be paired with `Kind` `Embedding`, and the `VoyageAI` provider cannot be paired with `Kind` `Inference`; both combinations are rejected with `400 Bad Request`.
+
+---
+
 ### Enumerations
 
 All enumerations serialize as strings in JSON (e.g., `"InProgress"`, not `2`).
@@ -5099,6 +5360,52 @@ Response from `GET /api/v1/captains/{id}/log`.
 | `Log` | string | Log content (newline-delimited) |
 | `Lines` | integer | Number of lines returned |
 | `TotalLines` | integer | Total lines in log file |
+
+---
+
+#### ModelEndpointProbeResult
+
+Result of `POST /api/v1/model-endpoints/{id}/validate`. Describes the outcome of a single real request against the provider.
+
+```json
+{
+  "Success": true,
+  "BaseUrl": "https://api.openai.com/v1",
+  "LatencyMs": 92,
+  "StatusCode": 200,
+  "Error": null,
+  "EmbeddingDimensions": 1536,
+  "SampleText": null,
+  "TimestampUtc": "2026-03-07T12:00:00Z"
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `Success` | bool | Whether the probe request succeeded |
+| `BaseUrl` | string \| null | Base URL that was probed |
+| `LatencyMs` | int | Round-trip latency in milliseconds |
+| `StatusCode` | int \| null | HTTP status code returned by the provider, when available |
+| `Error` | string \| null | Error text when the probe failed |
+| `EmbeddingDimensions` | int \| null | Dimensionality returned by an embedding probe |
+| `SampleText` | string \| null | Sample completion text returned by an inference probe |
+| `TimestampUtc` | datetime | When the probe ran (UTC) |
+
+---
+
+#### ModelEndpointHealthSweepResponse
+
+Result of `POST /api/v1/model-endpoints/health-check`.
+
+```json
+{
+  "DistinctBaseUrlsProbed": 3
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `DistinctBaseUrlsProbed` | int | Number of distinct base URLs probed during the sweep |
 
 ---
 

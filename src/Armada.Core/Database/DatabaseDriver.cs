@@ -169,6 +169,11 @@ namespace Armada.Core.Database
         /// </summary>
         public ICoordinationLeaseMethods CoordinationLeases { get; protected set; } = null!;
 
+        /// <summary>
+        /// Managed model endpoint (embedding/inference) operations.
+        /// </summary>
+        public IModelEndpointMethods ModelEndpoints { get; protected set; } = null!;
+
         #endregion
 
         #region Constructors-and-Factories

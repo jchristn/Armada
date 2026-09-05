@@ -41,7 +41,7 @@ namespace Armada.Server.Mcp.Tools
                     type = "object",
                     properties = new
                     {
-                        entityType = new { type = "string", description = "Entity type to enumerate: objectives, jobs, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions" },
+                        entityType = new { type = "string", description = "Entity type to enumerate: objectives, jobs, model_endpoints, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions" },
                         pageNumber = new { type = "integer", description = "Page number (1-based, default 1)" },
                         pageSize = new { type = "integer", description = "Results per page (default 10, max 1000)" },
                         order = new { type = "string", description = "Sort order: CreatedAscending, CreatedDescending (default)" },
@@ -107,6 +107,18 @@ namespace Armada.Server.Mcp.Tools
                                 .Take(jobPageSize)
                                 .ToList();
                             return (object)new { Success = true, PageNumber = jobPageNumber, PageSize = jobPageSize, TotalRecords = allJobs.Count, Objects = jobPage };
+                        case "model_endpoints":
+                        case "model-endpoints":
+                        case "model_endpoint":
+                        case "endpoints":
+                            System.Collections.Generic.List<ModelEndpoint> allEndpoints = await database.ModelEndpoints.EnumerateAsync().ConfigureAwait(false);
+                            int mepPageSize = query.PageSize > 0 ? query.PageSize : 25;
+                            int mepPageNumber = query.PageNumber > 0 ? query.PageNumber : 1;
+                            System.Collections.Generic.List<ModelEndpoint> mepPage = allEndpoints
+                                .Skip((mepPageNumber - 1) * mepPageSize)
+                                .Take(mepPageSize)
+                                .ToList();
+                            return (object)new { Success = true, PageNumber = mepPageNumber, PageSize = mepPageSize, TotalRecords = allEndpoints.Count, Objects = mepPage };
                         case "fleets":
                         case "fleet":
                             EnumerationResult<Fleet> fleets = await database.Fleets.EnumerateAsync(query).ConfigureAwait(false);
@@ -450,7 +462,7 @@ namespace Armada.Server.Mcp.Tools
                             }).ConfigureAwait(false);
                             return (object)checkRuns;
                         default:
-                            return (object)new { Error = "Unknown entity type: " + entityType + ". Valid types: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases" };
+                            return (object)new { Error = "Unknown entity type: " + entityType + ". Valid types: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, jobs, model_endpoints" };
                     }
                 });
         }

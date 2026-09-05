@@ -1982,6 +1982,28 @@ tr.clickable { cursor: pointer; }
     border-bottom: 1px solid var(--border);
 }
 
+/* Key/value list used inside compact modals (endpoint validate/health details). */
+.detail-list {
+    display: grid;
+    grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
+    gap: 0.35rem 1rem;
+    margin: 0.5rem 0 1rem;
+}
+
+.detail-list dt {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    align-self: center;
+}
+
+.detail-list dd {
+    margin: 0;
+    min-width: 0;
+    word-break: break-word;
+}
+
 .detail-meta-field span {
     font-size: 0.75rem;
     color: var(--text-dim);

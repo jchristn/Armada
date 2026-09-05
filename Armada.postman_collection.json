@@ -185,6 +185,12 @@
       "value": "",
       "type": "string",
       "description": "Runbook execution ID for detail, update, and delete requests."
+    },
+    {
+      "key": "modelEndpointId",
+      "value": "",
+      "type": "string",
+      "description": "Model endpoint ID for detail, update, delete, and validate requests."
     }
   ],
   "item": [
@@ -8666,6 +8672,199 @@
               ]
             },
             "description": "Delete one runbook execution."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Model Endpoints",
+      "description": "Managed external embedding or inference provider endpoints. The stored ApiKey is write-only and never returned on reads; reads expose HasApiKey.",
+      "item": [
+        {
+          "name": "List Model Endpoints",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/model-endpoints",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "model-endpoints"
+              ]
+            },
+            "description": "List all model endpoints in scope. Returns a plain array, not a paginated envelope. The stored API key is never returned; reads expose HasApiKey."
+          }
+        },
+        {
+          "name": "Create Model Endpoint",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/model-endpoints",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "model-endpoints"
+              ]
+            },
+            "description": "Create a model endpoint and save the resulting ID to modelEndpointId. Supply ApiKey to store a provider key; it is write-only and never returned on reads.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Name\": \"Primary embeddings\",\n  \"Kind\": \"Embedding\",\n  \"Provider\": \"OpenAI\",\n  \"BaseUrl\": \"https://api.openai.com/v1\",\n  \"Model\": \"text-embedding-3-small\",\n  \"Dimensionality\": 1536,\n  \"TimeoutMs\": 120000,\n  \"Enabled\": true,\n  \"ApiKey\": \"sk-example-key\"\n}"
+            }
+          },
+          "event": {
+            "listen": "test",
+            "script": {
+              "exec": [
+                "if (pm.response.code === 201 || pm.response.code === 200) {",
+                "    const json = pm.response.json();",
+                "    pm.collectionVariables.set('modelEndpointId', json.Id || json.id);",
+                "}"
+              ],
+              "type": "text/javascript"
+            }
+          }
+        },
+        {
+          "name": "Get Model Endpoint",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/model-endpoints/{{modelEndpointId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "model-endpoints",
+                "{{modelEndpointId}}"
+              ]
+            },
+            "description": "Read one model endpoint by ID."
+          }
+        },
+        {
+          "name": "Update Model Endpoint",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/model-endpoints/{{modelEndpointId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "model-endpoints",
+                "{{modelEndpointId}}"
+              ]
+            },
+            "description": "Update one model endpoint. Omit ApiKey to keep the stored key; send ApiKey to replace it.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Name\": \"Primary embeddings (updated)\",\n  \"Model\": \"text-embedding-3-large\",\n  \"Dimensionality\": 3072,\n  \"Enabled\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Model Endpoint",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/model-endpoints/{{modelEndpointId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "model-endpoints",
+                "{{modelEndpointId}}"
+              ]
+            },
+            "description": "Delete one model endpoint record."
+          }
+        },
+        {
+          "name": "Validate Model Endpoint",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/model-endpoints/{{modelEndpointId}}/validate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "model-endpoints",
+                "{{modelEndpointId}}",
+                "validate"
+              ]
+            },
+            "description": "Issue a real embedding or completion request against one endpoint and persist its health status. Returns a ModelEndpointProbeResult.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "Health Sweep Model Endpoints",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/model-endpoints/health-check",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "model-endpoints",
+                "health-check"
+              ]
+            },
+            "description": "Probe all enabled endpoints, deduplicated by base URL, and persist health status. Returns the distinct base URL count.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
           }
         }
       ]

@@ -68,6 +68,9 @@ import type {
   ProjectProfileResolutionResult,
   PersonaPromptPreview,
   Skill,
+  ModelEndpoint,
+  ModelEndpointProbeResult,
+  ModelEndpointHealthSweepResponse,
   AskResponse,
   CaptainChatRequest,
   CaptainChatResponse,
@@ -839,6 +842,19 @@ export const getSkill = (id: string) => get<Skill>(`/api/v1/skills/${encodeURICo
 export const createSkill = (data: Partial<Skill>) => post<Skill>('/api/v1/skills', data);
 export const updateSkill = (id: string, data: Partial<Skill>) => put<Skill>(`/api/v1/skills/${encodeURIComponent(id)}`, data);
 export const deleteSkill = (id: string) => del<void>(`/api/v1/skills/${encodeURIComponent(id)}`);
+
+// Model endpoints (embedding/inference)
+export const listModelEndpoints = () => get<ModelEndpoint[]>('/api/v1/model-endpoints');
+export const getModelEndpoint = (id: string) => get<ModelEndpoint>(`/api/v1/model-endpoints/${encodeURIComponent(id)}`);
+export const createModelEndpoint = (data: Partial<ModelEndpoint> & { apiKey?: string | null }) =>
+  post<ModelEndpoint>('/api/v1/model-endpoints', data);
+export const updateModelEndpoint = (id: string, data: Partial<ModelEndpoint> & { apiKey?: string | null }) =>
+  put<ModelEndpoint>(`/api/v1/model-endpoints/${encodeURIComponent(id)}`, data);
+export const deleteModelEndpoint = (id: string) => del<void>(`/api/v1/model-endpoints/${encodeURIComponent(id)}`);
+export const validateModelEndpoint = (id: string) =>
+  post<ModelEndpointProbeResult>(`/api/v1/model-endpoints/${encodeURIComponent(id)}/validate`, {});
+export const healthCheckModelEndpoints = () =>
+  post<ModelEndpointHealthSweepResponse>('/api/v1/model-endpoints/health-check', {});
 
 // Ask Armada
 export const askArmada = (message: string) => post<AskResponse>('/api/v1/ask', { message });

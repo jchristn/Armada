@@ -1305,6 +1305,35 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration v60 statements: add the model_endpoints table for managed embedding/inference endpoints.
+        /// </summary>
+        public static readonly string[] MigrationV60Statements = new string[]
+        {
+            @"CREATE TABLE IF NOT EXISTS model_endpoints (
+                id VARCHAR(450) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(450),
+                user_id VARCHAR(450),
+                name VARCHAR(450) NOT NULL,
+                kind VARCHAR(64) NOT NULL,
+                provider VARCHAR(64) NOT NULL,
+                base_url VARCHAR(1024) NOT NULL,
+                api_key TEXT,
+                model VARCHAR(255),
+                dimensionality INT NOT NULL DEFAULT 0,
+                timeout_ms INT NOT NULL DEFAULT 120000,
+                enabled TINYINT(1) NOT NULL DEFAULT 1,
+                health_status VARCHAR(64) NOT NULL DEFAULT 'Unknown',
+                last_health_check_utc DATETIME(6) NULL,
+                last_health_error TEXT,
+                last_latency_ms BIGINT NULL,
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL
+            );",
+            "CREATE INDEX idx_model_endpoints_created ON model_endpoints(created_utc DESC);",
+            "CREATE INDEX idx_model_endpoints_tenant ON model_endpoints(tenant_id);"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

@@ -80,7 +80,8 @@ namespace Armada.Server.Mcp
             AgentLifecycleHandler? agentLifecycle = null,
             IPromptTemplateService? templateService = null,
             LoggingModule? logging = null,
-            CaptainToolService? captainToolService = null)
+            CaptainToolService? captainToolService = null,
+            ModelEndpointService? modelEndpointService = null)
         {
             McpStatusTools.Register(register, admiral, onStop);
             if (logging != null) McpInboxTools.Register(register, database, logging);
@@ -106,6 +107,7 @@ namespace Armada.Server.Mcp
             McpPersonaTools.Register(register, database);
             McpPipelineTools.Register(register, database);
             if (settings != null) McpBackupTools.Register(register, database, settings);
+            if (modelEndpointService != null) McpModelEndpointTools.Register(register, modelEndpointService);
         }
 
         /// <summary>
@@ -131,7 +133,8 @@ namespace Armada.Server.Mcp
             Func<string, Task>? onStopCaptain = null,
             AgentLifecycleHandler? agentLifecycle = null,
             IPromptTemplateService? templateService = null,
-            LoggingModule? logging = null)
+            LoggingModule? logging = null,
+            ModelEndpointService? modelEndpointService = null)
         {
             List<CaptainToolSummary> tools = new List<CaptainToolSummary>();
 
@@ -175,6 +178,7 @@ namespace Armada.Server.Mcp
             RegisterCatalogGroup("Armada MCP / Personas", register => McpPersonaTools.Register(register, database));
             RegisterCatalogGroup("Armada MCP / Pipelines", register => McpPipelineTools.Register(register, database));
             if (settings != null) RegisterCatalogGroup("Armada MCP / Backup", register => McpBackupTools.Register(register, database, settings));
+            if (modelEndpointService != null) RegisterCatalogGroup("Armada MCP / Model Endpoints", register => McpModelEndpointTools.Register(register, modelEndpointService));
 
             return tools
                 .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase)

@@ -86,6 +86,7 @@ namespace Armada.Server
         private GitHubIntegrationService _GitHubIntegrationService = null!;
         private LandingPreviewService _LandingPreviewService = null!;
         private HistoricalTimelineService _HistoricalTimelineService = null!;
+        private ModelEndpointService _ModelEndpointService = null!;
 
         private ISessionTokenService _SessionTokenService = null!;
         private IAuthenticationService _AuthenticationService = null!;
@@ -183,6 +184,7 @@ namespace Armada.Server
             _GitHubIntegrationService = new GitHubIntegrationService(_Database, _ObjectiveService, _CheckRunService, _DeploymentService, _Settings, _Logging);
             _LandingPreviewService = new LandingPreviewService(_Database, _Logging);
             _HistoricalTimelineService = new HistoricalTimelineService(_Database);
+            _ModelEndpointService = new ModelEndpointService(_Database, _Logging);
             _RemoteTunnel = new RemoteTunnelManager(_Logging, _Settings);
             _RemoteDashboardRelay = new RemoteDashboardRelayService(_Logging, _Settings, _RemoteTunnel.PublishEventAsync);
             admiralService.OnGetRemoteTunnelStatus = _RemoteTunnel.GetStatus;
@@ -582,6 +584,10 @@ namespace Armada.Server
 
             // Environments
             new EnvironmentRoutes(_EnvironmentService)
+                .Register(_App, authenticate, _AuthorizationService);
+
+            // Model endpoints (embedding/inference)
+            new ModelEndpointRoutes(_ModelEndpointService)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Structured check runs
@@ -1020,7 +1026,8 @@ namespace Armada.Server
                 _AgentLifecycle,
                 _PromptTemplateService,
                 _Logging,
-                _CaptainTools);
+                _CaptainTools,
+                _ModelEndpointService);
         }
 
         private async Task EmitEventAsync(string eventType, string message,
@@ -1125,6 +1132,10 @@ namespace Armada.Server
                         _LogRotation.RotateIfNeeded(Path.Combine(_Settings.LogDirectory, "admiral.log"));
                         await _PlanningSessions.MaintainSessionsAsync(token).ConfigureAwait(false);
                         await _ObjectiveRefinementSessions.MaintainSessionsAsync(token).ConfigureAwait(false);
+
+                        // Sweep managed model endpoints, deduplicated by base URL, so their health status stays current.
+                        try { await _ModelEndpointService.CheckHealthAllAsync(token).ConfigureAwait(false); }
+                        catch (Exception epEx) { _Logging.Warn(_Header + "model endpoint health sweep error: " + epEx.Message); }
                     }
 
                     // Run data expiry every 100 health check cycles (~50 min at default interval)

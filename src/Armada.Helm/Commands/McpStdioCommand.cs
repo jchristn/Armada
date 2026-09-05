@@ -98,6 +98,7 @@ namespace Armada.Helm.Commands
             DeploymentEnvironmentService environmentService = new DeploymentEnvironmentService(database, workflowProfileService, logging);
             DeploymentService deploymentService = new DeploymentService(database, workflowProfileService, environmentService, checkRunService, logging);
             RunbookService runbookService = new RunbookService(database, logging);
+            ModelEndpointService modelEndpointService = new ModelEndpointService(database, logging);
             // Adapt Armada's JsonElement-based tool handlers to Voltaic 0.6.0's RpcParameters API.
             void RegisterAdapted(string name, string description, object inputSchema, Func<JsonElement?, Task<object>> handler)
             {
@@ -130,7 +131,8 @@ namespace Armada.Helm.Commands
                 deploymentService,
                 runbookService,
                 agentLifecycle: agentLifecycle,
-                templateService: promptTemplateService);
+                templateService: promptTemplateService,
+                modelEndpointService: modelEndpointService);
 
             // Run until stdin closes or process is killed
             using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

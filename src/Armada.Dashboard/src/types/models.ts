@@ -2145,3 +2145,43 @@ export interface PipelineStage {
 }
 
 export type EntityType = 'fleets' | 'vessels' | 'captains' | 'missions' | 'voyages' | 'signals' | 'events' | 'docks' | 'merge-queue' | 'personas' | 'prompt-templates' | 'pipelines' | 'playbooks' | 'releases' | 'environments' | 'deployments' | 'incidents' | 'runbooks';
+
+export type ModelEndpointKind = 'Embedding' | 'Inference';
+export type ModelProvider = 'Ollama' | 'OpenAI' | 'OpenAICompatible' | 'Anthropic' | 'Gemini' | 'VoyageAI';
+export type EndpointHealthStatus = 'Unknown' | 'Healthy' | 'Unhealthy';
+
+export interface ModelEndpoint {
+  id: string;
+  tenantId: string | null;
+  userId: string | null;
+  name: string;
+  kind: ModelEndpointKind;
+  provider: ModelProvider;
+  baseUrl: string;
+  model: string | null;
+  dimensionality: number;
+  timeoutMs: number;
+  enabled: boolean;
+  hasApiKey: boolean;
+  healthStatus: EndpointHealthStatus;
+  lastHealthCheckUtc: string | null;
+  lastHealthError: string | null;
+  lastLatencyMs: number | null;
+  createdUtc: string;
+  lastUpdateUtc: string;
+}
+
+export interface ModelEndpointProbeResult {
+  success: boolean;
+  baseUrl: string | null;
+  latencyMs: number;
+  statusCode: number | null;
+  error: string | null;
+  embeddingDimensions: number | null;
+  sampleText: string | null;
+  timestampUtc: string;
+}
+
+export interface ModelEndpointHealthSweepResponse {
+  distinctBaseUrlsProbed: number;
+}

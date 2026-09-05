@@ -1392,7 +1392,30 @@ namespace Armada.Core.Database.Sqlite.Queries
                     @"ALTER TABLE vessels ADD COLUMN definition_of_done_test_command TEXT;",
                     @"ALTER TABLE vessels ADD COLUMN definition_of_done_timeout_seconds INTEGER NOT NULL DEFAULT 1800;"),
                 new SchemaMigration(59, "Add git_anchors_json to docks",
-                    @"ALTER TABLE docks ADD COLUMN git_anchors_json TEXT;")
+                    @"ALTER TABLE docks ADD COLUMN git_anchors_json TEXT;"),
+                new SchemaMigration(60, "Add model_endpoints table for managed embedding/inference endpoints",
+                    @"CREATE TABLE IF NOT EXISTS model_endpoints (
+                        id TEXT PRIMARY KEY,
+                        tenant_id TEXT,
+                        user_id TEXT,
+                        name TEXT NOT NULL DEFAULT '',
+                        kind TEXT NOT NULL,
+                        provider TEXT NOT NULL,
+                        base_url TEXT NOT NULL DEFAULT '',
+                        api_key TEXT,
+                        model TEXT,
+                        dimensionality INTEGER NOT NULL DEFAULT 0,
+                        timeout_ms INTEGER NOT NULL DEFAULT 120000,
+                        enabled INTEGER NOT NULL DEFAULT 1,
+                        health_status TEXT NOT NULL DEFAULT 'Unknown',
+                        last_health_check_utc TEXT,
+                        last_health_error TEXT,
+                        last_latency_ms INTEGER,
+                        created_utc TEXT NOT NULL,
+                        last_update_utc TEXT NOT NULL
+                    );",
+                    @"CREATE INDEX IF NOT EXISTS idx_model_endpoints_created ON model_endpoints(created_utc DESC);",
+                    @"CREATE INDEX IF NOT EXISTS idx_model_endpoints_tenant ON model_endpoints(tenant_id);")
             };
         }
 

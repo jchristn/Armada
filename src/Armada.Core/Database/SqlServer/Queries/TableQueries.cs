@@ -942,6 +942,34 @@ namespace Armada.Core.Database.SqlServer.Queries
                     59,
                     "Add git_anchors_json to docks",
                     @"IF COL_LENGTH('docks','git_anchors_json') IS NULL ALTER TABLE docks ADD git_anchors_json NVARCHAR(MAX) NULL;"
+                ),
+                new SchemaMigration(
+                    60,
+                    "Add model_endpoints table for managed embedding/inference endpoints",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'model_endpoints')
+                    CREATE TABLE model_endpoints (
+                        id NVARCHAR(450) NOT NULL PRIMARY KEY,
+                        tenant_id NVARCHAR(450),
+                        user_id NVARCHAR(450),
+                        name NVARCHAR(450) NOT NULL,
+                        kind NVARCHAR(64) NOT NULL,
+                        provider NVARCHAR(64) NOT NULL,
+                        base_url NVARCHAR(2048) NOT NULL,
+                        api_key NVARCHAR(MAX),
+                        model NVARCHAR(450),
+                        dimensionality INT NOT NULL CONSTRAINT DF_model_endpoints_dimensionality DEFAULT 0,
+                        timeout_ms INT NOT NULL CONSTRAINT DF_model_endpoints_timeout_ms DEFAULT 120000,
+                        enabled BIT NOT NULL CONSTRAINT DF_model_endpoints_enabled DEFAULT 1,
+                        health_status NVARCHAR(64) NOT NULL CONSTRAINT DF_model_endpoints_health_status DEFAULT 'Unknown',
+                        last_health_check_utc NVARCHAR(450),
+                        last_health_error NVARCHAR(MAX),
+                        last_latency_ms BIGINT,
+                        created_utc NVARCHAR(450) NOT NULL,
+                        last_update_utc NVARCHAR(450) NOT NULL
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_model_endpoints_created') CREATE INDEX idx_model_endpoints_created ON model_endpoints(created_utc DESC);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_model_endpoints_tenant') CREATE INDEX idx_model_endpoints_tenant ON model_endpoints(tenant_id);"
                 )
             };
         }

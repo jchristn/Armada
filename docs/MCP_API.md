@@ -137,6 +137,13 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [get_pipeline](#get_pipeline)
     - [update_pipeline](#update_pipeline)
     - [delete_pipeline](#delete_pipeline)
+  - **Model Endpoints**
+    - [get_model_endpoint](#get_model_endpoint)
+    - [create_model_endpoint](#create_model_endpoint)
+    - [update_model_endpoint](#update_model_endpoint)
+    - [delete_model_endpoint](#delete_model_endpoint)
+    - [validate_model_endpoint](#validate_model_endpoint)
+    - [health_check_model_endpoints](#health_check_model_endpoints)
   - **Backup and Restore**
     - [backup](#backup)
     - [restore](#restore)
@@ -170,6 +177,7 @@ Armada exposes a full MCP server that allows AI agents and MCP-compatible client
 - Send signals to captains
 - Stop individual captains or all captains (emergency stop)
 - Manage the merge queue (enqueue, cancel, process, inspect)
+- Manage model endpoints (external embedding/inference providers), validate them with a real request, and sweep their health
 
 MCP does **not** currently expose the newer dashboard/system helper REST surfaces such as:
 
@@ -492,7 +500,7 @@ No parameters required.
 
 ### enumerate
 
-Paginated enumeration of any entity type with filtering and sorting. This is the MCP equivalent of the `POST /api/v1/{entity}/enumerate` REST endpoints. Returns paginated results with total counts, page metadata, and query timing. Supports: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, playbooks, personas, prompt_templates, pipelines, workflow_profiles, check_runs, releases.
+Paginated enumeration of any entity type with filtering and sorting. This is the MCP equivalent of the `POST /api/v1/{entity}/enumerate` REST endpoints. Returns paginated results with total counts, page metadata, and query timing. Supports: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, playbooks, personas, prompt_templates, pipelines, workflow_profiles, check_runs, releases, model_endpoints.
 
 **Input Schema:**
 
@@ -500,7 +508,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 {
   "type": "object",
   "properties": {
-    "entityType": { "type": "string", "description": "Entity type to enumerate (fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, playbooks, personas, prompt_templates, pipelines, workflow_profiles, check_runs, releases)" },
+    "entityType": { "type": "string", "description": "Entity type to enumerate (fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, playbooks, personas, prompt_templates, pipelines, workflow_profiles, check_runs, releases, model_endpoints)" },
     "pageNumber": { "type": "integer", "description": "Page number (1-based, default 1)" },
     "pageSize": { "type": "integer", "description": "Results per page (default 10, max 1000)" },
     "order": { "type": "string", "description": "Sort order: CreatedAscending, CreatedDescending" },
@@ -544,6 +552,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 | `workflow_profiles` | `createdAfter`, `createdBefore` (current MCP enumeration is primarily paginated browse) |
 | `check_runs` | `createdAfter`, `createdBefore` (current MCP enumeration is primarily paginated browse) |
 | `releases` | `status`, `vesselId`, `search`, `createdAfter`, `createdBefore` |
+| `model_endpoints` | `createdAfter`, `createdBefore` (current MCP enumeration is primarily paginated browse) |
 
 | Include flag | Applies to | Default | Description |
 |---|---|---|---|
@@ -3375,6 +3384,220 @@ Returns `{ "Error": "Cannot delete built-in pipeline" }` if the pipeline is buil
 
 ---
 
+### get_model_endpoint
+
+Get details of a specific model endpoint (managed embedding or inference provider reference). The stored API key is never returned; `hasApiKey` indicates whether one is set.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "endpointId": { "type": "string", "description": "Model endpoint ID (mep_ prefix)" }
+  },
+  "required": ["endpointId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `endpointId` | string | Yes | Model endpoint ID (prefix `mep_`) |
+
+**Response:** [ModelEndpoint](#modelendpoint) object, or `{ "Error": "Model endpoint not found" }`.
+
+---
+
+### create_model_endpoint
+
+Create a model endpoint. Supply `apiKey` to store a provider key; it is write-only and is never returned on reads.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": { "type": "string", "description": "Display name" },
+    "baseUrl": { "type": "string", "description": "Provider API base URL" },
+    "kind": { "type": "string", "description": "Embedding (default) or Inference" },
+    "provider": { "type": "string", "description": "Ollama, OpenAI, OpenAICompatible, Anthropic, Gemini, or VoyageAI" },
+    "model": { "type": "string", "description": "Model name to target" },
+    "apiKey": { "type": "string", "description": "Provider API key. Write-only: accepted here, never returned on reads." },
+    "dimensionality": { "type": "integer", "description": "Embedding dimensionality (default 0)" },
+    "timeoutMs": { "type": "integer", "description": "Request timeout in milliseconds (default 120000, clamped to [1000, 600000])" },
+    "enabled": { "type": "boolean", "description": "Whether the endpoint participates in health sweeps (default true)" }
+  },
+  "required": ["name", "baseUrl"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Display name |
+| `baseUrl` | string | Yes | Provider API base URL |
+| `kind` | string | No | `Embedding` (default) or `Inference` |
+| `provider` | string | No | `Ollama`, `OpenAI`, `OpenAICompatible`, `Anthropic`, `Gemini`, or `VoyageAI` |
+| `model` | string | No | Model name to target |
+| `apiKey` | string | No | Provider API key. Write-only: accepted here, never returned on reads. |
+| `dimensionality` | integer | No | Embedding dimensionality (default 0) |
+| `timeoutMs` | integer | No | Request timeout in milliseconds (default 120000, clamped to [1000, 600000]) |
+| `enabled` | boolean | No | Whether the endpoint participates in health sweeps (default true) |
+
+**Example Input:**
+
+```json
+{
+  "name": "Primary embeddings",
+  "kind": "Embedding",
+  "provider": "OpenAI",
+  "baseUrl": "https://api.openai.com/v1",
+  "model": "text-embedding-3-small",
+  "dimensionality": 1536,
+  "apiKey": "sk-example-key"
+}
+```
+
+**Response:** The newly created [ModelEndpoint](#modelendpoint) object (with `hasApiKey: true`, no `apiKey` field). Returns `{ "Error": "..." }` when `Anthropic` is paired with `Embedding`, or `VoyageAI` is paired with `Inference`.
+
+---
+
+### update_model_endpoint
+
+Update an existing model endpoint. Omit `apiKey` to keep the stored key; send `apiKey` to replace it.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "endpointId": { "type": "string", "description": "Model endpoint ID (mep_ prefix)" },
+    "name": { "type": "string", "description": "New display name" },
+    "kind": { "type": "string", "description": "Embedding or Inference" },
+    "provider": { "type": "string", "description": "Ollama, OpenAI, OpenAICompatible, Anthropic, Gemini, or VoyageAI" },
+    "baseUrl": { "type": "string", "description": "New provider API base URL" },
+    "model": { "type": "string", "description": "New model name to target" },
+    "apiKey": { "type": "string", "description": "New provider API key. Omit to keep the stored key." },
+    "dimensionality": { "type": "integer", "description": "Embedding dimensionality" },
+    "timeoutMs": { "type": "integer", "description": "Request timeout in milliseconds (clamped to [1000, 600000])" },
+    "enabled": { "type": "boolean", "description": "Whether the endpoint participates in health sweeps" }
+  },
+  "required": ["endpointId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `endpointId` | string | Yes | Model endpoint ID (prefix `mep_`) |
+| `name` | string | No | New display name |
+| `kind` | string | No | `Embedding` or `Inference` |
+| `provider` | string | No | `Ollama`, `OpenAI`, `OpenAICompatible`, `Anthropic`, `Gemini`, or `VoyageAI` |
+| `baseUrl` | string | No | New provider API base URL |
+| `model` | string | No | New model name to target |
+| `apiKey` | string | No | New provider API key. Omit to keep the stored key. |
+| `dimensionality` | integer | No | Embedding dimensionality |
+| `timeoutMs` | integer | No | Request timeout in milliseconds (clamped to [1000, 600000]) |
+| `enabled` | boolean | No | Whether the endpoint participates in health sweeps |
+
+**Response:** Updated [ModelEndpoint](#modelendpoint) object, or `{ "Error": "Model endpoint not found" }`. A rejected provider/kind combination returns `{ "Error": "..." }`.
+
+When `apiKey` is omitted, MCP preserves the current stored key.
+
+---
+
+### delete_model_endpoint
+
+Delete a model endpoint by ID.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "endpointId": { "type": "string", "description": "Model endpoint ID (mep_ prefix)" }
+  },
+  "required": ["endpointId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `endpointId` | string | Yes | Model endpoint ID (prefix `mep_`) |
+
+**Response:**
+
+```json
+{ "Status": "deleted", "EndpointId": "mep_abc123" }
+```
+
+Returns `{ "Error": "Model endpoint not found" }` if the ID does not exist.
+
+---
+
+### validate_model_endpoint
+
+Validate one endpoint by issuing a real request against the provider: an embedding request for `Embedding` endpoints, or a completion request for `Inference` endpoints. The resulting health status, timestamp, latency, and any error are persisted on the endpoint.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "endpointId": { "type": "string", "description": "Model endpoint ID (mep_ prefix)" }
+  },
+  "required": ["endpointId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `endpointId` | string | Yes | Model endpoint ID (prefix `mep_`) |
+
+**Response:** [ModelEndpointProbeResult](#modelendpointproberesult) object.
+
+```json
+{
+  "success": true,
+  "baseUrl": "https://api.openai.com/v1",
+  "latencyMs": 92,
+  "statusCode": 200,
+  "error": null,
+  "embeddingDimensions": 1536,
+  "sampleText": null,
+  "timestampUtc": "2026-03-07T12:00:00Z"
+}
+```
+
+Returns `{ "Error": "Model endpoint not found" }` if the ID does not exist.
+
+---
+
+### health_check_model_endpoints
+
+Probe all enabled model endpoints, deduplicated by base URL, and persist each endpoint's health status. Returns the number of distinct base URLs that were probed.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+No parameters required.
+
+**Response:** [ModelEndpointHealthSweepResponse](#modelendpointhealthsweepresponse) object.
+
+```json
+{ "distinctBaseUrlsProbed": 3 }
+```
+
+---
+
 ### backup
 
 Create a backup of the Armada database and settings as a ZIP archive.
@@ -3767,6 +3990,56 @@ Paginated result wrapper returned by `enumerate`.
 | `personaName` | string | Persona name for this stage |
 | `isOptional` | bool | Whether this stage is optional |
 | `description` | string \| null | Stage description |
+
+#### ModelEndpoint
+
+A managed reference to an external embedding or inference model behind a provider API. The `apiKey` is write-only: it is accepted on create/update but is never returned on reads. Reads expose `hasApiKey` instead.
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Model endpoint ID (prefix `mep_`) |
+| `tenantId` | string \| null | Owning tenant ID |
+| `userId` | string \| null | Owning user ID |
+| `name` | string | Display name |
+| `kind` | string | `Embedding` or `Inference` |
+| `provider` | string | `Ollama`, `OpenAI`, `OpenAICompatible`, `Anthropic`, `Gemini`, or `VoyageAI` |
+| `baseUrl` | string | Provider API base URL |
+| `model` | string \| null | Model name to target |
+| `dimensionality` | int | Embedding dimensionality (default 0) |
+| `timeoutMs` | int | Request timeout in milliseconds (default 120000, clamped to [1000, 600000]) |
+| `enabled` | bool | Whether the endpoint participates in health sweeps (default true) |
+| `hasApiKey` | bool | Read-only. Whether a provider key is stored. |
+| `healthStatus` | string | `Unknown`, `Healthy`, or `Unhealthy` |
+| `lastHealthCheckUtc` | string \| null | ISO 8601 timestamp of the last probe |
+| `lastHealthError` | string \| null | Error text from the last failed probe |
+| `lastLatencyMs` | int \| null | Latency of the last probe in milliseconds |
+| `createdUtc` | string | ISO 8601 creation timestamp |
+| `lastUpdateUtc` | string | ISO 8601 last update timestamp |
+
+`Anthropic` cannot be paired with `kind` `Embedding`, and `VoyageAI` cannot be paired with `kind` `Inference`; both combinations are rejected with an error.
+
+#### ModelEndpointProbeResult
+
+Returned by `validate_model_endpoint`.
+
+| Field | Type | Description |
+|---|---|---|
+| `success` | bool | Whether the probe request succeeded |
+| `baseUrl` | string \| null | Base URL that was probed |
+| `latencyMs` | int | Round-trip latency in milliseconds |
+| `statusCode` | int \| null | HTTP status code returned by the provider, when available |
+| `error` | string \| null | Error text when the probe failed |
+| `embeddingDimensions` | int \| null | Dimensionality returned by an embedding probe |
+| `sampleText` | string \| null | Sample completion text returned by an inference probe |
+| `timestampUtc` | string | ISO 8601 timestamp of when the probe ran |
+
+#### ModelEndpointHealthSweepResponse
+
+Returned by `health_check_model_endpoints`.
+
+| Field | Type | Description |
+|---|---|---|
+| `distinctBaseUrlsProbed` | int | Number of distinct base URLs probed during the sweep |
 
 ---
 
