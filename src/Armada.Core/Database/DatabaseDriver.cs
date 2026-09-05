@@ -174,6 +174,11 @@ namespace Armada.Core.Database
         /// </summary>
         public IModelEndpointMethods ModelEndpoints { get; protected set; } = null!;
 
+        /// <summary>
+        /// Harbor (host runner) operations.
+        /// </summary>
+        public IHarborMethods Harbors { get; protected set; } = null!;
+
         #endregion
 
         #region Constructors-and-Factories

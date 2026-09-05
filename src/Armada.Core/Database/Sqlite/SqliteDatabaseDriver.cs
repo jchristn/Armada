@@ -91,6 +91,7 @@ namespace Armada.Core.Database.Sqlite
             Deployments = new DeploymentMethods(this, _Settings, _Logging);
             CoordinationLeases = new CoordinationLeaseMethods(this, _Settings, _Logging);
             ModelEndpoints = new ModelEndpointMethods(this, _Settings, _Logging);
+            Harbors = new HarborMethods(this, _Settings, _Logging);
         }
 
         /// <summary>
@@ -138,6 +139,7 @@ namespace Armada.Core.Database.Sqlite
             Deployments = new DeploymentMethods(this, _Settings, _Logging);
             CoordinationLeases = new CoordinationLeaseMethods(this, _Settings, _Logging);
             ModelEndpoints = new ModelEndpointMethods(this, _Settings, _Logging);
+            Harbors = new HarborMethods(this, _Settings, _Logging);
         }
 
         /// <summary>

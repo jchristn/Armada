@@ -1132,7 +1132,35 @@ namespace Armada.Core.Database.Postgresql.Queries
                     @"CREATE INDEX IF NOT EXISTS idx_model_endpoints_created ON model_endpoints(created_utc DESC);",
                     @"CREATE INDEX IF NOT EXISTS idx_model_endpoints_tenant ON model_endpoints(tenant_id);"),
                 new SchemaMigration(61, "Add rolling health-check history to model_endpoints",
-                    @"ALTER TABLE model_endpoints ADD COLUMN health_history_json TEXT;")
+                    @"ALTER TABLE model_endpoints ADD COLUMN health_history_json TEXT;"),
+                new SchemaMigration(62, "Add harbors and harbor_capabilities tables for host runners",
+                    @"CREATE TABLE IF NOT EXISTS harbors (
+                        id TEXT PRIMARY KEY,
+                        tenant_id TEXT,
+                        user_id TEXT,
+                        name TEXT NOT NULL DEFAULT '',
+                        connection_status TEXT NOT NULL DEFAULT 'Unknown',
+                        max_concurrent_jobs INTEGER NOT NULL DEFAULT 4,
+                        enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                        protocol_version TEXT,
+                        os_platform TEXT,
+                        architecture TEXT,
+                        last_seen_utc TIMESTAMP,
+                        last_connected_utc TIMESTAMP,
+                        created_utc TIMESTAMP NOT NULL,
+                        last_update_utc TIMESTAMP NOT NULL
+                    );",
+                    @"CREATE INDEX IF NOT EXISTS idx_harbors_created ON harbors(created_utc DESC);",
+                    @"CREATE INDEX IF NOT EXISTS idx_harbors_tenant ON harbors(tenant_id);",
+                    @"CREATE TABLE IF NOT EXISTS harbor_capabilities (
+                        harbor_id TEXT NOT NULL,
+                        name TEXT NOT NULL,
+                        available BOOLEAN NOT NULL DEFAULT TRUE,
+                        detail TEXT,
+                        PRIMARY KEY (harbor_id, name),
+                        FOREIGN KEY (harbor_id) REFERENCES harbors(id) ON DELETE CASCADE
+                    );",
+                    @"CREATE INDEX IF NOT EXISTS idx_harbor_capabilities_harbor ON harbor_capabilities(harbor_id);")
             };
         }
 

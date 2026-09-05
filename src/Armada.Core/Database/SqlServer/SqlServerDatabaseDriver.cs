@@ -67,6 +67,7 @@ namespace Armada.Core.Database.SqlServer
             Objectives = new ObjectiveMethods(this, _Settings, _Logging);
             Jobs = new JobMethods(this, _Settings, _Logging);
             ModelEndpoints = new ModelEndpointMethods(this, _Settings, _Logging);
+            Harbors = new HarborMethods(this, _Settings, _Logging);
             ObjectiveRefinementSessions = new ObjectiveRefinementSessionMethods(this, _Settings, _Logging);
             ObjectiveRefinementMessages = new ObjectiveRefinementMessageMethods(this, _Settings, _Logging);
             Docks = new DockMethods(this, _Settings, _Logging);

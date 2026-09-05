@@ -975,6 +975,41 @@ namespace Armada.Core.Database.SqlServer.Queries
                     61,
                     "Add rolling health-check history to model_endpoints",
                     @"IF COL_LENGTH('model_endpoints', 'health_history_json') IS NULL ALTER TABLE model_endpoints ADD health_history_json NVARCHAR(MAX) NULL;"
+                ),
+                new SchemaMigration(
+                    62,
+                    "Add harbors and harbor_capabilities tables for host runners",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'harbors')
+                    CREATE TABLE harbors (
+                        id NVARCHAR(450) NOT NULL PRIMARY KEY,
+                        tenant_id NVARCHAR(450),
+                        user_id NVARCHAR(450),
+                        name NVARCHAR(450) NOT NULL,
+                        connection_status NVARCHAR(64) NOT NULL CONSTRAINT DF_harbors_connection_status DEFAULT 'Unknown',
+                        max_concurrent_jobs INT NOT NULL CONSTRAINT DF_harbors_max_concurrent_jobs DEFAULT 4,
+                        enabled BIT NOT NULL CONSTRAINT DF_harbors_enabled DEFAULT 1,
+                        protocol_version NVARCHAR(450),
+                        os_platform NVARCHAR(450),
+                        architecture NVARCHAR(450),
+                        last_seen_utc NVARCHAR(450),
+                        last_connected_utc NVARCHAR(450),
+                        created_utc NVARCHAR(450) NOT NULL,
+                        last_update_utc NVARCHAR(450) NOT NULL
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_harbors_created') CREATE INDEX idx_harbors_created ON harbors(created_utc DESC);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_harbors_tenant') CREATE INDEX idx_harbors_tenant ON harbors(tenant_id);",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'harbor_capabilities')
+                    CREATE TABLE harbor_capabilities (
+                        harbor_id NVARCHAR(450) NOT NULL,
+                        name NVARCHAR(450) NOT NULL,
+                        available BIT NOT NULL CONSTRAINT DF_harbor_capabilities_available DEFAULT 1,
+                        detail NVARCHAR(MAX),
+                        CONSTRAINT PK_harbor_capabilities PRIMARY KEY (harbor_id, name),
+                        CONSTRAINT FK_harbor_capabilities_harbor FOREIGN KEY (harbor_id) REFERENCES harbors(id) ON DELETE CASCADE
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_harbor_capabilities_harbor') CREATE INDEX idx_harbor_capabilities_harbor ON harbor_capabilities(harbor_id);"
                 )
             };
         }

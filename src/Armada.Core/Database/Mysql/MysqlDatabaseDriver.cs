@@ -63,6 +63,7 @@ namespace Armada.Core.Database.Mysql
             Objectives = new ObjectiveMethods(_ConnectionString);
             Jobs = new JobMethods(_ConnectionString);
             ModelEndpoints = new ModelEndpointMethods(_ConnectionString);
+            Harbors = new HarborMethods(_ConnectionString);
             ObjectiveRefinementSessions = new ObjectiveRefinementSessionMethods(_ConnectionString);
             ObjectiveRefinementMessages = new ObjectiveRefinementMessageMethods(_ConnectionString);
             Docks = new DockMethods(_ConnectionString);
@@ -582,6 +583,11 @@ namespace Armada.Core.Database.Mysql
                     61,
                     "Add rolling health-check history to model_endpoints",
                     TableQueries.MigrationV61Statements
+                ),
+                new SchemaMigration(
+                    62,
+                    "Add harbors and harbor_capabilities tables for host runners",
+                    TableQueries.MigrationV62Statements
                 )
             };
         }

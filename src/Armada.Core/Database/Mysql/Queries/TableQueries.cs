@@ -1342,6 +1342,40 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration v62 statements: add the harbors and harbor_capabilities tables for host runners.
+        /// </summary>
+        public static readonly string[] MigrationV62Statements = new string[]
+        {
+            @"CREATE TABLE IF NOT EXISTS harbors (
+                id VARCHAR(450) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(450),
+                user_id VARCHAR(450),
+                name VARCHAR(450) NOT NULL,
+                connection_status VARCHAR(64) NOT NULL DEFAULT 'Unknown',
+                max_concurrent_jobs INT NOT NULL DEFAULT 4,
+                enabled TINYINT(1) NOT NULL DEFAULT 1,
+                protocol_version VARCHAR(64),
+                os_platform VARCHAR(64),
+                architecture VARCHAR(64),
+                last_seen_utc DATETIME(6) NULL,
+                last_connected_utc DATETIME(6) NULL,
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL
+            );",
+            "CREATE INDEX idx_harbors_created ON harbors(created_utc DESC);",
+            "CREATE INDEX idx_harbors_tenant ON harbors(tenant_id);",
+            @"CREATE TABLE IF NOT EXISTS harbor_capabilities (
+                harbor_id VARCHAR(191) NOT NULL,
+                name VARCHAR(191) NOT NULL,
+                available TINYINT(1) NOT NULL DEFAULT 1,
+                detail TEXT,
+                PRIMARY KEY (harbor_id, name),
+                FOREIGN KEY (harbor_id) REFERENCES harbors(id) ON DELETE CASCADE
+            );",
+            "CREATE INDEX idx_harbor_capabilities_harbor ON harbor_capabilities(harbor_id);"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

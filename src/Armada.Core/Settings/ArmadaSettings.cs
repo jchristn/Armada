@@ -621,6 +621,21 @@ namespace Armada.Core.Settings
             set => _Telemetry = value ?? new TelemetrySettings();
         }
 
+        /// <summary>
+        /// How the Admiral executes host operations: Local (in-process, standalone) or Split (delegated to
+        /// attached Harbor runners). Defaults to Local.
+        /// </summary>
+        public DeploymentModeEnum DeploymentMode { get; set; } = DeploymentModeEnum.Local;
+
+        /// <summary>
+        /// Server-side Harbor subsystem settings (link endpoint, auth, heartbeats, routing capacity).
+        /// </summary>
+        public HarborServerSettings Harbor
+        {
+            get => _Harbor;
+            set => _Harbor = value ?? new HarborServerSettings();
+        }
+
         #endregion
 
         #region Private-Members
@@ -671,6 +686,7 @@ namespace Armada.Core.Settings
         private int _IdleCaptainTimeoutSeconds = Constants.DefaultIdleCaptainTimeoutSeconds;
         private RemoteControlSettings _RemoteControl = new RemoteControlSettings();
         private TelemetrySettings _Telemetry = new TelemetrySettings();
+        private HarborServerSettings _Harbor = new HarborServerSettings();
         private DatabaseSettings _Database = new DatabaseSettings();
         private bool _DatabasePathConfigured = false;
 

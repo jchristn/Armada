@@ -129,6 +129,11 @@ namespace Armada.Core
         public static readonly string ModelEndpointIdPrefix = "mep_";
 
         /// <summary>
+        /// Harbor (host runner) ID prefix.
+        /// </summary>
+        public static readonly string HarborIdPrefix = "hbr_";
+
+        /// <summary>
         /// Default per-phase timeout, in seconds, for the in-dock Definition-of-Done gate (30 minutes).
         /// </summary>
         public const int DefaultDefinitionOfDoneTimeoutSeconds = 1800;
