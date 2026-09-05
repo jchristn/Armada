@@ -1,5 +1,7 @@
 namespace Armada.Core.Database.Sqlite.Implementations
 {
+    using System.Collections.Generic;
+    using System.Text.Json;
     using Microsoft.Data.Sqlite;
     using Armada.Core.Database.Interfaces;
     using Armada.Core.Enums;
@@ -12,6 +14,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
     /// </summary>
     public class ModelEndpointMethods : IModelEndpointMethods
     {
+        private static readonly JsonSerializerOptions _Json = new JsonSerializerOptions();
+
         private readonly SqliteDatabaseDriver _Driver;
         private readonly DatabaseSettings _Settings;
         private readonly LoggingModule _Logging;
@@ -36,9 +40,9 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 using (SqliteCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = @"INSERT INTO model_endpoints
-                        (id, tenant_id, user_id, name, kind, provider, base_url, api_key, model, dimensionality, timeout_ms, enabled, health_status, last_health_check_utc, last_health_error, last_latency_ms, created_utc, last_update_utc)
+                        (id, tenant_id, user_id, name, kind, provider, base_url, api_key, model, dimensionality, timeout_ms, enabled, health_status, last_health_check_utc, last_health_error, last_latency_ms, health_history_json, created_utc, last_update_utc)
                         VALUES
-                        (@id, @tenant_id, @user_id, @name, @kind, @provider, @base_url, @api_key, @model, @dimensionality, @timeout_ms, @enabled, @health_status, @last_health_check_utc, @last_health_error, @last_latency_ms, @created_utc, @last_update_utc);";
+                        (@id, @tenant_id, @user_id, @name, @kind, @provider, @base_url, @api_key, @model, @dimensionality, @timeout_ms, @enabled, @health_status, @last_health_check_utc, @last_health_error, @last_latency_ms, @health_history_json, @created_utc, @last_update_utc);";
                     BindEndpoint(cmd, endpoint);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
@@ -72,6 +76,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                         last_health_check_utc = @last_health_check_utc,
                         last_health_error = @last_health_error,
                         last_latency_ms = @last_latency_ms,
+                        health_history_json = @health_history_json,
                         created_utc = @created_utc,
                         last_update_utc = @last_update_utc
                         WHERE id = @id;";
@@ -265,6 +270,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             cmd.Parameters.AddWithValue("@last_health_check_utc", endpoint.LastHealthCheckUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(endpoint.LastHealthCheckUtc.Value) : DBNull.Value);
             cmd.Parameters.AddWithValue("@last_health_error", (object?)endpoint.LastHealthError ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@last_latency_ms", endpoint.LastLatencyMs.HasValue ? (object)endpoint.LastLatencyMs.Value : DBNull.Value);
+            cmd.Parameters.AddWithValue("@health_history_json", JsonSerializer.Serialize(endpoint.HealthHistory ?? new List<ModelEndpointHealthRecord>(), _Json));
             cmd.Parameters.AddWithValue("@created_utc", SqliteDatabaseDriver.ToIso8601(endpoint.CreatedUtc));
             cmd.Parameters.AddWithValue("@last_update_utc", SqliteDatabaseDriver.ToIso8601(endpoint.LastUpdateUtc));
         }
@@ -293,6 +299,11 @@ namespace Armada.Core.Database.Sqlite.Implementations
             };
 
             endpoint.ApiKey = SqliteDatabaseDriver.NullableString(reader["api_key"]);
+
+            string? historyJson = SqliteDatabaseDriver.NullableString(reader["health_history_json"]);
+            if (!String.IsNullOrWhiteSpace(historyJson))
+                endpoint.HealthHistory = JsonSerializer.Deserialize<List<ModelEndpointHealthRecord>>(historyJson, _Json) ?? new List<ModelEndpointHealthRecord>();
+
             return endpoint;
         }
 

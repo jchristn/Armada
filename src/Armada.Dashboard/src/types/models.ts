@@ -2150,6 +2150,11 @@ export type ModelEndpointKind = 'Embedding' | 'Inference';
 export type ModelProvider = 'Ollama' | 'OpenAI' | 'OpenAICompatible' | 'Anthropic' | 'Gemini' | 'VoyageAI';
 export type EndpointHealthStatus = 'Unknown' | 'Healthy' | 'Unhealthy';
 
+export interface ModelEndpointHealthRecord {
+  timestampUtc: string;
+  success: boolean;
+}
+
 export interface ModelEndpoint {
   id: string;
   tenantId: string | null;
@@ -2167,6 +2172,13 @@ export interface ModelEndpoint {
   lastHealthCheckUtc: string | null;
   lastHealthError: string | null;
   lastLatencyMs: number | null;
+  healthHistory: ModelEndpointHealthRecord[];
+  uptimePercentage: number;
+  consecutiveSuccesses: number;
+  consecutiveFailures: number;
+  firstHealthCheckUtc: string | null;
+  lastHealthyUtc: string | null;
+  lastUnhealthyUtc: string | null;
   createdUtc: string;
   lastUpdateUtc: string;
 }

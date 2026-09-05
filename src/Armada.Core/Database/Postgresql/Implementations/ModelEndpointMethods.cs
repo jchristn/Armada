@@ -2,6 +2,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
 {
     using System;
     using System.Collections.Generic;
+    using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
     using Npgsql;
@@ -14,6 +15,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
     /// </summary>
     public class ModelEndpointMethods : IModelEndpointMethods
     {
+        private static readonly JsonSerializerOptions _Json = new JsonSerializerOptions();
+
         private readonly PostgresqlDatabaseDriver _Driver;
 
         /// <summary>
@@ -35,9 +38,9 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = @"INSERT INTO model_endpoints
-                        (id, tenant_id, user_id, name, kind, provider, base_url, api_key, model, dimensionality, timeout_ms, enabled, health_status, last_health_check_utc, last_health_error, last_latency_ms, created_utc, last_update_utc)
+                        (id, tenant_id, user_id, name, kind, provider, base_url, api_key, model, dimensionality, timeout_ms, enabled, health_status, last_health_check_utc, last_health_error, last_latency_ms, health_history_json, created_utc, last_update_utc)
                         VALUES
-                        (@id, @tenant_id, @user_id, @name, @kind, @provider, @base_url, @api_key, @model, @dimensionality, @timeout_ms, @enabled, @health_status, @last_health_check_utc, @last_health_error, @last_latency_ms, @created_utc, @last_update_utc);";
+                        (@id, @tenant_id, @user_id, @name, @kind, @provider, @base_url, @api_key, @model, @dimensionality, @timeout_ms, @enabled, @health_status, @last_health_check_utc, @last_health_error, @last_latency_ms, @health_history_json, @created_utc, @last_update_utc);";
                     BindEndpoint(cmd, endpoint);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
@@ -72,6 +75,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         last_health_check_utc = @last_health_check_utc,
                         last_health_error = @last_health_error,
                         last_latency_ms = @last_latency_ms,
+                        health_history_json = @health_history_json,
                         created_utc = @created_utc,
                         last_update_utc = @last_update_utc
                         WHERE id = @id;";
@@ -289,6 +293,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@last_health_check_utc", (object?)endpoint.LastHealthCheckUtc ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@last_health_error", (object?)endpoint.LastHealthError ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@last_latency_ms", (object?)endpoint.LastLatencyMs ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@health_history_json", JsonSerializer.Serialize(endpoint.HealthHistory ?? new List<ModelEndpointHealthRecord>(), _Json));
             cmd.Parameters.AddWithValue("@created_utc", endpoint.CreatedUtc);
             cmd.Parameters.AddWithValue("@last_update_utc", endpoint.LastUpdateUtc);
         }
@@ -317,6 +322,11 @@ namespace Armada.Core.Database.Postgresql.Implementations
             };
 
             endpoint.ApiKey = NullableString(reader["api_key"]);
+
+            string? historyJson = NullableString(reader["health_history_json"]);
+            if (!String.IsNullOrWhiteSpace(historyJson))
+                endpoint.HealthHistory = JsonSerializer.Deserialize<List<ModelEndpointHealthRecord>>(historyJson, _Json) ?? new List<ModelEndpointHealthRecord>();
+
             return endpoint;
         }
 

@@ -915,7 +915,9 @@ h3 { font-size: 1.1rem; margin-bottom: 0.5rem; font-weight: 600; margin-top: 1re
 .tag.idle, .tag.pending, .tag.queued { background: var(--tag-idle-bg); color: var(--tag-idle-fg); }
 .tag.working, .tag.inprogress, .tag.assigned, .tag.open, .tag.testing { background: var(--tag-working-bg); color: var(--tag-working-fg); }
 .tag.workproduced { background: var(--tag-review-bg); color: var(--tag-review-fg); }
-.tag.complete, .tag.completed, .tag.landed, .tag.passed, .tag.pass { background: var(--tag-complete-bg); color: var(--tag-complete-fg); }
+.tag.complete, .tag.completed, .tag.landed, .tag.passed, .tag.pass, .tag.healthy { background: var(--tag-complete-bg); color: var(--tag-complete-fg); }
+.tag.unhealthy { background: var(--tag-failed-bg); color: var(--tag-failed-fg); }
+.tag.unknown { background: var(--tag-idle-bg); color: var(--tag-idle-fg); }
 .tag.failed, .tag.error, .tag.stalled, .tag.landingfailed { background: var(--tag-failed-bg); color: var(--tag-failed-fg); }
 .tag.fail { background: #dc2626; color: #fff; }
 .tag.review, .tag.warn { background: var(--tag-review-bg); color: var(--tag-review-fg); }
@@ -2003,6 +2005,137 @@ tr.clickable { cursor: pointer; }
     min-width: 0;
     word-break: break-word;
 }
+
+/* Model endpoint health histogram (segmented pass/fail bar) + health-detail modal. */
+.health-histogram {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 1px;
+    overflow: hidden;
+}
+
+.health-histogram .hh-bar {
+    flex: 1 1 auto;
+    min-width: 2px;
+    border-radius: 1px;
+}
+
+.health-histogram .hh-ok { background: var(--green); }
+.health-histogram .hh-fail { background: var(--red); }
+.health-histogram .hh-mixed { background: var(--orange); }
+
+.health-cell {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.health-cell .health-histogram {
+    width: 96px;
+    min-width: 96px;
+    flex: 0 0 auto;
+}
+
+.health-modal { display: flex; flex-direction: column; gap: 1rem; }
+
+.health-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.25rem;
+    font-size: 0.82rem;
+    color: var(--text-dim);
+}
+
+.health-meta code { word-break: break-all; }
+
+.health-stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 0.75rem;
+}
+
+.health-stat-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.65rem 0.5rem;
+    border-radius: 6px;
+    background: var(--bg-hover);
+    border: 1px solid var(--border);
+    min-width: 0;
+}
+
+.health-stat-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+}
+
+.health-stat-value {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text);
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+
+.health-stat-value.health-ok { color: var(--green); }
+.health-stat-value.health-fail { color: var(--red); }
+
+.health-error-box {
+    padding: 0.65rem 0.85rem;
+    border-radius: 6px;
+    border-left: 3px solid var(--red);
+    background: color-mix(in srgb, var(--red) 10%, var(--bg-card));
+}
+
+.health-error-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--red);
+    margin-bottom: 0.25rem;
+}
+
+.health-error-message { font-size: 0.85rem; color: var(--red); word-break: break-word; }
+
+.health-section-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    margin-bottom: 0.4rem;
+}
+
+.health-histogram-container {
+    padding: 0.75rem;
+    border-radius: 6px;
+    background: var(--bg-hover);
+    border: 1px solid var(--border);
+    overflow-x: auto;
+}
+
+.health-timestamps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.5rem 1.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+}
+
+.health-timestamps > div { display: flex; flex-direction: column; gap: 0.15rem; }
+.health-timestamps span { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
+.health-timestamps strong { font-size: 0.85rem; font-weight: 500; color: var(--text); }
 
 .detail-meta-field span {
     font-size: 0.75rem;

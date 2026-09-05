@@ -252,6 +252,37 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(EndpointHealthStatusEnum.Unhealthy, reloaded!.HealthStatus);
             }));
 
+            // Validation appends to the persisted rolling health history and updates derived aggregates.
+
+            cases.Add(CaseAsync("validate_appends_health_history", "ValidateAsync appends to the persisted health history", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                ModelEndpointService service = new ModelEndpointService(testDb.Driver, CreateLogging());
+                AuthContext auth = AuthContext.Authenticated("ten_mep_hist", "usr_mep_hist", false, true, "UnitTest");
+
+                ModelEndpoint endpoint = new ModelEndpoint
+                {
+                    Name = "History",
+                    Kind = ModelEndpointKindEnum.Embedding,
+                    Provider = ModelProviderEnum.OpenAI,
+                    BaseUrl = "http://127.0.0.1:1",
+                    Model = "text-embedding-3-small",
+                    TimeoutMs = 2000
+                };
+                ModelEndpoint created = await service.CreateAsync(auth, endpoint).ConfigureAwait(false);
+                AssertEqual(0, created.HealthHistory.Count);
+
+                await service.ValidateAsync(auth, created.Id).ConfigureAwait(false);
+                await service.ValidateAsync(auth, created.Id).ConfigureAwait(false);
+
+                ModelEndpoint? reloaded = await testDb.Driver.ModelEndpoints.ReadAsync(created.Id).ConfigureAwait(false);
+                AssertNotNull(reloaded, "Expected endpoint to reload.");
+                AssertEqual(2, reloaded!.HealthHistory.Count);
+                AssertEqual(2, reloaded.ConsecutiveFailures);
+                AssertEqual(0, reloaded.ConsecutiveSuccesses);
+                AssertNotNull(reloaded.FirstHealthCheckUtc, "Expected FirstHealthCheckUtc to be derived from history.");
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: "Services.ModelEndpointService",
                 displayName: "Model Endpoint Service",

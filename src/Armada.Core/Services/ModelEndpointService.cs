@@ -20,6 +20,8 @@ namespace Armada.Core.Services
     {
         #region Private-Members
 
+        private const int _MaxHistoryRecords = 500;
+
         private readonly string _Header = "[ModelEndpointService] ";
         private readonly DatabaseDriver _Database;
         private readonly LoggingModule _Logging;
@@ -343,6 +345,16 @@ namespace Armada.Core.Services
             endpoint.LastHealthCheckUtc = result.TimestampUtc;
             endpoint.LastHealthError = result.Success ? null : result.Error;
             endpoint.LastLatencyMs = result.LatencyMs;
+
+            if (endpoint.HealthHistory == null) endpoint.HealthHistory = new List<ModelEndpointHealthRecord>();
+            endpoint.HealthHistory.Add(new ModelEndpointHealthRecord
+            {
+                TimestampUtc = result.TimestampUtc,
+                Success = result.Success
+            });
+            if (endpoint.HealthHistory.Count > _MaxHistoryRecords)
+                endpoint.HealthHistory.RemoveRange(0, endpoint.HealthHistory.Count - _MaxHistoryRecords);
+
             endpoint.LastUpdateUtc = DateTime.UtcNow;
             await _Database.ModelEndpoints.UpdateAsync(endpoint, token).ConfigureAwait(false);
         }

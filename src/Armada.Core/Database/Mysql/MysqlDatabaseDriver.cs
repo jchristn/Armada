@@ -577,6 +577,11 @@ namespace Armada.Core.Database.Mysql
                     60,
                     "Add model_endpoints table for managed embedding/inference endpoints",
                     TableQueries.MigrationV60Statements
+                ),
+                new SchemaMigration(
+                    61,
+                    "Add rolling health-check history to model_endpoints",
+                    TableQueries.MigrationV61Statements
                 )
             };
         }

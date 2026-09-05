@@ -4013,6 +4013,13 @@ A managed reference to an external embedding or inference model behind a provide
 | `lastHealthCheckUtc` | string \| null | ISO 8601 timestamp of the last probe |
 | `lastHealthError` | string \| null | Error text from the last failed probe |
 | `lastLatencyMs` | int \| null | Latency of the last probe in milliseconds |
+| `healthHistory` | array | Rolling series of recent probes (oldest first), each `{ timestampUtc, success }`, capped at 500 |
+| `uptimePercentage` | double | Read-only. Percentage of retained probes that succeeded (0-100), derived from `healthHistory` |
+| `consecutiveSuccesses` | int | Read-only. Trailing run of successful probes |
+| `consecutiveFailures` | int | Read-only. Trailing run of failed probes |
+| `firstHealthCheckUtc` | string \| null | Read-only. Earliest retained probe timestamp |
+| `lastHealthyUtc` | string \| null | Read-only. Most recent successful probe timestamp |
+| `lastUnhealthyUtc` | string \| null | Read-only. Most recent failed probe timestamp |
 | `createdUtc` | string | ISO 8601 creation timestamp |
 | `lastUpdateUtc` | string | ISO 8601 last update timestamp |
 

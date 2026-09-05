@@ -5020,10 +5020,19 @@ A managed reference to an external embedding or inference model behind a provide
 | `LastHealthCheckUtc` | datetime? | null | Timestamp of the last probe (UTC) |
 | `LastHealthError` | string? | null | Error text from the last failed probe |
 | `LastLatencyMs` | int? | null | Latency of the last probe in milliseconds |
+| `HealthHistory` | array | [] | Rolling series of recent probes (oldest first), each `{ TimestampUtc, Success }`, capped at 500 records. Drives the dashboard health-history bar. |
+| `UptimePercentage` | double | 0 | Read-only. Percentage of retained probes that succeeded (0-100), derived from `HealthHistory`. |
+| `ConsecutiveSuccesses` | int | 0 | Read-only. Trailing run of successful probes, derived from `HealthHistory`. |
+| `ConsecutiveFailures` | int | 0 | Read-only. Trailing run of failed probes, derived from `HealthHistory`. |
+| `FirstHealthCheckUtc` | datetime? | null | Read-only. Timestamp of the earliest retained probe, derived from `HealthHistory`. |
+| `LastHealthyUtc` | datetime? | null | Read-only. Timestamp of the most recent successful probe, derived from `HealthHistory`. |
+| `LastUnhealthyUtc` | datetime? | null | Read-only. Timestamp of the most recent failed probe, derived from `HealthHistory`. |
 | `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
 | `LastUpdateUtc` | datetime | now | Last update timestamp (UTC) |
 
 The `Anthropic` provider cannot be paired with `Kind` `Embedding`, and the `VoyageAI` provider cannot be paired with `Kind` `Inference`; both combinations are rejected with `400 Bad Request`.
+
+Each health probe (from the base-URL-deduplicated background sweep or from `/validate`) appends a `{ TimestampUtc, Success }` record to `HealthHistory`; the derived fields above are computed from that series.
 
 ---
 

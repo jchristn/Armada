@@ -1334,6 +1334,14 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration v61 statements: add rolling health-check history to model_endpoints.
+        /// </summary>
+        public static readonly string[] MigrationV61Statements = new string[]
+        {
+            @"ALTER TABLE model_endpoints ADD COLUMN health_history_json LONGTEXT;"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System;
+    using System.Collections.Generic;
     using System.Text.Json.Serialization;
     using Armada.Core.Enums;
 
@@ -164,6 +165,105 @@ namespace Armada.Core.Models
         public long? LastLatencyMs { get; set; } = null;
 
         /// <summary>
+        /// Rolling series of recent health-check probes (oldest first), capped in size. Drives the
+        /// dashboard health-history bar.
+        /// </summary>
+        public List<ModelEndpointHealthRecord> HealthHistory
+        {
+            get => _HealthHistory;
+            set => _HealthHistory = value ?? new List<ModelEndpointHealthRecord>();
+        }
+
+        /// <summary>
+        /// Percentage of retained probes that succeeded (0-100). Derived from <see cref="HealthHistory"/>.
+        /// </summary>
+        [JsonInclude]
+        public double UptimePercentage
+        {
+            get
+            {
+                if (_HealthHistory.Count == 0) return 0.0;
+                int successes = 0;
+                foreach (ModelEndpointHealthRecord record in _HealthHistory)
+                    if (record.Success) successes++;
+                return Math.Round((double)successes / _HealthHistory.Count * 100.0, 2);
+            }
+        }
+
+        /// <summary>
+        /// Number of consecutive successful probes at the tail of the history. Derived.
+        /// </summary>
+        [JsonInclude]
+        public int ConsecutiveSuccesses
+        {
+            get
+            {
+                int count = 0;
+                for (int i = _HealthHistory.Count - 1; i >= 0; i--)
+                {
+                    if (!_HealthHistory[i].Success) break;
+                    count++;
+                }
+                return count;
+            }
+        }
+
+        /// <summary>
+        /// Number of consecutive failed probes at the tail of the history. Derived.
+        /// </summary>
+        [JsonInclude]
+        public int ConsecutiveFailures
+        {
+            get
+            {
+                int count = 0;
+                for (int i = _HealthHistory.Count - 1; i >= 0; i--)
+                {
+                    if (_HealthHistory[i].Success) break;
+                    count++;
+                }
+                return count;
+            }
+        }
+
+        /// <summary>
+        /// Timestamp of the earliest retained probe, or null when no history exists. Derived.
+        /// </summary>
+        [JsonInclude]
+        public DateTime? FirstHealthCheckUtc
+        {
+            get => _HealthHistory.Count == 0 ? (DateTime?)null : _HealthHistory[0].TimestampUtc;
+        }
+
+        /// <summary>
+        /// Timestamp of the most recent successful probe, or null. Derived.
+        /// </summary>
+        [JsonInclude]
+        public DateTime? LastHealthyUtc
+        {
+            get
+            {
+                for (int i = _HealthHistory.Count - 1; i >= 0; i--)
+                    if (_HealthHistory[i].Success) return _HealthHistory[i].TimestampUtc;
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Timestamp of the most recent failed probe, or null. Derived.
+        /// </summary>
+        [JsonInclude]
+        public DateTime? LastUnhealthyUtc
+        {
+            get
+            {
+                for (int i = _HealthHistory.Count - 1; i >= 0; i--)
+                    if (!_HealthHistory[i].Success) return _HealthHistory[i].TimestampUtc;
+                return null;
+            }
+        }
+
+        /// <summary>
         /// Creation timestamp in UTC.
         /// </summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
@@ -184,6 +284,7 @@ namespace Armada.Core.Models
         private bool? _HasApiKey = null;
         private int _Dimensionality = 0;
         private int _TimeoutMs = 120000;
+        private List<ModelEndpointHealthRecord> _HealthHistory = new List<ModelEndpointHealthRecord>();
 
         #endregion
 

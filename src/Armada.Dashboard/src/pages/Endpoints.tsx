@@ -20,6 +20,7 @@ import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
+import HealthHistogram from '../components/shared/HealthHistogram';
 
 const PROVIDERS: ModelProvider[] = ['Ollama', 'OpenAI', 'OpenAICompatible', 'Anthropic', 'Gemini', 'VoyageAI'];
 const KINDS: ModelEndpointKind[] = ['Embedding', 'Inference'];
@@ -49,6 +50,20 @@ const EMPTY_FORM: EndpointForm = {
   timeoutMs: '120000',
   enabled: true,
 };
+
+/** Humanize the span between the earliest retained probe and now, for the health modal. */
+function formatSpan(firstUtc: string | null): string {
+  if (!firstUtc) return '-';
+  const ms = Date.now() - new Date(firstUtc).getTime();
+  if (ms < 0) return '-';
+  const minutes = Math.floor(ms / 60000);
+  if (minutes < 1) return '<1m';
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ${minutes % 60}m`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ${hours % 24}h`;
+}
 
 /** Reason a provider/kind combination is invalid, or null when valid. Mirrors the server-side guard. */
 function unsupportedReason(provider: ModelProvider, kind: ModelEndpointKind): string | null {
@@ -328,21 +343,61 @@ export default function Endpoints() {
 
       {health.open && health.endpoint && (
         <div className="modal-overlay" onClick={() => setHealth({ open: false, endpoint: null })}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>{t('Endpoint Health')}</h3>
-            <p><strong>{health.endpoint.name}</strong> <span className="text-dim mono" style={{ fontSize: '0.78rem' }}>{health.endpoint.id}</span></p>
-            <dl className="detail-list">
-              <dt>{t('Status')}</dt>
-              <dd><StatusBadge status={health.endpoint.healthStatus} /></dd>
-              <dt>{t('Base URL')}</dt>
-              <dd className="mono">{health.endpoint.baseUrl}</dd>
-              <dt>{t('Last Checked')}</dt>
-              <dd>{health.endpoint.lastHealthCheckUtc ? formatDateTime(health.endpoint.lastHealthCheckUtc) : t('Never')}</dd>
-              <dt>{t('Last Latency')}</dt>
-              <dd>{health.endpoint.lastLatencyMs != null ? `${health.endpoint.lastLatencyMs} ms` : '-'}</dd>
-              {health.endpoint.lastHealthError && (<><dt>{t('Last Error')}</dt><dd className="text-danger">{health.endpoint.lastHealthError}</dd></>)}
-            </dl>
-            <p className="text-dim" style={{ fontSize: '0.82rem' }}>{t('Health checks are deduplicated by base URL: endpoints sharing a base URL are probed once per sweep.')}</p>
+          <div className="modal modal-large" onClick={(e) => e.stopPropagation()}>
+            <h3>{t('Health')}: {health.endpoint.name}</h3>
+            <div className="health-modal">
+              <div className="health-meta">
+                <span><strong>{t('Base URL')}:</strong> <code>{health.endpoint.baseUrl}</code></span>
+                {health.endpoint.model && <span><strong>{t('Model')}:</strong> {health.endpoint.model}</span>}
+                {health.endpoint.lastLatencyMs != null && <span><strong>{t('Latency')}:</strong> {health.endpoint.lastLatencyMs} ms</span>}
+              </div>
+
+              <div className="health-stats-row">
+                <div className="health-stat-card">
+                  <div className="health-stat-label">{t('Status')}</div>
+                  <div className="health-stat-value"><StatusBadge status={health.endpoint.healthStatus} /></div>
+                </div>
+                <div className="health-stat-card">
+                  <div className="health-stat-label">{t('Uptime')}</div>
+                  <div className="health-stat-value">{health.endpoint.healthHistory.length > 0 ? `${health.endpoint.uptimePercentage.toFixed(2)}%` : '-'}</div>
+                </div>
+                <div className="health-stat-card">
+                  <div className="health-stat-label">{t('History Span')}</div>
+                  <div className="health-stat-value">{formatSpan(health.endpoint.firstHealthCheckUtc)}</div>
+                </div>
+                <div className="health-stat-card">
+                  <div className="health-stat-label">{t('Consecutive OK')}</div>
+                  <div className="health-stat-value health-ok">{health.endpoint.consecutiveSuccesses}</div>
+                </div>
+                <div className="health-stat-card">
+                  <div className="health-stat-label">{t('Consecutive Fail')}</div>
+                  <div className="health-stat-value health-fail">{health.endpoint.consecutiveFailures}</div>
+                </div>
+              </div>
+
+              {health.endpoint.lastHealthError && (
+                <div className="health-error-box">
+                  <div className="health-error-label">{t('Last Error')}</div>
+                  <div className="health-error-message">{health.endpoint.lastHealthError}</div>
+                </div>
+              )}
+
+              <div>
+                <div className="health-section-label">{t('Health History')}</div>
+                <div className="health-histogram-container">
+                  <HealthHistogram history={health.endpoint.healthHistory} height={36} fill />
+                </div>
+              </div>
+
+              <div className="health-timestamps">
+                <div><span>{t('First check')}</span><strong>{health.endpoint.firstHealthCheckUtc ? formatDateTime(health.endpoint.firstHealthCheckUtc) : '-'}</strong></div>
+                <div><span>{t('Last check')}</span><strong>{health.endpoint.lastHealthCheckUtc ? formatDateTime(health.endpoint.lastHealthCheckUtc) : '-'}</strong></div>
+                <div><span>{t('Last healthy')}</span><strong>{health.endpoint.lastHealthyUtc ? formatDateTime(health.endpoint.lastHealthyUtc) : '-'}</strong></div>
+                <div><span>{t('Last unhealthy')}</span><strong>{health.endpoint.lastUnhealthyUtc ? formatDateTime(health.endpoint.lastUnhealthyUtc) : '-'}</strong></div>
+              </div>
+
+              <p className="text-dim" style={{ fontSize: '0.82rem', margin: 0 }}>{t('Health checks are deduplicated by base URL: endpoints sharing a base URL are probed once per sweep.')}</p>
+            </div>
             <div className="modal-actions">
               {canManage && (
                 <button type="button" className="btn btn-primary" disabled={validating === health.endpoint.id} onClick={() => { const ep = health.endpoint!; setHealth({ open: false, endpoint: null }); handleValidate(ep); }}>
@@ -416,7 +471,19 @@ export default function Endpoints() {
                   <td className="text-dim">{endpoint.kind}</td>
                   <td className="text-dim">{endpoint.provider}</td>
                   <td className="text-dim">{endpoint.model || '-'}</td>
-                  <td><StatusBadge status={endpoint.healthStatus} /></td>
+                  <td onClick={(e) => e.stopPropagation()}>
+                    <span
+                      className="health-cell"
+                      role="button"
+                      tabIndex={0}
+                      title={t('View health detail')}
+                      onClick={() => setHealth({ open: true, endpoint })}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setHealth({ open: true, endpoint }); } }}
+                    >
+                      <StatusBadge status={endpoint.healthStatus} />
+                      {endpoint.healthHistory.length > 0 && <HealthHistogram history={endpoint.healthHistory} width={96} height={18} />}
+                    </span>
+                  </td>
                   <td className="text-dim" title={endpoint.lastHealthCheckUtc ? formatDateTime(endpoint.lastHealthCheckUtc) : ''}>
                     {endpoint.lastHealthCheckUtc ? formatRelativeTime(endpoint.lastHealthCheckUtc) : t('Never')}
                   </td>

@@ -970,6 +970,11 @@ namespace Armada.Core.Database.SqlServer.Queries
                     );",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_model_endpoints_created') CREATE INDEX idx_model_endpoints_created ON model_endpoints(created_utc DESC);",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_model_endpoints_tenant') CREATE INDEX idx_model_endpoints_tenant ON model_endpoints(tenant_id);"
+                ),
+                new SchemaMigration(
+                    61,
+                    "Add rolling health-check history to model_endpoints",
+                    @"IF COL_LENGTH('model_endpoints', 'health_history_json') IS NULL ALTER TABLE model_endpoints ADD health_history_json NVARCHAR(MAX) NULL;"
                 )
             };
         }

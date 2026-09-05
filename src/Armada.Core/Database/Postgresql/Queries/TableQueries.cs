@@ -1130,7 +1130,9 @@ namespace Armada.Core.Database.Postgresql.Queries
                         last_update_utc TIMESTAMP NOT NULL
                     );",
                     @"CREATE INDEX IF NOT EXISTS idx_model_endpoints_created ON model_endpoints(created_utc DESC);",
-                    @"CREATE INDEX IF NOT EXISTS idx_model_endpoints_tenant ON model_endpoints(tenant_id);")
+                    @"CREATE INDEX IF NOT EXISTS idx_model_endpoints_tenant ON model_endpoints(tenant_id);"),
+                new SchemaMigration(61, "Add rolling health-check history to model_endpoints",
+                    @"ALTER TABLE model_endpoints ADD COLUMN health_history_json TEXT;")
             };
         }
 
