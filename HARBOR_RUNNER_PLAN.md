@@ -219,6 +219,11 @@ Freeze the wire protocol and the seam before building either side against them.
   be defined together with `LocalHostExecutor` -- the runtime is deeply PID-keyed and event-driven
   (`IAgentRuntime` returns an int PID with output/exit events), so the seam must be grounded in its real
   consumer rather than designed speculatively.
+  PARTIAL: the host-command half of the seam is built and verified -- IHostCommandExecutor +
+  LocalHostCommandExecutor (git/gh via Process) with HostCommandRequest/Result, mapping 1:1 to the
+  HarborGitRequest/HarborGitResult messages; 4 tests run real git (version, init-in-workdir, failing
+  subcommand, null guard). The process-launch half (captain PID/events) still lands with the
+  AgentLifecycleHandler rewire. -- 2026-09-05
 - [ ] CON-03 Split `BaseAgentRuntime` into a *plan* half (command resolution, argument building,
   environment, prompt-via-stdin, MCP config) and an *execute* half. The plan half stays in
   `Armada.Runtimes`; the execute half moves behind `IHostExecutor`. Acceptance: existing runtimes build
