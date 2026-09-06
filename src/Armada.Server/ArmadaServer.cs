@@ -235,6 +235,9 @@ namespace Armada.Server
             _AgentLifecycle = new AgentLifecycleHandler(
                 _Logging, _Database, _Settings, _RuntimeFactory, _Admiral, _TemplateService, _PromptTemplateService, null, EmitEventAsync);
 
+            // Delegate captain launches to a connected Harbor by default; falls back to local when none is eligible.
+            _AgentLifecycle.SetHarborConnections(_HarborConnectionManager);
+
             // Wire up agent lifecycle events
             _Admiral.OnLaunchAgent = _AgentLifecycle.HandleLaunchAgentAsync;
             _Admiral.OnStopAgent = _AgentLifecycle.HandleStopAgentAsync;

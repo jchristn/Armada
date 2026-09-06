@@ -304,6 +304,56 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Resolve the Harbor running a delegated job by its reported process id.
+        /// </summary>
+        /// <param name="processId">Host process id.</param>
+        /// <param name="harborId">The owning Harbor identifier when found.</param>
+        /// <returns>True when the process id maps to a delegated job.</returns>
+        public bool TryGetHarborForProcess(int processId, out string? harborId)
+        {
+            harborId = null;
+            if (!_JobsByProcessId.TryGetValue(processId, out HarborJobHandle? handle)) return false;
+            harborId = handle!.HarborId;
+            return true;
+        }
+
+        /// <summary>
+        /// Whether any Harbor currently has a live link.
+        /// </summary>
+        /// <returns>True when at least one Harbor is connected.</returns>
+        public bool HasConnectedHarbor()
+        {
+            return !_Connections.IsEmpty;
+        }
+
+        /// <summary>
+        /// Choose a Harbor for a launch by dock affinity, vessel preference, capability match, and load. The
+        /// caller supplies the owning tenant so only that tenant's Harbors are considered (an empty tenant
+        /// enumerates all Harbors as an admin). Returns a decision whose <see cref="HarborRoutingDecision.Success"/>
+        /// is false when no eligible Harbor is available, in which case the caller should run locally.
+        /// </summary>
+        /// <param name="tenantId">Owning tenant identifier, or null/empty to enumerate all Harbors.</param>
+        /// <param name="request">Routing inputs.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The routing decision.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when the request is null.</exception>
+        public async Task<HarborRoutingDecision> SelectHarborAsync(string? tenantId, HarborRoutingRequest request, CancellationToken token = default)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+
+            AuthContext auth = new AuthContext
+            {
+                IsAuthenticated = true,
+                TenantId = tenantId,
+                IsAdmin = String.IsNullOrEmpty(tenantId)
+            };
+
+            List<Harbor> candidates = await _Harbors.EnumerateAsync(auth, token).ConfigureAwait(false);
+            HarborRouter router = new HarborRouter();
+            return router.Select(candidates, IsConnected, InFlightJobs, request);
+        }
+
+        /// <summary>
         /// Stop a delegated job by the process id the Harbor reported. No-op when the process id is unknown.
         /// </summary>
         /// <param name="processId">Host process id.</param>

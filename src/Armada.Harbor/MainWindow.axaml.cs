@@ -208,10 +208,21 @@ namespace Armada.Harbor
         private List<HarborCapability> BuildCapabilities()
         {
             List<HarborCapability> capabilities = new List<HarborCapability>();
+            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
             foreach (string name in _Settings.Capabilities)
             {
-                if (!string.IsNullOrWhiteSpace(name))
+                if (!string.IsNullOrWhiteSpace(name) && seen.Add(name))
                     capabilities.Add(new HarborCapability { Name = name, Available = true });
+            }
+
+            // Advertise the agent runtimes this host can launch so the Admiral's router can match a captain's
+            // requested runtime. The local job runner can drive any runtime; a launch fails with a clear error
+            // if the corresponding CLI is not installed.
+            foreach (string runtime in Enum.GetNames(typeof(Armada.Core.Enums.AgentRuntimeEnum)))
+            {
+                if (seen.Add(runtime))
+                    capabilities.Add(new HarborCapability { Name = runtime, Available = true });
             }
 
             return capabilities;

@@ -27,6 +27,7 @@ namespace Armada.Server
         private ArmadaSettings _Settings;
         private AgentRuntimeFactory _RuntimeFactory;
         private IHostProcessExecutor _HostProcessExecutor;
+        private HarborConnectionManager? _HarborConnections;
         private MuxCliService _MuxCli;
         private IAdmiralService _Admiral;
         private IMessageTemplateService _TemplateService;
@@ -143,8 +144,16 @@ namespace Armada.Server
         #region Public-Methods
 
         /// <summary>
-        /// Set or update the WebSocket hub reference (created after this handler).
+        /// Provide the Harbor connection manager so captain launches are delegated to a connected Harbor by
+        /// default. When set and a Harbor is eligible, launches run on the Harbor host; when null or no Harbor
+        /// is eligible, launches fall back to in-process (local) execution.
         /// </summary>
+        /// <param name="manager">Harbor connection manager, or null to force local execution.</param>
+        public void SetHarborConnections(HarborConnectionManager? manager)
+        {
+            _HarborConnections = manager;
+        }
+
         /// <summary>
         /// Retrieve and clear accumulated stdout output for a mission.
         /// Used by pipeline handoff to pass agent output to the next stage.
@@ -356,7 +365,8 @@ namespace Armada.Server
         public async Task<int> HandleLaunchAgentAsync(Captain captain, Mission mission, Dock dock)
         {
             _Logging.Info(_Header + "launching " + captain.Runtime + " agent for captain " + captain.Id);
-            Armada.Runtimes.Interfaces.IAgentRuntime runtime = _HostProcessExecutor.CreateRuntime(captain.Runtime);
+            IHostProcessExecutor executor = await ResolveLaunchExecutorAsync(captain, mission, dock).ConfigureAwait(false);
+            Armada.Runtimes.Interfaces.IAgentRuntime runtime = executor.CreateRuntime(captain.Runtime);
             string launchKey = captain.Id + ":" + mission.Id;
             _PendingLaunches[launchKey] = new PendingLaunchInfo
             {
@@ -866,13 +876,109 @@ namespace Armada.Server
                 _ProcessToCaptain.Remove(captain.ProcessId.Value);
                 _ProcessToMission.Remove(captain.ProcessId.Value);
             }
-            Armada.Runtimes.Interfaces.IAgentRuntime runtime = _HostProcessExecutor.CreateRuntime(captain.Runtime);
+            IHostProcessExecutor stopExecutor = ResolveStopExecutor(captain.ProcessId.Value);
+            Armada.Runtimes.Interfaces.IAgentRuntime runtime = stopExecutor.CreateRuntime(captain.Runtime);
             await runtime.StopAsync(captain.ProcessId.Value).ConfigureAwait(false);
         }
 
         #endregion
 
         #region Private-Methods
+
+        /// <summary>
+        /// Resolve the process executor for a launch. Prefers a connected, eligible Harbor (making Harbor the
+        /// default execution path); falls back to local in-process execution when no Harbor is connected, no
+        /// Harbor is eligible, or routing fails.
+        /// </summary>
+        private async Task<IHostProcessExecutor> ResolveLaunchExecutorAsync(Captain captain, Mission mission, Dock dock)
+        {
+            if (_HarborConnections == null || !_HarborConnections.HasConnectedHarbor()) return _HostProcessExecutor;
+
+            try
+            {
+                Vessel? vessel = !String.IsNullOrEmpty(mission.VesselId)
+                    ? await _Database.Vessels.ReadAsync(mission.VesselId).ConfigureAwait(false)
+                    : null;
+
+                HarborRoutingRequest request = new HarborRoutingRequest
+                {
+                    ExistingHarborId = String.IsNullOrWhiteSpace(dock.HarborId) ? null : dock.HarborId,
+                    PreferredHarborId = vessel?.PreferredHarborId,
+                    RequestedRuntime = captain.Runtime.ToString(),
+                    RequiredCapabilities = SplitCapabilities(vessel?.RequiredCapabilities)
+                };
+
+                HarborRoutingDecision decision = await _HarborConnections.SelectHarborAsync(mission.TenantId, request).ConfigureAwait(false);
+                if (decision.Success && !String.IsNullOrWhiteSpace(decision.HarborId))
+                {
+                    await RecordHarborAffinityAsync(mission, dock, decision.HarborId!).ConfigureAwait(false);
+                    _Logging.Info(_Header + "delegating captain launch to Harbor " + decision.HarborId + " (" + decision.Reason + ")");
+                    return new Armada.Runtimes.RemoteHostProcessExecutor(_HarborConnections, decision.HarborId!);
+                }
+
+                _Logging.Info(_Header + "no eligible Harbor for this launch (" + decision.Reason + "); running locally");
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "Harbor routing failed; running locally: " + ex.Message);
+            }
+
+            return _HostProcessExecutor;
+        }
+
+        /// <summary>
+        /// Resolve the process executor for a stop. When the process id maps to a delegated Harbor job, stop
+        /// on that Harbor; otherwise stop the local process.
+        /// </summary>
+        private IHostProcessExecutor ResolveStopExecutor(int processId)
+        {
+            if (_HarborConnections != null && _HarborConnections.TryGetHarborForProcess(processId, out string? harborId) && !String.IsNullOrWhiteSpace(harborId))
+                return new Armada.Runtimes.RemoteHostProcessExecutor(_HarborConnections, harborId!);
+            return _HostProcessExecutor;
+        }
+
+        /// <summary>
+        /// Pin a mission and its dock to the Harbor that ran its launch so subsequent launches and stops route
+        /// to the same host (dock affinity). Best-effort: a persistence failure does not abort the launch.
+        /// </summary>
+        private async Task RecordHarborAffinityAsync(Mission mission, Dock dock, string harborId)
+        {
+            try
+            {
+                if (!String.Equals(dock.HarborId, harborId, StringComparison.Ordinal))
+                {
+                    dock.HarborId = harborId;
+                    await _Database.Docks.UpdateAsync(dock).ConfigureAwait(false);
+                }
+
+                if (!String.Equals(mission.AssignedHarborId, harborId, StringComparison.Ordinal))
+                {
+                    mission.AssignedHarborId = harborId;
+                    await _Database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "could not persist Harbor affinity for mission " + mission.Id + ": " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Split a comma or whitespace separated capability list into distinct required capability names.
+        /// </summary>
+        private static List<string> SplitCapabilities(string? capabilities)
+        {
+            List<string> result = new List<string>();
+            if (String.IsNullOrWhiteSpace(capabilities)) return result;
+            string[] parts = capabilities.Split(new char[] { ',', ';', ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (string part in parts)
+            {
+                string trimmed = part.Trim();
+                if (trimmed.Length > 0 && !result.Contains(trimmed)) result.Add(trimmed);
+            }
+
+            return result;
+        }
 
         private static bool IsValidTransition(MissionStatusEnum current, MissionStatusEnum target)
         {

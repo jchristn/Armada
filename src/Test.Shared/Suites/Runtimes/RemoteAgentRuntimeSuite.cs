@@ -6,6 +6,7 @@ namespace Test.Shared.Suites.Runtimes
     using System.Threading.Tasks;
     using Armada.Core.Enums;
     using Armada.Core.Harbor;
+    using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Runtimes;
     using Armada.Runtimes.Interfaces;
@@ -95,6 +96,47 @@ namespace Test.Shared.Suites.Runtimes
                 RemoteHostProcessExecutor executor = new RemoteHostProcessExecutor(manager, "hbr_absent_rt");
                 IAgentRuntime runtime = executor.CreateRuntime(AgentRuntimeEnum.ClaudeCode);
                 await AssertThrowsAsync<InvalidOperationException>(() => runtime.StartAsync("/repo", "x"));
+            }));
+
+            cases.Add(CaseAsync("select_prefers_connected_capable_harbor", "SelectHarborAsync chooses a connected Harbor that advertises the runtime", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                HarborService harbors = new HarborService(testDb.Driver, CreateLogging());
+                HarborConnectionManager manager = new HarborConnectionManager(harbors, CreateLogging(), null);
+
+                HarborSendDelegate send = (message, cancellation) => Task.CompletedTask;
+                await manager.OnHandshakeAsync(new HarborHandshake
+                {
+                    HarborId = "hbr_sel",
+                    Name = "Rig",
+                    ProtocolVersion = "1.0",
+                    MaxConcurrentJobs = 4,
+                    Capabilities = new List<HarborCapability> { new HarborCapability { Name = "ClaudeCode", Available = true } }
+                }, "ten_sel", "usr_sel", send).ConfigureAwait(false);
+
+                HarborRoutingDecision decision = await manager.SelectHarborAsync("ten_sel", new HarborRoutingRequest { RequestedRuntime = "ClaudeCode" }).ConfigureAwait(false);
+                AssertTrue(decision.Success, "Expected a connected, capable Harbor to be chosen.");
+                AssertEqual("hbr_sel", decision.HarborId ?? string.Empty);
+            }));
+
+            cases.Add(CaseAsync("select_without_capability_falls_back", "SelectHarborAsync declines when no Harbor advertises the runtime", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                HarborService harbors = new HarborService(testDb.Driver, CreateLogging());
+                HarborConnectionManager manager = new HarborConnectionManager(harbors, CreateLogging(), null);
+
+                HarborSendDelegate send = (message, cancellation) => Task.CompletedTask;
+                await manager.OnHandshakeAsync(new HarborHandshake
+                {
+                    HarborId = "hbr_git_only",
+                    Name = "Rig",
+                    ProtocolVersion = "1.0",
+                    MaxConcurrentJobs = 4,
+                    Capabilities = new List<HarborCapability> { new HarborCapability { Name = "git", Available = true } }
+                }, "ten_git", "usr_git", send).ConfigureAwait(false);
+
+                HarborRoutingDecision decision = await manager.SelectHarborAsync("ten_git", new HarborRoutingRequest { RequestedRuntime = "ClaudeCode" }).ConfigureAwait(false);
+                AssertTrue(!decision.Success, "Expected no Harbor to be chosen when the runtime is not advertised (caller runs locally).");
             }));
 
             return new TestSuiteDescriptor(
