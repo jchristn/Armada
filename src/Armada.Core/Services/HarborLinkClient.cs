@@ -34,6 +34,7 @@ namespace Armada.Core.Services
         private readonly IHostCommandExecutor _CommandExecutor;
         private readonly LoggingModule _Logging;
         private readonly int _HeartbeatIntervalMs;
+        private readonly Action<HarborLogEntry>? _OnLog;
         private readonly SemaphoreSlim _SendLock = new SemaphoreSlim(1, 1);
 
         #endregion
@@ -50,6 +51,7 @@ namespace Armada.Core.Services
         /// <param name="commandExecutor">Executor for delegated git/gh commands (typically local).</param>
         /// <param name="logging">Logging module.</param>
         /// <param name="heartbeatIntervalMs">Heartbeat interval in milliseconds; 0 disables heartbeats.</param>
+        /// <param name="onLog">Optional sink for link log entries (work in, status out) for a UI log view.</param>
         public HarborLinkClient(
             string harborId,
             string name,
@@ -57,7 +59,8 @@ namespace Armada.Core.Services
             int maxConcurrentJobs,
             IHostCommandExecutor commandExecutor,
             LoggingModule logging,
-            int heartbeatIntervalMs)
+            int heartbeatIntervalMs,
+            Action<HarborLogEntry>? onLog = null)
         {
             if (String.IsNullOrWhiteSpace(harborId)) throw new ArgumentNullException(nameof(harborId));
             if (String.IsNullOrWhiteSpace(name)) throw new ArgumentNullException(nameof(name));
@@ -68,6 +71,7 @@ namespace Armada.Core.Services
             _CommandExecutor = commandExecutor ?? throw new ArgumentNullException(nameof(commandExecutor));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _HeartbeatIntervalMs = heartbeatIntervalMs < 0 ? 0 : heartbeatIntervalMs;
+            _OnLog = onLog;
         }
 
         #endregion
@@ -89,6 +93,7 @@ namespace Armada.Core.Services
             await transport.ConnectAsync(token).ConfigureAwait(false);
             await SendAsync(transport, BuildHandshake(), token).ConfigureAwait(false);
             _Logging.Info(_Header + "harbor " + _HarborId + " sent handshake");
+            Log(HarborLogDirection.Out, "Handshake sent (harbor " + _HarborId + ")");
             onConnected?.Invoke();
 
             using (CancellationTokenSource sessionCts = CancellationTokenSource.CreateLinkedTokenSource(token))
@@ -147,13 +152,25 @@ namespace Armada.Core.Services
             if (message is HarborHandshakeAck ack)
             {
                 McpBaseUrl = ack.McpBaseUrl;
-                if (!ack.Accepted) _Logging.Warn(_Header + "handshake rejected: " + (ack.Reason ?? "unspecified"));
-                else _Logging.Info(_Header + "handshake accepted; mcp=" + (ack.McpBaseUrl ?? "(none)"));
+                if (!ack.Accepted)
+                {
+                    _Logging.Warn(_Header + "handshake rejected: " + (ack.Reason ?? "unspecified"));
+                    Log(HarborLogDirection.In, "Handshake rejected: " + (ack.Reason ?? "unspecified"));
+                }
+                else
+                {
+                    _Logging.Info(_Header + "handshake accepted; mcp=" + (ack.McpBaseUrl ?? "(none)"));
+                    Log(HarborLogDirection.In, "Handshake accepted by Admiral. MCP=" + (ack.McpBaseUrl ?? "(none)"));
+                }
                 return;
             }
 
             if (message is HarborGitRequest git)
             {
+                Log(HarborLogDirection.In, "Work: " + git.Executable + " " + String.Join(" ", git.Arguments)
+                    + (String.IsNullOrEmpty(git.WorkingDirectory) ? "" : " (in " + git.WorkingDirectory + ")")
+                    + " [req " + git.RequestId + "]");
+
                 HostCommandResult result = await _CommandExecutor.RunAsync(new HostCommandRequest
                 {
                     Executable = git.Executable,
@@ -169,17 +186,21 @@ namespace Armada.Core.Services
                     StandardOutput = result.StandardOutput,
                     StandardError = result.StandardError
                 }, token).ConfigureAwait(false);
+
+                Log(HarborLogDirection.Out, "Result: exit " + result.ExitCode + " [req " + git.RequestId + "]");
                 return;
             }
 
             if (message is HarborLaunchRequest launch)
             {
+                Log(HarborLogDirection.In, "Launch request for job " + launch.JobId + " (runtime " + launch.Runtime + ")");
                 await SendAsync(transport, new HarborError
                 {
                     CorrelationId = launch.CorrelationId,
                     JobId = launch.JobId,
                     Message = "Captain launch is not yet supported by this Harbor build."
                 }, token).ConfigureAwait(false);
+                Log(HarborLogDirection.Out, "Refused launch " + launch.JobId + " (captain delegation not yet enabled)");
                 return;
             }
 
@@ -194,6 +215,7 @@ namespace Armada.Core.Services
                 {
                     await Task.Delay(_HeartbeatIntervalMs, token).ConfigureAwait(false);
                     await SendAsync(transport, new HarborHeartbeat { LiveJobIds = new List<string>() }, token).ConfigureAwait(false);
+                    Log(HarborLogDirection.Out, "Heartbeat");
                 }
                 catch (OperationCanceledException)
                 {
@@ -204,6 +226,17 @@ namespace Armada.Core.Services
                     _Logging.Warn(_Header + "heartbeat failed: " + e.Message);
                     break;
                 }
+            }
+        }
+
+        private void Log(HarborLogDirection direction, string message)
+        {
+            try
+            {
+                _OnLog?.Invoke(new HarborLogEntry(direction, message));
+            }
+            catch
+            {
             }
         }
 

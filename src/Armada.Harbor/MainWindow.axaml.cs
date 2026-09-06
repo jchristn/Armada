@@ -7,7 +7,6 @@ namespace Armada.Harbor
     using System.Threading;
     using System.Threading.Tasks;
     using Avalonia.Controls;
-    using Avalonia.Controls.Shapes;
     using Avalonia.Interactivity;
     using Avalonia.Media;
     using Avalonia.Threading;
@@ -17,12 +16,15 @@ namespace Armada.Harbor
 
     /// <summary>
     /// The Harbor status window. Framework code-behind (partial class as Avalonia requires). Owns the
-    /// reconnecting link loop and surfaces status and full connection details to the operator. Closing the
+    /// reconnecting link loop, surfaces status, and streams link activity (work in, status out) to a
+    /// copyable log so an operator can watch the Admiral issue work and results propagate back. Closing the
     /// window hides it to the tray rather than stopping the runner.
     /// </summary>
     public partial class MainWindow : Window
     {
         #region Private-Members
+
+        private const int _MaxLogLines = 500;
 
         private static readonly IBrush _Green = new SolidColorBrush(Color.Parse("#22c55e"));
         private static readonly IBrush _Amber = new SolidColorBrush(Color.Parse("#f59e0b"));
@@ -31,11 +33,19 @@ namespace Armada.Harbor
 
         private readonly HarborAppSettings _Settings;
         private readonly LoggingModule _Logging;
+        private readonly List<string> _LogLines = new List<string>();
         private CancellationTokenSource? _RunCts;
 
         #endregion
 
         #region Constructors-and-Factories
+
+        /// <summary>
+        /// Parameterless constructor for the Avalonia runtime XAML loader / previewer. Uses default settings.
+        /// </summary>
+        public MainWindow() : this(new HarborAppSettings())
+        {
+        }
 
         /// <summary>
         /// Instantiate with the shared application settings.
@@ -73,6 +83,7 @@ namespace Armada.Harbor
             _RunCts = new CancellationTokenSource();
             ConnectButton.IsEnabled = false;
             DisconnectButton.IsEnabled = true;
+            AppendInfo("Connect requested.");
             _ = RunLoopAsync(_RunCts.Token);
         }
 
@@ -84,6 +95,7 @@ namespace Armada.Harbor
             DisconnectButton.IsEnabled = false;
             SetStatus("Idle", _Gray);
             SetDetail("Disconnected by operator.");
+            AppendInfo("Disconnected by operator.");
         }
 
         private void OnOpenDashboardClick(object? sender, RoutedEventArgs e)
@@ -96,6 +108,25 @@ namespace Armada.Harbor
             {
                 SetDetail("Could not open dashboard: " + ex.Message);
             }
+        }
+
+        private async void OnCopyLogClick(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                TopLevel? top = TopLevel.GetTopLevel(this);
+                if (top?.Clipboard != null)
+                    await top.Clipboard.SetTextAsync(LogBox.Text ?? string.Empty);
+            }
+            catch
+            {
+            }
+        }
+
+        private void OnClearLogClick(object? sender, RoutedEventArgs e)
+        {
+            _LogLines.Clear();
+            LogBox.Text = string.Empty;
         }
 
         private async Task RunLoopAsync(CancellationToken token)
@@ -114,7 +145,8 @@ namespace Armada.Harbor
                         _Settings.MaxConcurrentJobs,
                         executor,
                         _Logging,
-                        _Settings.HeartbeatIntervalMs);
+                        _Settings.HeartbeatIntervalMs,
+                        AppendLog);
 
                     try
                     {
@@ -123,11 +155,12 @@ namespace Armada.Harbor
                         await client.RunSessionAsync(transport, token, () =>
                         {
                             SetStatus("Connected", _Green);
-                            SetDetail("Linked to " + _Settings.ServerLinkUrl + ". Handshake sent; awaiting work.");
+                            SetDetail("Linked to " + _Settings.ServerLinkUrl + ". Awaiting work.");
                         }).ConfigureAwait(false);
 
                         SetStatus("Disconnected", _Red);
                         SetDetail("The link closed. Retrying in 3 seconds...");
+                        AppendInfo("Link closed; retrying in 3s.");
                     }
                     catch (OperationCanceledException)
                     {
@@ -137,6 +170,7 @@ namespace Armada.Harbor
                     {
                         SetStatus("Disconnected", _Red);
                         SetDetail(DescribeConnectError(ex));
+                        AppendInfo("Connect failed: " + ex.Message);
                     }
 
                     SetMcp(client.McpBaseUrl);
@@ -160,9 +194,9 @@ namespace Armada.Harbor
             if (ex is WebSocketException || ex.InnerException is WebSocketException)
             {
                 detail = ex.Message
-                    + "\n\nThe Admiral accepted the connection request but did not complete the Harbor link handshake. "
-                    + "The server-side Harbor link endpoint may not be enabled in this Admiral build yet, or the link "
-                    + "URL / credentials may be wrong.\n\nLink URL: " + _Settings.ServerLinkUrl
+                    + "\n\nThe Admiral did not complete the Harbor link handshake. The server-side Harbor link "
+                    + "endpoint may not be enabled in this Admiral build yet, or the link URL / credentials may "
+                    + "be wrong.\n\nLink URL: " + _Settings.ServerLinkUrl
                     + "\nRetrying in 3 seconds...";
             }
 
@@ -189,6 +223,25 @@ namespace Armada.Harbor
                 { "x-access-key", _Settings.AccessKey },
                 { "x-secret-key", _Settings.Secret }
             };
+        }
+
+        private void AppendInfo(string message)
+        {
+            AppendLog(new HarborLogEntry(HarborLogDirection.Info, message));
+        }
+
+        private void AppendLog(HarborLogEntry entry)
+        {
+            string line = entry.ToString();
+            Dispatcher.UIThread.Post(() =>
+            {
+                _LogLines.Add(line);
+                if (_LogLines.Count > _MaxLogLines)
+                    _LogLines.RemoveRange(0, _LogLines.Count - _MaxLogLines);
+
+                LogBox.Text = string.Join("\n", _LogLines);
+                LogBox.CaretIndex = LogBox.Text.Length;
+            });
         }
 
         private void SetStatus(string status, IBrush color)

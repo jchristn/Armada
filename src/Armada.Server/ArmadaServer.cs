@@ -88,6 +88,8 @@ namespace Armada.Server
         private HistoricalTimelineService _HistoricalTimelineService = null!;
         private ModelEndpointService _ModelEndpointService = null!;
         private HarborService _HarborService = null!;
+        private HarborConnectionManager _HarborConnectionManager = null!;
+        private HarborLinkEndpoint _HarborLinkEndpoint = null!;
 
         private ISessionTokenService _SessionTokenService = null!;
         private IAuthenticationService _AuthenticationService = null!;
@@ -187,6 +189,11 @@ namespace Armada.Server
             _HistoricalTimelineService = new HistoricalTimelineService(_Database);
             _ModelEndpointService = new ModelEndpointService(_Database, _Logging);
             _HarborService = new HarborService(_Database, _Logging);
+            string harborMcpUrl = String.IsNullOrWhiteSpace(_Settings.Harbor.AdvertisedMcpBaseUrl)
+                ? ArmadaMcpConfigBuilder.GetMcpUrl(_Settings.McpPort)
+                : _Settings.Harbor.AdvertisedMcpBaseUrl!;
+            _HarborConnectionManager = new HarborConnectionManager(_HarborService, _Logging, harborMcpUrl);
+            _HarborLinkEndpoint = new HarborLinkEndpoint(_HarborConnectionManager, _Settings.Harbor, _Logging);
             _RemoteTunnel = new RemoteTunnelManager(_Logging, _Settings);
             _RemoteDashboardRelay = new RemoteDashboardRelayService(_Logging, _Settings, _RemoteTunnel.PublishEventAsync);
             admiralService.OnGetRemoteTunnelStatus = _RemoteTunnel.GetStatus;
@@ -366,6 +373,9 @@ namespace Armada.Server
             // Register WebSocket route on the main REST server
             _App.WebSocket("/ws", _WebSocketHub.HandleWebSocketAsync);
             _Logging.Info(_Header + "WebSocket route registered at /ws");
+
+            _App.WebSocket(_Settings.Harbor.LinkPath, _HarborLinkEndpoint.HandleWebSocketAsync);
+            _Logging.Info(_Header + "Harbor link route registered at " + _Settings.Harbor.LinkPath);
 
             // Watson 7 StartAsync is long-running; Start() binds and returns after
             // scheduling the accept loop.
@@ -593,7 +603,7 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Harbors (host runners)
-            new HarborRoutes(_HarborService)
+            new HarborRoutes(_HarborService, _HarborConnectionManager)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Structured check runs

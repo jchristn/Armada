@@ -279,7 +279,7 @@ Freeze the wire protocol and the seam before building either side against them.
 - [ ] SRV-07 Static operation-scope map: every Harbor command message type maps to a
   `(ResourceType, Operation)` pair; dispatch/execute maps to `Execute`/`Write`; unclassifiable payloads
   require `Write`, never default to `Read`.
-- [ ] SRV-08 Authenticate the WebSocket upgrade: read the credential/signed-request material from
+- [~] SRV-08 Authenticate the WebSocket upgrade: read the credential/signed-request material from
   upgrade headers, resolve tenant, build the `RequestContext` on the HTTP context, normalize to the
   Credential principal, reject with a close frame on failure. Signed-request path enforces bounded clock
   skew and nonce uniqueness.
@@ -291,7 +291,7 @@ Freeze the wire protocol and the seam before building either side against them.
 
 ### The Harbor link and delegation
 
-- [ ] SRV-11 Enable WebSockets on the existing Watson server (same port, no second listener) and register
+- [x] SRV-11 Enable WebSockets on the existing Watson server (same port, no second listener) and register
   the Harbor link path (e.g. `Server.WebSocket("/v1.0/harbor/connect", ...)`). Bind honoring
   `Rest.Hostname` (set `0.0.0.0` in split-mode config).
 - [~] SRV-12 Harbor connection manager (instance-owned by the server host, not a static global): tracks

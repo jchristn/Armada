@@ -22,10 +22,12 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
-        /// Whether a Harbor link must present valid credentials. Defaults to true. Disable only for local,
-        /// loopback-only development.
+        /// Whether a Harbor link must present a credential on the upgrade. Defaults to false so a local,
+        /// loopback Harbor connects with no setup; enable it for any non-loopback or multi-tenant deployment.
+        /// Full signed-request credential validation is a follow-up; when enabled today the endpoint requires
+        /// the presence of an access-key header.
         /// </summary>
-        public bool RequireAuth { get; set; } = true;
+        public bool RequireAuth { get; set; } = false;
 
         /// <summary>
         /// Expected heartbeat interval from a Harbor, in seconds. Clamped to [5, 3600]; defaults to 15.

@@ -18,6 +18,7 @@ namespace Armada.Server.Routes
     public class HarborRoutes
     {
         private readonly HarborService _Harbors;
+        private readonly HarborConnectionManager _Connections;
         private static readonly JsonSerializerOptions _BodyJsonOptions = new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true,
@@ -29,9 +30,11 @@ namespace Armada.Server.Routes
         /// Instantiate.
         /// </summary>
         /// <param name="harbors">Harbor service.</param>
-        public HarborRoutes(HarborService harbors)
+        /// <param name="connections">Harbor connection manager (for the connectivity probe).</param>
+        public HarborRoutes(HarborService harbors, HarborConnectionManager connections)
         {
             _Harbors = harbors ?? throw new ArgumentNullException(nameof(harbors));
+            _Connections = connections ?? throw new ArgumentNullException(nameof(connections));
         }
 
         /// <summary>
@@ -201,6 +204,47 @@ namespace Armada.Server.Routes
                 .WithDescription("Disables a Harbor so it keeps its docks but receives no new missions.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Harbor ID (hbr_ prefix)"))
                 .WithResponse(200, OpenApiJson.For<Harbor>("Updated Harbor"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            app.Post("/api/v1/harbors/{id}/probe", async (ApiRequest req) =>
+            {
+                AuthContext? ctx = await AuthorizeAsync(req, authenticate, authz).ConfigureAwait(false);
+                if (ctx == null) return BuildAuthError(req);
+
+                Harbor? harbor = await _Harbors.ReadAsync(ctx, req.Parameters["id"]).ConfigureAwait(false);
+                if (harbor == null)
+                {
+                    req.Http.Response.StatusCode = 404;
+                    return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Harbor not found" };
+                }
+
+                HarborProbeRequest probe = new HarborProbeRequest();
+                if (!string.IsNullOrWhiteSpace(req.Http.Request.DataAsString))
+                    probe = JsonSerializer.Deserialize<HarborProbeRequest>(req.Http.Request.DataAsString, _BodyJsonOptions) ?? new HarborProbeRequest();
+
+                if (!_Connections.IsConnected(harbor.Id))
+                {
+                    req.Http.Response.StatusCode = 409;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Harbor is not connected; no link to probe over." };
+                }
+
+                RemoteHostCommandExecutor executor = new RemoteHostCommandExecutor(_Connections, harbor.Id);
+                return await executor.RunAsync(new HostCommandRequest
+                {
+                    Executable = probe.Executable,
+                    Arguments = probe.Arguments,
+                    WorkingDirectory = probe.WorkingDirectory,
+                    TimeoutMs = probe.TimeoutMs
+                }).ConfigureAwait(false);
+            },
+            api => api
+                .WithTag("Harbors")
+                .WithSummary("Probe a Harbor")
+                .WithDescription("Runs a one-off host command (default: git --version) on a connected Harbor over its link and returns the result. Verifies the end-to-end server-issues-work / Harbor-replies loop.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Harbor ID (hbr_ prefix)"))
+                .WithRequestBody(OpenApiJson.BodyFor<HarborProbeRequest>("Optional command to run", false))
+                .WithResponse(200, OpenApiJson.For<HostCommandResult>("Command result"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
         }
