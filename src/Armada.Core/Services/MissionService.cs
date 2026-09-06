@@ -3746,12 +3746,32 @@ namespace Armada.Core.Services
             CaptainTierEnum? resolvedTier = null;
 
             List<CaptainAssignmentOverride> overrides = await ReadVoyageCaptainOverridesAsync(mission.VoyageId, token).ConfigureAwait(false);
+
+            // An exact per-persona override wins; a wildcard override ("*" or empty persona) applies to every
+            // step and is the fallback. The wildcard lets a dispatch pin one captain regardless of pipeline
+            // (including "Inherit", where the resolved stages are not known at dispatch time).
+            CaptainAssignmentOverride? exactMatch = null;
+            CaptainAssignmentOverride? wildcardMatch = null;
             foreach (CaptainAssignmentOverride ov in overrides)
             {
-                if (!PersonaCatalog.Matches(ov.Persona, mission.Persona)) continue;
-                resolvedCaptainId = String.IsNullOrEmpty(ov.CaptainId) ? null : ov.CaptainId;
-                resolvedTier = ov.FallbackTier;
-                break;
+                if (String.IsNullOrEmpty(ov.Persona) || ov.Persona == "*")
+                {
+                    if (wildcardMatch == null) wildcardMatch = ov;
+                    continue;
+                }
+
+                if (PersonaCatalog.Matches(ov.Persona, mission.Persona))
+                {
+                    exactMatch = ov;
+                    break;
+                }
+            }
+
+            CaptainAssignmentOverride? chosen = exactMatch ?? wildcardMatch;
+            if (chosen != null)
+            {
+                resolvedCaptainId = String.IsNullOrEmpty(chosen.CaptainId) ? null : chosen.CaptainId;
+                resolvedTier = chosen.FallbackTier;
             }
 
             if (String.IsNullOrEmpty(resolvedCaptainId))

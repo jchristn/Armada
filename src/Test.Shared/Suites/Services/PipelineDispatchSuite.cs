@@ -79,6 +79,50 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("wildcard_captain_override_pins_any_persona", "A wildcard captain override pins the captain for any persona/step", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    StubGitService git = new StubGitService();
+                    IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
+                    ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
+                    captainService.OnLaunchAgent = (_, _, _) => Task.FromResult(12345);
+                    IMissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService);
+
+                    Vessel vessel = new Vessel("wildcard-vessel", "https://github.com/test/repo.git");
+                    vessel.DefaultBranch = "main";
+                    vessel.AllowConcurrentMissions = true;
+                    vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    Captain target = new Captain("Target Captain");
+                    target.State = CaptainStateEnum.Idle;
+                    target = await testDb.Driver.Captains.CreateAsync(target).ConfigureAwait(false);
+
+                    Armada.Core.Models.Voyage voyage = new Armada.Core.Models.Voyage("wildcard voyage", "d");
+                    voyage.CaptainOverridesJson = MissionService.SerializeCaptainOverrides(new List<Armada.Core.Models.CaptainAssignmentOverride>
+                    {
+                        new Armada.Core.Models.CaptainAssignmentOverride { Persona = "*", CaptainId = target.Id }
+                    });
+                    voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
+
+                    Mission mission = new Mission("[Judge] review the work", "Review it.");
+                    mission.VesselId = vessel.Id;
+                    mission.VoyageId = voyage.Id;
+                    mission.Persona = "Judge";
+                    mission = await testDb.Driver.Missions.CreateAsync(mission).ConfigureAwait(false);
+
+                    bool assigned = await missionService.TryAssignAsync(mission, vessel).ConfigureAwait(false);
+                    Mission? reloaded = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+
+                    AssertTrue(assigned, "Mission should be assigned.");
+                    AssertNotNull(reloaded, "Assigned mission should persist.");
+                    AssertEqual(target.Id, reloaded!.RequestedCaptainId ?? String.Empty);
+                    AssertEqual(target.Id, reloaded.CaptainId ?? String.Empty);
+                }
+            }));
+
             cases.Add(CaseAsync("try_assign_async_skips_vessels_reusing_local_and_working_directory_path", "TryAssignAsync skips vessels that reuse the same local and working directory path", TestTags.Negative, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
