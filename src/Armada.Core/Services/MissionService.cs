@@ -150,6 +150,7 @@ namespace Armada.Core.Services
         /// <param name="captains">Captain service.</param>
         /// <param name="promptTemplates">Prompt template service (optional for backward compatibility).</param>
         /// <param name="git">Git service used for branch cleanup on non-landed intermediate stages.</param>
+        /// <param name="definitionOfDone">Optional in-dock Definition-of-Done gate.</param>
         public MissionService(
             LoggingModule logging,
             DatabaseDriver database,

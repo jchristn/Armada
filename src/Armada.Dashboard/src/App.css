@@ -2303,7 +2303,7 @@ tr.clickable { cursor: pointer; }
     border: 1px solid var(--border);
     border-radius: 12px;
     padding: 0.75rem 0.85rem;
-    background: rgba(255, 255, 255, 0.65);
+    background: var(--bg-hover);
 }
 
 .readiness-info-label,
@@ -2360,7 +2360,7 @@ tr.clickable { cursor: pointer; }
     border: 1px solid var(--border);
     border-radius: 12px;
     padding: 0.7rem 0.8rem;
-    background: rgba(255, 255, 255, 0.55);
+    background: var(--bg-hover);
 }
 
 .readiness-checklist-item.satisfied {
@@ -2387,15 +2387,17 @@ tr.clickable { cursor: pointer; }
     border: 1px solid var(--border);
     border-radius: 12px;
     padding: 0.7rem 0.8rem;
-    background: rgba(255, 255, 255, 0.55);
+    background: var(--bg-hover);
 }
 
 .readiness-issue.warning {
-    border-color: rgba(191, 132, 36, 0.28);
+    border-color: color-mix(in srgb, var(--yellow) 45%, var(--border));
+    background: color-mix(in srgb, var(--yellow) 10%, var(--bg-card));
 }
 
 .readiness-issue.error {
-    border-color: rgba(191, 68, 68, 0.3);
+    border-color: color-mix(in srgb, var(--red) 45%, var(--border));
+    background: color-mix(in srgb, var(--red) 10%, var(--bg-card));
 }
 
 .readiness-issue-title-row {
@@ -2411,15 +2413,15 @@ tr.clickable { cursor: pointer; }
 }
 
 .readiness-issue-severity.warning {
-    color: #8a5a12;
+    color: var(--yellow);
 }
 
 .readiness-issue-severity.error {
-    color: #9e2323;
+    color: var(--red);
 }
 
 .readiness-issue-severity.info {
-    color: var(--text-muted);
+    color: var(--text-dim);
 }
 
 .readiness-related-value {

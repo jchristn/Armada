@@ -23,6 +23,7 @@ namespace Armada.Core.Services
         /// <param name="targetBranch">The branch the change targets (e.g. the default branch), or null.</param>
         /// <param name="workingBranch">The mission's working branch name, or null.</param>
         /// <param name="recentPathCommits">Optional recent commits per named path (path -> summary lines).</param>
+        /// <param name="subjectTermsPresent">Optional subject terms already present in the change, used to avoid restating them.</param>
         /// <returns>A markdown section, or empty string when there is nothing to state.</returns>
         public static string Render(
             string? startCommit,

@@ -80,13 +80,16 @@ namespace Armada.Core.Services
         /// </summary>
         /// <param name="transport">Transport to run over.</param>
         /// <param name="token">Cancellation token.</param>
-        public async Task RunSessionAsync(IHarborTransport transport, CancellationToken token)
+        /// <param name="onConnected">Optional callback invoked once the transport is open and the handshake
+        /// has been sent, so a caller can surface a "connected" state.</param>
+        public async Task RunSessionAsync(IHarborTransport transport, CancellationToken token, Action? onConnected = null)
         {
             if (transport == null) throw new ArgumentNullException(nameof(transport));
 
             await transport.ConnectAsync(token).ConfigureAwait(false);
             await SendAsync(transport, BuildHandshake(), token).ConfigureAwait(false);
             _Logging.Info(_Header + "harbor " + _HarborId + " sent handshake");
+            onConnected?.Invoke();
 
             using (CancellationTokenSource sessionCts = CancellationTokenSource.CreateLinkedTokenSource(token))
             {

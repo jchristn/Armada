@@ -708,6 +708,14 @@ namespace Armada.Core.Services
             return DispatchValidationResult.Valid(resolvedPipelineId, isBareVoyage);
         }
 
+        /// <summary>
+        /// Handle an agent process exit: reconcile the captain and mission state for the exited process.
+        /// </summary>
+        /// <param name="processId">Operating-system process id that exited.</param>
+        /// <param name="exitCode">Process exit code, or null when unavailable.</param>
+        /// <param name="captainId">Captain identifier associated with the process.</param>
+        /// <param name="missionId">Mission identifier associated with the process.</param>
+        /// <param name="token">Cancellation token.</param>
         public async Task HandleProcessExitAsync(int processId, int? exitCode, string captainId, string missionId, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));

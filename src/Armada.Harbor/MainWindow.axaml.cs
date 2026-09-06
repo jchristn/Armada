@@ -3,10 +3,13 @@ namespace Armada.Harbor
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
+    using System.Net.WebSockets;
     using System.Threading;
     using System.Threading.Tasks;
     using Avalonia.Controls;
+    using Avalonia.Controls.Shapes;
     using Avalonia.Interactivity;
+    using Avalonia.Media;
     using Avalonia.Threading;
     using Armada.Core.Models;
     using Armada.Core.Services;
@@ -14,12 +17,17 @@ namespace Armada.Harbor
 
     /// <summary>
     /// The Harbor status window. Framework code-behind (partial class as Avalonia requires). Owns the
-    /// reconnecting link loop: it dials the Admiral, runs a link session, and retries with a short backoff
-    /// when the link drops, surfacing status to the operator.
+    /// reconnecting link loop and surfaces status and full connection details to the operator. Closing the
+    /// window hides it to the tray rather than stopping the runner.
     /// </summary>
     public partial class MainWindow : Window
     {
         #region Private-Members
+
+        private static readonly IBrush _Green = new SolidColorBrush(Color.Parse("#22c55e"));
+        private static readonly IBrush _Amber = new SolidColorBrush(Color.Parse("#f59e0b"));
+        private static readonly IBrush _Red = new SolidColorBrush(Color.Parse("#ef4444"));
+        private static readonly IBrush _Gray = new SolidColorBrush(Color.Parse("#9ca3af"));
 
         private readonly HarborAppSettings _Settings;
         private readonly LoggingModule _Logging;
@@ -30,25 +38,34 @@ namespace Armada.Harbor
         #region Constructors-and-Factories
 
         /// <summary>
-        /// Instantiate.
+        /// Instantiate with the shared application settings.
         /// </summary>
-        public MainWindow()
+        /// <param name="settings">Harbor application settings.</param>
+        public MainWindow(HarborAppSettings settings)
         {
+            _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             InitializeComponent();
 
-            _Settings = HarborAppSettings.Load();
-            _Settings.Save();
             _Logging = new LoggingModule();
             _Logging.Settings.EnableConsole = false;
 
             HarborNameText.Text = _Settings.Name + "  (" + _Settings.HarborId + ")";
             ServerText.Text = _Settings.ServerLinkUrl;
-            Closing += (sender, args) => _RunCts?.Cancel();
+            SetStatus("Idle", _Gray);
+
+            Closing += OnWindowClosing;
         }
 
         #endregion
 
         #region Private-Methods
+
+        private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
+        {
+            // Keep the runner alive in the tray instead of exiting; the tray "Quit" item shuts the app down.
+            e.Cancel = true;
+            Hide();
+        }
 
         private void OnConnectClick(object? sender, RoutedEventArgs e)
         {
@@ -65,7 +82,8 @@ namespace Armada.Harbor
             _RunCts = null;
             ConnectButton.IsEnabled = true;
             DisconnectButton.IsEnabled = false;
-            SetStatus("Idle");
+            SetStatus("Idle", _Gray);
+            SetDetail("Disconnected by operator.");
         }
 
         private void OnOpenDashboardClick(object? sender, RoutedEventArgs e)
@@ -76,7 +94,7 @@ namespace Armada.Harbor
             }
             catch (Exception ex)
             {
-                SetStatus("Could not open dashboard: " + ex.Message);
+                SetDetail("Could not open dashboard: " + ex.Message);
             }
         }
 
@@ -100,9 +118,16 @@ namespace Armada.Harbor
 
                     try
                     {
-                        SetStatus("Connecting...");
-                        await client.RunSessionAsync(transport, token).ConfigureAwait(false);
-                        SetStatus("Disconnected");
+                        SetStatus("Connecting...", _Amber);
+                        SetDetail("Dialing " + _Settings.ServerLinkUrl + " ...");
+                        await client.RunSessionAsync(transport, token, () =>
+                        {
+                            SetStatus("Connected", _Green);
+                            SetDetail("Linked to " + _Settings.ServerLinkUrl + ". Handshake sent; awaiting work.");
+                        }).ConfigureAwait(false);
+
+                        SetStatus("Disconnected", _Red);
+                        SetDetail("The link closed. Retrying in 3 seconds...");
                     }
                     catch (OperationCanceledException)
                     {
@@ -110,7 +135,8 @@ namespace Armada.Harbor
                     }
                     catch (Exception ex)
                     {
-                        SetStatus("Disconnected: " + ex.Message);
+                        SetStatus("Disconnected", _Red);
+                        SetDetail(DescribeConnectError(ex));
                     }
 
                     SetMcp(client.McpBaseUrl);
@@ -126,6 +152,21 @@ namespace Armada.Harbor
                     break;
                 }
             }
+        }
+
+        private string DescribeConnectError(Exception ex)
+        {
+            string detail = ex.Message;
+            if (ex is WebSocketException || ex.InnerException is WebSocketException)
+            {
+                detail = ex.Message
+                    + "\n\nThe Admiral accepted the connection request but did not complete the Harbor link handshake. "
+                    + "The server-side Harbor link endpoint may not be enabled in this Admiral build yet, or the link "
+                    + "URL / credentials may be wrong.\n\nLink URL: " + _Settings.ServerLinkUrl
+                    + "\nRetrying in 3 seconds...";
+            }
+
+            return detail;
         }
 
         private List<HarborCapability> BuildCapabilities()
@@ -150,9 +191,18 @@ namespace Armada.Harbor
             };
         }
 
-        private void SetStatus(string status)
+        private void SetStatus(string status, IBrush color)
         {
-            Dispatcher.UIThread.Post(() => StatusText.Text = status);
+            Dispatcher.UIThread.Post(() =>
+            {
+                StatusText.Text = status;
+                StatusDot.Fill = color;
+            });
+        }
+
+        private void SetDetail(string detail)
+        {
+            Dispatcher.UIThread.Post(() => DetailText.Text = detail);
         }
 
         private void SetMcp(string? mcp)

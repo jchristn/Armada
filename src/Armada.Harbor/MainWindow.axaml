@@ -1,29 +1,50 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Armada.Harbor.MainWindow"
-        Width="460" Height="320"
-        CanResize="False"
+        Width="560" Height="460"
+        MinWidth="460" MinHeight="380"
+        CanResize="True"
+        Icon="/Assets/logo.png"
         Title="Armada Harbor">
-  <StackPanel Margin="20" Spacing="12">
-    <TextBlock Text="Armada Harbor" FontSize="20" FontWeight="Bold" />
-    <TextBlock Text="Detached host runner. This machine executes captains, git, and worktrees for the Admiral."
-               TextWrapping="Wrap" Foreground="Gray" />
+  <DockPanel Margin="20">
 
-    <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto" >
-      <TextBlock Grid.Row="0" Grid.Column="0" Text="Harbor" FontWeight="SemiBold" />
-      <TextBlock Grid.Row="0" Grid.Column="1" x:Name="HarborNameText" Text="-" />
-      <TextBlock Grid.Row="1" Grid.Column="0" Text="Server" FontWeight="SemiBold" />
-      <TextBlock Grid.Row="1" Grid.Column="1" x:Name="ServerText" Text="-" TextWrapping="Wrap" />
-      <TextBlock Grid.Row="2" Grid.Column="0" Text="Status" FontWeight="SemiBold" />
-      <TextBlock Grid.Row="2" Grid.Column="1" x:Name="StatusText" Text="Idle" />
-      <TextBlock Grid.Row="3" Grid.Column="0" Text="MCP" FontWeight="SemiBold" />
-      <TextBlock Grid.Row="3" Grid.Column="1" x:Name="McpText" Text="-" TextWrapping="Wrap" />
-    </Grid>
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="14">
+      <Image Source="/Assets/logo.png" Width="40" Height="40" VerticalAlignment="Center" />
+      <StackPanel VerticalAlignment="Center">
+        <TextBlock Text="Armada Harbor" FontSize="22" FontWeight="Bold" />
+        <TextBlock Text="Detached host runner - executes captains, git, and worktrees for the Admiral."
+                   FontSize="12" Foreground="Gray" TextWrapping="Wrap" MaxWidth="420" />
+      </StackPanel>
+    </StackPanel>
 
-    <StackPanel Orientation="Horizontal" Spacing="10">
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="10" Margin="0,16,0,0">
       <Button x:Name="ConnectButton" Content="Connect" Click="OnConnectClick" />
       <Button x:Name="DisconnectButton" Content="Disconnect" Click="OnDisconnectClick" IsEnabled="False" />
       <Button Content="Open Dashboard" Click="OnOpenDashboardClick" />
     </StackPanel>
-  </StackPanel>
+
+    <StackPanel Spacing="12" Margin="0,20,0,0">
+      <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto,Auto">
+        <TextBlock Grid.Row="0" Grid.Column="0" Text="Harbor" FontWeight="SemiBold" Margin="0,0,0,6" />
+        <SelectableTextBlock Grid.Row="0" Grid.Column="1" x:Name="HarborNameText" Text="-" TextWrapping="Wrap" Margin="0,0,0,6" />
+        <TextBlock Grid.Row="1" Grid.Column="0" Text="Server" FontWeight="SemiBold" Margin="0,0,0,6" />
+        <SelectableTextBlock Grid.Row="1" Grid.Column="1" x:Name="ServerText" Text="-" TextWrapping="Wrap" Margin="0,0,0,6" />
+        <TextBlock Grid.Row="2" Grid.Column="0" Text="MCP URL" FontWeight="SemiBold" />
+        <SelectableTextBlock Grid.Row="2" Grid.Column="1" x:Name="McpText" Text="-" TextWrapping="Wrap" />
+      </Grid>
+
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Ellipse x:Name="StatusDot" Width="11" Height="11" VerticalAlignment="Center" Fill="Gray" />
+        <TextBlock x:Name="StatusText" Text="Idle" FontWeight="SemiBold" VerticalAlignment="Center" />
+      </StackPanel>
+
+      <Border BorderBrush="Gray" BorderThickness="1" CornerRadius="6" Padding="10" MinHeight="96">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+          <SelectableTextBlock x:Name="DetailText" TextWrapping="Wrap"
+                               Text="Not connected. Click Connect to dial the Admiral." />
+        </ScrollViewer>
+      </Border>
+    </StackPanel>
+
+  </DockPanel>
 </Window>
