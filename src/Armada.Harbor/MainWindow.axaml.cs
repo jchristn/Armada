@@ -64,6 +64,7 @@ namespace Armada.Harbor
             SetStatus("Idle", _Gray);
 
             Closing += OnWindowClosing;
+            Opened += OnWindowOpened;
         }
 
         #endregion
@@ -77,13 +78,25 @@ namespace Armada.Harbor
             Hide();
         }
 
+        private void OnWindowOpened(object? sender, EventArgs e)
+        {
+            // Connect automatically on startup so an operator does not have to click Connect; the link loop
+            // reconnects on its own after transient drops.
+            StartConnecting(true);
+        }
+
         private void OnConnectClick(object? sender, RoutedEventArgs e)
+        {
+            StartConnecting(false);
+        }
+
+        private void StartConnecting(bool automatic)
         {
             if (_RunCts != null) return;
             _RunCts = new CancellationTokenSource();
             ConnectButton.IsEnabled = false;
             DisconnectButton.IsEnabled = true;
-            AppendInfo("Connect requested.");
+            AppendInfo(automatic ? "Auto-connecting on startup." : "Connect requested.");
             _ = RunLoopAsync(_RunCts.Token);
         }
 
