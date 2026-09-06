@@ -4,6 +4,7 @@ namespace Test.Shared.Infrastructure
     using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core.Models;
     using Armada.Core.Services.Interfaces;
 
     /// <summary>
@@ -145,5 +146,22 @@ namespace Test.Shared.Infrastructure
         public Task<bool> ForceAdvanceBranchAsync(string worktreePath, string branchName, string commitHash, CancellationToken token = default) => Task.FromResult(true);
         public Task<IReadOnlyList<string>> GetRecentCommitsForPathsAsync(string worktreePath, IReadOnlyList<string> paths, int maxPerPath, CancellationToken token = default) => Task.FromResult<IReadOnlyList<string>>(new List<string>());
         public Task<IReadOnlyList<string>> FindExistingSubjectTermsAsync(string worktreePath, IReadOnlyList<string> terms, CancellationToken token = default) => Task.FromResult<IReadOnlyList<string>>(new List<string>());
+
+        public Task<IReadOnlyList<BranchInfo>> ListBranchesAsync(string repoPath, string defaultBranch = "main", CancellationToken token = default)
+            => Task.FromResult<IReadOnlyList<BranchInfo>>(new List<BranchInfo>());
+
+        public Task PushLocalBranchAsync(string repoPath, string branchName, string remoteName = "origin", CancellationToken token = default)
+        {
+            PushCalls.Add(repoPath + ":" + branchName);
+            OperationCalls.Add("push-local-branch:" + branchName);
+            return Task.CompletedTask;
+        }
+
+        public Task MergeBranchesAsync(string repoPath, string sourceBranch, string targetBranch, bool push, CancellationToken token = default)
+        {
+            MergeBranchCalls.Add(sourceBranch + " -> " + targetBranch);
+            OperationCalls.Add("merge-branches:" + sourceBranch + "->" + targetBranch);
+            return Task.CompletedTask;
+        }
     }
 }

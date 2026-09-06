@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { listVessels, listFleets, listPipelines, createVessel, updateVessel, deleteVessel, getVesselGitStatus } from '../api/client';
+import { listVessels, listFleets, listPipelines, createVessel, updateVessel, deleteVessel, getVesselGitStatus, getVesselBranches } from '../api/client';
+import BranchesModal from '../components/vessels/BranchesModal';
 import type { Fleet, Vessel, Pipeline } from '../types/models';
 import Pagination from '../components/shared/Pagination';
 import ActionMenu from '../components/shared/ActionMenu';
@@ -68,6 +69,8 @@ export default function Vessels() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [gitStatus, setGitStatus] = useState<Record<string, { ahead: number | null; behind: number | null }>>({});
+  const [branchCounts, setBranchCounts] = useState<Record<string, number | null>>({});
+  const [branchesModal, setBranchesModal] = useState<{ vesselId: string; vesselName: string } | null>(null);
 
   // Modal
   const [showForm, setShowForm] = useState(false);
@@ -127,8 +130,9 @@ export default function Vessels() {
       setPipelines(pResult.objects);
       setError('');
 
-      // Fetch git status for each vessel in the background (non-blocking)
+      // Fetch git status and branch counts for each vessel in the background (non-blocking)
       const statusMap: Record<string, { ahead: number | null; behind: number | null }> = {};
+      const countMap: Record<string, number | null> = {};
       await Promise.all(vResult.objects.map(async (v: Vessel) => {
         try {
           const gs = await getVesselGitStatus(v.id);
@@ -136,8 +140,15 @@ export default function Vessels() {
         } catch {
           statusMap[v.id] = { ahead: null, behind: null };
         }
+        try {
+          const br = await getVesselBranches(v.id);
+          countMap[v.id] = br.branchCount;
+        } catch {
+          countMap[v.id] = null;
+        }
       }));
       setGitStatus(statusMap);
+      setBranchCounts(countMap);
     } catch {
       setError(t('Failed to load vessels.'));
     } finally {
@@ -545,6 +556,7 @@ export default function Vessels() {
                   </th>
                   <th title={t('How completed mission work is integrated (LocalMerge, PullRequest, MergeQueue, None)')}>{t('Landing Mode')}</th>
                   <th title={t('Commits ahead and behind the remote default branch')}>{t('Sync')}</th>
+                  <th title={t('Number of branches in the vessel repository')}>{t('Branches')}</th>
                   <th className="text-right">{t('Actions')}</th>
                 </tr>
                 <tr className="column-filter-row">
@@ -568,6 +580,7 @@ export default function Vessels() {
                       <option value="None">None</option>
                     </select>
                   </td>
+                  <td></td>
                   <td></td>
                   <td></td>
                 </tr>
@@ -622,8 +635,22 @@ export default function Vessels() {
                         );
                       })()}
                     </td>
+                    <td onClick={e => e.stopPropagation()}>
+                      {(() => {
+                        const count = branchCounts[v.id];
+                        return (
+                          <button
+                            className="btn btn-sm"
+                            title={t('Manage branches')}
+                            onClick={() => setBranchesModal({ vesselId: v.id, vesselName: v.name })}>
+                            {count === null || count === undefined ? t('Branches') : t('{{count}} branches', { count })}
+                          </button>
+                        );
+                      })()}
+                    </td>
                     <td className="text-right" onClick={e => e.stopPropagation()}>
                       <ActionMenu id={`vessel-${v.id}`} items={[
+                        { label: 'Manage Branches', onClick: () => setBranchesModal({ vesselId: v.id, vesselName: v.name }) },
                         { label: 'Manage Objectives', onClick: () => manageObjectives(v) },
                         { label: 'Manage Fleet', onClick: () => navigate(`/fleets/${v.fleetId}`), disabled: !v.fleetId },
                         { label: 'Open Workspace', onClick: () => navigate(`/workspace/${v.id}`) },
@@ -638,12 +665,21 @@ export default function Vessels() {
                   </tr>
                 ))}
                 {table.paginated.length === 0 && (
-                  <tr><td colSpan={9} className="text-dim">{t('No vessels match the current filters.')}</td></tr>
+                  <tr><td colSpan={10} className="text-dim">{t('No vessels match the current filters.')}</td></tr>
                 )}
               </tbody>
             </table>
           </div>
         </>
+      )}
+
+      {branchesModal && (
+        <BranchesModal
+          vesselId={branchesModal.vesselId}
+          vesselName={branchesModal.vesselName}
+          open={true}
+          onClose={() => { setBranchesModal(null); void load(); }}
+        />
       )}
     </div>
   );

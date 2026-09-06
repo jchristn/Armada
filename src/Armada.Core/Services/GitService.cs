@@ -2,8 +2,10 @@ namespace Armada.Core.Services
 {
     using System.Collections.Generic;
     using System.Diagnostics;
+    using System.IO;
     using System.Linq;
     using SyslogLogging;
+    using Armada.Core.Models;
     using Armada.Core.Services.Interfaces;
 
     /// <summary>
@@ -612,6 +614,134 @@ namespace Armada.Core.Services
             catch
             {
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// List the local branches in a repository with their tip commit and their position (ahead/behind)
+        /// relative to the given default branch. The default branch is flagged and marked at zero divergence.
+        /// </summary>
+        /// <param name="repoPath">Repository path (bare repo or worktree).</param>
+        /// <param name="defaultBranch">Default branch to measure divergence against (for example "main").</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The branches, default branch first, then by name.</returns>
+        public async Task<IReadOnlyList<BranchInfo>> ListBranchesAsync(string repoPath, string defaultBranch = "main", CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
+
+            // Field-separated, one line per branch. Unit separator (\x1f) avoids collisions with commit text.
+            string format = "%(refname:short)\x1f%(HEAD)\x1f%(objectname:short)\x1f%(committerdate:iso8601)\x1f%(contents:subject)";
+            string raw = await RunGitAsync(repoPath, "for-each-ref", "--format=" + format, "refs/heads/").ConfigureAwait(false);
+
+            List<BranchInfo> branches = new List<BranchInfo>();
+            string[] lines = raw.Replace("\r\n", "\n").Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            foreach (string line in lines)
+            {
+                string[] parts = line.Split('\x1f');
+                if (parts.Length < 3) continue;
+
+                BranchInfo info = new BranchInfo();
+                info.Name = parts[0].Trim();
+                info.IsCurrent = parts.Length > 1 && parts[1].Trim() == "*";
+                info.CommitHash = parts.Length > 2 ? parts[2].Trim() : null;
+                if (parts.Length > 3 && DateTime.TryParse(parts[3].Trim(), out DateTime parsedDate))
+                    info.CommitDate = parsedDate.ToUniversalTime();
+                info.CommitSubject = parts.Length > 4 ? parts[4].Trim() : null;
+                info.IsDefault = String.Equals(info.Name, defaultBranch, StringComparison.Ordinal);
+
+                if (!info.IsDefault)
+                {
+                    try
+                    {
+                        string counts = await RunGitAsync(repoPath, "rev-list", "--left-right", "--count", defaultBranch + "..." + info.Name).ConfigureAwait(false);
+                        string[] countParts = counts.Trim().Split(new char[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (countParts.Length == 2)
+                        {
+                            // left = commits on default not on branch (branch is behind); right = commits on branch not on default (ahead).
+                            Int32.TryParse(countParts[0], out int behind);
+                            Int32.TryParse(countParts[1], out int ahead);
+                            info.Behind = behind;
+                            info.Ahead = ahead;
+                        }
+                    }
+                    catch
+                    {
+                        // Divergence unknown (for example the default branch does not exist yet); leave zeros.
+                    }
+                }
+
+                branches.Add(info);
+            }
+
+            branches.Sort((a, b) =>
+            {
+                if (a.IsDefault && !b.IsDefault) return -1;
+                if (!a.IsDefault && b.IsDefault) return 1;
+                return String.Compare(a.Name, b.Name, StringComparison.Ordinal);
+            });
+
+            return branches;
+        }
+
+        /// <summary>
+        /// Push a named local branch to the remote.
+        /// </summary>
+        /// <param name="repoPath">Repository path (bare repo or worktree).</param>
+        /// <param name="branchName">Branch to push.</param>
+        /// <param name="remoteName">Remote name (default "origin").</param>
+        /// <param name="token">Cancellation token.</param>
+        public async Task PushLocalBranchAsync(string repoPath, string branchName, string remoteName = "origin", CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
+            if (String.IsNullOrEmpty(branchName)) throw new ArgumentNullException(nameof(branchName));
+
+            _Logging.Info(_Header + "pushing branch " + branchName + " to " + remoteName + " from " + repoPath);
+            await RunGitAsync(repoPath, "push", remoteName, "refs/heads/" + branchName + ":refs/heads/" + branchName).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Merge one branch into another within a repository using a temporary worktree, then optionally push
+        /// the updated target. A merge conflict throws with the git error, leaving the target branch unchanged.
+        /// </summary>
+        /// <param name="repoPath">Bare repository path.</param>
+        /// <param name="sourceBranch">Branch to merge from.</param>
+        /// <param name="targetBranch">Branch to merge into.</param>
+        /// <param name="push">Whether to push the target branch to the remote after a successful merge.</param>
+        /// <param name="token">Cancellation token.</param>
+        public async Task MergeBranchesAsync(string repoPath, string sourceBranch, string targetBranch, bool push, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
+            if (String.IsNullOrEmpty(sourceBranch)) throw new ArgumentNullException(nameof(sourceBranch));
+            if (String.IsNullOrEmpty(targetBranch)) throw new ArgumentNullException(nameof(targetBranch));
+            if (String.Equals(sourceBranch, targetBranch, StringComparison.Ordinal))
+                throw new InvalidOperationException("Cannot merge a branch into itself.");
+
+            string mergeDirName = "merge-" + Guid.NewGuid().ToString("N");
+            string worktreePath = Path.Combine(Path.GetDirectoryName(repoPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+                ?? Path.GetTempPath(), mergeDirName);
+
+            _Logging.Info(_Header + "merging " + sourceBranch + " into " + targetBranch + " via " + worktreePath);
+            try
+            {
+                await RunGitAsync(repoPath, "worktree", "add", worktreePath, targetBranch).ConfigureAwait(false);
+
+                try
+                {
+                    await RunGitAsync(worktreePath, "merge", "--no-edit", sourceBranch).ConfigureAwait(false);
+                }
+                catch
+                {
+                    try { await RunGitAsync(worktreePath, "merge", "--abort").ConfigureAwait(false); } catch { }
+                    throw;
+                }
+
+                if (push)
+                    await RunGitAsync(worktreePath, "push", "origin", "HEAD:refs/heads/" + targetBranch).ConfigureAwait(false);
+            }
+            finally
+            {
+                try { await RunGitAsync(repoPath, "worktree", "remove", "--force", worktreePath).ConfigureAwait(false); } catch { }
+                try { if (Directory.Exists(worktreePath)) Directory.Delete(worktreePath, true); } catch { }
             }
         }
 

@@ -1,6 +1,7 @@
 namespace Armada.Core.Services.Interfaces
 {
     using System.Collections.Generic;
+    using Armada.Core.Models;
 
     /// <summary>
     /// Git operations for repository and worktree management.
@@ -188,6 +189,34 @@ namespace Armada.Core.Services.Interfaces
         /// <param name="token">Cancellation token.</param>
         /// <returns>True if the branch exists or was created; false if the repo has no commits/branches.</returns>
         Task<bool> EnsureLocalBranchAsync(string repoPath, string branchName, CancellationToken token = default);
+
+        /// <summary>
+        /// List local branches with their tip commit and ahead/behind position relative to the default branch.
+        /// </summary>
+        /// <param name="repoPath">Repository path (bare repo or worktree).</param>
+        /// <param name="defaultBranch">Default branch to measure divergence against.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The branches, default branch first, then by name.</returns>
+        Task<IReadOnlyList<BranchInfo>> ListBranchesAsync(string repoPath, string defaultBranch = "main", CancellationToken token = default);
+
+        /// <summary>
+        /// Push a named local branch to the remote.
+        /// </summary>
+        /// <param name="repoPath">Repository path.</param>
+        /// <param name="branchName">Branch to push.</param>
+        /// <param name="remoteName">Remote name.</param>
+        /// <param name="token">Cancellation token.</param>
+        Task PushLocalBranchAsync(string repoPath, string branchName, string remoteName = "origin", CancellationToken token = default);
+
+        /// <summary>
+        /// Merge one branch into another within a repository, optionally pushing the updated target.
+        /// </summary>
+        /// <param name="repoPath">Bare repository path.</param>
+        /// <param name="sourceBranch">Branch to merge from.</param>
+        /// <param name="targetBranch">Branch to merge into.</param>
+        /// <param name="push">Whether to push the target branch after a successful merge.</param>
+        /// <param name="token">Cancellation token.</param>
+        Task MergeBranchesAsync(string repoPath, string sourceBranch, string targetBranch, bool push, CancellationToken token = default);
 
         /// <summary>
         /// Check if a path is registered as a git worktree.

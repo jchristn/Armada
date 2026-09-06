@@ -589,6 +589,26 @@ export const getVesselLandingPreview = (id: string, sourceBranch?: string | null
   get<LandingPreviewResult>(`/api/v1/vessels/${encodeURIComponent(id)}/landing-preview${sourceBranch ? `?sourceBranch=${encodeURIComponent(sourceBranch)}` : ''}`);
 export const getVesselGitStatus = (id: string) => get<{ vesselId: string; commitsAhead: number | null; commitsBehind: number | null; error?: string }>(`/api/v1/vessels/${id}/git-status`);
 
+export interface BranchInfo {
+  name: string;
+  isCurrent: boolean;
+  isDefault: boolean;
+  commitHash: string | null;
+  commitSubject: string | null;
+  commitDate: string | null;
+  ahead: number;
+  behind: number;
+}
+
+export const getVesselBranches = (id: string) =>
+  get<{ vesselId: string; defaultBranch?: string; branches: BranchInfo[]; branchCount: number; error?: string }>(`/api/v1/vessels/${id}/branches`);
+
+export const pushVesselBranch = (id: string, branch: string) =>
+  post<{ vesselId: string; branch: string; pushed: boolean }>(`/api/v1/vessels/${id}/branches/push`, { Branch: branch });
+
+export const mergeVesselBranch = (id: string, source: string, target: string, push: boolean) =>
+  post<{ vesselId: string; source: string; target: string; merged: boolean; pushed: boolean }>(`/api/v1/vessels/${id}/branches/merge`, { Source: source, Target: target, Push: push });
+
 // ==================== Workspace ====================
 function encodeWorkspaceQueryPath(path: string) {
   return encodeURIComponent(path).replace(/%2F/g, '/');
