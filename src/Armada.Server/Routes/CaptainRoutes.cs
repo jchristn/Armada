@@ -112,11 +112,7 @@ namespace Armada.Server.Routes
                 EnumerationQuery query = new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
                 Stopwatch sw = Stopwatch.StartNew();
-                EnumerationResult<Captain> result = ctx.IsAdmin
-                    ? await _database.Captains.EnumerateAsync(query).ConfigureAwait(false)
-                    : ctx.IsTenantAdmin
-                        ? await _database.Captains.EnumerateAsync(ctx.TenantId!, query).ConfigureAwait(false)
-                        : await _database.Captains.EnumerateAsync(ctx.TenantId!, ctx.UserId!, query).ConfigureAwait(false);
+                EnumerationResult<Captain> result = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, query, q => _database.Captains.EnumerateAsync(q), (t, q) => _database.Captains.EnumerateAsync(t, q), (t, u, q) => _database.Captains.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
                 return result;
             },
@@ -138,11 +134,7 @@ namespace Armada.Server.Routes
                 EnumerationQuery query = JsonSerializer.Deserialize<EnumerationQuery>(req.Http.Request.DataAsString, _jsonOptions) ?? new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
                 Stopwatch sw = Stopwatch.StartNew();
-                EnumerationResult<Captain> result = ctx.IsAdmin
-                    ? await _database.Captains.EnumerateAsync(query).ConfigureAwait(false)
-                    : ctx.IsTenantAdmin
-                        ? await _database.Captains.EnumerateAsync(ctx.TenantId!, query).ConfigureAwait(false)
-                        : await _database.Captains.EnumerateAsync(ctx.TenantId!, ctx.UserId!, query).ConfigureAwait(false);
+                EnumerationResult<Captain> result = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, query, q => _database.Captains.EnumerateAsync(q), (t, q) => _database.Captains.EnumerateAsync(t, q), (t, u, q) => _database.Captains.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
                 return result;
             },
