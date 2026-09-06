@@ -251,6 +251,9 @@ namespace Armada.Core.Services
                 return;
             }
 
+            DateTime startedUtc = DateTime.UtcNow;
+            long firstOutputTicks = 0;
+
             try
             {
                 await _JobRunner.StartAsync(
@@ -262,12 +265,23 @@ namespace Armada.Core.Services
                         Enqueue(new HarborStarted { CorrelationId = launch.CorrelationId, JobId = launch.JobId, ProcessId = processId });
                         Log(HarborLogDirection.Out, "Started job " + launch.JobId + " (pid " + processId + ")");
                     },
-                    (stream, data) => Enqueue(new HarborOutput { JobId = launch.JobId, Stream = stream, Data = data }),
+                    (stream, data) =>
+                    {
+                        // Record the first-output timestamp once (time-to-first-token proxy).
+                        System.Threading.Interlocked.CompareExchange(ref firstOutputTicks, DateTime.UtcNow.Ticks, 0);
+                        Enqueue(new HarborOutput { JobId = launch.JobId, Stream = stream, Data = data });
+                    },
                     exitCode =>
                     {
                         RemoveLiveJob(launch.JobId);
-                        Enqueue(new HarborExited { JobId = launch.JobId, ExitCode = exitCode });
-                        Log(HarborLogDirection.Out, "Exited job " + launch.JobId + " (code " + exitCode + ")");
+                        long durationMs = (long)(DateTime.UtcNow - startedUtc).TotalMilliseconds;
+                        long? ttftMs = firstOutputTicks == 0
+                            ? (long?)null
+                            : (long)(new DateTime(firstOutputTicks, DateTimeKind.Utc) - startedUtc).TotalMilliseconds;
+                        Enqueue(new HarborExited { JobId = launch.JobId, ExitCode = exitCode, DurationMs = durationMs, TimeToFirstTokenMs = ttftMs });
+                        Log(HarborLogDirection.Out, "Exited job " + launch.JobId + " (code " + exitCode
+                            + ", runtime " + FormatDuration(durationMs)
+                            + (ttftMs.HasValue ? ", first output " + FormatDuration(ttftMs.Value) : "") + ")");
                     },
                     token).ConfigureAwait(false);
             }
@@ -322,6 +336,17 @@ namespace Armada.Core.Services
         private void Enqueue(HarborMessage message)
         {
             _Outbound?.Writer.TryWrite(message);
+        }
+
+        private static string FormatDuration(long milliseconds)
+        {
+            if (milliseconds < 1000) return milliseconds + "ms";
+            double seconds = milliseconds / 1000.0;
+            if (seconds < 60) return seconds.ToString("0.0") + "s";
+            long totalSeconds = milliseconds / 1000;
+            long minutes = totalSeconds / 60;
+            long remainderSeconds = totalSeconds % 60;
+            return minutes + "m" + remainderSeconds + "s";
         }
 
         private void AddLiveJob(string jobId)
