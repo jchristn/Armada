@@ -21,6 +21,7 @@ import { useAutoRefresh } from '../lib/useAutoRefresh';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
 import HealthHistogram from '../components/shared/HealthHistogram';
+import CopyButton from '../components/shared/CopyButton';
 
 const PROVIDERS: ModelProvider[] = ['Ollama', 'OpenAI', 'OpenAICompatible', 'Anthropic', 'Gemini', 'VoyageAI'];
 const KINDS: ModelEndpointKind[] = ['Embedding', 'Inference'];
@@ -466,6 +467,10 @@ export default function Endpoints() {
                   <td>
                     <strong>{endpoint.name}</strong>
                     {!endpoint.enabled && <span className="text-dim"> ({t('disabled')})</span>}
+                    <div className="mono text-dim" style={{ fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }} onClick={(e) => e.stopPropagation()}>
+                      <span title={endpoint.id}>{endpoint.id}</span>
+                      <CopyButton text={endpoint.id} title={t('Copy endpoint ID')} />
+                    </div>
                     <div className="mono text-dim" style={{ fontSize: '0.78rem' }}>{endpoint.baseUrl}</div>
                   </td>
                   <td className="text-dim">{endpoint.kind}</td>
