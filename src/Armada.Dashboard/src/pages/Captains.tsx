@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { listCaptains, createCaptain, updateCaptain, deleteCaptain, stopCaptain, recallCaptain, stopAllCaptains, restartCaptain, getCaptainTools } from '../api/client';
+import { listCaptains, createCaptain, updateCaptain, deleteCaptain, stopCaptain, recallCaptain, stopAllCaptains, restartCaptain, getCaptainTools, listModelEndpoints } from '../api/client';
+import type { ModelEndpoint } from '../types/models';
 import type { Captain, CaptainToolAccessResult } from '../types/models';
 import Pagination from '../components/shared/Pagination';
 import ActionMenu from '../components/shared/ActionMenu';
@@ -29,6 +30,7 @@ type CaptainFormState = {
   runtime: string;
   systemInstructions: string;
   model: string;
+  modelEndpointId: string;
   reasoningEffort: string;
   tier: string;
 } & MuxCaptainFormFields;
@@ -44,8 +46,9 @@ export default function Captains() {
   // Modal state
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Captain | null>(null);
-  const [form, setForm] = useState<CaptainFormState>({ name: '', runtime: '', systemInstructions: '', model: '', reasoningEffort: '', tier: '', ...EMPTY_MUX_CAPTAIN_FORM });
+  const [form, setForm] = useState<CaptainFormState>({ name: '', runtime: '', systemInstructions: '', model: '', modelEndpointId: '', reasoningEffort: '', tier: '', ...EMPTY_MUX_CAPTAIN_FORM });
   const [saving, setSaving] = useState(false);
+  const [inferenceEndpoints, setInferenceEndpoints] = useState<ModelEndpoint[]>([]);
 
   // JSON viewer
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
@@ -144,9 +147,16 @@ export default function Captains() {
   function selectAll() { setSelected(filtered.map(c => c.id)); }
   function clearSelection() { setSelected([]); }
 
+  // Load the configured inference endpoints so an API-endpoint captain can be pointed at one.
+  useEffect(() => {
+    listModelEndpoints()
+      .then(result => setInferenceEndpoints((result ?? []).filter(e => e.kind === 'Inference')))
+      .catch(() => setInferenceEndpoints([]));
+  }, []);
+
   // CRUD
   function openCreate() {
-    setForm({ name: '', runtime: '', systemInstructions: '', model: '', reasoningEffort: '', tier: '', ...EMPTY_MUX_CAPTAIN_FORM });
+    setForm({ name: '', runtime: '', systemInstructions: '', model: '', modelEndpointId: '', reasoningEffort: '', tier: '', ...EMPTY_MUX_CAPTAIN_FORM });
     setEditing(null);
     setShowForm(true);
   }
@@ -157,6 +167,7 @@ export default function Captains() {
       runtime: c.runtime,
       systemInstructions: c.systemInstructions ?? '',
       model: c.model ?? '',
+      modelEndpointId: c.modelEndpointId ?? '',
       reasoningEffort: c.reasoningEffort ?? '',
       tier: c.tier ?? '',
       ...muxFormFromCaptain(c),
@@ -174,10 +185,16 @@ export default function Captains() {
         return;
       }
 
+      if (form.runtime === 'ApiEndpoint' && !form.modelEndpointId) {
+        setError(t('API-endpoint captains require an inference endpoint. Select one, or add it under Configuration > Endpoints.'));
+        return;
+      }
+
       setSaving(true);
       const payload = { ...form } as Record<string, unknown>;
       if (!payload.systemInstructions) delete payload.systemInstructions;
       payload.model = form.model.trim() ? form.model.trim() : null;
+      payload.modelEndpointId = form.runtime === 'ApiEndpoint' ? (form.modelEndpointId || null) : null;
       payload.reasoningEffort = form.reasoningEffort ? form.reasoningEffort : null;
       payload.tier = form.tier ? form.tier : null;
       payload.runtimeOptionsJson = buildMuxRuntimeOptionsJson(form.runtime, form);
@@ -393,13 +410,30 @@ export default function Captains() {
                   <option value="Cursor">Cursor</option>
                   <option value="Mux">Mux</option>
                   <option value="OpenCode">OpenCode</option>
+                  <option value="ApiEndpoint">API Endpoint</option>
                 </select>
               </label>
               <label title={t('Optional AI model identifier. Leave blank to let the runtime choose its default model.')}>
                 {t('Model')}
-                <input value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} placeholder={t('e.g., gpt-5.4-mini')} />
+                <input value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} placeholder={form.runtime === 'ApiEndpoint' ? t('Optional; overrides the endpoint model') : t('e.g., gpt-5.4-mini')} />
               </label>
             </div>
+            {form.runtime === 'ApiEndpoint' && (
+              <label title={t('The configured inference endpoint this captain drives. Manage endpoints under Configuration > Endpoints.')}>
+                {t('Inference Endpoint')}
+                <select value={form.modelEndpointId} onChange={e => setForm({ ...form, modelEndpointId: e.target.value })} required>
+                  <option value="">{t('Select an inference endpoint...')}</option>
+                  {inferenceEndpoints.map(ep => (
+                    <option key={ep.id} value={ep.id}>{ep.name} ({ep.provider}{ep.model ? ' / ' + ep.model : ''})</option>
+                  ))}
+                </select>
+                {inferenceEndpoints.length === 0 && (
+                  <small className="text-dim" style={{ display: 'block', marginTop: '0.25rem' }}>
+                    {t('No inference endpoints configured. Add one under Configuration > Endpoints first.')}
+                  </small>
+                )}
+              </label>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 1rem' }}>
               <label>
                 {t('Reasoning effort')}

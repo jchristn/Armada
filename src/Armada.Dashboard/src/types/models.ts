@@ -151,6 +151,7 @@ export interface Captain {
   planningSessionSupportReason: string | null;
   systemInstructions: string | null;
   model: string | null;
+  modelEndpointId?: string | null;
   reasoningEffort?: string | null;
   tier?: string | null;
   quarantineUntilUtc?: string | null;
