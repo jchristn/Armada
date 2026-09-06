@@ -11,6 +11,7 @@ namespace Armada.Server
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
     using Armada.Runtimes;
+    using Armada.Runtimes.Interfaces;
     using Armada.Server.WebSocket;
 
     /// <summary>
@@ -25,6 +26,7 @@ namespace Armada.Server
         private DatabaseDriver _Database;
         private ArmadaSettings _Settings;
         private AgentRuntimeFactory _RuntimeFactory;
+        private IHostProcessExecutor _HostProcessExecutor;
         private MuxCliService _MuxCli;
         private IAdmiralService _Admiral;
         private IMessageTemplateService _TemplateService;
@@ -127,6 +129,7 @@ namespace Armada.Server
             _Database = database ?? throw new ArgumentNullException(nameof(database));
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _RuntimeFactory = runtimeFactory ?? throw new ArgumentNullException(nameof(runtimeFactory));
+            _HostProcessExecutor = new LocalHostProcessExecutor(_RuntimeFactory);
             _MuxCli = new MuxCliService(_Logging);
             _Admiral = admiral ?? throw new ArgumentNullException(nameof(admiral));
             _TemplateService = templateService ?? throw new ArgumentNullException(nameof(templateService));
@@ -243,7 +246,7 @@ namespace Armada.Server
             Armada.Runtimes.Interfaces.IAgentRuntime runtime;
             try
             {
-                runtime = _RuntimeFactory.Create(runtimeType);
+                runtime = _HostProcessExecutor.CreateRuntime(runtimeType);
             }
             catch (Exception ex)
             {
@@ -353,7 +356,7 @@ namespace Armada.Server
         public async Task<int> HandleLaunchAgentAsync(Captain captain, Mission mission, Dock dock)
         {
             _Logging.Info(_Header + "launching " + captain.Runtime + " agent for captain " + captain.Id);
-            Armada.Runtimes.Interfaces.IAgentRuntime runtime = _RuntimeFactory.Create(captain.Runtime);
+            Armada.Runtimes.Interfaces.IAgentRuntime runtime = _HostProcessExecutor.CreateRuntime(captain.Runtime);
             string launchKey = captain.Id + ":" + mission.Id;
             _PendingLaunches[launchKey] = new PendingLaunchInfo
             {
@@ -863,7 +866,7 @@ namespace Armada.Server
                 _ProcessToCaptain.Remove(captain.ProcessId.Value);
                 _ProcessToMission.Remove(captain.ProcessId.Value);
             }
-            Armada.Runtimes.Interfaces.IAgentRuntime runtime = _RuntimeFactory.Create(captain.Runtime);
+            Armada.Runtimes.Interfaces.IAgentRuntime runtime = _HostProcessExecutor.CreateRuntime(captain.Runtime);
             await runtime.StopAsync(captain.ProcessId.Value).ConfigureAwait(false);
         }
 

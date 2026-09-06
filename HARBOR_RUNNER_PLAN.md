@@ -212,7 +212,7 @@ Freeze the wire protocol and the seam before building either side against them.
   `gitResult`, `heartbeat`, `error`; plus `HarborProtocol` (shared serializer + version 1.0). Typed
   classes only. Done: `HarborProtocolSuite` round-trips every type and rejects malformed/unknown/empty
   payloads (9 cases, green). -- 2026-09-05
-- [ ] CON-02 Define `IHostExecutor` in `Core/Services/Interfaces` covering process launch
+- [~] CON-02 Define `IHostExecutor` in `Core/Services/Interfaces` covering process launch
   (launch/stdin/kill/liveness with streamed stdout/stderr), git operations (clone bare, fetch, worktree
   add/remove/prune, branch, rev-parse, commit, push), gh operations (PR create/merge/view), and
   filesystem worktree lifecycle. Return typed result classes, never tuples. NOTE: moved into Phase 2 to
@@ -224,7 +224,7 @@ Freeze the wire protocol and the seam before building either side against them.
   HarborGitRequest/HarborGitResult messages; 4 tests run real git (version, init-in-workdir, failing
   subcommand, null guard). The process-launch half (captain PID/events) still lands with the
   AgentLifecycleHandler rewire. -- 2026-09-05
-- [ ] CON-03 Split `BaseAgentRuntime` into a *plan* half (command resolution, argument building,
+- [~] CON-03 Split `BaseAgentRuntime` into a *plan* half (command resolution, argument building,
   environment, prompt-via-stdin, MCP config) and an *execute* half. The plan half stays in
   `Armada.Runtimes`; the execute half moves behind `IHostExecutor`. Acceptance: existing runtimes build
   and behave identically under `LocalHostExecutor`. NOTE: done with Phase 2 alongside CON-02.
@@ -359,10 +359,10 @@ Keep standalone identical while everything routes through the new interface.
 |----|------|--------|
 | LOC-01..05 | LocalHostExecutor + callers | not started |
 
-- [ ] LOC-01 Implement `LocalHostExecutor` by lifting the current in-process behavior: `Process.Start`
+- [~] LOC-01 Implement `LocalHostExecutor` by lifting the current in-process behavior: `Process.Start`
   launch/stdin/kill/liveness from `BaseAgentRuntime`, plus `GitService`/`DockService` calls, behind
   `IHostExecutor`. Windows `.cmd` resolution and stdin prompt delivery preserved.
-- [ ] LOC-02 Route `AgentLifecycleHandler` (launch/stop/liveness, PID->captain mapping) through
+- [~] LOC-02 Route `AgentLifecycleHandler` (launch/stop/liveness, PID->captain mapping) through
   `IHostExecutor` instead of calling runtimes directly.
 - [ ] LOC-03 Route `DockService`/`GitService` git and worktree operations through the executor seam so
   split mode can intercept them; local mode calls straight through.
