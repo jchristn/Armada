@@ -2,6 +2,7 @@ namespace Armada.Runtimes
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using Armada.Core.Enums;
     using Armada.Core.Harbor;
     using Armada.Core.Models;
@@ -51,6 +52,8 @@ namespace Armada.Runtimes
         private string _JobId = string.Empty;
         private int _ProcessId = 0;
         private TaskCompletionSource<int>? _StartedTcs;
+        private StreamWriter? _LogWriter;
+        private readonly object _LogLock = new object();
 
         #endregion
 
@@ -90,6 +93,11 @@ namespace Armada.Runtimes
         {
             _JobId = Guid.NewGuid().ToString("N");
             _StartedTcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            // Mirror the captain's streamed output into the Admiral-side mission log file so live-follow
+            // (which tails this file) and the stored log read identically to a local run. The captain process
+            // itself runs on the Harbor, so this is the only server-side copy of its transcript.
+            OpenLog(logFilePath, prompt);
 
             HarborLaunchRequest request = new HarborLaunchRequest
             {
@@ -137,6 +145,7 @@ namespace Armada.Runtimes
         /// <inheritdoc />
         public void OnOutput(HarborOutputStreamEnum stream, string data)
         {
+            WriteLog(data);
             OnOutputReceived?.Invoke(_ProcessId, data);
             if (stream == HarborOutputStreamEnum.Stdout)
                 OnStdoutReceived?.Invoke(_ProcessId, data);
@@ -146,7 +155,54 @@ namespace Armada.Runtimes
         public void OnExited(int exitCode)
         {
             _Manager.UnregisterProcessId(_ProcessId);
+            CloseLog();
             OnProcessExited?.Invoke(_ProcessId, exitCode);
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private void OpenLog(string? logFilePath, string prompt)
+        {
+            if (String.IsNullOrEmpty(logFilePath)) return;
+            try
+            {
+                lock (_LogLock)
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(logFilePath)!);
+                    _LogWriter = new StreamWriter(logFilePath, append: true) { AutoFlush = true };
+                    string timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss");
+                    _LogWriter.WriteLine("[" + timestamp + "] Agent starting on Harbor " + _HarborId + " (" + _RuntimeType + ")");
+                    if (!String.IsNullOrEmpty(prompt)) _LogWriter.WriteLine(prompt);
+                    _LogWriter.WriteLine(String.Empty);
+                }
+            }
+            catch
+            {
+                // A logging failure must never block the launch; live-follow simply shows less.
+                _LogWriter = null;
+            }
+        }
+
+        private void WriteLog(string data)
+        {
+            lock (_LogLock)
+            {
+                try { _LogWriter?.WriteLine(data); }
+                catch (ObjectDisposedException) { }
+                catch { }
+            }
+        }
+
+        private void CloseLog()
+        {
+            lock (_LogLock)
+            {
+                try { _LogWriter?.Flush(); } catch { }
+                try { _LogWriter?.Dispose(); } catch { }
+                _LogWriter = null;
+            }
         }
 
         #endregion

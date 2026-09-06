@@ -2,6 +2,7 @@ namespace Test.Shared.Suites.Runtimes
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Enums;
@@ -96,6 +97,41 @@ namespace Test.Shared.Suites.Runtimes
                 RemoteHostProcessExecutor executor = new RemoteHostProcessExecutor(manager, "hbr_absent_rt");
                 IAgentRuntime runtime = executor.CreateRuntime(AgentRuntimeEnum.ClaudeCode);
                 await AssertThrowsAsync<InvalidOperationException>(() => runtime.StartAsync("/repo", "x"));
+            }));
+
+            cases.Add(CaseAsync("delegated_output_is_mirrored_to_log_file", "Delegated output is mirrored to the Admiral-side mission log file", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                HarborService harbors = new HarborService(testDb.Driver, CreateLogging());
+                HarborConnectionManager manager = new HarborConnectionManager(harbors, CreateLogging(), null);
+
+                HarborSendDelegate simulated = async (message, cancellation) =>
+                {
+                    if (message is HarborLaunchRequest launch)
+                    {
+                        await manager.OnMessageAsync("hbr_log", new HarborStarted { JobId = launch.JobId, ProcessId = 7777 }, cancellation).ConfigureAwait(false);
+                        await manager.OnMessageAsync("hbr_log", new HarborOutput { JobId = launch.JobId, Stream = HarborOutputStreamEnum.Stdout, Data = "line-one" }, cancellation).ConfigureAwait(false);
+                        await manager.OnMessageAsync("hbr_log", new HarborOutput { JobId = launch.JobId, Stream = HarborOutputStreamEnum.Stdout, Data = "line-two" }, cancellation).ConfigureAwait(false);
+                        await manager.OnMessageAsync("hbr_log", new HarborExited { JobId = launch.JobId, ExitCode = 0 }, cancellation).ConfigureAwait(false);
+                    }
+                };
+                await manager.OnHandshakeAsync(new HarborHandshake { HarborId = "hbr_log", Name = "Rig", ProtocolVersion = "1.0" }, "t", "u", simulated).ConfigureAwait(false);
+
+                string logPath = Path.Combine(Path.GetTempPath(), "armada-test-" + Guid.NewGuid().ToString("N") + ".log");
+                try
+                {
+                    RemoteHostProcessExecutor executor = new RemoteHostProcessExecutor(manager, "hbr_log");
+                    IAgentRuntime runtime = executor.CreateRuntime(AgentRuntimeEnum.ClaudeCode);
+                    await runtime.StartAsync("/repo", "the prompt", logFilePath: logPath).ConfigureAwait(false);
+
+                    AssertTrue(File.Exists(logPath), "Expected the mission log file to be written on the Admiral side.");
+                    string contents = await File.ReadAllTextAsync(logPath).ConfigureAwait(false);
+                    AssertTrue(contents.Contains("line-one") && contents.Contains("line-two"), "Expected both streamed output lines in the mirrored log.");
+                }
+                finally
+                {
+                    try { File.Delete(logPath); } catch { }
+                }
             }));
 
             cases.Add(CaseAsync("select_prefers_connected_capable_harbor", "SelectHarborAsync chooses a connected Harbor that advertises the runtime", TestTags.Positive, async () =>
