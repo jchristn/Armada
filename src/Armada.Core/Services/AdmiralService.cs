@@ -1455,6 +1455,25 @@ namespace Armada.Core.Services
             }
         }
 
+        private async Task<string> DescribePendingReasonAsync(Mission mission, CancellationToken token)
+        {
+            if (!String.IsNullOrEmpty(mission.DependsOnMissionId))
+            {
+                Mission? dependency = await _Database.Missions.ReadAsync(mission.DependsOnMissionId, token).ConfigureAwait(false);
+                if (dependency == null)
+                    return "its upstream mission " + mission.DependsOnMissionId + " was not found";
+                if (dependency.Status != MissionStatusEnum.Complete && dependency.Status != MissionStatusEnum.WorkProduced)
+                    return "waiting on upstream mission " + dependency.Id + " which is " + dependency.Status
+                        + (dependency.Status == MissionStatusEnum.Review ? " (awaiting your review/approval)" : "");
+                return "upstream mission " + dependency.Id + " is " + dependency.Status + " but the branch/context handoff is not yet ready";
+            }
+
+            if (!String.IsNullOrEmpty(mission.RequestedCaptainId))
+                return "no idle captain matches the requested captain " + mission.RequestedCaptainId;
+
+            return "assignment preconditions are not yet met (captain routing, vessel path configuration, or a transient in-flight assignment)";
+        }
+
         private async Task DispatchPendingMissionsAsync(CancellationToken token)
         {
             List<Mission> pendingMissions = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending, token).ConfigureAwait(false);
@@ -1488,7 +1507,8 @@ namespace Armada.Core.Services
                 bool assigned = await _Missions.TryAssignAsync(mission, vessel, token).ConfigureAwait(false);
                 if (!assigned)
                 {
-                    _Logging.Warn(_Header + "could not assign pending mission " + mission.Id + " - will retry on next health check cycle");
+                    string reason = await DescribePendingReasonAsync(mission, token).ConfigureAwait(false);
+                    _Logging.Info(_Header + "pending mission " + mission.Id + " not yet assigned: " + reason + " - will retry on the next health check cycle");
                     anyFailed = true;
                 }
             }

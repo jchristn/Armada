@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { copyToClipboard } from './CopyButton';
+import Markdown from './Markdown';
 import { useLocale } from '../../context/LocaleContext';
 
 interface LogViewerProps {
@@ -8,6 +9,8 @@ interface LogViewerProps {
   content: string;
   totalLines?: number;
   loading?: boolean;
+  /** Render the content as GitHub-flavored markdown instead of plain monospace text. Copy still copies the raw source. */
+  markdown?: boolean;
   /** Whether the mission/process has completed (terminal state) */
   completed?: boolean;
   onClose: () => void;
@@ -27,6 +30,7 @@ export default function LogViewer({
   content,
   totalLines,
   loading,
+  markdown,
   completed,
   onClose,
   onLineCountChange,
@@ -172,11 +176,15 @@ export default function LogViewer({
         <div className="viewer-body-wrap">
           <div
             ref={bodyRef}
-            className={`viewer-body${!following ? ' log-paused' : ''}`}
+            className={`viewer-body${!following ? ' log-paused' : ''}${markdown ? ' viewer-body-markdown' : ''}`}
             id="log-viewer-content"
             data-i18n-skip="true"
           >
-            {loading ? t('Loading...') : (content || t('No log output'))}
+            {loading
+              ? t('Loading...')
+              : markdown && content
+                ? <Markdown>{content}</Markdown>
+                : (content || t('No log output'))}
           </div>
         </div>
         {totalLines !== undefined && (

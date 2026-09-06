@@ -31,6 +31,7 @@ import DiffViewer from '../components/shared/DiffViewer';
 import LogViewer from '../components/shared/LogViewer';
 import PageHeader from '../components/shared/PageHeader';
 import CopyButton from '../components/shared/CopyButton';
+import Markdown from '../components/shared/Markdown';
 import Button from '../components/shared/Button';
 import CaptainRef from '../components/shared/CaptainRef';
 import { useLocale } from '../context/LocaleContext';
@@ -492,6 +493,7 @@ export default function MissionDetail() {
         open={logModal.open}
         title={logModal.title}
         content={logModal.content}
+        markdown
         totalLines={logModal.totalLines}
         completed={mission != null && ['Complete', 'Failed', 'Cancelled', 'WorkProduced', 'LandingFailed', 'Review'].includes(mission.status)}
         onClose={() => setLogModal({ open: false, title: '', missionId: '', content: '', totalLines: 0, lineCount: 200 })}
@@ -502,6 +504,7 @@ export default function MissionDetail() {
         open={instructionsModal.open}
         title={instructionsModal.title}
         content={instructionsModal.content}
+        markdown
         completed={true}
         onClose={() => setInstructionsModal({ open: false, title: '', content: '' })}
       />
@@ -856,8 +859,13 @@ export default function MissionDetail() {
       {/* Description */}
       {mission.description && (
         <div style={{ marginTop: '1rem' }}>
-          <h3>{t('Description')}</h3>
-          <div className="card" style={{ padding: '1rem', whiteSpace: 'pre-wrap' }}>{mission.description}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <h3 style={{ margin: 0 }}>{t('Description')}</h3>
+            <CopyButton text={mission.description} title={t('Copy raw markdown')} />
+          </div>
+          <div className="card markdown" style={{ padding: '1rem', marginTop: '0.5rem' }}>
+            <Markdown>{mission.description}</Markdown>
+          </div>
         </div>
       )}
 

@@ -5548,6 +5548,13 @@ a:hover { text-decoration: underline; }
     background: var(--diff-bg);
 }
 
+/* When the viewer renders markdown, use normal prose flow; code blocks keep monospace via .markdown. */
+.viewer-body-markdown {
+    font-family: inherit;
+    font-size: 0.9rem;
+    white-space: normal;
+}
+
 /* Log viewer follow mode */
 .log-live-badge {
     display: inline-block;
