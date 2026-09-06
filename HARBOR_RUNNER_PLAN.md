@@ -289,10 +289,10 @@ Freeze the wire protocol and the seam before building either side against them.
 - [ ] SRV-11 Enable WebSockets on the existing Watson server (same port, no second listener) and register
   the Harbor link path (e.g. `Server.WebSocket("/v1.0/harbor/connect", ...)`). Bind honoring
   `Rest.Hostname` (set `0.0.0.0` in split-mode config).
-- [ ] SRV-12 Harbor connection manager (instance-owned by the server host, not a static global): tracks
+- [~] SRV-12 Harbor connection manager (instance-owned by the server host, not a static global): tracks
   attached Harbors, handshake, capability registration, heartbeat/liveness, reconnection and rebind of
   in-flight jobs, and updates the Harbor entity's connection status. Honors cancellation; failures logged
-  and swallowed so a bad link never crashes the host.
+  and swallowed so a bad link never crashes the host. DONE (core): HarborConnectionManager handles handshake->upsert+ack, heartbeat->liveness+live-job set, disconnect->offline, with per-Harbor load; 6 tests green. Transport wiring (Watson WS endpoint SRV-11) and in-flight-job rebind on reconnect pending. -- 2026-09-05
 - [ ] SRV-13 `RemoteHostExecutor implements IHostExecutor`: marshals every host operation to the attached
   Harbor over the link, correlates responses, streams stdout/stderr back to the existing captain output
   path, and surfaces exit/errors. Job id from the Harbor replaces PID mapping.
