@@ -137,11 +137,11 @@ namespace Armada.Core.Services
                 string? resolved = _PromptTemplates.GetEmbeddedDefault("commit.instructions_preamble");
                 preamble = !String.IsNullOrEmpty(resolved)
                     ? resolved
-                    : "IMPORTANT: For every git commit you create, append the following trailers at the end of your commit message (after a blank line):";
+                    : "IMPORTANT: Every git commit you create MUST have a clear, descriptive commit message. The message MUST include: (1) a concise summary line stating what the commit does, and (2) a full manifest and description of what was changed -- list every file added, modified, or deleted and, for each, explain what changed and why. After that description, append the following trailers at the end of the commit message (after a blank line):";
             }
             else
             {
-                preamble = "IMPORTANT: For every git commit you create, append the following trailers at the end of your commit message (after a blank line):";
+                preamble = "IMPORTANT: Every git commit you create MUST have a clear, descriptive commit message. The message MUST include: (1) a concise summary line stating what the commit does, and (2) a full manifest and description of what was changed -- list every file added, modified, or deleted and, for each, explain what changed and why. After that description, append the following trailers at the end of the commit message (after a blank line):";
             }
 
             string instructions = preamble + rendered;

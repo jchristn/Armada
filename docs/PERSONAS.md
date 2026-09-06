@@ -696,7 +696,7 @@ All prompts that are or were hardcoded in C#. Status column indicates current st
 | 10 | `mission.progress_signals` | mission | ARMADA signal format documentation | **DONE** -- template-resolved |
 | 11 | `mission.model_context_updates` | mission | Instructions for updating vessel model context | **DONE** -- template-resolved |
 | 12 | `agent.launch_prompt` | agent | Short CLI prompt: `Mission: {MissionTitle}\n\n{MissionDescription}` | **DONE** -- template-resolved |
-| 13 | `commit.instructions_preamble` | commit | "IMPORTANT: For every git commit..." | **DONE** -- resolved at runtime via GetEmbeddedDefault |
+| 13 | `commit.instructions_preamble` | commit | "IMPORTANT: Every git commit MUST include a full manifest and description of what changed..." | **DONE** -- resolved at runtime via GetEmbeddedDefault |
 | 14 | `landing.pr_body` | landing | PR body: `## Mission\n**{MissionTitle}**\n\n{MissionDescription}` | **DONE** -- template-resolved |
 | 15 | `commit.message_template` | commit | Commit trailer template | Already configurable via MessageTemplateSettings |
 | 16 | `commit.pr_description_template` | commit | PR description metadata | Already configurable via MessageTemplateSettings |

@@ -416,7 +416,7 @@ namespace Armada.Core.Services
                 Name = "commit.instructions_preamble",
                 Description = "Preamble text for commit message trailer instructions injected into agent prompts.",
                 Category = "commit",
-                Content = "IMPORTANT: For every git commit you create, append the following trailers at the end of your commit message (after a blank line):"
+                Content = "IMPORTANT: Every git commit you create MUST have a clear, descriptive commit message. The message MUST include: (1) a concise summary line stating what the commit does, and (2) a full manifest and description of what was changed -- list every file added, modified, or deleted and, for each, explain what changed and why. After that description, append the following trailers at the end of the commit message (after a blank line):"
             };
 
             defaults["persona.worker"] = new EmbeddedTemplate
