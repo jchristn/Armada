@@ -1059,7 +1059,9 @@ namespace Armada.Server.Routes
                 string id = req.Parameters["id"];
                 Mission? mission = ctx.IsAdmin
                     ? await _database.Missions.ReadAsync(id).ConfigureAwait(false)
-                    : await _database.Missions.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false);
+                    : ctx.IsTenantAdmin
+                        ? await _database.Missions.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
+                        : await _database.Missions.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (mission == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Mission not found" }; }
 
                 if (mission.Status != MissionStatusEnum.WorkProduced && mission.Status != MissionStatusEnum.LandingFailed)

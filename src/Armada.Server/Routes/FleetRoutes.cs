@@ -134,6 +134,8 @@ namespace Armada.Server.Routes
                 List<Vessel> vessels = ctx.IsAdmin
                     ? await _database.Vessels.EnumerateByFleetAsync(id).ConfigureAwait(false)
                     : await _database.Vessels.EnumerateByFleetAsync(ctx.TenantId!, id).ConfigureAwait(false);
+                if (!ctx.IsAdmin && !ctx.IsTenantAdmin)
+                    vessels = vessels.Where(v => String.Equals(v.UserId, ctx.UserId, StringComparison.Ordinal)).ToList();
                 return (object)new { Fleet = fleet, Vessels = vessels };
             },
             api => api

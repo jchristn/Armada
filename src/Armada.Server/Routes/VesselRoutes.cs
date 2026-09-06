@@ -282,7 +282,9 @@ namespace Armada.Server.Routes
                 string id = req.Parameters["id"];
                 Vessel? vessel = ctx.IsAdmin
                     ? await _database.Vessels.ReadAsync(id).ConfigureAwait(false)
-                    : await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false);
+                    : ctx.IsTenantAdmin
+                        ? await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
+                        : await _database.Vessels.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (vessel == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
                 if (String.IsNullOrEmpty(vessel.WorkingDirectory) || !Directory.Exists(vessel.WorkingDirectory))
                     return (object)new { VesselId = id, CommitsAhead = (int?)null, CommitsBehind = (int?)null, Error = "No working directory configured or directory does not exist" };
@@ -326,7 +328,9 @@ namespace Armada.Server.Routes
                 string id = req.Parameters["id"];
                 Vessel? vessel = ctx.IsAdmin
                     ? await _database.Vessels.ReadAsync(id).ConfigureAwait(false)
-                    : await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false);
+                    : ctx.IsTenantAdmin
+                        ? await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
+                        : await _database.Vessels.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (vessel == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
                 if (_git == null) { req.Http.Response.StatusCode = 503; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Git service is not available" }; }
 
@@ -368,7 +372,9 @@ namespace Armada.Server.Routes
                 string id = req.Parameters["id"];
                 Vessel? vessel = ctx.IsAdmin
                     ? await _database.Vessels.ReadAsync(id).ConfigureAwait(false)
-                    : await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false);
+                    : ctx.IsTenantAdmin
+                        ? await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
+                        : await _database.Vessels.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (vessel == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
                 if (_git == null) { req.Http.Response.StatusCode = 503; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Git service is not available" }; }
                 BranchActionRequest pushBody = JsonSerializer.Deserialize<BranchActionRequest>(req.Http.Request.DataAsString, _jsonOptions) ?? new BranchActionRequest();
@@ -406,7 +412,9 @@ namespace Armada.Server.Routes
                 string id = req.Parameters["id"];
                 Vessel? vessel = ctx.IsAdmin
                     ? await _database.Vessels.ReadAsync(id).ConfigureAwait(false)
-                    : await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false);
+                    : ctx.IsTenantAdmin
+                        ? await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
+                        : await _database.Vessels.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (vessel == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
                 if (_git == null) { req.Http.Response.StatusCode = 503; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Git service is not available" }; }
                 BranchMergeRequest mergeBody = JsonSerializer.Deserialize<BranchMergeRequest>(req.Http.Request.DataAsString, _jsonOptions) ?? new BranchMergeRequest();

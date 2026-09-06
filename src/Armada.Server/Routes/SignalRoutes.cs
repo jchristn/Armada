@@ -131,6 +131,8 @@ namespace Armada.Server.Routes
                 List<Signal> signals = ctx.IsAdmin
                     ? await _database.Signals.EnumerateRecentAsync(count).ConfigureAwait(false)
                     : await _database.Signals.EnumerateRecentAsync(ctx.TenantId!, count).ConfigureAwait(false);
+                if (!ctx.IsAdmin && !ctx.IsTenantAdmin)
+                    signals = signals.Where(s => String.Equals(s.UserId, ctx.UserId, StringComparison.Ordinal)).ToList();
                 return signals;
             },
             api => api
@@ -225,6 +227,8 @@ namespace Armada.Server.Routes
                 List<Signal> signals = ctx.IsAdmin
                     ? await _database.Signals.EnumerateByRecipientAsync(captainId, unreadOnly).ConfigureAwait(false)
                     : await _database.Signals.EnumerateByRecipientAsync(ctx.TenantId!, captainId, unreadOnly).ConfigureAwait(false);
+                if (!ctx.IsAdmin && !ctx.IsTenantAdmin)
+                    signals = signals.Where(s => String.Equals(s.UserId, ctx.UserId, StringComparison.Ordinal)).ToList();
                 return signals;
             },
             api => api
