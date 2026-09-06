@@ -33,6 +33,7 @@ namespace Armada.Core.Services
         private readonly LoggingModule _Logging;
         private readonly string? _AdvertisedMcpBaseUrl;
         private readonly ConcurrentDictionary<string, HarborConnection> _Connections = new ConcurrentDictionary<string, HarborConnection>(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<string, TaskCompletionSource<HarborGitResult>> _PendingGit = new ConcurrentDictionary<string, TaskCompletionSource<HarborGitResult>>(StringComparer.Ordinal);
 
         #endregion
 
@@ -129,6 +130,13 @@ namespace Armada.Core.Services
                 return;
             }
 
+            if (message is HarborGitResult gitResult)
+            {
+                if (_PendingGit.TryRemove(gitResult.RequestId, out TaskCompletionSource<HarborGitResult>? pending))
+                    pending.TrySetResult(gitResult);
+                return;
+            }
+
             if (message is HarborError error)
             {
                 _Logging.Warn(_Header + "harbor " + harborId + " reported error"
@@ -136,8 +144,49 @@ namespace Armada.Core.Services
                 return;
             }
 
-            // started/output/exited/gitResult are consumed by the remote executor's pending-job handlers.
+            // started/output/exited are consumed by the remote process executor's pending-job handlers.
             _Logging.Debug(_Header + "harbor " + harborId + " message " + message.GetType().Name);
+        }
+
+        /// <summary>
+        /// Send a git/gh request to a connected Harbor and await its result. Returns null when the Harbor
+        /// does not reply within the timeout.
+        /// </summary>
+        /// <param name="harborId">Target Harbor identifier.</param>
+        /// <param name="request">Git request (its RequestId correlates the reply).</param>
+        /// <param name="timeoutMs">Timeout in milliseconds; values below 1 mean wait indefinitely.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The git result, or null on timeout.</returns>
+        /// <exception cref="InvalidOperationException">Thrown when the Harbor is not connected.</exception>
+        public async Task<HarborGitResult?> SendGitAsync(string harborId, HarborGitRequest request, int timeoutMs, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(harborId)) throw new ArgumentNullException(nameof(harborId));
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            if (String.IsNullOrWhiteSpace(request.RequestId)) throw new ArgumentException("Git request is missing a request id.");
+            if (!_Connections.TryGetValue(harborId, out HarborConnection? connection))
+                throw new InvalidOperationException("Harbor " + harborId + " is not connected.");
+
+            TaskCompletionSource<HarborGitResult> completion = new TaskCompletionSource<HarborGitResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _PendingGit[request.RequestId] = completion;
+
+            try
+            {
+                await connection!.SendAsync(request, token).ConfigureAwait(false);
+
+                if (timeoutMs < 1)
+                    return await completion.Task.ConfigureAwait(false);
+
+                Task delay = Task.Delay(timeoutMs, token);
+                Task finished = await Task.WhenAny(completion.Task, delay).ConfigureAwait(false);
+                if (finished == completion.Task)
+                    return await completion.Task.ConfigureAwait(false);
+
+                return null;
+            }
+            finally
+            {
+                _PendingGit.TryRemove(request.RequestId, out TaskCompletionSource<HarborGitResult>? _);
+            }
         }
 
         /// <summary>
