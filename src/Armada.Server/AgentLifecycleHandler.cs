@@ -892,7 +892,17 @@ namespace Armada.Server
         /// </summary>
         private async Task<IHostProcessExecutor> ResolveLaunchExecutorAsync(Captain captain, Mission mission, Dock dock)
         {
-            if (_HarborConnections == null || !_HarborConnections.HasConnectedHarbor()) return _HostProcessExecutor;
+            if (_HarborConnections == null)
+            {
+                _Logging.Info(_Header + "Harbor delegation disabled (no connection manager wired); running locally");
+                return _HostProcessExecutor;
+            }
+
+            if (!_HarborConnections.HasConnectedHarbor())
+            {
+                _Logging.Info(_Header + "no Harbor connected; running captain locally");
+                return _HostProcessExecutor;
+            }
 
             try
             {
@@ -907,6 +917,10 @@ namespace Armada.Server
                     RequestedRuntime = captain.Runtime.ToString(),
                     RequiredCapabilities = SplitCapabilities(vessel?.RequiredCapabilities)
                 };
+
+                _Logging.Info(_Header + "Harbor routing for mission " + mission.Id + ": tenant=" + (mission.TenantId ?? "(none)")
+                    + " runtime=" + request.RequestedRuntime + " dockHarbor=" + (request.ExistingHarborId ?? "(none)")
+                    + " connected=[" + String.Join(",", _HarborConnections.ConnectedHarborIds) + "]");
 
                 HarborRoutingDecision decision = await _HarborConnections.SelectHarborAsync(mission.TenantId, request).ConfigureAwait(false);
                 if (decision.Success && !String.IsNullOrWhiteSpace(decision.HarborId))

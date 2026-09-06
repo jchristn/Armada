@@ -158,6 +158,7 @@ namespace Armada.Harbor
                         {
                             SetStatus("Connected", _Green);
                             SetDetail("Linked to " + _Settings.ServerLinkUrl + ". Awaiting work.");
+                            SetMcp(client.McpBaseUrl);
                         }).ConfigureAwait(false);
 
                         SetStatus("Disconnected", _Red);

@@ -341,14 +341,21 @@ namespace Armada.Core.Services
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
 
-            AuthContext auth = new AuthContext
-            {
-                IsAuthenticated = true,
-                TenantId = tenantId,
-                IsAdmin = String.IsNullOrEmpty(tenantId)
-            };
+            // Routing is a system operation: enumerate every Harbor, then keep those a mission of this tenant
+            // may use -- one owned by the tenant, or a globally shared (unassigned) Harbor. This preserves
+            // tenant isolation while letting a single shared Harbor serve a local, single-tenant deployment
+            // where the mission carries a tenant but the Harbor registered without one.
+            AuthContext adminAuth = new AuthContext { IsAuthenticated = true, IsAdmin = true };
+            List<Harbor> all = await _Harbors.EnumerateAsync(adminAuth, token).ConfigureAwait(false);
 
-            List<Harbor> candidates = await _Harbors.EnumerateAsync(auth, token).ConfigureAwait(false);
+            List<Harbor> candidates = new List<Harbor>();
+            foreach (Harbor harbor in all)
+            {
+                bool shared = String.IsNullOrEmpty(harbor.TenantId);
+                bool sameTenant = !String.IsNullOrEmpty(tenantId) && String.Equals(harbor.TenantId, tenantId, StringComparison.Ordinal);
+                if (String.IsNullOrEmpty(tenantId) || shared || sameTenant) candidates.Add(harbor);
+            }
+
             HarborRouter router = new HarborRouter();
             return router.Select(candidates, IsConnected, InFlightJobs, request);
         }
