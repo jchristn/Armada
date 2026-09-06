@@ -588,6 +588,11 @@ namespace Armada.Core.Database.Mysql
                     62,
                     "Add harbors and harbor_capabilities tables for host runners",
                     TableQueries.MigrationV62Statements
+                ),
+                new SchemaMigration(
+                    63,
+                    "Add Harbor routing and affinity columns",
+                    TableQueries.MigrationV63Statements
                 )
             };
         }

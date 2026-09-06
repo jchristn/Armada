@@ -57,14 +57,15 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = @"INSERT INTO docks (id, tenant_id, user_id, vessel_id, captain_id, worktree_path, branch_name, active, created_utc, last_update_utc, state, lease_expires_utc, owner_token, git_anchors_json)
-                            VALUES (@id, @tenant_id, @user_id, @vessel_id, @captain_id, @worktree_path, @branch_name, @active, @created_utc, @last_update_utc, @state, @lease_expires_utc, @owner_token, @git_anchors_json);";
+                    cmd.CommandText = @"INSERT INTO docks (id, tenant_id, user_id, vessel_id, captain_id, worktree_path, harbor_id, branch_name, active, created_utc, last_update_utc, state, lease_expires_utc, owner_token, git_anchors_json)
+                            VALUES (@id, @tenant_id, @user_id, @vessel_id, @captain_id, @worktree_path, @harbor_id, @branch_name, @active, @created_utc, @last_update_utc, @state, @lease_expires_utc, @owner_token, @git_anchors_json);";
                     cmd.Parameters.AddWithValue("@id", dock.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)dock.TenantId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@user_id", (object?)dock.UserId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@vessel_id", dock.VesselId);
                     cmd.Parameters.AddWithValue("@captain_id", (object?)dock.CaptainId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@worktree_path", (object?)dock.WorktreePath ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@harbor_id", (object?)dock.HarborId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@branch_name", (object?)dock.BranchName ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@active", dock.Active ? 1 : 0);
                     cmd.Parameters.AddWithValue("@created_utc", SqliteDatabaseDriver.ToIso8601(dock.CreatedUtc));
@@ -120,6 +121,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                             vessel_id = @vessel_id,
                             captain_id = @captain_id,
                             worktree_path = @worktree_path,
+                            harbor_id = @harbor_id,
                             branch_name = @branch_name,
                             active = @active,
                             state = @state,
@@ -134,6 +136,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     cmd.Parameters.AddWithValue("@vessel_id", dock.VesselId);
                     cmd.Parameters.AddWithValue("@captain_id", (object?)dock.CaptainId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@worktree_path", (object?)dock.WorktreePath ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@harbor_id", (object?)dock.HarborId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@branch_name", (object?)dock.BranchName ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@active", dock.Active ? 1 : 0);
                     cmd.Parameters.AddWithValue("@state", dock.State.ToString());

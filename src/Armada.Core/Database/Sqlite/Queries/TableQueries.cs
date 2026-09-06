@@ -1445,7 +1445,12 @@ namespace Armada.Core.Database.Sqlite.Queries
                         PRIMARY KEY (harbor_id, name),
                         FOREIGN KEY (harbor_id) REFERENCES harbors(id) ON DELETE CASCADE
                     );",
-                    @"CREATE INDEX IF NOT EXISTS idx_harbor_capabilities_harbor ON harbor_capabilities(harbor_id);")
+                    @"CREATE INDEX IF NOT EXISTS idx_harbor_capabilities_harbor ON harbor_capabilities(harbor_id);"),
+                new SchemaMigration(63, "Add Harbor routing and affinity columns",
+                    @"ALTER TABLE docks ADD COLUMN harbor_id TEXT;",
+                    @"ALTER TABLE missions ADD COLUMN assigned_harbor_id TEXT;",
+                    @"ALTER TABLE vessels ADD COLUMN preferred_harbor_id TEXT;",
+                    @"ALTER TABLE vessels ADD COLUMN required_capabilities TEXT;")
             };
         }
 

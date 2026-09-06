@@ -63,14 +63,15 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = @"INSERT INTO docks (id, tenant_id, user_id, vessel_id, captain_id, worktree_path, branch_name, active, state, lease_expires_utc, owner_token, git_anchors_json, created_utc, last_update_utc)
-                        VALUES (@id, @tenant_id, @user_id, @vessel_id, @captain_id, @worktree_path, @branch_name, @active, @state, @lease_expires_utc, @owner_token, @git_anchors_json, @created_utc, @last_update_utc);";
+                    cmd.CommandText = @"INSERT INTO docks (id, tenant_id, user_id, vessel_id, captain_id, worktree_path, harbor_id, branch_name, active, state, lease_expires_utc, owner_token, git_anchors_json, created_utc, last_update_utc)
+                        VALUES (@id, @tenant_id, @user_id, @vessel_id, @captain_id, @worktree_path, @harbor_id, @branch_name, @active, @state, @lease_expires_utc, @owner_token, @git_anchors_json, @created_utc, @last_update_utc);";
                     cmd.Parameters.AddWithValue("@id", dock.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)dock.TenantId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@user_id", (object?)dock.UserId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@vessel_id", dock.VesselId);
                     cmd.Parameters.AddWithValue("@captain_id", (object?)dock.CaptainId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@worktree_path", (object?)dock.WorktreePath ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@harbor_id", (object?)dock.HarborId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@branch_name", (object?)dock.BranchName ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@active", dock.Active);
                     cmd.Parameters.AddWithValue("@state", dock.State.ToString());
@@ -138,6 +139,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         vessel_id = @vessel_id,
                         captain_id = @captain_id,
                         worktree_path = @worktree_path,
+                        harbor_id = @harbor_id,
                         branch_name = @branch_name,
                         active = @active,
                         state = @state,
@@ -152,6 +154,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@vessel_id", dock.VesselId);
                     cmd.Parameters.AddWithValue("@captain_id", (object?)dock.CaptainId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@worktree_path", (object?)dock.WorktreePath ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@harbor_id", (object?)dock.HarborId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@branch_name", (object?)dock.BranchName ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@active", dock.Active);
                     cmd.Parameters.AddWithValue("@state", dock.State.ToString());
@@ -730,6 +733,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             dock.VesselId = reader["vessel_id"].ToString()!;
             dock.CaptainId = NullableString(reader["captain_id"]);
             dock.WorktreePath = NullableString(reader["worktree_path"]);
+            try { dock.HarborId = NullableString(reader["harbor_id"]); } catch { }
             dock.BranchName = NullableString(reader["branch_name"]);
             dock.Active = (bool)reader["active"];
             try { dock.State = Enum.Parse<DockStateEnum>(reader["state"].ToString()!); } catch { }

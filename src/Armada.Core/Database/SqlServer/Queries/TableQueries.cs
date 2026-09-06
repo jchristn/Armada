@@ -1010,6 +1010,14 @@ namespace Armada.Core.Database.SqlServer.Queries
                         CONSTRAINT FK_harbor_capabilities_harbor FOREIGN KEY (harbor_id) REFERENCES harbors(id) ON DELETE CASCADE
                     );",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_harbor_capabilities_harbor') CREATE INDEX idx_harbor_capabilities_harbor ON harbor_capabilities(harbor_id);"
+                ),
+                new SchemaMigration(
+                    63,
+                    "Add Harbor routing and affinity columns",
+                    @"IF COL_LENGTH('docks','harbor_id') IS NULL ALTER TABLE docks ADD harbor_id NVARCHAR(450) NULL;",
+                    @"IF COL_LENGTH('missions','assigned_harbor_id') IS NULL ALTER TABLE missions ADD assigned_harbor_id NVARCHAR(450) NULL;",
+                    @"IF COL_LENGTH('vessels','preferred_harbor_id') IS NULL ALTER TABLE vessels ADD preferred_harbor_id NVARCHAR(450) NULL;",
+                    @"IF COL_LENGTH('vessels','required_capabilities') IS NULL ALTER TABLE vessels ADD required_capabilities NVARCHAR(MAX) NULL;"
                 )
             };
         }

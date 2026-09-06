@@ -384,6 +384,8 @@ namespace Armada.Core.Database.SqlServer
             vessel.RepoUrl = NullableString(reader["repo_url"]);
             vessel.LocalPath = NullableString(reader["local_path"]);
             vessel.WorkingDirectory = NullableString(reader["working_directory"]);
+            vessel.PreferredHarborId = NullableString(reader["preferred_harbor_id"]);
+            vessel.RequiredCapabilities = NullableString(reader["required_capabilities"]);
             vessel.ProjectContext = NullableString(reader["project_context"]);
             vessel.StyleGuide = NullableString(reader["style_guide"]);
             try { vessel.EnableModelContext = Convert.ToBoolean(reader["enable_model_context"]); }
@@ -527,6 +529,7 @@ namespace Armada.Core.Database.SqlServer
             mission.VesselId = NullableString(reader["vessel_id"]);
             mission.CaptainId = NullableString(reader["captain_id"]);
             try { mission.RequestedCaptainId = NullableString(reader["requested_captain_id"]); } catch { }
+            try { mission.AssignedHarborId = NullableString(reader["assigned_harbor_id"]); } catch { }
             mission.Title = reader["title"].ToString()!;
             mission.Description = NullableString(reader["description"]);
             mission.Status = Enum.Parse<MissionStatusEnum>(reader["status"].ToString()!);
@@ -621,6 +624,7 @@ namespace Armada.Core.Database.SqlServer
             dock.VesselId = reader["vessel_id"].ToString()!;
             dock.CaptainId = NullableString(reader["captain_id"]);
             dock.WorktreePath = NullableString(reader["worktree_path"]);
+            dock.HarborId = NullableString(reader["harbor_id"]);
             dock.BranchName = NullableString(reader["branch_name"]);
             dock.Active = Convert.ToBoolean(reader["active"]);
             try

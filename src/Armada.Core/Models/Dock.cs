@@ -52,6 +52,13 @@ namespace Armada.Core.Models
         public string? CaptainId { get; set; } = null;
 
         /// <summary>
+        /// Identifier of the Harbor (host runner) that owns this dock, or null when the dock is on the
+        /// Admiral's own host (Local mode). A dock's worktree lives on exactly one host, so this pins the
+        /// mission's later host operations to that Harbor (dock affinity).
+        /// </summary>
+        public string? HarborId { get; set; } = null;
+
+        /// <summary>
         /// Local filesystem path to the worktree.
         /// </summary>
         public string? WorktreePath { get; set; } = null;

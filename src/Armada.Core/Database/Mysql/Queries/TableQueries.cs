@@ -1376,6 +1376,17 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration v63 statements: add Harbor routing and affinity columns to docks, missions, and vessels.
+        /// </summary>
+        public static readonly string[] MigrationV63Statements = new string[]
+        {
+            "ALTER TABLE docks ADD COLUMN harbor_id VARCHAR(191);",
+            "ALTER TABLE missions ADD COLUMN assigned_harbor_id VARCHAR(191);",
+            "ALTER TABLE vessels ADD COLUMN preferred_harbor_id VARCHAR(191);",
+            "ALTER TABLE vessels ADD COLUMN required_capabilities VARCHAR(1024);"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

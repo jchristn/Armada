@@ -72,6 +72,18 @@ namespace Armada.Core.Models
         public string? WorkingDirectory { get; set; } = null;
 
         /// <summary>
+        /// Optional preferred Harbor (host runner) identifier for this vessel's missions. Honored by the
+        /// router when the Harbor is otherwise eligible; null lets the router choose.
+        /// </summary>
+        public string? PreferredHarborId { get; set; } = null;
+
+        /// <summary>
+        /// Optional comma-separated list of capabilities a Harbor must advertise to run this vessel's
+        /// missions (for example "claude,gh"). Null or empty imposes no capability requirement.
+        /// </summary>
+        public string? RequiredCapabilities { get; set; } = null;
+
+        /// <summary>
         /// Optional per-vessel GitHub token override.
         /// This value is accepted on create and update, but is never serialized in read responses.
         /// </summary>

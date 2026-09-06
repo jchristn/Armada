@@ -262,7 +262,7 @@ Freeze the wire protocol and the seam before building either side against them.
   `model_endpoints`.)
 - [x] SRV-04 Add schema migration **v62** ("Add harbors and harbor_capabilities tables") to all four
   `TableQueries.cs`, idempotent, tenant-scoped indexes, `(tenant_id, name)` uniqueness.
-- [ ] SRV-04b Add schema migration **v63** for multi-Harbor routing/affinity to all four drivers:
+- [x] SRV-04b Add schema migration **v63** for multi-Harbor routing/affinity to all four drivers:
   `docks.harbor_id` (which Harbor owns the dock), `vessels.preferred_harbor_id` and
   `vessels.required_capabilities` (optional routing hints), and `missions.assigned_harbor_id` (resolved at
   dispatch). Additive and idempotent.

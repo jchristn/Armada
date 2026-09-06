@@ -61,6 +61,12 @@ namespace Armada.Core.Models
         public string? RequestedCaptainId { get; set; } = null;
 
         /// <summary>
+        /// Identifier of the Harbor (host runner) this mission was routed to when its dock was provisioned,
+        /// or null when it runs on the Admiral's own host (Local mode) or has not yet been routed.
+        /// </summary>
+        public string? AssignedHarborId { get; set; } = null;
+
+        /// <summary>
         /// Mission title.
         /// </summary>
         public string Title
