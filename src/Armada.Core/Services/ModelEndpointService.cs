@@ -59,7 +59,17 @@ namespace Armada.Core.Services
             if (auth.IsAdmin || String.IsNullOrEmpty(auth.TenantId))
                 return await _Database.ModelEndpoints.EnumerateAsync(token).ConfigureAwait(false);
 
-            return await _Database.ModelEndpoints.EnumerateAsync(auth.TenantId, token).ConfigureAwait(false);
+            // Within a tenant: a tenant admin sees all; a regular user sees tenant-wide endpoints plus their own.
+            List<ModelEndpoint> tenantEndpoints = await _Database.ModelEndpoints.EnumerateAsync(auth.TenantId, token).ConfigureAwait(false);
+            if (auth.IsTenantAdmin) return tenantEndpoints;
+
+            List<ModelEndpoint> visible = new List<ModelEndpoint>();
+            foreach (ModelEndpoint endpoint in tenantEndpoints)
+            {
+                if (ScopedVisibility.CanView(auth, endpoint.Scope, endpoint.TenantId, endpoint.UserId)) visible.Add(endpoint);
+            }
+
+            return visible;
         }
 
         /// <summary>
@@ -97,6 +107,8 @@ namespace Armada.Core.Services
 
             endpoint.TenantId = auth.TenantId;
             endpoint.UserId = auth.UserId;
+            // Regular users may only create user-specific endpoints; admins may choose (default tenant-wide).
+            endpoint.Scope = ScopedVisibility.ResolveCreateScope(auth, endpoint.Scope);
             endpoint.CreatedUtc = DateTime.UtcNow;
             endpoint.LastUpdateUtc = DateTime.UtcNow;
             endpoint.HealthStatus = EndpointHealthStatusEnum.Unknown;
@@ -123,7 +135,10 @@ namespace Armada.Core.Services
 
             ModelEndpoint? existing = await _Database.ModelEndpoints.ReadAsync(endpoint.Id, token).ConfigureAwait(false);
             if (existing == null) throw new KeyNotFoundException("Model endpoint not found: " + endpoint.Id);
-            if (!IsVisible(auth, existing)) throw new UnauthorizedAccessException("Not permitted to modify endpoint " + endpoint.Id);
+            if (!ScopedVisibility.CanEdit(auth, existing.Scope, existing.TenantId, existing.UserId)) throw new UnauthorizedAccessException("Not permitted to modify endpoint " + endpoint.Id);
+            // Preserve ownership/scope on update; only an admin may change the scope of an existing endpoint.
+            endpoint.UserId = existing.UserId;
+            endpoint.Scope = (auth.IsAdmin || auth.IsTenantAdmin) ? endpoint.Scope : existing.Scope;
 
             ValidateShape(endpoint);
 
@@ -155,7 +170,7 @@ namespace Armada.Core.Services
 
             ModelEndpoint? existing = await _Database.ModelEndpoints.ReadAsync(id, token).ConfigureAwait(false);
             if (existing == null) throw new KeyNotFoundException("Model endpoint not found: " + id);
-            if (!IsVisible(auth, existing)) throw new UnauthorizedAccessException("Not permitted to delete endpoint " + id);
+            if (!ScopedVisibility.CanEdit(auth, existing.Scope, existing.TenantId, existing.UserId)) throw new UnauthorizedAccessException("Not permitted to delete endpoint " + id);
 
             // Guard: do not delete an endpoint a captain still references, which would orphan that captain and
             // cause its launches to fail. The caller must first repoint or remove those captains.
@@ -288,9 +303,7 @@ namespace Armada.Core.Services
 
         private static bool IsVisible(AuthContext auth, ModelEndpoint endpoint)
         {
-            if (auth.IsAdmin) return true;
-            if (String.IsNullOrEmpty(auth.TenantId)) return true;
-            return String.Equals(auth.TenantId, endpoint.TenantId, StringComparison.Ordinal);
+            return ScopedVisibility.CanView(auth, endpoint.Scope, endpoint.TenantId, endpoint.UserId);
         }
 
         private static void ValidateShape(ModelEndpoint endpoint)

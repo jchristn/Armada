@@ -57,6 +57,13 @@ namespace Armada.Core.Models
         public ModelEndpointKindEnum Kind { get; set; } = ModelEndpointKindEnum.Inference;
 
         /// <summary>
+        /// Ownership scope: a tenant-wide endpoint is visible to everyone in the tenant but editable only by
+        /// tenant/global admins; a user-specific endpoint is owned by <see cref="UserId"/>. Defaults to
+        /// tenant-wide (existing rows and admin-created rows); regular users create user-specific endpoints.
+        /// </summary>
+        public ScopeEnum Scope { get; set; } = ScopeEnum.TenantWide;
+
+        /// <summary>
         /// The provider/wire-format the endpoint speaks.
         /// </summary>
         public ModelProviderEnum Provider { get; set; } = ModelProviderEnum.OpenAI;

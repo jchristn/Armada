@@ -1395,6 +1395,14 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration v65 statements: add scope to model_endpoints (tenant-wide vs user-specific).
+        /// </summary>
+        public static readonly string[] MigrationV65Statements = new string[]
+        {
+            "ALTER TABLE model_endpoints ADD COLUMN scope VARCHAR(32) NOT NULL DEFAULT 'TenantWide';"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

@@ -37,9 +37,9 @@ namespace Armada.Core.Database.Mysql.Implementations
                 using (MySqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = @"INSERT INTO model_endpoints
-                        (id, tenant_id, user_id, name, kind, provider, base_url, api_key, model, dimensionality, timeout_ms, enabled, health_status, last_health_check_utc, last_health_error, last_latency_ms, health_history_json, created_utc, last_update_utc)
+                        (id, tenant_id, user_id, name, kind, scope, provider, base_url, api_key, model, dimensionality, timeout_ms, enabled, health_status, last_health_check_utc, last_health_error, last_latency_ms, health_history_json, created_utc, last_update_utc)
                         VALUES
-                        (@id, @tenant_id, @user_id, @name, @kind, @provider, @base_url, @api_key, @model, @dimensionality, @timeout_ms, @enabled, @health_status, @last_health_check_utc, @last_health_error, @last_latency_ms, @health_history_json, @created_utc, @last_update_utc);";
+                        (@id, @tenant_id, @user_id, @name, @kind, @scope, @provider, @base_url, @api_key, @model, @dimensionality, @timeout_ms, @enabled, @health_status, @last_health_check_utc, @last_health_error, @last_latency_ms, @health_history_json, @created_utc, @last_update_utc);";
                     BindEndpoint(cmd, endpoint);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
@@ -62,6 +62,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                         user_id = @user_id,
                         name = @name,
                         kind = @kind,
+                        scope = @scope,
                         provider = @provider,
                         base_url = @base_url,
                         api_key = @api_key,
@@ -280,6 +281,7 @@ namespace Armada.Core.Database.Mysql.Implementations
             cmd.Parameters.AddWithValue("@user_id", (object?)endpoint.UserId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@name", endpoint.Name);
             cmd.Parameters.AddWithValue("@kind", endpoint.Kind.ToString());
+            cmd.Parameters.AddWithValue("@scope", endpoint.Scope.ToString());
             cmd.Parameters.AddWithValue("@provider", endpoint.Provider.ToString());
             cmd.Parameters.AddWithValue("@base_url", endpoint.BaseUrl);
             cmd.Parameters.AddWithValue("@api_key", (object?)endpoint.ApiKey ?? DBNull.Value);
@@ -305,6 +307,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                 UserId = MysqlDatabaseDriver.NullableString(reader["user_id"]),
                 Name = reader["name"].ToString()!,
                 Kind = ParseEnum(reader["kind"], ModelEndpointKindEnum.Inference),
+                Scope = ParseEnum(reader["scope"], ScopeEnum.TenantWide),
                 Provider = ParseEnum(reader["provider"], ModelProviderEnum.OpenAI),
                 BaseUrl = reader["base_url"].ToString()!,
                 Model = MysqlDatabaseDriver.NullableString(reader["model"]),

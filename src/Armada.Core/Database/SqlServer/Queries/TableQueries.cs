@@ -1023,6 +1023,11 @@ namespace Armada.Core.Database.SqlServer.Queries
                     64,
                     "Add model_endpoint_id to captains for API-endpoint captains",
                     @"IF COL_LENGTH('captains','model_endpoint_id') IS NULL ALTER TABLE captains ADD model_endpoint_id NVARCHAR(450) NULL;"
+                ),
+                new SchemaMigration(
+                    65,
+                    "Add scope to model_endpoints (tenant-wide vs user-specific)",
+                    @"IF COL_LENGTH('model_endpoints','scope') IS NULL ALTER TABLE model_endpoints ADD scope NVARCHAR(32) NOT NULL DEFAULT 'TenantWide';"
                 )
             };
         }

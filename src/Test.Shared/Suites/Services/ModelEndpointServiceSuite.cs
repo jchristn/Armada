@@ -57,6 +57,34 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(EndpointHealthStatusEnum.Unknown, created.HealthStatus);
             }));
 
+            cases.Add(CaseAsync("scope_visibility_and_create_scope", "Regular user sees tenant-wide + own; create is forced user-specific", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                ModelEndpointService service = new ModelEndpointService(testDb.Driver, CreateLogging());
+                AuthContext admin = AuthContext.Authenticated("ten_s", "usr_admin", false, true, "Test");
+                AuthContext userA = AuthContext.Authenticated("ten_s", "usr_a", false, false, "Test");
+                AuthContext userB = AuthContext.Authenticated("ten_s", "usr_b", false, false, "Test");
+
+                await service.CreateAsync(admin, NewInference("Shared", "http://localhost:1")).ConfigureAwait(false);
+                ModelEndpoint aOwn = await service.CreateAsync(userA, NewInference("A-Private", "http://localhost:2")).ConfigureAwait(false);
+                await service.CreateAsync(userB, NewInference("B-Private", "http://localhost:3")).ConfigureAwait(false);
+
+                // Regular-user create is forced user-specific and survives the DB round-trip.
+                ModelEndpoint? aReread = await service.ReadAsync(userA, aOwn.Id).ConfigureAwait(false);
+                AssertTrue(aReread != null, "User should read their own endpoint.");
+                AssertEqual(ScopeEnum.UserSpecific, aReread!.Scope);
+
+                List<ModelEndpoint> visibleToA = await service.EnumerateAsync(userA).ConfigureAwait(false);
+                AssertEqual(2, visibleToA.Count);
+                AssertTrue(visibleToA.Exists(e => e.Name == "Shared"), "User A should see the tenant-wide endpoint.");
+                AssertTrue(visibleToA.Exists(e => e.Name == "A-Private"), "User A should see their own endpoint.");
+                AssertTrue(!visibleToA.Exists(e => e.Name == "B-Private"), "User A should NOT see user B's endpoint.");
+
+                // Tenant admin sees all three.
+                List<ModelEndpoint> visibleToAdmin = await service.EnumerateAsync(admin).ConfigureAwait(false);
+                AssertEqual(3, visibleToAdmin.Count);
+            }));
+
             cases.Add(CaseAsync("delete_blocked_when_referenced_by_captain", "DeleteAsync is blocked while a captain references the endpoint", TestTags.Negative, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

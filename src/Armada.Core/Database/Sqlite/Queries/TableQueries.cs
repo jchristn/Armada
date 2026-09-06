@@ -1452,7 +1452,9 @@ namespace Armada.Core.Database.Sqlite.Queries
                     @"ALTER TABLE vessels ADD COLUMN preferred_harbor_id TEXT;",
                     @"ALTER TABLE vessels ADD COLUMN required_capabilities TEXT;"),
                 new SchemaMigration(64, "Add model_endpoint_id to captains for API-endpoint captains",
-                    @"ALTER TABLE captains ADD COLUMN model_endpoint_id TEXT;")
+                    @"ALTER TABLE captains ADD COLUMN model_endpoint_id TEXT;"),
+                new SchemaMigration(65, "Add scope to model_endpoints (tenant-wide vs user-specific)",
+                    @"ALTER TABLE model_endpoints ADD COLUMN scope TEXT NOT NULL DEFAULT 'TenantWide';")
             };
         }
 

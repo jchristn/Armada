@@ -598,6 +598,11 @@ namespace Armada.Core.Database.Mysql
                     64,
                     "Add model_endpoint_id to captains for API-endpoint captains",
                     TableQueries.MigrationV64Statements
+                ),
+                new SchemaMigration(
+                    65,
+                    "Add scope to model_endpoints (tenant-wide vs user-specific)",
+                    TableQueries.MigrationV65Statements
                 )
             };
         }
