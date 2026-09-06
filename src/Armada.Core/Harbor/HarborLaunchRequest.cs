@@ -53,6 +53,13 @@ namespace Armada.Core.Harbor
         /// </summary>
         public Dictionary<string, string> Environment { get; set; } = new Dictionary<string, string>();
 
+        /// <summary>
+        /// For an API-endpoint captain (<see cref="Runtime"/> == "ApiEndpoint"), the fully resolved inference
+        /// endpoint the Harbor should drive. The Harbor has no database, so the Admiral ships the endpoint
+        /// (including its API key) here over the authenticated link. Null for CLI-harness runtimes.
+        /// </summary>
+        public HarborInferenceEndpoint? InferenceEndpoint { get; set; } = null;
+
         #endregion
     }
 }

@@ -16,6 +16,7 @@ namespace Armada.Runtimes
 
         private readonly HarborConnectionManager _Manager;
         private readonly string _HarborId;
+        private readonly Func<string, Armada.Core.Models.ModelEndpoint?>? _EndpointResolver;
 
         #endregion
 
@@ -26,11 +27,13 @@ namespace Armada.Runtimes
         /// </summary>
         /// <param name="manager">Harbor connection manager.</param>
         /// <param name="harborId">Target Harbor identifier.</param>
-        public RemoteHostProcessExecutor(HarborConnectionManager manager, string harborId)
+        /// <param name="endpointResolver">Optional model-endpoint resolver for API-endpoint captains.</param>
+        public RemoteHostProcessExecutor(HarborConnectionManager manager, string harborId, Func<string, Armada.Core.Models.ModelEndpoint?>? endpointResolver = null)
         {
             _Manager = manager ?? throw new ArgumentNullException(nameof(manager));
             if (String.IsNullOrWhiteSpace(harborId)) throw new ArgumentNullException(nameof(harborId));
             _HarborId = harborId;
+            _EndpointResolver = endpointResolver;
         }
 
         #endregion
@@ -40,14 +43,14 @@ namespace Armada.Runtimes
         /// <inheritdoc />
         public IAgentRuntime CreateRuntime(AgentRuntimeEnum runtimeType)
         {
-            return new RemoteAgentRuntime(_Manager, _HarborId, runtimeType);
+            return new RemoteAgentRuntime(_Manager, _HarborId, runtimeType, _EndpointResolver);
         }
 
         /// <inheritdoc />
         public IAgentRuntime CreateRuntime(string name)
         {
             if (Enum.TryParse<AgentRuntimeEnum>(name, true, out AgentRuntimeEnum parsed))
-                return new RemoteAgentRuntime(_Manager, _HarborId, parsed);
+                return new RemoteAgentRuntime(_Manager, _HarborId, parsed, _EndpointResolver);
             throw new NotSupportedException("Harbor delegation does not support the custom runtime name: " + name);
         }
 

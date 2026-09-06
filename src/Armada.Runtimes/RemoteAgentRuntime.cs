@@ -48,6 +48,7 @@ namespace Armada.Runtimes
         private readonly HarborConnectionManager _Manager;
         private readonly string _HarborId;
         private readonly AgentRuntimeEnum _RuntimeType;
+        private readonly Func<string, ModelEndpoint?>? _EndpointResolver;
         private readonly int _StartTimeoutMs = 60000;
         private string _JobId = string.Empty;
         private int _ProcessId = 0;
@@ -65,11 +66,14 @@ namespace Armada.Runtimes
         /// <param name="manager">Harbor connection manager.</param>
         /// <param name="harborId">Target Harbor identifier.</param>
         /// <param name="runtimeType">Agent runtime type.</param>
-        public RemoteAgentRuntime(HarborConnectionManager manager, string harborId, AgentRuntimeEnum runtimeType)
+        /// <param name="endpointResolver">Optional resolver mapping a captain's model-endpoint id to a
+        /// ModelEndpoint, used to ship the endpoint to the Harbor for API-endpoint captains.</param>
+        public RemoteAgentRuntime(HarborConnectionManager manager, string harborId, AgentRuntimeEnum runtimeType, Func<string, ModelEndpoint?>? endpointResolver = null)
         {
             _Manager = manager ?? throw new ArgumentNullException(nameof(manager));
             if (String.IsNullOrWhiteSpace(harborId)) throw new ArgumentNullException(nameof(harborId));
             _HarborId = harborId;
+            _EndpointResolver = endpointResolver;
             _RuntimeType = runtimeType;
         }
 
@@ -110,6 +114,27 @@ namespace Armada.Runtimes
                 Arguments = new List<string>(),
                 Environment = environment ?? new Dictionary<string, string>()
             };
+
+            // API-endpoint captains have no CLI on the Harbor; ship the resolved endpoint so the Harbor can
+            // drive it. The Harbor has no database to resolve it itself.
+            if (_RuntimeType == AgentRuntimeEnum.ApiEndpoint)
+            {
+                ModelEndpoint? endpoint = (_EndpointResolver != null && captain != null && !String.IsNullOrEmpty(captain.ModelEndpointId))
+                    ? _EndpointResolver(captain.ModelEndpointId)
+                    : null;
+                if (endpoint == null)
+                    throw new InvalidOperationException("API-endpoint captain has no resolvable inference endpoint to delegate to the Harbor.");
+                request.InferenceEndpoint = new HarborInferenceEndpoint
+                {
+                    Name = endpoint.Name,
+                    Provider = endpoint.Provider,
+                    Kind = endpoint.Kind,
+                    BaseUrl = endpoint.BaseUrl ?? string.Empty,
+                    Model = endpoint.Model,
+                    ApiKey = endpoint.ApiKey,
+                    TimeoutMs = endpoint.TimeoutMs
+                };
+            }
 
             await _Manager.LaunchAsync(_HarborId, request, this, token).ConfigureAwait(false);
 

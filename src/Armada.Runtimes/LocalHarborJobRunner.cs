@@ -56,7 +56,32 @@ namespace Armada.Runtimes
             if (!Enum.TryParse(request.Runtime, true, out runtimeType))
                 throw new NotSupportedException("Unknown runtime requested: " + request.Runtime);
 
-            IAgentRuntime runtime = _Executor.CreateRuntime(runtimeType);
+            IAgentRuntime runtime;
+            if (runtimeType == AgentRuntimeEnum.ApiEndpoint)
+            {
+                // An API-endpoint captain runs its tool-calling loop here on the Harbor, against the endpoint
+                // the Admiral shipped in the launch (the Harbor has no database to resolve it).
+                if (request.InferenceEndpoint == null)
+                    throw new NotSupportedException("API-endpoint captain launch did not include an inference endpoint.");
+
+                HarborInferenceEndpoint shipped = request.InferenceEndpoint;
+                Armada.Core.Models.ModelEndpoint endpoint = new Armada.Core.Models.ModelEndpoint
+                {
+                    Name = shipped.Name,
+                    Provider = shipped.Provider,
+                    Kind = shipped.Kind,
+                    BaseUrl = shipped.BaseUrl,
+                    Model = shipped.Model,
+                    TimeoutMs = shipped.TimeoutMs
+                };
+                endpoint.ApiKey = shipped.ApiKey;
+                runtime = new ApiAgentRuntime(endpoint, _Logging);
+            }
+            else
+            {
+                runtime = _Executor.CreateRuntime(runtimeType);
+            }
+
             string jobId = request.JobId;
 
             runtime.OnProcessStarted += processId =>

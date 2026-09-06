@@ -171,20 +171,7 @@ namespace Armada.Server
             _MissionRecovery = new Armada.Core.Services.MissionRecoveryCoordinator(_Logging, _Database, _Settings);
             _LandingService = new LandingService(_Logging, _Database, _Settings, _Git);
             _TemplateService = new MessageTemplateService(_Logging, _PromptTemplateService);
-            _RuntimeFactory = new AgentRuntimeFactory(_Logging, endpointId =>
-            {
-                if (String.IsNullOrEmpty(endpointId)) return null;
-                try
-                {
-                    Armada.Core.Models.ModelEndpoint? endpoint = _Database.ModelEndpoints.ReadAsync(endpointId).GetAwaiter().GetResult();
-                    if (endpoint == null || !endpoint.Enabled || endpoint.Kind != Armada.Core.Enums.ModelEndpointKindEnum.Inference) return null;
-                    return endpoint;
-                }
-                catch
-                {
-                    return null;
-                }
-            });
+            _RuntimeFactory = new AgentRuntimeFactory(_Logging, ResolveInferenceEndpoint);
             _Workspace = new WorkspaceService();
             _RequestHistoryCapture = new RequestHistoryCaptureService(_Settings);
             _WorkflowProfileService = new WorkflowProfileService(_Database, _Logging);
@@ -250,6 +237,8 @@ namespace Armada.Server
 
             // Delegate captain launches to a connected Harbor by default; falls back to local when none is eligible.
             _AgentLifecycle.SetHarborConnections(_HarborConnectionManager);
+            // Enable API-endpoint captains delegated to a Harbor to carry their resolved inference endpoint.
+            _AgentLifecycle.SetEndpointResolver(ResolveInferenceEndpoint);
 
             // Wire up agent lifecycle events
             _Admiral.OnLaunchAgent = _AgentLifecycle.HandleLaunchAgentAsync;
@@ -1061,6 +1050,28 @@ namespace Armada.Server
                 _CaptainTools,
                 _ModelEndpointService,
                 _HarborService);
+        }
+
+        /// <summary>
+        /// Resolve a model-endpoint id to a usable inference endpoint (enabled, Inference-kind), or null.
+        /// Shared by the runtime factory (in-process captains) and the lifecycle handler (Harbor-delegated
+        /// captains, whose endpoint is shipped in the launch).
+        /// </summary>
+        /// <param name="endpointId">Model-endpoint identifier.</param>
+        /// <returns>The endpoint, or null when missing, disabled, or not an Inference endpoint.</returns>
+        private Armada.Core.Models.ModelEndpoint? ResolveInferenceEndpoint(string endpointId)
+        {
+            if (String.IsNullOrEmpty(endpointId)) return null;
+            try
+            {
+                Armada.Core.Models.ModelEndpoint? endpoint = _Database.ModelEndpoints.ReadAsync(endpointId).GetAwaiter().GetResult();
+                if (endpoint == null || !endpoint.Enabled || endpoint.Kind != Armada.Core.Enums.ModelEndpointKindEnum.Inference) return null;
+                return endpoint;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private async Task EmitEventAsync(string eventType, string message,

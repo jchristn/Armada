@@ -28,6 +28,7 @@ namespace Armada.Server
         private AgentRuntimeFactory _RuntimeFactory;
         private IHostProcessExecutor _HostProcessExecutor;
         private HarborConnectionManager? _HarborConnections;
+        private Func<string, ModelEndpoint?>? _EndpointResolver;
         private MuxCliService _MuxCli;
         private IAdmiralService _Admiral;
         private IMessageTemplateService _TemplateService;
@@ -152,6 +153,16 @@ namespace Armada.Server
         public void SetHarborConnections(HarborConnectionManager? manager)
         {
             _HarborConnections = manager;
+        }
+
+        /// <summary>
+        /// Provide the model-endpoint resolver so an API-endpoint captain delegated to a Harbor can have its
+        /// inference endpoint shipped in the launch (the Harbor has no database to resolve it).
+        /// </summary>
+        /// <param name="resolver">Resolver mapping a model-endpoint id to a ModelEndpoint, or null.</param>
+        public void SetEndpointResolver(Func<string, ModelEndpoint?>? resolver)
+        {
+            _EndpointResolver = resolver;
         }
 
         /// <summary>
@@ -952,7 +963,7 @@ namespace Armada.Server
                 {
                     await RecordHarborAffinityAsync(mission, dock, decision.HarborId!).ConfigureAwait(false);
                     _Logging.Info(_Header + "delegating captain launch to Harbor " + decision.HarborId + " (" + decision.Reason + ")");
-                    return new Armada.Runtimes.RemoteHostProcessExecutor(_HarborConnections, decision.HarborId!);
+                    return new Armada.Runtimes.RemoteHostProcessExecutor(_HarborConnections, decision.HarborId!, _EndpointResolver);
                 }
 
                 _Logging.Info(_Header + "no eligible Harbor for this launch (" + decision.Reason + "); running locally");
