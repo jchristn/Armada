@@ -1,0 +1,29 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Armada.Harbor.MainWindow"
+        Width="460" Height="320"
+        CanResize="False"
+        Title="Armada Harbor">
+  <StackPanel Margin="20" Spacing="12">
+    <TextBlock Text="Armada Harbor" FontSize="20" FontWeight="Bold" />
+    <TextBlock Text="Detached host runner. This machine executes captains, git, and worktrees for the Admiral."
+               TextWrapping="Wrap" Foreground="Gray" />
+
+    <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto" >
+      <TextBlock Grid.Row="0" Grid.Column="0" Text="Harbor" FontWeight="SemiBold" />
+      <TextBlock Grid.Row="0" Grid.Column="1" x:Name="HarborNameText" Text="-" />
+      <TextBlock Grid.Row="1" Grid.Column="0" Text="Server" FontWeight="SemiBold" />
+      <TextBlock Grid.Row="1" Grid.Column="1" x:Name="ServerText" Text="-" TextWrapping="Wrap" />
+      <TextBlock Grid.Row="2" Grid.Column="0" Text="Status" FontWeight="SemiBold" />
+      <TextBlock Grid.Row="2" Grid.Column="1" x:Name="StatusText" Text="Idle" />
+      <TextBlock Grid.Row="3" Grid.Column="0" Text="MCP" FontWeight="SemiBold" />
+      <TextBlock Grid.Row="3" Grid.Column="1" x:Name="McpText" Text="-" TextWrapping="Wrap" />
+    </Grid>
+
+    <StackPanel Orientation="Horizontal" Spacing="10">
+      <Button x:Name="ConnectButton" Content="Connect" Click="OnConnectClick" />
+      <Button x:Name="DisconnectButton" Content="Disconnect" Click="OnDisconnectClick" IsEnabled="False" />
+      <Button Content="Open Dashboard" Click="OnOpenDashboardClick" />
+    </StackPanel>
+  </StackPanel>
+</Window>

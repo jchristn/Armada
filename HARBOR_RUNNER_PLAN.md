@@ -379,18 +379,18 @@ Keep standalone identical while everything routes through the new interface.
 |----|------|--------|
 | HBR-01..12 | app, client, executor, tray, packaging | not started |
 
-- [ ] HBR-01 Create `src/Armada.Harbor` (Avalonia, `net8.0;net10.0`) referencing `Armada.Core` and
+- [x] HBR-01 Create `src/Armada.Harbor` (Avalonia, `net8.0;net10.0`) referencing `Armada.Core` and
   `Armada.Runtimes`. Source under `src/` per repo rules.
-- [ ] HBR-02 Harbor link client: dial the Admiral over WSS, perform the handshake (signed-request or
+- [~] HBR-02 Harbor link client: dial the Admiral over WSS, perform the handshake (signed-request or
   access-key/secret over TLS), advertise capabilities, maintain heartbeat, auto-reconnect with backoff,
   and rebind in-flight jobs on reconnect. Client-initiated only.
-- [ ] HBR-03 `HostExecutorServer`: receive delegated commands and execute them by reusing
+- [~] HBR-03 `HostExecutorServer`: receive delegated commands and execute them by reusing
   `Armada.Runtimes` (captain launch), `GitService`, and `DockService` on the host; stream stdout/stderr
   and lifecycle events back; multiplex many concurrent jobs keyed by Harbor-assigned job id.
 - [ ] HBR-04 Inject the Admiral-advertised MCP URL into launched captains' MCP config; use the host's own
   environment and home so host logins (`~/.claude`, `~/.codex`) and provider keys resolve as they do
   today.
-- [ ] HBR-05 Configuration: a Harbor settings file (server URL, credential/access key + secret via env
+- [x] HBR-05 Configuration: a Harbor settings file (server URL, credential/access key + secret via env
   or OS secret store, repos/docks directories, concurrency), `127.0.0.1` loopback default, secrets never
   written to logs.
 - [ ] HBR-06 Kill/liveness ownership: track child PIDs on the host, honor graceful-stop-then-kill-tree,
@@ -399,12 +399,12 @@ Keep standalone identical while everything routes through the new interface.
   propagated trace as a child span per command, nested span for child-process execution, structured logs,
   best-effort (never blocks execution). Decide scrape-vs-push (push/OTLP for a host app) and record the
   choice; consult the Pneuma reference for exact wiring.
-- [ ] HBR-08 Tray UI: status (connected/disconnected/degraded), attached server, running captains count,
+- [~] HBR-08 Tray UI: status (connected/disconnected/degraded), attached server, running captains count,
   start/stop the runner, open the dashboard in the browser, and quit. Theme-aware.
 - [ ] HBR-09 First-run/setup: prompt for server URL + credential, validate the connection, and persist.
 - [ ] HBR-10 Graceful shutdown: on quit, stop accepting new jobs, optionally drain or cleanly kill
   running captains, and close the link.
-- [ ] HBR-11 Touchstone tests for the Harbor executor and link client (connect/auth/reconnect, command
+- [~] HBR-11 Touchstone tests for the Harbor executor and link client (connect/auth/reconnect, command
   round-trips, concurrent job multiplexing, kill/liveness), positive and negative, in `Test.Shared`.
 - [ ] HBR-12 Packaging targets: self-contained single-file publish for win-x64, osx-arm64/x64, linux-x64
   (see Phase 7 scripts).
