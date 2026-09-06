@@ -37,6 +37,19 @@ namespace Armada.Harbor
         public string Name { get; set; } = string.Empty;
 
         /// <summary>
+        /// Owning user identifier this Harbor registers under (sent as x-user-guid at connect). Set this to
+        /// your Armada user id so the Admiral treats this as "your" Harbor for user-scoped launch policies.
+        /// Empty registers the Harbor with no owner.
+        /// </summary>
+        public string UserId { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Owning tenant identifier this Harbor registers under (sent as x-tenant-guid at connect). Empty
+        /// registers the Harbor with no tenant.
+        /// </summary>
+        public string TenantId { get; set; } = string.Empty;
+
+        /// <summary>
         /// Capabilities advertised at handshake (runtimes and tools available on this host).
         /// </summary>
         public List<string> Capabilities { get; set; } = new List<string> { "git" };

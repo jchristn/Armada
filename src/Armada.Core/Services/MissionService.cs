@@ -30,6 +30,14 @@ namespace Armada.Core.Services
         /// </summary>
         public Action<Mission>? OnReviewRequested { get; set; }
 
+        /// <summary>
+        /// Optional gate consulted before a mission is assigned to the selected captain. Returns true to allow
+        /// the assignment, or false to defer it (the mission stays Pending and is retried). Used to enforce the
+        /// "require a connected Harbor" policy: when set and it returns false, the mission waits instead of
+        /// running in-process.
+        /// </summary>
+        public Func<Mission, Captain, Task<bool>>? CanAssignMissionAsync { get; set; }
+
         #endregion
 
         #region Private-Members
@@ -333,6 +341,19 @@ namespace Armada.Core.Services
                 _Logging.Warn(_Header + "no idle captains available for mission " + mission.Id +
                     (mission.Persona != null ? " (persona: " + mission.Persona + ")" : ""));
                 return false;
+            }
+
+            // Policy gate: when the deployment requires a connected Harbor, defer assignment until one is
+            // available for this mission rather than running the captain in-process. The mission stays Pending
+            // and is retried on the next dispatch cycle.
+            if (CanAssignMissionAsync != null)
+            {
+                bool allowed = await CanAssignMissionAsync(mission, captain).ConfigureAwait(false);
+                if (!allowed)
+                {
+                    _Logging.Info(_Header + "deferring mission " + mission.Id + ": launch policy requires the requesting user's Harbor to be connected and eligible, and none is yet");
+                    return false;
+                }
             }
 
             // Missions with an existing branch continue work on that branch. This covers

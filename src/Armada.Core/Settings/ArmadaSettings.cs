@@ -538,6 +538,15 @@ namespace Armada.Core.Settings
         public bool RequireAuthForShutdown { get; set; } = false;
 
         /// <summary>
+        /// When true, a mission is only assigned when an eligible Harbor owned by the requesting user (the
+        /// mission's user) is connected; the Admiral never falls back to running the captain in-process or on
+        /// another user's Harbor. Missions wait (stay Pending and are retried) until that user's Harbor
+        /// connects. When false (default), the Admiral delegates to a connected Harbor when one is available
+        /// and otherwise runs the captain locally.
+        /// </summary>
+        public bool RequireHarborForLaunch { get; set; } = false;
+
+        /// <summary>
         /// AES-256 encryption key for session tokens.
         /// Auto-generated if not provided.
         /// </summary>

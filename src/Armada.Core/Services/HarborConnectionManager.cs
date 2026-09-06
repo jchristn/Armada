@@ -361,6 +361,34 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Whether an eligible Harbor owned by the given user is currently connected and able to serve the
+        /// request. Used to enforce the "require the requesting user's Harbor" launch policy: only a Harbor
+        /// whose owner matches the user counts (shared or other users' Harbors do not).
+        /// </summary>
+        /// <param name="userId">Owning user identifier the Harbor must belong to (null matches Harbors with no
+        /// owner, e.g. a local single-user install).</param>
+        /// <param name="request">Routing inputs (runtime/capabilities/capacity).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when at least one Harbor owned by the user is eligible right now.</returns>
+        public async Task<bool> HasEligibleHarborForUserAsync(string? userId, HarborRoutingRequest request, CancellationToken token = default)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+
+            AuthContext adminAuth = new AuthContext { IsAuthenticated = true, IsAdmin = true };
+            List<Harbor> all = await _Harbors.EnumerateAsync(adminAuth, token).ConfigureAwait(false);
+
+            List<Harbor> candidates = new List<Harbor>();
+            foreach (Harbor harbor in all)
+            {
+                if (String.Equals(harbor.UserId, userId, StringComparison.Ordinal)) candidates.Add(harbor);
+            }
+
+            HarborRouter router = new HarborRouter();
+            HarborRoutingDecision decision = router.Select(candidates, IsConnected, InFlightJobs, request);
+            return decision.Success;
+        }
+
+        /// <summary>
         /// Stop a delegated job by the process id the Harbor reported. No-op when the process id is unknown.
         /// </summary>
         /// <param name="processId">Host process id.</param>

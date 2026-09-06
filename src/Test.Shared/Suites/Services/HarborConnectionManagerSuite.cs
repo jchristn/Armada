@@ -62,6 +62,31 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("ten_cm", stored.TenantId);
             }));
 
+            cases.Add(CaseAsync("eligible_harbor_is_scoped_to_the_owning_user", "HasEligibleHarborForUserAsync matches only the owning user's connected Harbor", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                HarborService harbors = new HarborService(testDb.Driver, CreateLogging());
+                HarborConnectionManager manager = new HarborConnectionManager(harbors, CreateLogging(), null);
+
+                HarborHandshake handshake = new HarborHandshake
+                {
+                    HarborId = "hbr_userscoped",
+                    Name = "Rig",
+                    ProtocolVersion = HarborProtocol.Version,
+                    MaxConcurrentJobs = 4,
+                    Capabilities = new List<HarborCapability> { new HarborCapability { Name = "ClaudeCode", Available = true } }
+                };
+                await manager.OnHandshakeAsync(handshake, "ten_us", "usr_owner", NoopSend).ConfigureAwait(false);
+
+                Armada.Core.Services.HarborRoutingRequest request = new Armada.Core.Services.HarborRoutingRequest { RequestedRuntime = "ClaudeCode" };
+
+                bool owner = await manager.HasEligibleHarborForUserAsync("usr_owner", request).ConfigureAwait(false);
+                bool other = await manager.HasEligibleHarborForUserAsync("usr_other", request).ConfigureAwait(false);
+
+                AssertTrue(owner, "Expected the owning user's connected Harbor to be eligible.");
+                AssertTrue(!other, "Expected a different user to have no eligible Harbor.");
+            }));
+
             cases.Add(CaseAsync("heartbeat_marks_seen_and_tracks_jobs", "OnMessageAsync heartbeat advances liveness and job set", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

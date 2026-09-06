@@ -246,6 +246,16 @@ namespace Armada.Server
             _Admiral.OnCaptureDiff = _MissionLanding.HandleCaptureDiffAsync;
             _Admiral.OnIsProcessExitHandled = _AgentLifecycle.IsProcessExitHandled;
             missionService.OnGetMissionOutput = _AgentLifecycle.GetAndClearMissionOutput;
+
+            // When RequireHarborForLaunch is set, defer a mission until an eligible Harbor owned by the
+            // requesting user is connected -- never run it in-process or on another user's Harbor.
+            missionService.CanAssignMissionAsync = async (mission, captain) =>
+            {
+                if (!_Settings.RequireHarborForLaunch) return true;
+                if (_HarborConnectionManager == null) return false;
+                Armada.Core.Services.HarborRoutingRequest request = new Armada.Core.Services.HarborRoutingRequest { RequestedRuntime = captain.Runtime.ToString() };
+                return await _HarborConnectionManager.HasEligibleHarborForUserAsync(mission.UserId, request).ConfigureAwait(false);
+            };
             _Admiral.OnMissionComplete = _MissionLanding.HandleMissionCompleteAsync;
             _Admiral.OnVoyageComplete = _MissionLanding.HandleVoyageCompleteAsync;
             _Admiral.OnReconcilePullRequest = _MissionLanding.HandleReconcilePullRequestAsync;

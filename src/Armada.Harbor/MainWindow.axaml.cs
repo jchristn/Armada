@@ -244,12 +244,14 @@ namespace Armada.Harbor
 
         private Dictionary<string, string>? BuildHeaders()
         {
-            if (string.IsNullOrWhiteSpace(_Settings.AccessKey)) return null;
-            return new Dictionary<string, string>
-            {
-                { "x-access-key", _Settings.AccessKey },
-                { "x-secret-key", _Settings.Secret }
-            };
+            Dictionary<string, string> headers = new Dictionary<string, string>();
+            if (!string.IsNullOrWhiteSpace(_Settings.AccessKey)) headers["x-access-key"] = _Settings.AccessKey;
+            if (!string.IsNullOrWhiteSpace(_Settings.Secret)) headers["x-secret-key"] = _Settings.Secret;
+            // Advertise the owner so the Admiral registers this as the user's/tenant's Harbor (used by
+            // user-scoped launch policies).
+            if (!string.IsNullOrWhiteSpace(_Settings.UserId)) headers["x-user-guid"] = _Settings.UserId;
+            if (!string.IsNullOrWhiteSpace(_Settings.TenantId)) headers["x-tenant-guid"] = _Settings.TenantId;
+            return headers.Count > 0 ? headers : null;
         }
 
         private void AppendInfo(string message)
