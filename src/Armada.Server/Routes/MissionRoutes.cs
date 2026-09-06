@@ -1078,16 +1078,46 @@ namespace Armada.Server.Routes
 
                 bool success = await _landingService.RetryLandingAsync(id, ctx.TenantId).ConfigureAwait(false);
                 mission = await _database.Missions.ReadAsync(id).ConfigureAwait(false);
-                mission = await _database.Missions.ReadAsync(id).ConfigureAwait(false);
                 if (!success)
                 {
                     string reason = "Landing failed.";
                     if (mission != null)
                     {
-                        if (String.IsNullOrEmpty(mission.BranchName)) reason = "Mission has no branch name -- the branch may have been cleaned up.";
-                        else if (String.IsNullOrEmpty(mission.VesselId)) reason = "Mission has no vessel assigned.";
-                        else if (mission.Status == MissionStatusEnum.LandingFailed) reason = "Rebase or merge failed -- the branch may have conflicts with the target branch.";
-                        else if (mission.Status == MissionStatusEnum.WorkProduced) reason = "Landing handler failed -- check server logs for details.";
+                        // Resolve the effective landing mode the same way the landing handler does:
+                        // voyage > vessel > global default.
+                        Vessel? landingVessel = String.IsNullOrEmpty(mission.VesselId) ? null : await _database.Vessels.ReadAsync(mission.VesselId).ConfigureAwait(false);
+                        Voyage? landingVoyage = String.IsNullOrEmpty(mission.VoyageId) ? null : await _database.Voyages.ReadAsync(mission.VoyageId).ConfigureAwait(false);
+                        LandingModeEnum? effectiveMode = landingVoyage?.LandingMode ?? landingVessel?.LandingMode ?? _settings.LandingMode;
+                        string branch = String.IsNullOrEmpty(mission.BranchName) ? "(unknown)" : mission.BranchName;
+
+                        if (String.IsNullOrEmpty(mission.BranchName))
+                        {
+                            reason = "Mission has no branch name -- the branch may have been cleaned up, so there is nothing to land.";
+                        }
+                        else if (String.IsNullOrEmpty(mission.VesselId))
+                        {
+                            reason = "Mission has no vessel assigned, so its branch cannot be landed.";
+                        }
+                        else if (!effectiveMode.HasValue || effectiveMode.Value == LandingModeEnum.None)
+                        {
+                            // Not a failure: there is simply no automatic landing configured. The work is done
+                            // and the branch is available for manual integration.
+                            reason = "No automatic landing is configured for this "
+                                + (effectiveMode.HasValue ? "vessel (landing mode: None)" : "vessel, voyage, or Admiral (landing mode: not set)")
+                                + ". The mission's work is complete and its branch '" + branch + "' is available in the repository for manual integration. "
+                                + "To land it automatically, set a landing mode (Local Merge, Pull Request, or Merge Queue) on the vessel or voyage and retry; "
+                                + "or merge the branch yourself from the vessel's Manage Branches view.";
+                        }
+                        else if (mission.Status == MissionStatusEnum.LandingFailed)
+                        {
+                            reason = "Landing for mode " + effectiveMode.Value + " failed to rebase or merge branch '" + branch
+                                + "' onto the target -- the branch likely has conflicts that must be resolved before it can land.";
+                        }
+                        else if (mission.Status == MissionStatusEnum.WorkProduced)
+                        {
+                            reason = "Landing for mode " + effectiveMode.Value + " did not complete for branch '" + branch
+                                + "'. The work is preserved as WorkProduced. Check the [MissionLanding] entries in the server log for the specific git or provider error.";
+                        }
                     }
                     req.Http.Response.StatusCode = 409;
                     return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = reason };
