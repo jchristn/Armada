@@ -36,6 +36,7 @@ Machine-readable OpenAPI is available at `/openapi.json`, and the interactive Sw
   - [Events](#events)
   - [Docks](#docks)
   - [Merge Queue](#merge-queue)
+  - [Harbors](#harbors)
   - [Workflow Profiles](#workflow-profiles)
   - [Check Runs](#check-runs)
   - [Environments](#environments)
@@ -166,6 +167,10 @@ Operational entities persist both `TenantId` and `UserId`. Those ownership colum
 | `/api/v1/signals` | ALL | Authenticated | Tenant-scoped |
 | `/api/v1/events` | ALL | Authenticated | Tenant-scoped |
 | `/api/v1/merge-queue` | ALL | Authenticated | Tenant-scoped |
+| `/api/v1/harbors` | GET/POST | Authenticated | Tenant-scoped. List returns a plain array. |
+| `/api/v1/harbors/{id}` | GET/PUT/DELETE | Authenticated | Read, update (`name`, `maxConcurrentJobs`, `enabled`), or delete one Harbor in scope |
+| `/api/v1/harbors/{id}/enable` | POST | Authenticated | Enable one Harbor |
+| `/api/v1/harbors/{id}/disable` | POST | Authenticated | Disable one Harbor; it keeps its docks but receives no new missions |
 | `/api/v1/workflow-profiles` | GET/POST/PUT/DELETE | Authenticated / TenantAdmin | Reads are tenant-scoped for any authenticated user. Mutations require tenant admin. |
 | `/api/v1/workflow-profiles/validate` | POST | Authenticated | Validate a workflow profile without saving it |
 | `/api/v1/workflow-profiles/resolve/vessels/{vesselId}` | GET | Authenticated | Resolve the active workflow profile for one vessel |
@@ -2396,6 +2401,75 @@ Batch purge multiple terminal merge queue entries from the database by ID. Retur
 ```
 
 Skipped entries include the entry ID and the reason (e.g., "Not found" or "Not in terminal state").
+
+---
+
+### Harbors
+
+Harbor records register host-side runners that let the Admiral run detached (in Docker or on another host) while agent CLIs, git, and worktrees execute on a developer machine over an authenticated client-to-server link. These routes manage the Harbor registrations only -- creating, reading, updating, enabling, disabling, and deleting them. Runtime state such as `ConnectionStatus`, `LastSeenUtc`, `ProtocolVersion`, `OsPlatform`, and `Architecture` is reported by the link and is not operator-editable; the operator-editable fields are `Name`, `MaxConcurrentJobs`, and `Enabled`. The live link transport that carries host work is still emerging (see [docs/HARBOR.md](HARBOR.md) and [docs/HARBOR_PROTOCOL.md](HARBOR_PROTOCOL.md)); these management routes exist today.
+
+#### GET /api/v1/harbors
+
+List Harbors in the caller scope. Returns a plain array, not a paged envelope.
+
+- Response: `200 OK` - `Harbor[]`
+
+#### POST /api/v1/harbors
+
+Register one Harbor. Only `name`, `maxConcurrentJobs`, and `enabled` are honored on create; all other fields are managed by the link.
+
+```json
+{
+  "name": "workstation-01",
+  "maxConcurrentJobs": 4,
+  "enabled": true
+}
+```
+
+- Response: `201 Created` - `Harbor`
+
+#### GET /api/v1/harbors/{id}
+
+Read one Harbor.
+
+- Response: `200 OK` - `Harbor`
+- Errors: `404 Not Found`
+
+#### PUT /api/v1/harbors/{id}
+
+Update one Harbor. Only `name`, `maxConcurrentJobs`, and `enabled` are updated; runtime state reported by the link is preserved server-side.
+
+```json
+{
+  "name": "workstation-01",
+  "maxConcurrentJobs": 8,
+  "enabled": true
+}
+```
+
+- Response: `200 OK` - `Harbor`
+- Errors: `404 Not Found`
+
+#### DELETE /api/v1/harbors/{id}
+
+Delete one Harbor registration.
+
+- Response: `204 No Content`
+- Errors: `404 Not Found`
+
+#### POST /api/v1/harbors/{id}/enable
+
+Enable one Harbor so the router may route new missions to it.
+
+- Response: `200 OK` - `Harbor`
+- Errors: `404 Not Found`
+
+#### POST /api/v1/harbors/{id}/disable
+
+Disable one Harbor. A disabled Harbor keeps its docks but receives no new missions.
+
+- Response: `200 OK` - `Harbor`
+- Errors: `404 Not Found`
 
 ---
 
@@ -4928,6 +5002,65 @@ A git worktree provisioned for a captain. Docks are managed internally by the Ad
 
 ---
 
+#### Harbor
+
+A registered host-side runner (see the [Harbors](#harbors) endpoints). Only `Name`, `MaxConcurrentJobs`, and `Enabled` are operator-editable; the remaining runtime fields are reported by the link and preserved server-side.
+
+```json
+{
+  "id": "hbr_abc123",
+  "tenantId": "default",
+  "userId": "default",
+  "name": "workstation-01",
+  "capabilities": [
+    { "name": "claude", "available": true, "detail": "claude-code 1.0" },
+    { "name": "git", "available": true, "detail": null }
+  ],
+  "connectionStatus": "Connected",
+  "maxConcurrentJobs": 4,
+  "enabled": true,
+  "protocolVersion": "1.0",
+  "osPlatform": "Windows",
+  "architecture": "X64",
+  "lastSeenUtc": "2026-03-07T12:00:00Z",
+  "lastConnectedUtc": "2026-03-07T11:30:00Z",
+  "createdUtc": "2026-03-07T11:00:00Z",
+  "lastUpdateUtc": "2026-03-07T12:00:00Z"
+}
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `id` | string | auto-generated | Unique ID with `hbr_` prefix |
+| `tenantId` | string? | null | Owning tenant ID |
+| `userId` | string? | null | Owning user ID |
+| `name` | string | `"New Harbor"` | Human-facing Harbor name (operator-editable) |
+| `capabilities` | array | [] | Advertised [HarborCapability](#harborcapability) entries (runtimes and host tools) |
+| `connectionStatus` | [HarborConnectionStatusEnum](#harborconnectionstatusenum) | `Unknown` | Connection state as seen by the Admiral |
+| `maxConcurrentJobs` | int | 4 | Maximum concurrent jobs the Harbor accepts (clamped to a minimum of 1, operator-editable) |
+| `enabled` | bool | true | Whether the Harbor is enabled for routing (operator-editable). A disabled Harbor keeps its docks but receives no new missions. |
+| `protocolVersion` | string? | null | Protocol version reported at handshake |
+| `osPlatform` | string? | null | Operating-system platform reported at handshake (e.g. `Windows`, `Linux`, `macOS`) |
+| `architecture` | string? | null | Processor architecture reported at handshake (e.g. `X64`, `Arm64`) |
+| `lastSeenUtc` | datetime? | null | Last heartbeat or message timestamp (UTC) |
+| `lastConnectedUtc` | datetime? | null | Last link-establishment timestamp (UTC) |
+| `createdUtc` | datetime | now | Creation timestamp (UTC) |
+| `lastUpdateUtc` | datetime | now | Last update timestamp (UTC) |
+
+---
+
+#### HarborCapability
+
+One capability a Harbor advertises at handshake.
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | string | Capability name (e.g. a runtime like `claude` or a host tool like `git`) |
+| `available` | bool | Whether the capability is currently available on the host |
+| `detail` | string? | Optional human-readable detail (e.g. a version string), or null |
+
+---
+
 #### Playbook
 
 A reusable tenant-scoped markdown document selected during dispatch.
@@ -5159,6 +5292,17 @@ All enumerations serialize as strings in JSON (e.g., `"InProgress"`, not `2`).
 | `Failed` | Tests failed |
 | `Landed` | Successfully merged into target branch |
 | `Cancelled` | Removed from queue |
+
+---
+
+#### HarborConnectionStatusEnum
+
+| Value | Description |
+|---|---|
+| `Unknown` | No link has been established yet, or the state is not yet known |
+| `Connected` | The Harbor currently has a live link to the Admiral |
+| `Degraded` | The link is present but impaired (e.g. missed heartbeats) |
+| `Disconnected` | The Harbor is registered but has no live link |
 
 ---
 

@@ -4,6 +4,22 @@ All notable changes to Armada are documented in this file.
 
 ---
 
+## Unreleased
+
+Focus: Harbors -- detaching the Admiral from the developer's machine so it can run standalone (Local mode, today's default) or containerized/remote (Split mode) while agent CLIs, git, and worktrees keep executing on the host where the repositories and tool logins live.
+
+### Harbors (host runners)
+- Added the `Harbor` entity (`hbr_`): a registered host-side runner with advertised capabilities, connection status, capacity, and handshake-reported platform/architecture/protocol metadata. Persisted across SQLite, PostgreSQL, MySQL, and SQL Server (schema migration 62 adds the `harbors` and `harbor_capabilities` tables; schema migration 63 adds the `harbor_id`, `assigned_harbor_id`, `preferred_harbor_id`, and `required_capabilities` routing/affinity columns to docks, missions, and vessels).
+- Harbor management REST API under `/api/v1/harbors`: list (plain array), register, read, update (`name`, `maxConcurrentJobs`, `enabled` only), delete, and enable/disable. Runtime state reported by the link is preserved server-side and is not operator-editable.
+- Harbor management MCP tools: `get_harbor`, `create_harbor`, `update_harbor`, `delete_harbor`, and `set_harbor_enabled`, plus a new `harbors` entityType on the `enumerate` tool.
+- Multi-Harbor router (`HarborRouter`) with dock affinity: the routing decision is made once when a dock is provisioned and pinned afterward, so a mission's later host operations stay on the Harbor that owns its dock. Selection precedence is affinity, then an eligible preferred Harbor (`vessel.preferredHarborId`), then capability (`vessel.requiredCapabilities` and the requested runtime), then least load under `maxConcurrentJobs`.
+- Documented the Harbor link wire protocol in `docs/HARBOR_PROTOCOL.md`: an authenticated, client-to-server WebSocket the Harbor dials out to the Admiral, versioned by `HarborProtocol.Version` (1.0), carrying polymorphic `HarborMessage` frames for launch/stdin/kill/git and handshake/started/output/exited/gitResult/heartbeat/error.
+- Added the `Armada.Harbor` host-runner app (Avalonia), configured from `~/.armada-harbor/settings.json` (`serverLinkUrl`, `dashboardUrl`, `harborId`, `name`, `capabilities`, `maxConcurrentJobs`, `accessKey`/`secret`).
+- New guide `docs/HARBOR.md` covering Local vs Split mode, the link, installing and running the app, the management surfaces, and dock-affinity routing.
+- Status: the Harbor entity, management REST + MCP APIs, wire-protocol contract, and host-runner app exist today; the live split-mode link transport (the server-side WebSocket endpoint that accepts Harbor links, credential auth on the upgrade, and remote captain-process delegation) is still being rolled out.
+
+---
+
 ## v0.9.0
 
 Focus: stickiness and reliability -- making Armada a daily driver through per-project customization, while eliminating the stuck-dock and dangling-handoff failure modes and hardening the orchestrator for multi-instance operation.

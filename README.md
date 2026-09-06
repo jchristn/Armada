@@ -64,6 +64,7 @@ Everything else in Armada exists to support that: isolated worktrees, parallel d
 - **Configurable and extensible workflows.** Prompt templates, personas, and pipelines are user-controlled, so you can adapt the system to your project instead of fitting your project to the built-ins.
 - **Reusable playbooks at dispatch time.** Store markdown guidance such as `CSHARP_BACKEND_ARCHITECTURE.md`, manage it in the dashboard, and select it per voyage or mission with inline or file-based delivery modes.
 - **Works with the agents you already have.** Claude Code, Codex, Gemini, Cursor, Mux, and OpenCode -- pluggable runtime system.
+- **Harbors (host runners).** Run the Admiral standalone on your machine (Local mode, the default) or detached in Docker or on another host (Split mode) while agent CLIs, git, and worktrees execute where your repositories and tool logins live, over an authenticated client-to-server link. The Harbor entity, its management REST and MCP APIs, the wire protocol, and the host-runner app ship today; the live split-mode link transport is still being rolled out. See [docs/HARBOR.md](docs/HARBOR.md) and [docs/HARBOR_PROTOCOL.md](docs/HARBOR_PROTOCOL.md).
 - **Per-step captain selection.** Give each persona a default captain and dictate which captain runs each pipeline step at dispatch, with a capability-tier fallback when that captain is busy. See [docs/CAPTAIN_ROUTING.md](docs/CAPTAIN_ROUTING.md).
 - **Guided setup in the dashboard.** First-run configuration can stay inside the setup wizard instead of bouncing between unrelated pages.
 - **Internationalized dashboard UX.** Login, shared shell UI, list/detail/admin routes, setup flows, notifications, pagination, server management, and legacy embedded dashboard surfaces support live language selection and locale-aware formatting.
@@ -480,7 +481,7 @@ See [Claude Code as Orchestrator](docs/CLAUDE_CODE_AS_ORCHESTRATOR.md) for setup
 
 ## Architecture
 
-Armada is a C#/.NET solution with five main projects:
+Armada is a C#/.NET solution with these main projects:
 
 | Project | Description |
 |---------|-------------|
@@ -489,6 +490,7 @@ Armada is a C#/.NET solution with five main projects:
 | **Armada.Server** | Admiral process: REST API + WebSocket ([Watson](https://github.com/jchristn/watson)), MCP server ([Voltaic](https://github.com/jchristn/voltaic)), embedded dashboard |
 | **Armada.Dashboard** | Standalone React dashboard for Docker/production deployments |
 | **Armada.Helm** | CLI ([Spectre.Console](https://spectreconsole.net/)), thin HTTP client to Admiral |
+| **Armada.Harbor** | Avalonia host-runner app that opens an authenticated link to the Admiral and executes agent processes, git, and worktrees on the developer's machine (see [docs/HARBOR.md](docs/HARBOR.md)) |
 
 ### Key Concepts
 

@@ -104,6 +104,12 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [purge_merge_queue](#purge_merge_queue)
     - [purge_merge_entry](#purge_merge_entry)
     - [purge_merge_entries](#purge_merge_entries)
+  - **Harbors**
+    - [get_harbor](#get_harbor)
+    - [create_harbor](#create_harbor)
+    - [update_harbor](#update_harbor)
+    - [delete_harbor](#delete_harbor)
+    - [set_harbor_enabled](#set_harbor_enabled)
   - **Objectives**
     - [get_objective](#get_objective)
     - [create_objective](#create_objective)
@@ -177,6 +183,7 @@ Armada exposes a full MCP server that allows AI agents and MCP-compatible client
 - Send signals to captains
 - Stop individual captains or all captains (emergency stop)
 - Manage the merge queue (enqueue, cancel, process, inspect)
+- Register and manage Harbors (host runners): inspect, create, update, enable/disable, and delete them
 - Manage model endpoints (external embedding/inference providers), validate them with a real request, and sweep their health
 
 MCP does **not** currently expose the newer dashboard/system helper REST surfaces such as:
@@ -500,7 +507,7 @@ No parameters required.
 
 ### enumerate
 
-Paginated enumeration of any entity type with filtering and sorting. This is the MCP equivalent of the `POST /api/v1/{entity}/enumerate` REST endpoints. Returns paginated results with total counts, page metadata, and query timing. Supports: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, playbooks, personas, prompt_templates, pipelines, workflow_profiles, check_runs, releases, model_endpoints.
+Paginated enumeration of any entity type with filtering and sorting. This is the MCP equivalent of the `POST /api/v1/{entity}/enumerate` REST endpoints. Returns paginated results with total counts, page metadata, and query timing. Supports: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, prompt_templates, pipelines, workflow_profiles, check_runs, releases, model_endpoints.
 
 **Input Schema:**
 
@@ -508,7 +515,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 {
   "type": "object",
   "properties": {
-    "entityType": { "type": "string", "description": "Entity type to enumerate (fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, playbooks, personas, prompt_templates, pipelines, workflow_profiles, check_runs, releases, model_endpoints)" },
+    "entityType": { "type": "string", "description": "Entity type to enumerate (fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, prompt_templates, pipelines, workflow_profiles, check_runs, releases, model_endpoints)" },
     "pageNumber": { "type": "integer", "description": "Page number (1-based, default 1)" },
     "pageSize": { "type": "integer", "description": "Results per page (default 10, max 1000)" },
     "order": { "type": "string", "description": "Sort order: CreatedAscending, CreatedDescending" },
@@ -545,6 +552,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 | `signals` | `signalType`, `captainId`, `toCaptainId`, `unreadOnly`, `createdAfter`, `createdBefore` |
 | `events` | `eventType`, `captainId`, `missionId`, `vesselId`, `voyageId`, `createdAfter`, `createdBefore` |
 | `merge_queue` | `status` (Queued/Testing/Passed/Failed/Landed/Cancelled), `createdAfter`, `createdBefore` |
+| `harbors` | `createdAfter`, `createdBefore` (current MCP enumeration is primarily paginated browse) |
 | `personas` | `createdAfter`, `createdBefore` |
 | `playbooks` | `createdAfter`, `createdBefore` |
 | `prompt_templates` | `createdAfter`, `createdBefore` |
@@ -2529,6 +2537,144 @@ Returns `{ "Error": "entryIds is required and must not be empty" }` if no IDs ar
 
 ---
 
+### get_harbor
+
+Inspect one registered Harbor (host runner) by ID, including its advertised capabilities and connection status.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "harborId": { "type": "string", "description": "Harbor ID (hbr_ prefix)" }
+  },
+  "required": ["harborId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `harborId` | string | Yes | Harbor ID (prefix `hbr_`) |
+
+**Response:** [Harbor](#harbor) object, or `{ "Error": "Harbor not found" }`.
+
+---
+
+### create_harbor
+
+Pre-register a Harbor. A Harbor also self-registers on first handshake; use this to reserve a name and capacity before it connects. Only `name`, `maxConcurrentJobs`, and `enabled` are honored; all other fields are managed by the link.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": { "type": "string", "description": "Human-facing Harbor name" },
+    "maxConcurrentJobs": { "type": "integer", "description": "Maximum concurrent jobs (default 4)" },
+    "enabled": { "type": "boolean", "description": "Whether the Harbor is enabled for routing (default true)" }
+  },
+  "required": ["name"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Human-facing Harbor name |
+| `maxConcurrentJobs` | int | No | Maximum concurrent jobs (default 4, clamped to a minimum of 1) |
+| `enabled` | bool | No | Whether the Harbor is enabled for routing (default true) |
+
+**Response:** The newly created [Harbor](#harbor) object, or `{ "Error": "..." }` on invalid input.
+
+---
+
+### update_harbor
+
+Update a Harbor's operator-editable fields (`name`, `maxConcurrentJobs`, `enabled`). Runtime state reported by the link is preserved server-side.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "harborId": { "type": "string", "description": "Harbor ID (hbr_ prefix)" },
+    "name": { "type": "string", "description": "Human-facing Harbor name" },
+    "maxConcurrentJobs": { "type": "integer", "description": "Maximum concurrent jobs" },
+    "enabled": { "type": "boolean", "description": "Whether the Harbor is enabled for routing" }
+  },
+  "required": ["harborId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `harborId` | string | Yes | Harbor ID (prefix `hbr_`) |
+| `name` | string | No | New Harbor name. Omit to keep the current value. |
+| `maxConcurrentJobs` | int | No | New concurrency cap. Omit to keep the current value. |
+| `enabled` | bool | No | New enabled flag. Omit to keep the current value. |
+
+**Response:** The updated [Harbor](#harbor) object, or `{ "Error": "Harbor not found" }`.
+
+---
+
+### delete_harbor
+
+Delete a Harbor registration by ID.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "harborId": { "type": "string", "description": "Harbor ID (hbr_ prefix)" }
+  },
+  "required": ["harborId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `harborId` | string | Yes | Harbor ID (prefix `hbr_`) |
+
+**Response:**
+
+```json
+{ "Deleted": true, "HarborId": "hbr_abc123" }
+```
+
+Returns `{ "Error": "..." }` if the Harbor does not exist.
+
+---
+
+### set_harbor_enabled
+
+Enable or disable a Harbor for routing. A disabled Harbor keeps its docks but receives no new missions.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "harborId": { "type": "string", "description": "Harbor ID (hbr_ prefix)" },
+    "enabled": { "type": "boolean", "description": "Whether the Harbor is enabled for routing" }
+  },
+  "required": ["harborId", "enabled"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `harborId` | string | Yes | Harbor ID (prefix `hbr_`) |
+| `enabled` | bool | Yes | `true` to enable, `false` to disable |
+
+**Response:** The updated [Harbor](#harbor) object, or `{ "Error": "..." }`.
+
+---
+
 ### get_objective
 
 Inspect one scoped objective or intake-style record, including linked vessels, planning sessions, refinement sessions, voyages, checks, releases, deployments, incidents, and acceptance criteria.
@@ -3949,6 +4095,36 @@ Paginated result wrapper returned by `enumerate`.
 | `testStartedUtc` | string \| null | ISO 8601 test start timestamp |
 | `completedUtc` | string \| null | ISO 8601 completion timestamp |
 
+#### Harbor
+
+A registered host-side runner. Only `name`, `maxConcurrentJobs`, and `enabled` are operator-editable via MCP; the remaining runtime fields are reported by the link.
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Harbor ID (prefix `hbr_`) |
+| `tenantId` | string \| null | Owning tenant ID |
+| `userId` | string \| null | Owning user ID |
+| `name` | string | Human-facing Harbor name |
+| `capabilities` | array | Advertised [HarborCapability](#harborcapability) entries |
+| `connectionStatus` | string | [HarborConnectionStatusEnum](#harborconnectionstatusenum) value |
+| `maxConcurrentJobs` | int | Maximum concurrent jobs the Harbor accepts (default 4, minimum 1) |
+| `enabled` | bool | Whether the Harbor is enabled for routing (default true) |
+| `protocolVersion` | string \| null | Protocol version reported at handshake |
+| `osPlatform` | string \| null | OS platform reported at handshake (e.g. `Windows`, `Linux`, `macOS`) |
+| `architecture` | string \| null | Processor architecture reported at handshake (e.g. `X64`, `Arm64`) |
+| `lastSeenUtc` | string \| null | ISO 8601 last heartbeat or message timestamp |
+| `lastConnectedUtc` | string \| null | ISO 8601 last link-establishment timestamp |
+| `createdUtc` | string | ISO 8601 creation timestamp |
+| `lastUpdateUtc` | string | ISO 8601 last update timestamp |
+
+#### HarborCapability
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | string | Capability name (e.g. a runtime like `claude` or a host tool like `git`) |
+| `available` | bool | Whether the capability is currently available on the host |
+| `detail` | string \| null | Optional human-readable detail (e.g. a version string) |
+
 #### PromptTemplate
 
 | Field | Type | Description |
@@ -4133,6 +4309,15 @@ Returned by `health_check_model_endpoints`.
 | `Failed` | Tests failed |
 | `Landed` | Successfully merged to target |
 | `Cancelled` | Removed from queue |
+
+#### HarborConnectionStatusEnum
+
+| Value | Description |
+|---|---|
+| `Unknown` | No link established yet, or the state is not yet known |
+| `Connected` | The Harbor currently has a live link to the Admiral |
+| `Degraded` | The link is present but impaired (e.g. missed heartbeats) |
+| `Disconnected` | The Harbor is registered but has no live link |
 
 #### AgentRuntimeEnum
 

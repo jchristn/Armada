@@ -483,18 +483,18 @@ Keep standalone identical while everything routes through the new interface.
 |----|------|--------|
 | DOC-01..08 | README, CHANGELOG, API docs, deploy guide | not started |
 
-- [ ] DOC-01 `README.md`: add the Harbor runner and the two deployment modes; keep the "zero-install
+- [x] DOC-01 `README.md`: add the Harbor runner and the two deployment modes; keep the "zero-install
   standalone" promise accurate; add a "server in Docker + host Harbor" quickstart.
-- [ ] DOC-02 `CHANGELOG.md`: new 0.10.0 entry covering the runner, the entity/migration v62, the new
+- [x] DOC-02 `CHANGELOG.md`: new 0.10.0 entry covering the runner, the entity/migration v62, the new
   APIs, and the Harbor app.
-- [ ] DOC-03 `docs/REST_API.md`: document every new Harbor route (method, path, params, request/response
+- [x] DOC-03 `docs/REST_API.md`: document every new Harbor route (method, path, params, request/response
   bodies, status codes, auth, examples), including the once-only secret on mint.
-- [ ] DOC-04 `docs/MCP_API.md`: document the new Harbor tools and the `harbors` enumerate type.
-- [ ] DOC-05 Postman collection under `assets/postman/`: a "Harbors" folder with documented requests,
+- [x] DOC-04 `docs/MCP_API.md`: document the new Harbor tools and the `harbors` enumerate type.
+- [x] DOC-05 Postman collection under `assets/postman/`: a "Harbors" folder with documented requests,
   variables for base URL/port/token, in sync with REST_API.
 - [ ] DOC-06 `DOCKERHUB_README.md`: reflect the split-mode deployment and the Harbor requirement, with
   explicit asset image URLs.
-- [ ] DOC-07 `docs/HARBOR.md`: install and run the Harbor app, mint and configure a credential, auth and
+- [x] DOC-07 `docs/HARBOR.md`: install and run the Harbor app, mint and configure a credential, auth and
   TLS expectations, troubleshooting the link, and the local-vs-split decision guide.
 - [ ] DOC-08 `docs/HARBOR_PROTOCOL.md` (from CON-07) kept current with the shipped message set.
 

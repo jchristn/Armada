@@ -93,6 +93,11 @@
       "type": "string"
     },
     {
+      "key": "harborId",
+      "value": "",
+      "type": "string"
+    },
+    {
       "key": "proxyBaseUrl",
       "value": "http://localhost:7893",
       "type": "string"
@@ -5017,6 +5022,200 @@
               "body": "{\n  \"Status\": \"purged\",\n  \"EntriesPurged\": 2,\n  \"Skipped\": []\n}"
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "Harbors",
+      "description": "Registered host runners. A Harbor lets the Admiral run detached (in Docker or on another host) while agent CLIs, git, and worktrees execute on a developer machine over an authenticated client-to-server link. These routes manage the Harbor registrations only; runtime state (connectionStatus, lastSeenUtc, protocolVersion, osPlatform, architecture) is reported by the link. Operator-editable fields are name, maxConcurrentJobs, and enabled. The live link transport is still emerging.",
+      "item": [
+        {
+          "name": "List Harbors",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/harbors",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "harbors"
+              ]
+            },
+            "description": "Returns all registered Harbors visible to the caller as a plain array (not a paged envelope)."
+          },
+          "response": [
+            {
+              "name": "OK",
+              "status": "OK",
+              "code": 200,
+              "body": "[\n  {\n    \"id\": \"hbr_abc123\",\n    \"name\": \"workstation-01\",\n    \"connectionStatus\": \"Connected\",\n    \"maxConcurrentJobs\": 4,\n    \"enabled\": true\n  }\n]"
+            }
+          ]
+        },
+        {
+          "name": "Register Harbor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('harborId', json.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"workstation-01\",\n  \"maxConcurrentJobs\": 4,\n  \"enabled\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/harbors",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "harbors"
+              ]
+            },
+            "description": "Pre-registers a Harbor. Only name, maxConcurrentJobs, and enabled are honored; all other fields are managed by the link. Auto-saves the ID to the harborId collection variable."
+          },
+          "response": [
+            {
+              "name": "Created",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"id\": \"hbr_abc123\",\n  \"name\": \"workstation-01\",\n  \"connectionStatus\": \"Unknown\",\n  \"maxConcurrentJobs\": 4,\n  \"enabled\": true,\n  \"createdUtc\": \"2026-03-07T12:00:00Z\",\n  \"lastUpdateUtc\": \"2026-03-07T12:00:00Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Harbor",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/harbors/{{harborId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "harbors",
+                "{{harborId}}"
+              ]
+            },
+            "description": "Returns a single Harbor by ID."
+          }
+        },
+        {
+          "name": "Update Harbor",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"workstation-01\",\n  \"maxConcurrentJobs\": 8,\n  \"enabled\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/harbors/{{harborId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "harbors",
+                "{{harborId}}"
+              ]
+            },
+            "description": "Updates operator-editable fields (name, maxConcurrentJobs, enabled) only. Runtime state reported by the link is preserved server-side."
+          }
+        },
+        {
+          "name": "Delete Harbor",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/harbors/{{harborId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "harbors",
+                "{{harborId}}"
+              ]
+            },
+            "description": "Deletes one Harbor registration. Returns 204 No Content on success."
+          }
+        },
+        {
+          "name": "Enable Harbor",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/harbors/{{harborId}}/enable",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "harbors",
+                "{{harborId}}",
+                "enable"
+              ]
+            },
+            "description": "Enables a Harbor so the router may dispatch new missions to it."
+          }
+        },
+        {
+          "name": "Disable Harbor",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/harbors/{{harborId}}/disable",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "harbors",
+                "{{harborId}}",
+                "disable"
+              ]
+            },
+            "description": "Disables a Harbor. A disabled Harbor keeps its docks but receives no new missions."
+          }
         }
       ]
     },
