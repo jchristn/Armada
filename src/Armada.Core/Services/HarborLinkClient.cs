@@ -2,16 +2,18 @@ namespace Armada.Core.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Threading.Channels;
     using Armada.Core.Harbor;
     using Armada.Core.Models;
     using SyslogLogging;
 
     /// <summary>
     /// The Harbor-side runner brain: dials the Admiral over a transport, sends its handshake, heartbeats,
-    /// and carries out delegated host operations. Git/gh requests are executed through the supplied
-    /// <see cref="IHostCommandExecutor"/>; captain-launch requests are acknowledged with an explanatory error
-    /// until the process-launch executor is present. The protocol logic is transport-agnostic so it can be
-    /// exercised without a live socket.
+    /// and carries out delegated host operations. Git/gh requests run through the supplied
+    /// <see cref="IHostCommandExecutor"/>; captain launches run through the supplied
+    /// <see cref="IHarborJobRunner"/> (when present) with their lifecycle streamed back. Outbound messages
+    /// are sent through a single ordered pump so streamed output cannot interleave or reorder. The protocol
+    /// logic is transport-agnostic so it can be exercised without a live socket.
     /// </summary>
     public class HarborLinkClient
     {
@@ -32,11 +34,14 @@ namespace Armada.Core.Services
         private readonly List<HarborCapability> _Capabilities;
         private readonly int _MaxConcurrentJobs;
         private readonly IHostCommandExecutor _CommandExecutor;
+        private readonly IHarborJobRunner? _JobRunner;
         private readonly LoggingModule _Logging;
         private readonly int _HeartbeatIntervalMs;
         private readonly Action<HarborLogEntry>? _OnLog;
-        private readonly SemaphoreSlim _SendLock = new SemaphoreSlim(1, 1);
+        private readonly HashSet<string> _LiveJobs = new HashSet<string>(StringComparer.Ordinal);
+        private readonly object _JobLock = new object();
         private Action? _OnConnected;
+        private Channel<HarborMessage>? _Outbound;
 
         #endregion
 
@@ -53,6 +58,7 @@ namespace Armada.Core.Services
         /// <param name="logging">Logging module.</param>
         /// <param name="heartbeatIntervalMs">Heartbeat interval in milliseconds; 0 disables heartbeats.</param>
         /// <param name="onLog">Optional sink for link log entries (work in, status out) for a UI log view.</param>
+        /// <param name="jobRunner">Optional captain launcher; when null, launch requests are refused.</param>
         public HarborLinkClient(
             string harborId,
             string name,
@@ -61,7 +67,8 @@ namespace Armada.Core.Services
             IHostCommandExecutor commandExecutor,
             LoggingModule logging,
             int heartbeatIntervalMs,
-            Action<HarborLogEntry>? onLog = null)
+            Action<HarborLogEntry>? onLog = null,
+            IHarborJobRunner? jobRunner = null)
         {
             if (String.IsNullOrWhiteSpace(harborId)) throw new ArgumentNullException(nameof(harborId));
             if (String.IsNullOrWhiteSpace(name)) throw new ArgumentNullException(nameof(name));
@@ -73,6 +80,7 @@ namespace Armada.Core.Services
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _HeartbeatIntervalMs = heartbeatIntervalMs < 0 ? 0 : heartbeatIntervalMs;
             _OnLog = onLog;
+            _JobRunner = jobRunner;
         }
 
         #endregion
@@ -85,21 +93,26 @@ namespace Armada.Core.Services
         /// </summary>
         /// <param name="transport">Transport to run over.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <param name="onConnected">Optional callback invoked once the transport is open and the handshake
-        /// has been sent, so a caller can surface a "connected" state.</param>
+        /// <param name="onConnected">Optional callback invoked once the Admiral accepts the handshake.</param>
         public async Task RunSessionAsync(IHarborTransport transport, CancellationToken token, Action? onConnected = null)
         {
             if (transport == null) throw new ArgumentNullException(nameof(transport));
 
             _OnConnected = onConnected;
+            Channel<HarborMessage> outbound = Channel.CreateUnbounded<HarborMessage>();
+            _Outbound = outbound;
+
             await transport.ConnectAsync(token).ConfigureAwait(false);
-            await SendAsync(transport, BuildHandshake(), token).ConfigureAwait(false);
-            _Logging.Info(_Header + "harbor " + _HarborId + " sent handshake");
-            Log(HarborLogDirection.Out, "Handshake sent (harbor " + _HarborId + ")");
 
             using (CancellationTokenSource sessionCts = CancellationTokenSource.CreateLinkedTokenSource(token))
             {
-                Task heartbeat = _HeartbeatIntervalMs > 0 ? HeartbeatLoopAsync(transport, sessionCts.Token) : Task.CompletedTask;
+                Task pump = SendPumpAsync(transport, outbound, sessionCts.Token);
+                Task heartbeat = _HeartbeatIntervalMs > 0 ? HeartbeatLoopAsync(sessionCts.Token) : Task.CompletedTask;
+
+                Enqueue(BuildHandshake());
+                _Logging.Info(_Header + "harbor " + _HarborId + " sent handshake");
+                Log(HarborLogDirection.Out, "Handshake sent (harbor " + _HarborId + ")");
+
                 try
                 {
                     while (!token.IsCancellationRequested)
@@ -118,14 +131,17 @@ namespace Armada.Core.Services
                             continue;
                         }
 
-                        await HandleAsync(transport, message, token).ConfigureAwait(false);
+                        await HandleAsync(message, token).ConfigureAwait(false);
                     }
                 }
                 finally
                 {
+                    outbound.Writer.TryComplete();
+                    try { await pump.ConfigureAwait(false); } catch { }
                     sessionCts.Cancel();
                     try { await heartbeat.ConfigureAwait(false); } catch { }
                     await transport.CloseAsync(CancellationToken.None).ConfigureAwait(false);
+                    _Outbound = null;
                 }
             }
         }
@@ -148,7 +164,7 @@ namespace Armada.Core.Services
             };
         }
 
-        private async Task HandleAsync(IHarborTransport transport, HarborMessage message, CancellationToken token)
+        private async Task HandleAsync(HarborMessage message, CancellationToken token)
         {
             if (message is HarborHandshakeAck ack)
             {
@@ -180,14 +196,14 @@ namespace Armada.Core.Services
                     Arguments = git.Arguments
                 }, token).ConfigureAwait(false);
 
-                await SendAsync(transport, new HarborGitResult
+                Enqueue(new HarborGitResult
                 {
                     CorrelationId = git.CorrelationId,
                     RequestId = git.RequestId,
                     ExitCode = result.ExitCode,
                     StandardOutput = result.StandardOutput,
                     StandardError = result.StandardError
-                }, token).ConfigureAwait(false);
+                });
 
                 Log(HarborLogDirection.Out, "Result: exit " + result.ExitCode + " [req " + git.RequestId + "]");
                 return;
@@ -195,28 +211,100 @@ namespace Armada.Core.Services
 
             if (message is HarborLaunchRequest launch)
             {
-                Log(HarborLogDirection.In, "Launch request for job " + launch.JobId + " (runtime " + launch.Runtime + ")");
-                await SendAsync(transport, new HarborError
+                await HandleLaunchAsync(launch, token).ConfigureAwait(false);
+                return;
+            }
+
+            if (message is HarborKillRequest kill)
+            {
+                if (_JobRunner != null)
                 {
-                    CorrelationId = launch.CorrelationId,
-                    JobId = launch.JobId,
-                    Message = "Captain launch is not yet supported by this Harbor build."
-                }, token).ConfigureAwait(false);
-                Log(HarborLogDirection.Out, "Refused launch " + launch.JobId + " (captain delegation not yet enabled)");
+                    Log(HarborLogDirection.In, "Stop job " + kill.JobId);
+                    try
+                    {
+                        await _JobRunner.StopAsync(kill.JobId, kill.GracefulTimeoutMs, token).ConfigureAwait(false);
+                    }
+                    catch (Exception e)
+                    {
+                        _Logging.Warn(_Header + "stop of job " + kill.JobId + " failed: " + e.Message);
+                    }
+                }
                 return;
             }
 
             _Logging.Debug(_Header + "ignoring message " + message.GetType().Name);
         }
 
-        private async Task HeartbeatLoopAsync(IHarborTransport transport, CancellationToken token)
+        private async Task HandleLaunchAsync(HarborLaunchRequest launch, CancellationToken token)
+        {
+            Log(HarborLogDirection.In, "Launch job " + launch.JobId + " (runtime " + launch.Runtime + ") in " + launch.WorkingDirectory);
+
+            if (_JobRunner == null)
+            {
+                Enqueue(new HarborError
+                {
+                    CorrelationId = launch.CorrelationId,
+                    JobId = launch.JobId,
+                    Message = "Captain launch is not enabled on this Harbor build."
+                });
+                Log(HarborLogDirection.Out, "Refused launch " + launch.JobId + " (captain delegation not enabled)");
+                return;
+            }
+
+            try
+            {
+                await _JobRunner.StartAsync(
+                    launch,
+                    McpBaseUrl,
+                    processId =>
+                    {
+                        AddLiveJob(launch.JobId);
+                        Enqueue(new HarborStarted { CorrelationId = launch.CorrelationId, JobId = launch.JobId, ProcessId = processId });
+                        Log(HarborLogDirection.Out, "Started job " + launch.JobId + " (pid " + processId + ")");
+                    },
+                    (stream, data) => Enqueue(new HarborOutput { JobId = launch.JobId, Stream = stream, Data = data }),
+                    exitCode =>
+                    {
+                        RemoveLiveJob(launch.JobId);
+                        Enqueue(new HarborExited { JobId = launch.JobId, ExitCode = exitCode });
+                        Log(HarborLogDirection.Out, "Exited job " + launch.JobId + " (code " + exitCode + ")");
+                    },
+                    token).ConfigureAwait(false);
+            }
+            catch (Exception e)
+            {
+                RemoveLiveJob(launch.JobId);
+                Enqueue(new HarborError { CorrelationId = launch.CorrelationId, JobId = launch.JobId, Message = e.Message });
+                Log(HarborLogDirection.Out, "Launch " + launch.JobId + " failed: " + e.Message);
+            }
+        }
+
+        private async Task SendPumpAsync(IHarborTransport transport, Channel<HarborMessage> outbound, CancellationToken token)
+        {
+            try
+            {
+                await foreach (HarborMessage message in outbound.Reader.ReadAllAsync(token).ConfigureAwait(false))
+                {
+                    await transport.SendAsync(HarborProtocol.Serialize(message), token).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception e)
+            {
+                _Logging.Warn(_Header + "send pump stopped: " + e.Message);
+            }
+        }
+
+        private async Task HeartbeatLoopAsync(CancellationToken token)
         {
             while (!token.IsCancellationRequested)
             {
                 try
                 {
                     await Task.Delay(_HeartbeatIntervalMs, token).ConfigureAwait(false);
-                    await SendAsync(transport, new HarborHeartbeat { LiveJobIds = new List<string>() }, token).ConfigureAwait(false);
+                    Enqueue(new HarborHeartbeat { LiveJobIds = SnapshotLiveJobs() });
                     Log(HarborLogDirection.Out, "Heartbeat");
                 }
                 catch (OperationCanceledException)
@@ -231,6 +319,26 @@ namespace Armada.Core.Services
             }
         }
 
+        private void Enqueue(HarborMessage message)
+        {
+            _Outbound?.Writer.TryWrite(message);
+        }
+
+        private void AddLiveJob(string jobId)
+        {
+            lock (_JobLock) { _LiveJobs.Add(jobId); }
+        }
+
+        private void RemoveLiveJob(string jobId)
+        {
+            lock (_JobLock) { _LiveJobs.Remove(jobId); }
+        }
+
+        private List<string> SnapshotLiveJobs()
+        {
+            lock (_JobLock) { return new List<string>(_LiveJobs); }
+        }
+
         private void Log(HarborLogDirection direction, string message)
         {
             try
@@ -239,20 +347,6 @@ namespace Armada.Core.Services
             }
             catch
             {
-            }
-        }
-
-        private async Task SendAsync(IHarborTransport transport, HarborMessage message, CancellationToken token)
-        {
-            string text = HarborProtocol.Serialize(message);
-            await _SendLock.WaitAsync(token).ConfigureAwait(false);
-            try
-            {
-                await transport.SendAsync(text, token).ConfigureAwait(false);
-            }
-            finally
-            {
-                _SendLock.Release();
             }
         }
 

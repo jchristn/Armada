@@ -132,6 +132,7 @@ namespace Armada.Harbor
         private async Task RunLoopAsync(CancellationToken token)
         {
             LocalHostCommandExecutor executor = new LocalHostCommandExecutor();
+            Armada.Runtimes.LocalHarborJobRunner jobRunner = new Armada.Runtimes.LocalHarborJobRunner(_Logging);
             List<HarborCapability> capabilities = BuildCapabilities();
 
             while (!token.IsCancellationRequested)
@@ -146,7 +147,8 @@ namespace Armada.Harbor
                         executor,
                         _Logging,
                         _Settings.HeartbeatIntervalMs,
-                        AppendLog);
+                        AppendLog,
+                        jobRunner);
 
                     try
                     {

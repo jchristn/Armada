@@ -34,6 +34,8 @@ namespace Armada.Core.Services
         private readonly string? _AdvertisedMcpBaseUrl;
         private readonly ConcurrentDictionary<string, HarborConnection> _Connections = new ConcurrentDictionary<string, HarborConnection>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, TaskCompletionSource<HarborGitResult>> _PendingGit = new ConcurrentDictionary<string, TaskCompletionSource<HarborGitResult>>(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<string, IHarborJobListener> _JobListeners = new ConcurrentDictionary<string, IHarborJobListener>(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<int, HarborJobHandle> _JobsByProcessId = new ConcurrentDictionary<int, HarborJobHandle>();
 
         #endregion
 
@@ -137,6 +139,27 @@ namespace Armada.Core.Services
                 return;
             }
 
+            if (message is HarborStarted started)
+            {
+                if (_JobListeners.TryGetValue(started.JobId, out IHarborJobListener? startListener))
+                    startListener.OnStarted(started.ProcessId);
+                return;
+            }
+
+            if (message is HarborOutput output)
+            {
+                if (_JobListeners.TryGetValue(output.JobId, out IHarborJobListener? outputListener))
+                    outputListener.OnOutput(output.Stream, output.Data);
+                return;
+            }
+
+            if (message is HarborExited exited)
+            {
+                if (_JobListeners.TryRemove(exited.JobId, out IHarborJobListener? exitListener))
+                    exitListener.OnExited(exited.ExitCode);
+                return;
+            }
+
             if (message is HarborError error)
             {
                 _Logging.Warn(_Header + "harbor " + harborId + " reported error"
@@ -187,6 +210,109 @@ namespace Armada.Core.Services
             {
                 _PendingGit.TryRemove(request.RequestId, out TaskCompletionSource<HarborGitResult>? _);
             }
+        }
+
+        /// <summary>
+        /// Register a listener for a delegated job's lifecycle, then send the launch request to the Harbor.
+        /// The listener receives started/output/exited as the Harbor reports them. Throws when the Harbor is
+        /// not connected.
+        /// </summary>
+        /// <param name="harborId">Target Harbor identifier.</param>
+        /// <param name="request">Launch request (its JobId keys the lifecycle).</param>
+        /// <param name="listener">Listener for the job's lifecycle.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <exception cref="InvalidOperationException">Thrown when the Harbor is not connected.</exception>
+        public async Task LaunchAsync(string harborId, HarborLaunchRequest request, IHarborJobListener listener, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(harborId)) throw new ArgumentNullException(nameof(harborId));
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            if (listener == null) throw new ArgumentNullException(nameof(listener));
+            if (String.IsNullOrWhiteSpace(request.JobId)) throw new ArgumentException("Launch request is missing a job id.");
+            if (!_Connections.TryGetValue(harborId, out HarborConnection? connection))
+                throw new InvalidOperationException("Harbor " + harborId + " is not connected.");
+
+            _JobListeners[request.JobId] = listener;
+            try
+            {
+                await connection!.SendAsync(request, token).ConfigureAwait(false);
+            }
+            catch
+            {
+                _JobListeners.TryRemove(request.JobId, out IHarborJobListener? _);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Send a stop request for a delegated job to a connected Harbor. No-op when the Harbor is not
+        /// connected (its jobs are gone with it).
+        /// </summary>
+        /// <param name="harborId">Target Harbor identifier.</param>
+        /// <param name="jobId">Job identifier to stop.</param>
+        /// <param name="gracefulTimeoutMs">Graceful window before a forced kill.</param>
+        /// <param name="token">Cancellation token.</param>
+        public async Task KillJobAsync(string harborId, string jobId, int gracefulTimeoutMs, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(harborId)) throw new ArgumentNullException(nameof(harborId));
+            if (String.IsNullOrWhiteSpace(jobId)) throw new ArgumentNullException(nameof(jobId));
+            _JobListeners.TryRemove(jobId, out IHarborJobListener? _);
+            if (!_Connections.TryGetValue(harborId, out HarborConnection? connection)) return;
+            await connection!.SendAsync(new HarborKillRequest { JobId = jobId, GracefulTimeoutMs = gracefulTimeoutMs }, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Whether a delegated job is currently tracked (its Harbor is expected to be running it).
+        /// </summary>
+        /// <param name="jobId">Job identifier.</param>
+        /// <returns>True when the job is tracked.</returns>
+        public bool IsJobTracked(string jobId)
+        {
+            if (String.IsNullOrWhiteSpace(jobId)) return false;
+            return _JobListeners.ContainsKey(jobId);
+        }
+
+        /// <summary>
+        /// Associate a reported host process id with the Harbor and job running it, so a later stop or
+        /// liveness check by process id can be routed correctly.
+        /// </summary>
+        /// <param name="processId">Host process id reported by the Harbor.</param>
+        /// <param name="harborId">Harbor running the job.</param>
+        /// <param name="jobId">Job identifier.</param>
+        public void RegisterProcessId(int processId, string harborId, string jobId)
+        {
+            if (processId <= 0) return;
+            _JobsByProcessId[processId] = new HarborJobHandle(harborId, jobId);
+        }
+
+        /// <summary>
+        /// Forget a host process id (its job exited).
+        /// </summary>
+        /// <param name="processId">Host process id.</param>
+        public void UnregisterProcessId(int processId)
+        {
+            _JobsByProcessId.TryRemove(processId, out HarborJobHandle? _);
+        }
+
+        /// <summary>
+        /// Whether a delegated job is still tracked by its reported process id.
+        /// </summary>
+        /// <param name="processId">Host process id.</param>
+        /// <returns>True when tracked.</returns>
+        public bool IsProcessTracked(int processId)
+        {
+            return _JobsByProcessId.ContainsKey(processId);
+        }
+
+        /// <summary>
+        /// Stop a delegated job by the process id the Harbor reported. No-op when the process id is unknown.
+        /// </summary>
+        /// <param name="processId">Host process id.</param>
+        /// <param name="gracefulTimeoutMs">Graceful window before a forced kill.</param>
+        /// <param name="token">Cancellation token.</param>
+        public async Task KillByProcessIdAsync(int processId, int gracefulTimeoutMs, CancellationToken token = default)
+        {
+            if (!_JobsByProcessId.TryRemove(processId, out HarborJobHandle? handle)) return;
+            await KillJobAsync(handle!.HarborId, handle.JobId, gracefulTimeoutMs, token).ConfigureAwait(false);
         }
 
         /// <summary>
