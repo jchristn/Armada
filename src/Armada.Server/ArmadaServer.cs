@@ -87,6 +87,7 @@ namespace Armada.Server
         private LandingPreviewService _LandingPreviewService = null!;
         private HistoricalTimelineService _HistoricalTimelineService = null!;
         private ModelEndpointService _ModelEndpointService = null!;
+        private HarborService _HarborService = null!;
 
         private ISessionTokenService _SessionTokenService = null!;
         private IAuthenticationService _AuthenticationService = null!;
@@ -185,6 +186,7 @@ namespace Armada.Server
             _LandingPreviewService = new LandingPreviewService(_Database, _Logging);
             _HistoricalTimelineService = new HistoricalTimelineService(_Database);
             _ModelEndpointService = new ModelEndpointService(_Database, _Logging);
+            _HarborService = new HarborService(_Database, _Logging);
             _RemoteTunnel = new RemoteTunnelManager(_Logging, _Settings);
             _RemoteDashboardRelay = new RemoteDashboardRelayService(_Logging, _Settings, _RemoteTunnel.PublishEventAsync);
             admiralService.OnGetRemoteTunnelStatus = _RemoteTunnel.GetStatus;
@@ -588,6 +590,10 @@ namespace Armada.Server
 
             // Model endpoints (embedding/inference)
             new ModelEndpointRoutes(_ModelEndpointService)
+                .Register(_App, authenticate, _AuthorizationService);
+
+            // Harbors (host runners)
+            new HarborRoutes(_HarborService)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Structured check runs
@@ -1027,7 +1033,8 @@ namespace Armada.Server
                 _PromptTemplateService,
                 _Logging,
                 _CaptainTools,
-                _ModelEndpointService);
+                _ModelEndpointService,
+                _HarborService);
         }
 
         private async Task EmitEventAsync(string eventType, string message,

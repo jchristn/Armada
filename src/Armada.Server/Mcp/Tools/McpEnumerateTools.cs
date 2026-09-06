@@ -41,7 +41,7 @@ namespace Armada.Server.Mcp.Tools
                     type = "object",
                     properties = new
                     {
-                        entityType = new { type = "string", description = "Entity type to enumerate: objectives, jobs, model_endpoints, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions" },
+                        entityType = new { type = "string", description = "Entity type to enumerate: objectives, jobs, model_endpoints, harbors, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions" },
                         pageNumber = new { type = "integer", description = "Page number (1-based, default 1)" },
                         pageSize = new { type = "integer", description = "Results per page (default 10, max 1000)" },
                         order = new { type = "string", description = "Sort order: CreatedAscending, CreatedDescending (default)" },
@@ -119,6 +119,16 @@ namespace Armada.Server.Mcp.Tools
                                 .Take(mepPageSize)
                                 .ToList();
                             return (object)new { Success = true, PageNumber = mepPageNumber, PageSize = mepPageSize, TotalRecords = allEndpoints.Count, Objects = mepPage };
+                        case "harbors":
+                        case "harbor":
+                            System.Collections.Generic.List<Harbor> allHarbors = await database.Harbors.EnumerateAsync().ConfigureAwait(false);
+                            int hbrPageSize = query.PageSize > 0 ? query.PageSize : 25;
+                            int hbrPageNumber = query.PageNumber > 0 ? query.PageNumber : 1;
+                            System.Collections.Generic.List<Harbor> hbrPage = allHarbors
+                                .Skip((hbrPageNumber - 1) * hbrPageSize)
+                                .Take(hbrPageSize)
+                                .ToList();
+                            return (object)new { Success = true, PageNumber = hbrPageNumber, PageSize = hbrPageSize, TotalRecords = allHarbors.Count, Objects = hbrPage };
                         case "fleets":
                         case "fleet":
                             EnumerationResult<Fleet> fleets = await database.Fleets.EnumerateAsync(query).ConfigureAwait(false);

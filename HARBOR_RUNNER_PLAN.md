@@ -329,13 +329,14 @@ Freeze the wire protocol and the seam before building either side against them.
 
 ### REST + MCP surface
 
-- [ ] SRV-17 `Server/Routes/HarborRoutes.cs`: list/enumerate Harbors (paged `EnumerationResult`), get by
-  id, mint/rotate/revoke a Harbor credential, disconnect a Harbor, and read live status. Typed DTOs in
-  `Core/Requests` and `Core/Responses`, per-route OpenAPI metadata, tenant scoping from `RequestContext`,
-  typed `ErrorResponse`. Secrets returned once on mint only.
-- [ ] SRV-18 MCP tools mirroring the read/manage surface (`list_harbors`, `get_harbor`,
-  `disconnect_harbor`, `revoke_harbor_credential`) via `McpToolRegistrar` with typed arg classes; add
-  `harbors` to the `enumerate` tool's entity types. No secret material through MCP.
+- [~] SRV-17 `Server/Routes/HarborRoutes.cs` (via `HarborService`): list, get, create, update, delete,
+  enable/disable, tenant-scoped from the auth context, per-route OpenAPI metadata, typed error responses,
+  registered in `ArmadaServer`. Credential mint/rotate/revoke and disconnect are deferred to the auth +
+  connection-manager passes (SRV-06/08/12). -- 2026-09-05
+- [x] SRV-18 MCP tools `get_harbor`, `create_harbor`, `update_harbor`, `delete_harbor`,
+  `set_harbor_enabled` via `McpHarborTools` + registrar wiring (server and Helm stdio); added `harbors`
+  to the `enumerate` tool's entity types. No secret material through MCP. Credential/disconnect tools land
+  with the auth pass. -- 2026-09-05
 - [ ] SRV-19 Server-side telemetry: meters + spans for link lifecycle, per-command delegation
   (integration pattern with `service`/`operation`/`outcome`), and the dispatch queue (with a `queued`
   stage), all product-prefixed and low-cardinality.
