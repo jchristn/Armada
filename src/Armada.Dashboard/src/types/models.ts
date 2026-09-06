@@ -2146,6 +2146,32 @@ export interface PipelineStage {
 
 export type EntityType = 'fleets' | 'vessels' | 'captains' | 'missions' | 'voyages' | 'signals' | 'events' | 'docks' | 'merge-queue' | 'personas' | 'prompt-templates' | 'pipelines' | 'playbooks' | 'releases' | 'environments' | 'deployments' | 'incidents' | 'runbooks';
 
+export type HarborConnectionStatus = 'Unknown' | 'Connected' | 'Degraded' | 'Disconnected';
+
+export interface HarborCapability {
+  name: string;
+  available: boolean;
+  detail: string | null;
+}
+
+export interface Harbor {
+  id: string;
+  tenantId: string | null;
+  userId: string | null;
+  name: string;
+  capabilities: HarborCapability[];
+  connectionStatus: HarborConnectionStatus;
+  maxConcurrentJobs: number;
+  enabled: boolean;
+  protocolVersion: string | null;
+  osPlatform: string | null;
+  architecture: string | null;
+  lastSeenUtc: string | null;
+  lastConnectedUtc: string | null;
+  createdUtc: string;
+  lastUpdateUtc: string;
+}
+
 export type ModelEndpointKind = 'Embedding' | 'Inference';
 export type ModelProvider = 'Ollama' | 'OpenAI' | 'OpenAICompatible' | 'Anthropic' | 'Gemini' | 'VoyageAI';
 export type EndpointHealthStatus = 'Unknown' | 'Healthy' | 'Unhealthy';

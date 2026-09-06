@@ -68,6 +68,7 @@ import type {
   ProjectProfileResolutionResult,
   PersonaPromptPreview,
   Skill,
+  Harbor,
   ModelEndpoint,
   ModelEndpointProbeResult,
   ModelEndpointHealthSweepResponse,
@@ -842,6 +843,16 @@ export const getSkill = (id: string) => get<Skill>(`/api/v1/skills/${encodeURICo
 export const createSkill = (data: Partial<Skill>) => post<Skill>('/api/v1/skills', data);
 export const updateSkill = (id: string, data: Partial<Skill>) => put<Skill>(`/api/v1/skills/${encodeURIComponent(id)}`, data);
 export const deleteSkill = (id: string) => del<void>(`/api/v1/skills/${encodeURIComponent(id)}`);
+
+// Harbors (host runners)
+export const listHarbors = () => get<Harbor[]>('/api/v1/harbors');
+export const getHarbor = (id: string) => get<Harbor>(`/api/v1/harbors/${encodeURIComponent(id)}`);
+export const createHarbor = (data: Partial<Harbor>) => post<Harbor>('/api/v1/harbors', data);
+export const updateHarbor = (id: string, data: Partial<Harbor>) =>
+  put<Harbor>(`/api/v1/harbors/${encodeURIComponent(id)}`, data);
+export const deleteHarbor = (id: string) => del<void>(`/api/v1/harbors/${encodeURIComponent(id)}`);
+export const enableHarbor = (id: string) => post<Harbor>(`/api/v1/harbors/${encodeURIComponent(id)}/enable`, {});
+export const disableHarbor = (id: string) => post<Harbor>(`/api/v1/harbors/${encodeURIComponent(id)}/disable`, {});
 
 // Model endpoints (embedding/inference)
 export const listModelEndpoints = () => get<ModelEndpoint[]>('/api/v1/model-endpoints');

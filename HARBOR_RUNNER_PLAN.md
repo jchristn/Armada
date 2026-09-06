@@ -412,17 +412,17 @@ Keep standalone identical while everything routes through the new interface.
 |----|------|--------|
 | DASH-01..11 | types, client, page, status, i18n, tests | not started |
 
-- [ ] DASH-01 Types in `src/types/models.ts`: `Harbor`, `HarborCapability`, `HarborConnectionStatus`
+- [x] DASH-01 Types in `src/types/models.ts`: `Harbor`, `HarborCapability`, `HarborConnectionStatus`
   (string-literal union), `HarborQuery`, credential mint/response DTOs.
-- [ ] DASH-02 Client functions in `src/api/client.ts`: list/get Harbors, mint/rotate/revoke credential,
+- [x] DASH-02 Client functions in `src/api/client.ts`: list/get Harbors, mint/rotate/revoke credential,
   disconnect. Reuse `EnumerationResult`, `buildQuery`.
-- [ ] DASH-03 Harbors surface as a tab under the SYSTEM/Server hub (avoids a new top-level nav slot;
+- [~] DASH-03 Harbors surface as a tab under the SYSTEM/Server hub (avoids a new top-level nav slot;
   matches Armada's hub-with-tabs consolidation). If a top-level item is chosen instead, update
   `navConfig.tsx`, `navIcons.tsx`, and the count assertion in `navConfig.test.ts`.
-- [ ] DASH-04 Harbors table: `useResourceTable`, `Pagination`, refresh + auto-refresh, per-column
+- [x] DASH-04 Harbors table: `useResourceTable`, `Pagination`, refresh + auto-refresh, per-column
   filters, `StatusBadge` for connection status, `ActionMenu` (View, View JSON, mint/rotate credential,
   disconnect), copyable ids, empty/loading/filtered-empty/error states.
-- [ ] DASH-05 Harbor detail/health modal: capabilities, connection status, last-seen (relative +
+- [x] DASH-05 Harbor detail/health modal: capabilities, connection status, last-seen (relative +
   absolute title), running jobs, OS/arch, protocol version; overlay + ESC + backdrop-close conventions.
 - [ ] DASH-06 Credential mint modal: show the secret once with a `CopyButton` and a clear "you will not
   see this again" warning; destructive actions (revoke, disconnect) via `ConfirmDialog` with `btn-danger`.
@@ -437,7 +437,7 @@ Keep standalone identical while everything routes through the new interface.
   waiting for its owning Harbor to reconnect, or when no eligible Harbor exists.
 - [ ] DASH-09 Onboarding: a setup panel with copyable install commands for the Harbor app per OS and the
   mint-credential flow, following `SetupWizard` conventions; `.mono` + `data-i18n-skip` on command blocks.
-- [ ] DASH-10 i18n: wrap every new string in `t()`; add new phrases to the catalog source for
+- [~] DASH-10 i18n: wrap every new string in `t()`; add new phrases to the catalog source for
   `armada.json`; add `StatusBadge` tooltips and `.tag.<status>` colors for the new connection statuses;
   format times via `useLocale` helpers.
 - [ ] DASH-11 Tests + build: page/table test, `navConfig.test.ts` updated if nav changes, responsive QA

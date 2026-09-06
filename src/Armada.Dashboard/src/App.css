@@ -918,6 +918,9 @@ h3 { font-size: 1.1rem; margin-bottom: 0.5rem; font-weight: 600; margin-top: 1re
 .tag.complete, .tag.completed, .tag.landed, .tag.passed, .tag.pass, .tag.healthy { background: var(--tag-complete-bg); color: var(--tag-complete-fg); }
 .tag.unhealthy { background: var(--tag-failed-bg); color: var(--tag-failed-fg); }
 .tag.unknown { background: var(--tag-idle-bg); color: var(--tag-idle-fg); }
+.tag.connected { background: var(--tag-complete-bg); color: var(--tag-complete-fg); }
+.tag.disconnected { background: var(--tag-failed-bg); color: var(--tag-failed-fg); }
+.tag.degraded { background: var(--tag-review-bg); color: var(--tag-review-fg); }
 .tag.failed, .tag.error, .tag.stalled, .tag.landingfailed { background: var(--tag-failed-bg); color: var(--tag-failed-fg); }
 .tag.fail { background: #dc2626; color: #fff; }
 .tag.review, .tag.warn { background: var(--tag-review-bg); color: var(--tag-review-fg); }
