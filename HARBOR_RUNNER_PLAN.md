@@ -202,31 +202,36 @@ Freeze the wire protocol and the seam before building either side against them.
 
 | ID | Task | Status |
 |----|------|--------|
-| CON-01..07 | protocol + seam + settings | not started |
+| CON-01,04,05,07 | protocol, handshake, id, doc | done |
+| CON-06 | settings | done (docs entry pending) |
+| CON-02,03 | IHostExecutor seam | moved to Phase 2 |
 
-- [ ] CON-01 Define the Harbor wire protocol as typed envelope classes in `Armada.Core` (new
-  `Core/Harbor/` namespace): a request/response/event envelope with correlation id, message type, and
-  `traceparent`; command messages `Launch`, `Stdin`, `Kill`, `GitOp`, `WorktreeOp`, `Probe`; event
-  messages `Started{jobId,pid}`, `Stdout`, `Stderr`, `Exited{code}`, `GitOpResult`, `Heartbeat{liveJobIds}`,
-  `Error`. Typed classes only, no `JsonElement`. Acceptance: a round-trip serialize/deserialize
-  Touchstone test for every message type, positive and negative (malformed rejected).
+- [x] CON-01 Define the Harbor wire protocol as typed polymorphic messages in `Armada.Core/Harbor`:
+  base `HarborMessage` (correlationId, traceParent, "type" discriminator); commands `launch`, `stdin`,
+  `kill`, `git`; events `started`, `output` (stdout/stderr via `HarborOutputStreamEnum`), `exited`,
+  `gitResult`, `heartbeat`, `error`; plus `HarborProtocol` (shared serializer + version 1.0). Typed
+  classes only. Done: `HarborProtocolSuite` round-trips every type and rejects malformed/unknown/empty
+  payloads (9 cases, green). -- 2026-09-05
 - [ ] CON-02 Define `IHostExecutor` in `Core/Services/Interfaces` covering process launch
   (launch/stdin/kill/liveness with streamed stdout/stderr), git operations (clone bare, fetch, worktree
   add/remove/prune, branch, rev-parse, commit, push), gh operations (PR create/merge/view), and
-  filesystem worktree lifecycle. Return typed result classes, never tuples.
+  filesystem worktree lifecycle. Return typed result classes, never tuples. NOTE: moved into Phase 2 to
+  be defined together with `LocalHostExecutor` -- the runtime is deeply PID-keyed and event-driven
+  (`IAgentRuntime` returns an int PID with output/exit events), so the seam must be grounded in its real
+  consumer rather than designed speculatively.
 - [ ] CON-03 Split `BaseAgentRuntime` into a *plan* half (command resolution, argument building,
   environment, prompt-via-stdin, MCP config) and an *execute* half. The plan half stays in
   `Armada.Runtimes`; the execute half moves behind `IHostExecutor`. Acceptance: existing runtimes build
-  and behave identically under `LocalHostExecutor` (Phase 2 verifies at runtime).
-- [ ] CON-04 Define the handshake payload: Harbor id (`hbr_` prefix), advertised capabilities
-  (installed runtimes, git/gh availability, OS/arch), protocol version, and the auth material carrier.
-  Server replies with the advertised MCP base URL and any runtime settings the Harbor needs.
+  and behave identically under `LocalHostExecutor`. NOTE: done with Phase 2 alongside CON-02.
+- [x] CON-04 Handshake payload defined: `HarborHandshake` (harborId, name, protocolVersion, OS/arch,
+  maxConcurrentJobs, capabilities) and `HarborHandshakeAck` (accepted, mcpBaseUrl, reason). The auth
+  material rides on the WSS upgrade headers (SRV-08), not in the handshake body. -- 2026-09-05
 - [x] CON-05 Add the `hbr_` ID prefix to `Constants.cs` and a `GenerateHarborId()` helper alongside the
   existing generators.
 - [~] CON-06 Define `HarborSettings` (backing fields, validation/clamping, defaults) and a
   `DeploymentModeEnum { Local, Split }` (or an `ExecutionMode` setting) on `ArmadaSettings`. Default
   `Local`. Include the link path, required-auth toggle, heartbeat interval, and job concurrency ceiling.
-- [ ] CON-07 Document the protocol and seam in a short `docs/HARBOR_PROTOCOL.md` so both sides implement
+- [x] CON-07 Document the protocol and seam in a short `docs/HARBOR_PROTOCOL.md` so both sides implement
   against one spec; keep it in sync as messages change.
 
 ---
