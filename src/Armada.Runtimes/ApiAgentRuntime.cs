@@ -31,7 +31,7 @@ namespace Armada.Runtimes
         #region Public-Members
 
         /// <inheritdoc />
-        public string Name => "ApiEndpoint:" + _Endpoint.Name;
+        public string Name => _Endpoint != null ? "ApiEndpoint:" + _Endpoint.Name : "ApiEndpoint";
 
         /// <inheritdoc />
         public bool SupportsResume => false;
@@ -60,7 +60,8 @@ namespace Armada.Runtimes
         private static int _PidCounter = 2_000_000_000;
         private static readonly ConcurrentDictionary<int, CancellationTokenSource> _Running = new ConcurrentDictionary<int, CancellationTokenSource>();
 
-        private readonly ModelEndpoint _Endpoint;
+        private readonly ModelEndpoint? _Endpoint;
+        private readonly Func<string, ModelEndpoint?>? _EndpointResolver;
         private readonly LoggingModule _Logging;
         private readonly int _MaxIterations;
         private readonly Func<ModelEndpoint, LoggingModule, CompletionClientBase> _ClientFactory;
@@ -87,6 +88,26 @@ namespace Armada.Runtimes
             Func<ModelEndpoint, LoggingModule, CompletionClientBase>? clientFactory = null)
         {
             _Endpoint = endpoint ?? throw new ArgumentNullException(nameof(endpoint));
+            _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
+            _MaxIterations = Math.Clamp(maxIterations, 1, 1000);
+            _ClientFactory = clientFactory ?? ((ep, log) => ModelEndpointClientFactory.Create(ep, log));
+        }
+
+        /// <summary>
+        /// Instantiate with a resolver that maps a captain's endpoint id to a <see cref="ModelEndpoint"/> at
+        /// launch time. Used in production where the endpoint is chosen per captain.
+        /// </summary>
+        /// <param name="endpointResolver">Resolves a model-endpoint id to the endpoint, or null when not found.</param>
+        /// <param name="logging">Logging module.</param>
+        /// <param name="maxIterations">Maximum tool-call iterations before the loop stops. Clamped to 1..1000.</param>
+        /// <param name="clientFactory">Optional inference-client factory seam for testing.</param>
+        public ApiAgentRuntime(
+            Func<string, ModelEndpoint?> endpointResolver,
+            LoggingModule logging,
+            int maxIterations = 100,
+            Func<ModelEndpoint, LoggingModule, CompletionClientBase>? clientFactory = null)
+        {
+            _EndpointResolver = endpointResolver ?? throw new ArgumentNullException(nameof(endpointResolver));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _MaxIterations = Math.Clamp(maxIterations, 1, 1000);
             _ClientFactory = clientFactory ?? ((ep, log) => ModelEndpointClientFactory.Create(ep, log));
@@ -122,15 +143,22 @@ namespace Armada.Runtimes
         {
             if (String.IsNullOrWhiteSpace(workingDirectory)) throw new ArgumentNullException(nameof(workingDirectory));
 
+            ModelEndpoint? endpoint = _Endpoint;
+            if (endpoint == null && _EndpointResolver != null && captain != null && !String.IsNullOrEmpty(captain.ModelEndpointId))
+                endpoint = _EndpointResolver(captain.ModelEndpointId);
+
+            if (endpoint == null)
+                throw new InvalidOperationException("API-endpoint captain has no resolvable inference endpoint. Set the captain's model endpoint to a configured Inference endpoint.");
+
             int processId = Interlocked.Increment(ref _PidCounter);
             CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(token);
             _Running[processId] = cts;
 
-            OpenLog(logFilePath, prompt);
+            OpenLog(logFilePath, prompt, endpoint);
             OnProcessStarted?.Invoke(processId);
 
             // Run the loop in the background so StartAsync returns the pid promptly, mirroring a process launch.
-            _ = Task.Run(() => RunLoopAsync(processId, workingDirectory, prompt, model, finalMessageFilePath, cts));
+            _ = Task.Run(() => RunLoopAsync(processId, endpoint, workingDirectory, prompt, model, finalMessageFilePath, cts));
 
             return Task.FromResult(processId);
         }
@@ -158,6 +186,7 @@ namespace Armada.Runtimes
 
         private async Task RunLoopAsync(
             int processId,
+            ModelEndpoint endpoint,
             string workingDirectory,
             string prompt,
             string? model,
@@ -170,7 +199,7 @@ namespace Armada.Runtimes
 
             try
             {
-                using CompletionClientBase client = _ClientFactory(_Endpoint, _Logging);
+                using CompletionClientBase client = _ClientFactory(endpoint, _Logging);
                 if (!String.IsNullOrWhiteSpace(model)) client.Model = model;
 
                 TaskPlan taskPlan = new TaskPlan();
@@ -319,7 +348,7 @@ namespace Armada.Runtimes
             return single.Length <= max ? single : single.Substring(0, max) + "...";
         }
 
-        private void OpenLog(string? logFilePath, string prompt)
+        private void OpenLog(string? logFilePath, string prompt, ModelEndpoint endpoint)
         {
             if (String.IsNullOrEmpty(logFilePath)) return;
             try
@@ -329,7 +358,7 @@ namespace Armada.Runtimes
                     Directory.CreateDirectory(Path.GetDirectoryName(logFilePath)!);
                     _LogWriter = new StreamWriter(logFilePath, append: true) { AutoFlush = true };
                     string timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss");
-                    _LogWriter.WriteLine("[" + timestamp + "] API-endpoint captain starting: " + _Endpoint.Name + " (" + _Endpoint.Provider + "/" + (_Endpoint.Model ?? "default") + ")");
+                    _LogWriter.WriteLine("[" + timestamp + "] API-endpoint captain starting: " + endpoint.Name + " (" + endpoint.Provider + "/" + (endpoint.Model ?? "default") + ")");
                     if (!String.IsNullOrEmpty(prompt)) _LogWriter.WriteLine(prompt);
                     _LogWriter.WriteLine(String.Empty);
                 }

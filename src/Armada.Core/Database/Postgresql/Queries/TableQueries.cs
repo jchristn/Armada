@@ -1165,7 +1165,9 @@ namespace Armada.Core.Database.Postgresql.Queries
                     @"ALTER TABLE docks ADD COLUMN IF NOT EXISTS harbor_id TEXT;",
                     @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS assigned_harbor_id TEXT;",
                     @"ALTER TABLE vessels ADD COLUMN IF NOT EXISTS preferred_harbor_id TEXT;",
-                    @"ALTER TABLE vessels ADD COLUMN IF NOT EXISTS required_capabilities TEXT;")
+                    @"ALTER TABLE vessels ADD COLUMN IF NOT EXISTS required_capabilities TEXT;"),
+                new SchemaMigration(64, "Add model_endpoint_id to captains for API-endpoint captains",
+                    @"ALTER TABLE captains ADD COLUMN IF NOT EXISTS model_endpoint_id TEXT;")
             };
         }
 

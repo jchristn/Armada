@@ -157,8 +157,47 @@ namespace Armada.Core.Services
             if (existing == null) throw new KeyNotFoundException("Model endpoint not found: " + id);
             if (!IsVisible(auth, existing)) throw new UnauthorizedAccessException("Not permitted to delete endpoint " + id);
 
+            // Guard: do not delete an endpoint a captain still references, which would orphan that captain and
+            // cause its launches to fail. The caller must first repoint or remove those captains.
+            List<Captain> referencing = await FindCaptainsReferencingAsync(id, token).ConfigureAwait(false);
+            if (referencing.Count > 0)
+            {
+                List<string> names = new List<string>();
+                foreach (Captain captain in referencing) names.Add(captain.Name);
+                throw new InvalidOperationException(
+                    "Cannot delete endpoint " + id + ": it is used by " + referencing.Count + " captain(s): " + String.Join(", ", names) +
+                    ". Repoint or delete those captains first.");
+            }
+
             _Logging.Info(_Header + "deleting endpoint " + id);
             await _Database.ModelEndpoints.DeleteAsync(id, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Return the captains that reference the given endpoint, so callers can warn before attempting a
+        /// delete. Empty when the endpoint is unused.
+        /// </summary>
+        /// <param name="auth">Authentication context.</param>
+        /// <param name="id">Endpoint identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The referencing captains.</returns>
+        public async Task<List<Captain>> GetReferencingCaptainsAsync(AuthContext auth, string id, CancellationToken token = default)
+        {
+            if (auth == null) throw new ArgumentNullException(nameof(auth));
+            if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
+            return await FindCaptainsReferencingAsync(id, token).ConfigureAwait(false);
+        }
+
+        private async Task<List<Captain>> FindCaptainsReferencingAsync(string id, CancellationToken token)
+        {
+            List<Captain> all = await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false);
+            List<Captain> referencing = new List<Captain>();
+            foreach (Captain captain in all)
+            {
+                if (String.Equals(captain.ModelEndpointId, id, StringComparison.Ordinal)) referencing.Add(captain);
+            }
+
+            return referencing;
         }
 
         /// <summary>

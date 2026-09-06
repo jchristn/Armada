@@ -171,6 +171,12 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 403;
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
                 }
+                catch (InvalidOperationException ex)
+                {
+                    // Endpoint is still referenced by one or more captains.
+                    req.Http.Response.StatusCode = 409;
+                    return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = ex.Message };
+                }
             },
             api => api
                 .WithTag("Model Endpoints")

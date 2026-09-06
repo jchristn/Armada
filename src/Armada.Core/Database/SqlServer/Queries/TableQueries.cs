@@ -1018,6 +1018,11 @@ namespace Armada.Core.Database.SqlServer.Queries
                     @"IF COL_LENGTH('missions','assigned_harbor_id') IS NULL ALTER TABLE missions ADD assigned_harbor_id NVARCHAR(450) NULL;",
                     @"IF COL_LENGTH('vessels','preferred_harbor_id') IS NULL ALTER TABLE vessels ADD preferred_harbor_id NVARCHAR(450) NULL;",
                     @"IF COL_LENGTH('vessels','required_capabilities') IS NULL ALTER TABLE vessels ADD required_capabilities NVARCHAR(MAX) NULL;"
+                ),
+                new SchemaMigration(
+                    64,
+                    "Add model_endpoint_id to captains for API-endpoint captains",
+                    @"IF COL_LENGTH('captains','model_endpoint_id') IS NULL ALTER TABLE captains ADD model_endpoint_id NVARCHAR(450) NULL;"
                 )
             };
         }

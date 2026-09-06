@@ -231,9 +231,34 @@ namespace Armada.Server
         public Task<string?> ValidateCaptainModelAsync(Captain captain, CancellationToken token = default)
         {
             if (captain == null) throw new ArgumentNullException(nameof(captain));
+            if (captain.Runtime == AgentRuntimeEnum.ApiEndpoint)
+                return ValidateApiEndpointCaptainAsync(captain, token);
             if (captain.Runtime == AgentRuntimeEnum.Mux)
                 return ValidateMuxCaptainAsync(captain, token);
             return ValidateModelAsync(captain.Runtime, captain.Model, token);
+        }
+
+        /// <summary>
+        /// Validate an API-endpoint captain: it must reference an existing, enabled, Inference-kind model
+        /// endpoint. Returns null when valid, otherwise a human-readable error.
+        /// </summary>
+        /// <param name="captain">Captain to validate.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Null when valid, otherwise an error message.</returns>
+        private async Task<string?> ValidateApiEndpointCaptainAsync(Captain captain, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(captain.ModelEndpointId))
+                return "An API-endpoint captain must reference an inference model endpoint. Choose one under Configuration > Endpoints.";
+
+            ModelEndpoint? endpoint = await _Database.ModelEndpoints.ReadAsync(captain.ModelEndpointId, token).ConfigureAwait(false);
+            if (endpoint == null)
+                return "The referenced model endpoint (" + captain.ModelEndpointId + ") does not exist.";
+            if (endpoint.Kind != ModelEndpointKindEnum.Inference)
+                return "The referenced model endpoint '" + endpoint.Name + "' is an " + endpoint.Kind + " endpoint; an API-endpoint captain requires an Inference endpoint.";
+            if (!endpoint.Enabled)
+                return "The referenced model endpoint '" + endpoint.Name + "' is disabled. Enable it or choose another.";
+
+            return null;
         }
 
         /// <summary>

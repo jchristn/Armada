@@ -593,6 +593,11 @@ namespace Armada.Core.Database.Mysql
                     63,
                     "Add Harbor routing and affinity columns",
                     TableQueries.MigrationV63Statements
+                ),
+                new SchemaMigration(
+                    64,
+                    "Add model_endpoint_id to captains for API-endpoint captains",
+                    TableQueries.MigrationV64Statements
                 )
             };
         }
@@ -762,6 +767,7 @@ namespace Armada.Core.Database.Mysql
             captain.Name = reader["name"].ToString()!;
             captain.Runtime = Enum.Parse<AgentRuntimeEnum>(reader["runtime"].ToString()!);
             try { captain.Model = NullableString(reader["model"]); } catch { }
+            try { captain.ModelEndpointId = NullableString(reader["model_endpoint_id"]); } catch { }
             captain.SystemInstructions = NullableString(reader["system_instructions"]);
             try { captain.RuntimeOptionsJson = NullableString(reader["runtime_options_json"]); } catch { }
             captain.State = Enum.Parse<CaptainStateEnum>(reader["state"].ToString()!);

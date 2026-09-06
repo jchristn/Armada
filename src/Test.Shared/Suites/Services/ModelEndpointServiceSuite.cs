@@ -57,6 +57,37 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(EndpointHealthStatusEnum.Unknown, created.HealthStatus);
             }));
 
+            cases.Add(CaseAsync("delete_blocked_when_referenced_by_captain", "DeleteAsync is blocked while a captain references the endpoint", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                ModelEndpointService service = new ModelEndpointService(testDb.Driver, CreateLogging());
+                AuthContext auth = AuthContext.Authenticated("ten_del", "usr_del", false, true, "UnitTest");
+
+                ModelEndpoint endpoint = new ModelEndpoint
+                {
+                    Name = "Inference One",
+                    Kind = ModelEndpointKindEnum.Inference,
+                    Provider = ModelProviderEnum.OpenAICompatible,
+                    BaseUrl = "http://localhost:11434",
+                    Model = "llama3"
+                };
+                ModelEndpoint created = await service.CreateAsync(auth, endpoint).ConfigureAwait(false);
+
+                Armada.Core.Models.Captain captain = new Armada.Core.Models.Captain("api-captain", Armada.Core.Enums.AgentRuntimeEnum.ApiEndpoint);
+                captain.ModelEndpointId = created.Id;
+                Armada.Core.Models.Captain createdCaptain = await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+
+                // The endpoint id must survive the DB round-trip (proves the migration + row mapping).
+                Armada.Core.Models.Captain? reread = await testDb.Driver.Captains.ReadAsync(createdCaptain.Id).ConfigureAwait(false);
+                AssertTrue(reread != null, "Expected the captain to be readable.");
+                AssertEqual(created.Id, reread!.ModelEndpointId ?? String.Empty);
+
+                List<Armada.Core.Models.Captain> referencing = await service.GetReferencingCaptainsAsync(auth, created.Id).ConfigureAwait(false);
+                AssertEqual(1, referencing.Count);
+
+                await AssertThrowsAsync<InvalidOperationException>(() => service.DeleteAsync(auth, created.Id));
+            }));
+
             cases.Add(CaseAsync("enumerate_returns_tenant_scoped_endpoints", "EnumerateAsync returns tenant-scoped endpoints", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

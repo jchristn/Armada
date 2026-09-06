@@ -1387,6 +1387,14 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration v64 statements: add model_endpoint_id to captains for API-endpoint captains.
+        /// </summary>
+        public static readonly string[] MigrationV64Statements = new string[]
+        {
+            "ALTER TABLE captains ADD COLUMN model_endpoint_id VARCHAR(191);"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

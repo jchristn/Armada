@@ -171,7 +171,20 @@ namespace Armada.Server
             _MissionRecovery = new Armada.Core.Services.MissionRecoveryCoordinator(_Logging, _Database, _Settings);
             _LandingService = new LandingService(_Logging, _Database, _Settings, _Git);
             _TemplateService = new MessageTemplateService(_Logging, _PromptTemplateService);
-            _RuntimeFactory = new AgentRuntimeFactory(_Logging);
+            _RuntimeFactory = new AgentRuntimeFactory(_Logging, endpointId =>
+            {
+                if (String.IsNullOrEmpty(endpointId)) return null;
+                try
+                {
+                    Armada.Core.Models.ModelEndpoint? endpoint = _Database.ModelEndpoints.ReadAsync(endpointId).GetAwaiter().GetResult();
+                    if (endpoint == null || !endpoint.Enabled || endpoint.Kind != Armada.Core.Enums.ModelEndpointKindEnum.Inference) return null;
+                    return endpoint;
+                }
+                catch
+                {
+                    return null;
+                }
+            });
             _Workspace = new WorkspaceService();
             _RequestHistoryCapture = new RequestHistoryCaptureService(_Settings);
             _WorkflowProfileService = new WorkflowProfileService(_Database, _Logging);

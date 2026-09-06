@@ -53,14 +53,15 @@ namespace Armada.Core.Database.Mysql.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (MySqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = @"INSERT INTO captains (id, tenant_id, user_id, name, runtime, model, reasoning_effort, tier, system_instructions, allowed_personas, preferred_persona, runtime_options_json, state, current_mission_id, current_dock_id, process_id, recovery_attempts, last_heartbeat_utc, last_process_alive_utc, quarantine_until_utc, quarantine_reason, created_utc, last_update_utc)
-                        VALUES (@id, @tenant_id, @user_id, @name, @runtime, @model, @reasoning_effort, @tier, @system_instructions, @allowed_personas, @preferred_persona, @runtime_options_json, @state, @current_mission_id, @current_dock_id, @process_id, @recovery_attempts, @last_heartbeat_utc, @last_process_alive_utc, @quarantine_until_utc, @quarantine_reason, @created_utc, @last_update_utc);";
+                    cmd.CommandText = @"INSERT INTO captains (id, tenant_id, user_id, name, runtime, model, model_endpoint_id, reasoning_effort, tier, system_instructions, allowed_personas, preferred_persona, runtime_options_json, state, current_mission_id, current_dock_id, process_id, recovery_attempts, last_heartbeat_utc, last_process_alive_utc, quarantine_until_utc, quarantine_reason, created_utc, last_update_utc)
+                        VALUES (@id, @tenant_id, @user_id, @name, @runtime, @model, @model_endpoint_id, @reasoning_effort, @tier, @system_instructions, @allowed_personas, @preferred_persona, @runtime_options_json, @state, @current_mission_id, @current_dock_id, @process_id, @recovery_attempts, @last_heartbeat_utc, @last_process_alive_utc, @quarantine_until_utc, @quarantine_reason, @created_utc, @last_update_utc);";
                     cmd.Parameters.AddWithValue("@id", captain.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)captain.TenantId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@user_id", (object?)captain.UserId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@name", captain.Name);
                     cmd.Parameters.AddWithValue("@runtime", captain.Runtime.ToString());
                     cmd.Parameters.AddWithValue("@model", (object?)captain.Model ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@model_endpoint_id", (object?)captain.ModelEndpointId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@reasoning_effort", (object?)captain.ReasoningEffort?.ToString() ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@tier", (object?)captain.Tier?.ToString() ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@system_instructions", (object?)captain.SystemInstructions ?? DBNull.Value);
@@ -163,6 +164,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                         name = @name,
                         runtime = @runtime,
                         model = @model,
+                        model_endpoint_id = @model_endpoint_id,
                         reasoning_effort = @reasoning_effort,
                         tier = @tier,
                         system_instructions = @system_instructions,
@@ -186,6 +188,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                     cmd.Parameters.AddWithValue("@name", captain.Name);
                     cmd.Parameters.AddWithValue("@runtime", captain.Runtime.ToString());
                     cmd.Parameters.AddWithValue("@model", (object?)captain.Model ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@model_endpoint_id", (object?)captain.ModelEndpointId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@reasoning_effort", (object?)captain.ReasoningEffort?.ToString() ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@tier", (object?)captain.Tier?.ToString() ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@system_instructions", (object?)captain.SystemInstructions ?? DBNull.Value);
@@ -951,6 +954,7 @@ namespace Armada.Core.Database.Mysql.Implementations
             captain.Name = reader["name"].ToString()!;
             captain.Runtime = Enum.Parse<AgentRuntimeEnum>(reader["runtime"].ToString()!);
             try { captain.Model = NullableString(reader["model"]); } catch { }
+            try { captain.ModelEndpointId = NullableString(reader["model_endpoint_id"]); } catch { }
             try
             {
                 string? reasoningEffort = NullableString(reader["reasoning_effort"]);
