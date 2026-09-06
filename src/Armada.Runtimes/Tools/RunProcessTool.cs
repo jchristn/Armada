@@ -8,8 +8,6 @@ namespace Armada.Runtimes.Tools
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
-    using Armada.Runtimes.Tools;
-    using Armada.Runtimes.Tools;
 
     /// <summary>
     /// Spawns a process and captures its stdout, stderr, and exit code.

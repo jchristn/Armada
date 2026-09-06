@@ -6,9 +6,6 @@ namespace Armada.Runtimes.Tools
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Runtimes.Tools.Tasks;
-    using Armada.Runtimes.Tools;
-    using Armada.Runtimes.Tools.Tasks;
-    using Armada.Runtimes.Tools;
 
     /// <summary>
     /// Advances a single task in the current job's plan: sets its status and optionally a note. The model

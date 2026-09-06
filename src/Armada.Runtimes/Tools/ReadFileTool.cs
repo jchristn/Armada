@@ -6,8 +6,6 @@ namespace Armada.Runtimes.Tools
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
-    using Armada.Runtimes.Tools;
-    using Armada.Runtimes.Tools;
 
     /// <summary>
     /// Reads a file from the filesystem and returns its contents with line numbers.
