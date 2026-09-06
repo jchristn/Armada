@@ -36,6 +36,7 @@ namespace Armada.Core.Services
         private readonly int _HeartbeatIntervalMs;
         private readonly Action<HarborLogEntry>? _OnLog;
         private readonly SemaphoreSlim _SendLock = new SemaphoreSlim(1, 1);
+        private Action? _OnConnected;
 
         #endregion
 
@@ -90,11 +91,11 @@ namespace Armada.Core.Services
         {
             if (transport == null) throw new ArgumentNullException(nameof(transport));
 
+            _OnConnected = onConnected;
             await transport.ConnectAsync(token).ConfigureAwait(false);
             await SendAsync(transport, BuildHandshake(), token).ConfigureAwait(false);
             _Logging.Info(_Header + "harbor " + _HarborId + " sent handshake");
             Log(HarborLogDirection.Out, "Handshake sent (harbor " + _HarborId + ")");
-            onConnected?.Invoke();
 
             using (CancellationTokenSource sessionCts = CancellationTokenSource.CreateLinkedTokenSource(token))
             {
@@ -161,6 +162,7 @@ namespace Armada.Core.Services
                 {
                     _Logging.Info(_Header + "handshake accepted; mcp=" + (ack.McpBaseUrl ?? "(none)"));
                     Log(HarborLogDirection.In, "Handshake accepted by Admiral. MCP=" + (ack.McpBaseUrl ?? "(none)"));
+                    _OnConnected?.Invoke();
                 }
                 return;
             }
