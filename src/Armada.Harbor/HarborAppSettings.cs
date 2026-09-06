@@ -16,9 +16,10 @@ namespace Armada.Harbor
         #region Public-Members
 
         /// <summary>
-        /// WebSocket URL of the Admiral's Harbor link (ws:// or wss://).
+        /// WebSocket URL of the Admiral's Harbor link (ws:// or wss://). The link is served on the main
+        /// Admiral port (default 7890), not the MCP port.
         /// </summary>
-        public string ServerLinkUrl { get; set; } = "ws://127.0.0.1:7891/v1.0/harbor/connect";
+        public string ServerLinkUrl { get; set; } = "ws://127.0.0.1:7890/v1.0/harbor/connect";
 
         /// <summary>
         /// Dashboard URL opened by the "Open Dashboard" action.
