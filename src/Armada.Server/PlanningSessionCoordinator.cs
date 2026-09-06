@@ -367,6 +367,7 @@ namespace Armada.Server
                 missions,
                 session.PipelineId,
                 session.SelectedPlaybooks,
+                null,
                 token).ConfigureAwait(false);
 
             voyage.SourcePlanningSessionId = session.Id;

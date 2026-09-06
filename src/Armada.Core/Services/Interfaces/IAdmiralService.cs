@@ -112,6 +112,8 @@ namespace Armada.Core.Services.Interfaces
         /// <param name="missionDescriptions">List of mission title/description pairs.</param>
         /// <param name="pipelineId">Optional pipeline ID. Resolved: explicit > vessel default > fleet default > WorkerOnly.</param>
         /// <param name="selectedPlaybooks">Ordered playbooks to apply to every mission in the voyage.</param>
+        /// <param name="captainOverridesJson">Serialized per-persona captain overrides, persisted on the voyage
+        /// before any mission is created and dispatched so assignment can honor the preferred captain.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The created voyage.</returns>
         Task<Voyage> DispatchVoyageAsync(
@@ -121,6 +123,7 @@ namespace Armada.Core.Services.Interfaces
             List<MissionDescription> missionDescriptions,
             string? pipelineId,
             List<SelectedPlaybook>? selectedPlaybooks,
+            string? captainOverridesJson = null,
             CancellationToken token = default);
 
         /// <summary>

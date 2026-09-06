@@ -174,13 +174,21 @@ namespace Armada.Server.Routes
                 }
                 else
                 {
+                    // Serialize the per-persona captain overrides and pass them in so they are persisted on the
+                    // voyage BEFORE any mission is created and assigned -- otherwise the first stage's inline
+                    // assignment runs before the overrides exist and auto-assigns an arbitrary idle captain.
+                    string? overridesJson = (voyageReq.CaptainAssignments != null && voyageReq.CaptainAssignments.Count > 0)
+                        ? MissionService.SerializeCaptainOverrides(voyageReq.CaptainAssignments)
+                        : null;
+
                     voyage = await _admiral.DispatchVoyageAsync(
                         voyageReq.Title,
                         voyageReq.Description,
                         voyageReq.VesselId,
                         missions,
                         pipelineId,
-                        voyageReq.SelectedPlaybooks).ConfigureAwait(false);
+                        voyageReq.SelectedPlaybooks,
+                        overridesJson).ConfigureAwait(false);
                 }
 
                 if (!String.IsNullOrWhiteSpace(voyageReq.ObjectiveId))
@@ -188,9 +196,9 @@ namespace Armada.Server.Routes
                     await _objectives.LinkVoyageAsync(ctx, voyageReq.ObjectiveId, voyage.Id).ConfigureAwait(false);
                 }
 
-                // Persist per-persona captain overrides so assignment resolves the preferred captain and
-                // fallback tier for every mission of a step, including fan-out missions created later.
-                if (voyageReq.CaptainAssignments != null && voyageReq.CaptainAssignments.Count > 0)
+                // For a bare voyage (missions added separately), there was no inline dispatch, so persist the
+                // overrides now; they will apply when missions are added later.
+                if (validation.IsBareVoyage && voyageReq.CaptainAssignments != null && voyageReq.CaptainAssignments.Count > 0)
                 {
                     voyage.CaptainOverridesJson = MissionService.SerializeCaptainOverrides(voyageReq.CaptainAssignments);
                     voyage = await _database.Voyages.UpdateAsync(voyage).ConfigureAwait(false);
