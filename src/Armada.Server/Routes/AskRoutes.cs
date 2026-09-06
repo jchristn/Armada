@@ -55,7 +55,7 @@ namespace Armada.Server.Routes
                 }
 
                 AskRequest request = JsonSerializer.Deserialize<AskRequest>(req.Http.Request.DataAsString, _bodyJsonOptions) ?? new AskRequest();
-                AskResponse response = await _ask.AskAsync(request.Message).ConfigureAwait(false);
+                AskResponse response = await _ask.AskAsync(request.Message, ctx).ConfigureAwait(false);
                 return response;
             },
             api => api
@@ -81,7 +81,7 @@ namespace Armada.Server.Routes
 
                 string id = req.Parameters["id"];
                 CaptainChatRequest request = JsonSerializer.Deserialize<CaptainChatRequest>(req.Http.Request.DataAsString, _bodyJsonOptions) ?? new CaptainChatRequest();
-                CaptainChatResponse response = await _captainChat.ChatAsync(id, request).ConfigureAwait(false);
+                CaptainChatResponse response = await _captainChat.ChatAsync(id, request, ctx).ConfigureAwait(false);
                 return response;
             },
             api => api

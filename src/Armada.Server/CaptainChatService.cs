@@ -72,13 +72,20 @@ namespace Armada.Server
         /// <param name="request">The new message and prior conversation.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The assistant reply and its timing statistics.</returns>
-        public async Task<CaptainChatResponse> ChatAsync(string captainId, CaptainChatRequest request, CancellationToken token = default)
+        public async Task<CaptainChatResponse> ChatAsync(string captainId, CaptainChatRequest request, AuthContext auth, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));
             if (request == null) throw new ArgumentNullException(nameof(request));
+            if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (String.IsNullOrWhiteSpace(request.Message)) return Fail("A message is required.");
 
-            Captain? captain = await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false);
+            // Scope the captain read so a caller can only chat with a captain they can see: a global admin any,
+            // a tenant admin any in their tenant, a regular user only their own. Not-visible reads as not-found.
+            Captain? captain = auth.IsAdmin
+                ? await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false)
+                : auth.IsTenantAdmin
+                    ? await _Database.Captains.ReadAsync(auth.TenantId!, captainId, token).ConfigureAwait(false)
+                    : await _Database.Captains.ReadAsync(auth.TenantId!, auth.UserId!, captainId, token).ConfigureAwait(false);
             if (captain == null) return Fail("Captain not found.");
 
             // The editable Ask Armada system prompt (Configuration > Prompts, template 'ask.system').

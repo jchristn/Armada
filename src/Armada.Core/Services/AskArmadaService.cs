@@ -2,6 +2,7 @@ namespace Armada.Core.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Database;
@@ -53,7 +54,7 @@ namespace Armada.Core.Services
         /// <param name="message">The user's message.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The assistant response.</returns>
-        public async Task<AskResponse> AskAsync(string message, CancellationToken token = default)
+        public async Task<AskResponse> AskAsync(string message, AuthContext auth, CancellationToken token = default)
         {
             string text = (message ?? String.Empty).Trim().ToLowerInvariant();
             if (text.Length == 0)
@@ -68,7 +69,7 @@ namespace Armada.Core.Services
                     return await AnswerStalledAsync(token).ConfigureAwait(false);
 
                 if (Contains(text, "fail", "broke", "error"))
-                    return await AnswerFailuresAsync(token).ConfigureAwait(false);
+                    return await AnswerFailuresAsync(auth, token).ConfigureAwait(false);
 
                 if (Contains(text, "captain", "agent", "worker"))
                     return await AnswerCaptainsAsync(token).ConfigureAwait(false);
@@ -80,7 +81,7 @@ namespace Armada.Core.Services
                     return await AnswerVoyagesAsync(token).ConfigureAwait(false);
 
                 if (Contains(text, "mission", "task", "work"))
-                    return await AnswerMissionsAsync(token).ConfigureAwait(false);
+                    return await AnswerMissionsAsync(auth, token).ConfigureAwait(false);
 
                 if (Contains(text, "status", "overview", "how are", "how's", "health", "summary", "going"))
                     return await AnswerStatusAsync(token).ConfigureAwait(false);
@@ -152,10 +153,10 @@ namespace Armada.Core.Services
             };
         }
 
-        private async Task<AskResponse> AnswerFailuresAsync(CancellationToken token)
+        private async Task<AskResponse> AnswerFailuresAsync(AuthContext auth, CancellationToken token)
         {
-            List<Mission> failed = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Failed, token).ConfigureAwait(false);
-            List<Mission> landingFailed = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.LandingFailed, token).ConfigureAwait(false);
+            List<Mission> failed = await MissionsByStatusAsync(auth, MissionStatusEnum.Failed, token).ConfigureAwait(false);
+            List<Mission> landingFailed = await MissionsByStatusAsync(auth, MissionStatusEnum.LandingFailed, token).ConfigureAwait(false);
             return new AskResponse
             {
                 Kind = AskResponseKindEnum.Answer,
@@ -164,11 +165,11 @@ namespace Armada.Core.Services
             };
         }
 
-        private async Task<AskResponse> AnswerMissionsAsync(CancellationToken token)
+        private async Task<AskResponse> AnswerMissionsAsync(AuthContext auth, CancellationToken token)
         {
-            List<Mission> pending = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending, token).ConfigureAwait(false);
-            List<Mission> inProgress = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.InProgress, token).ConfigureAwait(false);
-            List<Mission> review = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Review, token).ConfigureAwait(false);
+            List<Mission> pending = await MissionsByStatusAsync(auth, MissionStatusEnum.Pending, token).ConfigureAwait(false);
+            List<Mission> inProgress = await MissionsByStatusAsync(auth, MissionStatusEnum.InProgress, token).ConfigureAwait(false);
+            List<Mission> review = await MissionsByStatusAsync(auth, MissionStatusEnum.Review, token).ConfigureAwait(false);
             return new AskResponse
             {
                 Kind = AskResponseKindEnum.Answer,
@@ -222,6 +223,13 @@ namespace Armada.Core.Services
                 if (text.Contains(needle, StringComparison.Ordinal)) return true;
             }
             return false;
+        }
+
+        private async System.Threading.Tasks.Task<List<Mission>> MissionsByStatusAsync(AuthContext auth, MissionStatusEnum status, CancellationToken token)
+        {
+            if (auth == null || auth.IsAdmin) return await _Database.Missions.EnumerateByStatusAsync(status, token).ConfigureAwait(false);
+            List<Mission> list = await _Database.Missions.EnumerateByStatusAsync(auth.TenantId!, status, token).ConfigureAwait(false);
+            return auth.IsTenantAdmin ? list : list.Where(m => String.Equals(m.UserId, auth.UserId, StringComparison.Ordinal)).ToList();
         }
 
         #endregion

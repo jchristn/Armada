@@ -49,7 +49,7 @@ namespace Test.Shared.Suites.Services
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
                     InboxService inbox = new InboxService(testDb.Driver, CreateLogging());
-                    List<InboxItem> items = await inbox.GetInboxAsync();
+                    List<InboxItem> items = await inbox.GetInboxAsync(AuthContext.Authenticated("ten_inbox", "usr_inbox", true, false, "Test"));
                     AssertEqual(0, items.Count);
                 }
             }));
@@ -65,7 +65,7 @@ namespace Test.Shared.Suites.Services
                     await db.Captains.CreateAsync(new Captain("stuck-1") { State = CaptainStateEnum.Stalled });
 
                     InboxService inbox = new InboxService(db, CreateLogging());
-                    List<InboxItem> items = await inbox.GetInboxAsync();
+                    List<InboxItem> items = await inbox.GetInboxAsync(AuthContext.Authenticated("ten_inbox", "usr_inbox", true, false, "Test"));
 
                     AssertEqual(4, items.Count);
                     AssertTrue(items.Any(i => i.Kind == "review"), "Should include the review");
@@ -84,7 +84,7 @@ namespace Test.Shared.Suites.Services
                     await db.Missions.CreateAsync(new Mission("Could not land") { Status = MissionStatusEnum.LandingFailed });
 
                     InboxService inbox = new InboxService(db, CreateLogging());
-                    List<InboxItem> items = await inbox.GetInboxAsync();
+                    List<InboxItem> items = await inbox.GetInboxAsync(AuthContext.Authenticated("ten_inbox", "usr_inbox", true, false, "Test"));
 
                     AssertTrue(items.Count >= 2, "Expected at least two items");
                     AssertEqual(InboxSeverityEnum.Critical, items[0].Severity);
@@ -102,7 +102,7 @@ namespace Test.Shared.Suites.Services
                     await db.Missions.CreateAsync(overdue);
 
                     InboxService inbox = new InboxService(db, CreateLogging());
-                    List<InboxItem> items = await inbox.GetInboxAsync();
+                    List<InboxItem> items = await inbox.GetInboxAsync(AuthContext.Authenticated("ten_inbox", "usr_inbox", true, false, "Test"));
 
                     AssertEqual(1, items.Count);
                     AssertEqual(InboxSeverityEnum.Critical, items[0].Severity);

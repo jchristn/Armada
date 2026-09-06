@@ -30,7 +30,7 @@ namespace Armada.Server.Mcp.Tools
                 new { type = "object", properties = new { } },
                 async (args) =>
                 {
-                    List<InboxItem> items = await inbox.GetInboxAsync().ConfigureAwait(false);
+                    List<InboxItem> items = await inbox.GetInboxAsync(McpToolHelpers.CreateDefaultTenantAdminContext()).ConfigureAwait(false);
                     int critical = 0;
                     int warning = 0;
                     foreach (InboxItem item in items)
