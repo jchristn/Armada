@@ -307,12 +307,12 @@ Freeze the wire protocol and the seam before building either side against them.
 
 ### Routing and affinity (multiple Harbors)
 
-- [ ] RTR-01 `IHarborRouter` + `HarborRouter`: given a mission/vessel and the set of attached, enabled,
+- [x] RTR-01 `IHarborRouter` + `HarborRouter`: given a mission/vessel and the set of attached, enabled,
   healthy Harbors, select one. Order of precedence: (1) an existing dock's owning Harbor if the mission
   already has a dock (hard affinity); (2) `mission.assigned_harbor_id` / `vessel.preferred_harbor_id` if
   set and eligible; (3) a Harbor that already holds the vessel's repo clone; (4) capability match against
   `vessel.required_capabilities` and the requested runtime; (5) least loaded by in-flight jobs under the
-  Harbor's capacity. Returns a typed decision (chosen Harbor or a typed "no eligible Harbor" reason).
+  Harbor's capacity. Returns a typed decision (chosen Harbor or a typed "no eligible Harbor" reason). DONE: HarborRouter + HarborRoutingRequest/Decision; 8 tests (affinity pin + offline-owner stall, capability filter, preferred, least-loaded, capacity-full, no-connected, disabled). Wiring into dock provisioning (RTR-02) pending the v63 dock.harbor_id columns and RemoteHostExecutor. -- 2026-09-05
 - [ ] RTR-02 Decide routing only at dock provisioning. Persist the chosen Harbor on `docks.harbor_id` and
   `missions.assigned_harbor_id`; after that, `RemoteHostExecutor` resolves the Harbor for every operation
   from the dock's `harbor_id` (affinity), never re-routes a live mission.
