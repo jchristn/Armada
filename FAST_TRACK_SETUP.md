@@ -16,7 +16,7 @@ By the end of the guide:
 
 ## Prerequisites
 
-1. **Armada is running locally** and the MCP HTTP server is reachable at `http://localhost:7891/rpc` (the default `McpPort`). All examples below assume this URL.
+1. **Armada is running locally** and the MCP HTTP server is reachable at `http://localhost:7891/mcp` (the default `McpPort`). All examples below assume this URL.
 2. **A coding agent is installed** — either:
    - **Claude Code** (`claude`) with the model of your choice, or
    - **Codex CLI** (`codex`) wired to your OpenAI account
@@ -37,7 +37,7 @@ Edit `.mcp.json` at the project root or `~/.claude/mcp.json`:
   "mcpServers": {
     "armada": {
       "transport": "http",
-      "url": "http://localhost:7891/rpc"
+      "url": "http://localhost:7891/mcp"
     }
   }
 }
@@ -46,7 +46,7 @@ Edit `.mcp.json` at the project root or `~/.claude/mcp.json`:
 Or, equivalent CLI:
 
 ```bash
-claude mcp add --transport http --scope user armada http://localhost:7891/rpc
+claude mcp add --transport http --scope user armada http://localhost:7891/mcp
 ```
 
 Restart Claude Code. The tools surface as `mcp__armada__*` — they're loaded lazily, so the first call may pause briefly.
@@ -57,11 +57,15 @@ Edit `~/.codex/config.toml` (or `%USERPROFILE%\.codex\config.toml` on Windows). 
 
 ```toml
 [mcp_servers.armada]
-url = "http://localhost:7891/rpc"
+url = "http://localhost:7891/mcp"
 transport = "http"
 ```
 
 Codex auto-loads tools from configured MCP servers on session start; no restart needed beyond exiting the current session. Tools surface with the prefix configured by Codex (typically `armada__<tool>`).
+
+### Authenticated MCP (multi-user or remote)
+
+MCP is authenticated end-to-end. For a local single-user server the bare URL above is enough -- an unauthenticated caller is treated as the default tenant admin, so everything works out of the box. For a shared/multi-user or remote deployment, present a credential so the server scopes every MCP call to your user (the same per-user scoping the REST API enforces): mint an access key + secret in the dashboard (Server hub -> Credentials tab) and pass it as a header in your agent's MCP config, e.g. add an `Authorization` (or `X-Token`) header alongside the `url`. Without a credential the tools still load, but user-scoped data (your inbox, Ask history, captain chat) resolves against the default admin context rather than your user.
 
 ### Verify the connection
 
@@ -69,7 +73,7 @@ In whichever agent you're using, ask:
 
 > Do you have access to Armada via MCP?
 
-Expected: the agent confirms a long list of Armada tools (fleets, vessels, captains, missions, voyages, merge queue, personas, playbooks, signals, status, backup, restore). If it can't see them, confirm Armada is running locally (`armada status` or check `http://localhost:7891/rpc` returns a JSON-RPC error rather than a connection refused) and that the URL in your agent config matches.
+Expected: the agent confirms a long list of Armada tools (fleets, vessels, captains, missions, voyages, merge queue, personas, playbooks, signals, status, backup, restore). If it can't see them, confirm Armada is running locally (`armada status` or check `http://localhost:7891/mcp` returns a JSON-RPC error rather than a connection refused) and that the URL in your agent config matches.
 
 ## Step 2 — Point the agent at your code
 
@@ -146,7 +150,7 @@ Under the hood the agent calls `create_captain` once per captain. The fields tha
 |-------|-------|
 | `name` | Display name. Pick something operators will recognize: "Claude Code (Opus)", "Codex", "Gemini", "Cursor". |
 | `runtime` | One of `ClaudeCode`, `Codex`, `Gemini`, `Cursor`, `Custom`. Required for dispatch routing. |
-| `model` | Specific model identifier (e.g. `claude-opus-4-7`, `gpt-5`). Optional — runtime defaults if omitted. |
+| `model` | Specific model identifier (e.g. `claude-opus-4-8`, `gpt-5`). Optional — runtime defaults if omitted. |
 | `systemInstructions` | Text injected into every mission prompt for this captain. The right place to enforce playbook usage and compile-clean discipline. |
 | `preferredPersona` | Optional; routing prefers this captain when missions match the persona (e.g. `Worker`, `Architect`, `Judge`). |
 | `allowedPersonas` | JSON array; if set, the captain only takes missions whose persona is on the list. |
@@ -172,7 +176,7 @@ Compile clean (no errors, no warnings) before reporting work complete. Prefer ex
 
 ### Per-runtime defaults to consider
 
-- **Claude Code** — model `claude-opus-4-7` for heavy work, `claude-sonnet-4-6` for cheaper passes, `claude-haiku-4-5-20251001` for fast triage. Multiple captains is fine: e.g. one named "Claude Code (Opus)" and another "Claude Code (Sonnet, fast)".
+- **Claude Code** — model `claude-opus-4-8` for heavy work, `claude-sonnet-5` for cheaper passes, `claude-haiku-4-5-20251001` for fast triage. Multiple captains is fine: e.g. one named "Claude Code (Opus)" and another "Claude Code (Sonnet, fast)".
 - **Codex** — runs against OpenAI models (typically `gpt-5` family). Codex auto-selects without an explicit model identifier; pass it only if you want to pin behavior.
 - **Gemini** — runtime `Gemini`; pin a specific Gemini model if you care about which version answers (e.g. `gemini-3-pro` for code, `gemini-3-flash` for quick passes). Note that Gemini's tool-calling shape differs from Claude/OpenAI — your system instructions don't need to change but expect different cadence.
 - **Cursor** — runtime `Cursor`; useful when you want missions to land in someone's IDE for review rather than running fully autonomously. Pair with a tighter `allowedPersonas` (e.g. only `Reviewer`) so it doesn't pick up bulk work.
@@ -230,3 +234,7 @@ If you'd rather hand the whole thing to the agent in one shot, the minimal promp
 - Any new repos that needed initialization show a `main` branch on GitHub with the initial commit.
 
 From here, you can dispatch missions, open voyages, and route work between captains.
+
+## Where captains execute (local vs. Harbor)
+
+By default the Admiral launches captains in-process on its own machine (local mode) -- the setup above is all you need. If the Admiral runs in a container or on a remote host, or you set `RequireHarborForLaunch`, captains instead execute on a host-side **Harbor** runner that dials out to the Admiral and runs the CLIs where your logins and repos already live. In that case, install and start the Harbor app on your machine, point it at the Admiral, and mint it a credential (see `docs/HARBOR.md`); dispatched missions then run on your Harbor rather than the Admiral. Each user's launches require that user's own connected Harbor.
