@@ -115,8 +115,10 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     MissionCreateArgs request = JsonSerializer.Deserialize<MissionCreateArgs>(args!.Value, _JsonOptions)!;
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Mission mission = new Mission();
-                    mission.TenantId = ArmadaConstants.DefaultTenantId;
+                    mission.TenantId = String.IsNullOrEmpty(caller.TenantId) ? ArmadaConstants.DefaultTenantId : caller.TenantId;
+                    mission.UserId = caller.UserId;
                     mission.Title = request.Title;
                     mission.Description = request.Description;
                     mission.VesselId = request.VesselId;
@@ -412,7 +414,8 @@ namespace Armada.Server.Mcp.Tools
                     mission = await database.Missions.UpdateAsync(mission).ConfigureAwait(false);
 
                     Signal signal = new Signal(SignalTypeEnum.Progress, "Mission " + missionId + " restarted");
-                    signal.TenantId = ArmadaConstants.DefaultTenantId;
+                    signal.TenantId = mission.TenantId;
+                    signal.UserId = mission.UserId;
                     await database.Signals.CreateAsync(signal).ConfigureAwait(false);
 
                     return (object)mission;
@@ -476,7 +479,8 @@ namespace Armada.Server.Mcp.Tools
                     mission = await database.Missions.UpdateAsync(mission).ConfigureAwait(false);
 
                     Signal signal = new Signal(SignalTypeEnum.Progress, "Mission " + missionId + " transitioned to " + newStatus);
-                    signal.TenantId = ArmadaConstants.DefaultTenantId;
+                    signal.TenantId = mission.TenantId;
+                    signal.UserId = mission.UserId;
                     if (!String.IsNullOrEmpty(mission.CaptainId)) signal.FromCaptainId = mission.CaptainId;
                     await database.Signals.CreateAsync(signal).ConfigureAwait(false);
 

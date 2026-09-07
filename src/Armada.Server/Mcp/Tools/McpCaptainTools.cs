@@ -142,8 +142,10 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     CaptainCreateArgs request = JsonSerializer.Deserialize<CaptainCreateArgs>(args!.Value, _JsonOptions)!;
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Captain captain = new Captain();
-                    captain.TenantId = ArmadaConstants.DefaultTenantId;
+                    captain.TenantId = String.IsNullOrEmpty(caller.TenantId) ? ArmadaConstants.DefaultTenantId : caller.TenantId;
+                    captain.UserId = caller.UserId;
                     captain.Name = request.Name;
                     if (!String.IsNullOrEmpty(request.Runtime) && Enum.TryParse<AgentRuntimeEnum>(request.Runtime, true, out AgentRuntimeEnum rt))
                         captain.Runtime = rt;

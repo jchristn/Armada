@@ -118,12 +118,14 @@ namespace Armada.Server.Mcp.Tools
 
                     string? pipelineId = validation.ResolvedPipelineId;
 
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Voyage voyage;
                     if (validation.IsBareVoyage)
                     {
                         // Bare voyage (missions added separately) -- parity with the REST bare-voyage path.
                         voyage = new Voyage(title, description);
-                        voyage.TenantId = ArmadaConstants.DefaultTenantId;
+                        voyage.TenantId = String.IsNullOrEmpty(caller.TenantId) ? ArmadaConstants.DefaultTenantId : caller.TenantId;
+                        voyage.UserId = caller.UserId;
                         voyage = await database.Voyages.CreateAsync(voyage).ConfigureAwait(false);
                         if (selectedPlaybooks.Count > 0)
                         {

@@ -62,8 +62,10 @@ namespace Armada.Server.Mcp.Tools
                     if (String.IsNullOrEmpty(request.Name)) return (object)new { Error = "name is required" };
                     if (request.Stages == null || request.Stages.Count == 0) return (object)new { Error = "stages is required and must not be empty" };
 
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Pipeline pipeline = new Pipeline(request.Name);
-                    pipeline.TenantId = ArmadaConstants.DefaultTenantId;
+                    pipeline.TenantId = String.IsNullOrEmpty(caller.TenantId) ? ArmadaConstants.DefaultTenantId : caller.TenantId;
+                    pipeline.UserId = caller.UserId;
                     if (request.Description != null)
                         pipeline.Description = request.Description;
 

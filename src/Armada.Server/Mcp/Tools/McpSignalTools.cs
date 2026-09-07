@@ -46,8 +46,10 @@ namespace Armada.Server.Mcp.Tools
                     SignalSendArgs request = JsonSerializer.Deserialize<SignalSendArgs>(args!.Value, _JsonOptions)!;
                     string captainId = request.CaptainId;
                     string message = request.Message;
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Signal signal = new Signal(SignalTypeEnum.Mail, message);
-                    signal.TenantId = ArmadaConstants.DefaultTenantId;
+                    signal.TenantId = String.IsNullOrEmpty(caller.TenantId) ? ArmadaConstants.DefaultTenantId : caller.TenantId;
+                    signal.UserId = caller.UserId;
                     signal.ToCaptainId = captainId;
                     signal = await database.Signals.CreateAsync(signal).ConfigureAwait(false);
                     return (object)signal;

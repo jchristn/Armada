@@ -43,8 +43,9 @@ namespace Armada.Server.Mcp.Tools
                 {
                     FleetIdArgs request = JsonSerializer.Deserialize<FleetIdArgs>(args!.Value, _JsonOptions)!;
                     string fleetId = request.FleetId;
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Fleet? fleet = await database.Fleets.ReadAsync(fleetId).ConfigureAwait(false);
-                    if (fleet == null) return (object)new { Error = "Fleet not found" };
+                    if (fleet == null || !CallerCanAccess(fleet, caller)) return (object)new { Error = "Fleet not found" };
                     List<Vessel> vessels = await database.Vessels.EnumerateByFleetAsync(fleetId).ConfigureAwait(false);
                     return (object)new { Fleet = fleet, Vessels = vessels };
                 });
@@ -65,8 +66,12 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     FleetCreateArgs request = JsonSerializer.Deserialize<FleetCreateArgs>(args!.Value, _JsonOptions)!;
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Fleet fleet = new Fleet();
-                    fleet.TenantId = ArmadaConstants.DefaultTenantId;
+                    // Attribute the fleet to the authenticated caller so it is scoped like the REST API.
+                    // Unauthenticated local callers resolve to the default tenant/user, preserving prior behavior.
+                    fleet.TenantId = String.IsNullOrEmpty(caller.TenantId) ? ArmadaConstants.DefaultTenantId : caller.TenantId;
+                    fleet.UserId = caller.UserId;
                     fleet.Name = request.Name;
                     fleet.Description = request.Description ?? "";
                     fleet = await database.Fleets.CreateAsync(fleet).ConfigureAwait(false);
@@ -92,8 +97,9 @@ namespace Armada.Server.Mcp.Tools
                 {
                     FleetUpdateArgs request = JsonSerializer.Deserialize<FleetUpdateArgs>(args!.Value, _JsonOptions)!;
                     string fleetId = request.FleetId;
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Fleet? fleet = await database.Fleets.ReadAsync(fleetId).ConfigureAwait(false);
-                    if (fleet == null) return (object)new { Error = "Fleet not found" };
+                    if (fleet == null || !CallerCanAccess(fleet, caller)) return (object)new { Error = "Fleet not found" };
                     if (request.Name != null)
                         fleet.Name = request.Name;
                     if (request.Description != null)
@@ -120,8 +126,9 @@ namespace Armada.Server.Mcp.Tools
                 {
                     FleetIdArgs request = JsonSerializer.Deserialize<FleetIdArgs>(args!.Value, _JsonOptions)!;
                     string fleetId = request.FleetId;
-                    bool exists = await database.Fleets.ExistsAsync(fleetId).ConfigureAwait(false);
-                    if (!exists) return (object)new { Error = "Fleet not found" };
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    Fleet? fleet = await database.Fleets.ReadAsync(fleetId).ConfigureAwait(false);
+                    if (fleet == null || !CallerCanAccess(fleet, caller)) return (object)new { Error = "Fleet not found" };
                     await database.Fleets.DeleteAsync(fleetId).ConfigureAwait(false);
                     return (object)new { Status = "deleted", FleetId = fleetId };
                 });
@@ -144,6 +151,7 @@ namespace Armada.Server.Mcp.Tools
                     if (request.Ids == null || request.Ids.Count == 0)
                         return (object)new { Error = "ids is required and must not be empty" };
 
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     DeleteMultipleResult result = new DeleteMultipleResult();
                     foreach (string id in request.Ids)
                     {
@@ -152,8 +160,8 @@ namespace Armada.Server.Mcp.Tools
                             result.Skipped.Add(new DeleteMultipleSkipped(id ?? "", "Empty ID"));
                             continue;
                         }
-                        bool exists = await database.Fleets.ExistsAsync(id).ConfigureAwait(false);
-                        if (!exists)
+                        Fleet? fleet = await database.Fleets.ReadAsync(id).ConfigureAwait(false);
+                        if (fleet == null || !CallerCanAccess(fleet, caller))
                         {
                             result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
                             continue;
@@ -164,6 +172,19 @@ namespace Armada.Server.Mcp.Tools
                     result.ResolveStatus();
                     return (object)result;
                 });
+        }
+
+        /// <summary>
+        /// Whether the authenticated caller may access the given fleet. Admins may access any fleet;
+        /// everyone else is confined to their own tenant, so a fleet in another tenant is treated as absent.
+        /// </summary>
+        /// <param name="fleet">Fleet to check.</param>
+        /// <param name="caller">Resolved caller context.</param>
+        /// <returns>True when the caller may see or mutate the fleet.</returns>
+        private static bool CallerCanAccess(Fleet fleet, AuthContext caller)
+        {
+            if (caller.IsAdmin) return true;
+            return String.Equals(fleet.TenantId, caller.TenantId, StringComparison.Ordinal);
         }
     }
 }

@@ -76,8 +76,10 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     VesselAddArgs request = JsonSerializer.Deserialize<VesselAddArgs>(args!.Value, _JsonOptions)!;
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Vessel vessel = new Vessel();
-                    vessel.TenantId = ArmadaConstants.DefaultTenantId;
+                    vessel.TenantId = String.IsNullOrEmpty(caller.TenantId) ? ArmadaConstants.DefaultTenantId : caller.TenantId;
+                    vessel.UserId = caller.UserId;
                     vessel.Name = request.Name;
                     vessel.RepoUrl = request.RepoUrl;
                     vessel.FleetId = request.FleetId;

@@ -72,18 +72,19 @@ namespace Armada.Server.Mcp.Tools
                     if (String.IsNullOrWhiteSpace(request.FileName)) return (object)new { Error = "fileName is required" };
                     if (String.IsNullOrWhiteSpace(request.Content)) return (object)new { Error = "content is required" };
 
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Playbook playbook = new Playbook(request.FileName!, request.Content!)
                     {
                         Description = request.Description,
                         Active = request.Active ?? true
                     };
-                    playbook.TenantId = Constants.DefaultTenantId;
-                    playbook.UserId = Constants.DefaultUserId;
+                    playbook.TenantId = String.IsNullOrEmpty(caller.TenantId) ? Constants.DefaultTenantId : caller.TenantId;
+                    playbook.UserId = caller.UserId;
 
                     PlaybookService service = new PlaybookService(database, logging);
                     service.Validate(playbook);
 
-                    if (await database.Playbooks.ExistsByFileNameAsync(Constants.DefaultTenantId, playbook.FileName).ConfigureAwait(false))
+                    if (await database.Playbooks.ExistsByFileNameAsync(playbook.TenantId, playbook.FileName).ConfigureAwait(false))
                     {
                         return (object)new { Error = "A playbook with that file name already exists." };
                     }
