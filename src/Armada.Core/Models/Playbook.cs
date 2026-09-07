@@ -33,6 +33,12 @@ namespace Armada.Core.Models
         public string? UserId { get; set; } = null;
 
         /// <summary>
+        /// Ownership scope: tenant-wide playbooks are visible to everyone in the tenant but editable only by
+        /// tenant/global admins; user-specific playbooks are owned by <see cref="UserId"/>. Defaults tenant-wide.
+        /// </summary>
+        public Armada.Core.Enums.ScopeEnum Scope { get; set; } = Armada.Core.Enums.ScopeEnum.TenantWide;
+
+        /// <summary>
         /// Playbook filename. Expected to end in .md.
         /// </summary>
         public string FileName

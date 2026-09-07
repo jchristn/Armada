@@ -1028,6 +1028,12 @@ namespace Armada.Core.Database.SqlServer.Queries
                     65,
                     "Add scope to model_endpoints (tenant-wide vs user-specific)",
                     @"IF COL_LENGTH('model_endpoints','scope') IS NULL ALTER TABLE model_endpoints ADD scope NVARCHAR(32) NOT NULL DEFAULT 'TenantWide';"
+                ),
+                new SchemaMigration(
+                    66,
+                    "Add ownership scope to playbooks and skills",
+                    @"IF COL_LENGTH('playbooks','scope') IS NULL ALTER TABLE playbooks ADD scope NVARCHAR(32) NOT NULL DEFAULT 'TenantWide';",
+                    @"IF COL_LENGTH('skills','scope') IS NULL ALTER TABLE skills ADD scope NVARCHAR(32) NOT NULL DEFAULT 'TenantWide';"
                 )
             };
         }

@@ -603,6 +603,11 @@ namespace Armada.Core.Database.Mysql
                     65,
                     "Add scope to model_endpoints (tenant-wide vs user-specific)",
                     TableQueries.MigrationV65Statements
+                ),
+                new SchemaMigration(
+                    66,
+                    "Add ownership scope to playbooks and skills",
+                    TableQueries.MigrationV66Statements
                 )
             };
         }

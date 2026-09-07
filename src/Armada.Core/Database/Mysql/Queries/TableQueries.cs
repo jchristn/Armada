@@ -1403,6 +1403,15 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration v66 statements: add ownership scope to playbooks and skills.
+        /// </summary>
+        public static readonly string[] MigrationV66Statements = new string[]
+        {
+            "ALTER TABLE playbooks ADD COLUMN scope VARCHAR(32) NOT NULL DEFAULT 'TenantWide';",
+            "ALTER TABLE skills ADD COLUMN scope VARCHAR(32) NOT NULL DEFAULT 'TenantWide';"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

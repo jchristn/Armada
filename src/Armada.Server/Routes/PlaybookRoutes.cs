@@ -60,6 +60,8 @@ namespace Armada.Server.Routes
                 EnumerationResult<Playbook> result = ctx.IsAdmin
                     ? await _database.Playbooks.EnumerateAsync(query).ConfigureAwait(false)
                     : await _database.Playbooks.EnumerateAsync(ctx.TenantId!, query).ConfigureAwait(false);
+                if (!ctx.IsAdmin && !ctx.IsTenantAdmin)
+                    result.Objects = result.Objects.Where(p => ScopedVisibility.CanView(ctx, p.Scope, p.TenantId, p.UserId)).ToList();
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
                 return result;
             },
@@ -89,6 +91,8 @@ namespace Armada.Server.Routes
                 EnumerationResult<Playbook> result = ctx.IsAdmin
                     ? await _database.Playbooks.EnumerateAsync(query).ConfigureAwait(false)
                     : await _database.Playbooks.EnumerateAsync(ctx.TenantId!, query).ConfigureAwait(false);
+                if (!ctx.IsAdmin && !ctx.IsTenantAdmin)
+                    result.Objects = result.Objects.Where(p => ScopedVisibility.CanView(ctx, p.Scope, p.TenantId, p.UserId)).ToList();
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
                 return result;
             },
@@ -116,6 +120,8 @@ namespace Armada.Server.Routes
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Playbook.");
                 playbook.TenantId = ctx.TenantId;
                 playbook.UserId = ctx.UserId;
+                // Regular users may only create user-specific playbooks; admins may choose (default tenant-wide).
+                playbook.Scope = ScopedVisibility.ResolveCreateScope(ctx, playbook.Scope);
 
                 PlaybookService playbookService = new PlaybookService(_database, _logging);
                 playbookService.Validate(playbook);
@@ -156,7 +162,7 @@ namespace Armada.Server.Routes
                 Playbook? playbook = ctx.IsAdmin
                     ? await _database.Playbooks.ReadAsync(id).ConfigureAwait(false)
                     : await _database.Playbooks.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false);
-                if (playbook == null)
+                if (playbook == null || !ScopedVisibility.CanView(ctx, playbook.Scope, playbook.TenantId, playbook.UserId))
                 {
                     req.Http.Response.StatusCode = 404;
                     return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Playbook not found" };
@@ -196,6 +202,12 @@ namespace Armada.Server.Routes
                     return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Playbook not found" };
                 }
 
+                if (!ScopedVisibility.CanEdit(ctx, existing.Scope, existing.TenantId, existing.UserId))
+                {
+                    req.Http.Response.StatusCode = 403;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "You may only modify your own playbooks; a tenant-wide playbook requires a tenant admin." };
+                }
+
                 Playbook incoming = JsonSerializer.Deserialize<Playbook>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Playbook.");
 
@@ -203,6 +215,8 @@ namespace Armada.Server.Routes
                 existing.Description = incoming.Description;
                 existing.Content = incoming.Content;
                 existing.Active = incoming.Active;
+                // Only tenant/global admins may change the ownership scope of an existing playbook.
+                if (ctx.IsAdmin || ctx.IsTenantAdmin) existing.Scope = incoming.Scope;
                 existing.LastUpdateUtc = DateTime.UtcNow;
 
                 PlaybookService playbookService = new PlaybookService(_database, _logging);
@@ -249,6 +263,11 @@ namespace Armada.Server.Routes
                 {
                     req.Http.Response.StatusCode = 404;
                     return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Playbook not found" };
+                }
+                if (!ScopedVisibility.CanEdit(ctx, existing.Scope, existing.TenantId, existing.UserId))
+                {
+                    req.Http.Response.StatusCode = 403;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "You may only delete your own playbooks; a tenant-wide playbook requires a tenant admin." };
                 }
 
                 await _database.Playbooks.DeleteAsync(id).ConfigureAwait(false);
