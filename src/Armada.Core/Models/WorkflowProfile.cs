@@ -34,6 +34,13 @@ namespace Armada.Core.Models
         public string? UserId { get; set; } = null;
 
         /// <summary>
+        /// Ownership scope for user-scoping (tenant-wide vs user-specific). Distinct from <see cref="Scope"/>,
+        /// which is the application scope (Global/Fleet/Vessel). Tenant-wide profiles are visible to everyone in
+        /// the tenant but editable only by tenant/global admins; user-specific profiles are owned by <see cref="UserId"/>.
+        /// </summary>
+        public Armada.Core.Enums.ScopeEnum OwnershipScope { get; set; } = Armada.Core.Enums.ScopeEnum.TenantWide;
+
+        /// <summary>
         /// Human-readable profile name.
         /// </summary>
         public string Name

@@ -1179,7 +1179,10 @@ namespace Armada.Core.Database.Postgresql.Queries
                     @"ALTER TABLE pipelines ADD COLUMN IF NOT EXISTS user_id TEXT;",
                     @"ALTER TABLE pipelines ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'TenantWide';",
                     @"ALTER TABLE prompt_templates ADD COLUMN IF NOT EXISTS user_id TEXT;",
-                    @"ALTER TABLE prompt_templates ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'TenantWide';")
+                    @"ALTER TABLE prompt_templates ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'TenantWide';"),
+                new SchemaMigration(68, "Add ownership_scope to workflow_profiles and project_profiles",
+                    @"ALTER TABLE workflow_profiles ADD COLUMN IF NOT EXISTS ownership_scope TEXT NOT NULL DEFAULT 'TenantWide';",
+                    @"ALTER TABLE project_profiles ADD COLUMN IF NOT EXISTS ownership_scope TEXT NOT NULL DEFAULT 'TenantWide';")
             };
         }
 

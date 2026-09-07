@@ -1044,6 +1044,12 @@ namespace Armada.Core.Database.SqlServer.Queries
                     @"IF COL_LENGTH('pipelines','scope') IS NULL ALTER TABLE pipelines ADD scope NVARCHAR(32) NOT NULL DEFAULT 'TenantWide';",
                     @"IF COL_LENGTH('prompt_templates','user_id') IS NULL ALTER TABLE prompt_templates ADD user_id NVARCHAR(450);",
                     @"IF COL_LENGTH('prompt_templates','scope') IS NULL ALTER TABLE prompt_templates ADD scope NVARCHAR(32) NOT NULL DEFAULT 'TenantWide';"
+                ),
+                new SchemaMigration(
+                    68,
+                    "Add ownership_scope to workflow_profiles and project_profiles",
+                    @"IF COL_LENGTH('workflow_profiles','ownership_scope') IS NULL ALTER TABLE workflow_profiles ADD ownership_scope NVARCHAR(32) NOT NULL DEFAULT 'TenantWide';",
+                    @"IF COL_LENGTH('project_profiles','ownership_scope') IS NULL ALTER TABLE project_profiles ADD ownership_scope NVARCHAR(32) NOT NULL DEFAULT 'TenantWide';"
                 )
             };
         }

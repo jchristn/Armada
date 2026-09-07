@@ -613,6 +613,11 @@ namespace Armada.Core.Database.Mysql
                     67,
                     "Add ownership (user_id + scope) to personas, pipelines, prompt_templates",
                     TableQueries.MigrationV67Statements
+                ),
+                new SchemaMigration(
+                    68,
+                    "Add ownership_scope to workflow_profiles and project_profiles",
+                    TableQueries.MigrationV68Statements
                 )
             };
         }

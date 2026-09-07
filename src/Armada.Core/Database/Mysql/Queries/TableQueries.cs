@@ -1425,6 +1425,15 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration v68 statements: add ownership_scope to workflow_profiles and project_profiles.
+        /// </summary>
+        public static readonly string[] MigrationV68Statements = new string[]
+        {
+            "ALTER TABLE workflow_profiles ADD COLUMN ownership_scope VARCHAR(32) NOT NULL DEFAULT 'TenantWide';",
+            "ALTER TABLE project_profiles ADD COLUMN ownership_scope VARCHAR(32) NOT NULL DEFAULT 'TenantWide';"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]
