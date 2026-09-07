@@ -70,6 +70,7 @@ namespace Armada.Server
         /// </summary>
         /// <param name="captainId">Captain identifier (cpt_ prefix).</param>
         /// <param name="request">The new message and prior conversation.</param>
+        /// <param name="auth">Caller authentication context, used to scope which captain can be chatted with.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The assistant reply and its timing statistics.</returns>
         public async Task<CaptainChatResponse> ChatAsync(string captainId, CaptainChatRequest request, AuthContext auth, CancellationToken token = default)

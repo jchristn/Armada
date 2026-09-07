@@ -34,6 +34,12 @@ namespace Armada.Core.Models
         public string? UserId { get; set; } = null;
 
         /// <summary>
+        /// Ownership scope: tenant-wide skills are visible to everyone in the tenant but editable only by
+        /// tenant/global admins; user-specific skills are owned by <see cref="UserId"/>. Defaults tenant-wide.
+        /// </summary>
+        public Armada.Core.Enums.ScopeEnum Scope { get; set; } = Armada.Core.Enums.ScopeEnum.TenantWide;
+
+        /// <summary>
         /// Human-readable skill name (also the reference key used by project profiles).
         /// </summary>
         public string Name
