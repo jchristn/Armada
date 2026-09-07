@@ -39,7 +39,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     RunbookIdArgs request = JsonSerializer.Deserialize<RunbookIdArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize RunbookIdArgs.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     Runbook? runbook = await runbookService.ReadAsync(auth, request.RunbookId).ConfigureAwait(false);
                     if (runbook == null) return (object)new { Error = "Runbook not found" };
                     return (object)runbook;
@@ -61,7 +61,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     RunbookExecutionIdArgs request = JsonSerializer.Deserialize<RunbookExecutionIdArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize RunbookExecutionIdArgs.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     RunbookExecution? execution = await runbookService.ReadExecutionAsync(auth, request.RunbookExecutionId).ConfigureAwait(false);
                     if (execution == null) return (object)new { Error = "Runbook execution not found" };
                     return (object)execution;
@@ -99,7 +99,7 @@ namespace Armada.Server.Mcp.Tools
                     string runbookId = value.GetProperty("runbookId").GetString() ?? String.Empty;
                     RunbookExecutionStartRequest request = JsonSerializer.Deserialize<RunbookExecutionStartRequest>(value, _JsonOptions)
                         ?? new RunbookExecutionStartRequest();
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     return (object)await runbookService.StartExecutionAsync(auth, runbookId, request).ConfigureAwait(false);
                 });
         }

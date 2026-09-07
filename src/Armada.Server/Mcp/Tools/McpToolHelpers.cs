@@ -83,10 +83,35 @@ namespace Armada.Server.Mcp.Tools
         }
 
         /// <summary>
-        /// Build the default tenant-admin auth context used by MCP service-backed workflows.
+        /// Resolve the auth context for the current MCP tool invocation. When the MCP transport
+        /// authenticated the caller, Voltaic publishes the caller's tenant/user claims on the ambient
+        /// <see cref="Voltaic.Core.RpcCallContext.Current"/> for this request's async flow; that identity is
+        /// used so tools are scoped per-user exactly like the REST API. When no caller identity is present
+        /// (an unauthenticated local/stdio caller, or no authentication handler configured), this falls back
+        /// to the default tenant-admin context so existing local workflows keep working.
         /// </summary>
-        public static AuthContext CreateDefaultTenantAdminContext()
+        public static AuthContext ResolveCallerContext()
         {
+            Voltaic.Core.RpcCallContext? caller = Voltaic.Core.RpcCallContext.Current;
+            if (caller != null
+                && caller.Claims != null
+                && caller.Claims.TryGetValue("userId", out string? userId)
+                && !String.IsNullOrEmpty(userId))
+            {
+                caller.Claims.TryGetValue("tenantId", out string? tenantId);
+                caller.Claims.TryGetValue("isAdmin", out string? isAdmin);
+                caller.Claims.TryGetValue("isTenantAdmin", out string? isTenantAdmin);
+                caller.Claims.TryGetValue("authMethod", out string? authMethod);
+                return AuthContext.Authenticated(
+                    String.IsNullOrEmpty(tenantId) ? Constants.DefaultTenantId : tenantId,
+                    userId,
+                    String.Equals(isAdmin, "true", StringComparison.OrdinalIgnoreCase),
+                    String.Equals(isTenantAdmin, "true", StringComparison.OrdinalIgnoreCase),
+                    String.IsNullOrEmpty(authMethod) ? "Mcp" : authMethod,
+                    null,
+                    caller.Principal);
+            }
+
             return AuthContext.Authenticated(
                 Constants.DefaultTenantId,
                 Constants.DefaultUserId,

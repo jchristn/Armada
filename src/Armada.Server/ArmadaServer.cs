@@ -401,6 +401,7 @@ namespace Armada.Server
             _McpServer = new McpHttpServer(_Settings.Rest.Hostname, _Settings.McpPort);
             _McpServer.ServerName = ArmadaConstants.ProductName;
             _McpServer.ServerVersion = ArmadaConstants.ProductVersion;
+            _McpServer.AuthenticationHandler = AuthenticateMcpRequestAsync;
             RegisterMcpTools();
 
             Task mcpTask = Task.Run(() => _McpServer.StartAsync(_TokenSource.Token));
@@ -500,6 +501,45 @@ namespace Armada.Server
             AuthContext result = await _AuthenticationService.AuthenticateAsync(authHeader, tokenHeader, apiKeyHeader).ConfigureAwait(false);
             _RequestAuthContexts.Remove(ctx);
             _RequestAuthContexts.Add(ctx, result);
+            return result;
+        }
+
+        private async Task<AuthenticationResult> AuthenticateMcpRequestAsync(System.Net.HttpListenerRequest request)
+        {
+            // Populate the caller's identity for the MCP tool handlers when a credential is presented.
+            // This is additive: unauthenticated local/stdio callers still succeed (IsAuthenticated = true with
+            // no claims), and the tool handlers fall back to the default tenant-admin context. When a valid
+            // credential is presented, the resolved tenant/user/role claims flow into the handlers via
+            // Voltaic's ambient RpcCallContext so MCP tools are scoped per-user, matching the REST API.
+            AuthenticationResult result = new AuthenticationResult { IsAuthenticated = true };
+            try
+            {
+                string? authHeader = request.Headers["Authorization"];
+                string? tokenHeader = request.Headers["X-Token"];
+                string? apiKeyHeader = request.Headers["X-Api-Key"];
+                if (!String.IsNullOrEmpty(authHeader) || !String.IsNullOrEmpty(tokenHeader) || !String.IsNullOrEmpty(apiKeyHeader))
+                {
+                    AuthContext ctx = await _AuthenticationService.AuthenticateAsync(authHeader, tokenHeader, apiKeyHeader).ConfigureAwait(false);
+                    if (ctx != null && ctx.IsAuthenticated && !String.IsNullOrEmpty(ctx.UserId))
+                    {
+                        result.Principal = ctx.UserId;
+                        result.Claims = new Dictionary<string, string>
+                        {
+                            ["tenantId"] = ctx.TenantId ?? String.Empty,
+                            ["userId"] = ctx.UserId ?? String.Empty,
+                            ["isAdmin"] = ctx.IsAdmin ? "true" : "false",
+                            ["isTenantAdmin"] = ctx.IsTenantAdmin ? "true" : "false",
+                            ["authMethod"] = ctx.AuthMethod ?? "Mcp"
+                        };
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Never fail the MCP request on an auth-resolution error; treat as an anonymous local caller.
+                _Logging.Debug(_Header + "MCP caller authentication skipped: " + ex.Message);
+            }
+
             return result;
         }
 

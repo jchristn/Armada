@@ -70,7 +70,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     CheckRunRequest request = JsonSerializer.Deserialize<CheckRunRequest>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize CheckRunRequest.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     return (object)await checkRunService.RunAsync(auth, request).ConfigureAwait(false);
                 });
 
@@ -90,7 +90,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     CheckRunIdArgs request = JsonSerializer.Deserialize<CheckRunIdArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize CheckRunIdArgs.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     return (object)await checkRunService.RetryAsync(auth, request.CheckRunId).ConfigureAwait(false);
                 });
         }

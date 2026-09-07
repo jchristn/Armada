@@ -15,7 +15,7 @@
     <PackageReference Include="Spectre.Console" Version="0.57.2" />
     <PackageReference Include="Spectre.Console.Cli" Version="0.55.0" />
     <PackageReference Include="SyslogLogging" Version="2.2.2" />
-    <PackageReference Include="Voltaic" Version="0.6.1" />
+    <PackageReference Include="Voltaic" Version="0.7.1" />
   </ItemGroup>
 
   <ItemGroup>

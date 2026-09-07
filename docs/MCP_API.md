@@ -248,13 +248,13 @@ The MCP port can be configured in the Armada settings file. The hostname is shar
 
 ## Authentication
 
-The MCP server does **not** currently enforce authentication. All MCP operations run in the context of the default tenant. Access control should be managed at the network level (firewall, bind address).
+The MCP server accepts an **optional** credential and scopes tool calls to the authenticated caller. Present a credential with the same headers the REST API accepts - `Authorization: Bearer <token>`, `X-Token: <session token>`, or `X-Api-Key: <api key>`. When a valid credential is presented, the caller's tenant/user/role identity flows into every tool handler and the tools are scoped **per-user exactly like the REST API** (a regular user sees only their own owned records and only tenant-wide plus their own configuration objects; a tenant/global admin sees the tenant/system). When no credential is presented, the request still succeeds and runs under the default tenant-admin context, so existing local/stdio workflows keep working unchanged.
 
-> **Note:** Unlike the REST API, which supports bearer tokens, encrypted session tokens, and API keys as of v0.3.0, the MCP server remains unauthenticated and MCP tools run under a system/tenant-admin context - they are **not** per-user data-scoped. Per-user MCP authorization (mirroring the REST scoping model, where a regular user sees only their own operational records and only tenant-wide plus their own configuration objects) is planned. It requires the MCP transport to carry the authenticated caller's identity into each tool handler; until that ships, use the authenticated REST API for per-user-scoped access. See [REST_API.md - Data Scoping](REST_API.md#data-scoping-who-sees-and-edits-what) for the scoping model.
+> **Design:** authentication is additive, not mandatory. The transport does not reject anonymous calls (the local orchestrating agent is assumed trusted); it simply uses the caller's identity for scoping when one is supplied. Under the hood, `McpHttpServer.AuthenticationHandler` resolves the credential to an identity and Voltaic publishes it on the ambient `RpcCallContext`, which the tool handlers read via `McpToolHelpers.ResolveCallerContext()`. See [REST_API.md - Data Scoping](REST_API.md#data-scoping-who-sees-and-edits-what) for the full scoping model.
 
 ### MCP Authentication Scope
 
-MCP tools (served via stdio) remain **unauthenticated by design**. The MCP transport assumes the orchestrating agent (e.g., Claude Code) is already trusted and running locally. All MCP tool operations use the default tenant context (`ten_default`). If multi-tenant isolation is required for MCP clients, use the authenticated REST API instead.
+Owned (Category A) entities - fleets, vessels, captains, missions, voyages, docks, signals, events, merge queue, objectives/backlog - are scoped to the authenticated caller across `enumerate` and the entity tools. Configuration (Category B) entities remain tenant-visible through MCP; per-object ownership editing is enforced by their services. If you need strict multi-tenant isolation for untrusted MCP clients, bind the MCP port to localhost or a firewalled interface and require a credential at the network layer.
 
 ---
 
@@ -281,7 +281,7 @@ Common error responses across tools:
 
 MCP tools do not return HTTP status codes (MCP uses JSON-RPC, not HTTP). The presence of an `Error` field in the response indicates failure. On success, the response contains the requested data (entity object, status, list, etc.) without an `Error` field.
 
-This is a deliberate architectural decision, not a missing feature. The stdio transport has no network attack surface -- the only caller is the parent process that spawned Armada. Adding authentication to stdio would add complexity without meaningful security benefit. The HTTP MCP transport inherits the same unauthenticated model for consistency, but should be bound to `localhost` or protected by a firewall in production.
+The stdio transport has no network attack surface -- the only caller is the parent process that spawned Armada -- so it runs anonymously under the default tenant-admin context. The HTTP MCP transport accepts an optional credential and scopes tool calls to the authenticated caller when one is supplied (see [Authentication](#authentication)); it should still be bound to `localhost` or protected by a firewall in production.
 
 ---
 

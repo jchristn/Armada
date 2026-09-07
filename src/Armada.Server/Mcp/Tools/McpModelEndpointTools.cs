@@ -42,7 +42,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     ModelEndpointIdArgs request = JsonSerializer.Deserialize<ModelEndpointIdArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize ModelEndpointIdArgs.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     ModelEndpoint? endpoint = await endpoints.ReadAsync(auth, request.EndpointId).ConfigureAwait(false);
                     if (endpoint == null) return (object)new { Error = "Model endpoint not found" };
                     return (object)endpoint;
@@ -72,7 +72,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     ModelEndpointUpsertArgs request = JsonSerializer.Deserialize<ModelEndpointUpsertArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize ModelEndpointUpsertArgs.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
 
                     ModelEndpoint endpoint = new ModelEndpoint();
                     if (!String.IsNullOrWhiteSpace(request.Name)) endpoint.Name = request.Name;
@@ -120,7 +120,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     ModelEndpointUpsertArgs request = JsonSerializer.Deserialize<ModelEndpointUpsertArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize ModelEndpointUpsertArgs.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
 
                     if (String.IsNullOrWhiteSpace(request.EndpointId)) return (object)new { Error = "endpointId is required." };
 
@@ -163,7 +163,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     ModelEndpointIdArgs request = JsonSerializer.Deserialize<ModelEndpointIdArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize ModelEndpointIdArgs.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     try
                     {
                         await endpoints.DeleteAsync(auth, request.EndpointId).ConfigureAwait(false);
@@ -191,7 +191,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     ModelEndpointIdArgs request = JsonSerializer.Deserialize<ModelEndpointIdArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize ModelEndpointIdArgs.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     try
                     {
                         return (object)await endpoints.ValidateAsync(auth, request.EndpointId).ConfigureAwait(false);

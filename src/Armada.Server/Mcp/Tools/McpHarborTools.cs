@@ -41,7 +41,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     HarborIdArgs request = JsonSerializer.Deserialize<HarborIdArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize HarborIdArgs.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     Harbor? harbor = await harbors.ReadAsync(auth, request.HarborId).ConfigureAwait(false);
                     if (harbor == null) return (object)new { Error = "Harbor not found" };
                     return (object)harbor;
@@ -65,7 +65,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     HarborUpsertArgs request = JsonSerializer.Deserialize<HarborUpsertArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize HarborUpsertArgs.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
 
                     Harbor harbor = new Harbor();
                     if (!String.IsNullOrWhiteSpace(request.Name)) harbor.Name = request.Name;
@@ -101,7 +101,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     HarborUpsertArgs request = JsonSerializer.Deserialize<HarborUpsertArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize HarborUpsertArgs.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
 
                     if (String.IsNullOrWhiteSpace(request.HarborId)) return (object)new { Error = "harborId is required." };
                     Harbor? existing = await harbors.ReadAsync(auth, request.HarborId).ConfigureAwait(false);
@@ -137,7 +137,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     HarborIdArgs request = JsonSerializer.Deserialize<HarborIdArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize HarborIdArgs.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     try
                     {
                         await harbors.DeleteAsync(auth, request.HarborId).ConfigureAwait(false);
@@ -166,7 +166,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     HarborUpsertArgs request = JsonSerializer.Deserialize<HarborUpsertArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize HarborUpsertArgs.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     if (String.IsNullOrWhiteSpace(request.HarborId)) return (object)new { Error = "harborId is required." };
                     try
                     {

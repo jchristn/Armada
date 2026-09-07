@@ -60,7 +60,7 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     ObjectiveQuery query = JsonSerializer.Deserialize<ObjectiveQuery>(args!.Value, _JsonOptions) ?? new ObjectiveQuery();
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     return (object)await objectiveService.EnumerateAsync(auth, query).ConfigureAwait(false);
                 });
 
@@ -91,7 +91,7 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     ObjectiveQuery query = JsonSerializer.Deserialize<ObjectiveQuery>(args!.Value, _JsonOptions) ?? new ObjectiveQuery();
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     return (object)await objectiveService.EnumerateAsync(auth, query).ConfigureAwait(false);
                 });
 
@@ -111,7 +111,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     ObjectiveIdArgs request = JsonSerializer.Deserialize<ObjectiveIdArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize ObjectiveIdArgs.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     Objective? objective = await objectiveService.ReadAsync(auth, request.ObjectiveId).ConfigureAwait(false);
                     if (objective == null) return (object)new { Error = "Objective not found" };
                     return (object)objective;
@@ -133,7 +133,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     ObjectiveIdArgs request = JsonSerializer.Deserialize<ObjectiveIdArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize ObjectiveIdArgs.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     Objective? objective = await objectiveService.ReadAsync(auth, request.ObjectiveId).ConfigureAwait(false);
                     if (objective == null) return (object)new { Error = "Backlog item not found" };
                     return (object)objective;
@@ -185,7 +185,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     ObjectiveUpsertRequest request = JsonSerializer.Deserialize<ObjectiveUpsertRequest>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize ObjectiveUpsertRequest.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     return (object)await objectiveService.CreateAsync(auth, request).ConfigureAwait(false);
                 });
 
@@ -235,7 +235,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     ObjectiveUpsertRequest request = JsonSerializer.Deserialize<ObjectiveUpsertRequest>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize ObjectiveUpsertRequest.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     return (object)await objectiveService.CreateAsync(auth, request).ConfigureAwait(false);
                 });
 
@@ -286,7 +286,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     UpdateObjectiveArgs request = JsonSerializer.Deserialize<UpdateObjectiveArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize UpdateObjectiveArgs.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     return (object)await objectiveService.UpdateAsync(auth, request.ObjectiveId, request.ToUpsertRequest()).ConfigureAwait(false);
                 });
 
@@ -337,7 +337,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     UpdateObjectiveArgs request = JsonSerializer.Deserialize<UpdateObjectiveArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize UpdateObjectiveArgs.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     return (object)await objectiveService.UpdateAsync(auth, request.ObjectiveId, request.ToUpsertRequest()).ConfigureAwait(false);
                 });
 
@@ -371,7 +371,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     ObjectiveReorderRequest request = JsonSerializer.Deserialize<ObjectiveReorderRequest>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize ObjectiveReorderRequest.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     return (object)await objectiveService.ReorderAsync(auth, request).ConfigureAwait(false);
                 });
 
@@ -405,7 +405,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     ObjectiveReorderRequest request = JsonSerializer.Deserialize<ObjectiveReorderRequest>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize ObjectiveReorderRequest.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     return (object)await objectiveService.ReorderAsync(auth, request).ConfigureAwait(false);
                 });
 
@@ -429,7 +429,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         ObjectiveIdArgs request = JsonSerializer.Deserialize<ObjectiveIdArgs>(args!.Value, _JsonOptions)
                             ?? throw new InvalidOperationException("Could not deserialize ObjectiveIdArgs.");
-                        AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                        AuthContext auth = McpToolHelpers.ResolveCallerContext();
                         Objective? objective = await objectiveService.ReadAsync(auth, request.ObjectiveId).ConfigureAwait(false);
                         if (objective == null) return (object)new { Error = "Backlog item not found" };
 
@@ -483,7 +483,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         CreateBacklogRefinementSessionArgs request = JsonSerializer.Deserialize<CreateBacklogRefinementSessionArgs>(args!.Value, _JsonOptions)
                             ?? throw new InvalidOperationException("Could not deserialize CreateBacklogRefinementSessionArgs.");
-                        AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                        AuthContext auth = McpToolHelpers.ResolveCallerContext();
                         Objective objective = await objectiveService.ReadAsync(auth, request.ObjectiveId).ConfigureAwait(false)
                             ?? throw new InvalidOperationException("Backlog item not found.");
                         Captain captain = await ReadCaptainForContextAsync(database, auth, request.CaptainId).ConfigureAwait(false)
@@ -518,7 +518,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         ObjectiveRefinementSessionIdArgs request = JsonSerializer.Deserialize<ObjectiveRefinementSessionIdArgs>(args!.Value, _JsonOptions)
                             ?? throw new InvalidOperationException("Could not deserialize ObjectiveRefinementSessionIdArgs.");
-                        AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                        AuthContext auth = McpToolHelpers.ResolveCallerContext();
                         ObjectiveRefinementSession session = await ReadObjectiveRefinementSessionForContextAsync(database, auth, request.SessionId).ConfigureAwait(false)
                             ?? throw new InvalidOperationException("Objective refinement session not found.");
                         return (object)await BuildObjectiveRefinementSessionDetailAsync(database, objectiveService, auth, session).ConfigureAwait(false);
@@ -541,7 +541,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         SendBacklogRefinementMessageArgs request = JsonSerializer.Deserialize<SendBacklogRefinementMessageArgs>(args!.Value, _JsonOptions)
                             ?? throw new InvalidOperationException("Could not deserialize SendBacklogRefinementMessageArgs.");
-                        AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                        AuthContext auth = McpToolHelpers.ResolveCallerContext();
                         ObjectiveRefinementSession session = await ReadObjectiveRefinementSessionForContextAsync(database, auth, request.SessionId).ConfigureAwait(false)
                             ?? throw new InvalidOperationException("Objective refinement session not found.");
                         await objectiveRefinementCoordinator.SendMessageAsync(session, request.Content).ConfigureAwait(false);
@@ -565,7 +565,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         SummarizeBacklogRefinementArgs request = JsonSerializer.Deserialize<SummarizeBacklogRefinementArgs>(args!.Value, _JsonOptions)
                             ?? throw new InvalidOperationException("Could not deserialize SummarizeBacklogRefinementArgs.");
-                        AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                        AuthContext auth = McpToolHelpers.ResolveCallerContext();
                         ObjectiveRefinementSession session = await ReadObjectiveRefinementSessionForContextAsync(database, auth, request.SessionId).ConfigureAwait(false)
                             ?? throw new InvalidOperationException("Objective refinement session not found.");
                         return (object)await objectiveRefinementCoordinator.SummarizeAsync(session, request.ToSummaryRequest()).ConfigureAwait(false);
@@ -590,7 +590,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         ApplyBacklogRefinementArgs request = JsonSerializer.Deserialize<ApplyBacklogRefinementArgs>(args!.Value, _JsonOptions)
                             ?? throw new InvalidOperationException("Could not deserialize ApplyBacklogRefinementArgs.");
-                        AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                        AuthContext auth = McpToolHelpers.ResolveCallerContext();
                         ObjectiveRefinementSession session = await ReadObjectiveRefinementSessionForContextAsync(database, auth, request.SessionId).ConfigureAwait(false)
                             ?? throw new InvalidOperationException("Objective refinement session not found.");
                         Objective objective = await objectiveService.ReadAsync(auth, session.ObjectiveId).ConfigureAwait(false)
@@ -621,7 +621,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         ObjectiveRefinementSessionIdArgs request = JsonSerializer.Deserialize<ObjectiveRefinementSessionIdArgs>(args!.Value, _JsonOptions)
                             ?? throw new InvalidOperationException("Could not deserialize ObjectiveRefinementSessionIdArgs.");
-                        AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                        AuthContext auth = McpToolHelpers.ResolveCallerContext();
                         ObjectiveRefinementSession session = await ReadObjectiveRefinementSessionForContextAsync(database, auth, request.SessionId).ConfigureAwait(false)
                             ?? throw new InvalidOperationException("Objective refinement session not found.");
                         ObjectiveRefinementSession stopping = await objectiveRefinementCoordinator.RequestStopAsync(session).ConfigureAwait(false);
@@ -653,7 +653,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         CreateBacklogPlanningSessionArgs request = JsonSerializer.Deserialize<CreateBacklogPlanningSessionArgs>(args!.Value, _JsonOptions)
                             ?? throw new InvalidOperationException("Could not deserialize CreateBacklogPlanningSessionArgs.");
-                        AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                        AuthContext auth = McpToolHelpers.ResolveCallerContext();
                         string objectiveId = String.IsNullOrWhiteSpace(request.ObjectiveId)
                             ? throw new InvalidOperationException("Objective ID is required.")
                             : request.ObjectiveId;
@@ -687,7 +687,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         PlanningSessionIdArgs request = JsonSerializer.Deserialize<PlanningSessionIdArgs>(args!.Value, _JsonOptions)
                             ?? throw new InvalidOperationException("Could not deserialize PlanningSessionIdArgs.");
-                        AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                        AuthContext auth = McpToolHelpers.ResolveCallerContext();
                         PlanningSession session = await ReadPlanningSessionForContextAsync(database, auth, request.SessionId).ConfigureAwait(false)
                             ?? throw new InvalidOperationException("Planning session not found.");
                         return (object)await BuildPlanningSessionDetailAsync(database, objectiveService, auth, session).ConfigureAwait(false);
@@ -712,7 +712,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         DispatchBacklogPlanningSessionArgs request = JsonSerializer.Deserialize<DispatchBacklogPlanningSessionArgs>(args!.Value, _JsonOptions)
                             ?? throw new InvalidOperationException("Could not deserialize DispatchBacklogPlanningSessionArgs.");
-                        AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                        AuthContext auth = McpToolHelpers.ResolveCallerContext();
                         PlanningSession session = await ReadPlanningSessionForContextAsync(database, auth, request.SessionId).ConfigureAwait(false)
                             ?? throw new InvalidOperationException("Planning session not found.");
                         Voyage voyage = await planningSessionCoordinator.DispatchAsync(session, request.ToDispatchRequest()).ConfigureAwait(false);
@@ -748,7 +748,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     ObjectiveIdArgs request = JsonSerializer.Deserialize<ObjectiveIdArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize ObjectiveIdArgs.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     await objectiveService.DeleteAsync(auth, request.ObjectiveId).ConfigureAwait(false);
                     return (object)new { Success = true, ObjectiveId = request.ObjectiveId };
                 });
@@ -769,7 +769,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     ObjectiveIdArgs request = JsonSerializer.Deserialize<ObjectiveIdArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize ObjectiveIdArgs.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     await objectiveService.DeleteAsync(auth, request.ObjectiveId).ConfigureAwait(false);
                     return (object)new { Success = true, ObjectiveId = request.ObjectiveId };
                 });
