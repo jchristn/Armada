@@ -84,7 +84,10 @@ export default function AskArmada() {
   }, [captainId]);
 
   const selectedCaptain = captains.find((c) => c.id === captainId) || null;
-  const armadaMcpMissing = tools != null && tools.armadaToolCount <= 0;
+  // API-endpoint captains run Armada's built-in coding tools in-process and never act as an MCP
+  // client, so the "connect over MCP" warning does not apply to them -- show an accurate note instead.
+  const isApiEndpoint = tools != null && tools.runtime === 'ApiEndpoint';
+  const armadaMcpMissing = tools != null && tools.armadaToolCount <= 0 && !isApiEndpoint;
 
   // Replace the in-flight streaming assistant turn (the last one) via the updater.
   function updateStreamingTurn(mutate: (turn: ChatTurn) => ChatTurn) {
@@ -217,6 +220,11 @@ export default function AskArmada() {
           {toolsLoading && (
             <div className="text-dim" style={{ fontSize: '0.78rem', marginBottom: '0.6rem' }}>
               {t('Checking whether this captain is connected to Armada over MCP...')}
+            </div>
+          )}
+          {isApiEndpoint && (
+            <div className="text-dim" style={{ fontSize: '0.78rem', marginBottom: '0.6rem' }}>
+              {t('This is an API-endpoint captain. It runs Armada’s built-in coding tools (read, edit, search, run) in-process against a working directory, and does not connect over MCP. Fleet, mission, and voyage orchestration tools are not available in chat.')}
             </div>
           )}
           {armadaMcpMissing && (

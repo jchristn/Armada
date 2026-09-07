@@ -288,6 +288,25 @@ export default function MissionDetail() {
     }
   }
 
+  function handleMarkComplete() {
+    if (!mission) return;
+    setConfirm({
+      open: true,
+      title: t('Mark Complete'),
+      message: t('Mark mission "{{title}}" as Complete? Use this when the work has already landed and the mission just needs to graduate out of Review.', { title: mission.title }),
+      onConfirm: async () => {
+        setConfirm(c => ({ ...c, open: false }));
+        try {
+          await transitionMission(mission.id, { status: 'Complete' });
+          pushToast('success', t('Mission "{{title}}" marked Complete.', { title: mission.title }));
+          loadMission();
+        } catch (e: unknown) {
+          setError(t('Mark Complete failed: {{message}}', { message: e instanceof Error ? e.message : String(e) }));
+        }
+      },
+    });
+  }
+
   async function submitReview(verdict: 'approve' | 'conditional' | 'morework' | 'deny') {
     if (!mission || !reviewDecision) return;
 
@@ -374,6 +393,7 @@ export default function MissionDetail() {
   if (loading) return <p className="text-dim">{t('Loading...')}</p>;
   if (!mission) return <ErrorModal error={error || t('Mission not found.')} onClose={() => navigate('/missions')} />;
   const canResolveReview = mission.status === 'Review' && mission.requiresReview;
+  const canMarkComplete = mission.status === 'Review' && !mission.requiresReview;
 
   return (
     <div>
@@ -388,6 +408,9 @@ export default function MissionDetail() {
           <>
             {canResolveReview && (
               <button className="btn btn-sm btn-primary" onClick={() => setReviewDecision({ comment: mission.reviewComment || '' })}>{t('Resolve Review')}</button>
+            )}
+            {canMarkComplete && (
+              <button className="btn btn-sm btn-primary" onClick={handleMarkComplete} title={t('Graduate this mission out of Review to Complete')}>{t('Mark Complete')}</button>
             )}
             <button className="btn btn-sm" onClick={handleViewDiff} title={t('View mission diff')}>{t('Diff')}</button>
             <button className="btn btn-sm" onClick={handleViewLog} title={t('View mission log')}>{t('Log')}</button>
@@ -404,6 +427,9 @@ export default function MissionDetail() {
               { label: 'Edit', onClick: openEdit },
               ...(canResolveReview ? [
                 { label: 'Resolve Review', onClick: () => setReviewDecision({ comment: mission.reviewComment || '' }) },
+              ] : []),
+              ...(canMarkComplete ? [
+                { label: 'Mark Complete', onClick: handleMarkComplete },
               ] : []),
               { label: 'View Diff', onClick: handleViewDiff },
               { label: 'View Log', onClick: handleViewLog },
