@@ -213,7 +213,7 @@ namespace Armada.Proxy
                 }
 
                 req.Http.Response.Headers.Add("Set-Cookie", BuildSessionCookie(session!.Token, session.ExpiresUtc));
-                _Logging.Info(_Header + "browser login accepted");
+                _Logging.Debug(_Header + "browser login accepted");
                 return new
                 {
                     token = session.Token,

@@ -113,7 +113,7 @@ namespace Armada.Server
                     _LokiLogger = _Host.LoggerFactory.CreateLogger("Armada.Admiral");
                     _MessageForwarder = ForwardLogEntry;
                     _Logging.MessageLogged += _MessageForwarder;
-                    _Logging.Info(_Header + "bridging the Admiral log stream to the telemetry log exporter (Loki/OTLP)");
+                    _Logging.Debug(_Header + "bridging the Admiral log stream to the telemetry log exporter (Loki/OTLP)");
                 }
 
                 _Logging.Info(_Header + "telemetry host started for service '" + settings.ServiceName + "'" +

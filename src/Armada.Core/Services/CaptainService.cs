@@ -189,7 +189,7 @@ namespace Armada.Core.Services
                     }
 
                     await ReleaseAsync(captain, token: token).ConfigureAwait(false);
-                    _Logging.Info(_Header + "skipping auto-recovery for captain " + captain.Id +
+                    _Logging.Debug(_Header + "skipping auto-recovery for captain " + captain.Id +
                         " because mission " + mission.Id + " is " + mission.Status +
                         (voyageCancelled ? " and voyage " + mission.VoyageId + " is Cancelled" : String.Empty));
                     return;

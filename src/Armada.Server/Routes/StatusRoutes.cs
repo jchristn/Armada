@@ -521,7 +521,7 @@ namespace Armada.Server.Routes
                     return false;
                 }
 
-                _logging.Info(_HeaderRestart + "launched replacement Admiral process " + replacement.Id + " from " + executablePath);
+                _logging.Debug(_HeaderRestart + "launched replacement Admiral process " + replacement.Id + " from " + executablePath);
                 return true;
             }
             catch (Exception e)

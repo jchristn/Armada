@@ -84,7 +84,7 @@ namespace Armada.Core.Services
             persona.IsBuiltIn = true;
 
             await _Database.Personas.CreateAsync(persona, token).ConfigureAwait(false);
-            _Logging.Info(_Header + "seeded built-in persona: " + name);
+            _Logging.Debug(_Header + "seeded built-in persona: " + name);
         }
 
         private async Task SeedPipelinesAsync(CancellationToken token)
@@ -142,7 +142,7 @@ namespace Armada.Core.Services
                     existing.Stages = CloneStages(existing.Id, stages);
                     existing.LastUpdateUtc = DateTime.UtcNow;
                     await _Database.Pipelines.UpdateAsync(existing, token).ConfigureAwait(false);
-                    _Logging.Info(_Header + "upgraded built-in pipeline: " + name);
+                    _Logging.Debug(_Header + "upgraded built-in pipeline: " + name);
                 }
                 return;
             }
@@ -155,7 +155,7 @@ namespace Armada.Core.Services
             pipeline.Stages = CloneStages(pipeline.Id, stages);
 
             await _Database.Pipelines.CreateAsync(pipeline, token).ConfigureAwait(false);
-            _Logging.Info(_Header + "seeded built-in pipeline: " + name);
+            _Logging.Debug(_Header + "seeded built-in pipeline: " + name);
         }
 
         private static List<PipelineStage> CloneStages(string pipelineId, IEnumerable<PipelineStage> stages)
@@ -186,7 +186,7 @@ namespace Armada.Core.Services
             legacy.Name = PersonaCatalog.TestEngineer;
             legacy.LastUpdateUtc = DateTime.UtcNow;
             await _Database.Personas.UpdateAsync(legacy, token).ConfigureAwait(false);
-            _Logging.Info(_Header + "renamed built-in persona: " + PersonaCatalog.LegacyTestEngineer + " -> " + PersonaCatalog.TestEngineer);
+            _Logging.Debug(_Header + "renamed built-in persona: " + PersonaCatalog.LegacyTestEngineer + " -> " + PersonaCatalog.TestEngineer);
         }
 
         private async Task UpgradeCaptainPersonaReferencesAsync(CancellationToken token)
@@ -214,7 +214,7 @@ namespace Armada.Core.Services
 
                 captain.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
-                _Logging.Info(_Header + "updated captain persona references: " + captain.Name);
+                _Logging.Debug(_Header + "updated captain persona references: " + captain.Name);
             }
         }
 

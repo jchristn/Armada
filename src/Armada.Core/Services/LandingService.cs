@@ -140,7 +140,7 @@ namespace Armada.Core.Services
                     return false;
                 }
 
-                _Logging.Info(_Header + "retrying landing for mission " + missionId + " branch " + missionBranch);
+                _Logging.Debug(_Header + "retrying landing for mission " + missionId + " branch " + missionBranch);
 
                 // Transition back to WorkProduced for landing attempt
                 mission.Status = MissionStatusEnum.WorkProduced;
@@ -169,7 +169,7 @@ namespace Armada.Core.Services
                 if (OnPerformLanding != null)
                 {
                     await OnPerformLanding.Invoke(mission, dock).ConfigureAwait(false);
-                    _Logging.Info(_Header + "landing retry completed for mission " + missionId);
+                    _Logging.Debug(_Header + "landing retry completed for mission " + missionId);
 
                     // Re-read mission to get updated status from landing handler
                     mission = !String.IsNullOrEmpty(tenantId)

@@ -157,7 +157,7 @@ namespace Armada.Core.Services
                             bool isRegistered = await _Git.IsWorktreeRegisteredAsync(repoPath, existingDir, token).ConfigureAwait(false);
                             if (isRegistered)
                             {
-                                _Logging.Info(_Header + "cleaning up stale worktree from previous captain: " + existingDir);
+                                _Logging.Debug(_Header + "cleaning up stale worktree from previous captain: " + existingDir);
                                 try
                                 {
                                     await _Git.RemoveWorktreeAsync(existingDir, token).ConfigureAwait(false);
@@ -190,7 +190,7 @@ namespace Armada.Core.Services
                     bool isRegistered = await _Git.IsWorktreeRegisteredAsync(repoPath, worktreePath, token).ConfigureAwait(false);
                     if (isRegistered)
                     {
-                        _Logging.Info(_Header + "removing stale dock directory: " + worktreePath);
+                        _Logging.Debug(_Header + "removing stale dock directory: " + worktreePath);
                         try
                         {
                             await _Git.RemoveWorktreeAsync(worktreePath, token).ConfigureAwait(false);
@@ -427,7 +427,7 @@ namespace Armada.Core.Services
                 try
                 {
                     await _Git.RemoveWorktreeAsync(dock.WorktreePath, token).ConfigureAwait(false);
-                    _Logging.Info(_Header + "removed worktree for dock " + dock.Id + " at " + dock.WorktreePath);
+                    _Logging.Debug(_Header + "removed worktree for dock " + dock.Id + " at " + dock.WorktreePath);
                 }
                 catch (Exception ex)
                 {
@@ -501,7 +501,7 @@ namespace Armada.Core.Services
                 {
                     await RunGitInDirAsync(tempPath, "remote add origin " + vessel.RepoUrl, token).ConfigureAwait(false);
                     await RunGitInDirAsync(tempPath, "push -u origin " + vessel.DefaultBranch, token).ConfigureAwait(false);
-                    _Logging.Info(_Header + "pushed initial commit to remote for " + vessel.Name);
+                    _Logging.Debug(_Header + "pushed initial commit to remote for " + vessel.Name);
                 }
 
                 // Delete the stale bare repo (if it exists) and re-clone fresh

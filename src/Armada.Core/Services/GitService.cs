@@ -52,7 +52,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(repoUrl)) throw new ArgumentNullException(nameof(repoUrl));
             if (String.IsNullOrEmpty(localPath)) throw new ArgumentNullException(nameof(localPath));
 
-            _Logging.Info(_Header + "cloning bare: " + repoUrl + " -> " + localPath);
+            _Logging.Debug(_Header + "cloning bare: " + repoUrl + " -> " + localPath);
             await RunGitAsync(null, "clone", "--bare", repoUrl, localPath).ConfigureAwait(false);
 
             // Keep fetches on remote-tracking refs so active mission branches checked out
@@ -69,7 +69,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(worktreePath)) throw new ArgumentNullException(nameof(worktreePath));
             if (String.IsNullOrEmpty(branchName)) throw new ArgumentNullException(nameof(branchName));
 
-            _Logging.Info(_Header + "creating worktree: " + worktreePath + " branch: " + branchName);
+            _Logging.Debug(_Header + "creating worktree: " + worktreePath + " branch: " + branchName);
 
             string normalizedRepoPath = Path.GetFullPath(repoPath);
             SemaphoreSlim repoLock = _RepoLocks.GetOrAdd(normalizedRepoPath, _ => new SemaphoreSlim(1, 1));
@@ -92,7 +92,7 @@ namespace Armada.Core.Services
 
                 if (branchExists)
                 {
-                    _Logging.Info(_Header + "attaching worktree to existing branch: " + branchName);
+                    _Logging.Debug(_Header + "attaching worktree to existing branch: " + branchName);
                     await RunGitAsync(repoPath, "worktree", "add", worktreePath, branchName).ConfigureAwait(false);
                 }
                 else
@@ -169,7 +169,7 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrEmpty(worktreePath)) throw new ArgumentNullException(nameof(worktreePath));
 
-            _Logging.Info(_Header + "removing worktree: " + worktreePath);
+            _Logging.Debug(_Header + "removing worktree: " + worktreePath);
             string repoPath = await ResolveWorktreeRepoPathAsync(worktreePath).ConfigureAwait(false);
             await RunGitAsync(repoPath, token, "worktree", "remove", "--force", worktreePath).ConfigureAwait(false);
         }
@@ -238,7 +238,7 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrEmpty(worktreePath)) throw new ArgumentNullException(nameof(worktreePath));
 
-            _Logging.Info(_Header + "pushing branch from: " + worktreePath);
+            _Logging.Debug(_Header + "pushing branch from: " + worktreePath);
             await RunGitAsync(worktreePath, "push", "-u", remoteName, "HEAD").ConfigureAwait(false);
         }
 
@@ -250,12 +250,12 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(worktreePath)) throw new ArgumentNullException(nameof(worktreePath));
             if (String.IsNullOrEmpty(title)) throw new ArgumentNullException(nameof(title));
 
-            _Logging.Info(_Header + "creating PR: " + title);
+            _Logging.Debug(_Header + "creating PR: " + title);
 
             string result = await RunProcessAsync(worktreePath, "gh", "pr", "create", "--title", title, "--body", body ?? "").ConfigureAwait(false);
             string prUrl = result.Trim();
 
-            _Logging.Info(_Header + "PR created: " + prUrl);
+            _Logging.Debug(_Header + "PR created: " + prUrl);
             return prUrl;
         }
 
@@ -266,7 +266,7 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrEmpty(worktreePath)) throw new ArgumentNullException(nameof(worktreePath));
 
-            _Logging.Info(_Header + "repairing worktree: " + worktreePath);
+            _Logging.Debug(_Header + "repairing worktree: " + worktreePath);
 
             // Reset any uncommitted changes
             await RunGitAsync(worktreePath, "checkout", "--", ".").ConfigureAwait(false);
@@ -274,7 +274,7 @@ namespace Armada.Core.Services
             // Remove untracked files
             await RunGitAsync(worktreePath, "clean", "-fd").ConfigureAwait(false);
 
-            _Logging.Info(_Header + "worktree repaired: " + worktreePath);
+            _Logging.Debug(_Header + "worktree repaired: " + worktreePath);
         }
 
         /// <summary>
@@ -296,7 +296,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(worktreePath)) throw new ArgumentNullException(nameof(worktreePath));
             if (String.IsNullOrEmpty(prUrl)) throw new ArgumentNullException(nameof(prUrl));
 
-            _Logging.Info(_Header + "enabling auto-merge for PR: " + prUrl);
+            _Logging.Debug(_Header + "enabling auto-merge for PR: " + prUrl);
             await RunProcessAsync(worktreePath, "gh", "pr", "merge", prUrl, "--merge", "--auto").ConfigureAwait(false);
         }
 
@@ -309,7 +309,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(sourceRepoPath)) throw new ArgumentNullException(nameof(sourceRepoPath));
             if (String.IsNullOrEmpty(branchName)) throw new ArgumentNullException(nameof(branchName));
 
-            _Logging.Info(_Header + "merging branch " + branchName + " from " + sourceRepoPath + " into " + targetWorkDir);
+            _Logging.Debug(_Header + "merging branch " + branchName + " from " + sourceRepoPath + " into " + targetWorkDir);
             await EnsureTrackedFilesCleanAsync(targetWorkDir, token).ConfigureAwait(false);
 
             // Ensure we are on the correct target branch before merging.
@@ -347,7 +347,7 @@ namespace Armada.Core.Services
                 throw;
             }
 
-            _Logging.Info(_Header + "merged " + branchName + " into " + targetWorkDir + (String.IsNullOrEmpty(targetBranch) ? "" : " (target: " + targetBranch + ")"));
+            _Logging.Debug(_Header + "merged " + branchName + " into " + targetWorkDir + (String.IsNullOrEmpty(targetBranch) ? "" : " (target: " + targetBranch + ")"));
         }
 
         /// <summary>
@@ -357,7 +357,7 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrEmpty(workingDirectory)) throw new ArgumentNullException(nameof(workingDirectory));
 
-            _Logging.Info(_Header + "pulling latest in " + workingDirectory);
+            _Logging.Debug(_Header + "pulling latest in " + workingDirectory);
             await RunGitAsync(workingDirectory, "pull").ConfigureAwait(false);
         }
 
@@ -695,7 +695,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
             if (String.IsNullOrEmpty(branchName)) throw new ArgumentNullException(nameof(branchName));
 
-            _Logging.Info(_Header + "pushing branch " + branchName + " to " + remoteName + " from " + repoPath);
+            _Logging.Debug(_Header + "pushing branch " + branchName + " to " + remoteName + " from " + repoPath);
             await RunGitAsync(repoPath, "push", remoteName, "refs/heads/" + branchName + ":refs/heads/" + branchName).ConfigureAwait(false);
         }
 
@@ -720,7 +720,7 @@ namespace Armada.Core.Services
             string worktreePath = Path.Combine(Path.GetDirectoryName(repoPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
                 ?? Path.GetTempPath(), mergeDirName);
 
-            _Logging.Info(_Header + "merging " + sourceBranch + " into " + targetBranch + " via " + worktreePath);
+            _Logging.Debug(_Header + "merging " + sourceBranch + " into " + targetBranch + " via " + worktreePath);
             try
             {
                 await RunGitAsync(repoPath, "worktree", "add", worktreePath, targetBranch).ConfigureAwait(false);
@@ -772,7 +772,7 @@ namespace Armada.Core.Services
                 return false;
             }
 
-            _Logging.Info(_Header + "creating local branch " + branchName + " from " + baseRef);
+            _Logging.Debug(_Header + "creating local branch " + branchName + " from " + baseRef);
             await RunGitAsync(repoPath, "branch", branchName, baseRef).ConfigureAwait(false);
             return true;
         }

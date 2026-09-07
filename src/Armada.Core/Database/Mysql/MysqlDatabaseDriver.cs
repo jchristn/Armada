@@ -101,7 +101,7 @@ namespace Armada.Core.Database.Mysql
         /// <returns>Task.</returns>
         public override async Task InitializeAsync(CancellationToken token = default)
         {
-            _Logging.Info(_Header + "initializing database");
+            _Logging.Debug(_Header + "initializing database");
 
             using (MySqlConnection conn = await GetConnectionAsync(token).ConfigureAwait(false))
             {
@@ -157,10 +157,10 @@ namespace Armada.Core.Database.Mysql
                 if (applied > 0)
                     _Logging.Info(_Header + "applied " + applied + " migration(s), schema now at v" + migrations[migrations.Count - 1].Version);
                 else
-                    _Logging.Info(_Header + "schema is up to date at v" + currentVersion);
+                    _Logging.Debug(_Header + "schema is up to date at v" + currentVersion);
             }
 
-            _Logging.Info(_Header + "database initialized successfully");
+            _Logging.Debug(_Header + "database initialized successfully");
 
             // Seed default data on first boot (or after migration that created tenant but not user)
             bool anyTenants = await Tenants.ExistsAnyAsync(token).ConfigureAwait(false);
@@ -328,7 +328,7 @@ namespace Armada.Core.Database.Mysql
         {
             if (_Disposed) return;
             _Disposed = true;
-            _Logging.Info(_Header + "disposed");
+            _Logging.Debug(_Header + "disposed");
         }
 
         #endregion
@@ -880,7 +880,7 @@ namespace Armada.Core.Database.Mysql
                 }
                 catch (MySqlException ex) when (IsIgnorableReplayError(ex))
                 {
-                    _Logging.Info(_Header + "ignoring duplicate schema artifact while replaying migration: " + ex.Message);
+                    _Logging.Debug(_Header + "ignoring duplicate schema artifact while replaying migration: " + ex.Message);
                 }
             }
         }

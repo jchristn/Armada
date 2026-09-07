@@ -170,7 +170,7 @@ namespace Armada.Core.Database.Sqlite
         /// <returns>Task.</returns>
         public override async Task InitializeAsync(CancellationToken token = default)
         {
-            _Logging.Info(_Header + "initializing database");
+            _Logging.Debug(_Header + "initializing database");
 
             using (SqliteConnection conn = new SqliteConnection(_ConnectionString))
             {
@@ -235,7 +235,7 @@ namespace Armada.Core.Database.Sqlite
                                     // Column already exists in the CREATE TABLE definition.
                                     // This happens when migrations add columns that were later
                                     // incorporated into the initial schema. Safe to skip.
-                                    _Logging.Info(_Header + "migration v" + migration.Version + ": column already exists, skipping");
+                                    _Logging.Debug(_Header + "migration v" + migration.Version + ": column already exists, skipping");
                                 }
                             }
                         }
@@ -259,10 +259,10 @@ namespace Armada.Core.Database.Sqlite
                 if (applied > 0)
                     _Logging.Info(_Header + "applied " + applied + " migration(s), schema now at v" + migrations[migrations.Count - 1].Version);
                 else
-                    _Logging.Info(_Header + "schema is up to date at v" + currentVersion);
+                    _Logging.Debug(_Header + "schema is up to date at v" + currentVersion);
             }
 
-            _Logging.Info(_Header + "database initialized successfully");
+            _Logging.Debug(_Header + "database initialized successfully");
 
             // Seed default data on first boot (or after migration that created tenant but not user)
             bool anyTenants = await Tenants.ExistsAnyAsync(token).ConfigureAwait(false);
@@ -343,7 +343,7 @@ namespace Armada.Core.Database.Sqlite
             if (_Disposed) return;
             _Disposed = true;
             _Semaphore.Dispose();
-            _Logging.Info(_Header + "disposed");
+            _Logging.Debug(_Header + "disposed");
         }
 
         #endregion

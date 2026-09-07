@@ -143,7 +143,7 @@ namespace Armada.Runtimes
                     {
                         args.Add(extraArg);
                     }
-                    _Logging.Info(_Header + "isolated launch for " + RuntimeType + " using scoped config " + scopedConfigDirectory);
+                    _Logging.Debug(_Header + "isolated launch for " + RuntimeType + " using scoped config " + scopedConfigDirectory);
                 }
             }
 

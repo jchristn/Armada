@@ -145,7 +145,7 @@ namespace Armada.Server
             // Initialize database
             _Database = DatabaseDriverFactory.Create(_Settings.Database, _Logging);
             await _Database.InitializeAsync().ConfigureAwait(false);
-            _Logging.Info(_Header + "database initialized");
+            _Logging.Debug(_Header + "database initialized");
 
             // Ensure a local API key exists so trusted local clients (the armada CLI) can authenticate
             // to the REST API. Generated once and persisted to settings.json, which the CLI also reads.
@@ -199,14 +199,14 @@ namespace Armada.Server
             admiralService.OnGetRemoteTunnelStatus = _RemoteTunnel.GetStatus;
             // Seed built-in prompt templates, personas, and pipelines
             await _PromptTemplateService.SeedDefaultsAsync().ConfigureAwait(false);
-            _Logging.Info(_Header + "prompt template seeding completed");
+            _Logging.Debug(_Header + "prompt template seeding completed");
 
             _PersonaSeedService = new PersonaSeedService(_Database, _Logging);
             await _PersonaSeedService.SeedAsync().ConfigureAwait(false);
-            _Logging.Info(_Header + "persona and pipeline seeding completed");
+            _Logging.Debug(_Header + "persona and pipeline seeding completed");
 
             await _EnvironmentService.SeedDefaultsAsync().ConfigureAwait(false);
-            _Logging.Info(_Header + "deployment environment seeding completed");
+            _Logging.Debug(_Header + "deployment environment seeding completed");
 
             // Initialize authentication services
             _SessionTokenService = new SessionTokenService(_Settings.SessionTokenEncryptionKey);
@@ -387,10 +387,10 @@ namespace Armada.Server
 
             // Register WebSocket route on the main REST server
             _App.WebSocket("/ws", _WebSocketHub.HandleWebSocketAsync);
-            _Logging.Info(_Header + "WebSocket route registered at /ws");
+            _Logging.Debug(_Header + "WebSocket route registered at /ws");
 
             _App.WebSocket(_Settings.Harbor.LinkPath, _HarborLinkEndpoint.HandleWebSocketAsync);
-            _Logging.Info(_Header + "Harbor link route registered at " + _Settings.Harbor.LinkPath);
+            _Logging.Debug(_Header + "Harbor link route registered at " + _Settings.Harbor.LinkPath);
 
             // Watson 7 StartAsync is long-running; Start() binds and returns after
             // scheduling the accept loop.
@@ -413,7 +413,7 @@ namespace Armada.Server
             try
             {
                 await _PlanningSessions.RecoverSessionsAsync(_TokenSource.Token).ConfigureAwait(false);
-                _Logging.Info(_Header + "planning session recovery completed");
+                _Logging.Debug(_Header + "planning session recovery completed");
             }
             catch (Exception ex)
             {
@@ -423,7 +423,7 @@ namespace Armada.Server
             try
             {
                 await _PlanningSessions.MaintainSessionsAsync(_TokenSource.Token).ConfigureAwait(false);
-                _Logging.Info(_Header + "planning session maintenance completed");
+                _Logging.Debug(_Header + "planning session maintenance completed");
             }
             catch (Exception ex)
             {
@@ -433,7 +433,7 @@ namespace Armada.Server
             try
             {
                 await _ObjectiveRefinementSessions.RecoverSessionsAsync(_TokenSource.Token).ConfigureAwait(false);
-                _Logging.Info(_Header + "objective refinement session recovery completed");
+                _Logging.Debug(_Header + "objective refinement session recovery completed");
             }
             catch (Exception ex)
             {
@@ -443,7 +443,7 @@ namespace Armada.Server
             try
             {
                 await _ObjectiveRefinementSessions.MaintainSessionsAsync(_TokenSource.Token).ConfigureAwait(false);
-                _Logging.Info(_Header + "objective refinement session maintenance completed");
+                _Logging.Debug(_Header + "objective refinement session maintenance completed");
             }
             catch (Exception ex)
             {
@@ -562,7 +562,7 @@ namespace Armada.Server
 
         private async Task SeedSyntheticAdminAsync()
         {
-            _Logging.Info(_Header + "seeding synthetic admin identity for API key");
+            _Logging.Debug(_Header + "seeding synthetic admin identity for API key");
 
             // Create system tenant if not exists
             TenantMetadata? existingTenant = await _Database.Tenants.ReadAsync(ArmadaConstants.SystemTenantId).ConfigureAwait(false);
@@ -590,7 +590,7 @@ namespace Armada.Server
                 await _Database.Users.CreateAsync(systemUser).ConfigureAwait(false);
             }
 
-            _Logging.Info(_Header + "synthetic admin identity ready");
+            _Logging.Debug(_Header + "synthetic admin identity ready");
         }
 
         private void RegisterRoutes()
@@ -766,7 +766,7 @@ namespace Armada.Server
                 if (Directory.Exists(path))
                 {
                     Dashboard.StaticFileHandler.SetExternalPath(path);
-                    _Logging.Info(_Header + "dashboard serving from external path: " + path);
+                    _Logging.Debug(_Header + "dashboard serving from external path: " + path);
                     return;
                 }
                 else
@@ -780,7 +780,7 @@ namespace Armada.Server
             if (Directory.Exists(dashboardInData) && File.Exists(Path.Combine(dashboardInData, "index.html")))
             {
                 Dashboard.StaticFileHandler.SetExternalPath(dashboardInData);
-                _Logging.Info(_Header + "dashboard auto-detected at: " + dashboardInData);
+                _Logging.Debug(_Header + "dashboard auto-detected at: " + dashboardInData);
                 return;
             }
 
@@ -792,13 +792,13 @@ namespace Armada.Server
                 if (Directory.Exists(dashboardNextToExe) && File.Exists(Path.Combine(dashboardNextToExe, "index.html")))
                 {
                     Dashboard.StaticFileHandler.SetExternalPath(dashboardNextToExe);
-                    _Logging.Info(_Header + "dashboard auto-detected at: " + dashboardNextToExe);
+                    _Logging.Debug(_Header + "dashboard auto-detected at: " + dashboardNextToExe);
                     return;
                 }
             }
 
             // Fallback: use embedded wwwroot resources (legacy dashboard, not the React dashboard)
-            _Logging.Info(_Header + "using embedded legacy dashboard because no external React dashboard was found");
+            _Logging.Debug(_Header + "using embedded legacy dashboard because no external React dashboard was found");
         }
 
         private static void ApplyCorsHeaders(HttpContextBase ctx)
@@ -1177,7 +1177,7 @@ namespace Armada.Server
             try
             {
                 await _Admiral.CleanupStaleCaptainsAsync(token).ConfigureAwait(false);
-                _Logging.Info(_Header + "startup stale captain cleanup completed");
+                _Logging.Debug(_Header + "startup stale captain cleanup completed");
             }
             catch (Exception ex)
             {
@@ -1189,7 +1189,7 @@ namespace Armada.Server
             {
                 await _Admiral.HealthCheckAsync(token).ConfigureAwait(false);
                 await _DeploymentService.MonitorRolloutWindowsAsync(token).ConfigureAwait(false);
-                _Logging.Info(_Header + "startup health check completed");
+                _Logging.Debug(_Header + "startup health check completed");
             }
             catch (Exception ex)
             {
@@ -1284,7 +1284,7 @@ namespace Armada.Server
 
                 if (deleted > 0)
                 {
-                    _Logging.Info(_Header + "purged " + deleted + " expired request history records");
+                    _Logging.Debug(_Header + "purged " + deleted + " expired request history records");
                 }
             }
             catch (Exception ex)

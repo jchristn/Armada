@@ -277,7 +277,7 @@ namespace Armada.Core.Services
                 if (dependency.Status == MissionStatusEnum.WorkProduced &&
                     !IsPipelineHandoffPrepared(mission, dependency))
                 {
-                    _Logging.Info(_Header + "mission " + mission.Id + " depends on " + dependency.Id +
+                    _Logging.Debug(_Header + "mission " + mission.Id + " depends on " + dependency.Id +
                         " which is WorkProduced, but handoff is not prepared yet -- deferring assignment");
                     return false;
                 }
@@ -285,7 +285,7 @@ namespace Armada.Core.Services
 
             if (await ShouldDeferArchitectSequencedMissionAsync(mission, token).ConfigureAwait(false))
             {
-                _Logging.Info(_Header + "mission " + mission.Id +
+                _Logging.Debug(_Header + "mission " + mission.Id +
                     " is architect-marked as sequential after implementation work -- deferring assignment");
                 return false;
             }
@@ -372,7 +372,7 @@ namespace Armada.Core.Services
             Dock? dock;
             try
             {
-                _Logging.Info(_Header + "provisioning dock for mission " + mission.Id + " on vessel " + vessel.Id + " with captain " + captain.Id);
+                _Logging.Debug(_Header + "provisioning dock for mission " + mission.Id + " on vessel " + vessel.Id + " with captain " + captain.Id);
                 dock = await _Docks.ProvisionAsync(vessel, captain, branchName, mission.Id, token).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -1008,7 +1008,7 @@ namespace Armada.Core.Services
                 mission.BranchName = dock.BranchName;
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
-                _Logging.Info(_Header + "backfilled branch " + dock.BranchName + " onto mission " + mission.Id +
+                _Logging.Debug(_Header + "backfilled branch " + dock.BranchName + " onto mission " + mission.Id +
                     " from dock " + dock.Id + " before pipeline handoff");
             }
 
@@ -1222,7 +1222,7 @@ namespace Armada.Core.Services
 
             if (!shouldAttemptLanding)
             {
-                _Logging.Info(_Header + "skipping landing for mission " + mission.Id +
+                _Logging.Debug(_Header + "skipping landing for mission " + mission.Id +
                     " because it is not a terminal landed stage yet (status: " + mission.Status + ")");
             }
 
@@ -1231,7 +1231,7 @@ namespace Armada.Core.Services
             // from being reassigned while git operations are still in progress.
             if (shouldAttemptLanding && dock != null && OnMissionComplete != null)
             {
-                _Logging.Info(_Header + "executing synchronous landing handoff for mission " + mission.Id);
+                _Logging.Debug(_Header + "executing synchronous landing handoff for mission " + mission.Id);
                 try
                 {
                     await OnMissionComplete.Invoke(mission, dock).ConfigureAwait(false);
@@ -1284,7 +1284,7 @@ namespace Armada.Core.Services
             }
             else
             {
-                _Logging.Info(_Header + "skipping captain release for mission " + mission.Id +
+                _Logging.Debug(_Header + "skipping captain release for mission " + mission.Id +
                     " because captain " + captain.Id + " is now assigned to " + (latestCaptain?.CurrentMissionId ?? "nothing"));
             }
 
@@ -1497,7 +1497,7 @@ namespace Armada.Core.Services
                 {
                     if (!String.Equals(existing, sanitizedExisting, StringComparison.Ordinal))
                     {
-                        _Logging.Info(_Header + "sanitized generated mission sections from existing instructions at " + instructionsPath);
+                        _Logging.Debug(_Header + "sanitized generated mission sections from existing instructions at " + instructionsPath);
                     }
 
                     templateParams["ExistingClaudeMd"] = sanitizedExisting;
@@ -1549,7 +1549,7 @@ namespace Armada.Core.Services
                 _Logging.Warn(_Header + "could not update git exclude for " + instructionsFileName + ": " + ex.ToString());
             }
 
-            _Logging.Info(_Header + "generated mission instructions at " + instructionsPath);
+            _Logging.Debug(_Header + "generated mission instructions at " + instructionsPath);
         }
 
         private async Task<List<MissionPlaybookSnapshot>> LoadMissionPlaybookSnapshotsAsync(Mission mission, CancellationToken token)
@@ -2127,14 +2127,14 @@ namespace Armada.Core.Services
             BranchCleanupPolicyEnum cleanupPolicy = vessel.BranchCleanupPolicy ?? _Settings.BranchCleanupPolicy;
             if (cleanupPolicy == BranchCleanupPolicyEnum.None)
             {
-                _Logging.Info(_Header + "branch cleanup policy is None - retaining architect branch " + branchName + " after handoff");
+                _Logging.Debug(_Header + "branch cleanup policy is None - retaining architect branch " + branchName + " after handoff");
                 return;
             }
 
             try
             {
                 await _Git.DeleteLocalBranchAsync(vessel.LocalPath, branchName, token).ConfigureAwait(false);
-                _Logging.Info(_Header + "deleted architect branch " + branchName + " from bare repo after successful handoff");
+                _Logging.Debug(_Header + "deleted architect branch " + branchName + " from bare repo after successful handoff");
             }
             catch (Exception branchEx)
             {
@@ -2153,7 +2153,7 @@ namespace Armada.Core.Services
                 try
                 {
                     await _Git.DeleteRemoteBranchAsync(vessel.WorkingDirectory, branchName, token).ConfigureAwait(false);
-                    _Logging.Info(_Header + "deleted remote architect branch " + branchName + " after successful handoff");
+                    _Logging.Debug(_Header + "deleted remote architect branch " + branchName + " after successful handoff");
                 }
                 catch (Exception remoteBranchEx)
                 {
@@ -2229,7 +2229,7 @@ namespace Armada.Core.Services
                 if (parsed.Count > 0)
                 {
                     await ProjectArchitectMissionsToLogAsync(completedMission, parsed, token).ConfigureAwait(false);
-                    _Logging.Info(_Header + "architect produced " + parsed.Count + " mission definitions");
+                    _Logging.Debug(_Header + "architect produced " + parsed.Count + " mission definitions");
 
                     foreach (Mission nextMission in dependentMissions)
                     {
@@ -2383,7 +2383,7 @@ namespace Armada.Core.Services
                 nextMission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(nextMission, token).ConfigureAwait(false);
 
-                _Logging.Info(_Header + "pipeline handoff: prepared mission " + nextMission.Id +
+                _Logging.Debug(_Header + "pipeline handoff: prepared mission " + nextMission.Id +
                     " (" + nextMission.Persona + ") with context from " + completedMission.Id +
                     " (" + completedMission.Persona + ")");
 
@@ -2416,7 +2416,7 @@ namespace Armada.Core.Services
                 bool advanced = await _Git.ForceAdvanceBranchAsync(dock.WorktreePath!, completedMission.BranchName!, headCommit!, token).ConfigureAwait(false);
                 if (advanced)
                 {
-                    _Logging.Info(_Header + "stage-lag hardening: advanced branch " + completedMission.BranchName +
+                    _Logging.Debug(_Header + "stage-lag hardening: advanced branch " + completedMission.BranchName +
                         " to " + headCommit + " from dock " + dock.Id + " before handoff from mission " + completedMission.Id);
                 }
             }
@@ -2615,7 +2615,7 @@ namespace Armada.Core.Services
                 workerRoot.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(workerRoot, token).ConfigureAwait(false);
 
-                _Logging.Info(_Header + "architect sequenced worker mission " + workerRoot.Id +
+                _Logging.Debug(_Header + "architect sequenced worker mission " + workerRoot.Id +
                     " to depend on terminal stage " + resolvedDependency.Id +
                     " from reference '" + dependencyReference + "'");
             }

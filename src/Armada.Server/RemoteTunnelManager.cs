@@ -715,7 +715,7 @@ namespace Armada.Server
                 : String.Empty;
             Stopwatch stopwatch = Stopwatch.StartNew();
 
-            _Logging.Info(
+            _Logging.Debug(
                 _Header +
                 requesterIp + " processing " +
                 envelope.Method +
@@ -765,7 +765,7 @@ namespace Armada.Server
                 statusCode = result.Success ? 200 : 500;
             }
 
-            _Logging.Info(
+            _Logging.Debug(
                 _Header +
                 "processed " +
                 envelope.Method +

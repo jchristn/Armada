@@ -101,7 +101,7 @@ namespace Armada.Runtimes
             if (factory == null) throw new ArgumentNullException(nameof(factory));
 
             _CustomRuntimes[name] = factory;
-            _Logging.Info(_Header + "registered custom runtime: " + name);
+            _Logging.Debug(_Header + "registered custom runtime: " + name);
         }
 
         #endregion

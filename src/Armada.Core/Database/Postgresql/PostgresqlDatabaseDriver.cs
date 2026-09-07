@@ -112,7 +112,7 @@ namespace Armada.Core.Database.Postgresql
         /// <param name="token">Cancellation token.</param>
         public override async Task InitializeAsync(CancellationToken token = default)
         {
-            _Logging.Info(_Header + "initializing database");
+            _Logging.Debug(_Header + "initializing database");
 
             using (NpgsqlConnection conn = new NpgsqlConnection(_ConnectionString))
             {
@@ -183,10 +183,10 @@ namespace Armada.Core.Database.Postgresql
                 if (applied > 0)
                     _Logging.Info(_Header + "applied " + applied + " migration(s), schema now at v" + migrations[migrations.Count - 1].Version);
                 else
-                    _Logging.Info(_Header + "schema is up to date at v" + currentVersion);
+                    _Logging.Debug(_Header + "schema is up to date at v" + currentVersion);
             }
 
-            _Logging.Info(_Header + "database initialized successfully");
+            _Logging.Debug(_Header + "database initialized successfully");
 
             // Seed default data on first boot (or after migration that created tenant but not user)
             bool anyTenants = await Tenants.ExistsAnyAsync(token).ConfigureAwait(false);

@@ -188,7 +188,7 @@ namespace Armada.Core.Services
             if (entry == null) return null;
             if (entry.Status != MergeStatusEnum.Queued) return null;
 
-            _Logging.Info(_Header + "processing single entry " + entryId);
+            _Logging.Debug(_Header + "processing single entry " + entryId);
             await ProcessEntryAsync(entry, token).ConfigureAwait(false);
 
             // Re-read from DB to get updated state
@@ -235,7 +235,7 @@ namespace Armada.Core.Services
                     try
                     {
                         await RunGitAsync(repoPath, token, "push", "origin", "--delete", entry.BranchName).ConfigureAwait(false);
-                        _Logging.Info(_Header + "deleted remote branch " + entry.BranchName);
+                        _Logging.Debug(_Header + "deleted remote branch " + entry.BranchName);
                     }
                     catch (Exception ex)
                     {
@@ -246,7 +246,7 @@ namespace Armada.Core.Services
                     try
                     {
                         await _Git.DeleteLocalBranchAsync(repoPath, entry.BranchName, token).ConfigureAwait(false);
-                        _Logging.Info(_Header + "deleted local branch " + entry.BranchName);
+                        _Logging.Debug(_Header + "deleted local branch " + entry.BranchName);
                     }
                     catch (Exception ex)
                     {
@@ -395,7 +395,7 @@ namespace Armada.Core.Services
                 return;
             }
 
-            _Logging.Info(_Header + "processing " + entries.Count + " entries for " + first.TargetBranch + " on vessel " + (first.VesselId ?? "default"));
+            _Logging.Debug(_Header + "processing " + entries.Count + " entries for " + first.TargetBranch + " on vessel " + (first.VesselId ?? "default"));
 
             foreach (MergeEntry entry in entries)
             {
@@ -430,7 +430,7 @@ namespace Armada.Core.Services
         private async Task ProcessEntryAsync(MergeEntry entry, string repoPath, CancellationToken token)
         {
             string entryTag = entry.Id + " branch " + entry.BranchName;
-            _Logging.Info(_Header + "processing " + entryTag);
+            _Logging.Debug(_Header + "processing " + entryTag);
 
             // Mark as testing
             entry.Status = MergeStatusEnum.Testing;
@@ -484,7 +484,7 @@ namespace Armada.Core.Services
                         return;
                     }
 
-                    _Logging.Info(_Header + "tests PASSED for " + entryTag);
+                    _Logging.Debug(_Header + "tests PASSED for " + entryTag);
                 }
 
                 // Land immediately -- push the integration branch to update the target
@@ -596,7 +596,7 @@ namespace Armada.Core.Services
 
         private async Task<TestResult> RunTestsAsync(string workingDir, string testCommand, CancellationToken token)
         {
-            _Logging.Info(_Header + "running tests: " + testCommand + " in " + workingDir);
+            _Logging.Debug(_Header + "running tests: " + testCommand + " in " + workingDir);
 
             ProcessStartInfo startInfo = new ProcessStartInfo
             {

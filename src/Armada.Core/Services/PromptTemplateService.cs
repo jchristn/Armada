@@ -122,7 +122,7 @@ namespace Armada.Core.Services
                     };
 
                     await _Database.PromptTemplates.CreateAsync(template, token).ConfigureAwait(false);
-                    _Logging.Info(_Header + "seeded built-in template '" + name + "'");
+                    _Logging.Debug(_Header + "seeded built-in template '" + name + "'");
                 }
             }
 
@@ -222,7 +222,7 @@ namespace Armada.Core.Services
                 template.Content = updatedContent;
                 template.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.PromptTemplates.UpdateAsync(template, token).ConfigureAwait(false);
-                _Logging.Info(_Header + "updated built-in template references: '" + template.Name + "'");
+                _Logging.Debug(_Header + "updated built-in template references: '" + template.Name + "'");
             }
         }
 

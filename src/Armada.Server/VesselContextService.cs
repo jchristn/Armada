@@ -114,7 +114,7 @@ namespace Armada.Server
                 vessel.EnableModelContext = true;
                 vessel = await _Database.Vessels.UpdateAsync(vessel).ConfigureAwait(false);
 
-                _Logging.Info(_Header + (refine ? "refined" : "built") + " Model Context for vessel " + vesselId +
+                _Logging.Debug(_Header + (refine ? "refined" : "built") + " Model Context for vessel " + vesselId +
                     " using captain " + captainId + " (" + context.Length + " chars)");
                 return vessel;
             }

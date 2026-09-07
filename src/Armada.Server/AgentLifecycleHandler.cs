@@ -698,7 +698,7 @@ namespace Armada.Server
                 return;
             }
 
-            _Logging.Info(_Header + "progress signal from captain " + captainId + ": [" + signal.Type + "] " + signal.Value);
+            _Logging.Debug(_Header + "progress signal from captain " + captainId + ": [" + signal.Type + "] " + signal.Value);
 
             string capturedCaptainId = captainId;
             string? capturedMissionId = missionId;
@@ -810,7 +810,7 @@ namespace Armada.Server
 
                     await _Database.Events.CreateAsync(PapercutService.ToEvent(parsed)).ConfigureAwait(false);
 
-                    _Logging.Info(_Header + "papercut from captain " + capturedCaptainId + " [" +
+                    _Logging.Debug(_Header + "papercut from captain " + capturedCaptainId + " [" +
                         parsed.Category + "/" + parsed.Severity + "] " + parsed.Title);
                 }
                 catch (Exception ex)
@@ -850,7 +850,7 @@ namespace Armada.Server
                     }
                     if (!String.IsNullOrEmpty(captainId) && !String.IsNullOrEmpty(missionId))
                     {
-                        _Logging.Info(_Header + "process " + processId + " exit handler resolved mapping after " + (attempt + 1) + " retries");
+                        _Logging.Debug(_Header + "process " + processId + " exit handler resolved mapping after " + (attempt + 1) + " retries");
                         break;
                     }
                 }
@@ -930,13 +930,13 @@ namespace Armada.Server
         {
             if (_HarborConnections == null)
             {
-                _Logging.Info(_Header + "Harbor delegation disabled (no connection manager wired); running locally");
+                _Logging.Debug(_Header + "Harbor delegation disabled (no connection manager wired); running locally");
                 return _HostProcessExecutor;
             }
 
             if (!_HarborConnections.HasConnectedHarbor())
             {
-                _Logging.Info(_Header + "no Harbor connected; running captain locally");
+                _Logging.Debug(_Header + "no Harbor connected; running captain locally");
                 return _HostProcessExecutor;
             }
 
@@ -954,7 +954,7 @@ namespace Armada.Server
                     RequiredCapabilities = SplitCapabilities(vessel?.RequiredCapabilities)
                 };
 
-                _Logging.Info(_Header + "Harbor routing for mission " + mission.Id + ": tenant=" + (mission.TenantId ?? "(none)")
+                _Logging.Debug(_Header + "Harbor routing for mission " + mission.Id + ": tenant=" + (mission.TenantId ?? "(none)")
                     + " runtime=" + request.RequestedRuntime + " dockHarbor=" + (request.ExistingHarborId ?? "(none)")
                     + " connected=[" + String.Join(",", _HarborConnections.ConnectedHarborIds) + "]");
 
@@ -966,7 +966,7 @@ namespace Armada.Server
                     return new Armada.Runtimes.RemoteHostProcessExecutor(_HarborConnections, decision.HarborId!, _EndpointResolver);
                 }
 
-                _Logging.Info(_Header + "no eligible Harbor for this launch (" + decision.Reason + "); running locally");
+                _Logging.Debug(_Header + "no eligible Harbor for this launch (" + decision.Reason + "); running locally");
             }
             catch (Exception ex)
             {

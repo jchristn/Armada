@@ -110,7 +110,7 @@ namespace Armada.Core.Services
                 Task heartbeat = _HeartbeatIntervalMs > 0 ? HeartbeatLoopAsync(sessionCts.Token) : Task.CompletedTask;
 
                 Enqueue(BuildHandshake());
-                _Logging.Info(_Header + "harbor " + _HarborId + " sent handshake");
+                _Logging.Debug(_Header + "harbor " + _HarborId + " sent handshake");
                 Log(HarborLogDirection.Out, "Handshake sent (harbor " + _HarborId + ")");
 
                 try

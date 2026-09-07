@@ -521,7 +521,7 @@ namespace Armada.Core.Services
 
             if (workingCaptains.Count > 0)
             {
-                _Logging.Info(_Header + "starting parallel health checks for " + workingCaptains.Count + " working captain(s)");
+                _Logging.Debug(_Header + "starting parallel health checks for " + workingCaptains.Count + " working captain(s)");
 
                 List<Task> healthCheckTasks = workingCaptains.Select(captain =>
                     Task.Run(async () =>
@@ -538,7 +538,7 @@ namespace Armada.Core.Services
 
                 await Task.WhenAll(healthCheckTasks).ConfigureAwait(false);
 
-                _Logging.Info(_Header + "completed parallel health checks for " + workingCaptains.Count + " working captain(s)");
+                _Logging.Debug(_Header + "completed parallel health checks for " + workingCaptains.Count + " working captain(s)");
             }
 
             // Safety net: detect orphaned InProgress missions whose captain has moved on.
@@ -1275,7 +1275,7 @@ namespace Armada.Core.Services
                                                    reviewMissions.Any(m => m.DockId == dock.Id);
                         if (preservedForMission)
                         {
-                            _Logging.Info(_Header + "skipping reclaim of dock " + dock.Id + " -- preserved for a pending re-dispatch or an in-review mission");
+                            _Logging.Debug(_Header + "skipping reclaim of dock " + dock.Id + " -- preserved for a pending re-dispatch or an in-review mission");
                             continue;
                         }
 
@@ -1381,7 +1381,7 @@ namespace Armada.Core.Services
                 }
 
                 if (checked_count > 0)
-                    _Logging.Info(_Header + "reconciled " + checked_count + " PullRequestOpen mission(s)");
+                    _Logging.Debug(_Header + "reconciled " + checked_count + " PullRequestOpen mission(s)");
             }
             catch (Exception ex)
             {
@@ -1524,7 +1524,7 @@ namespace Armada.Core.Services
 
             if (_RetryDispatchNeeded)
             {
-                _Logging.Info(_Header + "retrying dispatch for pending missions that previously could not be assigned");
+                _Logging.Debug(_Header + "retrying dispatch for pending missions that previously could not be assigned");
             }
 
             // Check for any idle captains with available capacity
@@ -1857,7 +1857,7 @@ namespace Armada.Core.Services
                 needed = Math.Min(needed, headroom);
             }
 
-            _Logging.Info(_Header + "captain pool: " + idleCount + " idle, need " + needed + " more to reach minimum of " + _Settings.MinIdleCaptains);
+            _Logging.Debug(_Header + "captain pool: " + idleCount + " idle, need " + needed + " more to reach minimum of " + _Settings.MinIdleCaptains);
 
             for (int i = 0; i < needed; i++)
             {

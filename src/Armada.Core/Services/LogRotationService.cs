@@ -51,7 +51,7 @@ namespace Armada.Core.Services
             FileInfo fileInfo = new FileInfo(filePath);
             if (fileInfo.Length < _MaxFileSizeBytes) return;
 
-            _Logging.Info(_Header + "rotating log file: " + filePath + " (" + fileInfo.Length + " bytes)");
+            _Logging.Debug(_Header + "rotating log file: " + filePath + " (" + fileInfo.Length + " bytes)");
 
             // Shift existing rotated files: .4 -> .5, .3 -> .4, etc.
             for (int i = _MaxFileCount - 1; i >= 1; i--)

@@ -65,7 +65,7 @@ namespace Armada.Core.Services
             string cutoffStr = cutoff.ToString(_Iso8601Format, CultureInfo.InvariantCulture);
             int totalDeleted = 0;
 
-            _Logging.Info(_Header + "purging data older than " + cutoffStr);
+            _Logging.Debug(_Header + "purging data older than " + cutoffStr);
 
             using (SqliteConnection conn = new SqliteConnection(_ConnectionString))
             {
