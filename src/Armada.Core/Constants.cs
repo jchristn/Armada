@@ -23,11 +23,27 @@ namespace Armada.Core
         public static readonly string ProductVersion = "0.9.0";
 
         /// <summary>
-        /// Default data directory.
+        /// Environment variable that overrides the default data directory. When set to a non-empty path it is
+        /// used verbatim as the data directory (holding settings.json, the database, logs, docks, and repos),
+        /// which enables isolated/ephemeral instances, side-by-side servers, and containerized deployments.
+        /// When unset, the data directory defaults to <c>~/.armada</c>.
         /// </summary>
-        public static readonly string DefaultDataDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".armada");
+        public const string DataDirectoryEnvVar = "ARMADA_DATA_DIR";
+
+        /// <summary>
+        /// Default data directory. Honors the <see cref="DataDirectoryEnvVar"/> environment variable when set,
+        /// otherwise <c>~/.armada</c> under the current user's profile.
+        /// </summary>
+        public static readonly string DefaultDataDirectory = ResolveDefaultDataDirectory();
+
+        private static string ResolveDefaultDataDirectory()
+        {
+            string? overrideDir = Environment.GetEnvironmentVariable(DataDirectoryEnvVar);
+            if (!String.IsNullOrWhiteSpace(overrideDir)) return overrideDir;
+            return Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                ".armada");
+        }
 
         /// <summary>
         /// Default database filename.

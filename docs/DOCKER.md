@@ -86,10 +86,12 @@ services:
     ports:
       - "7890:7890"
       - "7891:7891"
+    environment:
+      # Relocate the entire data directory (settings.json, database, logs, docks, repos) with one variable
+      # instead of mapping individual paths. Defaults to ~/.armada when unset.
+      - ARMADA_DATA_DIR=/app/data
     volumes:
-      - ./armada.json:/app/data/armada.json
-      - ./db:/app/data/db
-      - ./logs:/app/data/logs
+      - ./data:/app/data
 
   armada-dashboard:
     build:
