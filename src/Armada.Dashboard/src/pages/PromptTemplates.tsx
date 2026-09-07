@@ -2,6 +2,9 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPromptTemplate, listPromptTemplates, resetPromptTemplate } from '../api/client';
 import type { PromptTemplate } from '../types/models';
+import { useAuth } from '../context/AuthContext';
+import { canEdit as canEditScoped, type ScopeViewer } from '../lib/scoping';
+import ScopeBadge from '../components/shared/ScopeBadge';
 import Pagination from '../components/shared/Pagination';
 import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
@@ -24,6 +27,8 @@ const CATEGORY_OPTIONS = ['all', 'mission', 'persona', 'structure', 'commit', 'l
 
 export default function PromptTemplates() {
   const navigate = useNavigate();
+  const { isAdmin, isTenantAdmin, user } = useAuth();
+  const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const { t: translate, formatRelativeTime, formatDateTime } = useLocale();
   const { pushToast } = useNotifications();
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
@@ -218,6 +223,7 @@ export default function PromptTemplates() {
                   <th className="sortable" onClick={() => handleSort('category')} title={translate('Category -- click to sort')}>
                     {translate('Category')}{sortIcon('category')}
                   </th>
+                  <th>{translate('Visibility')}</th>
                   <th className="sortable" onClick={() => handleSort('isBuiltIn')} title={translate('Built-in -- click to sort')}>
                     {translate('Built-in')}{sortIcon('isBuiltIn')}
                   </th>
@@ -241,6 +247,7 @@ export default function PromptTemplates() {
                   <td></td>
                   <td></td>
                   <td></td>
+                  <td></td>
                 </tr>
               </thead>
               <tbody>
@@ -249,22 +256,25 @@ export default function PromptTemplates() {
                     <td><strong>{template.name}</strong></td>
                     <td className="text-dim">{template.description || '-'}</td>
                     <td><StatusBadge status={template.category} /></td>
+                    <td><ScopeBadge scope={template.scope} /></td>
                     <td>{template.isBuiltIn ? <StatusBadge status="Built-in" /> : '-'}</td>
                     <td className="mono text-dim">{(template.content ?? '').length.toLocaleString()} {translate('chars')}</td>
                     <td><StatusBadge status={template.active !== false ? 'Active' : 'Inactive'} /></td>
                     <td className="text-dim" title={formatDateTime(template.lastUpdateUtc)}>{formatRelativeTime(template.lastUpdateUtc)}</td>
                     <td className="text-right" onClick={e => e.stopPropagation()}>
                       <ActionMenu id={`template-${template.id}`} items={[
-                        { label: 'Edit', onClick: () => navigate(`/prompt-templates/${encodeURIComponent(template.name)}`) },
+                        canEditScoped(viewer, template)
+                          ? { label: 'Edit', onClick: () => navigate(`/prompt-templates/${encodeURIComponent(template.name)}`) }
+                          : { label: 'Open', onClick: () => navigate(`/prompt-templates/${encodeURIComponent(template.name)}`) },
                         { label: 'Duplicate', onClick: () => void handleDuplicate(template) },
                         { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `${translate('Template')}: ${template.name}`, data: template }) },
-                        ...(template.isBuiltIn ? [{ label: 'Reset to Default', danger: true as const, onClick: () => handleResetToDefault(template.name) }] : []),
+                        ...(template.isBuiltIn && canEditScoped(viewer, template) ? [{ label: 'Reset to Default', danger: true as const, onClick: () => handleResetToDefault(template.name) }] : []),
                       ]} />
                     </td>
                   </tr>
                 ))}
                 {paginated.length === 0 && (
-                  <tr><td colSpan={8} className="text-dim">{translate('No prompt templates match the current filters.')}</td></tr>
+                  <tr><td colSpan={9} className="text-dim">{translate('No prompt templates match the current filters.')}</td></tr>
                 )}
               </tbody>
             </table>

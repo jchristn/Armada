@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPlaybook, deletePlaybook, listPlaybooks, updatePlaybook } from '../api/client';
-import type { Playbook } from '../types/models';
+import type { Playbook, ScopeEnum } from '../types/models';
 import { useAuth } from '../context/AuthContext';
+import { canEdit as canEditScoped, resolveCreateScope, type ScopeViewer } from '../lib/scoping';
+import ScopeBadge from '../components/shared/ScopeBadge';
+import ScopeSelect from '../components/shared/ScopeSelect';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import ActionMenu from '../components/shared/ActionMenu';
@@ -18,7 +21,8 @@ import { buildPlaybookDuplicatePayload } from '../lib/duplicates';
 
 export default function Playbooks() {
   const navigate = useNavigate();
-  const { isAdmin, isTenantAdmin } = useAuth();
+  const { isAdmin, isTenantAdmin, user } = useAuth();
+  const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const { t, formatRelativeTime, formatDateTime } = useLocale();
   const { pushToast } = useNotifications();
   const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
@@ -39,13 +43,15 @@ export default function Playbooks() {
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Playbook | null>(null);
   const [saving, setSaving] = useState(false);
-  const [createForm, setCreateForm] = useState<{ fileName: string; description: string; content: string; active: boolean }>({
+  const [createForm, setCreateForm] = useState<{ fileName: string; description: string; content: string; active: boolean; scope: ScopeEnum }>({
     fileName: 'NEW_PLAYBOOK.md',
     description: '',
     content: '# Playbook\n\nDescribe the rules the model must follow.\n',
     active: true,
+    scope: resolveCreateScope(viewer),
   });
 
+  // Any authenticated user may create their own playbooks; editing/deleting is gated per-row by ownership.
   const canManage = isAdmin || isTenantAdmin;
 
   function openCreate() {
@@ -55,6 +61,7 @@ export default function Playbooks() {
       description: '',
       content: '# Playbook\n\nDescribe the rules the model must follow.\n',
       active: true,
+      scope: resolveCreateScope(viewer),
     });
     setShowCreate(true);
   }
@@ -66,6 +73,7 @@ export default function Playbooks() {
       description: playbook.description || '',
       content: playbook.content,
       active: playbook.active,
+      scope: playbook.scope,
     });
     setShowCreate(true);
   }
@@ -80,6 +88,7 @@ export default function Playbooks() {
         description: createForm.description.trim() || null,
         content: createForm.content,
         active: createForm.active,
+        scope: createForm.scope,
       };
       if (editing) {
         const updated = await updatePlaybook(editing.id, payload);
@@ -157,7 +166,7 @@ export default function Playbooks() {
 
   async function handleDuplicate(playbook: Playbook) {
     try {
-      const created = await createPlaybook(buildPlaybookDuplicatePayload(playbook));
+      const created = await createPlaybook({ ...buildPlaybookDuplicatePayload(playbook), scope: resolveCreateScope(viewer, playbook.scope) });
       pushToast('success', t('Playbook "{{name}}" duplicated.', { name: created.fileName }));
       navigate(`/playbooks/${created.id}`);
     } catch (err: unknown) {
@@ -174,11 +183,9 @@ export default function Playbooks() {
           <>
             <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
             <RefreshButton onRefresh={load} title={t('Refresh playbooks')} />
-            {canManage && (
-              <button className="btn btn-primary" onClick={openCreate}>
-                + {t('Playbook')}
-              </button>
-            )}
+            <button className="btn btn-primary" onClick={openCreate}>
+              + {t('Playbook')}
+            </button>
           </>
         )}
       />
@@ -206,6 +213,7 @@ export default function Playbooks() {
             <label>{t('Markdown Content')}
               <textarea rows={16} value={createForm.content} onChange={(event) => setCreateForm({ ...createForm, content: event.target.value })} spellCheck={false} />
             </label>
+            <ScopeSelect viewer={viewer} value={createForm.scope} onChange={(scope) => setCreateForm({ ...createForm, scope })} />
             <label className="checkbox-row">
               <input type="checkbox" checked={createForm.active} onChange={(event) => setCreateForm({ ...createForm, active: event.target.checked })} />
               <span>{t('Active and selectable during dispatch')}</span>
@@ -267,6 +275,7 @@ export default function Playbooks() {
               <tr>
                 <th>{t('File')}</th>
                 <th>{t('Description')}</th>
+                <th>{t('Visibility')}</th>
                 <th>{t('Status')}</th>
                 <th>{t('Content')}</th>
                 <th>{t('Last Updated')}</th>
@@ -279,16 +288,22 @@ export default function Playbooks() {
                 <td></td>
                 <td></td>
                 <td></td>
+                <td></td>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((playbook) => (
-                <tr key={playbook.id} className="clickable" onClick={() => canManage ? openEdit(playbook) : navigate(`/playbooks/${playbook.id}`)}>
+              {filtered.map((playbook) => {
+                const canEditRow = canEditScoped(viewer, playbook);
+                return (
+                <tr key={playbook.id} className="clickable" onClick={() => canEditRow ? openEdit(playbook) : navigate(`/playbooks/${playbook.id}`)}>
                   <td>
                     <strong>{playbook.fileName}</strong>
                     <div className="mono text-dim" style={{ fontSize: '0.78rem' }}>{playbook.id}</div>
                   </td>
                   <td className="text-dim">{playbook.description || '-'}</td>
+                  <td>
+                    <ScopeBadge scope={playbook.scope} />
+                  </td>
                   <td>
                     <StatusBadge status={playbook.active ? 'Active' : 'Inactive'} />
                   </td>
@@ -303,15 +318,16 @@ export default function Playbooks() {
                       id={`playbook-${playbook.id}`}
                       items={[
                         { label: 'Open', onClick: () => navigate(`/playbooks/${playbook.id}`) },
-                        ...(canManage ? [{ label: 'Edit', onClick: () => openEdit(playbook) }] : []),
-                        ...(canManage ? [{ label: 'Duplicate', onClick: () => void handleDuplicate(playbook) }] : []),
+                        ...(canEditRow ? [{ label: 'Edit', onClick: () => openEdit(playbook) }] : []),
+                        { label: 'Duplicate', onClick: () => void handleDuplicate(playbook) },
                         { label: 'View JSON', onClick: () => setJsonData({ open: true, title: playbook.fileName, data: playbook }) },
-                        ...(canManage ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(playbook) }] : []),
+                        ...(canEditRow ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(playbook) }] : []),
                       ]}
                     />
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

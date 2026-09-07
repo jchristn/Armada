@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createSkill, deleteSkill, listSkills, updateSkill } from '../api/client';
-import type { Skill } from '../types/models';
+import type { Skill, ScopeEnum } from '../types/models';
 import { useAuth } from '../context/AuthContext';
+import { canEdit as canEditScoped, resolveCreateScope, type ScopeViewer } from '../lib/scoping';
+import ScopeBadge from '../components/shared/ScopeBadge';
+import ScopeSelect from '../components/shared/ScopeSelect';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import ActionMenu from '../components/shared/ActionMenu';
@@ -17,7 +20,8 @@ import StatusBadge from '../components/shared/StatusBadge';
 
 export default function Skills() {
   const navigate = useNavigate();
-  const { isAdmin, isTenantAdmin } = useAuth();
+  const { isAdmin, isTenantAdmin, user } = useAuth();
+  const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const { t, formatRelativeTime, formatDateTime } = useLocale();
   const { pushToast } = useNotifications();
   const [skills, setSkills] = useState<Skill[]>([]);
@@ -35,15 +39,15 @@ export default function Skills() {
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Skill | null>(null);
   const [saving, setSaving] = useState(false);
-  const [createForm, setCreateForm] = useState<{ name: string; category: string; description: string; content: string; active: boolean }>({
-    name: 'Untitled Skill', category: '', description: '', content: '', active: true,
+  const [createForm, setCreateForm] = useState<{ name: string; category: string; description: string; content: string; active: boolean; scope: ScopeEnum }>({
+    name: 'Untitled Skill', category: '', description: '', content: '', active: true, scope: resolveCreateScope(viewer),
   });
 
   const canManage = isAdmin || isTenantAdmin;
 
   function openCreate() {
     setEditing(null);
-    setCreateForm({ name: 'Untitled Skill', category: '', description: '', content: '', active: true });
+    setCreateForm({ name: 'Untitled Skill', category: '', description: '', content: '', active: true, scope: resolveCreateScope(viewer) });
     setShowCreate(true);
   }
 
@@ -55,6 +59,7 @@ export default function Skills() {
       description: skill.description || '',
       content: skill.content || '',
       active: skill.active,
+      scope: skill.scope,
     });
     setShowCreate(true);
   }
@@ -70,6 +75,7 @@ export default function Skills() {
         category: createForm.category || null,
         content: createForm.content,
         active: createForm.active,
+        scope: createForm.scope,
       };
       if (editing) {
         const updated = await updateSkill(editing.id, payload);
@@ -149,9 +155,7 @@ export default function Skills() {
           <>
             <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
             <RefreshButton onRefresh={load} title={t('Refresh skills')} />
-            {canManage && (
-              <button className="btn btn-primary" onClick={openCreate}>+ {t('Skill')}</button>
-            )}
+            <button className="btn btn-primary" onClick={openCreate}>+ {t('Skill')}</button>
           </>
         )}
       />
@@ -182,6 +186,7 @@ export default function Skills() {
             <label>{t('Content')}
               <textarea rows={12} value={createForm.content} onChange={(e) => setCreateForm({ ...createForm, content: e.target.value })} spellCheck={false} placeholder={t('Markdown or plain text injected into mission prompts for projects that attach this skill.')} />
             </label>
+            <ScopeSelect viewer={viewer} value={createForm.scope} onChange={(scope) => setCreateForm({ ...createForm, scope })} />
             <label className="checkbox-row">
               <input type="checkbox" checked={createForm.active} onChange={(e) => setCreateForm({ ...createForm, active: e.target.checked })} />
               <span>{t('Active')}</span>
@@ -237,6 +242,7 @@ export default function Skills() {
               <tr>
                 <th>{t('Skill')}</th>
                 <th>{t('Category')}</th>
+                <th>{t('Visibility')}</th>
                 <th>{t('Status')}</th>
                 <th>{t('Last Updated')}</th>
                 <th className="text-right">{t('Actions')}</th>
@@ -247,17 +253,21 @@ export default function Skills() {
                 <td></td>
                 <td></td>
                 <td></td>
+                <td></td>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((skill) => (
-                <tr key={skill.id} className="clickable" onClick={() => canManage ? openEdit(skill) : navigate(`/skills/${skill.id}`)}>
+              {filtered.map((skill) => {
+                const canEditRow = canEditScoped(viewer, skill);
+                return (
+                <tr key={skill.id} className="clickable" onClick={() => canEditRow ? openEdit(skill) : navigate(`/skills/${skill.id}`)}>
                   <td>
                     <strong>{skill.name}</strong>
                     <div className="mono text-dim" style={{ fontSize: '0.78rem' }}>{skill.id}</div>
                     {skill.description && <div className="text-dim" style={{ marginTop: '0.2rem' }}>{skill.description}</div>}
                   </td>
                   <td className="text-dim">{skill.category || '-'}</td>
+                  <td><ScopeBadge scope={skill.scope} /></td>
                   <td><StatusBadge status={skill.active ? 'Active' : 'Inactive'} /></td>
                   <td className="text-dim" title={formatDateTime(skill.lastUpdateUtc)}>{formatRelativeTime(skill.lastUpdateUtc)}</td>
                   <td className="text-right" onClick={(e) => e.stopPropagation()}>
@@ -265,14 +275,15 @@ export default function Skills() {
                       id={`skill-${skill.id}`}
                       items={[
                         { label: 'Open', onClick: () => navigate(`/skills/${skill.id}`) },
-                        ...(canManage ? [{ label: 'Edit', onClick: () => openEdit(skill) }] : []),
+                        ...(canEditRow ? [{ label: 'Edit', onClick: () => openEdit(skill) }] : []),
                         { label: 'View JSON', onClick: () => setJsonData({ open: true, title: skill.name, data: skill }) },
-                        ...(canManage ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(skill) }] : []),
+                        ...(canEditRow ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(skill) }] : []),
                       ]}
                     />
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

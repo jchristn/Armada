@@ -7,7 +7,10 @@ import {
   validateModelEndpoint,
   healthCheckModelEndpoints,
 } from '../api/client';
-import type { ModelEndpoint, ModelEndpointKind, ModelProvider, ModelEndpointProbeResult } from '../types/models';
+import type { ModelEndpoint, ModelEndpointKind, ModelProvider, ModelEndpointProbeResult, ScopeEnum } from '../types/models';
+import { canEdit as canEditScoped, resolveCreateScope, type ScopeViewer } from '../lib/scoping';
+import ScopeBadge from '../components/shared/ScopeBadge';
+import ScopeSelect from '../components/shared/ScopeSelect';
 import { useAuth } from '../context/AuthContext';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
@@ -37,6 +40,7 @@ interface EndpointForm {
   dimensionality: string;
   timeoutMs: string;
   enabled: boolean;
+  scope: ScopeEnum;
 }
 
 const EMPTY_FORM: EndpointForm = {
@@ -50,6 +54,7 @@ const EMPTY_FORM: EndpointForm = {
   dimensionality: '0',
   timeoutMs: '120000',
   enabled: true,
+  scope: 'TenantWide',
 };
 
 /** Humanize the span between the earliest retained probe and now, for the health modal. */
@@ -74,7 +79,8 @@ function unsupportedReason(provider: ModelProvider, kind: ModelEndpointKind): st
 }
 
 export default function Endpoints() {
-  const { isAdmin, isTenantAdmin } = useAuth();
+  const { isAdmin, isTenantAdmin, user } = useAuth();
+  const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const { t, formatRelativeTime, formatDateTime } = useLocale();
   const { pushToast } = useNotifications();
   const [endpoints, setEndpoints] = useState<ModelEndpoint[]>([]);
@@ -103,7 +109,7 @@ export default function Endpoints() {
 
   function openCreate() {
     setEditing(null);
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, scope: resolveCreateScope(viewer) });
     setShowForm(true);
   }
 
@@ -120,6 +126,7 @@ export default function Endpoints() {
       dimensionality: String(endpoint.dimensionality ?? 0),
       timeoutMs: String(endpoint.timeoutMs ?? 120000),
       enabled: endpoint.enabled,
+      scope: endpoint.scope,
     });
     setShowForm(true);
   }
@@ -139,6 +146,7 @@ export default function Endpoints() {
         dimensionality: Number.parseInt(form.dimensionality, 10) || 0,
         timeoutMs: Number.parseInt(form.timeoutMs, 10) || 120000,
         enabled: form.enabled,
+        scope: form.scope,
       };
       // Only send apiKey when the operator actually typed one, so an unchanged edit keeps the stored key.
       if (form.apiKeyTouched) payload.apiKey = form.apiKey;
@@ -248,7 +256,7 @@ export default function Endpoints() {
                 {sweeping ? t('Sweeping...') : t('Run Health Sweep')}
               </button>
             )}
-            {canManage && (
+            {(
               <button className="btn btn-primary" onClick={openCreate}>+ {t('Endpoint')}</button>
             )}
           </>
@@ -308,6 +316,7 @@ export default function Endpoints() {
                 <input type="number" min={1000} max={600000} value={form.timeoutMs} onChange={(e) => setForm({ ...form, timeoutMs: e.target.value })} />
               </label>
             </div>
+            <ScopeSelect viewer={viewer} value={form.scope} onChange={(scope) => setForm({ ...form, scope })} />
             <label className="checkbox-row">
               <input type="checkbox" checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} />
               <span>{t('Enabled')}</span>
@@ -456,14 +465,17 @@ export default function Endpoints() {
                 <th>{t('Kind')}</th>
                 <th>{t('Provider')}</th>
                 <th>{t('Model')}</th>
+                <th>{t('Visibility')}</th>
                 <th>{t('Health')}</th>
                 <th>{t('Last Checked')}</th>
                 <th className="text-right">{t('Actions')}</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((endpoint) => (
-                <tr key={endpoint.id} className="clickable" onClick={() => canManage ? openEdit(endpoint) : setHealth({ open: true, endpoint })}>
+              {filtered.map((endpoint) => {
+                const canEditRow = canEditScoped(viewer, endpoint);
+                return (
+                <tr key={endpoint.id} className="clickable" onClick={() => canEditRow ? openEdit(endpoint) : setHealth({ open: true, endpoint })}>
                   <td>
                     <strong>{endpoint.name}</strong>
                     {!endpoint.enabled && <span className="text-dim"> ({t('disabled')})</span>}
@@ -476,6 +488,7 @@ export default function Endpoints() {
                   <td className="text-dim">{endpoint.kind}</td>
                   <td className="text-dim">{endpoint.provider}</td>
                   <td className="text-dim">{endpoint.model || '-'}</td>
+                  <td><ScopeBadge scope={endpoint.scope} /></td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <span
                       className="health-cell"
@@ -497,15 +510,16 @@ export default function Endpoints() {
                       id={`endpoint-${endpoint.id}`}
                       items={[
                         { label: 'Health', onClick: () => setHealth({ open: true, endpoint }) },
-                        ...(canManage ? [{ label: validating === endpoint.id ? 'Validating...' : 'Validate', onClick: () => handleValidate(endpoint) }] : []),
-                        ...(canManage ? [{ label: 'Edit', onClick: () => openEdit(endpoint) }] : []),
+                        ...(canEditRow ? [{ label: validating === endpoint.id ? 'Validating...' : 'Validate', onClick: () => handleValidate(endpoint) }] : []),
+                        ...(canEditRow ? [{ label: 'Edit', onClick: () => openEdit(endpoint) }] : []),
                         { label: 'View JSON', onClick: () => setJsonData({ open: true, title: endpoint.name, data: endpoint }) },
-                        ...(canManage ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(endpoint) }] : []),
+                        ...(canEditRow ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(endpoint) }] : []),
                       ]}
                     />
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

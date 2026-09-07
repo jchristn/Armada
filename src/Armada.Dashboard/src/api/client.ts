@@ -1,4 +1,5 @@
 import type {
+  ScopeEnum,
   AuthenticateRequest,
   AuthenticateResult,
   WhoAmIResult,
@@ -817,9 +818,9 @@ export const cancelMergeEntry = (id: string) => post<void>(`/api/v1/merge-queue/
 export const listPromptTemplates = (params?: { pageNumber?: number; pageSize?: number; filters?: Record<string, string> }) =>
   get<EnumerationResult<PromptTemplate>>(`/api/v1/prompt-templates${buildQuery(params)}`);
 export const getPromptTemplate = (name: string) => get<PromptTemplate>(`/api/v1/prompt-templates/${encodeURIComponent(name)}`);
-export const createPromptTemplate = (data: { name: string; category: string; content: string; description?: string; active?: boolean }) =>
+export const createPromptTemplate = (data: { name: string; category: string; content: string; description?: string; active?: boolean; scope?: ScopeEnum }) =>
   post<PromptTemplate>('/api/v1/prompt-templates', data);
-export const updatePromptTemplate = (name: string, data: { content: string; description?: string }) => put<PromptTemplate>(`/api/v1/prompt-templates/${encodeURIComponent(name)}`, data);
+export const updatePromptTemplate = (name: string, data: { content: string; description?: string; scope?: ScopeEnum }) => put<PromptTemplate>(`/api/v1/prompt-templates/${encodeURIComponent(name)}`, data);
 export const resetPromptTemplate = (name: string) => post<PromptTemplate>(`/api/v1/prompt-templates/${encodeURIComponent(name)}/reset`);
 
 // ==================== Playbooks ====================

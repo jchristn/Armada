@@ -7,6 +7,14 @@ export interface TenantMetadata {
   lastUpdateUtc: string;
 }
 
+/**
+ * Ownership scope for Category B configuration entities. Tenant-wide objects are visible to everyone
+ * in the tenant but editable only by tenant/global admins; user-specific objects are owned by a user.
+ * Workflow profiles and project profiles carry this as `ownershipScope` (their `scope` field is the
+ * application scope: Global/Fleet/Vessel).
+ */
+export type ScopeEnum = 'TenantWide' | 'UserSpecific';
+
 export interface UserMaster {
   id: string;
   tenantId: string;
@@ -758,6 +766,7 @@ export interface Playbook {
   id: string;
   tenantId: string | null;
   userId: string | null;
+  scope: ScopeEnum;
   fileName: string;
   description: string | null;
   content: string;
@@ -797,6 +806,7 @@ export interface WorkflowProfile {
   id: string;
   tenantId: string | null;
   userId: string | null;
+  ownershipScope: ScopeEnum;
   name: string;
   description: string | null;
   scope: WorkflowProfileScope;
@@ -849,6 +859,7 @@ export interface ProjectProfile {
   id: string;
   tenantId: string | null;
   userId: string | null;
+  ownershipScope: ScopeEnum;
   name: string;
   description: string | null;
   scope: ProjectProfileScope;
@@ -889,6 +900,7 @@ export interface Skill {
   id: string;
   tenantId: string | null;
   userId: string | null;
+  scope: ScopeEnum;
   name: string;
   description: string | null;
   category: string | null;
@@ -1455,6 +1467,7 @@ export interface Runbook {
   playbookId: string;
   tenantId: string | null;
   userId: string | null;
+  scope: ScopeEnum;
   fileName: string;
   title: string;
   description: string | null;
@@ -1492,6 +1505,7 @@ export interface RunbookUpsertRequest {
   steps?: RunbookStep[] | null;
   overviewMarkdown?: string | null;
   active?: boolean | null;
+  scope?: ScopeEnum | null;
 }
 
 export interface RunbookExecution {
@@ -2099,6 +2113,8 @@ export interface WebSocketMessage {
 export interface PromptTemplate {
   id: string;
   tenantId: string | null;
+  userId: string | null;
+  scope: ScopeEnum;
   name: string;
   description: string | null;
   category: string;
@@ -2112,6 +2128,8 @@ export interface PromptTemplate {
 export interface Persona {
   id: string;
   tenantId: string | null;
+  userId: string | null;
+  scope: ScopeEnum;
   name: string;
   description: string | null;
   promptTemplateName: string;
@@ -2125,6 +2143,8 @@ export interface Persona {
 export interface Pipeline {
   id: string;
   tenantId: string | null;
+  userId: string | null;
+  scope: ScopeEnum;
   name: string;
   description: string | null;
   stages: PipelineStage[];
@@ -2186,6 +2206,7 @@ export interface ModelEndpoint {
   id: string;
   tenantId: string | null;
   userId: string | null;
+  scope: ScopeEnum;
   name: string;
   kind: ModelEndpointKind;
   provider: ModelProvider;
