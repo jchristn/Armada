@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createProjectProfile, deleteProjectProfile, listFleets, listProjectProfiles, listVessels, updateProjectProfile } from '../api/client';
-import type { Fleet, ProjectProfile, Vessel } from '../types/models';
+import type { Fleet, ProjectProfile, Vessel, ScopeEnum } from '../types/models';
 import { useAuth } from '../context/AuthContext';
+import { canEdit as canEditScoped, resolveCreateScope, type ScopeViewer } from '../lib/scoping';
+import ScopeBadge from '../components/shared/ScopeBadge';
+import ScopeSelect from '../components/shared/ScopeSelect';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import ActionMenu from '../components/shared/ActionMenu';
@@ -21,7 +24,9 @@ function splitList(value: string): string[] {
 
 export default function ProjectProfiles() {
   const navigate = useNavigate();
-  const { isAdmin, isTenantAdmin } = useAuth();
+  const { isAdmin, isTenantAdmin, user } = useAuth();
+  const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
+  const canEditProfile = (p: ProjectProfile) => canEditScoped(viewer, { scope: p.ownershipScope, tenantId: p.tenantId, userId: p.userId });
   const { t, formatDateTime, formatRelativeTime } = useLocale();
   const { pushToast } = useNotifications();
   const [profiles, setProfiles] = useState<ProjectProfile[]>([]);
@@ -47,6 +52,7 @@ export default function ProjectProfiles() {
     name: 'Default Project Profile',
     description: '',
     scope: 'Global' as 'Global' | 'Fleet' | 'Vessel',
+    ownershipScope: resolveCreateScope(viewer) as ScopeEnum,
     fleetId: '',
     vesselId: '',
     isDefault: false,
@@ -97,6 +103,7 @@ export default function ProjectProfiles() {
       name: profile.name,
       description: profile.description || '',
       scope: profile.scope,
+      ownershipScope: profile.ownershipScope,
       fleetId: profile.fleetId || '',
       vesselId: profile.vesselId || '',
       isDefault: profile.isDefault,
@@ -117,6 +124,7 @@ export default function ProjectProfiles() {
         name: createForm.name,
         description: createForm.description || null,
         scope: createForm.scope,
+        ownershipScope: createForm.ownershipScope,
         fleetId: createForm.scope === 'Fleet' ? (createForm.fleetId || null) : null,
         vesselId: createForm.scope === 'Vessel' ? (createForm.vesselId || null) : null,
         isDefault: createForm.isDefault,
@@ -190,11 +198,9 @@ export default function ProjectProfiles() {
           <>
             <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
             <RefreshButton onRefresh={load} title={t('Refresh project profiles')} />
-            {canManage && (
-              <button className="btn btn-primary" onClick={openCreate}>
-                + {t('Project Profile')}
-              </button>
-            )}
+            <button className="btn btn-primary" onClick={openCreate}>
+              + {t('Project Profile')}
+            </button>
           </>
         )}
       />
@@ -226,6 +232,7 @@ export default function ProjectProfiles() {
                 <option value="Vessel">{t('Vessel')}</option>
               </select>
             </label>
+            <ScopeSelect viewer={viewer} value={createForm.ownershipScope} onChange={(ownershipScope) => setCreateForm((current) => ({ ...current, ownershipScope }))} />
             {createForm.scope === 'Fleet' && (
               <label>{t('Fleet')}
                 <select value={createForm.fleetId} onChange={(event) => setCreateForm((current) => ({ ...current, fleetId: event.target.value }))}>
@@ -322,6 +329,7 @@ export default function ProjectProfiles() {
               <tr>
                 <th>{t('Profile')}</th>
                 <th>{t('Scope')}</th>
+                <th>{t('Visibility')}</th>
                 <th>{t('Overrides')}</th>
                 <th>{t('Skills')}</th>
                 <th>{t('Status')}</th>
@@ -336,11 +344,14 @@ export default function ProjectProfiles() {
                 <td></td>
                 <td></td>
                 <td></td>
+                <td></td>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((profile) => (
-                <tr key={profile.id} className="clickable" onClick={() => canManage ? openEdit(profile) : navigate(`/project-profiles/${profile.id}`)}>
+              {filtered.map((profile) => {
+                const canEditRow = canEditProfile(profile);
+                return (
+                <tr key={profile.id} className="clickable" onClick={() => canEditRow ? openEdit(profile) : navigate(`/project-profiles/${profile.id}`)}>
                   <td>
                     <strong>{profile.name}</strong>
                     <div className="mono text-dim" style={{ fontSize: '0.78rem' }}>{profile.id}</div>
@@ -352,6 +363,7 @@ export default function ProjectProfiles() {
                     <StatusBadge status={profile.scope} />
                     {profile.isDefault && <div className="text-dim" style={{ marginTop: '0.25rem' }}>{t('Default')}</div>}
                   </td>
+                  <td><ScopeBadge scope={profile.ownershipScope} /></td>
                   <td className="text-dim">{profile.personaOverrides?.length || 0} {t('personas')}</td>
                   <td className="text-dim">{profile.skills?.length || 0} {t('skills')}</td>
                   <td><StatusBadge status={profile.active ? 'Active' : 'Inactive'} /></td>
@@ -361,14 +373,15 @@ export default function ProjectProfiles() {
                       id={`project-profile-${profile.id}`}
                       items={[
                         { label: 'Open', onClick: () => navigate(`/project-profiles/${profile.id}`) },
-                        ...(canManage ? [{ label: 'Edit', onClick: () => openEdit(profile) }] : []),
+                        ...(canEditRow ? [{ label: 'Edit', onClick: () => openEdit(profile) }] : []),
                         { label: 'View JSON', onClick: () => setJsonData({ open: true, title: profile.name, data: profile }) },
-                        ...(canManage ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(profile) }] : []),
+                        ...(canEditRow ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(profile) }] : []),
                       ]}
                     />
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
