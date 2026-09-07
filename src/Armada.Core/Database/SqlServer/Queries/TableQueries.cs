@@ -1034,6 +1034,16 @@ namespace Armada.Core.Database.SqlServer.Queries
                     "Add ownership scope to playbooks and skills",
                     @"IF COL_LENGTH('playbooks','scope') IS NULL ALTER TABLE playbooks ADD scope NVARCHAR(32) NOT NULL DEFAULT 'TenantWide';",
                     @"IF COL_LENGTH('skills','scope') IS NULL ALTER TABLE skills ADD scope NVARCHAR(32) NOT NULL DEFAULT 'TenantWide';"
+                ),
+                new SchemaMigration(
+                    67,
+                    "Add ownership (user_id + scope) to personas, pipelines, prompt_templates",
+                    @"IF COL_LENGTH('personas','user_id') IS NULL ALTER TABLE personas ADD user_id NVARCHAR(450);",
+                    @"IF COL_LENGTH('personas','scope') IS NULL ALTER TABLE personas ADD scope NVARCHAR(32) NOT NULL DEFAULT 'TenantWide';",
+                    @"IF COL_LENGTH('pipelines','user_id') IS NULL ALTER TABLE pipelines ADD user_id NVARCHAR(450);",
+                    @"IF COL_LENGTH('pipelines','scope') IS NULL ALTER TABLE pipelines ADD scope NVARCHAR(32) NOT NULL DEFAULT 'TenantWide';",
+                    @"IF COL_LENGTH('prompt_templates','user_id') IS NULL ALTER TABLE prompt_templates ADD user_id NVARCHAR(450);",
+                    @"IF COL_LENGTH('prompt_templates','scope') IS NULL ALTER TABLE prompt_templates ADD scope NVARCHAR(32) NOT NULL DEFAULT 'TenantWide';"
                 )
             };
         }

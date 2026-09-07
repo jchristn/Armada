@@ -608,6 +608,11 @@ namespace Armada.Core.Database.Mysql
                     66,
                     "Add ownership scope to playbooks and skills",
                     TableQueries.MigrationV66Statements
+                ),
+                new SchemaMigration(
+                    67,
+                    "Add ownership (user_id + scope) to personas, pipelines, prompt_templates",
+                    TableQueries.MigrationV67Statements
                 )
             };
         }

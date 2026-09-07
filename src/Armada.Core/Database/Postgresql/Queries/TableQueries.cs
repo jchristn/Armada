@@ -1172,7 +1172,14 @@ namespace Armada.Core.Database.Postgresql.Queries
                     @"ALTER TABLE model_endpoints ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'TenantWide';"),
                 new SchemaMigration(66, "Add ownership scope to playbooks and skills",
                     @"ALTER TABLE playbooks ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'TenantWide';",
-                    @"ALTER TABLE skills ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'TenantWide';")
+                    @"ALTER TABLE skills ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'TenantWide';"),
+                new SchemaMigration(67, "Add ownership (user_id + scope) to personas, pipelines, prompt_templates",
+                    @"ALTER TABLE personas ADD COLUMN IF NOT EXISTS user_id TEXT;",
+                    @"ALTER TABLE personas ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'TenantWide';",
+                    @"ALTER TABLE pipelines ADD COLUMN IF NOT EXISTS user_id TEXT;",
+                    @"ALTER TABLE pipelines ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'TenantWide';",
+                    @"ALTER TABLE prompt_templates ADD COLUMN IF NOT EXISTS user_id TEXT;",
+                    @"ALTER TABLE prompt_templates ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'TenantWide';")
             };
         }
 

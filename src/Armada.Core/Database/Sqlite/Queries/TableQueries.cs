@@ -1457,7 +1457,14 @@ namespace Armada.Core.Database.Sqlite.Queries
                     @"ALTER TABLE model_endpoints ADD COLUMN scope TEXT NOT NULL DEFAULT 'TenantWide';"),
                 new SchemaMigration(66, "Add ownership scope to playbooks and skills",
                     @"ALTER TABLE playbooks ADD COLUMN scope TEXT NOT NULL DEFAULT 'TenantWide';",
-                    @"ALTER TABLE skills ADD COLUMN scope TEXT NOT NULL DEFAULT 'TenantWide';")
+                    @"ALTER TABLE skills ADD COLUMN scope TEXT NOT NULL DEFAULT 'TenantWide';"),
+                new SchemaMigration(67, "Add ownership (user_id + scope) to personas, pipelines, prompt_templates",
+                    @"ALTER TABLE personas ADD COLUMN user_id TEXT;",
+                    @"ALTER TABLE personas ADD COLUMN scope TEXT NOT NULL DEFAULT 'TenantWide';",
+                    @"ALTER TABLE pipelines ADD COLUMN user_id TEXT;",
+                    @"ALTER TABLE pipelines ADD COLUMN scope TEXT NOT NULL DEFAULT 'TenantWide';",
+                    @"ALTER TABLE prompt_templates ADD COLUMN user_id TEXT;",
+                    @"ALTER TABLE prompt_templates ADD COLUMN scope TEXT NOT NULL DEFAULT 'TenantWide';")
             };
         }
 

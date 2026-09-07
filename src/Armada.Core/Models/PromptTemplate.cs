@@ -30,6 +30,17 @@ namespace Armada.Core.Models
         public string? TenantId { get; set; } = null;
 
         /// <summary>
+        /// Owning user identifier (null for tenant-wide objects).
+        /// </summary>
+        public string? UserId { get; set; } = null;
+
+        /// <summary>
+        /// Ownership scope: tenant-wide objects are visible to everyone in the tenant but editable only by
+        /// tenant/global admins; user-specific objects are owned by <see cref="UserId"/>. Defaults tenant-wide.
+        /// </summary>
+        public Armada.Core.Enums.ScopeEnum Scope { get; set; } = Armada.Core.Enums.ScopeEnum.TenantWide;
+
+        /// <summary>
         /// Template name, used as a unique lookup key (e.g. "mission.rules", "persona.worker").
         /// </summary>
         public string Name

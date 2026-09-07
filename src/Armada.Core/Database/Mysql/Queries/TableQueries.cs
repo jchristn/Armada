@@ -1412,6 +1412,19 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration v67 statements: add ownership (user_id + scope) to personas, pipelines, prompt_templates.
+        /// </summary>
+        public static readonly string[] MigrationV67Statements = new string[]
+        {
+            "ALTER TABLE personas ADD COLUMN user_id VARCHAR(191) NULL;",
+            "ALTER TABLE personas ADD COLUMN scope VARCHAR(32) NOT NULL DEFAULT 'TenantWide';",
+            "ALTER TABLE pipelines ADD COLUMN user_id VARCHAR(191) NULL;",
+            "ALTER TABLE pipelines ADD COLUMN scope VARCHAR(32) NOT NULL DEFAULT 'TenantWide';",
+            "ALTER TABLE prompt_templates ADD COLUMN user_id VARCHAR(191) NULL;",
+            "ALTER TABLE prompt_templates ADD COLUMN scope VARCHAR(32) NOT NULL DEFAULT 'TenantWide';"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]
