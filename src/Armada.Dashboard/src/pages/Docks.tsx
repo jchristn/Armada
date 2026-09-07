@@ -10,6 +10,7 @@ import RecordDetailModal from '../components/shared/RecordDetailModal';
 import CopyButton from '../components/shared/CopyButton';
 import RefreshButton from '../components/shared/RefreshButton';
 import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
+import UserScopeFilter from '../components/shared/UserScopeFilter';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import PageHeader from '../components/shared/PageHeader';
 import ErrorModal from '../components/shared/ErrorModal';
@@ -29,6 +30,7 @@ export default function Docks() {
 
   // Pagination (server-side)
   const [pageNumber, setPageNumber] = useState(1);
+  const [userScope, setUserScope] = useState('');
   const [pageSize, setPageSize] = useState(25);
   const [totalPages, setTotalPages] = useState(1);
   const [totalRecords, setTotalRecords] = useState(0);
@@ -71,7 +73,7 @@ export default function Docks() {
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const result = await listDocks({ pageNumber, pageSize });
+      const result = await listDocks({ pageNumber, pageSize, filters: userScope ? { userId: userScope } : undefined });
       setDocks(result.objects || []);
       setTotalPages(result.totalPages || 1);
       setTotalRecords(result.totalRecords || 0);
@@ -82,7 +84,7 @@ export default function Docks() {
     } finally {
       setLoading(false);
     }
-  }, [pageNumber, pageSize, t]);
+  }, [pageNumber, pageSize, userScope, t]);
 
   useEffect(() => { load(); }, [load]);
   const { seconds: refreshSeconds, setSeconds: setRefreshSeconds } = useAutoRefresh('docks', load);
@@ -146,6 +148,7 @@ export default function Docks() {
                 {t('Delete Selected')} ({table.selected.length})
               </button>
             )}
+            <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPageNumber(1); }} />
             <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
             <RefreshButton onRefresh={load} title={t('Refresh dock data')} />
           </>

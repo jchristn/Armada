@@ -14,6 +14,7 @@ import JsonViewer from '../components/shared/JsonViewer';
 import CopyButton from '../components/shared/CopyButton';
 import RefreshButton from '../components/shared/RefreshButton';
 import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
+import UserScopeFilter from '../components/shared/UserScopeFilter';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import PageHeader from '../components/shared/PageHeader';
 import ErrorModal from '../components/shared/ErrorModal';
@@ -75,12 +76,13 @@ export default function Captains() {
 
   // Pagination
   const [pageNumber, setPageNumber] = useState(1);
+  const [userScope, setUserScope] = useState('');
   const [pageSize, setPageSize] = useState(25);
 
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const result = await listCaptains({ pageSize: 9999 });
+      const result = await listCaptains({ pageSize: 9999, filters: userScope ? { userId: userScope } : undefined });
       setCaptains(result.objects);
       setError('');
     } catch {
@@ -88,7 +90,7 @@ export default function Captains() {
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [userScope, t]);
 
   useEffect(() => { load(); }, [load]);
   const { seconds: refreshSeconds, setSeconds: setRefreshSeconds } = useAutoRefresh('captains', load);
@@ -386,6 +388,7 @@ export default function Captains() {
             )}
             <button className="btn btn-sm btn-danger" onClick={handleStopAll} title={t('Stop all captain processes')}>{t('Stop All')}</button>
             <button className="btn btn-primary btn-sm" onClick={openCreate}>+ {t('Captain')}</button>
+            <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPageNumber(1); }} />
             <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
             <RefreshButton onRefresh={load} title={t('Refresh captain data')} />
           </>

@@ -11,6 +11,7 @@ import RecordDetailModal from '../components/shared/RecordDetailModal';
 import CopyButton from '../components/shared/CopyButton';
 import RefreshButton from '../components/shared/RefreshButton';
 import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
+import UserScopeFilter from '../components/shared/UserScopeFilter';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import PageHeader from '../components/shared/PageHeader';
 import ErrorModal from '../components/shared/ErrorModal';
@@ -28,6 +29,7 @@ export default function Voyages() {
 
   // Pagination (server-side)
   const [pageNumber, setPageNumber] = useState(1);
+  const [userScope, setUserScope] = useState('');
   const [pageSize, setPageSize] = useState(25);
   const [totalPages, setTotalPages] = useState(1);
   const [totalRecords, setTotalRecords] = useState(0);
@@ -57,7 +59,7 @@ export default function Voyages() {
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const result = await listVoyages({ pageNumber, pageSize });
+      const result = await listVoyages({ pageNumber, pageSize, filters: userScope ? { userId: userScope } : undefined });
       setVoyages(result.objects || []);
       setTotalPages(result.totalPages || 1);
       setTotalRecords(result.totalRecords || 0);
@@ -67,7 +69,7 @@ export default function Voyages() {
     } finally {
       setLoading(false);
     }
-  }, [pageNumber, pageSize, t]);
+  }, [pageNumber, pageSize, userScope, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -151,6 +153,7 @@ export default function Voyages() {
               </button>
             )}
             <button className="btn btn-primary btn-sm" onClick={() => navigate('/voyages/create')}>+ {t('Voyage')}</button>
+            <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPageNumber(1); }} />
             <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
             <RefreshButton onRefresh={load} title="Refresh voyage data" />
           </>

@@ -12,6 +12,7 @@ import JsonViewer from '../components/shared/JsonViewer';
 import CopyButton from '../components/shared/CopyButton';
 import RefreshButton from '../components/shared/RefreshButton';
 import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
+import UserScopeFilter from '../components/shared/UserScopeFilter';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import PageHeader from '../components/shared/PageHeader';
 import ErrorModal from '../components/shared/ErrorModal';
@@ -78,6 +79,7 @@ export default function Vessels() {
   const [fleets, setFleets] = useState<Fleet[]>([]);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userScope, setUserScope] = useState('');
   const [error, setError] = useState('');
   const [gitStatus, setGitStatus] = useState<Record<string, { ahead: number | null; behind: number | null }>>({});
   const [branchCounts, setBranchCounts] = useState<Record<string, number | null>>({});
@@ -135,7 +137,7 @@ export default function Vessels() {
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const [vResult, fResult, pResult] = await Promise.all([listVessels({ pageSize: 9999 }), listFleets({ pageSize: 9999 }), listPipelines({ pageSize: 9999 })]);
+      const [vResult, fResult, pResult] = await Promise.all([listVessels({ pageSize: 9999, filters: userScope ? { userId: userScope } : undefined }), listFleets({ pageSize: 9999 }), listPipelines({ pageSize: 9999 })]);
       setVessels(vResult.objects);
       setFleets(fResult.objects);
       setPipelines(pResult.objects);
@@ -165,7 +167,7 @@ export default function Vessels() {
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [userScope, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -333,6 +335,7 @@ export default function Vessels() {
               </button>
             )}
             <button className="btn btn-primary btn-sm" onClick={openCreate}>+ {t('Vessel')}</button>
+            <UserScopeFilter value={userScope} onChange={setUserScope} />
             <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
             <RefreshButton onRefresh={load} title="Refresh vessel data" />
           </>

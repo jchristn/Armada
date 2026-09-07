@@ -364,6 +364,7 @@ function buildObjectiveQuery(params?: ObjectiveQuery): string {
   const search = new URLSearchParams();
   if (params.pageNumber) search.set('pageNumber', String(params.pageNumber));
   if (params.pageSize) search.set('pageSize', String(params.pageSize));
+  if (params.userId) search.set('userId', params.userId);
   if (params.owner) search.set('owner', params.owner);
   if (params.category) search.set('category', params.category);
   if (params.parentObjectiveId) search.set('parentObjectiveId', params.parentObjectiveId);

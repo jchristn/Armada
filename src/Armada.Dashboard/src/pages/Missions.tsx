@@ -20,6 +20,7 @@ import DiffViewer from '../components/shared/DiffViewer';
 import LogViewer from '../components/shared/LogViewer';
 import ErrorModal from '../components/shared/ErrorModal';
 import RefreshButton from '../components/shared/RefreshButton';
+import UserScopeFilter from '../components/shared/UserScopeFilter';
 import CopyButton from '../components/shared/CopyButton';
 import { useLocale } from '../context/LocaleContext';
 
@@ -47,6 +48,7 @@ export default function Missions() {
 
   // Server-side status filter
   const [statusFilter, setStatusFilter] = useState('');
+  const [userScope, setUserScope] = useState('');
 
   // Modal
   const [showForm, setShowForm] = useState(false);
@@ -97,6 +99,7 @@ export default function Missions() {
       setLoading(true);
       const filters: Record<string, string> = {};
       if (statusFilter) filters.status = statusFilter;
+      if (userScope) filters.userId = userScope;
       const result = await listMissionSummaries({ pageNumber, pageSize, filters });
       setMissions(result.objects || []);
       setTotalPages(result.totalPages || 1);
@@ -107,7 +110,7 @@ export default function Missions() {
     } finally {
       setLoading(false);
     }
-  }, [pageNumber, pageSize, statusFilter, t]);
+  }, [pageNumber, pageSize, statusFilter, userScope, t]);
 
   useEffect(() => {
     listVessels({ pageSize: 1000 }).then(r => setVessels(r.objects || [])).catch(() => {});
@@ -303,6 +306,7 @@ export default function Missions() {
               </button>
             )}
             <button className="btn btn-primary btn-sm" onClick={openCreate}>+ {t('Mission')}</button>
+            <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPageNumber(1); }} />
             <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
             <RefreshButton onRefresh={load} title="Refresh mission data" />
           </>

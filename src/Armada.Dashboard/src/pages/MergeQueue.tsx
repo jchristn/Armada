@@ -19,6 +19,7 @@ import ErrorModal from '../components/shared/ErrorModal';
 import RefreshButton from '../components/shared/RefreshButton';
 import CopyButton from '../components/shared/CopyButton';
 import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
+import UserScopeFilter from '../components/shared/UserScopeFilter';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
@@ -37,6 +38,7 @@ export default function MergeQueue() {
 
   // Pagination (server-side)
   const [pageNumber, setPageNumber] = useState(1);
+  const [userScope, setUserScope] = useState('');
   const [pageSize, setPageSize] = useState(25);
   const [totalPages, setTotalPages] = useState(1);
   const [totalRecords, setTotalRecords] = useState(0);
@@ -81,7 +83,7 @@ export default function MergeQueue() {
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const result = await listMergeQueue({ pageNumber, pageSize });
+      const result = await listMergeQueue({ pageNumber, pageSize, filters: userScope ? { userId: userScope } : undefined });
       setEntries(result.objects || []);
       setTotalPages(result.totalPages || 1);
       setTotalRecords(result.totalRecords || 0);
@@ -92,7 +94,7 @@ export default function MergeQueue() {
     } finally {
       setLoading(false);
     }
-  }, [pageNumber, pageSize, t]);
+  }, [pageNumber, pageSize, userScope, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -311,6 +313,7 @@ export default function MergeQueue() {
               setEnqueueForm({ branchName: '', targetBranch: 'main', missionId: '', vesselId: '', testCommand: '', priority: 0 });
               setShowEnqueue(true);
             }}>+ {t('Enqueue')}</button>
+            <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPageNumber(1); }} />
             <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
             <RefreshButton onRefresh={load} title={t('Refresh merge queue')} />
           </>
