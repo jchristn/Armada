@@ -87,6 +87,35 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(!other, "Expected a different user to have no eligible Harbor.");
             }));
 
+            cases.Add(CaseAsync("own_harbor_disconnected_is_not_eligible", "HasEligibleHarborForUserAsync returns false when the user's only Harbor is disconnected", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                HarborService harbors = new HarborService(testDb.Driver, CreateLogging());
+                HarborConnectionManager manager = new HarborConnectionManager(harbors, CreateLogging(), null);
+
+                HarborHandshake handshake = new HarborHandshake
+                {
+                    HarborId = "hbr_offline",
+                    Name = "Rig",
+                    ProtocolVersion = HarborProtocol.Version,
+                    MaxConcurrentJobs = 4,
+                    Capabilities = new List<HarborCapability> { new HarborCapability { Name = "ClaudeCode", Available = true } }
+                };
+                await manager.OnHandshakeAsync(handshake, "ten_off", "usr_off", NoopSend).ConfigureAwait(false);
+
+                Armada.Core.Services.HarborRoutingRequest request = new Armada.Core.Services.HarborRoutingRequest { RequestedRuntime = "ClaudeCode" };
+
+                // The user's own, capable Harbor is registered and connected: eligible.
+                bool whileConnected = await manager.HasEligibleHarborForUserAsync("usr_off", request).ConfigureAwait(false);
+                AssertTrue(whileConnected, "Expected the owning user's connected Harbor to be eligible.");
+
+                // The Harbor drops its connection (the "I have a Harbor but it isn't live" case).
+                await manager.OnDisconnectedAsync("hbr_offline").ConfigureAwait(false);
+
+                bool whileDisconnected = await manager.HasEligibleHarborForUserAsync("usr_off", request).ConfigureAwait(false);
+                AssertTrue(!whileDisconnected, "Expected no eligible Harbor once the user's only Harbor is disconnected.");
+            }));
+
             cases.Add(CaseAsync("heartbeat_marks_seen_and_tracks_jobs", "OnMessageAsync heartbeat advances liveness and job set", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
