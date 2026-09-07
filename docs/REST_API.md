@@ -113,6 +113,42 @@ Armada distinguishes three effective caller roles:
 
 Operational entities persist both `TenantId` and `UserId`. Those ownership columns are indexed and enforced by foreign keys across SQLite, PostgreSQL, SQL Server, and MySQL.
 
+### Data Scoping (who sees and edits what)
+
+Beyond the coarse authorization tiers above, Armada applies per-user data scoping within a tenant.
+Entities fall into two categories:
+
+**Category A - owned operational entities** (fleets, vessels, voyages, captains, missions, docks,
+signals, events, merge queue entries, objectives/backlog):
+
+- A regular user sees and manages only rows they own (`UserId` matches the caller).
+- A tenant admin sees and manages every row in their tenant.
+- A global admin sees and manages every row in the system.
+- Enumeration is scoped automatically from the caller's identity. Admins may **narrow** the view with
+  the `userId` and `tenantId` query filters (see Entity-Specific Filters) - for example a tenant admin
+  can pass `?userId=usr_...` to view a single user's records, or omit it to see the whole tenant.
+  A regular user cannot widen their scope; these filters are ignored when they would exceed the
+  caller's own ownership.
+
+**Category B - shared configuration entities** (model endpoints, playbooks, skills, prompt templates,
+personas, pipelines, workflow profiles, project profiles, runbooks):
+
+- Each object carries an ownership scope: `TenantWide` or `UserSpecific`. (Workflow profiles and
+  project profiles expose this as `ownershipScope` because their existing `scope` field already means
+  application scope - Global/Fleet/Vessel; all other Category B entities use `scope`.)
+- Enumeration and reads for a regular user return **all tenant-wide objects plus the caller's own
+  user-specific objects**. Tenant/global admins see everything in their tenant/system.
+- A regular user may create only `UserSpecific` objects (the requested scope is coerced); tenant and
+  global admins may create either and default to `TenantWide`.
+- Editing/deleting a `UserSpecific` object requires being its owner (or an admin). Editing/deleting a
+  `TenantWide` object requires a tenant or global admin. A regular user attempting to modify a
+  tenant-wide object receives `403`; an object they cannot even see reads as `404`.
+- Only tenant/global admins may change an existing object's ownership scope on update.
+- Built-in/seeded objects are `TenantWide`.
+
+> MCP tools currently run under a system/tenant-admin identity and are not yet per-user scoped; that
+> is pending a transport enhancement. REST is the per-user-scoped surface today.
+
 ### Authorization Matrix
 
 | Endpoint | Method | Permission | Notes |
@@ -171,7 +207,7 @@ Operational entities persist both `TenantId` and `UserId`. Those ownership colum
 | `/api/v1/harbors/{id}` | GET/PUT/DELETE | Authenticated | Read, update (`name`, `maxConcurrentJobs`, `enabled`), or delete one Harbor in scope |
 | `/api/v1/harbors/{id}/enable` | POST | Authenticated | Enable one Harbor |
 | `/api/v1/harbors/{id}/disable` | POST | Authenticated | Disable one Harbor; it keeps its docks but receives no new missions |
-| `/api/v1/workflow-profiles` | GET/POST/PUT/DELETE | Authenticated / TenantAdmin | Reads are tenant-scoped for any authenticated user. Mutations require tenant admin. |
+| `/api/v1/workflow-profiles` | GET/POST/PUT/DELETE | Authenticated | Category B (ownership scope via `ownershipScope`). Reads return tenant-wide + own. A user creates/edits/deletes their own user-specific profiles; tenant-wide requires a tenant admin. |
 | `/api/v1/workflow-profiles/validate` | POST | Authenticated | Validate a workflow profile without saving it |
 | `/api/v1/workflow-profiles/resolve/vessels/{vesselId}` | GET | Authenticated | Resolve the active workflow profile for one vessel |
 | `/api/v1/workflow-profiles/preview/vessels/{vesselId}` | GET | Authenticated | Preview the resolved workflow commands for one vessel |
@@ -202,7 +238,7 @@ Operational entities persist both `TenantId` and `UserId`. Those ownership colum
 | `/api/v1/incidents/{id}` | GET/PUT/DELETE | Authenticated | Read, update, or delete one incident in scope |
 | `/api/v1/runbooks` | GET/POST | Authenticated | List or create playbook-backed runbooks in caller scope |
 | `/api/v1/runbooks/enumerate` | POST | Authenticated | Body/query-driven runbook enumeration |
-| `/api/v1/runbooks/{id}` | GET/PUT/DELETE | Authenticated | Read, update, or delete one runbook in scope |
+| `/api/v1/runbooks/{id}` | GET/PUT/DELETE | Authenticated | Category B (`scope`, mirrored from the backing playbook). Reads return tenant-wide + own; a user edits/deletes their own user-specific runbooks; tenant-wide requires a tenant admin. |
 | `/api/v1/runbook-executions` | GET | Authenticated | List runbook executions in caller scope |
 | `/api/v1/runbook-executions/enumerate` | POST | Authenticated | Body/query-driven runbook-execution enumeration |
 | `/api/v1/runbook-executions/{id}` | GET/PUT/DELETE | Authenticated | Read, update, or delete one runbook execution in scope |
@@ -222,11 +258,11 @@ Operational entities persist both `TenantId` and `UserId`. Those ownership colum
 | `/api/v1/missions/{id}/evaluate-autoland` | GET | Authenticated | Dry-run the vessel's auto-land predicate against the mission diff |
 | `/api/v1/runtimes/mux/endpoints` | GET | Authenticated | List saved Mux endpoints, optionally from `configDirectory` |
 | `/api/v1/runtimes/mux/endpoints/{name}` | GET | Authenticated | Show one saved Mux endpoint |
-| `/api/v1/playbooks` | GET/POST/PUT/DELETE | Authenticated / TenantAdmin | Reads are tenant-scoped for any authenticated user. Mutations require tenant admin. |
-| `/api/v1/prompt-templates` | ALL | Authenticated | Tenant-scoped |
-| `/api/v1/personas` | ALL | Authenticated | Tenant-scoped |
-| `/api/v1/pipelines` | ALL | Authenticated | Tenant-scoped |
-| `/api/v1/model-endpoints` | GET/POST/PUT/DELETE | Authenticated | Tenant-scoped. The stored `ApiKey` is write-only and never returned on reads. |
+| `/api/v1/playbooks` | GET/POST/PUT/DELETE | Authenticated | Category B (`scope`). Reads return tenant-wide + own. A user creates/edits/deletes their own user-specific playbooks; tenant-wide requires a tenant admin. |
+| `/api/v1/prompt-templates` | ALL | Authenticated | Category B (`scope`). Reads return tenant-wide + own; edits/deletes/reset gated by ownership. Tenant-wide requires a tenant admin. |
+| `/api/v1/personas` | ALL | Authenticated | Category B (`scope`). Reads return tenant-wide + own; edits/deletes gated by ownership. Tenant-wide requires a tenant admin. |
+| `/api/v1/pipelines` | ALL | Authenticated | Category B (`scope`). Reads return tenant-wide + own; edits/deletes gated by ownership. Tenant-wide requires a tenant admin. |
+| `/api/v1/model-endpoints` | GET/POST/PUT/DELETE | Authenticated | Category B (`scope`). Reads return tenant-wide + own; edits/deletes gated by ownership. Tenant-wide requires a tenant admin. The stored `ApiKey` is write-only and never returned on reads. |
 | `/api/v1/model-endpoints/{id}/validate` | POST | Authenticated | Issue a real embedding or completion request against one endpoint and persist its health status |
 | `/api/v1/model-endpoints/health-check` | POST | Authenticated | Probe all enabled endpoints, deduplicated by base URL |
 | `/api/v1/tenants` | GET (list) | AdminOnly | Global admin only |
@@ -294,6 +330,8 @@ Query string parameters **override** body values on POST enumerate endpoints, al
 
 | Parameter | Applies To | Description |
 |---|---|---|
+| `userId` | Category A entities | Admin-only scope narrowing: view one user's owned records. Ignored for regular users. |
+| `tenantId` | Category A entities | Global-admin scope narrowing: view one tenant's records. |
 | `status` | missions, voyages, captains | Filter by status value |
 | `fleetId` | vessels | Filter by fleet ID |
 | `vesselId` | missions, docks, events | Filter by vessel ID |
@@ -5070,6 +5108,7 @@ A reusable tenant-scoped markdown document selected during dispatch.
 | `Id` | string | Playbook ID (prefix `pbk_`) |
 | `TenantId` | string \| null | Owning tenant |
 | `UserId` | string \| null | Owning user |
+| `Scope` | [ScopeEnum](#scopeenum) | Ownership scope: `TenantWide` or `UserSpecific`. Defaults `TenantWide`. See [Data Scoping](#data-scoping-who-sees-and-edits-what). |
 | `FileName` | string | Markdown file name, typically ending in `.md` |
 | `Description` | string \| null | Human-readable description |
 | `Content` | string | Markdown body |
@@ -5139,6 +5178,7 @@ A managed reference to an external embedding or inference model behind a provide
 | `Id` | string | auto-generated | Unique ID with `mep_` prefix |
 | `TenantId` | string? | null | Owning tenant ID |
 | `UserId` | string? | null | Owning user ID |
+| `Scope` | [ScopeEnum](#scopeenum) | `TenantWide` | Ownership scope: `TenantWide` or `UserSpecific`. See [Data Scoping](#data-scoping-who-sees-and-edits-what). |
 | `Name` | string | required | Display name |
 | `Kind` | string | `Embedding` | `Embedding` or `Inference` |
 | `Provider` | string | `Ollama` | `Ollama`, `OpenAI`, `OpenAICompatible`, `Anthropic`, `Gemini`, or `VoyageAI` |
@@ -5172,6 +5212,17 @@ Each health probe (from the base-URL-deduplicated background sweep or from `/val
 ### Enumerations
 
 All enumerations serialize as strings in JSON (e.g., `"InProgress"`, not `2`).
+
+#### ScopeEnum
+
+Ownership scope for Category B configuration entities (see [Data Scoping](#data-scoping-who-sees-and-edits-what)). On workflow profiles and project profiles this is carried by the `ownershipScope` field (their `scope` field means application scope).
+
+| Value | Description |
+|---|---|
+| `TenantWide` | Visible to everyone in the tenant; editable only by tenant/global admins. The default and the value for built-in/seeded objects. |
+| `UserSpecific` | Owned by a single user (`UserId`); visible and editable only by that user (or an admin). |
+
+---
 
 #### MissionStatusEnum
 

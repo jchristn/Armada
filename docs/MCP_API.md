@@ -250,7 +250,7 @@ The MCP port can be configured in the Armada settings file. The hostname is shar
 
 The MCP server does **not** currently enforce authentication. All MCP operations run in the context of the default tenant. Access control should be managed at the network level (firewall, bind address).
 
-> **Note:** Unlike the REST API, which supports bearer tokens, encrypted session tokens, and API keys as of v0.3.0, the MCP server remains unauthenticated. Multi-tenant MCP authentication is planned for a future release. For now, MCP clients have unrestricted access to all operations within the default tenant context.
+> **Note:** Unlike the REST API, which supports bearer tokens, encrypted session tokens, and API keys as of v0.3.0, the MCP server remains unauthenticated and MCP tools run under a system/tenant-admin context - they are **not** per-user data-scoped. Per-user MCP authorization (mirroring the REST scoping model, where a regular user sees only their own operational records and only tenant-wide plus their own configuration objects) is planned. It requires the MCP transport to carry the authenticated caller's identity into each tool handler; until that ships, use the authenticated REST API for per-user-scoped access. See [REST_API.md - Data Scoping](REST_API.md#data-scoping-who-sees-and-edits-what) for the scoping model.
 
 ### MCP Authentication Scope
 
