@@ -788,6 +788,22 @@ namespace Armada.Core.Services
                 // captured runtime error, halt the voyage, and only stall the captain
                 // when the failure indicates the runtime itself is unavailable.
                 _Logging.Warn(_Header + "agent process " + processId + " exited with code " + (exitCode?.ToString() ?? "unknown") + " for mission " + missionId);
+
+                // A negative exit code is an interruption (the runtime maps OperationCanceledException from a
+                // stop/shutdown to -1, and a vanished PID reports -1), not a genuine agent failure — real
+                // agent/model/config failures exit with a positive code. Re-dispatch an interrupted mission
+                // (bounded by MaxNoOpRedispatchAttempts) instead of terminally failing the voyage, so a
+                // server/harbor restart or reconnect does not nuke an otherwise-fine pipeline.
+                if (exitCode.HasValue && exitCode.Value < 0
+                    && mission != null
+                    && mission.Status != MissionStatusEnum.Cancelled
+                    && mission.RedispatchAttempts < _Settings.MaxNoOpRedispatchAttempts)
+                {
+                    await HandleInterruptedProcessExitAsync(captain, mission, missionId, exitCode.Value, token).ConfigureAwait(false);
+                    await DispatchPendingMissionsAsync(token).ConfigureAwait(false);
+                    return;
+                }
+
                 string failureReason = await BuildProcessExitFailureReasonAsync(missionId, exitCode, token).ConfigureAwait(false);
                 await HandleTerminalProcessExitFailureAsync(captain, mission, missionId, failureReason, token).ConfigureAwait(false);
 
@@ -1063,6 +1079,22 @@ namespace Armada.Core.Services
                     await EmitEventAsync("captain.completed", "Captain " + captain.Id + " process " + processId + " exited with code " + exitCode,
                         entityType: "captain", entityId: captain.Id,
                         captainId: captain.Id, missionId: missionId, token: token).ConfigureAwait(false);
+
+                    // A negative exit code signals an interruption rather than a genuine agent failure:
+                    // the runtime maps OperationCanceledException (a stop/shutdown) to -1, and the health
+                    // monitor uses -1 for a vanished PID. Real agent/model/config failures exit with a
+                    // positive code. Re-dispatch an interrupted mission (bounded by MaxNoOpRedispatchAttempts)
+                    // instead of terminally failing the voyage, so a server/harbor restart or reconnect does
+                    // not nuke an otherwise-fine pipeline. Genuine, repeatable interruptions still fail once
+                    // the redispatch budget is exhausted.
+                    if (exitCode < 0
+                        && mission != null
+                        && mission.Status != MissionStatusEnum.Cancelled
+                        && mission.RedispatchAttempts < _Settings.MaxNoOpRedispatchAttempts)
+                    {
+                        await HandleInterruptedProcessExitAsync(captain, mission, missionId, exitCode, token).ConfigureAwait(false);
+                        return;
+                    }
 
                     string failureReason = await BuildProcessExitFailureReasonAsync(missionId, exitCode, token).ConfigureAwait(false);
                     await HandleTerminalProcessExitFailureAsync(captain, mission, missionId, failureReason, token).ConfigureAwait(false);
@@ -1622,6 +1654,48 @@ namespace Armada.Core.Services
             }
 
             return "Agent process exited with code " + (exitCode?.ToString() ?? "unknown");
+        }
+
+        /// <summary>
+        /// Handle an interrupted (cancelled/vanished) captain process by re-dispatching its mission instead of
+        /// terminally failing it. Used for negative exit codes (a stop/shutdown cancellation or a missing PID),
+        /// which are not genuine agent failures. The dock and captain are reclaimed, the mission is reset to
+        /// Pending for a fresh assignment, and the voyage is left running. Bounded by the caller against
+        /// <see cref="ArmadaSettings.MaxNoOpRedispatchAttempts"/>.
+        /// </summary>
+        private async Task HandleInterruptedProcessExitAsync(
+            Captain captain,
+            Mission mission,
+            string missionId,
+            int exitCode,
+            CancellationToken token)
+        {
+            // Reclaim the dock and release the captain before resetting the mission (ReclaimDockAsync keys off
+            // the captain's/mission's current dock, so do it before clearing those references).
+            await ReclaimDockAsync(captain, mission, token).ConfigureAwait(false);
+            await _Captains.ReleaseAsync(captain, token).ConfigureAwait(false);
+
+            mission.RedispatchAttempts++;
+            mission.Status = MissionStatusEnum.Pending;
+            mission.CaptainId = null;
+            mission.DockId = null;
+            mission.ProcessId = null;
+            mission.FailureReason = null;
+            mission.StartedUtc = null;
+            mission.CompletedUtc = null;
+            mission.TotalRuntimeMs = null;
+            mission.LastUpdateUtc = DateTime.UtcNow;
+            await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+
+            _Logging.Warn(_Header + "mission " + missionId + " interrupted (process exit code " + exitCode +
+                ", treated as a stop/restart cancellation rather than a failure); re-dispatching (attempt " +
+                mission.RedispatchAttempts + "/" + _Settings.MaxNoOpRedispatchAttempts + ") and leaving the voyage running");
+
+            await EmitEventAsync("mission.redispatched",
+                "Mission re-dispatched after interruption (exit code " + exitCode + "): " + mission.Title,
+                entityType: "mission", entityId: mission.Id,
+                captainId: captain.Id, missionId: mission.Id,
+                vesselId: mission.VesselId, voyageId: mission.VoyageId, token: token).ConfigureAwait(false);
         }
 
         private async Task HandleTerminalProcessExitFailureAsync(

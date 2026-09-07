@@ -403,6 +403,87 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("handle_process_exit_async_redispatches_on_interruption", "HandleProcessExitAsync re-dispatches (not fails) on an interruption (exit -1)", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    StubGitService git = new StubGitService();
+                    ArmadaSettings settings = CreateSettings();
+                    settings.MaxNoOpRedispatchAttempts = 1;
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), db, settings, git);
+
+                    Voyage voyage = new Voyage("Interrupted Voyage");
+                    voyage.Status = VoyageStatusEnum.InProgress;
+                    await db.Voyages.CreateAsync(voyage);
+
+                    Mission mission = new Mission("Interrupted Judge");
+                    mission.VoyageId = voyage.Id;
+                    mission.Status = MissionStatusEnum.InProgress;
+                    mission.ProcessId = 5150;
+                    mission.RedispatchAttempts = 0;
+                    await db.Missions.CreateAsync(mission);
+
+                    Captain captain = new Captain("interrupted-judge");
+                    captain.State = CaptainStateEnum.Working;
+                    captain.CurrentMissionId = mission.Id;
+                    captain.ProcessId = 5150;
+                    await db.Captains.CreateAsync(captain);
+
+                    // Exit code -1 == interruption (stop/restart cancellation), not a genuine failure.
+                    await service.HandleProcessExitAsync(5150, -1, captain.Id, mission.Id).ConfigureAwait(false);
+
+                    Mission? updatedMission = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    Voyage? updatedVoyage = await db.Voyages.ReadAsync(voyage.Id).ConfigureAwait(false);
+                    AssertNotNull(updatedMission, "Mission should still exist");
+                    AssertEqual(MissionStatusEnum.Pending, updatedMission!.Status, "An interrupted mission should be re-queued as Pending, not Failed");
+                    AssertEqual(1, updatedMission.RedispatchAttempts, "Redispatch attempts should be incremented");
+                    AssertNull(updatedMission.FailureReason, "Failure reason should be cleared on re-dispatch");
+                    AssertNull(updatedMission.CaptainId, "Captain assignment should be cleared on re-dispatch");
+                    AssertNotNull(updatedVoyage, "Voyage should still exist");
+                    AssertEqual(VoyageStatusEnum.InProgress, updatedVoyage!.Status, "The voyage should keep running (not be halted) on an interruption");
+                }
+            }));
+
+            cases.Add(CaseAsync("handle_process_exit_async_fails_when_redispatch_budget_exhausted", "HandleProcessExitAsync fails an interruption terminally once the re-dispatch budget is exhausted", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    StubGitService git = new StubGitService();
+                    ArmadaSettings settings = CreateSettings();
+                    settings.MaxNoOpRedispatchAttempts = 1;
+                    settings.LogDirectory = Path.Combine(Path.GetTempPath(), "armada_test_logs_" + Guid.NewGuid().ToString("N"));
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), db, settings, git);
+
+                    Voyage voyage = new Voyage("Exhausted Voyage");
+                    voyage.Status = VoyageStatusEnum.InProgress;
+                    await db.Voyages.CreateAsync(voyage);
+
+                    Mission mission = new Mission("Exhausted Judge");
+                    mission.VoyageId = voyage.Id;
+                    mission.Status = MissionStatusEnum.InProgress;
+                    mission.ProcessId = 5151;
+                    mission.RedispatchAttempts = 1; // already at the max, so a further interruption must fail terminally
+                    await db.Missions.CreateAsync(mission);
+
+                    Captain captain = new Captain("exhausted-judge");
+                    captain.State = CaptainStateEnum.Working;
+                    captain.CurrentMissionId = mission.Id;
+                    captain.ProcessId = 5151;
+                    await db.Captains.CreateAsync(captain);
+
+                    await service.HandleProcessExitAsync(5151, -1, captain.Id, mission.Id).ConfigureAwait(false);
+
+                    Mission? updatedMission = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    Voyage? updatedVoyage = await db.Voyages.ReadAsync(voyage.Id).ConfigureAwait(false);
+                    AssertNotNull(updatedMission, "Mission should still exist");
+                    AssertEqual(MissionStatusEnum.Failed, updatedMission!.Status, "Once the redispatch budget is exhausted, an interruption should fail terminally");
+                    AssertNotNull(updatedVoyage, "Voyage should still exist");
+                    AssertEqual(VoyageStatusEnum.Cancelled, updatedVoyage!.Status, "The voyage should halt once the interrupted mission can no longer be re-dispatched");
+                }
+            }));
+
             cases.Add(CaseAsync("health_check_async_no_captains_does_not_throw", "HealthCheckAsync NoCaptains DoesNotThrow", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
