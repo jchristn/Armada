@@ -12,18 +12,20 @@ import JsonViewer from '../components/shared/JsonViewer';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
 import { buildPlaybookDuplicatePayload } from '../lib/duplicates';
+import { canEdit as canEditScoped, type ScopeViewer } from '../lib/scoping';
 
 export default function PlaybookDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { isAdmin, isTenantAdmin } = useAuth();
+  const { isAdmin, isTenantAdmin, user } = useAuth();
+  const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const { t, formatDateTime } = useLocale();
   const { pushToast } = useNotifications();
 
   const createMode = id === 'new';
-  const canManage = isAdmin || isTenantAdmin;
 
   const [playbook, setPlaybook] = useState<Playbook | null>(null);
+  const canManage = createMode ? true : (playbook ? canEditScoped(viewer, playbook) : (isAdmin || isTenantAdmin));
   const [fileName, setFileName] = useState('NEW_PLAYBOOK.md');
   const [description, setDescription] = useState('');
   const [content, setContent] = useState('# Playbook\n\nDescribe the rules the model must follow.\n');

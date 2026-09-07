@@ -11,6 +11,8 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
+import { useAuth } from '../context/AuthContext';
+import { canEdit as canEditScoped, type ScopeViewer } from '../lib/scoping';
 import { buildPromptTemplateDuplicatePayload } from '../lib/duplicates';
 
 interface ParameterInfo {
@@ -75,12 +77,15 @@ const PROMPT_TEMPLATE_CATEGORY_OPTIONS = ['mission', 'persona', 'structure', 'co
 
 export default function PromptTemplateDetail() {
   const { t, formatDateTime } = useLocale();
+  const { isAdmin, isTenantAdmin, user } = useAuth();
+  const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const { name } = useParams<{ name?: string }>();
   const navigate = useNavigate();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const createMode = !name;
 
   const [template, setTemplate] = useState<PromptTemplate | null>(null);
+  const canEditThis = createMode ? true : (template ? canEditScoped(viewer, template) : true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -300,7 +305,7 @@ export default function PromptTemplateDetail() {
                 <ActionMenu id={`template-${template!.name}`} items={[
                   { label: 'Duplicate', onClick: () => void handleDuplicate() },
                   { label: 'View JSON', onClick: () => setJsonData({ open: true, title: t('Template: {{name}}', { name: template!.name }), data: template }) },
-                  ...(template!.isBuiltIn ? [{ label: 'Reset to Default', danger: true as const, onClick: handleReset }] : []),
+                  ...(template!.isBuiltIn && canEditThis ? [{ label: 'Reset to Default', danger: true as const, onClick: handleReset }] : []),
                 ]} />
               </>
             )}
@@ -535,7 +540,7 @@ export default function PromptTemplateDetail() {
             <button
               className="btn btn-primary"
               onClick={handleSave}
-              disabled={saving || !dirty || (createMode && (!templateName.trim() || !category.trim() || !content.trim()))}
+              disabled={saving || !dirty || !canEditThis || (createMode && (!templateName.trim() || !category.trim() || !content.trim()))}
             >
               {saving ? t('Saving...') : t('Save')}
             </button>

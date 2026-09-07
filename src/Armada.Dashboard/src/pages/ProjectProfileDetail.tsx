@@ -19,6 +19,7 @@ import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
+import { canEdit as canEditScoped, type ScopeViewer } from '../lib/scoping';
 
 const KNOWN_PERSONAS = ['Product Manager', 'Architect', 'Worker', 'Test Engineer', 'Judge', 'Usability Engineer'];
 
@@ -33,14 +34,15 @@ function blankOverride(): PersonaOverride {
 export default function ProjectProfileDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { isAdmin, isTenantAdmin } = useAuth();
+  const { isAdmin, isTenantAdmin, user } = useAuth();
+  const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const { t, formatDateTime } = useLocale();
   const { pushToast } = useNotifications();
 
   const createMode = id === 'new';
-  const canManage = isAdmin || isTenantAdmin;
 
   const [profile, setProfile] = useState<ProjectProfile | null>(null);
+  const canManage = createMode ? true : (profile ? canEditScoped(viewer, { scope: profile.ownershipScope, tenantId: profile.tenantId, userId: profile.userId }) : (isAdmin || isTenantAdmin));
   const [fleets, setFleets] = useState<Fleet[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [name, setName] = useState('Default Project Profile');

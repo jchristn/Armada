@@ -19,6 +19,7 @@ import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
+import { canEdit as canEditScoped, type ScopeViewer } from '../lib/scoping';
 import WorkflowCommandPreview from '../components/shared/WorkflowCommandPreview';
 import { buildWorkflowProfileDuplicatePayload } from '../lib/duplicates';
 
@@ -79,14 +80,15 @@ export default function WorkflowProfileDetail() {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { isAdmin, isTenantAdmin } = useAuth();
+  const { isAdmin, isTenantAdmin, user } = useAuth();
+  const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const { t, formatDateTime } = useLocale();
   const { pushToast } = useNotifications();
 
   const createMode = id === 'new';
-  const canManage = isAdmin || isTenantAdmin;
 
   const [profile, setProfile] = useState<WorkflowProfile | null>(null);
+  const canManage = createMode ? true : (profile ? canEditScoped(viewer, { scope: profile.ownershipScope, tenantId: profile.tenantId, userId: profile.userId }) : (isAdmin || isTenantAdmin));
   const [fleets, setFleets] = useState<Fleet[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [name, setName] = useState('Default Workflow');
@@ -382,7 +384,7 @@ export default function WorkflowProfileDetail() {
 
       {!canManage && (
         <div className="alert alert-error" style={{ marginBottom: '1rem' }}>
-          {t('You can view workflow profiles, but only tenant administrators can change them.')}
+          {t('You can view this workflow profile, but only its owner or a tenant administrator can change it.')}
         </div>
       )}
 

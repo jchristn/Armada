@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { createPipeline, getPipeline, updatePipeline, deletePipeline, listPersonas, listVessels, createVoyage } from '../api/client';
 import type { Pipeline, PipelineStage, Vessel } from '../types/models';
 import { useAuth } from '../context/AuthContext';
+import { canEdit as canEditScoped, type ScopeViewer } from '../lib/scoping';
 import ActionMenu from '../components/shared/ActionMenu';
 import PageHeader from '../components/shared/PageHeader';
 import JsonViewer from '../components/shared/JsonViewer';
@@ -50,7 +51,8 @@ function PipelineFlow({ stages, label }: { stages: PipelineStage[]; label: (key:
 export default function PipelineDetail() {
   const { t, formatDateTime } = useLocale();
   const { pushToast } = useNotifications();
-  const { isAdmin, isTenantAdmin } = useAuth();
+  const { isAdmin, isTenantAdmin, user } = useAuth();
+  const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
   const [pipeline, setPipeline] = useState<Pipeline | null>(null);
@@ -64,7 +66,7 @@ export default function PipelineDetail() {
   const [runTitle, setRunTitle] = useState('');
   const [runDescription, setRunDescription] = useState('');
   const [running, setRunning] = useState(false);
-  const canManage = isAdmin || isTenantAdmin;
+  const canManage = pipeline ? canEditScoped(viewer, pipeline) : (isAdmin || isTenantAdmin);
 
   // Edit modal
   const [showForm, setShowForm] = useState(false);

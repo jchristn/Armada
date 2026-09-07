@@ -13,11 +13,15 @@ import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
+import { useAuth } from '../context/AuthContext';
+import { canEdit as canEditScoped, type ScopeViewer } from '../lib/scoping';
 import { buildPersonaDuplicatePayload } from '../lib/duplicates';
 
 export default function PersonaDetail() {
   const { t, formatDateTime } = useLocale();
   const { pushToast } = useNotifications();
+  const { isAdmin, isTenantAdmin, user } = useAuth();
+  const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
   const [persona, setPersona] = useState<Persona | null>(null);
@@ -205,10 +209,10 @@ export default function PersonaDetail() {
           <>
             <ActionMenu id={`persona-${persona.name}`} items={[
               { label: 'View JSON', onClick: () => setJsonData({ open: true, title: t('Persona: {{name}}', { name: persona.name }), data: persona }) },
-              { label: 'Edit', onClick: openEdit },
+              ...(canEditScoped(viewer, persona) ? [{ label: 'Edit', onClick: openEdit }] : []),
               { label: 'Duplicate', onClick: () => void handleDuplicate() },
               ...(persona.promptTemplateName ? [{ label: 'Open Backing Prompt', onClick: () => navigate(`/prompt-templates/${encodeURIComponent(persona.promptTemplateName)}`) }] : []),
-              { label: 'Delete', danger: true, onClick: handleDelete },
+              ...(canEditScoped(viewer, persona) ? [{ label: 'Delete', danger: true as const, onClick: handleDelete }] : []),
             ]} />
           </>
         }
