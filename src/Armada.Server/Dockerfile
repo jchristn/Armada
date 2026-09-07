@@ -19,6 +19,13 @@ RUN dotnet publish src/Armada.Server -c Release -f net10.0 -o /app --no-restore
 # --- Runtime stage ---
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
+
+# curl is required for the container healthcheck (probes 127.0.0.1) and for any git-only
+# operations that stay on the server in local-in-container edge cases.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /app .
 
 # Armada default ports: 7890 (Admiral + WebSocket at /ws), 7891 (MCP)

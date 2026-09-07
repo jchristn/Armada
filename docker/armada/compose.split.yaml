@@ -1,0 +1,78 @@
+# Split-mode deployment: the Admiral runs in a container while captains execute on the developer's
+# machine through a host-side Harbor runner. No agent CLIs are baked into the server image -- they live
+# on the Harbor, which dials out to the Admiral over the published link port (7890) and reaches the
+# advertised MCP endpoint (127.0.0.1:7891, published below) to call home.
+#
+# Bring the Admiral up with this profile, then start the Harbor app on the host and point it at
+# http://127.0.0.1:7890. Standalone/local mode remains the default and does not need Docker at all
+# (see compose.yaml).
+services:
+  armada-server:
+    build:
+      context: ../..
+      dockerfile: src/Armada.Server/Dockerfile
+    ports:
+      # 7890: Admiral REST + WebSocket (the Harbor link). 7891: MCP (captain call-home). 9464: metrics.
+      - "7890:7890"
+      - "7891:7891"
+      - "9464:9464"
+    volumes:
+      - ./armada.split.json:/app/data/armada.json
+      - ./db:/app/data/db
+      - ./logs:/app/data/logs
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:7890/api/v1/status/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 2
+    depends_on:
+      loki:
+        condition: service_healthy
+
+  # --- Observability stack (Prometheus / Loki / Grafana) ---
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+
+  loki:
+    image: grafana/loki:3.3.2
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./observability/loki-config.yaml:/etc/loki/local-config.yaml
+      - loki-data:/loki
+    command:
+      - "-config.file=/etc/loki/local-config.yaml"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3100/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+
+volumes:
+  prometheus-data:
+  loki-data:
+  grafana-data:
