@@ -52,6 +52,7 @@ namespace Armada.Core.Services
         /// Answer a natural-language question about fleet state.
         /// </summary>
         /// <param name="message">The user's message.</param>
+        /// <param name="auth">Caller authentication context, used to scope fleet state to the caller.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The assistant response.</returns>
         public async Task<AskResponse> AskAsync(string message, AuthContext auth, CancellationToken token = default)

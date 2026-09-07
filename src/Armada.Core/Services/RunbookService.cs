@@ -58,6 +58,9 @@ namespace Armada.Core.Services
                 .Select(ParseRunbook)
                 .ToList();
 
+            if (!auth.IsAdmin)
+                runbooks = runbooks.Where(item => ScopedVisibility.CanView(auth, item.Scope, item.TenantId, item.UserId)).ToList();
+
             IEnumerable<Runbook> filtered = runbooks;
             if (!String.IsNullOrWhiteSpace(query.WorkflowProfileId))
                 filtered = filtered.Where(item => String.Equals(item.WorkflowProfileId, query.WorkflowProfileId, StringComparison.OrdinalIgnoreCase));
@@ -109,7 +112,9 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
 
             Playbook? playbook = await ReadPlaybookAsync(auth, id, token).ConfigureAwait(false);
-            return playbook != null ? ParseRunbook(playbook) : null;
+            if (playbook == null) return null;
+            Runbook runbook = ParseRunbook(playbook);
+            return ScopedVisibility.CanView(auth, runbook.Scope, runbook.TenantId, runbook.UserId) ? runbook : null;
         }
 
         /// <summary>
@@ -121,6 +126,7 @@ namespace Armada.Core.Services
             if (request == null) throw new ArgumentNullException(nameof(request));
 
             Playbook playbook = BuildPlaybook(auth, request, null);
+            playbook.Scope = ScopedVisibility.ResolveCreateScope(auth, request.Scope);
             PlaybookService playbookService = new PlaybookService(_Database, _Logging);
             playbookService.Validate(playbook);
 
@@ -144,12 +150,17 @@ namespace Armada.Core.Services
 
             Playbook existing = await ReadPlaybookAsync(auth, id, token).ConfigureAwait(false)
                 ?? throw new InvalidOperationException("Runbook not found.");
+            if (!ScopedVisibility.CanView(auth, existing.Scope, existing.TenantId, existing.UserId))
+                throw new InvalidOperationException("Runbook not found.");
+            if (!ScopedVisibility.CanEdit(auth, existing.Scope, existing.TenantId, existing.UserId))
+                throw new UnauthorizedAccessException("You may only modify your own runbooks; a tenant-wide runbook requires a tenant admin.");
 
             Playbook updated = BuildPlaybook(auth, request, existing);
             updated.Id = existing.Id;
             updated.TenantId = existing.TenantId;
             updated.UserId = existing.UserId;
             updated.CreatedUtc = existing.CreatedUtc;
+            updated.Scope = (auth.IsAdmin || auth.IsTenantAdmin) ? (request.Scope ?? existing.Scope) : existing.Scope;
 
             PlaybookService playbookService = new PlaybookService(_Database, _Logging);
             playbookService.Validate(updated);
@@ -174,8 +185,10 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
 
             Playbook? existing = await ReadPlaybookAsync(auth, id, token).ConfigureAwait(false);
-            if (existing == null)
+            if (existing == null || !ScopedVisibility.CanView(auth, existing.Scope, existing.TenantId, existing.UserId))
                 throw new InvalidOperationException("Runbook not found.");
+            if (!ScopedVisibility.CanEdit(auth, existing.Scope, existing.TenantId, existing.UserId))
+                throw new UnauthorizedAccessException("You may only delete your own runbooks; a tenant-wide runbook requires a tenant admin.");
 
             await _Database.Playbooks.DeleteAsync(id, token).ConfigureAwait(false);
         }
@@ -382,6 +395,7 @@ namespace Armada.Core.Services
                 PlaybookId = playbook.Id,
                 TenantId = playbook.TenantId,
                 UserId = playbook.UserId,
+                Scope = playbook.Scope,
                 FileName = playbook.FileName,
                 Title = metadata.Title ?? PathToTitle(playbook.FileName),
                 Description = playbook.Description,

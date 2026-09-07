@@ -62,5 +62,11 @@ namespace Armada.Core.Models
         /// Optional active flag.
         /// </summary>
         public bool? Active { get; set; } = null;
+
+        /// <summary>
+        /// Optional requested ownership scope (tenant-wide vs user-specific). Honored only for tenant/global
+        /// admins; regular users always create user-specific runbooks. Null keeps the existing scope on update.
+        /// </summary>
+        public ScopeEnum? Scope { get; set; } = null;
     }
 }

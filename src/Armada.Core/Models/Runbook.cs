@@ -38,6 +38,13 @@ namespace Armada.Core.Models
         public string? UserId { get; set; } = null;
 
         /// <summary>
+        /// Ownership scope, mirrored from the backing playbook: tenant-wide runbooks are visible to everyone in
+        /// the tenant but editable only by tenant/global admins; user-specific runbooks are owned by
+        /// <see cref="UserId"/>. Defaults tenant-wide.
+        /// </summary>
+        public ScopeEnum Scope { get; set; } = ScopeEnum.TenantWide;
+
+        /// <summary>
         /// Backing playbook filename.
         /// </summary>
         public string FileName { get; set; } = "RUNBOOK.md";

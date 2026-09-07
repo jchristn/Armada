@@ -53,6 +53,7 @@ namespace Armada.Core.Services
         /// <summary>
         /// Build the inbox: actionable items ordered most-urgent first.
         /// </summary>
+        /// <param name="auth">Caller authentication context, used to scope inbox items to the caller.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The list of inbox items.</returns>
         public async Task<List<InboxItem>> GetInboxAsync(AuthContext auth, CancellationToken token = default)
