@@ -378,7 +378,8 @@ namespace Armada.Server
 
             _CaptainTools = new CaptainToolService(
                 _Logging,
-                _Database);
+                _Database,
+                _HarborConnectionManager);
 
             _RemoteTunnel.OnHandleRequest = HandleRemoteTunnelRequestAsync;
 

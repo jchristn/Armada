@@ -1,12 +1,14 @@
 namespace Armada.Core.Services
 {
-    using System.Diagnostics;
     using System.Text.Json;
     using Armada.Core.Models;
     using SyslogLogging;
 
     /// <summary>
-    /// Executes Mux CLI commands used by Armada for validation and endpoint inspection.
+    /// Executes Mux CLI commands used by Armada for validation and endpoint inspection. Every command runs
+    /// through an <see cref="IHostCommandExecutor"/>: in standalone mode that is the local host, but when a
+    /// captain runs on a Harbor the caller can supply a remote executor so the probe runs on the Harbor host
+    /// where mux, its config, and its provider auth actually live rather than on the Admiral.
     /// </summary>
     public class MuxCliService
     {
@@ -14,6 +16,7 @@ namespace Armada.Core.Services
 
         private readonly string _Header = "[MuxCliService] ";
         private readonly LoggingModule _Logging;
+        private readonly IHostCommandExecutor _CommandExecutor;
         private readonly JsonSerializerOptions _JsonOptions = new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
@@ -27,9 +30,13 @@ namespace Armada.Core.Services
         /// <summary>
         /// Instantiate.
         /// </summary>
-        public MuxCliService(LoggingModule logging)
+        /// <param name="logging">Logging module. Required.</param>
+        /// <param name="commandExecutor">Host-command executor used to run mux. When null, mux runs on the
+        /// local host; pass a <see cref="RemoteHostCommandExecutor"/> to run it on a specific Harbor.</param>
+        public MuxCliService(LoggingModule logging, IHostCommandExecutor? commandExecutor = null)
         {
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
+            _CommandExecutor = commandExecutor ?? new LocalHostCommandExecutor();
         }
 
         #endregion
@@ -37,9 +44,19 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <summary>
-        /// Probe a Mux captain configuration.
+        /// Probe a Mux captain configuration on the local host.
         /// </summary>
         public async Task<MuxProbeResult> ProbeAsync(Captain captain, CancellationToken token = default)
+        {
+            return await ProbeAsync(captain, null, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Probe a Mux captain configuration, optionally in a specific working directory (the captain's dock
+        /// worktree). The command runs through the configured executor, so when that executor targets a Harbor
+        /// the probe reflects the Harbor host rather than the Admiral.
+        /// </summary>
+        public async Task<MuxProbeResult> ProbeAsync(Captain captain, string? workingDirectory, CancellationToken token = default)
         {
             if (captain == null) throw new ArgumentNullException(nameof(captain));
 
@@ -55,19 +72,20 @@ namespace Armada.Core.Services
                 };
             }
 
-            return await ProbeAsync(captain.Model, options, token).ConfigureAwait(false);
+            return await ProbeAsync(captain.Model, options, workingDirectory, token).ConfigureAwait(false);
         }
 
         /// <summary>
         /// Probe a Mux endpoint selection directly.
         /// </summary>
-        public async Task<MuxProbeResult> ProbeAsync(string? model, MuxCaptainOptions options, CancellationToken token = default)
+        public async Task<MuxProbeResult> ProbeAsync(string? model, MuxCaptainOptions options, string? workingDirectory = null, CancellationToken token = default)
         {
             if (options == null) throw new ArgumentNullException(nameof(options));
 
             MuxCommandExecutionResult execution = await ExecuteAsync(
                 MuxCommandBuilder.BuildProbeArguments(model, options),
                 _DefaultTimeout,
+                workingDirectory,
                 token).ConfigureAwait(false);
 
             MuxProbeResult? result = DeserializeJson<MuxProbeResult>(execution.Stdout, execution.Stderr);
@@ -93,6 +111,7 @@ namespace Armada.Core.Services
             MuxCommandExecutionResult execution = await ExecuteAsync(
                 MuxCommandBuilder.BuildEndpointListArguments(configDirectory),
                 _DefaultTimeout,
+                null,
                 token).ConfigureAwait(false);
 
             MuxEndpointListResult? result = DeserializeJson<MuxEndpointListResult>(execution.Stdout, execution.Stderr);
@@ -119,6 +138,7 @@ namespace Armada.Core.Services
             MuxCommandExecutionResult execution = await ExecuteAsync(
                 MuxCommandBuilder.BuildEndpointShowArguments(endpointName, configDirectory),
                 _DefaultTimeout,
+                null,
                 token).ConfigureAwait(false);
 
             MuxEndpointShowResult? result = DeserializeJson<MuxEndpointShowResult>(execution.Stdout, execution.Stderr);
@@ -142,69 +162,35 @@ namespace Armada.Core.Services
         private async Task<MuxCommandExecutionResult> ExecuteAsync(
             List<string> arguments,
             TimeSpan timeout,
+            string? workingDirectory,
             CancellationToken token)
         {
-            ProcessStartInfo startInfo = new ProcessStartInfo
+            HostCommandRequest request = new HostCommandRequest
             {
-                FileName = "mux",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
+                Executable = "mux",
+                Arguments = arguments,
+                WorkingDirectory = String.IsNullOrWhiteSpace(workingDirectory) ? String.Empty : workingDirectory!,
+                TimeoutMs = (int)timeout.TotalMilliseconds
             };
 
-            foreach (string argument in arguments)
+            HostCommandResult result = await _CommandExecutor.RunAsync(request, token).ConfigureAwait(false);
+
+            if (result.TimedOut)
             {
-                startInfo.ArgumentList.Add(argument);
-            }
-
-            using Process process = new Process
-            {
-                StartInfo = startInfo
-            };
-
-            if (!process.Start())
-            {
-                throw new InvalidOperationException("Failed to start mux.");
-            }
-
-            Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
-            Task<string> stderrTask = process.StandardError.ReadToEndAsync();
-
-            using CancellationTokenSource timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(token);
-            timeoutCts.CancelAfter(timeout);
-
-            try
-            {
-                await process.WaitForExitAsync(timeoutCts.Token).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (!token.IsCancellationRequested)
-            {
-                try
-                {
-                    if (!process.HasExited)
-                    {
-                        process.Kill(true);
-                    }
-                }
-                catch
-                {
-                }
-
                 throw new TimeoutException("mux command timed out after " + timeout.TotalSeconds.ToString("0") + " seconds.");
             }
 
-            string stdout = await stdoutTask.ConfigureAwait(false);
-            string stderr = await stderrTask.ConfigureAwait(false);
+            string stdout = result.StandardOutput ?? String.Empty;
+            string stderr = result.StandardError ?? String.Empty;
 
-            if (process.ExitCode != 0)
+            if (result.ExitCode != 0)
             {
-                _Logging.Debug(_Header + "mux exited with code " + process.ExitCode + ": " + FirstNonEmptyLine(stderr, stdout));
+                _Logging.Debug(_Header + "mux exited with code " + result.ExitCode + ": " + FirstNonEmptyLine(stderr, stdout));
             }
 
             return new MuxCommandExecutionResult
             {
-                ExitCode = process.ExitCode,
+                ExitCode = result.ExitCode,
                 Stdout = stdout.Trim(),
                 Stderr = stderr.Trim()
             };

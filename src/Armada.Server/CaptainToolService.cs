@@ -2,6 +2,7 @@ namespace Armada.Server
 {
     using Armada.Core.Database;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using SyslogLogging;
 
     /// <summary>
@@ -17,13 +18,15 @@ namespace Armada.Server
         /// </summary>
         /// <param name="logging">Logging module.</param>
         /// <param name="database">Database driver.</param>
-        public CaptainToolService(LoggingModule logging, DatabaseDriver database)
+        /// <param name="harborConnections">Harbor connection manager, so runtime probes for captains that run
+        /// on a Harbor can be executed on the Harbor host. Null in standalone mode (probes run locally).</param>
+        public CaptainToolService(LoggingModule logging, DatabaseDriver database, HarborConnectionManager? harborConnections = null)
         {
             if (logging == null) throw new ArgumentNullException(nameof(logging));
             if (database == null) throw new ArgumentNullException(nameof(database));
 
             _database = database;
-            _runtimeCatalog = new CaptainRuntimeToolCatalogService(logging);
+            _runtimeCatalog = new CaptainRuntimeToolCatalogService(logging, harborConnections);
         }
 
         /// <summary>
