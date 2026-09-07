@@ -1,0 +1,1 @@
+function e(e,t){return e.isAdmin?!0:t.tenantId===e.tenantId?e.isTenantAdmin?!0:t.scope===`UserSpecific`&&t.userId!=null&&t.userId===e.userId:!1}function t(e,t){return e.isAdmin||e.isTenantAdmin?t??`TenantWide`:`UserSpecific`}function n(e){return e.isAdmin||e.isTenantAdmin}export{e as n,t as r,n as t};
