@@ -266,7 +266,7 @@ namespace Armada.Runtimes
                 // Disposing first invalidates the PID, which can cause the health check
                 // to race with the exit handler and trigger spurious recovery.
                 try { OnProcessExited?.Invoke(processId, code); }
-                catch (Exception ex) { _Logging.Warn(_Header + "error in OnProcessExited handler for process " + processId + ": " + ex.Message); }
+                catch (Exception ex) { _Logging.Warn(_Header + "error in OnProcessExited handler for process " + processId + ": " + ex.ToString()); }
 
                 // Dispose the Process object to release the working directory handle.
                 // On Windows, undisposed Process objects hold handles on the WorkingDirectory
@@ -281,7 +281,7 @@ namespace Armada.Runtimes
                 throw new InvalidOperationException("Failed to start agent process: " + command);
 
             try { OnProcessStarted?.Invoke(process.Id); }
-            catch (Exception ex) { _Logging.Warn(_Header + "error in OnProcessStarted handler for process " + process.Id + ": " + ex.Message); }
+            catch (Exception ex) { _Logging.Warn(_Header + "error in OnProcessStarted handler for process " + process.Id + ": " + ex.ToString()); }
 
             if (UsePromptStdin)
             {
@@ -338,7 +338,7 @@ namespace Armada.Runtimes
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error stopping process " + processId + ": " + ex.Message);
+                _Logging.Warn(_Header + "error stopping process " + processId + ": " + ex.ToString());
             }
 
             return Task.CompletedTask;

@@ -265,7 +265,7 @@ namespace Armada.Runtimes
             catch (Exception e)
             {
                 exitCode = 1;
-                _Logging.Warn(_Header + "loop error for process " + processId + ": " + e.Message);
+                _Logging.Warn(_Header + "loop error for process " + processId + ": " + e.ToString());
                 Emit(processId, "[error] " + e.Message);
             }
             finally

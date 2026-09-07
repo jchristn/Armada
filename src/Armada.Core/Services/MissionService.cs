@@ -377,7 +377,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "dock provisioning threw for mission " + mission.Id + " vessel " + vessel.Id + " captain " + captain.Id + ": " + ex.Message);
+                _Logging.Warn(_Header + "dock provisioning threw for mission " + mission.Id + " vessel " + vessel.Id + " captain " + captain.Id + ": " + ex.ToString());
 
                 // Revert mission to Pending
                 mission.Status = MissionStatusEnum.Pending;
@@ -471,7 +471,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "failed to launch agent for captain " + captain.Id + ": " + ex.Message);
+                    _Logging.Warn(_Header + "failed to launch agent for captain " + captain.Id + ": " + ex.ToString());
 
                     // Rollback captain state — release back to idle so it can accept future work
                     await _Captains.ReleaseAsync(captain, token).ConfigureAwait(false);
@@ -751,7 +751,7 @@ namespace Armada.Core.Services
             if (dock != null)
             {
                 try { await ReclaimMissionDockAsync(dock.Id, token).ConfigureAwait(false); }
-                catch (Exception ex) { _Logging.Warn(_Header + "boundary reclaim error for mission " + mission.Id + ": " + ex.Message); }
+                catch (Exception ex) { _Logging.Warn(_Header + "boundary reclaim error for mission " + mission.Id + ": " + ex.ToString()); }
             }
 
             mission.Status = MissionStatusEnum.Failed;
@@ -907,7 +907,7 @@ namespace Armada.Core.Services
             if (dock != null)
             {
                 try { await ReclaimMissionDockAsync(dock.Id, token).ConfigureAwait(false); }
-                catch (Exception ex) { _Logging.Warn(_Header + "no-op reclaim error for mission " + mission.Id + ": " + ex.Message); }
+                catch (Exception ex) { _Logging.Warn(_Header + "no-op reclaim error for mission " + mission.Id + ": " + ex.ToString()); }
             }
 
             int maxAttempts = _Settings.MaxNoOpRedispatchAttempts;
@@ -1027,7 +1027,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "error capturing diff for mission " + mission.Id + ": " + ex.Message);
+                    _Logging.Warn(_Header + "error capturing diff for mission " + mission.Id + ": " + ex.ToString());
                 }
             }
 
@@ -1238,7 +1238,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "error in mission complete handler for " + mission.Id + ": " + ex.Message);
+                    _Logging.Warn(_Header + "error in mission complete handler for " + mission.Id + ": " + ex.ToString());
                 }
             }
 
@@ -1519,7 +1519,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "could not persist mission instructions snapshot for " + mission.Id + ": " + ex.Message);
+                _Logging.Warn(_Header + "could not persist mission instructions snapshot for " + mission.Id + ": " + ex.ToString());
             }
 
             // Ensure the generated instruction file is ignored locally so agents don't commit it.
@@ -1546,7 +1546,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "could not update git exclude for " + instructionsFileName + ": " + ex.Message);
+                _Logging.Warn(_Header + "could not update git exclude for " + instructionsFileName + ": " + ex.ToString());
             }
 
             _Logging.Info(_Header + "generated mission instructions at " + instructionsPath);
@@ -1749,7 +1749,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error resolving persona override for vessel " + vessel.Id + ": " + ex.Message);
+                _Logging.Warn(_Header + "error resolving persona override for vessel " + vessel.Id + ": " + ex.ToString());
                 return null;
             }
         }
@@ -1801,7 +1801,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error resolving skills for vessel " + vessel.Id + ": " + ex.Message);
+                _Logging.Warn(_Header + "error resolving skills for vessel " + vessel.Id + ": " + ex.ToString());
                 return String.Empty;
             }
         }
@@ -2203,7 +2203,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "error re-driving handoff for mission " + produced.Id + ": " + ex.Message);
+                    _Logging.Warn(_Header + "error re-driving handoff for mission " + produced.Id + ": " + ex.ToString());
                 }
             }
 
@@ -2422,7 +2422,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "stage-lag hardening failed for mission " + completedMission.Id + ": " + ex.Message);
+                _Logging.Warn(_Header + "stage-lag hardening failed for mission " + completedMission.Id + ": " + ex.ToString());
             }
         }
 
@@ -3257,7 +3257,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "could not read dock start commit metadata for " + dockId + ": " + ex.Message);
+                _Logging.Warn(_Header + "could not read dock start commit metadata for " + dockId + ": " + ex.ToString());
                 return null;
             }
         }
@@ -3537,7 +3537,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "could not project architect mission definitions into log for " + architectMission.Id + ": " + ex.Message);
+                _Logging.Warn(_Header + "could not project architect mission definitions into log for " + architectMission.Id + ": " + ex.ToString());
             }
         }
 

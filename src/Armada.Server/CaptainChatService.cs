@@ -505,7 +505,7 @@ namespace Armada.Server
             }
             catch (Exception e)
             {
-                _Logging.Warn(_Header + "chat turn failed for captain " + captainId + ": " + e.Message);
+                _Logging.Warn(_Header + "chat turn failed for captain " + captainId + ": " + e.ToString());
                 return Fail(e.Message);
             }
             finally

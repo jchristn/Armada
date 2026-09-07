@@ -100,7 +100,7 @@ namespace Armada.Server.WebSocket
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "session error: " + ex.Message);
+                _Logging.Warn(_Header + "session error: " + ex.ToString());
             }
             finally
             {
@@ -399,7 +399,7 @@ namespace Armada.Server.WebSocket
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error handling message: " + ex.Message);
+                _Logging.Warn(_Header + "error handling message: " + ex.ToString());
                 try
                 {
                     string errorJson = JsonSerializer.Serialize(new { type = "command.error", error = ex.Message }, _JsonOptions);
@@ -438,7 +438,7 @@ namespace Armada.Server.WebSocket
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "broadcast error: " + ex.Message);
+                _Logging.Warn(_Header + "broadcast error: " + ex.ToString());
             }
         }
 

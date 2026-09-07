@@ -1,6 +1,7 @@
 namespace Armada.Server
 {
     using System;
+    using Microsoft.Extensions.Logging;
     using Radiant;
     using SyslogLogging;
     using Armada.Core;
@@ -29,6 +30,12 @@ namespace Armada.Server
         private readonly LoggingModule _Logging;
         private readonly string _Header = "[ArmadaTelemetryHost] ";
         private RadiantHost? _Host = null;
+
+        // When log export is active, we forward the SyslogLogging stream into a Radiant ILogger so every
+        // _Logging.* line (including full-stack exception logs) is shipped to Loki/OTLP alongside the
+        // console/file/syslog sinks. Held so we can unsubscribe on dispose.
+        private Microsoft.Extensions.Logging.ILogger? _LokiLogger = null;
+        private Action<LogEntry>? _MessageForwarder = null;
 
         #endregion
 
@@ -86,6 +93,11 @@ namespace Armada.Server
                     radiant.Loki.Endpoint = settings.LokiEndpoint;
                 }
 
+                // Export logs (not just metrics/traces) when a Loki or OTLP sink is configured, so the
+                // Admiral's own log stream -- especially exception traces -- lands in Loki for debugging.
+                bool exportLogs = !String.IsNullOrWhiteSpace(settings.LokiEndpoint) || !String.IsNullOrWhiteSpace(settings.OtlpEndpoint);
+                radiant.Logs.Enable = exportLogs;
+
                 // Armada's own instruments, plus the web server and HTTP client instrumentation.
                 // Subscribing to a name that emits nothing is harmless.
                 radiant.Sources.AddMeter(ArmadaMetrics.MeterName);
@@ -96,14 +108,61 @@ namespace Armada.Server
 
                 _Host = RadiantHost.Start(radiant);
 
+                if (exportLogs && _Host.LoggerFactory != null)
+                {
+                    _LokiLogger = _Host.LoggerFactory.CreateLogger("Armada.Admiral");
+                    _MessageForwarder = ForwardLogEntry;
+                    _Logging.MessageLogged += _MessageForwarder;
+                    _Logging.Info(_Header + "bridging the Admiral log stream to the telemetry log exporter (Loki/OTLP)");
+                }
+
                 _Logging.Info(_Header + "telemetry host started for service '" + settings.ServiceName + "'" +
                     (settings.PrometheusEnabled ? " (Prometheus scrape " + radiant.Prometheus.ToScrapeUrl() + ")" : "") +
                     (!String.IsNullOrWhiteSpace(settings.OtlpEndpoint) ? " (OTLP " + settings.OtlpEndpoint + ")" : ""));
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "failed to start telemetry host: " + ex.Message);
+                _Logging.Warn(_Header + "failed to start telemetry host: " + ex.ToString());
                 _Host = null;
+            }
+        }
+
+        /// <summary>
+        /// Forward one SyslogLogging entry into the Radiant log exporter (Loki/OTLP). Info and above only, so
+        /// Debug chatter (including Radiant's own diagnostic callback, which logs at Debug) is not shipped and
+        /// cannot form a feedback loop. The raw message is passed as a single structured value so it is never
+        /// parsed as a message template.
+        /// </summary>
+        private void ForwardLogEntry(LogEntry entry)
+        {
+            if (entry == null) return;
+            Microsoft.Extensions.Logging.ILogger? logger = _LokiLogger;
+            if (logger == null) return;
+            if (entry.Severity == Severity.Debug) return;
+
+            try
+            {
+                LogLevel level = ToLogLevel(entry.Severity);
+                logger.Log(level, entry.Exception, "{ArmadaMessage}", entry.Message ?? String.Empty);
+            }
+            catch
+            {
+                // Never let log forwarding throw back into the caller's logging path.
+            }
+        }
+
+        private static LogLevel ToLogLevel(Severity severity)
+        {
+            switch (severity)
+            {
+                case Severity.Debug: return LogLevel.Debug;
+                case Severity.Info: return LogLevel.Information;
+                case Severity.Warn: return LogLevel.Warning;
+                case Severity.Error: return LogLevel.Error;
+                case Severity.Alert:
+                case Severity.Critical:
+                case Severity.Emergency: return LogLevel.Critical;
+                default: return LogLevel.Information;
             }
         }
 
@@ -114,11 +173,17 @@ namespace Armada.Server
         {
             try
             {
+                if (_MessageForwarder != null)
+                {
+                    _Logging.MessageLogged -= _MessageForwarder;
+                    _MessageForwarder = null;
+                }
+                _LokiLogger = null;
                 _Host?.Dispose();
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error disposing telemetry host: " + ex.Message);
+                _Logging.Warn(_Header + "error disposing telemetry host: " + ex.ToString());
             }
             finally
             {

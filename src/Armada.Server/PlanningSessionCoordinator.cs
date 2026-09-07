@@ -329,7 +329,7 @@ namespace Armada.Server
                     }
                     catch (Exception ex)
                     {
-                        _Logging.Warn(_Header + "error aborting planning turn process " + session.ProcessId.Value + " for session " + session.Id + ": " + ex.Message);
+                        _Logging.Warn(_Header + "error aborting planning turn process " + session.ProcessId.Value + " for session " + session.Id + ": " + ex.ToString());
                     }
                 }
             }
@@ -403,7 +403,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error releasing planning session " + session.Id + " after dispatch: " + ex.Message);
+                _Logging.Warn(_Header + "error releasing planning session " + session.Id + " after dispatch: " + ex.ToString());
             }
 
             return voyage;
@@ -474,7 +474,7 @@ namespace Armada.Server
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "planning summary fallback for session " + session.Id + ": " + ex.Message);
+                    _Logging.Warn(_Header + "planning summary fallback for session " + session.Id + ": " + ex.ToString());
                 }
 
                 _WebSocketHub?.BroadcastEvent(
@@ -580,7 +580,7 @@ namespace Armada.Server
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "planning inactivity stop failed for " + session.Id + ": " + ex.Message);
+                    _Logging.Warn(_Header + "planning inactivity stop failed for " + session.Id + ": " + ex.ToString());
                 }
             }
 
@@ -597,7 +597,7 @@ namespace Armada.Server
                     }
                     catch (Exception ex)
                     {
-                        _Logging.Warn(_Header + "planning retention delete failed for " + session.Id + ": " + ex.Message);
+                        _Logging.Warn(_Header + "planning retention delete failed for " + session.Id + ": " + ex.ToString());
                     }
                 }
             }
@@ -712,7 +712,7 @@ namespace Armada.Server
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "planning session recovery error for " + session.Id + ": " + ex.Message);
+                    _Logging.Warn(_Header + "planning session recovery error for " + session.Id + ": " + ex.ToString());
                 }
             }
         }
@@ -902,7 +902,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "planning turn error for session " + sessionId + ": " + ex.Message);
+                _Logging.Warn(_Header + "planning turn error for session " + sessionId + ": " + ex.ToString());
                 try
                 {
                     PlanningSession? session = await _Database.PlanningSessions.ReadAsync(sessionId).ConfigureAwait(false);
@@ -1226,7 +1226,7 @@ namespace Armada.Server
                     }
                     catch (Exception ex)
                     {
-                        _Logging.Warn(_Header + "planning summary session cleanup failed for " + session.Id + ": " + ex.Message);
+                        _Logging.Warn(_Header + "planning summary session cleanup failed for " + session.Id + ": " + ex.ToString());
                     }
 
                     try
@@ -1243,7 +1243,7 @@ namespace Armada.Server
                     }
                     catch (Exception ex)
                     {
-                        _Logging.Warn(_Header + "planning summary captain cleanup failed for " + captain.Id + ": " + ex.Message);
+                        _Logging.Warn(_Header + "planning summary captain cleanup failed for " + captain.Id + ": " + ex.ToString());
                     }
                 }
             }
@@ -1391,7 +1391,7 @@ namespace Armada.Server
                     }
                     catch (Exception ex)
                     {
-                        _Logging.Warn(_Header + "error stopping planning process " + session.ProcessId.Value + " for session " + session.Id + ": " + ex.Message);
+                        _Logging.Warn(_Header + "error stopping planning process " + session.ProcessId.Value + " for session " + session.Id + ": " + ex.ToString());
                     }
                 }
 
@@ -1403,7 +1403,7 @@ namespace Armada.Server
                     }
                     catch (Exception ex)
                     {
-                        _Logging.Warn(_Header + "error reclaiming planning dock " + session.DockId + " for session " + session.Id + ": " + ex.Message);
+                        _Logging.Warn(_Header + "error reclaiming planning dock " + session.DockId + " for session " + session.Id + ": " + ex.ToString());
                     }
                 }
 

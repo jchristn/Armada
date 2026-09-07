@@ -357,7 +357,7 @@ namespace Armada.Core.Services
                 result.LatencyMs = sw.ElapsedMilliseconds;
                 result.Success = false;
                 result.Error = e.Message;
-                _Logging.Warn(_Header + "validation of endpoint " + endpoint.Id + " threw: " + e.Message);
+                _Logging.Warn(_Header + "validation of endpoint " + endpoint.Id + " threw: " + e.ToString());
             }
 
             return result;

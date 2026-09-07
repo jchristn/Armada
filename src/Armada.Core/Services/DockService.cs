@@ -243,7 +243,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "provisioning failed for vessel " + vessel.Id + " captain " + captain.Id + " repo " + (vessel.RepoUrl ?? "unknown") + ": " + ex.Message);
+                _Logging.Warn(_Header + "provisioning failed for vessel " + vessel.Id + " captain " + captain.Id + " repo " + (vessel.RepoUrl ?? "unknown") + ": " + ex.ToString());
 
                 // Clean up partial state -- remove worktree directory if it was partially created
                 if (Directory.Exists(worktreePath))
@@ -300,7 +300,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "error removing worktree for dock " + dockId + ": " + ex.Message);
+                    _Logging.Warn(_Header + "error removing worktree for dock " + dockId + ": " + ex.ToString());
                 }
 
                 // Ensure the directory is actually removed -- on Windows, file handles
@@ -431,7 +431,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "error removing worktree for dock " + dock.Id + ": " + ex.Message);
+                    _Logging.Warn(_Header + "error removing worktree for dock " + dock.Id + ": " + ex.ToString());
                 }
 
                 await ForceRemoveDirectoryAsync(dock.WorktreePath, token).ConfigureAwait(false);
@@ -515,7 +515,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "failed to seed empty repo for " + vessel.Name + ": " + ex.Message);
+                _Logging.Warn(_Header + "failed to seed empty repo for " + vessel.Name + ": " + ex.ToString());
                 // Clean up any debris
                 try { if (Directory.Exists(repoPath)) await ForceRemoveDirectoryAsync(repoPath, token).ConfigureAwait(false); }
                 catch { }
@@ -594,7 +594,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "failed to remove directory after " + maxAttempts + " attempts: " + path + ": " + ex.Message);
+                    _Logging.Warn(_Header + "failed to remove directory after " + maxAttempts + " attempts: " + path + ": " + ex.ToString());
                     return;
                 }
             }

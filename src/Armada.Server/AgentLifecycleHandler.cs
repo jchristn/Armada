@@ -196,7 +196,7 @@ namespace Armada.Server
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "error reading final message artifact for mission " + missionId + ": " + ex.Message);
+                    _Logging.Warn(_Header + "error reading final message artifact for mission " + missionId + ": " + ex.ToString());
                 }
             }
 
@@ -733,7 +733,7 @@ namespace Armada.Server
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "error processing progress signal: " + ex.Message);
+                    _Logging.Warn(_Header + "error processing progress signal: " + ex.ToString());
                 }
             });
         }
@@ -815,7 +815,7 @@ namespace Armada.Server
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "error storing papercut: " + ex.Message);
+                    _Logging.Warn(_Header + "error storing papercut: " + ex.ToString());
                 }
             });
         }
@@ -887,7 +887,7 @@ namespace Armada.Server
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "error handling process exit for captain " + capturedCaptainId + " mission " + capturedMissionId + ": " + ex.Message);
+                    _Logging.Warn(_Header + "error handling process exit for captain " + capturedCaptainId + " mission " + capturedMissionId + ": " + ex.ToString());
                 }
             });
         }
@@ -970,7 +970,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "Harbor routing failed; running locally: " + ex.Message);
+                _Logging.Warn(_Header + "Harbor routing failed; running locally: " + ex.ToString());
             }
 
             return _HostProcessExecutor;
@@ -1009,7 +1009,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "could not persist Harbor affinity for mission " + mission.Id + ": " + ex.Message);
+                _Logging.Warn(_Header + "could not persist Harbor affinity for mission " + mission.Id + ": " + ex.ToString());
             }
         }
 

@@ -70,7 +70,7 @@ namespace Armada.Server
                     }
                     catch (FormatException e)
                     {
-                        _Logging.Warn(_Header + "dropping malformed message: " + e.Message);
+                        _Logging.Warn(_Header + "dropping malformed message: " + e.ToString());
                         continue;
                     }
 
@@ -106,7 +106,7 @@ namespace Armada.Server
             }
             catch (Exception e)
             {
-                _Logging.Warn(_Header + "link error: " + e.Message);
+                _Logging.Warn(_Header + "link error: " + e.ToString());
             }
             finally
             {

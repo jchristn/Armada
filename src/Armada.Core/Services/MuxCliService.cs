@@ -229,7 +229,7 @@ namespace Armada.Core.Services
             }
             catch (JsonException ex)
             {
-                _Logging.Warn(_Header + "could not parse mux JSON payload: " + ex.Message);
+                _Logging.Warn(_Header + "could not parse mux JSON payload: " + ex.ToString());
                 return null;
             }
         }

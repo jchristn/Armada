@@ -417,7 +417,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "planning session recovery error: " + ex.Message);
+                _Logging.Warn(_Header + "planning session recovery error: " + ex.ToString());
             }
 
             try
@@ -427,7 +427,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "planning session maintenance error: " + ex.Message);
+                _Logging.Warn(_Header + "planning session maintenance error: " + ex.ToString());
             }
 
             try
@@ -437,7 +437,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "objective refinement session recovery error: " + ex.Message);
+                _Logging.Warn(_Header + "objective refinement session recovery error: " + ex.ToString());
             }
 
             try
@@ -447,7 +447,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "objective refinement session maintenance error: " + ex.Message);
+                _Logging.Warn(_Header + "objective refinement session maintenance error: " + ex.ToString());
             }
 
             // Start health check loop
@@ -467,7 +467,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "REST API stop error: " + ex.Message);
+                _Logging.Warn(_Header + "REST API stop error: " + ex.ToString());
             }
             // Kill agent subprocesses so none survive as orphans after the Admiral exits.
             // Runs before the token is cancelled and the database is disposed (it needs both).
@@ -477,7 +477,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error stopping agent processes on shutdown: " + ex.Message);
+                _Logging.Warn(_Header + "error stopping agent processes on shutdown: " + ex.ToString());
             }
 
             _TokenSource.Cancel();
@@ -556,7 +556,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "generated API key but could not persist settings: " + ex.Message);
+                _Logging.Warn(_Header + "generated API key but could not persist settings: " + ex.ToString());
             }
         }
 
@@ -846,7 +846,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "request history capture error: " + ex.Message);
+                _Logging.Warn(_Header + "request history capture error: " + ex.ToString());
             }
         }
 
@@ -1167,7 +1167,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error emitting event: " + ex.Message);
+                _Logging.Warn(_Header + "error emitting event: " + ex.ToString());
             }
         }
 
@@ -1181,7 +1181,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "startup stale captain cleanup error: " + ex.Message);
+                _Logging.Warn(_Header + "startup stale captain cleanup error: " + ex.ToString());
             }
 
             // Run an immediate health check on startup to dispatch any pending missions
@@ -1193,7 +1193,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "startup health check error: " + ex.Message);
+                _Logging.Warn(_Header + "startup health check error: " + ex.ToString());
             }
 
             while (!token.IsCancellationRequested)
@@ -1245,7 +1245,7 @@ namespace Armada.Server
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "health check error: " + ex.Message);
+                    _Logging.Warn(_Header + "health check error: " + ex.ToString());
                 }
             }
         }
@@ -1289,7 +1289,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "request history purge error: " + ex.Message);
+                _Logging.Warn(_Header + "request history purge error: " + ex.ToString());
             }
         }
 

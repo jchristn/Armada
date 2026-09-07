@@ -188,7 +188,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "landing retry failed for mission " + missionId + ": " + ex.Message);
+                _Logging.Warn(_Header + "landing retry failed for mission " + missionId + ": " + ex.ToString());
 
                 // Capture any merge-conflict file list so the operator sees exactly what to fix.
                 string failureReason = "Landing retry failed: " + ex.Message;

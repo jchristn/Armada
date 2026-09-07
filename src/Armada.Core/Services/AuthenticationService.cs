@@ -129,7 +129,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "credential authentication failed: " + ex.Message);
+                _Logging.Warn(_Header + "credential authentication failed: " + ex.ToString());
                 return new AuthContext();
             }
         }
@@ -162,7 +162,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "bearer token authentication failed: " + ex.Message);
+                _Logging.Warn(_Header + "bearer token authentication failed: " + ex.ToString());
                 return null;
             }
         }
@@ -189,7 +189,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "session token authentication failed: " + ex.Message);
+                _Logging.Warn(_Header + "session token authentication failed: " + ex.ToString());
                 return null;
             }
         }

@@ -155,7 +155,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "failed to publish tunnel event " + eventType + ": " + ex.Message);
+                _Logging.Warn(_Header + "failed to publish tunnel event " + eventType + ": " + ex.ToString());
             }
         }
 

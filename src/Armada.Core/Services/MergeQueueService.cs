@@ -143,7 +143,7 @@ namespace Armada.Core.Services
                     }
                     catch (Exception ex)
                     {
-                        _Logging.Warn(_Header + "error releasing merge-queue processing lease: " + ex.Message);
+                        _Logging.Warn(_Header + "error releasing merge-queue processing lease: " + ex.ToString());
                     }
                 }
                 lock (_ProcessLock) { _Processing = false; }
@@ -364,7 +364,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "group processing error: " + ex.Message);
+                _Logging.Warn(_Header + "group processing error: " + ex.ToString());
             }
         }
 
@@ -495,7 +495,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error processing " + entryTag + ": " + ex.Message);
+                _Logging.Warn(_Header + "error processing " + entryTag + ": " + ex.ToString());
                 entry.Status = MergeStatusEnum.Failed;
                 entry.TestOutput = "Queue processing error: " + ex.Message;
                 entry.CompletedUtc = DateTime.UtcNow;
@@ -529,7 +529,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "failed to land " + entry.Id + ": " + ex.Message);
+                _Logging.Warn(_Header + "failed to land " + entry.Id + ": " + ex.ToString());
                 entry.Status = MergeStatusEnum.Failed;
                 entry.TestOutput = "Landing failed: " + ex.Message;
                 entry.CompletedUtc = DateTime.UtcNow;
@@ -574,7 +574,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "failed to reconcile mission " + missionId + " to " + targetStatus + ": " + ex.Message);
+                _Logging.Warn(_Header + "failed to reconcile mission " + missionId + " to " + targetStatus + ": " + ex.ToString());
             }
         }
 
@@ -693,7 +693,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "cleanup error for " + worktreePath + ": " + ex.Message);
+                _Logging.Warn(_Header + "cleanup error for " + worktreePath + ": " + ex.ToString());
             }
         }
 

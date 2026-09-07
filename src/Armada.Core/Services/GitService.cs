@@ -217,7 +217,7 @@ namespace Armada.Core.Services
             {
                 // A checked-out worktree is blocking the full fetch.
                 // Fall back to fetching just the remote refs without updating local branches.
-                _Logging.Warn(_Header + "full fetch blocked by checked-out worktree, trying fetch origin: " + ex.Message);
+                _Logging.Warn(_Header + "full fetch blocked by checked-out worktree, trying fetch origin: " + ex.ToString());
                 try
                 {
                     await RunGitAsync(repoPath, "fetch", "origin").ConfigureAwait(false);
@@ -467,7 +467,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "force-advance of branch " + branchName + " to " + commitHash + " failed: " + ex.Message);
+                _Logging.Warn(_Header + "force-advance of branch " + branchName + " to " + commitHash + " failed: " + ex.ToString());
                 return false;
             }
         }
@@ -1051,7 +1051,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "unable to abort failed merge in " + targetWorkDir + ": " + ex.Message);
+                _Logging.Warn(_Header + "unable to abort failed merge in " + targetWorkDir + ": " + ex.ToString());
             }
 
             try
@@ -1061,7 +1061,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "unable to reset merge state in " + targetWorkDir + ": " + ex.Message);
+                _Logging.Warn(_Header + "unable to reset merge state in " + targetWorkDir + ": " + ex.ToString());
             }
 
             if (!String.IsNullOrEmpty(targetBranch))
@@ -1072,7 +1072,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "unable to return to target branch " + targetBranch + " after failed merge in " + targetWorkDir + ": " + ex.Message);
+                    _Logging.Warn(_Header + "unable to return to target branch " + targetBranch + " after failed merge in " + targetWorkDir + ": " + ex.ToString());
                 }
             }
         }
@@ -1132,7 +1132,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "unable to sync target branch " + branchName + " from origin in " + repoPath + ": " + ex.Message);
+                _Logging.Warn(_Header + "unable to sync target branch " + branchName + " from origin in " + repoPath + ": " + ex.ToString());
                 return false;
             }
         }

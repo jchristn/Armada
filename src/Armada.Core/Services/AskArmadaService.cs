@@ -89,7 +89,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error answering '" + text + "': " + ex.Message);
+                _Logging.Warn(_Header + "error answering '" + text + "': " + ex.ToString());
                 return new AskResponse
                 {
                     Kind = AskResponseKindEnum.Unknown,

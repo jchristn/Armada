@@ -109,7 +109,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "error rotating " + logFile + ": " + ex.Message);
+                    _Logging.Warn(_Header + "error rotating " + logFile + ": " + ex.ToString());
                 }
             }
         }

@@ -127,7 +127,7 @@ namespace Armada.Core.Services
                         }
                         catch (FormatException e)
                         {
-                            _Logging.Warn(_Header + "dropping malformed message: " + e.Message);
+                            _Logging.Warn(_Header + "dropping malformed message: " + e.ToString());
                             continue;
                         }
 
@@ -226,7 +226,7 @@ namespace Armada.Core.Services
                     }
                     catch (Exception e)
                     {
-                        _Logging.Warn(_Header + "stop of job " + kill.JobId + " failed: " + e.Message);
+                        _Logging.Warn(_Header + "stop of job " + kill.JobId + " failed: " + e.ToString());
                     }
                 }
                 return;
@@ -307,7 +307,7 @@ namespace Armada.Core.Services
             }
             catch (Exception e)
             {
-                _Logging.Warn(_Header + "send pump stopped: " + e.Message);
+                _Logging.Warn(_Header + "send pump stopped: " + e.ToString());
             }
         }
 
@@ -327,7 +327,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception e)
                 {
-                    _Logging.Warn(_Header + "heartbeat failed: " + e.Message);
+                    _Logging.Warn(_Header + "heartbeat failed: " + e.ToString());
                     break;
                 }
             }

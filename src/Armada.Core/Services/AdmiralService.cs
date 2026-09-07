@@ -484,7 +484,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "error recalling captain " + captain.Id + ": " + ex.Message);
+                    _Logging.Warn(_Header + "error recalling captain " + captain.Id + ": " + ex.ToString());
                 }
             }
         }
@@ -507,7 +507,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "error stopping agent for captain " + captain.Id + " on shutdown: " + ex.Message);
+                    _Logging.Warn(_Header + "error stopping agent for captain " + captain.Id + " on shutdown: " + ex.ToString());
                 }
             }
         }
@@ -532,7 +532,7 @@ namespace Armada.Core.Services
                         }
                         catch (Exception ex)
                         {
-                            _Logging.Warn(_Header + "error processing health check for captain " + captain.Id + ": " + ex.Message);
+                            _Logging.Warn(_Header + "error processing health check for captain " + captain.Id + ": " + ex.ToString());
                         }
                     }, token)).ToList();
 
@@ -559,7 +559,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error recovering dangling handoffs: " + ex.Message);
+                _Logging.Warn(_Header + "error recovering dangling handoffs: " + ex.ToString());
             }
 
             // Check for completed voyages
@@ -569,7 +569,7 @@ namespace Armada.Core.Services
                 foreach (Voyage completedVoyage in completedVoyages)
                 {
                     try { await OnVoyageComplete.Invoke(completedVoyage).ConfigureAwait(false); }
-                    catch (Exception ex) { _Logging.Warn(_Header + "error in OnVoyageComplete callback: " + ex.Message); }
+                    catch (Exception ex) { _Logging.Warn(_Header + "error in OnVoyageComplete callback: " + ex.ToString()); }
                 }
             }
 
@@ -1231,7 +1231,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error emitting event " + eventType + ": " + ex.Message);
+                _Logging.Warn(_Header + "error emitting event " + eventType + ": " + ex.ToString());
             }
         }
 
@@ -1286,14 +1286,14 @@ namespace Armada.Core.Services
                         }
                         catch (Exception ex)
                         {
-                            _Logging.Warn(_Header + "error reclaiming orphaned dock " + dock.Id + ": " + ex.Message);
+                            _Logging.Warn(_Header + "error reclaiming orphaned dock " + dock.Id + ": " + ex.ToString());
                         }
                     }
                 }
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error in orphaned dock reclamation: " + ex.Message);
+                _Logging.Warn(_Header + "error in orphaned dock reclamation: " + ex.ToString());
             }
         }
 
@@ -1343,7 +1343,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error recovering overdue reviews: " + ex.Message);
+                _Logging.Warn(_Header + "error recovering overdue reviews: " + ex.ToString());
             }
         }
 
@@ -1376,7 +1376,7 @@ namespace Armada.Core.Services
                     }
                     catch (Exception ex)
                     {
-                        _Logging.Warn(_Header + "error reconciling PR for mission " + mission.Id + ": " + ex.Message);
+                        _Logging.Warn(_Header + "error reconciling PR for mission " + mission.Id + ": " + ex.ToString());
                     }
                 }
 
@@ -1385,7 +1385,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error in PR reconciliation: " + ex.Message);
+                _Logging.Warn(_Header + "error in PR reconciliation: " + ex.ToString());
             }
         }
 
@@ -1608,7 +1608,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error reclaiming dock " + dockId + " for captain " + captain.Id + ": " + ex.Message);
+                _Logging.Warn(_Header + "error reclaiming dock " + dockId + " for captain " + captain.Id + ": " + ex.ToString());
             }
 
             // Clear dock references
@@ -1649,7 +1649,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "could not inspect mission log for failure reason on " + missionId + ": " + ex.Message);
+                    _Logging.Warn(_Header + "could not inspect mission log for failure reason on " + missionId + ": " + ex.ToString());
                 }
             }
 

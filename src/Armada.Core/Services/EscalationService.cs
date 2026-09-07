@@ -200,7 +200,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "webhook error for " + rule.WebhookUrl + ": " + ex.Message);
+                _Logging.Warn(_Header + "webhook error for " + rule.WebhookUrl + ": " + ex.ToString());
             }
         }
 

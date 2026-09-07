@@ -131,7 +131,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + phase + " command failed to start in " + worktreePath + ": " + ex.Message);
+                    _Logging.Warn(_Header + phase + " command failed to start in " + worktreePath + ": " + ex.ToString());
                     return new DefinitionOfDoneResult(DefinitionOfDoneOutcomeEnum.Infra, phase + " command failed to start: " + ex.Message);
                 }
 
@@ -162,7 +162,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + phase + " command errored in " + worktreePath + ": " + ex.Message);
+                _Logging.Warn(_Header + phase + " command errored in " + worktreePath + ": " + ex.ToString());
                 return new DefinitionOfDoneResult(DefinitionOfDoneOutcomeEnum.Infra, phase + " command errored: " + ex.Message);
             }
 
