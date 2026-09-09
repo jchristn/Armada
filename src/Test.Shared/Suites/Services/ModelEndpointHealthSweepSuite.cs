@@ -88,6 +88,30 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(2, probed);
             }));
 
+            cases.Add(CaseAsync("same_url_key_different_kind_probe_separately", "Endpoints on one URL and key that differ in kind are probed separately", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                await SeedEndpointAsync(testDb, "ep-a", ClosedUrl, "shared-key", ModelProviderEnum.OpenAICompatible, ModelEndpointKindEnum.Inference).ConfigureAwait(false);
+                await SeedEndpointAsync(testDb, "ep-b", ClosedUrl, "shared-key", ModelProviderEnum.OpenAICompatible, ModelEndpointKindEnum.Embedding).ConfigureAwait(false);
+
+                ModelEndpointService service = new ModelEndpointService(testDb.Driver, CreateLogging());
+                int probed = await service.CheckHealthAllAsync().ConfigureAwait(false);
+
+                AssertEqual(2, probed);
+            }));
+
+            cases.Add(CaseAsync("same_url_key_different_provider_probe_separately", "Endpoints on one URL and key that differ in provider are probed separately", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                await SeedEndpointAsync(testDb, "ep-a", ClosedUrl, "shared-key", ModelProviderEnum.OpenAICompatible, ModelEndpointKindEnum.Inference).ConfigureAwait(false);
+                await SeedEndpointAsync(testDb, "ep-b", ClosedUrl, "shared-key", ModelProviderEnum.OpenAI, ModelEndpointKindEnum.Inference).ConfigureAwait(false);
+
+                ModelEndpointService service = new ModelEndpointService(testDb.Driver, CreateLogging());
+                int probed = await service.CheckHealthAllAsync().ConfigureAwait(false);
+
+                AssertEqual(2, probed);
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: "Services.ModelEndpointHealthSweep",
                 displayName: "Model Endpoint Health Sweep",
@@ -98,14 +122,20 @@ namespace Test.Shared.Suites.Services
 
         #region Private-Methods
 
-        private static async Task SeedEndpointAsync(TestDatabase testDb, string name, string baseUrl, string apiKey)
+        private static async Task SeedEndpointAsync(
+            TestDatabase testDb,
+            string name,
+            string baseUrl,
+            string apiKey,
+            ModelProviderEnum provider = ModelProviderEnum.OpenAICompatible,
+            ModelEndpointKindEnum kind = ModelEndpointKindEnum.Inference)
         {
             ModelEndpoint endpoint = new ModelEndpoint();
             endpoint.TenantId = "default";
             endpoint.UserId = "default";
             endpoint.Name = name;
-            endpoint.Provider = ModelProviderEnum.OpenAICompatible;
-            endpoint.Kind = ModelEndpointKindEnum.Inference;
+            endpoint.Provider = provider;
+            endpoint.Kind = kind;
             endpoint.BaseUrl = baseUrl;
             endpoint.Model = "test-model";
             endpoint.ApiKey = apiKey;
