@@ -239,20 +239,25 @@ namespace Armada.Core.Services
 
         /// <summary>
         /// Run a system-wide health sweep across all enabled endpoints. Endpoints are grouped by normalized
-        /// base URL so each distinct URL is probed exactly once; the outcome is written to every endpoint that
-        /// shares that URL.
+        /// base URL AND API key, so each distinct (URL, key) pair is probed exactly once and the outcome is
+        /// written to every endpoint that shares it. Endpoints on the same URL with different keys are probed
+        /// separately -- a deliberate duplicate probe -- so each endpoint's health reflects its own configured
+        /// credential rather than an arbitrary co-located endpoint's.
         /// </summary>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The number of distinct base URLs probed.</returns>
+        /// <returns>The number of distinct (base URL, API key) pairs probed.</returns>
         public async Task<int> CheckHealthAllAsync(CancellationToken token = default)
         {
             List<ModelEndpoint> all = await _Database.ModelEndpoints.EnumerateAsync(token).ConfigureAwait(false);
             List<ModelEndpoint> enabled = all.Where(e => e.Enabled).ToList();
 
-            Dictionary<string, List<ModelEndpoint>> groups = new Dictionary<string, List<ModelEndpoint>>(StringComparer.OrdinalIgnoreCase);
+            // Ordinal (case-sensitive): the normalized URL is already lower-cased, but API keys are
+            // case-sensitive, so the composite key must not fold case. A null separator cannot occur in a
+            // URL or an API key, so it cannot collide across the two parts.
+            Dictionary<string, List<ModelEndpoint>> groups = new Dictionary<string, List<ModelEndpoint>>(StringComparer.Ordinal);
             foreach (ModelEndpoint endpoint in enabled)
             {
-                string key = NormalizeBaseUrl(endpoint.BaseUrl);
+                string key = NormalizeBaseUrl(endpoint.BaseUrl) + "\0" + (endpoint.ApiKey ?? String.Empty);
                 if (!groups.ContainsKey(key)) groups[key] = new List<ModelEndpoint>();
                 groups[key].Add(endpoint);
             }
@@ -269,7 +274,7 @@ namespace Armada.Core.Services
                     await PersistProbeAsync(member, result, token).ConfigureAwait(false);
             }
 
-            _Logging.Debug(_Header + "health sweep probed " + probed + " distinct base URL(s) across " + enabled.Count + " endpoint(s)");
+            _Logging.Debug(_Header + "health sweep probed " + probed + " distinct (base URL, API key) pair(s) across " + enabled.Count + " endpoint(s)");
             return probed;
         }
 
