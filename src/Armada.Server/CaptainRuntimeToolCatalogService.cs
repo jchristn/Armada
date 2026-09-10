@@ -11,6 +11,7 @@ namespace Armada.Server
     using Armada.Core.Models;
     using Armada.Core.Services;
     using SyslogLogging;
+    using ArmadaConstants = Armada.Core.Constants;
 
     /// <summary>
     /// Discovers runtime-visible MCP servers and probes them for tool inventories.
@@ -687,7 +688,7 @@ namespace Armada.Server
                     clientInfo = new
                     {
                         name = "armada",
-                        version = "0.8.0"
+                        version = ArmadaConstants.ProductVersion
                     }
                 }
             });
@@ -859,7 +860,7 @@ namespace Armada.Server
                             clientInfo = new
                             {
                                 name = "armada",
-                                version = "0.8.0"
+                                version = ArmadaConstants.ProductVersion
                             }
                         }
                     }),

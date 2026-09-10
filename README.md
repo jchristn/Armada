@@ -1024,7 +1024,7 @@ docker build -f src/Armada.Server/Dockerfile -t armada-server:local .
 docker build -f src/Armada.Dashboard/Dockerfile -t armada-dashboard:local .
 ```
 
-Build scripts for multi-platform images are provided under `scripts/windows/`, `scripts/linux/`, and `scripts/macos/`.
+Build scripts for multi-platform images are provided under `scripts/windows/`, `scripts/linux/`, and `scripts/macos/`. Each script builds once, pushes the tags to Docker Hub, and pulls them back into the local registry. Use the `build-all` script (for example `scripts\windows\build-all.bat v0.9.0`) to build, push, and locally pull every image in one command. See `docs/DOCKER.md` for details.
 
 ## Upgrading / Migration
 

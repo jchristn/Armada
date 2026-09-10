@@ -711,6 +711,13 @@ body {
     transition: color 0.15s;
 }
 .github-link:hover { color: var(--text); }
+.discord-link {
+    color: var(--text-dim);
+    display: inline-flex;
+    align-items: center;
+    transition: color 0.15s;
+}
+.discord-link:hover { color: var(--text); }
 
 /* Main */
 .main-content-area {
