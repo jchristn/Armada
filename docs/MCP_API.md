@@ -3567,7 +3567,7 @@ Create a model endpoint. Supply `apiKey` to store a provider key; it is write-on
     "name": { "type": "string", "description": "Display name" },
     "baseUrl": { "type": "string", "description": "Provider API base URL" },
     "kind": { "type": "string", "description": "Embedding (default) or Inference" },
-    "provider": { "type": "string", "description": "Ollama, OpenAI, OpenAICompatible, Anthropic, Gemini, or VoyageAI" },
+    "provider": { "type": "string", "description": "Ollama, OpenAI, OpenAICompatible, Anthropic, Gemini, VoyageAI, AzureOpenAI, VertexAI, or Bedrock" },
     "model": { "type": "string", "description": "Model name to target" },
     "apiKey": { "type": "string", "description": "Provider API key. Write-only: accepted here, never returned on reads." },
     "dimensionality": { "type": "integer", "description": "Embedding dimensionality (default 0)" },
@@ -3583,7 +3583,7 @@ Create a model endpoint. Supply `apiKey` to store a provider key; it is write-on
 | `name` | string | Yes | Display name |
 | `baseUrl` | string | Yes | Provider API base URL |
 | `kind` | string | No | `Embedding` (default) or `Inference` |
-| `provider` | string | No | `Ollama`, `OpenAI`, `OpenAICompatible`, `Anthropic`, `Gemini`, or `VoyageAI` |
+| `provider` | string | No | `Ollama`, `OpenAI`, `OpenAICompatible`, `Anthropic`, `Gemini`, `VoyageAI`, `AzureOpenAI`, `VertexAI`, or `Bedrock` |
 | `model` | string | No | Model name to target |
 | `apiKey` | string | No | Provider API key. Write-only: accepted here, never returned on reads. |
 | `dimensionality` | integer | No | Embedding dimensionality (default 0) |
@@ -3606,6 +3606,8 @@ Create a model endpoint. Supply `apiKey` to store a provider key; it is write-on
 
 **Response:** The newly created [ModelEndpoint](#modelendpoint) object (with `hasApiKey: true`, no `apiKey` field). Returns `{ "Error": "..." }` when `Anthropic` is paired with `Embedding`, or `VoyageAI` is paired with `Inference`.
 
+**Provider-specific fields** (accepted on create and update): `AzureOpenAI` uses `baseUrl` (resource endpoint), `model` (deployment name), `apiKey`, and optional `apiVersion`. `VertexAI` requires `project` and `region`, with the service-account JSON supplied write-only as `apiKey`; `baseUrl` is an optional override. `Bedrock` requires `region` and `accessKeyId`, with the AWS secret access key supplied write-only as `apiKey`; `model` is the Bedrock model id and `baseUrl` is an optional override.
+
 ---
 
 ### update_model_endpoint
@@ -3621,7 +3623,7 @@ Update an existing model endpoint. Omit `apiKey` to keep the stored key; send `a
     "endpointId": { "type": "string", "description": "Model endpoint ID (mep_ prefix)" },
     "name": { "type": "string", "description": "New display name" },
     "kind": { "type": "string", "description": "Embedding or Inference" },
-    "provider": { "type": "string", "description": "Ollama, OpenAI, OpenAICompatible, Anthropic, Gemini, or VoyageAI" },
+    "provider": { "type": "string", "description": "Ollama, OpenAI, OpenAICompatible, Anthropic, Gemini, VoyageAI, AzureOpenAI, VertexAI, or Bedrock" },
     "baseUrl": { "type": "string", "description": "New provider API base URL" },
     "model": { "type": "string", "description": "New model name to target" },
     "apiKey": { "type": "string", "description": "New provider API key. Omit to keep the stored key." },
@@ -3638,7 +3640,7 @@ Update an existing model endpoint. Omit `apiKey` to keep the stored key; send `a
 | `endpointId` | string | Yes | Model endpoint ID (prefix `mep_`) |
 | `name` | string | No | New display name |
 | `kind` | string | No | `Embedding` or `Inference` |
-| `provider` | string | No | `Ollama`, `OpenAI`, `OpenAICompatible`, `Anthropic`, `Gemini`, or `VoyageAI` |
+| `provider` | string | No | `Ollama`, `OpenAI`, `OpenAICompatible`, `Anthropic`, `Gemini`, `VoyageAI`, `AzureOpenAI`, `VertexAI`, or `Bedrock` |
 | `baseUrl` | string | No | New provider API base URL |
 | `model` | string | No | New model name to target |
 | `apiKey` | string | No | New provider API key. Omit to keep the stored key. |
@@ -4178,13 +4180,17 @@ A managed reference to an external embedding or inference model behind a provide
 | `userId` | string \| null | Owning user ID |
 | `name` | string | Display name |
 | `kind` | string | `Embedding` or `Inference` |
-| `provider` | string | `Ollama`, `OpenAI`, `OpenAICompatible`, `Anthropic`, `Gemini`, or `VoyageAI` |
-| `baseUrl` | string | Provider API base URL |
-| `model` | string \| null | Model name to target |
+| `provider` | string | `Ollama`, `OpenAI`, `OpenAICompatible`, `Anthropic`, `Gemini`, `VoyageAI`, `AzureOpenAI`, `VertexAI`, or `Bedrock` |
+| `baseUrl` | string | Provider API base URL. For Azure OpenAI this is the resource endpoint; for Vertex AI and Bedrock it is an optional override (the endpoint is derived from `region`). |
+| `model` | string \| null | Model name to target. For Azure OpenAI this is the deployment name; for Bedrock, the Bedrock model id. |
+| `region` | string \| null | Cloud region. Required for `VertexAI` and `Bedrock`. |
+| `project` | string \| null | GCP project id. Required for `VertexAI`. |
+| `apiVersion` | string \| null | API version for `AzureOpenAI` (defaults to the provider's current GA version when omitted). |
+| `accessKeyId` | string \| null | AWS access key id for `Bedrock`. The paired secret access key is supplied write-only via `apiKey`. |
 | `dimensionality` | int | Embedding dimensionality (default 0) |
 | `timeoutMs` | int | Request timeout in milliseconds (default 120000, clamped to [1000, 600000]) |
 | `enabled` | bool | Whether the endpoint participates in health sweeps (default true) |
-| `hasApiKey` | bool | Read-only. Whether a provider key is stored. |
+| `hasApiKey` | bool | Read-only. Whether a provider key/credential is stored. For `AzureOpenAI` this is the API key, for `VertexAI` the service-account JSON, for `Bedrock` the AWS secret access key. |
 | `healthStatus` | string | `Unknown`, `Healthy`, or `Unhealthy` |
 | `lastHealthCheckUtc` | string \| null | ISO 8601 timestamp of the last probe |
 | `lastHealthError` | string \| null | Error text from the last failed probe |

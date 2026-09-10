@@ -10,7 +10,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="PolyPrompt" Version="2.4.1" />
+    <PackageReference Include="PolyPrompt" Version="2.5.0" />
     <PackageReference Include="Watson" Version="7.1.1" />
     <PackageReference Include="Voltaic" Version="0.7.1" />
     <PackageReference Include="SyslogLogging" Version="2.2.2" />

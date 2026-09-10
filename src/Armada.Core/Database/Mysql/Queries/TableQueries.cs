@@ -1434,6 +1434,17 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration v69: cloud-provider fields on model_endpoints (Azure/Vertex/Bedrock).
+        /// </summary>
+        public static readonly string[] MigrationV69Statements = new string[]
+        {
+            "ALTER TABLE model_endpoints ADD COLUMN region VARCHAR(256) NULL;",
+            "ALTER TABLE model_endpoints ADD COLUMN project VARCHAR(256) NULL;",
+            "ALTER TABLE model_endpoints ADD COLUMN api_version VARCHAR(64) NULL;",
+            "ALTER TABLE model_endpoints ADD COLUMN access_key_id VARCHAR(256) NULL;"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

@@ -2983,12 +2983,18 @@ Create a model endpoint. Supply `ApiKey` to store a provider key; it is write-on
 | `Name` | string | yes | Display name |
 | `BaseUrl` | string | yes | Provider API base URL |
 | `Kind` | string | no | `Embedding` (default) or `Inference` |
-| `Provider` | string | no | `Ollama`, `OpenAI`, `OpenAICompatible`, `Anthropic`, `Gemini`, or `VoyageAI` |
-| `Model` | string | no | Model name to target |
+| `Provider` | string | no | `Ollama`, `OpenAI`, `OpenAICompatible`, `Anthropic`, `Gemini`, `VoyageAI`, `AzureOpenAI`, `VertexAI`, or `Bedrock` |
+| `Model` | string | no | Model name to target (Azure OpenAI: deployment name; Bedrock: Bedrock model id) |
+| `Region` | string | no | Cloud region. Required for `VertexAI` and `Bedrock`. |
+| `Project` | string | no | GCP project id. Required for `VertexAI`. |
+| `ApiVersion` | string | no | API version for `AzureOpenAI` (defaults to the current GA version when omitted). |
+| `AccessKeyId` | string | no | AWS access key id for `Bedrock`. The paired secret access key is supplied write-only via `ApiKey`. |
 | `Dimensionality` | int | no | Embedding dimensionality (default 0) |
 | `TimeoutMs` | int | no | Request timeout in milliseconds (default 120000, clamped to 1000..600000) |
 | `Enabled` | bool | no | Whether the endpoint participates in health sweeps (default true) |
-| `ApiKey` | string | no | Provider API key. Write-only: accepted here, never returned on reads. |
+| `ApiKey` | string | no | Provider key / Vertex service-account JSON / AWS secret access key. Write-only: accepted here, never returned on reads. |
+
+For `VertexAI` and `Bedrock`, `BaseUrl` is optional (the endpoint is derived from `Region`).
 
 ```json
 {
@@ -5181,14 +5187,18 @@ A managed reference to an external embedding or inference model behind a provide
 | `Scope` | [ScopeEnum](#scopeenum) | `TenantWide` | Ownership scope: `TenantWide` or `UserSpecific`. See [Data Scoping](#data-scoping-who-sees-and-edits-what). |
 | `Name` | string | required | Display name |
 | `Kind` | string | `Embedding` | `Embedding` or `Inference` |
-| `Provider` | string | `Ollama` | `Ollama`, `OpenAI`, `OpenAICompatible`, `Anthropic`, `Gemini`, or `VoyageAI` |
-| `BaseUrl` | string | required | Provider API base URL |
-| `Model` | string? | null | Model name to target |
+| `Provider` | string | `Ollama` | `Ollama`, `OpenAI`, `OpenAICompatible`, `Anthropic`, `Gemini`, `VoyageAI`, `AzureOpenAI`, `VertexAI`, or `Bedrock` |
+| `BaseUrl` | string | required | Provider API base URL. Azure OpenAI: resource endpoint. Vertex AI / Bedrock: optional override (endpoint is derived from `Region`). |
+| `Model` | string? | null | Model name to target. Azure OpenAI: deployment name. Bedrock: Bedrock model id. |
+| `Region` | string? | null | Cloud region. Required for `VertexAI` and `Bedrock`. |
+| `Project` | string? | null | GCP project id. Required for `VertexAI`. |
+| `ApiVersion` | string? | null | API version for `AzureOpenAI` (defaults to the current GA version when omitted). |
+| `AccessKeyId` | string? | null | AWS access key id for `Bedrock`. The paired secret access key is supplied write-only via `ApiKey`. |
 | `Dimensionality` | int | 0 | Embedding dimensionality |
 | `TimeoutMs` | int | 120000 | Request timeout in milliseconds (clamped to [1000, 600000]) |
 | `Enabled` | bool | true | Whether the endpoint participates in health sweeps |
-| `ApiKey` | string | -- | Write-only input. Accepted on create/update; never returned on reads. |
-| `HasApiKey` | bool | false | Read-only. Indicates whether a provider key is stored. |
+| `ApiKey` | string | -- | Write-only input (provider key / service-account JSON / AWS secret). Accepted on create/update; never returned on reads. |
+| `HasApiKey` | bool | false | Read-only. Indicates whether a provider key/credential is stored. |
 | `HealthStatus` | string | `Unknown` | `Unknown`, `Healthy`, or `Unhealthy` |
 | `LastHealthCheckUtc` | datetime? | null | Timestamp of the last probe (UTC) |
 | `LastHealthError` | string? | null | Error text from the last failed probe |

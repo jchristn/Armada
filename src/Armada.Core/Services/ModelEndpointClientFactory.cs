@@ -3,6 +3,7 @@ namespace Armada.Core.Services
     using System;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using PolyPrompt.Auth;
     using PolyPrompt.Clients;
     using SyslogLogging;
 
@@ -80,13 +81,61 @@ namespace Armada.Core.Services
                 case ModelProviderEnum.VoyageAI:
                     client = new VoyageAiClient(baseUrl, apiKey, logging, null);
                     break;
+                case ModelProviderEnum.AzureOpenAI:
+                    client = CreateAzure(endpoint, baseUrl, apiKey, logging);
+                    break;
+                case ModelProviderEnum.VertexAI:
+                    client = CreateVertex(endpoint, baseUrl, apiKey, logging);
+                    break;
+                case ModelProviderEnum.Bedrock:
+                    client = CreateBedrock(endpoint, baseUrl, apiKey, logging);
+                    break;
                 default:
                     throw new InvalidOperationException("Unsupported provider: " + endpoint.Provider);
             }
 
-            if (!String.IsNullOrWhiteSpace(endpoint.Model)) client.Model = endpoint.Model;
+            // Azure OpenAI derives its model from the deployment name at construction; do not overwrite it.
+            if (endpoint.Provider != ModelProviderEnum.AzureOpenAI && !String.IsNullOrWhiteSpace(endpoint.Model))
+                client.Model = endpoint.Model;
             client.TimeoutMs = endpoint.TimeoutMs;
             return client;
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private static CompletionClientBase CreateAzure(ModelEndpoint endpoint, string baseUrl, string apiKey, LoggingModule logging)
+        {
+            Require(baseUrl, "Azure OpenAI requires a base URL (the resource endpoint, e.g. https://my-resource.openai.azure.com).");
+            Require(endpoint.Model, "Azure OpenAI requires a model, which is the deployment name.");
+            Require(apiKey, "Azure OpenAI requires an API key.");
+            return new AzureOpenAiClient(baseUrl, endpoint.Model!, apiKey, endpoint.ApiVersion, logging, null);
+        }
+
+        private static CompletionClientBase CreateVertex(ModelEndpoint endpoint, string baseUrl, string apiKey, LoggingModule logging)
+        {
+            Require(endpoint.Project, "Vertex AI requires a GCP project id.");
+            Require(endpoint.Region, "Vertex AI requires a region (e.g. us-central1).");
+            Require(apiKey, "Vertex AI requires a service-account JSON supplied as the credential.");
+            ICredentialProvider credential = ServiceAccountCredential.FromJson(apiKey);
+            string? endpointOverride = String.IsNullOrWhiteSpace(baseUrl) ? null : baseUrl;
+            return new VertexAiClient(endpoint.Project!, endpoint.Region!, credential, endpointOverride, logging, null);
+        }
+
+        private static CompletionClientBase CreateBedrock(ModelEndpoint endpoint, string baseUrl, string apiKey, LoggingModule logging)
+        {
+            Require(endpoint.AccessKeyId, "AWS Bedrock requires an access key id.");
+            Require(apiKey, "AWS Bedrock requires a secret access key.");
+            Require(endpoint.Region, "AWS Bedrock requires a region (e.g. us-east-1).");
+            IAwsCredentialProvider credential = new StaticAwsCredential(endpoint.AccessKeyId!, apiKey, endpoint.Region!, null);
+            string? endpointOverride = String.IsNullOrWhiteSpace(baseUrl) ? null : baseUrl;
+            return new BedrockClient(credential, endpoint.Region!, logging, null, endpointOverride);
+        }
+
+        private static void Require(string? value, string message)
+        {
+            if (String.IsNullOrWhiteSpace(value)) throw new InvalidOperationException(message);
         }
 
         #endregion

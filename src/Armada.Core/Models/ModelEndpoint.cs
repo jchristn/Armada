@@ -78,9 +78,49 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
-        /// The model identifier to request (e.g. "text-embedding-3-small", "gpt-4o-mini", "voyage-3.5").
+        /// The model identifier to request (e.g. "text-embedding-3-small", "gpt-4o-mini", "voyage-3.5"). For
+        /// Azure OpenAI this is the deployment name; for Bedrock, the Bedrock model id.
         /// </summary>
         public string? Model { get; set; } = null;
+
+        /// <summary>
+        /// Cloud region for providers that require one (Vertex AI, AWS Bedrock). Null/unused for others.
+        /// </summary>
+        public string? Region
+        {
+            get => _Region;
+            set => _Region = Normalize(value);
+        }
+
+        /// <summary>
+        /// GCP project id for Vertex AI. Null/unused for other providers.
+        /// </summary>
+        public string? Project
+        {
+            get => _Project;
+            set => _Project = Normalize(value);
+        }
+
+        /// <summary>
+        /// API version for Azure OpenAI (defaults to the provider's current GA version when omitted).
+        /// Null/unused for other providers.
+        /// </summary>
+        public string? ApiVersion
+        {
+            get => _ApiVersion;
+            set => _ApiVersion = Normalize(value);
+        }
+
+        /// <summary>
+        /// AWS access key id for Bedrock. The paired secret access key is stored in <see cref="ApiKey"/>.
+        /// This is an identifier rather than a secret, so it is returned on reads. Null/unused for other
+        /// providers.
+        /// </summary>
+        public string? AccessKeyId
+        {
+            get => _AccessKeyId;
+            set => _AccessKeyId = Normalize(value);
+        }
 
         /// <summary>
         /// Optional embedding dimensionality hint (embedding endpoints). Clamped to non-negative.
@@ -291,6 +331,10 @@ namespace Armada.Core.Models
         private bool? _HasApiKey = null;
         private int _Dimensionality = 0;
         private int _TimeoutMs = 120000;
+        private string? _Region = null;
+        private string? _Project = null;
+        private string? _ApiVersion = null;
+        private string? _AccessKeyId = null;
         private List<ModelEndpointHealthRecord> _HealthHistory = new List<ModelEndpointHealthRecord>();
 
         #endregion
@@ -302,6 +346,16 @@ namespace Armada.Core.Models
         /// </summary>
         public ModelEndpoint()
         {
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private static string? Normalize(string? value)
+        {
+            if (String.IsNullOrWhiteSpace(value)) return null;
+            return value.Trim();
         }
 
         #endregion

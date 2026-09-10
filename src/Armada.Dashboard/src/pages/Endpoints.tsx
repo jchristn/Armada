@@ -26,7 +26,7 @@ import StatusBadge from '../components/shared/StatusBadge';
 import HealthHistogram from '../components/shared/HealthHistogram';
 import CopyButton from '../components/shared/CopyButton';
 
-const PROVIDERS: ModelProvider[] = ['Ollama', 'OpenAI', 'OpenAICompatible', 'Anthropic', 'Gemini', 'VoyageAI'];
+const PROVIDERS: ModelProvider[] = ['Ollama', 'OpenAI', 'OpenAICompatible', 'Anthropic', 'Gemini', 'VoyageAI', 'AzureOpenAI', 'VertexAI', 'Bedrock'];
 const KINDS: ModelEndpointKind[] = ['Embedding', 'Inference'];
 
 interface EndpointForm {
@@ -37,6 +37,10 @@ interface EndpointForm {
   model: string;
   apiKey: string;
   apiKeyTouched: boolean;
+  region: string;
+  project: string;
+  apiVersion: string;
+  accessKeyId: string;
   dimensionality: string;
   timeoutMs: string;
   enabled: boolean;
@@ -51,6 +55,10 @@ const EMPTY_FORM: EndpointForm = {
   model: '',
   apiKey: '',
   apiKeyTouched: false,
+  region: '',
+  project: '',
+  apiVersion: '',
+  accessKeyId: '',
   dimensionality: '0',
   timeoutMs: '120000',
   enabled: true,
@@ -106,6 +114,12 @@ export default function Endpoints() {
 
   const canManage = isAdmin || isTenantAdmin;
   const formReason = unsupportedReason(form.provider, form.kind);
+  const isAzure = form.provider === 'AzureOpenAI';
+  const isVertex = form.provider === 'VertexAI';
+  const isBedrock = form.provider === 'Bedrock';
+  // Vertex AI and Bedrock derive their endpoint from the region, so a base URL is optional (override only).
+  const baseUrlRequired = !isVertex && !isBedrock;
+  const credentialLabel = isVertex ? t('Service Account JSON') : isBedrock ? t('AWS Secret Access Key') : t('API Key');
 
   function openCreate() {
     setEditing(null);
@@ -123,6 +137,10 @@ export default function Endpoints() {
       model: endpoint.model || '',
       apiKey: '',
       apiKeyTouched: false,
+      region: endpoint.region || '',
+      project: endpoint.project || '',
+      apiVersion: endpoint.apiVersion || '',
+      accessKeyId: endpoint.accessKeyId || '',
       dimensionality: String(endpoint.dimensionality ?? 0),
       timeoutMs: String(endpoint.timeoutMs ?? 120000),
       enabled: endpoint.enabled,
@@ -143,6 +161,10 @@ export default function Endpoints() {
         provider: form.provider,
         baseUrl: form.baseUrl,
         model: form.model.trim() || null,
+        region: form.region.trim() || null,
+        project: form.project.trim() || null,
+        apiVersion: form.apiVersion.trim() || null,
+        accessKeyId: form.accessKeyId.trim() || null,
         dimensionality: Number.parseInt(form.dimensionality, 10) || 0,
         timeoutMs: Number.parseInt(form.timeoutMs, 10) || 120000,
         enabled: form.enabled,
@@ -293,20 +315,61 @@ export default function Endpoints() {
               </label>
             </div>
             {formReason && <p className="text-danger" style={{ margin: '0 0 0.5rem' }}>{formReason}</p>}
-            <label>{t('Base URL')}
-              <input type="text" value={form.baseUrl} onChange={(e) => setForm({ ...form, baseUrl: e.target.value })} placeholder="https://api.openai.com" required />
-            </label>
-            <label>{t('Model')}
-              <input type="text" value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} placeholder={form.kind === 'Embedding' ? 'text-embedding-3-small' : 'gpt-4o-mini'} />
-            </label>
-            <label>{t('API Key')}
+            {(isVertex || isBedrock) && (
+              <div className="detail-form-grid">
+                <label>{t('Region')}
+                  <input type="text" value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })} placeholder={isBedrock ? 'us-east-1' : 'us-central1'} required />
+                </label>
+                {isVertex && (
+                  <label>{t('Project')}
+                    <input type="text" value={form.project} onChange={(e) => setForm({ ...form, project: e.target.value })} placeholder="my-gcp-project" required />
+                  </label>
+                )}
+                {isBedrock && (
+                  <label>{t('Access Key ID')}
+                    <input type="text" value={form.accessKeyId} onChange={(e) => setForm({ ...form, accessKeyId: e.target.value })} placeholder="AKIA..." required autoComplete="off" />
+                  </label>
+                )}
+              </div>
+            )}
+            <label>{isVertex || isBedrock ? t('Base URL (optional override)') : isAzure ? t('Base URL (resource endpoint)') : t('Base URL')}
               <input
-                type="password"
-                value={form.apiKey}
-                onChange={(e) => setForm({ ...form, apiKey: e.target.value, apiKeyTouched: true })}
-                placeholder={editing && editing.hasApiKey ? t('(unchanged - leave blank to keep stored key)') : t('Optional')}
-                autoComplete="new-password"
+                type="text"
+                value={form.baseUrl}
+                onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
+                placeholder={isAzure ? 'https://my-resource.openai.azure.com' : 'https://api.openai.com'}
+                required={baseUrlRequired}
               />
+            </label>
+            <div className="detail-form-grid">
+              <label>{isAzure ? t('Deployment name') : isBedrock ? t('Bedrock model id') : t('Model')}
+                <input type="text" value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} placeholder={isAzure ? 'gpt-4o' : isBedrock ? 'anthropic.claude-3-5-sonnet-20240620-v1:0' : form.kind === 'Embedding' ? 'text-embedding-3-small' : 'gpt-4o-mini'} required={isAzure} />
+              </label>
+              {isAzure && (
+                <label>{t('API Version')}
+                  <input type="text" value={form.apiVersion} onChange={(e) => setForm({ ...form, apiVersion: e.target.value })} placeholder="2024-10-21 (default)" />
+                </label>
+              )}
+            </div>
+            <label>{credentialLabel}
+              {isVertex ? (
+                <textarea
+                  value={form.apiKey}
+                  onChange={(e) => setForm({ ...form, apiKey: e.target.value, apiKeyTouched: true })}
+                  placeholder={editing && editing.hasApiKey ? t('(unchanged - leave blank to keep stored credential)') : t('Paste the service-account JSON')}
+                  rows={4}
+                  autoComplete="off"
+                  style={{ fontFamily: 'monospace' }}
+                />
+              ) : (
+                <input
+                  type="password"
+                  value={form.apiKey}
+                  onChange={(e) => setForm({ ...form, apiKey: e.target.value, apiKeyTouched: true })}
+                  placeholder={editing && editing.hasApiKey ? t('(unchanged - leave blank to keep stored key)') : t('Optional')}
+                  autoComplete="new-password"
+                />
+              )}
             </label>
             <div className="detail-form-grid">
               <label>{t('Dimensionality')}

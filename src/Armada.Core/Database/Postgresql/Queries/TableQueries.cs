@@ -1182,7 +1182,12 @@ namespace Armada.Core.Database.Postgresql.Queries
                     @"ALTER TABLE prompt_templates ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'TenantWide';"),
                 new SchemaMigration(68, "Add ownership_scope to workflow_profiles and project_profiles",
                     @"ALTER TABLE workflow_profiles ADD COLUMN IF NOT EXISTS ownership_scope TEXT NOT NULL DEFAULT 'TenantWide';",
-                    @"ALTER TABLE project_profiles ADD COLUMN IF NOT EXISTS ownership_scope TEXT NOT NULL DEFAULT 'TenantWide';")
+                    @"ALTER TABLE project_profiles ADD COLUMN IF NOT EXISTS ownership_scope TEXT NOT NULL DEFAULT 'TenantWide';"),
+                new SchemaMigration(69, "Add cloud-provider fields (region, project, api_version, access_key_id) to model_endpoints",
+                    @"ALTER TABLE model_endpoints ADD COLUMN IF NOT EXISTS region TEXT;",
+                    @"ALTER TABLE model_endpoints ADD COLUMN IF NOT EXISTS project TEXT;",
+                    @"ALTER TABLE model_endpoints ADD COLUMN IF NOT EXISTS api_version TEXT;",
+                    @"ALTER TABLE model_endpoints ADD COLUMN IF NOT EXISTS access_key_id TEXT;")
             };
         }
 

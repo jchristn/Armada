@@ -618,6 +618,11 @@ namespace Armada.Core.Database.Mysql
                     68,
                     "Add ownership_scope to workflow_profiles and project_profiles",
                     TableQueries.MigrationV68Statements
+                ),
+                new SchemaMigration(
+                    69,
+                    "Add cloud-provider fields (region, project, api_version, access_key_id) to model_endpoints",
+                    TableQueries.MigrationV69Statements
                 )
             };
         }

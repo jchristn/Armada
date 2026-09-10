@@ -1050,6 +1050,14 @@ namespace Armada.Core.Database.SqlServer.Queries
                     "Add ownership_scope to workflow_profiles and project_profiles",
                     @"IF COL_LENGTH('workflow_profiles','ownership_scope') IS NULL ALTER TABLE workflow_profiles ADD ownership_scope NVARCHAR(32) NOT NULL DEFAULT 'TenantWide';",
                     @"IF COL_LENGTH('project_profiles','ownership_scope') IS NULL ALTER TABLE project_profiles ADD ownership_scope NVARCHAR(32) NOT NULL DEFAULT 'TenantWide';"
+                ),
+                new SchemaMigration(
+                    69,
+                    "Add cloud-provider fields (region, project, api_version, access_key_id) to model_endpoints",
+                    @"IF COL_LENGTH('model_endpoints','region') IS NULL ALTER TABLE model_endpoints ADD region NVARCHAR(256) NULL;",
+                    @"IF COL_LENGTH('model_endpoints','project') IS NULL ALTER TABLE model_endpoints ADD project NVARCHAR(256) NULL;",
+                    @"IF COL_LENGTH('model_endpoints','api_version') IS NULL ALTER TABLE model_endpoints ADD api_version NVARCHAR(64) NULL;",
+                    @"IF COL_LENGTH('model_endpoints','access_key_id') IS NULL ALTER TABLE model_endpoints ADD access_key_id NVARCHAR(256) NULL;"
                 )
             };
         }

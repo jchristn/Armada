@@ -7,6 +7,7 @@ namespace Test.Shared.Suites.Services
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
+    using PolyPrompt.Clients;
     using SyslogLogging;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
@@ -340,6 +341,92 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(2, reloaded.ConsecutiveFailures);
                 AssertEqual(0, reloaded.ConsecutiveSuccesses);
                 AssertNotNull(reloaded.FirstHealthCheckUtc, "Expected FirstHealthCheckUtc to be derived from history.");
+            }));
+
+            cases.Add(CaseAsync("create_roundtrips_cloud_provider_fields", "CreateAsync persists region/project/api_version/access_key_id", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                ModelEndpointService service = new ModelEndpointService(testDb.Driver, CreateLogging());
+                AuthContext auth = AuthContext.Authenticated("ten_cloud", "usr_cloud", false, true, "UnitTest");
+
+                ModelEndpoint endpoint = new ModelEndpoint
+                {
+                    Name = "Bedrock Claude",
+                    Kind = ModelEndpointKindEnum.Inference,
+                    Provider = ModelProviderEnum.Bedrock,
+                    Model = "anthropic.claude-3-5-sonnet-20240620-v1:0",
+                    Region = "us-east-1",
+                    AccessKeyId = "AKIAEXAMPLE",
+                    ApiVersion = "2024-10-21",
+                    Project = "demo-project"
+                };
+                endpoint.ApiKey = "aws-secret-access-key";
+
+                ModelEndpoint created = await service.CreateAsync(auth, endpoint).ConfigureAwait(false);
+                ModelEndpoint? reloaded = await testDb.Driver.ModelEndpoints.ReadAsync(created.Id).ConfigureAwait(false);
+
+                AssertNotNull(reloaded, "Expected the endpoint to reload after the migration added the columns.");
+                AssertEqual(ModelProviderEnum.Bedrock, reloaded!.Provider);
+                AssertEqual("us-east-1", reloaded.Region);
+                AssertEqual("demo-project", reloaded.Project);
+                AssertEqual("2024-10-21", reloaded.ApiVersion);
+                AssertEqual("AKIAEXAMPLE", reloaded.AccessKeyId);
+                AssertTrue(reloaded.HasApiKey, "Expected the AWS secret access key to be stored.");
+            }));
+
+            cases.Add(CaseAsync("factory_builds_azure_client_from_deployment", "ModelEndpointClientFactory builds an Azure client using the model as deployment", TestTags.Positive, () =>
+            {
+                ModelEndpoint endpoint = new ModelEndpoint
+                {
+                    Name = "Azure GPT",
+                    Kind = ModelEndpointKindEnum.Inference,
+                    Provider = ModelProviderEnum.AzureOpenAI,
+                    BaseUrl = "https://my-resource.openai.azure.com",
+                    Model = "gpt-4o-deployment"
+                };
+                endpoint.ApiKey = "azure-key";
+
+                using (CompletionClientBase client = ModelEndpointClientFactory.Create(endpoint, CreateLogging()))
+                {
+                    AssertEqual("gpt-4o-deployment", client.Model);
+                }
+                return Task.CompletedTask;
+            }));
+
+            cases.Add(CaseAsync("factory_rejects_missing_vertex_project", "ModelEndpointClientFactory rejects a Vertex endpoint with no project", TestTags.Negative, async () =>
+            {
+                ModelEndpoint endpoint = new ModelEndpoint
+                {
+                    Name = "Vertex",
+                    Kind = ModelEndpointKindEnum.Inference,
+                    Provider = ModelProviderEnum.VertexAI,
+                    Region = "us-central1"
+                };
+                endpoint.ApiKey = "{}";
+
+                await AssertThrowsAsync<InvalidOperationException>(() =>
+                {
+                    ModelEndpointClientFactory.Create(endpoint, CreateLogging());
+                    return Task.CompletedTask;
+                }).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("factory_rejects_missing_bedrock_region", "ModelEndpointClientFactory rejects a Bedrock endpoint with no region", TestTags.Negative, async () =>
+            {
+                ModelEndpoint endpoint = new ModelEndpoint
+                {
+                    Name = "Bedrock",
+                    Kind = ModelEndpointKindEnum.Inference,
+                    Provider = ModelProviderEnum.Bedrock,
+                    AccessKeyId = "AKIAEXAMPLE"
+                };
+                endpoint.ApiKey = "secret";
+
+                await AssertThrowsAsync<InvalidOperationException>(() =>
+                {
+                    ModelEndpointClientFactory.Create(endpoint, CreateLogging());
+                    return Task.CompletedTask;
+                }).ConfigureAwait(false);
             }));
 
             return new TestSuiteDescriptor(

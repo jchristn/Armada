@@ -56,9 +56,9 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = @"INSERT INTO model_endpoints
-                        (id, tenant_id, user_id, name, kind, scope, provider, base_url, api_key, model, dimensionality, timeout_ms, enabled, health_status, last_health_check_utc, last_health_error, last_latency_ms, health_history_json, created_utc, last_update_utc)
+                        (id, tenant_id, user_id, name, kind, scope, provider, base_url, api_key, model, region, project, api_version, access_key_id, dimensionality, timeout_ms, enabled, health_status, last_health_check_utc, last_health_error, last_latency_ms, health_history_json, created_utc, last_update_utc)
                         VALUES
-                        (@id, @tenant_id, @user_id, @name, @kind, @scope, @provider, @base_url, @api_key, @model, @dimensionality, @timeout_ms, @enabled, @health_status, @last_health_check_utc, @last_health_error, @last_latency_ms, @health_history_json, @created_utc, @last_update_utc);";
+                        (@id, @tenant_id, @user_id, @name, @kind, @scope, @provider, @base_url, @api_key, @model, @region, @project, @api_version, @access_key_id, @dimensionality, @timeout_ms, @enabled, @health_status, @last_health_check_utc, @last_health_error, @last_latency_ms, @health_history_json, @created_utc, @last_update_utc);";
                     BindEndpoint(cmd, endpoint);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
@@ -86,6 +86,10 @@ namespace Armada.Core.Database.SqlServer.Implementations
                         base_url = @base_url,
                         api_key = @api_key,
                         model = @model,
+                        region = @region,
+                        project = @project,
+                        api_version = @api_version,
+                        access_key_id = @access_key_id,
                         dimensionality = @dimensionality,
                         timeout_ms = @timeout_ms,
                         enabled = @enabled,
@@ -309,6 +313,10 @@ namespace Armada.Core.Database.SqlServer.Implementations
             cmd.Parameters.AddWithValue("@base_url", endpoint.BaseUrl);
             cmd.Parameters.AddWithValue("@api_key", (object?)endpoint.ApiKey ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@model", (object?)endpoint.Model ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@region", (object?)endpoint.Region ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@project", (object?)endpoint.Project ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@api_version", (object?)endpoint.ApiVersion ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@access_key_id", (object?)endpoint.AccessKeyId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@dimensionality", endpoint.Dimensionality);
             cmd.Parameters.AddWithValue("@timeout_ms", endpoint.TimeoutMs);
             cmd.Parameters.AddWithValue("@enabled", endpoint.Enabled);
@@ -334,6 +342,10 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 Provider = ParseEnum(reader["provider"], ModelProviderEnum.OpenAI),
                 BaseUrl = reader["base_url"].ToString()!,
                 Model = SqlServerDatabaseDriver.NullableString(reader["model"]),
+                Region = SqlServerDatabaseDriver.NullableString(reader["region"]),
+                Project = SqlServerDatabaseDriver.NullableString(reader["project"]),
+                ApiVersion = SqlServerDatabaseDriver.NullableString(reader["api_version"]),
+                AccessKeyId = SqlServerDatabaseDriver.NullableString(reader["access_key_id"]),
                 Dimensionality = SqlServerDatabaseDriver.NullableInt(reader["dimensionality"]) ?? 0,
                 TimeoutMs = SqlServerDatabaseDriver.NullableInt(reader["timeout_ms"]) ?? 120000,
                 Enabled = SqlServerDatabaseDriver.NullableBool(reader, "enabled") ?? true,

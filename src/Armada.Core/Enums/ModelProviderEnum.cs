@@ -44,6 +44,27 @@ namespace Armada.Core.Enums
         /// Voyage AI embeddings (/v1/embeddings, Bearer auth). Embedding only.
         /// </summary>
         [EnumMember(Value = "VoyageAI")]
-        VoyageAI
+        VoyageAI,
+
+        /// <summary>
+        /// Azure OpenAI Service. Base URL is the resource endpoint, the model is the deployment name, and an
+        /// optional API version applies; authenticates with an api-key.
+        /// </summary>
+        [EnumMember(Value = "AzureOpenAI")]
+        AzureOpenAI,
+
+        /// <summary>
+        /// Google Vertex AI (Gemini on Vertex). Requires a GCP project and region; authenticates with a
+        /// service-account JSON supplied as the credential.
+        /// </summary>
+        [EnumMember(Value = "VertexAI")]
+        VertexAI,
+
+        /// <summary>
+        /// AWS Bedrock (Converse API). Requires an AWS region and an access key id + secret access key;
+        /// requests are SigV4-signed.
+        /// </summary>
+        [EnumMember(Value = "Bedrock")]
+        Bedrock
     }
 }

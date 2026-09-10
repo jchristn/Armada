@@ -147,6 +147,10 @@ namespace Armada.Core.Services
             existing.Provider = endpoint.Provider;
             existing.BaseUrl = endpoint.BaseUrl;
             existing.Model = endpoint.Model;
+            existing.Region = endpoint.Region;
+            existing.Project = endpoint.Project;
+            existing.ApiVersion = endpoint.ApiVersion;
+            existing.AccessKeyId = endpoint.AccessKeyId;
             existing.Dimensionality = endpoint.Dimensionality;
             existing.TimeoutMs = endpoint.TimeoutMs;
             existing.Enabled = endpoint.Enabled;
@@ -318,7 +322,27 @@ namespace Armada.Core.Services
         private static void ValidateShape(ModelEndpoint endpoint)
         {
             if (String.IsNullOrWhiteSpace(endpoint.Name)) throw new ArgumentException("Endpoint name is required.");
-            if (String.IsNullOrWhiteSpace(endpoint.BaseUrl)) throw new ArgumentException("Endpoint base URL is required.");
+
+            // Base URL is required for the URL-addressed providers; Vertex AI and Bedrock derive their
+            // endpoint from the region, so they require region/project/credential-identifier fields instead.
+            switch (endpoint.Provider)
+            {
+                case ModelProviderEnum.AzureOpenAI:
+                    if (String.IsNullOrWhiteSpace(endpoint.BaseUrl)) throw new ArgumentException("Azure OpenAI requires a base URL (the resource endpoint).");
+                    if (String.IsNullOrWhiteSpace(endpoint.Model)) throw new ArgumentException("Azure OpenAI requires a model, which is the deployment name.");
+                    break;
+                case ModelProviderEnum.VertexAI:
+                    if (String.IsNullOrWhiteSpace(endpoint.Project)) throw new ArgumentException("Vertex AI requires a GCP project id.");
+                    if (String.IsNullOrWhiteSpace(endpoint.Region)) throw new ArgumentException("Vertex AI requires a region.");
+                    break;
+                case ModelProviderEnum.Bedrock:
+                    if (String.IsNullOrWhiteSpace(endpoint.Region)) throw new ArgumentException("AWS Bedrock requires a region.");
+                    if (String.IsNullOrWhiteSpace(endpoint.AccessKeyId)) throw new ArgumentException("AWS Bedrock requires an access key id.");
+                    break;
+                default:
+                    if (String.IsNullOrWhiteSpace(endpoint.BaseUrl)) throw new ArgumentException("Endpoint base URL is required.");
+                    break;
+            }
 
             string? reason = ModelEndpointClientFactory.UnsupportedReason(endpoint.Provider, endpoint.Kind);
             if (reason != null) throw new ArgumentException(reason);

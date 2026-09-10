@@ -2194,7 +2194,7 @@ export interface Harbor {
 }
 
 export type ModelEndpointKind = 'Embedding' | 'Inference';
-export type ModelProvider = 'Ollama' | 'OpenAI' | 'OpenAICompatible' | 'Anthropic' | 'Gemini' | 'VoyageAI';
+export type ModelProvider = 'Ollama' | 'OpenAI' | 'OpenAICompatible' | 'Anthropic' | 'Gemini' | 'VoyageAI' | 'AzureOpenAI' | 'VertexAI' | 'Bedrock';
 export type EndpointHealthStatus = 'Unknown' | 'Healthy' | 'Unhealthy';
 
 export interface ModelEndpointHealthRecord {
@@ -2212,6 +2212,10 @@ export interface ModelEndpoint {
   provider: ModelProvider;
   baseUrl: string;
   model: string | null;
+  region: string | null;
+  project: string | null;
+  apiVersion: string | null;
+  accessKeyId: string | null;
   dimensionality: number;
   timeoutMs: number;
   enabled: boolean;
