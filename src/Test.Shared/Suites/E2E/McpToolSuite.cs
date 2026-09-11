@@ -2402,6 +2402,51 @@ namespace Test.Shared.Suites.E2E
                 AssertToolResultValid(result);
             }));
 
+            cases.Add(CaseAsync("memory_tools_create_search_get_delete", "MemoryTools_CreateSearchGetDelete", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient mcpClient = fx.McpClient;
+                string sessionId = await InitMcpSessionAsync(mcpClient);
+
+                string uniq = Guid.NewGuid().ToString("N").Substring(0, 8);
+                JsonElement createResult = await CallToolAsync(mcpClient, sessionId, "create_memory", new
+                {
+                    type = "Semantic",
+                    topic = "test",
+                    key = "test/" + uniq,
+                    summary = "recall hook",
+                    content = "Memory content " + uniq,
+                    salience = 0.8,
+                    tags = new[] { "t1" }
+                }).ConfigureAwait(false);
+                AssertToolResultValid(createResult);
+                Memory created = JsonHelper.Deserialize<Memory>(GetToolResultText(createResult));
+                AssertStartsWith("mem_", created.Id);
+
+                // Upsert by the same key does not create a duplicate.
+                JsonElement upsertResult = await CallToolAsync(mcpClient, sessionId, "create_memory", new
+                {
+                    type = "Semantic",
+                    key = "test/" + uniq,
+                    content = "Memory content " + uniq + " (revised)"
+                }).ConfigureAwait(false);
+                AssertToolResultValid(upsertResult);
+                Memory upserted = JsonHelper.Deserialize<Memory>(GetToolResultText(upsertResult));
+                AssertEqual(created.Id, upserted.Id);
+
+                JsonElement searchResult = await CallToolAsync(mcpClient, sessionId, "search_memory", new { search = uniq }).ConfigureAwait(false);
+                AssertToolResultValid(searchResult);
+                AssertContains(created.Id, GetToolResultText(searchResult));
+
+                JsonElement getResult = await CallToolAsync(mcpClient, sessionId, "get_memory", new { memoryId = created.Id }).ConfigureAwait(false);
+                AssertToolResultValid(getResult);
+                AssertContains("(revised)", GetToolResultText(getResult));
+
+                JsonElement delResult = await CallToolAsync(mcpClient, sessionId, "delete_memory", new { memoryId = created.Id }).ConfigureAwait(false);
+                AssertToolResultValid(delResult);
+                AssertContains("deleted", GetToolResultText(delResult));
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "MCP Tool Tests",

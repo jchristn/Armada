@@ -101,6 +101,26 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Heading marking the memory-recall section, used to detect whether a template already carries it.
+        /// </summary>
+        private const string _MemoryRecallMarker = "## Recall Existing Memory";
+
+        /// <summary>
+        /// Guidance appended to every working persona template so agents recall the vessel's durable memory
+        /// before acting. The Recorder writes memory; everyone else should read it.
+        /// </summary>
+        private const string _MemoryRecallGuidance =
+            "\n" +
+            "## Recall Existing Memory\n" +
+            "Before you start, recall what is already known about this vessel. Read the vessel model context " +
+            "provided in this prompt, and use the `search_memory` MCP tool (when available) to find durable " +
+            "memories relevant to this mission -- filter by this vessel and by keywords or topics from the " +
+            "mission description, and skim episodic, semantic, and procedural memories alike. Reuse the " +
+            "conventions, decisions, and procedures already recorded instead of re-deriving them; call out " +
+            "anything you find that conflicts with what you now observe. If the memory tools are not available, " +
+            "rely on the vessel model context.\n";
+
+        /// <summary>
         /// Seed all built-in templates into the database if they don't already exist.
         /// Called on startup.
         /// </summary>
@@ -114,7 +134,16 @@ namespace Armada.Core.Services
                 bool exists = await _Database.PromptTemplates.ExistsByNameAsync(name, token).ConfigureAwait(false);
                 if (!exists)
                 {
-                    PromptTemplate template = new PromptTemplate(name, embedded.Content)
+                    // Every working persona (everyone except the Recorder itself) is reminded to recall the
+                    // vessel's durable memory before acting, so recorded knowledge is actually reused.
+                    string content = embedded.Content;
+                    if (String.Equals(embedded.Category, "persona", StringComparison.OrdinalIgnoreCase)
+                        && !String.Equals(name, "persona.recorder", StringComparison.OrdinalIgnoreCase))
+                    {
+                        content += _MemoryRecallGuidance;
+                    }
+
+                    PromptTemplate template = new PromptTemplate(name, content)
                     {
                         Description = embedded.Description,
                         Category = embedded.Category,
@@ -127,6 +156,32 @@ namespace Armada.Core.Services
             }
 
             await UpgradeLegacyPersonaTemplateReferencesAsync(token).ConfigureAwait(false);
+            await UpgradeBuiltInPersonaMemoryRecallAsync(token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Bring existing built-in persona templates up to date with the memory-recall guidance. Seeding is
+        /// existence-guarded, so a deployment created before the guidance was introduced would otherwise never
+        /// receive it. This appends the guidance (idempotently) to every built-in persona template that lacks
+        /// it, except the Recorder's own template. It never overwrites operator edits -- it only appends a
+        /// missing section -- so a local deployment picks up the latest guidance on the next startup.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        private async Task UpgradeBuiltInPersonaMemoryRecallAsync(CancellationToken token)
+        {
+            List<PromptTemplate> all = await _Database.PromptTemplates.EnumerateAsync(token).ConfigureAwait(false);
+            foreach (PromptTemplate template in all)
+            {
+                if (!template.IsBuiltIn) continue;
+                if (!String.Equals(template.Category, "persona", StringComparison.OrdinalIgnoreCase)) continue;
+                if (String.Equals(template.Name, "persona.recorder", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!String.IsNullOrEmpty(template.Content) && template.Content.Contains(_MemoryRecallMarker, StringComparison.Ordinal)) continue;
+
+                template.Content = (template.Content ?? String.Empty) + _MemoryRecallGuidance;
+                template.LastUpdateUtc = DateTime.UtcNow;
+                await _Database.PromptTemplates.UpdateAsync(template, token).ConfigureAwait(false);
+                _Logging.Debug(_Header + "appended memory-recall guidance to built-in template '" + template.Name + "'");
+            }
         }
 
         /// <summary>
