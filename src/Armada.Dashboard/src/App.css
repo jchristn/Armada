@@ -7583,6 +7583,35 @@ thead tr.column-filter-row td input.col-filter::placeholder {
     font-style: italic;
     animation: ask-thinking-fade 0.45s ease;
 }
+
+/* Ask Armada: blank-screen greeting. The parent empty-state wrapper already centers this block both
+   vertically and horizontally within the chat window. */
+.ask-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+.ask-empty-greeting {
+    margin: 0;
+    font-size: clamp(1.6rem, 3.2vw, 2.6rem);
+    font-weight: 700;
+    line-height: 1.15;
+    color: var(--text, #e6edf3);
+    animation: ask-empty-fade 0.5s ease;
+}
+.ask-empty-sub {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-dim, #94a3b8);
+}
+@keyframes ask-empty-fade {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .ask-empty-greeting { animation: none; }
+}
 @keyframes ask-thinking-fade {
     from { opacity: 0; }
     to { opacity: 1; }

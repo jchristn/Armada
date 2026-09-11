@@ -9,6 +9,7 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import CaptainChatPanel, { type ChatTurn } from '../components/shared/CaptainChatPanel';
 import { applyToolEvent } from '../components/shared/ChatToolChips';
 import { randomThinkingMessage } from '../components/askThinkingMessages';
+import { randomGreeting } from '../components/askGreetings';
 
 // Ask Armada is available with any captain.
 function isChattable(_captain: Captain): boolean {
@@ -43,6 +44,8 @@ export default function AskArmada() {
   const [toolsLoading, setToolsLoading] = useState(false);
   const [streamingEnabled, setStreamingEnabled] = useState(true);
   const [showThinking, setShowThinking] = useState(false);
+  // A single random greeting chosen once per page load, shown large on the blank chat screen.
+  const [greeting] = useState(() => randomGreeting());
   const [thinking, setThinking] = useState('');
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -255,7 +258,12 @@ export default function AskArmada() {
             notice={selectedCaptain?.runtime === 'Codex' ? t('Codex responses cannot be streamed and will arrive upon completion.') : undefined}
             assistantName={selectedCaptain?.name}
             toolRuntimeLabel={selectedCaptain?.runtime || tools?.runtime || undefined}
-            emptyState={<p>{selectedCaptain ? t('Chatting with {{name}}', { name: selectedCaptain.name }) : t('Select a captain to begin.')}</p>}
+            emptyState={(
+              <div className="ask-empty">
+                <p className="ask-empty-greeting">{greeting}</p>
+                <p className="ask-empty-sub">{selectedCaptain ? t('Chatting with {{name}}', { name: selectedCaptain.name }) : t('Select a captain to begin.')}</p>
+              </div>
+            )}
             input={input}
             onInputChange={setInput}
             onSend={() => send(input)}
