@@ -224,7 +224,7 @@ export default function AskArmada() {
           )}
           {isApiEndpoint && (
             <div className="text-dim" style={{ fontSize: '0.78rem', marginBottom: '0.6rem' }}>
-              {t('This is an API-endpoint captain. It runs Armada’s built-in coding tools (read, edit, search, run) in-process against a working directory, and does not connect over MCP. Fleet, mission, and voyage orchestration tools are not available in chat.')}
+              {t('This is an API-endpoint captain. It runs Armada’s built-in coding tools (read, edit, search, run) in-process, and in this chat it can also use Armada’s orchestration tools (fleet, missions, voyages, and more), scoped to you.')}
             </div>
           )}
           {armadaMcpMissing && (
@@ -254,6 +254,7 @@ export default function AskArmada() {
             turns={turns}
             notice={selectedCaptain?.runtime === 'Codex' ? t('Codex responses cannot be streamed and will arrive upon completion.') : undefined}
             assistantName={selectedCaptain?.name}
+            toolRuntimeLabel={selectedCaptain?.runtime || tools?.runtime || undefined}
             emptyState={<p>{selectedCaptain ? t('Chatting with {{name}}', { name: selectedCaptain.name }) : t('Select a captain to begin.')}</p>}
             input={input}
             onInputChange={setInput}

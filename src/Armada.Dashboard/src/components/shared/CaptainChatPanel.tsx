@@ -43,6 +43,8 @@ interface CaptainChatPanelProps {
   inputDisabled?: boolean;
   /** Optional per-turn footer (e.g. Planning's "Open in Dispatch" action) rendered under the bubble. */
   renderTurnFooter?: (turn: ChatTurn, index: number) => ReactNode;
+  /** Optional runtime label shown on each tool card (e.g. "ApiEndpoint", "Mux"). */
+  toolRuntimeLabel?: string;
   /** Optional external ref to the scrolling chat window (callers that need to scroll it themselves). */
   windowRef?: RefObject<HTMLDivElement | null>;
   /** Optional small, always-visible notice shown at the top of the message window (e.g. a streaming caveat). */
@@ -80,6 +82,7 @@ export default function CaptainChatPanel(props: CaptainChatPanelProps) {
     notice,
     onClear,
     clearDisabled,
+    toolRuntimeLabel,
   } = props;
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -150,6 +153,7 @@ export default function CaptainChatPanel(props: CaptainChatPanelProps) {
               {turn.role === 'assistant' && (
                 <ChatToolChips
                   tools={turn.tools}
+                  runtimeLabel={toolRuntimeLabel}
                   runningLabel={t('running…')}
                   argumentsLabel={t('Arguments')}
                   resultLabel={t('Result')}

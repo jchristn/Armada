@@ -7638,6 +7638,27 @@ thead tr.column-filter-row td input.col-filter::placeholder {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    flex: 0 0 auto;
+}
+.chat-tool-runtime {
+    flex: 0 0 auto;
+    padding: 0.02rem 0.35rem;
+    border-radius: 0.5rem;
+    background: var(--surface-muted, rgba(148, 163, 184, 0.16));
+    color: var(--text-dim, #94a3b8);
+    font-size: 0.66rem;
+    white-space: nowrap;
+}
+.chat-tool-result-preview {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-dim, #94a3b8);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 0.7rem;
+    opacity: 0.85;
 }
 .chat-tool-meta {
     margin-left: auto;
