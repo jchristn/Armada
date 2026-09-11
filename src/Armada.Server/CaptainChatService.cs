@@ -430,9 +430,14 @@ namespace Armada.Server
                         AuthenticateResult minted = _SessionTokenService.CreateToken(auth.TenantId!, auth.UserId!);
                         if (!String.IsNullOrEmpty(minted.Token))
                         {
+                            // Use the same canonical MCP URL captains' generated configs target
+                            // (http://localhost:<port>/mcp). The MCP listener binds to the configured
+                            // hostname (default "localhost"), and Windows HTTP.sys rejects a request whose
+                            // Host header does not match the registered prefix -- so a hardcoded 127.0.0.1
+                            // is refused with "400 Invalid Hostname". Aligning with GetMcpUrl avoids that.
                             environment = new Dictionary<string, string>
                             {
-                                ["ARMADA_MCP_URL"] = "http://127.0.0.1:" + _McpPort + "/mcp",
+                                ["ARMADA_MCP_URL"] = Armada.Core.Services.ArmadaMcpConfigBuilder.GetMcpUrl(_McpPort),
                                 ["ARMADA_MCP_TOKEN"] = minted.Token!
                             };
                         }
