@@ -10,6 +10,7 @@ namespace Armada.Runtimes
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Runtimes.Interfaces;
+    using Armada.Runtimes.Mcp;
     using Armada.Runtimes.Tools;
     using Armada.Runtimes.Tools.Tasks;
     using PolyPrompt.Clients;
@@ -50,6 +51,13 @@ namespace Armada.Runtimes
 
         /// <inheritdoc />
         public event Action<int, int?>? OnProcessExited;
+
+        /// <summary>
+        /// Sentinel prefix for structured tool-activity lines emitted on the stdout channel. Consumers that
+        /// render chat tool cards recognize a line beginning with this marker as a JSON tool event rather
+        /// than reply text.
+        /// </summary>
+        public const string ToolEventMarker = "[ARMADA:TOOLEVENT] ";
 
         #endregion
 
@@ -150,6 +158,18 @@ namespace Armada.Runtimes
             if (endpoint == null)
                 throw new InvalidOperationException("API-endpoint captain has no resolvable inference endpoint. Set the captain's model endpoint to a configured Inference endpoint.");
 
+            // Optional MCP tool access: when the caller supplies an MCP endpoint (and, typically, a
+            // short-lived per-user session token) the in-process loop also exposes that server's tools to
+            // the model alongside the built-in coding tools. This is what lets an Ask Armada chat backed by
+            // an inference endpoint actually drive Armada's own orchestration tools, scoped to the caller.
+            string? mcpUrl = null;
+            string? mcpToken = null;
+            if (environment != null)
+            {
+                environment.TryGetValue("ARMADA_MCP_URL", out mcpUrl);
+                environment.TryGetValue("ARMADA_MCP_TOKEN", out mcpToken);
+            }
+
             int processId = Interlocked.Increment(ref _PidCounter);
             CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(token);
             _Running[processId] = cts;
@@ -158,7 +178,7 @@ namespace Armada.Runtimes
             OnProcessStarted?.Invoke(processId);
 
             // Run the loop in the background so StartAsync returns the pid promptly, mirroring a process launch.
-            _ = Task.Run(() => RunLoopAsync(processId, endpoint, workingDirectory, prompt, model, finalMessageFilePath, cts));
+            _ = Task.Run(() => RunLoopAsync(processId, endpoint, workingDirectory, prompt, model, finalMessageFilePath, mcpUrl, mcpToken, cts));
 
             return Task.FromResult(processId);
         }
@@ -191,11 +211,14 @@ namespace Armada.Runtimes
             string prompt,
             string? model,
             string? finalMessageFilePath,
+            string? mcpUrl,
+            string? mcpToken,
             CancellationTokenSource cts)
         {
             int exitCode = 0;
             string finalText = String.Empty;
             CancellationToken token = cts.Token;
+            McpToolClient? mcpClient = null;
 
             try
             {
@@ -205,6 +228,43 @@ namespace Armada.Runtimes
                 TaskPlan taskPlan = new TaskPlan();
                 BuiltInToolRegistry registry = new BuiltInToolRegistry(taskPlan);
                 List<PolyToolDefinition> tools = BuildToolDefinitions(registry);
+
+                // Merge in the tools advertised by the optional MCP endpoint. Built-in tool names always win
+                // on a collision so a remote server can never shadow the local file/process tools. The
+                // routing map records which tool names must be dispatched to the MCP client rather than the
+                // local registry.
+                Dictionary<string, McpToolClient> mcpRouting = new Dictionary<string, McpToolClient>(StringComparer.Ordinal);
+                if (!String.IsNullOrWhiteSpace(mcpUrl))
+                {
+                    HashSet<string> builtInNames = new HashSet<string>(StringComparer.Ordinal);
+                    foreach (PolyToolDefinition builtIn in tools) builtInNames.Add(builtIn.Name);
+
+                    try
+                    {
+                        mcpClient = new McpToolClient(mcpUrl!, mcpToken, null, _Logging);
+                        await mcpClient.InitializeAsync(token).ConfigureAwait(false);
+                        List<McpRemoteTool> remoteTools = await mcpClient.ListToolsAsync(token).ConfigureAwait(false);
+
+                        int added = 0;
+                        foreach (McpRemoteTool remote in remoteTools)
+                        {
+                            if (builtInNames.Contains(remote.Name) || mcpRouting.ContainsKey(remote.Name)) continue;
+                            Dictionary<string, object> parameters = SchemaJsonToDictionary(remote.InputSchemaJson);
+                            tools.Add(PolyToolDefinition.Function(remote.Name, remote.Description, parameters));
+                            mcpRouting[remote.Name] = mcpClient;
+                            added++;
+                        }
+
+                        Emit(processId, "[mcp] connected to " + mcpUrl + "; " + added + " tool(s) available");
+                    }
+                    catch (Exception ex)
+                    {
+                        Emit(processId, "[mcp] tool access unavailable (" + ex.Message + "); continuing with built-in tools only");
+                        try { mcpClient?.Dispose(); } catch { }
+                        mcpClient = null;
+                        mcpRouting.Clear();
+                    }
+                }
 
                 List<ChatMessage> messages = new List<ChatMessage>();
                 messages.Add(ChatMessage.System(BuildSystemPrompt(workingDirectory)));
@@ -245,7 +305,7 @@ namespace Armada.Runtimes
                     foreach (ToolCall call in response.ToolCalls)
                     {
                         token.ThrowIfCancellationRequested();
-                        string resultContent = await ExecuteToolAsync(processId, registry, call, workingDirectory, token).ConfigureAwait(false);
+                        string resultContent = await ExecuteToolAsync(processId, registry, mcpRouting, call, workingDirectory, token).ConfigureAwait(false);
                         messages.Add(ChatMessage.ToolResult(call.Id, call.Name, resultContent));
                     }
 
@@ -270,6 +330,7 @@ namespace Armada.Runtimes
             }
             finally
             {
+                try { mcpClient?.Dispose(); } catch { }
                 CloseLog();
                 _Running.TryRemove(processId, out CancellationTokenSource? _);
                 try { cts.Dispose(); } catch { }
@@ -277,22 +338,55 @@ namespace Armada.Runtimes
             }
         }
 
-        private async Task<string> ExecuteToolAsync(int processId, BuiltInToolRegistry registry, ToolCall call, string workingDirectory, CancellationToken token)
+        private async Task<string> ExecuteToolAsync(
+            int processId,
+            BuiltInToolRegistry registry,
+            Dictionary<string, McpToolClient> mcpRouting,
+            ToolCall call,
+            string workingDirectory,
+            CancellationToken token)
         {
             string argsJson = String.IsNullOrWhiteSpace(call.ArgumentsJson) ? "{}" : call.ArgumentsJson;
             Emit(processId, "[tool] " + call.Name + " " + Truncate(argsJson, 500));
+            EmitToolEvent(processId, new { phase = "started", id = call.Id, name = call.Name, arguments = Truncate(argsJson, 4000) });
+
+            long startTicks = Environment.TickCount64;
+
+            // Route to the MCP endpoint when the tool belongs to it; otherwise run the built-in local tool.
+            if (mcpRouting.TryGetValue(call.Name, out McpToolClient? mcpClient) && mcpClient != null)
+            {
+                try
+                {
+                    string mcpResult = await mcpClient.CallToolAsync(call.Name, argsJson, token).ConfigureAwait(false);
+                    long elapsed = Environment.TickCount64 - startTicks;
+                    Emit(processId, "[tool:result] " + call.Name + " ok " + Truncate(mcpResult, 500));
+                    EmitToolEvent(processId, new { phase = "completed", id = call.Id, name = call.Name, ok = true, elapsedMs = elapsed, result = Truncate(mcpResult, 16000) });
+                    return mcpResult;
+                }
+                catch (Exception ex)
+                {
+                    long elapsed = Environment.TickCount64 - startTicks;
+                    string message = "MCP tool call failed: " + ex.Message;
+                    Emit(processId, "[tool:result] " + call.Name + " failed " + message);
+                    EmitToolEvent(processId, new { phase = "completed", id = call.Id, name = call.Name, ok = false, elapsedMs = elapsed, result = message });
+                    return JsonSerializer.Serialize(new { error = "mcp_tool_failed", message });
+                }
+            }
 
             try
             {
                 using JsonDocument document = JsonDocument.Parse(argsJson);
                 ToolResult result = await registry.ExecuteAsync(call.Id ?? String.Empty, call.Name, document.RootElement, workingDirectory, token).ConfigureAwait(false);
+                long elapsed = Environment.TickCount64 - startTicks;
                 Emit(processId, "[tool:result] " + call.Name + " " + (result.Success ? "ok" : "failed") + " " + Truncate(result.Content, 500));
+                EmitToolEvent(processId, new { phase = "completed", id = call.Id, name = call.Name, ok = result.Success, elapsedMs = elapsed, result = Truncate(result.Content, 16000) });
                 return result.Content ?? String.Empty;
             }
             catch (JsonException)
             {
                 string message = "Tool arguments were not valid JSON: " + Truncate(argsJson, 200);
                 Emit(processId, "[tool:result] " + call.Name + " failed " + message);
+                EmitToolEvent(processId, new { phase = "completed", id = call.Id, name = call.Name, ok = false, result = message });
                 return JsonSerializer.Serialize(new { error = "invalid_arguments", message });
             }
         }
@@ -323,6 +417,22 @@ namespace Armada.Runtimes
             }
         }
 
+        private static Dictionary<string, object> SchemaJsonToDictionary(string? schemaJson)
+        {
+            if (String.IsNullOrWhiteSpace(schemaJson))
+                return new Dictionary<string, object> { ["type"] = "object" };
+
+            try
+            {
+                Dictionary<string, object>? parsed = JsonSerializer.Deserialize<Dictionary<string, object>>(schemaJson);
+                return parsed ?? new Dictionary<string, object> { ["type"] = "object" };
+            }
+            catch
+            {
+                return new Dictionary<string, object> { ["type"] = "object" };
+            }
+        }
+
         private string BuildSystemPrompt(string workingDirectory)
         {
             return
@@ -339,6 +449,23 @@ namespace Armada.Runtimes
             WriteLog(line);
             try { OnOutputReceived?.Invoke(processId, line); } catch { }
             try { OnStdoutReceived?.Invoke(processId, line); } catch { }
+        }
+
+        /// <summary>
+        /// Emit a structured tool-activity event on the stdout channel, marked with a sentinel prefix so a
+        /// consumer (the chat service) can lift it out into a UI tool card instead of treating it as reply
+        /// text. The payload carries the tool name, phase (started/completed), and, on completion, success,
+        /// elapsed time, and a truncated result.
+        /// </summary>
+        private void EmitToolEvent(int processId, object payload)
+        {
+            try
+            {
+                string line = ToolEventMarker + JsonSerializer.Serialize(payload);
+                WriteLog(line);
+                OnStdoutReceived?.Invoke(processId, line);
+            }
+            catch { }
         }
 
         private static string Truncate(string? value, int max)

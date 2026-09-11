@@ -31,6 +31,8 @@ namespace Armada.Server
         private readonly AgentRuntimeFactory _RuntimeFactory;
         private readonly ArmadaWebSocketHub? _WebSocketHub;
         private readonly IPromptTemplateService? _PromptTemplates;
+        private readonly ISessionTokenService? _SessionTokenService;
+        private readonly int _McpPort;
         private readonly LoggingModule _Logging;
         private readonly string _Header = "[CaptainChatService] ";
 
@@ -49,13 +51,20 @@ namespace Armada.Server
         /// <param name="runtimeFactory">Agent runtime factory used to launch the captain's CLI headlessly.</param>
         /// <param name="webSocketHub">WebSocket hub used to stream reply chunks live; may be null.</param>
         /// <param name="promptTemplates">Prompt template service used to resolve the Ask Armada system prompt; may be null.</param>
+        /// <param name="sessionTokenService">Session token service used to mint a short-lived per-caller token
+        /// so an in-process (ApiEndpoint) captain can reach Armada's own MCP server scoped to the caller; may
+        /// be null (MCP tool access is then disabled).</param>
+        /// <param name="mcpPort">The port Armada's MCP server listens on, used to build the in-runtime MCP
+        /// endpoint URL; a non-positive value disables MCP tool access.</param>
         /// <param name="logging">Logging module.</param>
-        public CaptainChatService(DatabaseDriver database, AgentRuntimeFactory runtimeFactory, ArmadaWebSocketHub? webSocketHub, IPromptTemplateService? promptTemplates, LoggingModule logging)
+        public CaptainChatService(DatabaseDriver database, AgentRuntimeFactory runtimeFactory, ArmadaWebSocketHub? webSocketHub, IPromptTemplateService? promptTemplates, ISessionTokenService? sessionTokenService, int mcpPort, LoggingModule logging)
         {
             _Database = database ?? throw new ArgumentNullException(nameof(database));
             _RuntimeFactory = runtimeFactory ?? throw new ArgumentNullException(nameof(runtimeFactory));
             _WebSocketHub = webSocketHub;
             _PromptTemplates = promptTemplates;
+            _SessionTokenService = sessionTokenService;
+            _McpPort = mcpPort > 0 ? mcpPort : 0;
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
         }
 
@@ -150,6 +159,31 @@ namespace Armada.Server
 
                 runtime.OnStdoutReceived += (pid, line) =>
                 {
+                    // Structured tool-activity events from the in-process (ApiEndpoint) runtime arrive as a
+                    // marked JSON line on stdout. Lift them into ask.tool card events (stamped with this
+                    // turn's id) and never let the marker line leak into the accumulated reply text.
+                    if (!String.IsNullOrEmpty(line) && line.StartsWith(ApiAgentRuntime.ToolEventMarker, StringComparison.Ordinal))
+                    {
+                        try
+                        {
+                            string toolJson = line.Substring(ApiAgentRuntime.ToolEventMarker.Length);
+                            using (JsonDocument doc = JsonDocument.Parse(toolJson))
+                            {
+                                JsonElement root = doc.RootElement;
+                                string? phase = root.TryGetProperty("phase", out JsonElement ph) && ph.ValueKind == JsonValueKind.String ? ph.GetString() : null;
+                                string? id = root.TryGetProperty("id", out JsonElement idv) && idv.ValueKind == JsonValueKind.String ? idv.GetString() : null;
+                                string? name = root.TryGetProperty("name", out JsonElement nmv) && nmv.ValueKind == JsonValueKind.String ? nmv.GetString() : null;
+                                string? arguments = root.TryGetProperty("arguments", out JsonElement av) && av.ValueKind == JsonValueKind.String ? av.GetString() : null;
+                                bool? ok = root.TryGetProperty("ok", out JsonElement okv) && (okv.ValueKind == JsonValueKind.True || okv.ValueKind == JsonValueKind.False) ? okv.GetBoolean() : (bool?)null;
+                                double? elapsedMs = root.TryGetProperty("elapsedMs", out JsonElement elv) && elv.ValueKind == JsonValueKind.Number ? elv.GetDouble() : (double?)null;
+                                string? resultText = root.TryGetProperty("result", out JsonElement rv) && rv.ValueKind == JsonValueKind.String ? rv.GetString() : null;
+                                EmitTool(turnId, new { turnId, phase, id, name, arguments, ok, elapsedMs, result = resultText });
+                            }
+                        }
+                        catch (JsonException) { }
+                        return;
+                    }
+
                     if (isClaude)
                     {
                         // Claude Code streaming-JSON: each stdout line is one JSON event. Incremental
@@ -379,12 +413,44 @@ namespace Armada.Server
                 };
                 runtime.OnProcessExited += (pid, code) => exitSource.TrySetResult(code);
 
+                // In-process (ApiEndpoint) captains have no CLI harness and thus no MCP config of their own.
+                // To let an Ask Armada chat actually drive Armada's orchestration tools, mint a short-lived
+                // session token for the caller and hand the runtime the local MCP endpoint URL plus that
+                // token. The runtime connects to Armada's own MCP server, which authenticates the token and
+                // scopes every tool call to this caller -- exactly as a real per-user MCP client would.
+                Dictionary<string, string>? environment = null;
+                if (captain.Runtime == AgentRuntimeEnum.ApiEndpoint
+                    && _SessionTokenService != null
+                    && _McpPort > 0
+                    && !String.IsNullOrEmpty(auth.TenantId)
+                    && !String.IsNullOrEmpty(auth.UserId))
+                {
+                    try
+                    {
+                        AuthenticateResult minted = _SessionTokenService.CreateToken(auth.TenantId!, auth.UserId!);
+                        if (!String.IsNullOrEmpty(minted.Token))
+                        {
+                            environment = new Dictionary<string, string>
+                            {
+                                ["ARMADA_MCP_URL"] = "http://127.0.0.1:" + _McpPort + "/mcp",
+                                ["ARMADA_MCP_TOKEN"] = minted.Token!
+                            };
+                        }
+                    }
+                    catch (Exception mintEx)
+                    {
+                        _Logging.Warn(_Header + "could not mint MCP session token for chat: " + mintEx.Message);
+                    }
+                }
+
                 processId = await runtime.StartAsync(
                     workingDirectory,
                     prompt,
+                    environment: environment,
                     finalMessageFilePath: finalMessageFilePath,
                     model: captain.Model,
                     captain: captain,
+                    mcpPort: _McpPort,
                     showThinking: request.ShowThinking,
                     token: token).ConfigureAwait(false);
 
