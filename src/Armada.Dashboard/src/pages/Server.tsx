@@ -10,6 +10,7 @@ import {
   getRebuildStatus,
   rollbackServer,
   getVesselBranches,
+  listVessels,
   downloadBackup,
   restoreBackup,
   getProxySessionContext,
@@ -17,6 +18,7 @@ import {
   type RebuildStatus,
   type BranchInfo,
 } from '../api/client';
+import type { Vessel } from '../types/models';
 import LogViewer from '../components/shared/LogViewer';
 import RefreshButton from '../components/shared/RefreshButton';
 import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
@@ -192,6 +194,7 @@ export default function Server() {
 
   const [buildRef, setBuildRef] = useState('');
   const [branches, setBranches] = useState<BranchInfo[]>([]);
+  const [vessels, setVessels] = useState<Vessel[]>([]);
   const [rebuildLogOpen, setRebuildLogOpen] = useState(false);
   const [rebuild, setRebuild] = useState<RebuildStatus | null>(null);
   const rebuildPollRef = useRef<number | null>(null);
@@ -224,6 +227,15 @@ export default function Server() {
   }, [stopRebuildPoll]);
 
   useEffect(() => stopRebuildPoll, [stopRebuildPoll]);
+
+  // Load vessels so the Armada source vessel can be picked from a dropdown.
+  useEffect(() => {
+    let cancelled = false;
+    listVessels({ pageSize: 9999 })
+      .then((r) => { if (!cancelled) setVessels(r.objects || []); })
+      .catch(() => { if (!cancelled) setVessels([]); });
+    return () => { cancelled = true; };
+  }, []);
 
   // Load the branches of the Armada source vessel so the rebuild ref can be picked from a dropdown.
   const selfVesselId = settings?.selfVesselId ?? null;
@@ -861,20 +873,23 @@ export default function Server() {
       {settings && (
         <div className="settings-section" style={{ marginTop: '1.5rem' }}>
           <h3>{t('Rebuild Armada')}</h3>
-          <p className="settings-hint">
-            {t('Designate the vessel that holds Armada\'s own source so the "Rebuild Armada" button knows what to build. See docs/SERVER_REBUILD.md.')}
+          <p className="settings-hint" style={{ marginBottom: '1rem' }}>
+            {t('Designate the vessel that holds Armada\'s own source so the "Rebuild Armada" button knows what to build. Rebuilding forces a server restart; if you are running Harbor, restart it manually afterward.')}
           </p>
           <fieldset disabled={remoteSettingsLocked} style={{ border: 'none', margin: 0, padding: 0 }}>
             <div className="settings-grid">
               <div className="form-group">
-                <label title={t('Identifier (vsl_ prefix) of the vessel holding Armada source. Leave blank to disable rebuild.')}>{t('Self Vessel ID')}</label>
-                <input
-                  type="text"
+                <label title={t('The vessel holding Armada source. Select none to disable rebuild.')}>{t('Self Vessel ID')}</label>
+                <select
                   value={settings.selfVesselId ?? ''}
                   onChange={(e) => setSettings({ ...settings, selfVesselId: e.target.value })}
-                  placeholder="vsl_..."
-                  title={t('Identifier of the vessel that holds Armada source')}
-                />
+                  title={t('The vessel that holds Armada source')}
+                >
+                  <option value="">{t('-- none --')}</option>
+                  {vessels.map((v) => (
+                    <option key={v.id} value={v.id}>{v.name} ({v.id})</option>
+                  ))}
+                </select>
               </div>
               <div className="form-group">
                 <label title={t('Number of published build slots to keep on disk for rollback.')}>{t('Slot Retention')}</label>
