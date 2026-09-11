@@ -7853,7 +7853,7 @@ thead tr.column-filter-row td input.col-filter::placeholder {
 }
 .ask-input-form {
     flex-shrink: 0;
-    margin-top: 0;
+    margin-top: 0.75rem;
 }
 
 /* Shared captain-chat panel (Ask Armada + Planning current session). Fills its host so the window
