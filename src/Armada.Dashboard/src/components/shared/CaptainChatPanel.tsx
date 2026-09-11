@@ -189,8 +189,6 @@ export default function CaptainChatPanel(props: CaptainChatPanelProps) {
         )}
       </div>
 
-      <p className="ask-disclaimer">{t('AI can make mistakes. Check answers.')}</p>
-
       <form
         className="ask-input-form"
         style={{ display: 'flex', gap: '0.5rem' }}
@@ -224,6 +222,8 @@ export default function CaptainChatPanel(props: CaptainChatPanelProps) {
           />
         )}
       </form>
+
+      <p className="ask-disclaimer">{t('AI can make mistakes. Check answers.')}</p>
     </div>
   );
 }
