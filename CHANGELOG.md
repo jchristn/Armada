@@ -37,6 +37,12 @@ Focus: Harbors -- detaching the Admiral from the developer's machine so it can r
 - Dashboard: a Memory tab under the Configuration hub (list/filter/view/delete memories), and the Pipelines table now renders the Built-in and Active columns as compact checkmark icons.
 - The `persona.recorder` prompt (and all persona prompts) remain editable under Configuration > Prompts. Design informed by the Isis agent-memory platform: a stable upsert key to fight duplicate sprawl, salience actually used in recall ordering, and a summary recall hook.
 
+### Ask Armada tool access (ApiEndpoint captains)
+- Ask Armada chats backed by an inference endpoint (an `ApiEndpoint` captain, which runs an in-process tool-calling loop instead of a CLI harness) can now use Armada's own MCP tools -- so the assistant can actually create a vessel, dispatch, enumerate, and otherwise act on fleet state instead of describing tools it cannot reach.
+- Added a streamable-HTTP MCP client (`Armada.Runtimes/Mcp/McpToolClient`): `initialize` + `Mcp-Session-Id` handshake, `tools/list` discovery, `tools/call` execution, and JSON-or-SSE envelope parsing. The in-process runtime discovers the endpoint's tools and merges them into its tool-calling loop alongside the built-in file/process tools (built-in names win on any collision).
+- Per-caller scoping: for each chat turn the server mints a short-lived session token for the asking user and hands the runtime the local `/mcp` URL plus that token, so every tool call authenticates and is scoped to that user exactly as a real per-user MCP client would be. Tool activity surfaces as chat tool cards.
+- The default `ask.system` prompt was rewritten to be honest about capability: use only tools actually provided, never claim MCP access it cannot verify, and, when it lacks a tool for a request, say so and point to a MCP-connected captain, the dashboard, or the CLI. Existing installs upgrade the built-in prompt in place without overwriting operator edits.
+
 ---
 
 ## v0.9.0
