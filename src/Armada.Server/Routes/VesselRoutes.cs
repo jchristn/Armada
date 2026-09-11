@@ -72,6 +72,10 @@ namespace Armada.Server.Routes
         private string? ResolveRepoPath(Vessel vessel)
         {
             if (!String.IsNullOrEmpty(vessel.LocalPath) && Directory.Exists(vessel.LocalPath)) return vessel.LocalPath;
+            // A local-clone vessel (e.g. one created from a file:// URL, as the Armada self-rebuild vessel is)
+            // carries only a WorkingDirectory -- the operator's own clone. Fall back to it so git operations
+            // such as branch listing work, which is what populates the Rebuild page's branch picker.
+            if (!String.IsNullOrEmpty(vessel.WorkingDirectory) && Directory.Exists(vessel.WorkingDirectory)) return vessel.WorkingDirectory;
             if (_settings != null && !String.IsNullOrEmpty(vessel.Name))
             {
                 string candidate = Path.Combine(_settings.ReposDirectory, vessel.Name + ".git");
