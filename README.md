@@ -326,6 +326,14 @@ The proxy keeps its own routes under `/proxy-api/v1/*`, serves the shared dashbo
 
 See [docs/REMOTE_MGMT.md](docs/REMOTE_MGMT.md) and [docs/PROXY_API.md](docs/PROXY_API.md) for setup and route details.
 
+### Rebuilding Armada from the Dashboard
+
+When Armada's own source is one of its vessels, you can rebuild the Admiral and pick up landed changes without leaving the dashboard. Set **Self Vessel ID** on the Server page to the vessel holding Armada's source, then use **Rebuild Armada**: pick a branch (or type a tag/commit), and Armada builds that ref from a throwaway `git worktree` into a fresh versioned slot while the current server keeps running, backs up the database, and cuts over to the new build. The build runs with no downtime, and a failed build never disturbs the running server -- only a successful publish triggers the cutover.
+
+If the new build does not come up, **Roll Back** reverts to the previous slot (restoring the pre-rebuild database backup when the rebuild changed the schema). On a single machine you can also point `RebuildSupervisorHarborId` at an on-box Harbor to get an automatic, health-gated rollback during the cutover.
+
+See [docs/SERVER_REBUILD.md](docs/SERVER_REBUILD.md) for the design, safety rails, and REST endpoints (`POST /api/v1/server/rebuild`, `GET /api/v1/server/rebuild/status`, `POST /api/v1/server/rollback`).
+
 ## Pipelines
 
 Pipelines are the workflow layer in Armada. They let you run work through explicit stages instead of treating every task as a single agent session.

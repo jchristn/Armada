@@ -344,7 +344,8 @@ slot until Phase 2 lands.
   build-failure and a live Harbor-rollback E2E remain to add.
 - [x] **i18n / dashboard style** for T8: all new strings route through `t()`, no
   hard-coded copy; typechecks clean (`tsc --noEmit`).
-- [ ] **README/CHANGELOG** -- pending release write-up.
+- [x] **README/CHANGELOG** -- README "Rebuilding Armada from the Dashboard" section
+  and a CHANGELOG "Self-rebuild" entry under Unreleased.
 
 ## Decisions (resolved 2026-09-11)
 
