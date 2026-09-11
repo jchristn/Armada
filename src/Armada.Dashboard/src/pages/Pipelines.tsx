@@ -194,9 +194,9 @@ export default function Pipelines() {
         subtitle={t('Multi-stage workflows combining different personas')}
         actions={(
           <>
-            <button className="btn btn-primary btn-sm" onClick={openCreate}>+ {t('Pipeline')}</button>
             <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
             <RefreshButton onRefresh={load} title="Refresh pipeline data" />
+            <button className="btn btn-primary btn-sm" onClick={openCreate}>+ {t('Pipeline')}</button>
           </>
         )}
       />

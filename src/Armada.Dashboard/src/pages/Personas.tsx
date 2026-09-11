@@ -134,9 +134,9 @@ export default function Personas() {
         subtitle={t('Named configurations that define how captains behave when executing missions.')}
         actions={(
           <>
-            <button className="btn btn-primary btn-sm" onClick={openCreate}>+ {t('Persona')}</button>
             <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
             <RefreshButton onRefresh={load} title={t('Refresh persona data')} />
+            <button className="btn btn-primary btn-sm" onClick={openCreate}>+ {t('Persona')}</button>
           </>
         )}
       />

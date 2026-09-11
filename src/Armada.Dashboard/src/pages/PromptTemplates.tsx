@@ -155,11 +155,11 @@ export default function PromptTemplates() {
         subtitle={translate('Prompt templates define the instructions and structure used when generating prompts for captains and missions.')}
         actions={(
           <>
+            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
+            <RefreshButton onRefresh={load} title={translate('Refresh prompt template data')} />
             <button className="btn btn-primary btn-sm" onClick={() => navigate('/prompt-templates/create')}>
               + {translate('Prompt Template')}
             </button>
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={translate('Refresh prompt template data')} />
           </>
         )}
       />

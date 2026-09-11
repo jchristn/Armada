@@ -381,6 +381,9 @@ export default function Captains() {
         subtitle={t('AI agent harness processes that execute missions. Monitor state, current mission, and captain lifecycle.')}
         actions={(
           <>
+            <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPageNumber(1); }} />
+            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
+            <RefreshButton onRefresh={load} title={t('Refresh captain data')} />
             {selected.length > 0 && (
               <button className="btn btn-sm btn-danger" onClick={handleBulkDelete}>
                 {t('Delete Selected')} ({selected.length})
@@ -388,9 +391,6 @@ export default function Captains() {
             )}
             <button className="btn btn-sm btn-danger" onClick={handleStopAll} title={t('Stop all captain processes')}>{t('Stop All')}</button>
             <button className="btn btn-primary btn-sm" onClick={openCreate}>+ {t('Captain')}</button>
-            <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPageNumber(1); }} />
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={t('Refresh captain data')} />
           </>
         )}
       />

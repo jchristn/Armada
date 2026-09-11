@@ -303,6 +303,9 @@ export default function MergeQueue() {
         subtitle={t('Completed missions awaiting merge. Review, test, approve, and manage the merge pipeline.')}
         actions={(
           <>
+            <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPageNumber(1); }} />
+            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
+            <RefreshButton onRefresh={load} title={t('Refresh merge queue')} />
             {selected.length > 0 && (
               <button className="btn btn-sm btn-danger" onClick={handleBulkDelete}>
                 {t('Delete Selected')} ({selected.length})
@@ -313,9 +316,6 @@ export default function MergeQueue() {
               setEnqueueForm({ branchName: '', targetBranch: 'main', missionId: '', vesselId: '', testCommand: '', priority: 0 });
               setShowEnqueue(true);
             }}>+ {t('Enqueue')}</button>
-            <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPageNumber(1); }} />
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={t('Refresh merge queue')} />
           </>
         )}
       />

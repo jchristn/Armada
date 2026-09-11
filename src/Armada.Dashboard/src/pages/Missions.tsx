@@ -300,15 +300,15 @@ export default function Missions() {
               <option value="">{t('All Statuses')}</option>
               {MISSION_STATUSES.map(s => <option key={s} value={s}>{t(s)}</option>)}
             </select>
+            <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPageNumber(1); }} />
+            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
+            <RefreshButton onRefresh={load} title="Refresh mission data" />
             {selected.length > 0 && (
               <button className="btn btn-sm btn-danger" onClick={handleBulkDelete}>
                 {t('Delete Selected')} ({selected.length})
               </button>
             )}
             <button className="btn btn-primary btn-sm" onClick={openCreate}>+ {t('Mission')}</button>
-            <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPageNumber(1); }} />
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title="Refresh mission data" />
           </>
         )}
       />

@@ -170,14 +170,14 @@ export default function Fleets() {
         subtitle={t('Fleets are groups of vessels (repositories) useful for organizing and understanding relationships amongst code assets.')}
         actions={(
           <>
+            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
+            <RefreshButton onRefresh={load} title={t('Refresh fleet data')} />
             {table.selected.length > 0 && (
               <button className="btn btn-sm btn-danger" onClick={handleBulkDelete}>
                 {t('Delete Selected')} ({table.selected.length})
               </button>
             )}
             <button className="btn btn-primary btn-sm" onClick={openCreate}>+ {t('Fleet')}</button>
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={t('Refresh fleet data')} />
           </>
         )}
       />

@@ -143,14 +143,14 @@ export default function Docks() {
         subtitle={t('Git worktrees provisioned for captains. Docks are system-managed and track branch activity.')}
         actions={(
           <>
+            <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPageNumber(1); }} />
+            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
+            <RefreshButton onRefresh={load} title={t('Refresh dock data')} />
             {table.selected.length > 0 && (
               <button className="btn btn-sm btn-danger" onClick={handleBulkDelete}>
                 {t('Delete Selected')} ({table.selected.length})
               </button>
             )}
-            <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPageNumber(1); }} />
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={t('Refresh dock data')} />
           </>
         )}
       />

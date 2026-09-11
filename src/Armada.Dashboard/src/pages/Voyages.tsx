@@ -147,15 +147,15 @@ export default function Voyages() {
         subtitle={t('Batches of related missions dispatched together')}
         actions={(
           <>
+            <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPageNumber(1); }} />
+            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
+            <RefreshButton onRefresh={load} title="Refresh voyage data" />
             {table.selected.length > 0 && (
               <button className="btn btn-sm btn-danger" onClick={handleBulkCancel}>
                 {t('Cancel Selected')} ({table.selected.length})
               </button>
             )}
             <button className="btn btn-primary btn-sm" onClick={() => navigate('/voyages/create')}>+ {t('Voyage')}</button>
-            <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPageNumber(1); }} />
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title="Refresh voyage data" />
           </>
         )}
       />

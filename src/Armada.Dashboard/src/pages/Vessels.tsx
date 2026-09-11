@@ -326,18 +326,15 @@ export default function Vessels() {
         subtitle={t('Git repositories registered with Armada')}
         actions={(
           <>
-            <button className="btn btn-sm" onClick={() => navigate('/workspace')}>
-              {t('Workspace')}
-            </button>
+            <UserScopeFilter value={userScope} onChange={setUserScope} />
+            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
+            <RefreshButton onRefresh={load} title="Refresh vessel data" />
             {table.selected.length > 0 && (
               <button className="btn btn-sm btn-danger" onClick={handleBulkDelete}>
                 {t('Delete Selected')} ({table.selected.length})
               </button>
             )}
             <button className="btn btn-primary btn-sm" onClick={openCreate}>+ {t('Vessel')}</button>
-            <UserScopeFilter value={userScope} onChange={setUserScope} />
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title="Refresh vessel data" />
           </>
         )}
       />
