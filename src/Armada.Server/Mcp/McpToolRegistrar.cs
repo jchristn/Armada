@@ -109,6 +109,7 @@ namespace Armada.Server.Mcp
             if (templateService != null) McpPromptTemplateTools.Register(register, database, templateService);
             McpPersonaTools.Register(register, database);
             McpPipelineTools.Register(register, database);
+            if (logging != null) McpMemoryTools.Register(register, database, logging);
             if (settings != null) McpBackupTools.Register(register, database, settings);
             if (modelEndpointService != null) McpModelEndpointTools.Register(register, modelEndpointService);
             if (harborService != null) McpHarborTools.Register(register, harborService);
@@ -182,6 +183,7 @@ namespace Armada.Server.Mcp
             if (templateService != null) RegisterCatalogGroup("Armada MCP / Prompt Templates", register => McpPromptTemplateTools.Register(register, database, templateService));
             RegisterCatalogGroup("Armada MCP / Personas", register => McpPersonaTools.Register(register, database));
             RegisterCatalogGroup("Armada MCP / Pipelines", register => McpPipelineTools.Register(register, database));
+            if (logging != null) RegisterCatalogGroup("Armada MCP / Memory", register => McpMemoryTools.Register(register, database, logging));
             if (settings != null) RegisterCatalogGroup("Armada MCP / Backup", register => McpBackupTools.Register(register, database, settings));
             if (modelEndpointService != null) RegisterCatalogGroup("Armada MCP / Model Endpoints", register => McpModelEndpointTools.Register(register, modelEndpointService));
             if (harborService != null) RegisterCatalogGroup("Armada MCP / Harbors", register => McpHarborTools.Register(register, harborService));

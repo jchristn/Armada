@@ -1445,6 +1445,47 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration v70 statements: add memories and memory_tags tables for durable agent memory.
+        /// </summary>
+        public static readonly string[] MigrationV70Statements = new string[]
+        {
+            @"CREATE TABLE IF NOT EXISTS memories (
+                id VARCHAR(450) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(450),
+                user_id VARCHAR(450),
+                scope VARCHAR(32) NOT NULL DEFAULT 'TenantWide',
+                type VARCHAR(64) NOT NULL DEFAULT 'Semantic',
+                topic VARCHAR(256),
+                memory_key VARCHAR(256),
+                summary TEXT,
+                content LONGTEXT NOT NULL,
+                salience DOUBLE NOT NULL DEFAULT 0.5,
+                version INT NOT NULL DEFAULT 1,
+                source_kind VARCHAR(64) NOT NULL DEFAULT 'Manual',
+                source_voyage_id VARCHAR(191),
+                source_mission_id VARCHAR(191),
+                source_vessel_id VARCHAR(191),
+                source_detail TEXT,
+                vessel_id VARCHAR(191),
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL
+            );",
+            "CREATE INDEX idx_memories_created ON memories(created_utc DESC);",
+            "CREATE INDEX idx_memories_tenant ON memories(tenant_id);",
+            "CREATE INDEX idx_memories_tenant_user ON memories(tenant_id(191), user_id(191));",
+            "CREATE INDEX idx_memories_type ON memories(type);",
+            "CREATE INDEX idx_memories_vessel ON memories(vessel_id);",
+            "CREATE INDEX idx_memories_key ON memories(tenant_id(191), memory_key(191));",
+            @"CREATE TABLE IF NOT EXISTS memory_tags (
+                memory_id VARCHAR(191) NOT NULL,
+                tag VARCHAR(191) NOT NULL,
+                PRIMARY KEY (memory_id, tag),
+                FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
+            );",
+            "CREATE INDEX idx_memory_tags_memory ON memory_tags(memory_id);"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

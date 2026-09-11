@@ -1058,6 +1058,48 @@ namespace Armada.Core.Database.SqlServer.Queries
                     @"IF COL_LENGTH('model_endpoints','project') IS NULL ALTER TABLE model_endpoints ADD project NVARCHAR(256) NULL;",
                     @"IF COL_LENGTH('model_endpoints','api_version') IS NULL ALTER TABLE model_endpoints ADD api_version NVARCHAR(64) NULL;",
                     @"IF COL_LENGTH('model_endpoints','access_key_id') IS NULL ALTER TABLE model_endpoints ADD access_key_id NVARCHAR(256) NULL;"
+                ),
+                new SchemaMigration(
+                    70,
+                    "Add memories and memory_tags tables for durable agent memory",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'memories')
+                    CREATE TABLE memories (
+                        id NVARCHAR(450) NOT NULL PRIMARY KEY,
+                        tenant_id NVARCHAR(450),
+                        user_id NVARCHAR(450),
+                        scope NVARCHAR(64) NOT NULL CONSTRAINT DF_memories_scope DEFAULT 'TenantWide',
+                        type NVARCHAR(64) NOT NULL CONSTRAINT DF_memories_type DEFAULT 'Semantic',
+                        topic NVARCHAR(450),
+                        memory_key NVARCHAR(450),
+                        summary NVARCHAR(MAX),
+                        content NVARCHAR(MAX) NOT NULL CONSTRAINT DF_memories_content DEFAULT '',
+                        salience FLOAT NOT NULL CONSTRAINT DF_memories_salience DEFAULT 0.5,
+                        version INT NOT NULL CONSTRAINT DF_memories_version DEFAULT 1,
+                        source_kind NVARCHAR(64) NOT NULL CONSTRAINT DF_memories_source_kind DEFAULT 'Manual',
+                        source_voyage_id NVARCHAR(450),
+                        source_mission_id NVARCHAR(450),
+                        source_vessel_id NVARCHAR(450),
+                        source_detail NVARCHAR(MAX),
+                        vessel_id NVARCHAR(450),
+                        created_utc NVARCHAR(450) NOT NULL,
+                        last_update_utc NVARCHAR(450) NOT NULL
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_memories_created') CREATE INDEX idx_memories_created ON memories(created_utc DESC);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_memories_tenant') CREATE INDEX idx_memories_tenant ON memories(tenant_id);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_memories_tenant_user') CREATE INDEX idx_memories_tenant_user ON memories(tenant_id, user_id);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_memories_type') CREATE INDEX idx_memories_type ON memories(type);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_memories_vessel') CREATE INDEX idx_memories_vessel ON memories(vessel_id);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_memories_key') CREATE INDEX idx_memories_key ON memories(tenant_id, memory_key);",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'memory_tags')
+                    CREATE TABLE memory_tags (
+                        memory_id NVARCHAR(450) NOT NULL,
+                        tag NVARCHAR(450) NOT NULL,
+                        CONSTRAINT PK_memory_tags PRIMARY KEY (memory_id, tag),
+                        CONSTRAINT FK_memory_tags_memory FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_memory_tags_memory') CREATE INDEX idx_memory_tags_memory ON memory_tags(memory_id);"
                 )
             };
         }

@@ -390,6 +390,11 @@ namespace Armada.Server.Mcp.Tools
                         case "persona":
                             EnumerationResult<Persona> personas = await database.Personas.EnumerateAsync(query).ConfigureAwait(false);
                             return (object)personas;
+                        case "memories":
+                        case "memory":
+                            EnumerationResult<Memory> memoryResult = await new MemoryService(database, new SyslogLogging.LoggingModule())
+                                .EnumerateAsync(callerCtx, query, request.Search).ConfigureAwait(false);
+                            return (object)memoryResult;
                         case "prompt_templates":
                         case "prompt_template":
                         case "templates":

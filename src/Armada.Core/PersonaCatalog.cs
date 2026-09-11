@@ -43,6 +43,13 @@ namespace Armada.Core
         public const string Judge = "Judge";
 
         /// <summary>
+        /// Recorder persona name. Reviews a voyage's conversation and distills durable memories
+        /// (episodic/semantic/procedural) into the vessel model context, the Armada memory store, and any
+        /// external memory facilities.
+        /// </summary>
+        public const string Recorder = "Recorder";
+
+        /// <summary>
         /// Normalize a persona name to the canonical built-in display name when applicable.
         /// </summary>
         /// <param name="persona">Persona name.</param>

@@ -1187,7 +1187,42 @@ namespace Armada.Core.Database.Postgresql.Queries
                     @"ALTER TABLE model_endpoints ADD COLUMN IF NOT EXISTS region TEXT;",
                     @"ALTER TABLE model_endpoints ADD COLUMN IF NOT EXISTS project TEXT;",
                     @"ALTER TABLE model_endpoints ADD COLUMN IF NOT EXISTS api_version TEXT;",
-                    @"ALTER TABLE model_endpoints ADD COLUMN IF NOT EXISTS access_key_id TEXT;")
+                    @"ALTER TABLE model_endpoints ADD COLUMN IF NOT EXISTS access_key_id TEXT;"),
+                new SchemaMigration(70, "Add memories and memory_tags tables for durable agent memory",
+                    @"CREATE TABLE IF NOT EXISTS memories (
+                        id TEXT PRIMARY KEY,
+                        tenant_id TEXT,
+                        user_id TEXT,
+                        scope TEXT NOT NULL DEFAULT 'TenantWide',
+                        type TEXT NOT NULL DEFAULT 'Semantic',
+                        topic TEXT,
+                        memory_key TEXT,
+                        summary TEXT,
+                        content TEXT NOT NULL DEFAULT '',
+                        salience DOUBLE PRECISION NOT NULL DEFAULT 0.5,
+                        version INTEGER NOT NULL DEFAULT 1,
+                        source_kind TEXT NOT NULL DEFAULT 'Manual',
+                        source_voyage_id TEXT,
+                        source_mission_id TEXT,
+                        source_vessel_id TEXT,
+                        source_detail TEXT,
+                        vessel_id TEXT,
+                        created_utc TIMESTAMP NOT NULL,
+                        last_update_utc TIMESTAMP NOT NULL
+                    );",
+                    @"CREATE INDEX IF NOT EXISTS idx_memories_created ON memories(created_utc DESC);",
+                    @"CREATE INDEX IF NOT EXISTS idx_memories_tenant ON memories(tenant_id);",
+                    @"CREATE INDEX IF NOT EXISTS idx_memories_tenant_user ON memories(tenant_id, user_id);",
+                    @"CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type);",
+                    @"CREATE INDEX IF NOT EXISTS idx_memories_vessel ON memories(vessel_id);",
+                    @"CREATE INDEX IF NOT EXISTS idx_memories_key ON memories(tenant_id, memory_key);",
+                    @"CREATE TABLE IF NOT EXISTS memory_tags (
+                        memory_id TEXT NOT NULL,
+                        tag TEXT NOT NULL,
+                        PRIMARY KEY (memory_id, tag),
+                        FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
+                    );",
+                    @"CREATE INDEX IF NOT EXISTS idx_memory_tags_memory ON memory_tags(memory_id);")
             };
         }
 

@@ -64,6 +64,7 @@ namespace Armada.Core.Database.Mysql
             Jobs = new JobMethods(_ConnectionString);
             ModelEndpoints = new ModelEndpointMethods(_ConnectionString);
             Harbors = new HarborMethods(_ConnectionString);
+            Memories = new MemoryMethods(_ConnectionString);
             ObjectiveRefinementSessions = new ObjectiveRefinementSessionMethods(_ConnectionString);
             ObjectiveRefinementMessages = new ObjectiveRefinementMessageMethods(_ConnectionString);
             Docks = new DockMethods(_ConnectionString);
@@ -623,6 +624,11 @@ namespace Armada.Core.Database.Mysql
                     69,
                     "Add cloud-provider fields (region, project, api_version, access_key_id) to model_endpoints",
                     TableQueries.MigrationV69Statements
+                ),
+                new SchemaMigration(
+                    70,
+                    "Add memories and memory_tags tables for durable agent memory",
+                    TableQueries.MigrationV70Statements
                 )
             };
         }

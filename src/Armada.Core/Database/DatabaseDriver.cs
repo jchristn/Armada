@@ -179,6 +179,11 @@ namespace Armada.Core.Database
         /// </summary>
         public IHarborMethods Harbors { get; protected set; } = null!;
 
+        /// <summary>
+        /// Durable agent memory operations.
+        /// </summary>
+        public IMemoryMethods Memories { get; protected set; } = null!;
+
         #endregion
 
         #region Constructors-and-Factories
