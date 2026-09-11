@@ -7636,31 +7636,45 @@ thead tr.column-filter-row td input.col-filter::placeholder {
     width: 30rem;
     max-width: 100%;
     border: 1px solid var(--border, rgba(148, 163, 184, 0.2));
+    border-left-width: 3px;
     border-radius: 6px;
     background: rgba(148, 163, 184, 0.06);
     overflow: hidden;
+    transition: background 0.12s ease, border-color 0.12s ease;
 }
+/* A status-colored left accent makes the outcome scannable at a glance without opening the card. */
+.chat-tool-running { border-left-color: var(--text-dim, #94a3b8); }
+.chat-tool-success { border-left-color: #3fb950; }
+.chat-tool-failed { border-left-color: #f85149; }
+.chat-tool[open] { background: rgba(148, 163, 184, 0.10); }
 .chat-tool-summary {
     display: flex;
     align-items: center;
     gap: 0.45rem;
-    padding: 0.22rem 0.5rem;
+    padding: 0.3rem 0.55rem;
     cursor: pointer;
     font-size: 0.72rem;
     list-style: none;
     user-select: none;
 }
+.chat-tool-summary:hover { background: rgba(148, 163, 184, 0.08); }
 .chat-tool-summary::-webkit-details-marker { display: none; }
 .chat-tool-summary::marker { content: ''; }
 .chat-tool-status {
     display: inline-flex;
-    width: 1rem;
+    align-items: center;
     justify-content: center;
+    width: 1.05rem;
+    height: 1.05rem;
+    border-radius: 50%;
+    font-size: 0.66rem;
     font-weight: 700;
+    line-height: 1;
+    flex: 0 0 auto;
 }
-.chat-tool-running .chat-tool-status { color: var(--text-dim, #94a3b8); }
-.chat-tool-success .chat-tool-status { color: #3fb950; }
-.chat-tool-failed .chat-tool-status { color: #f85149; }
+.chat-tool-running .chat-tool-status { color: var(--text-dim, #94a3b8); background: rgba(148, 163, 184, 0.18); }
+.chat-tool-success .chat-tool-status { color: #fff; background: #3fb950; }
+.chat-tool-failed .chat-tool-status { color: #fff; background: #f85149; }
 .chat-tool-name {
     font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
     font-size: 0.72rem;
