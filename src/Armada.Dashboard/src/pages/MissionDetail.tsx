@@ -394,6 +394,12 @@ export default function MissionDetail() {
   if (!mission) return <ErrorModal error={error || t('Mission not found.')} onClose={() => navigate('/missions')} />;
   const canResolveReview = mission.status === 'Review' && mission.requiresReview;
   const canMarkComplete = mission.status === 'Review' && !mission.requiresReview;
+  // A mission is landable when work is produced, a prior landing failed, or it sits in Review with no
+  // explicit review gate to resolve (requiresReview=false) -- in which case landing is how it graduates
+  // out of Review.
+  const canLand = mission.status === 'WorkProduced' || mission.status === 'LandingFailed'
+    || (mission.status === 'Review' && !mission.requiresReview);
+  const landLabel = mission.status === 'LandingFailed' ? t('Retry Landing') : t('Land');
 
   return (
     <div>
@@ -420,8 +426,8 @@ export default function MissionDetail() {
                 {t('Run Check')}
               </button>
             )}
-            {(mission.status === 'WorkProduced' || mission.status === 'LandingFailed') && (
-              <Button className="btn btn-sm btn-primary" onClick={async () => { try { await retryMissionLanding(mission.id); pushToast('success', t('Landing succeeded! Mission status updated.')); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : t('Retry landing failed.')); } }} title={t('Rebase the mission branch and re-attempt merge into the target branch')}>{t('Retry Landing')}</Button>
+            {canLand && (
+              <Button className="btn btn-sm btn-primary" onClick={async () => { try { await retryMissionLanding(mission.id); pushToast('success', t('Landing succeeded! Mission status updated.')); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : t('Landing failed.')); } }} title={t('Rebase the mission branch and merge it into the target branch, then complete the mission')}>{landLabel}</Button>
             )}
             <ActionMenu id={`mission-action-${mission.id}`} items={[
               { label: 'Edit', onClick: openEdit },
@@ -438,7 +444,7 @@ export default function MissionDetail() {
               { label: 'Transition Status', onClick: () => setShowTransition(true) },
               { label: 'View JSON', onClick: () => setJsonData({ open: true, title: t('Mission: {{title}}', { title: mission.title }), data: mission }) },
               { label: 'Restart', onClick: handleRestart },
-              ...((mission.status === 'WorkProduced' || mission.status === 'LandingFailed') ? [{ label: 'Retry Landing', onClick: async () => { try { await retryMissionLanding(mission.id); pushToast('success', t('Landing succeeded! Mission status updated.')); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : t('Retry landing failed.')); } } }] : []),
+              ...(canLand ? [{ label: mission.status === 'LandingFailed' ? 'Retry Landing' : 'Land', onClick: async () => { try { await retryMissionLanding(mission.id); pushToast('success', t('Landing succeeded! Mission status updated.')); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : t('Landing failed.')); } } }] : []),
               { label: 'Purge', danger: true, onClick: handlePurge },
               { label: 'Delete', danger: true, onClick: handleDelete },
             ]} />

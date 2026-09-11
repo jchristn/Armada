@@ -135,6 +135,72 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("retry_landing_lands_review_without_gate", "RetryLanding lands a Review mission that has no review gate", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    StubGitService git = new StubGitService();
+                    git.ExistingBranches.Add("feature/land");
+
+                    Vessel vessel = new Vessel("Review Vessel", "https://github.com/test/review");
+                    vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_landing_" + Guid.NewGuid().ToString("N"));
+                    await db.Vessels.CreateAsync(vessel);
+
+                    Mission mission = new Mission("Land me from review")
+                    {
+                        Status = MissionStatusEnum.Review,
+                        RequiresReview = false,
+                        VesselId = vessel.Id,
+                        BranchName = "feature/land"
+                    };
+                    await db.Missions.CreateAsync(mission);
+
+                    LandingService landing = new LandingService(CreateLogging(), db, CreateSettings(), git);
+                    landing.OnPerformLanding = async (m, d) =>
+                    {
+                        m.Status = MissionStatusEnum.Complete;
+                        m.CompletedUtc = DateTime.UtcNow;
+                        await db.Missions.UpdateAsync(m);
+                    };
+
+                    bool ok = await landing.RetryLandingAsync(mission.Id);
+                    AssertTrue(ok, "A Review mission with requiresReview=false should be landable");
+
+                    Mission? reread = await db.Missions.ReadAsync(mission.Id);
+                    AssertNotNull(reread);
+                    AssertEqual(MissionStatusEnum.Complete, reread!.Status);
+                }
+            }));
+
+            cases.Add(CaseAsync("retry_landing_refuses_review_gate", "RetryLanding refuses a review-gated mission (must go through Approve/Deny)", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    Vessel vessel = new Vessel("Gated Vessel", "https://github.com/test/gated");
+                    await db.Vessels.CreateAsync(vessel);
+
+                    Mission mission = new Mission("Needs explicit review")
+                    {
+                        Status = MissionStatusEnum.Review,
+                        RequiresReview = true,
+                        VesselId = vessel.Id,
+                        BranchName = "feature/y"
+                    };
+                    await db.Missions.CreateAsync(mission);
+
+                    LandingService landing = new LandingService(CreateLogging(), db, CreateSettings(), new StubGitService());
+                    landing.OnPerformLanding = (m, d) => throw new InvalidOperationException("landing must not run for a review-gated mission");
+
+                    bool ok = await landing.RetryLandingAsync(mission.Id);
+                    AssertFalse(ok, "A review-gated mission must not be landable via retry");
+
+                    Mission? reread = await db.Missions.ReadAsync(mission.Id);
+                    AssertEqual(MissionStatusEnum.Review, reread!.Status);
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Landing Conflict",

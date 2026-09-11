@@ -71,9 +71,17 @@ namespace Armada.Core.Services
                 return false;
             }
 
-            if (mission.Status != MissionStatusEnum.LandingFailed && mission.Status != MissionStatusEnum.WorkProduced)
+            // Landable directly: work produced but not yet landed, a prior landing that failed, or a mission
+            // sitting in Review that carries no explicit review gate (requiresReview=false) -- such a mission
+            // has no Approve/Deny decision to make, so landing is the way to graduate it out of Review. A
+            // Review mission that DOES require review must still be resolved via Approve/Deny, not landed here.
+            bool landableReview = mission.Status == MissionStatusEnum.Review && !mission.RequiresReview;
+            if (mission.Status != MissionStatusEnum.LandingFailed
+                && mission.Status != MissionStatusEnum.WorkProduced
+                && !landableReview)
             {
-                _Logging.Warn(_Header + "mission " + missionId + " is in status " + mission.Status + ", not LandingFailed or WorkProduced -- cannot retry");
+                _Logging.Warn(_Header + "mission " + missionId + " is in status " + mission.Status
+                    + " (requiresReview=" + mission.RequiresReview + ") -- not landable via retry");
                 return false;
             }
 
