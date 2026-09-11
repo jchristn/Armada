@@ -2249,3 +2249,30 @@ export interface ModelEndpointProbeResult {
 export interface ModelEndpointHealthSweepResponse {
   distinctBaseUrlsProbed: number;
 }
+
+export type MemoryType = 'Episodic' | 'Semantic' | 'Procedural';
+
+export type MemorySourceKind = 'Voyage' | 'Mission' | 'Vessel' | 'Conversation' | 'Manual' | 'Other';
+
+export interface Memory {
+  id: string;
+  tenantId?: string | null;
+  userId?: string | null;
+  scope: ScopeEnum;
+  type: MemoryType;
+  topic?: string | null;
+  key?: string | null;
+  summary?: string | null;
+  content: string;
+  salience: number;
+  version: number;
+  sourceKind: MemorySourceKind;
+  sourceVoyageId?: string | null;
+  sourceMissionId?: string | null;
+  sourceVesselId?: string | null;
+  sourceDetail?: string | null;
+  vesselId?: string | null;
+  tags: string[];
+  createdUtc: string;
+  lastUpdateUtc: string;
+}

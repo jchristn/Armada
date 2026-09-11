@@ -11,7 +11,7 @@ import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
 import RecordDetailModal from '../components/shared/RecordDetailModal';
-import StatusBadge from '../components/shared/StatusBadge';
+import BoolIcon from '../components/shared/BoolIcon';
 import CopyButton from '../components/shared/CopyButton';
 import RefreshButton from '../components/shared/RefreshButton';
 import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
@@ -349,8 +349,8 @@ export default function Pipelines() {
                     <td className="text-dim">{p.description || '-'}</td>
                     <td>{formatStages(p.stages)}</td>
                     <td><ScopeBadge scope={p.scope} /></td>
-                    <td>{p.isBuiltIn ? <StatusBadge status="Built-in" /> : <span className="text-dim">-</span>}</td>
-                    <td><StatusBadge status={p.active !== false ? 'Active' : 'Inactive'} /></td>
+                    <td><BoolIcon value={!!p.isBuiltIn} falseVariant="dash" trueTitle={t('Built-in')} falseTitle={t('Not built-in')} /></td>
+                    <td><BoolIcon value={p.active !== false} falseVariant="cross" trueTitle={t('Active')} falseTitle={t('Inactive')} /></td>
                     <td className="text-dim">{formatRelativeTime(p.createdUtc)}</td>
                     <td className="text-right" onClick={e => e.stopPropagation()}>
                       <ActionMenu id={`pipeline-${p.id}`} items={[

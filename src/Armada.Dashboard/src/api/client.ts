@@ -71,6 +71,7 @@ import type {
   Skill,
   Harbor,
   ModelEndpoint,
+  Memory,
   ModelEndpointProbeResult,
   ModelEndpointHealthSweepResponse,
   AskResponse,
@@ -888,6 +889,15 @@ export const validateModelEndpoint = (id: string) =>
   post<ModelEndpointProbeResult>(`/api/v1/model-endpoints/${encodeURIComponent(id)}/validate`, {});
 export const healthCheckModelEndpoints = () =>
   post<ModelEndpointHealthSweepResponse>('/api/v1/model-endpoints/health-check', {});
+
+// ==================== Memories ====================
+export const listMemories = (params?: { pageNumber?: number; pageSize?: number; filters?: Record<string, string> }) =>
+  get<EnumerationResult<Memory>>(`/api/v1/memories${buildQuery(params)}`);
+export const getMemory = (id: string) => get<Memory>(`/api/v1/memories/${encodeURIComponent(id)}`);
+export const createMemory = (data: Partial<Memory>) => post<Memory>('/api/v1/memories', data);
+export const updateMemory = (id: string, data: Partial<Memory>) =>
+  put<Memory>(`/api/v1/memories/${encodeURIComponent(id)}`, data);
+export const deleteMemory = (id: string) => del<void>(`/api/v1/memories/${encodeURIComponent(id)}`);
 
 // Ask Armada
 export const askArmada = (message: string) => post<AskResponse>('/api/v1/ask', { message });

@@ -10,6 +10,7 @@ const PromptTemplates = lazy(() => import('./PromptTemplates'));
 const Playbooks = lazy(() => import('./Playbooks'));
 const Endpoints = lazy(() => import('./Endpoints'));
 const Harbors = lazy(() => import('./Harbors'));
+const Memories = lazy(() => import('./Memories'));
 
 function panel(node: ReactNode): ReactNode {
   return <Suspense fallback={<p className="text-dim" style={{ padding: '1rem' }}>Loading...</p>}>{node}</Suspense>;
@@ -33,6 +34,7 @@ export default function Configuration() {
     { key: 'playbooks', label: 'Playbooks', render: () => panel(<Playbooks />) },
     { key: 'endpoints', label: 'Endpoints', render: () => panel(<Endpoints />) },
     { key: 'harbors', label: 'Harbors', render: () => panel(<Harbors />) },
+    { key: 'memory', label: 'Memory', render: () => panel(<Memories />) },
   ];
 
   return <Tabs tabs={tabs} defaultTabKey="workflow-profiles" ariaLabel="Configuration sections" />;
