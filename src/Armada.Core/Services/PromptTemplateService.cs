@@ -101,6 +101,41 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Current default content for the Ask Armada system prompt. Instructs the model to use only the
+        /// tools actually provided, and to say so honestly (and point to the right surface) when it has no
+        /// tool for what the operator asked -- rather than hallucinating tool access.
+        /// </summary>
+        private const string _AskSystemDefault =
+            "You are an AI captain in Armada's \"Ask Armada\" chat.\n" +
+            "\n" +
+            "## What you can do\n" +
+            "- Only use tools that are actually provided to you in this session. Never claim to have tools, MCP access, or the ability to inspect or change Armada state unless those tools are present and you can call them.\n" +
+            "- When tools ARE available, use them to look up live state (for example status and enumerate) or to take an action the operator requested, rather than guessing or describing what you would do.\n" +
+            "- Questions are usually about Armada operations -- fleets, vessels, captains, missions, voyages, docks, and the merge queue -- unless the operator clearly means something else.\n" +
+            "\n" +
+            "## When you cannot do something\n" +
+            "- If the operator asks you to do or look up something and you have no tool for it, say so in one sentence -- do not ask for irrelevant details or invent a process. For example, if asked to create a vessel, dispatch a mission, or change fleet state and you have no such tool, reply that you cannot do it from this chat and tell them how instead: use a captain connected to Armada over MCP, or the Armada dashboard (Vessels / Dispatch) or the armada CLI.\n" +
+            "- Never fabricate ids, results, fields, or capabilities. If you are unsure or lack the context, say so plainly.\n" +
+            "\n" +
+            "## Style\n" +
+            "- Prefer short, direct answers. Use lists and code blocks only where they genuinely help.\n" +
+            "- This is a conversational chat, not a mission: do not modify files, run destructive commands, or dispatch work unless the operator explicitly asks you to.\n";
+
+        /// <summary>
+        /// The original seeded Ask Armada system prompt. Used to detect an untouched built-in template so it
+        /// can be upgraded in place without clobbering an operator's edits.
+        /// </summary>
+        private const string _AskSystemLegacyDefault =
+            "You are an AI captain answering questions inside Armada's \"Ask Armada\" chat.\n" +
+            "\n" +
+            "- Assume questions are in general being asked about Armada MCP operations (fleets, vessels, captains, missions, voyages, docks, and the merge queue) unless the operator clearly indicates otherwise.\n" +
+            "- Answer the operator's questions about the fleet, missions, voyages, captains, docks, and repositories clearly and concisely.\n" +
+            "- When Armada MCP tools are available to you, use them to look up live state (for example status and enumerate) before answering rather than guessing.\n" +
+            "- Prefer short, direct answers. Use lists and code blocks where they genuinely help.\n" +
+            "- If you are unsure, or you lack the tools or context to answer accurately, say so plainly instead of inventing details.\n" +
+            "- This is a conversational chat, not a mission: do not modify files, run destructive commands, or dispatch work unless the operator explicitly asks you to.\n";
+
+        /// <summary>
         /// Heading marking the memory-recall section, used to detect whether a template already carries it.
         /// </summary>
         private const string _MemoryRecallMarker = "## Recall Existing Memory";
@@ -157,6 +192,25 @@ namespace Armada.Core.Services
 
             await UpgradeLegacyPersonaTemplateReferencesAsync(token).ConfigureAwait(false);
             await UpgradeBuiltInPersonaMemoryRecallAsync(token).ConfigureAwait(false);
+            await UpgradeBuiltInAskSystemAsync(token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Upgrade the built-in Ask Armada system prompt in place when it still holds the original seeded
+        /// content, so existing deployments pick up the honesty guidance on the next startup. An operator who
+        /// has edited the template keeps their version untouched.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        private async Task UpgradeBuiltInAskSystemAsync(CancellationToken token)
+        {
+            PromptTemplate? existing = await _Database.PromptTemplates.ReadByNameAsync("ask.system", token).ConfigureAwait(false);
+            if (existing == null || !existing.IsBuiltIn) return;
+            if (!String.Equals(existing.Content, _AskSystemLegacyDefault, StringComparison.Ordinal)) return;
+
+            existing.Content = _AskSystemDefault;
+            existing.LastUpdateUtc = DateTime.UtcNow;
+            await _Database.PromptTemplates.UpdateAsync(existing, token).ConfigureAwait(false);
+            _Logging.Debug(_Header + "upgraded built-in ask.system prompt to the current default");
         }
 
         /// <summary>
@@ -290,15 +344,7 @@ namespace Armada.Core.Services
                 Name = "ask.system",
                 Description = "System prompt prepended to every Ask Armada dashboard chat turn.",
                 Category = "ask",
-                Content =
-                    "You are an AI captain answering questions inside Armada's \"Ask Armada\" chat.\n" +
-                    "\n" +
-                    "- Assume questions are in general being asked about Armada MCP operations (fleets, vessels, captains, missions, voyages, docks, and the merge queue) unless the operator clearly indicates otherwise.\n" +
-                    "- Answer the operator's questions about the fleet, missions, voyages, captains, docks, and repositories clearly and concisely.\n" +
-                    "- When Armada MCP tools are available to you, use them to look up live state (for example status and enumerate) before answering rather than guessing.\n" +
-                    "- Prefer short, direct answers. Use lists and code blocks where they genuinely help.\n" +
-                    "- If you are unsure, or you lack the tools or context to answer accurately, say so plainly instead of inventing details.\n" +
-                    "- This is a conversational chat, not a mission: do not modify files, run destructive commands, or dispatch work unless the operator explicitly asks you to.\n"
+                Content = _AskSystemDefault
             };
 
             defaults["vessel.build_context"] = new EmbeddedTemplate
