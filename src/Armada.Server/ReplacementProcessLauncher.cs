@@ -3,7 +3,6 @@ namespace Armada.Server
     using System;
     using System.Diagnostics;
     using System.IO;
-    using System.Runtime.InteropServices;
     using ArmadaConstants = Armada.Core.Constants;
     using SyslogLogging;
 
@@ -86,25 +85,18 @@ namespace Armada.Server
 
         private static ProcessStartInfo BuildStartInfo(string fileName, string? firstArgument)
         {
-            ProcessStartInfo startInfo;
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            // UseShellExecute MUST be false: the caller sets a predecessor-PID environment variable on the
+            // start info (so the replacement waits for this instance to exit before binding the port), and
+            // .NET throws InvalidOperationException from Process.Start when environment variables are combined
+            // with UseShellExecute = true. On Windows a UseShellExecute=false child is still independent of
+            // this process's lifetime (it is not placed in a kill-on-close job object), so it survives the
+            // handover cleanly. CreateNoWindow keeps the detached Admiral headless on every platform.
+            ProcessStartInfo startInfo = new ProcessStartInfo
             {
-                startInfo = new ProcessStartInfo
-                {
-                    FileName = fileName,
-                    UseShellExecute = true,
-                    WindowStyle = ProcessWindowStyle.Minimized
-                };
-            }
-            else
-            {
-                startInfo = new ProcessStartInfo
-                {
-                    FileName = fileName,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-            }
+                FileName = fileName,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
 
             if (!String.IsNullOrEmpty(firstArgument)) startInfo.ArgumentList.Add(firstArgument);
             return startInfo;

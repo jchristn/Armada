@@ -443,14 +443,30 @@ namespace Armada.Server
             }
 
             Append(status, "Building dashboard (npm run build) from " + dashboardDir + " ...");
-            string npm = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "npm.cmd" : "npm";
-            HostCommandResult build = await _Host.RunAsync(new HostCommandRequest
+            // On Windows, invoke npm through cmd.exe rather than spawning npm.cmd directly. The npm.cmd shim
+            // locates its own CLI relative to how it was launched; started directly via CreateProcess (no
+            // shell) it can misresolve and fail with "Cannot find module ...\npm\bin\npm-cli.js". Going through
+            // cmd.exe /c resolves npm from PATH exactly like an interactive shell does.
+            HostCommandRequest buildRequest = new HostCommandRequest
             {
-                Executable = npm,
                 WorkingDirectory = dashboardDir,
-                Arguments = { "run", "build" },
                 TimeoutMs = _PublishTimeoutMs
-            }, CancellationToken.None).ConfigureAwait(false);
+            };
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                buildRequest.Executable = "cmd.exe";
+                buildRequest.Arguments.Add("/d");
+                buildRequest.Arguments.Add("/s");
+                buildRequest.Arguments.Add("/c");
+                buildRequest.Arguments.Add("npm run build");
+            }
+            else
+            {
+                buildRequest.Executable = "npm";
+                buildRequest.Arguments.Add("run");
+                buildRequest.Arguments.Add("build");
+            }
+            HostCommandResult build = await _Host.RunAsync(buildRequest, CancellationToken.None).ConfigureAwait(false);
 
             AppendCommandOutput(status, build);
             if (!build.Success)
@@ -490,6 +506,11 @@ namespace Armada.Server
                 await McpToolHelpers.PerformBackupAsync(_Database, _Settings, backupPath).ConfigureAwait(false);
                 status.BackupPath = backupPath;
                 Append(status, "Database backed up to " + backupPath + ".");
+
+                // Retain only the most recent pre-rebuild backups (the newest is this rebuild's rollback
+                // safety net); older ones from previous rebuilds are no longer needed and would otherwise
+                // accumulate forever. Bounded by the same retention count as published slots.
+                PruneOldBackups(status, backupsDir);
             }
             catch (Exception e)
             {
@@ -497,6 +518,40 @@ namespace Armada.Server
                 // surfaced loudly in the log.
                 Append(status, "WARNING: database backup failed: " + e.Message + ". Rollback after this rebuild will not be possible.");
                 _Logging.Warn(_Header + "database backup failed before rebuild " + status.RebuildId + ": " + e.Message);
+            }
+        }
+
+        /// <summary>
+        /// Delete old pre-rebuild database backups, keeping only the most recent
+        /// <see cref="ArmadaSettings.RebuildSlotRetentionCount"/> (floored at 1). Called after each new backup
+        /// is written, so backups are pruned on every rebuild rather than growing without bound. Best-effort:
+        /// a failure to delete an old backup is logged but never fails the rebuild.
+        /// </summary>
+        private void PruneOldBackups(ServerRebuildStatus status, string backupsDir)
+        {
+            try
+            {
+                int keep = Math.Max(1, _Settings.RebuildSlotRetentionCount);
+                string[] backups = Directory.GetFiles(backupsDir, "pre-rebuild-*.zip");
+                if (backups.Length <= keep) return;
+
+                List<FileInfo> ordered = new List<FileInfo>();
+                foreach (string path in backups) ordered.Add(new FileInfo(path));
+                ordered.Sort((left, right) => right.LastWriteTimeUtc.CompareTo(left.LastWriteTimeUtc));
+
+                int removed = 0;
+                for (int i = keep; i < ordered.Count; i++)
+                {
+                    try { ordered[i].Delete(); removed++; }
+                    catch (Exception e) { _Logging.Warn(_Header + "could not delete old backup " + ordered[i].FullName + ": " + e.Message); }
+                }
+
+                if (removed > 0)
+                    Append(status, "Pruned " + removed + " old database backup(s), keeping the " + keep + " most recent.");
+            }
+            catch (Exception e)
+            {
+                _Logging.Warn(_Header + "backup pruning failed: " + e.Message);
             }
         }
 
