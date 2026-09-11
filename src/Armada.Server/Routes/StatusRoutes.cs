@@ -13,6 +13,7 @@ namespace Armada.Server.Routes
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
     using SyslogLogging;
@@ -29,6 +30,8 @@ namespace Armada.Server.Routes
         private readonly DateTime _startUtc;
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly LoggingModule _logging;
+        private readonly ISlotManager _slots;
+        private readonly ServerRebuildService _rebuild;
         private readonly Func<RemoteTunnelStatus>? _getRemoteTunnelStatus;
         private readonly Func<Task>? _onRemoteControlSettingsChanged;
         private const string _HeaderRestart = "[ArmadaServer] restart: ";
@@ -43,6 +46,8 @@ namespace Armada.Server.Routes
         /// <param name="startUtc">Server start timestamp.</param>
         /// <param name="jsonOptions">JSON serializer options.</param>
         /// <param name="logging">Logging module.</param>
+        /// <param name="slots">Slot manager for the self-rebuild slot layout and pointer.</param>
+        /// <param name="rebuild">Server self-rebuild service.</param>
         /// <param name="getRemoteTunnelStatus">Optional callback that returns the current remote tunnel status.</param>
         /// <param name="onRemoteControlSettingsChanged">Optional callback invoked after remote-control settings are updated.</param>
         public StatusRoutes(
@@ -53,6 +58,8 @@ namespace Armada.Server.Routes
             DateTime startUtc,
             JsonSerializerOptions jsonOptions,
             LoggingModule logging,
+            ISlotManager slots,
+            ServerRebuildService rebuild,
             Func<RemoteTunnelStatus>? getRemoteTunnelStatus = null,
             Func<Task>? onRemoteControlSettingsChanged = null)
         {
@@ -63,6 +70,8 @@ namespace Armada.Server.Routes
             _startUtc = startUtc;
             _jsonOptions = jsonOptions;
             _logging = logging;
+            _slots = slots;
+            _rebuild = rebuild;
             _getRemoteTunnelStatus = getRemoteTunnelStatus;
             _onRemoteControlSettingsChanged = onRemoteControlSettingsChanged;
         }
@@ -329,7 +338,8 @@ namespace Armada.Server.Routes
                     }
                 }
 
-                if (!LaunchReplacementProcess())
+                string replacementExe = await ResolveCurrentExecutableAsync().ConfigureAwait(false);
+                if (!ReplacementProcessLauncher.Launch(replacementExe, _logging, _HeaderRestart))
                 {
                     req.Http.Response.StatusCode = 500;
                     return new ApiErrorResponse { Error = ApiResultEnum.InternalError, Message = "Unable to launch a replacement Admiral process; server was not restarted." };
@@ -349,6 +359,91 @@ namespace Armada.Server.Routes
                 .WithTag("Status")
                 .WithSummary("Restart the Admiral server")
                 .WithDescription("Launches a replacement Admiral process that waits for this instance to exit, then gracefully stops this instance so the replacement can bind the listening port.")
+                .WithSecurity("ApiKey"));
+
+            app.Post<ServerRebuildRequest>("/api/v1/server/rebuild", async (ApiRequest req) =>
+            {
+                if (_settings.RequireAuthForShutdown)
+                {
+                    AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                    if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
+                    {
+                        req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
+                        return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    }
+                }
+
+                ServerRebuildRequest body = new ServerRebuildRequest();
+                if (!String.IsNullOrWhiteSpace(req.Http.Request.DataAsString))
+                {
+                    body = JsonSerializer.Deserialize<ServerRebuildRequest>(req.Http.Request.DataAsString, _jsonOptions) ?? new ServerRebuildRequest();
+                }
+
+                try
+                {
+                    ServerRebuildStatus status = _rebuild.StartRebuild(body);
+                    _logging.Info(_Header + "rebuild requested via API; building slot " + (status.Slot ?? "(pending)"));
+                    return status;
+                }
+                catch (InvalidOperationException e)
+                {
+                    req.Http.Response.StatusCode = 409;
+                    return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = e.Message };
+                }
+            },
+            api => api
+                .WithTag("Status")
+                .WithSummary("Rebuild the Admiral server")
+                .WithDescription("Publishes the Armada source into a new slot from a detached worktree at the chosen ref, backs up the database, flips the slot pointer, and cuts over to the new build. Returns the initial rebuild status; poll GET /api/v1/server/rebuild/status for progress.")
+                .WithSecurity("ApiKey"));
+
+            app.Get("/api/v1/server/rebuild/status", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
+                {
+                    req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                }
+
+                ServerRebuildStatus? status = _rebuild.Latest;
+                if (status == null) return new { Status = "none" };
+                return status;
+            },
+            api => api
+                .WithTag("Status")
+                .WithSummary("Get the latest rebuild status")
+                .WithDescription("Returns the most recent Admiral rebuild status and its accumulated build log, or {\"status\":\"none\"} when no rebuild has run.")
+                .WithSecurity("ApiKey"));
+
+            app.Post("/api/v1/server/rollback", async (ApiRequest req) =>
+            {
+                if (_settings.RequireAuthForShutdown)
+                {
+                    AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                    if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
+                    {
+                        req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
+                        return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    }
+                }
+
+                try
+                {
+                    ServerRebuildStatus status = await _rebuild.RollbackAsync().ConfigureAwait(false);
+                    _logging.Info(_Header + "rollback requested via API; reverting to slot " + (status.PreviousSlot ?? "(unknown)"));
+                    return status;
+                }
+                catch (RebuildException e)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = e.Message };
+                }
+            },
+            api => api
+                .WithTag("Status")
+                .WithSummary("Roll back the last rebuild")
+                .WithDescription("Reverts to the previous slot after a successful rebuild. When the rebuild migrated the database schema, the pre-rebuild backup is restored first (discarding data written since cutover); otherwise the previous slot is relaunched with no restore. Then this instance stops so the previous slot binds.")
                 .WithSecurity("ApiKey"));
 
             // Settings
@@ -408,6 +503,12 @@ namespace Armada.Server.Routes
 
                 if (body.AutoCreatePr.HasValue)
                     _settings.AutoCreatePullRequests = body.AutoCreatePr.Value;
+
+                if (body.SelfVesselId != null)
+                    _settings.SelfVesselId = String.IsNullOrWhiteSpace(body.SelfVesselId) ? null : body.SelfVesselId.Trim();
+
+                if (body.RebuildSlotRetentionCount.HasValue)
+                    _settings.RebuildSlotRetentionCount = body.RebuildSlotRetentionCount.Value;
 
                 bool remoteControlChanged = body.RemoteControl != null;
                 if (remoteControlChanged)
@@ -480,55 +581,27 @@ namespace Armada.Server.Routes
                 .WithSecurity("ApiKey"));
         }
 
-        private bool LaunchReplacementProcess()
+        private async Task<string> ResolveCurrentExecutableAsync()
         {
-            string? executablePath = Environment.ProcessPath;
-            if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
-            {
-                _logging.Warn(_HeaderRestart + "cannot determine current executable path; restart aborted");
-                return false;
-            }
-
+            // Prefer the executable named by the active slot pointer so a restart after a rebuild comes up on
+            // the new build. Fall back to the currently running executable when no slot pointer is present
+            // (e.g. a classic non-slot install), preserving the original restart behavior.
             try
             {
-                ProcessStartInfo startInfo;
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                string? currentSlot = await _slots.ReadCurrentAsync().ConfigureAwait(false);
+                if (!String.IsNullOrWhiteSpace(currentSlot))
                 {
-                    startInfo = new ProcessStartInfo
-                    {
-                        FileName = executablePath,
-                        UseShellExecute = true,
-                        WindowStyle = ProcessWindowStyle.Minimized
-                    };
+                    string slotExe = _slots.GetSlotExecutablePath(currentSlot!);
+                    if (File.Exists(slotExe)) return slotExe;
+                    _logging.Warn(_HeaderRestart + "current slot '" + currentSlot + "' executable not found at " + slotExe + "; falling back to the running executable");
                 }
-                else
-                {
-                    startInfo = new ProcessStartInfo
-                    {
-                        FileName = executablePath,
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    };
-                }
-
-                startInfo.WorkingDirectory = Path.GetDirectoryName(executablePath) ?? Environment.CurrentDirectory;
-                startInfo.Environment[ArmadaConstants.RestartWaitPidEnvVar] = Environment.ProcessId.ToString();
-
-                Process? replacement = Process.Start(startInfo);
-                if (replacement == null)
-                {
-                    _logging.Warn(_HeaderRestart + "Process.Start returned null; restart aborted");
-                    return false;
-                }
-
-                _logging.Debug(_HeaderRestart + "launched replacement Admiral process " + replacement.Id + " from " + executablePath);
-                return true;
             }
             catch (Exception e)
             {
-                _logging.Warn(_HeaderRestart + "failed to launch replacement process: " + e.Message);
-                return false;
+                _logging.Warn(_HeaderRestart + "could not resolve the current slot; falling back to the running executable: " + e.Message);
             }
+
+            return Environment.ProcessPath ?? String.Empty;
         }
 
         private object BuildSettingsResponse()
@@ -550,6 +623,8 @@ namespace Armada.Server.Routes
                 LogDirectory = _settings.LogDirectory,
                 DocksDirectory = _settings.DocksDirectory,
                 ReposDirectory = _settings.ReposDirectory,
+                SelfVesselId = _settings.SelfVesselId,
+                RebuildSlotRetentionCount = _settings.RebuildSlotRetentionCount,
                 RemoteControl = _settings.RemoteControl
             };
         }

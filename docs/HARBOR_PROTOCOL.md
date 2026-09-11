@@ -42,6 +42,7 @@ Server to Harbor:
 | `stdin` | `HarborStdinRequest` | write to a running captain's stdin |
 | `kill` | `HarborKillRequest` | terminate a captain (graceful window, then kill tree) |
 | `git` | `HarborGitRequest` | run a git/gh command in a working directory |
+| `deferredLaunch` | `HarborDeferredLaunchRequest` | arm a one-shot cutover: after the Admiral exits, launch a new slot, health-check it, and roll back on failure |
 
 Harbor to server:
 
@@ -52,6 +53,7 @@ Harbor to server:
 | `output` | `HarborOutput` | a chunk of stdout or stderr for a job |
 | `exited` | `HarborExited` | a captain process exited (reports exit code) |
 | `gitResult` | `HarborGitResult` | the result of a git/gh request |
+| `deferredLaunchAck` | `HarborDeferredLaunchAck` | confirm a deferred-launch instruction is armed |
 | `heartbeat` | `HarborHeartbeat` | liveness plus the set of jobs still running |
 | `error` | `HarborError` | a command could not be carried out, or a job failed abnormally |
 
@@ -88,6 +90,21 @@ Delegate a git operation:
 Admiral -> git       { requestId, executable: "git", workingDirectory, arguments: ["worktree","add", ...] }
 Harbor  -> gitResult { requestId, exitCode, standardOutput, standardError }
 ```
+
+Delegate a rebuild cutover (health-gated rollback):
+
+```
+Admiral -> deferredLaunch    { requestId, launchExePath, waitForPid, workingDirectory,
+                               healthUrl, healthTimeoutSeconds, fallbackExePath, fallbackSlot, currentPointerPath }
+Harbor  -> deferredLaunchAck  { requestId, armed: true }
+(Admiral then exits.)
+Harbor  launches launchExePath with ARMADA_RESTART_WAIT_PID=waitForPid, polls healthUrl up to
+        healthTimeoutSeconds; on failure it rewrites currentPointerPath to fallbackSlot and launches
+        fallbackExePath.
+```
+
+The instruction is delivered and acknowledged while the Admiral is still alive, so the link being dead
+during the actual cutover is irrelevant. See [SERVER_REBUILD.md](SERVER_REBUILD.md).
 
 ## Reconnection
 

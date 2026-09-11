@@ -135,6 +135,11 @@ namespace Armada.Core
         public static readonly string JobIdPrefix = "job_";
 
         /// <summary>
+        /// ID prefix for Admiral self-rebuild records.
+        /// </summary>
+        public static readonly string RebuildIdPrefix = "rbd_";
+
+        /// <summary>
         /// Token-usage record ID prefix.
         /// </summary>
         public static readonly string TokenUsageIdPrefix = "tku_";

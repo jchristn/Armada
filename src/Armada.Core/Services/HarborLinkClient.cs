@@ -2,6 +2,10 @@ namespace Armada.Core.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
+    using System.IO;
+    using System.Net.Http;
+    using System.Runtime.InteropServices;
     using System.Threading.Channels;
     using Armada.Core.Harbor;
     using Armada.Core.Models;
@@ -232,7 +236,109 @@ namespace Armada.Core.Services
                 return;
             }
 
+            if (message is HarborDeferredLaunchRequest deferred)
+            {
+                HandleDeferredLaunch(deferred);
+                return;
+            }
+
             _Logging.Debug(_Header + "ignoring message " + message.GetType().Name);
+        }
+
+        private void HandleDeferredLaunch(HarborDeferredLaunchRequest deferred)
+        {
+            bool armed = !String.IsNullOrWhiteSpace(deferred.LaunchExePath) && File.Exists(deferred.LaunchExePath);
+            Enqueue(new HarborDeferredLaunchAck
+            {
+                CorrelationId = deferred.CorrelationId,
+                RequestId = deferred.RequestId,
+                Armed = armed,
+                Message = armed ? null : "Launch executable not found: " + deferred.LaunchExePath
+            });
+            Log(HarborLogDirection.Out, "Deferred launch " + (armed ? "armed" : "declined") + " [req " + deferred.RequestId + "]");
+
+            if (!armed) return;
+
+            // Perform the cutover on a detached task: the Admiral exits after this ack, so the health poll and
+            // any rollback run without the link. The launched process self-gates on the predecessor pid.
+            _ = Task.Run(async () => await RunDeferredLaunchAsync(deferred).ConfigureAwait(false));
+        }
+
+        private async Task RunDeferredLaunchAsync(HarborDeferredLaunchRequest deferred)
+        {
+            try
+            {
+                LaunchSlotProcess(deferred.LaunchExePath, deferred.WorkingDirectory, deferred.WaitForPid);
+
+                bool healthy = await PollHealthAsync(deferred.HealthUrl, deferred.HealthTimeoutSeconds).ConfigureAwait(false);
+                if (healthy)
+                {
+                    _Logging.Info(_Header + "deferred launch: new slot reported healthy at " + deferred.HealthUrl);
+                    return;
+                }
+
+                _Logging.Warn(_Header + "deferred launch: new slot did not become healthy within " + deferred.HealthTimeoutSeconds + "s; rolling back to " + deferred.FallbackSlot);
+
+                if (!String.IsNullOrWhiteSpace(deferred.CurrentPointerPath) && !String.IsNullOrWhiteSpace(deferred.FallbackSlot))
+                {
+                    try { File.WriteAllText(deferred.CurrentPointerPath, deferred.FallbackSlot); }
+                    catch (Exception e) { _Logging.Warn(_Header + "deferred launch: could not rewrite pointer " + deferred.CurrentPointerPath + ": " + e.Message); }
+                }
+
+                if (!String.IsNullOrWhiteSpace(deferred.FallbackExePath) && File.Exists(deferred.FallbackExePath))
+                    LaunchSlotProcess(deferred.FallbackExePath, deferred.WorkingDirectory, 0);
+                else
+                    _Logging.Warn(_Header + "deferred launch: fallback executable missing at " + deferred.FallbackExePath + "; cannot roll back automatically");
+            }
+            catch (Exception e)
+            {
+                _Logging.Warn(_Header + "deferred launch failed: " + e.ToString());
+            }
+        }
+
+        private void LaunchSlotProcess(string executablePath, string workingDirectory, int waitForPid)
+        {
+            string workDir = String.IsNullOrWhiteSpace(workingDirectory)
+                ? (Path.GetDirectoryName(executablePath) ?? Environment.CurrentDirectory)
+                : workingDirectory;
+
+            ProcessStartInfo startInfo;
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                startInfo = new ProcessStartInfo { FileName = executablePath, UseShellExecute = true, WindowStyle = ProcessWindowStyle.Minimized };
+            else
+                startInfo = new ProcessStartInfo { FileName = executablePath, UseShellExecute = false, CreateNoWindow = true };
+
+            startInfo.WorkingDirectory = workDir;
+            if (waitForPid > 0) startInfo.Environment[Armada.Core.Constants.RestartWaitPidEnvVar] = waitForPid.ToString();
+
+            Process? started = Process.Start(startInfo);
+            _Logging.Debug(_Header + "deferred launch: started " + executablePath + (started != null ? " (pid " + started.Id + ")" : ""));
+        }
+
+        private async Task<bool> PollHealthAsync(string healthUrl, int timeoutSeconds)
+        {
+            if (String.IsNullOrWhiteSpace(healthUrl)) return true;
+
+            DateTime deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds < 1 ? 1 : timeoutSeconds);
+            using (HttpClient client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) })
+            {
+                while (DateTime.UtcNow < deadline)
+                {
+                    try
+                    {
+                        HttpResponseMessage response = await client.GetAsync(healthUrl).ConfigureAwait(false);
+                        if (response.IsSuccessStatusCode) return true;
+                    }
+                    catch
+                    {
+                        // Not up yet; keep polling until the deadline.
+                    }
+
+                    await Task.Delay(1000).ConfigureAwait(false);
+                }
+            }
+
+            return false;
         }
 
         private async Task HandleLaunchAsync(HarborLaunchRequest launch, CancellationToken token)

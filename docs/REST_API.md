@@ -154,6 +154,9 @@ personas, pipelines, workflow profiles, project profiles, runbooks):
 | Endpoint | Method | Permission | Notes |
 |----------|--------|------------|-------|
 | `/api/v1/server/stop` | POST | NoAuthRequired\*\*\* | When `RequireAuthForShutdown` is `true`, requires global admin (`IsAdmin = true`) |
+| `/api/v1/server/rebuild` | POST | NoAuthRequired\*\*\* | Rebuild the Admiral from source and cut over. Gated by `RequireAuthForShutdown` |
+| `/api/v1/server/rebuild/status` | GET | AdminOnly | Latest rebuild status and build log |
+| `/api/v1/server/rollback` | POST | NoAuthRequired\*\*\* | Roll back the last rebuild. Gated by `RequireAuthForShutdown` |
 | `/api/v1/status/health` | GET | NoAuthRequired | |
 | `/api/v1/authenticate` | POST | NoAuthRequired | |
 | `/api/v1/tenants/lookup` | POST | NoAuthRequired | Input: email, returns matching tenants |
@@ -897,6 +900,8 @@ Returns current server settings including ports, agent configuration, system pat
   "LogDirectory": "C:\\Users\\joelc\\.armada\\logs",
   "DocksDirectory": "C:\\Users\\joelc\\.armada\\docks",
   "ReposDirectory": "C:\\Users\\joelc\\.armada\\repos",
+  "SelfVesselId": null,
+  "RebuildSlotRetentionCount": 3,
   "RemoteControl": {
     "Enabled": false,
     "TunnelUrl": null,
@@ -916,6 +921,14 @@ Returns current server settings including ports, agent configuration, system pat
 #### PUT /api/v1/settings
 
 Accepts partial updates to editable server settings. When `RemoteControl` is supplied, it replaces the full `RemoteControl` settings object.
+
+Self-rebuild fields (see [SERVER_REBUILD.md](SERVER_REBUILD.md)):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `SelfVesselId` | string | Vessel (`vsl_` prefix) holding Armada's own source for the "Rebuild Armada" feature. Send an empty string to clear. |
+| `RebuildSlotRetentionCount` | int | Published build slots to retain for rollback. Minimum 1. |
+| `RebuildSupervisorHarborId` | string | Optional on-box Harbor (`hbr_` prefix) that performs the health-gated cutover with rollback. Null uses the in-process baton. |
 
 **Request Body:** partial settings object
 
@@ -954,6 +967,55 @@ Initiates a graceful shutdown of the Admiral server.
   "Status": "shutting_down"
 }
 ```
+
+---
+
+#### POST /api/v1/server/rebuild
+
+Rebuilds the Admiral from source and cuts over to the new build. Publishes the configured Armada source (resolved from `SelfVesselId`, or an explicit `SourcePath`) into a fresh versioned slot from a detached `git worktree` at the requested ref, backs up the database, flips the active-slot pointer, and hands over to the new build. The build runs while the current instance keeps serving; only a successful server publish triggers a cutover. Returns immediately with the initial status; poll `GET /api/v1/server/rebuild/status` for progress. See [SERVER_REBUILD.md](SERVER_REBUILD.md).
+
+**Permission:** NoAuthRequired by default. When `RequireAuthForShutdown` is `true`, requires global admin (`IsAdmin = true`).
+
+**Request Body:** (all fields optional)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `SourcePath` | string | Explicit source directory. When omitted, resolved from `SelfVesselId`. |
+| `Ref` | string | Branch, tag, or commit to build. Omitted/blank builds current HEAD. |
+| `SkipDashboard` | bool | Skip the dashboard rebuild (server only). Default `false`. |
+| `RollbackTimeoutSeconds` | int | Seconds a supervising Harbor waits for health before rollback. Clamped to `[10, 600]`; default `120`. |
+
+**Response:** `200 OK` - a `ServerRebuildStatus`. `409 Conflict` when a rebuild is already in progress.
+
+```json
+{
+  "RebuildId": "rbd_...",
+  "Slot": "2026-09-11_120000_a1b2c3d",
+  "Sha": "a1b2c3d...",
+  "Status": "Building",
+  "StartedUtc": "2026-09-11T12:00:00Z"
+}
+```
+
+---
+
+#### GET /api/v1/server/rebuild/status
+
+Returns the most recent rebuild status and its accumulated build log, or `{"status":"none"}` when no rebuild has run. Values for `Status`: `Building`, `CuttingOver`, `Succeeded`, `Failed`, `RolledBack`.
+
+**Permission:** AdminOnly.
+
+**Response:** `200 OK` - a `ServerRebuildStatus` (includes `Slot`, `PreviousSlot`, `Sha`, `BackupPath`, `Error`, and `Log`).
+
+---
+
+#### POST /api/v1/server/rollback
+
+Rolls the last rebuild back to the previous slot. When the rebuild migrated the database schema (the live schema version differs from the version recorded before the rebuild), the pre-rebuild backup is restored first, discarding any data written since the cutover; otherwise the previous slot is relaunched with no restore. Then this instance stops so the previous slot binds.
+
+**Permission:** NoAuthRequired by default. When `RequireAuthForShutdown` is `true`, requires global admin (`IsAdmin = true`).
+
+**Response:** `200 OK` - the updated `ServerRebuildStatus` (`Status` = `RolledBack`). `400 Bad Request` when there is no previous slot, the previous executable is missing, or a required backup is absent.
 
 ---
 

@@ -21,6 +21,8 @@ namespace Armada.Core.Harbor
     [JsonDerivedType(typeof(HarborGitResult), "gitResult")]
     [JsonDerivedType(typeof(HarborHeartbeat), "heartbeat")]
     [JsonDerivedType(typeof(HarborError), "error")]
+    [JsonDerivedType(typeof(HarborDeferredLaunchRequest), "deferredLaunch")]
+    [JsonDerivedType(typeof(HarborDeferredLaunchAck), "deferredLaunchAck")]
     public abstract class HarborMessage
     {
         #region Public-Members

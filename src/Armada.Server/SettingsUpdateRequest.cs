@@ -77,6 +77,17 @@ namespace Armada.Server
         public bool? AutoCreatePr { get; set; }
 
         /// <summary>
+        /// Identifier (vsl_ prefix) of the vessel holding Armada's own source, used by the "Rebuild Armada"
+        /// feature. Send an empty string to clear it.
+        /// </summary>
+        public string? SelfVesselId { get; set; }
+
+        /// <summary>
+        /// Number of published rebuild slots to retain for rollback (minimum 1).
+        /// </summary>
+        public int? RebuildSlotRetentionCount { get; set; }
+
+        /// <summary>
         /// Optional remote-control tunnel settings update.
         /// When supplied, replaces the full remoteControl settings object.
         /// </summary>

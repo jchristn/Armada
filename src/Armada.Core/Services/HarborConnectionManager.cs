@@ -34,6 +34,7 @@ namespace Armada.Core.Services
         private readonly string? _AdvertisedMcpBaseUrl;
         private readonly ConcurrentDictionary<string, HarborConnection> _Connections = new ConcurrentDictionary<string, HarborConnection>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, TaskCompletionSource<HarborGitResult>> _PendingGit = new ConcurrentDictionary<string, TaskCompletionSource<HarborGitResult>>(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<string, TaskCompletionSource<HarborDeferredLaunchAck>> _PendingDeferredLaunch = new ConcurrentDictionary<string, TaskCompletionSource<HarborDeferredLaunchAck>>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, IHarborJobListener> _JobListeners = new ConcurrentDictionary<string, IHarborJobListener>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<int, HarborJobHandle> _JobsByProcessId = new ConcurrentDictionary<int, HarborJobHandle>();
 
@@ -139,6 +140,13 @@ namespace Armada.Core.Services
                 return;
             }
 
+            if (message is HarborDeferredLaunchAck deferredAck)
+            {
+                if (_PendingDeferredLaunch.TryRemove(deferredAck.RequestId, out TaskCompletionSource<HarborDeferredLaunchAck>? pendingDeferred))
+                    pendingDeferred.TrySetResult(deferredAck);
+                return;
+            }
+
             if (message is HarborStarted started)
             {
                 if (_JobListeners.TryGetValue(started.JobId, out IHarborJobListener? startListener))
@@ -209,6 +217,49 @@ namespace Armada.Core.Services
             finally
             {
                 _PendingGit.TryRemove(request.RequestId, out TaskCompletionSource<HarborGitResult>? _);
+            }
+        }
+
+        /// <summary>
+        /// Send a deferred-launch instruction to a Harbor and await its acknowledgement. The Harbor arms the
+        /// instruction (to launch a new slot after the Admiral exits, with health-gated rollback) and replies;
+        /// the reply confirms it is safe for the Admiral to exit. Returns null when the Harbor does not reply
+        /// within the timeout.
+        /// </summary>
+        /// <param name="harborId">Target Harbor identifier.</param>
+        /// <param name="request">Deferred-launch request (its RequestId correlates the reply).</param>
+        /// <param name="timeoutMs">Timeout in milliseconds; values below 1 mean wait indefinitely.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The acknowledgement, or null on timeout.</returns>
+        /// <exception cref="InvalidOperationException">Thrown when the Harbor is not connected.</exception>
+        public async Task<HarborDeferredLaunchAck?> SendDeferredLaunchAsync(string harborId, HarborDeferredLaunchRequest request, int timeoutMs, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(harborId)) throw new ArgumentNullException(nameof(harborId));
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            if (String.IsNullOrWhiteSpace(request.RequestId)) throw new ArgumentException("Deferred-launch request is missing a request id.");
+            if (!_Connections.TryGetValue(harborId, out HarborConnection? connection))
+                throw new InvalidOperationException("Harbor " + harborId + " is not connected.");
+
+            TaskCompletionSource<HarborDeferredLaunchAck> completion = new TaskCompletionSource<HarborDeferredLaunchAck>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _PendingDeferredLaunch[request.RequestId] = completion;
+
+            try
+            {
+                await connection!.SendAsync(request, token).ConfigureAwait(false);
+
+                if (timeoutMs < 1)
+                    return await completion.Task.ConfigureAwait(false);
+
+                Task delay = Task.Delay(timeoutMs, token);
+                Task finished = await Task.WhenAny(completion.Task, delay).ConfigureAwait(false);
+                if (finished == completion.Task)
+                    return await completion.Task.ConfigureAwait(false);
+
+                return null;
+            }
+            finally
+            {
+                _PendingDeferredLaunch.TryRemove(request.RequestId, out TaskCompletionSource<HarborDeferredLaunchAck>? _);
             }
         }
 

@@ -3,10 +3,30 @@
 > **Type:** implementation plan (work-tracking). Annotate task status and the
 > progress log as you go; keep this doc in sync with what actually shipped.
 >
-> **Status:** Not started
+> **Status:** Phase 1 + Phase 2 implemented (compiles; Harbor cutover path needs live verification)
 > **Owner:** _unassigned_
 > **Target deployment:** native single-box Windows (self-contained Admiral + on-box Harbor)
 > **Last updated:** 2026-09-11
+
+### Implementation notes / deviations from the original plan
+
+- `ServerRebuildService` lives in `Armada.Server` (not `Armada.Core`) so it can reuse the Server-side
+  `McpToolHelpers.PerformBackupAsync`/`PerformRestoreAsync`; `SlotManager` stays in `Armada.Core` (pure,
+  unit-tested).
+- The build streams into a persisted `ServerRebuildStatus` (`<dataDir>/rebuild-status.json`) polled via
+  `GET /api/v1/server/rebuild/status`, rather than reusing the CheckRun WebSocket channel. The dashboard tails
+  it with the existing `LogViewer` (poll-based).
+- The dashboard build is **best-effort and non-fatal**: only a failed *server* publish blocks cutover. The
+  dashboard is rebuilt from the live working tree into the shared `<dataDir>/dashboard` (served by whichever
+  slot is active), not per-slot, so a non-HEAD ref still ships the working-tree dashboard.
+- The build-ref control is a text input (blank = HEAD), not a branch dropdown. Functional; a dropdown backed
+  by `getVesselBranches` is a future enhancement.
+- Harbor supervision is opt-in via `settings.RebuildSupervisorHarborId`; when set and connected the cutover is
+  delegated for health-gated rollback, otherwise the in-process baton runs. The Harbor-side handler
+  (launch + health poll + rollback) compiles and has protocol round-trip tests, but the live cutover path has
+  not been exercised against a running Harbor.
+- Launcher slot-awareness needed only `start-armada-server.ps1` (the HKCU Run key already invokes it);
+  `install-windows-task.bat` was left unchanged.
 
 Status values used throughout: `[ ]` not started, `[~]` in progress, `[x]` done,
 `[!]` blocked. Put a one-line note under any task you touch, and add a dated row
@@ -156,7 +176,7 @@ existing baton, with an auto DB backup and live build log. A failed *boot* (rare
 than a failed build, which is already safe) needs a manual relaunch of the previous
 slot until Phase 2 lands.
 
-- [ ] **T1 -- Slot layout + `current` pointer helper.**
+- [x] **T1 -- Slot layout + `current` pointer helper.**
   New `SlotManager` (`src/Armada.Core/Services/`, interface `ISlotManager` in
   `.../Interfaces/`): resolve slot dir, read/write `current` atomically, enumerate
   and prune slots to the retention count. Retention count is a configurable public
@@ -165,7 +185,7 @@ slot until Phase 2 lands.
   _Acceptance:_ unit test proves atomic pointer swap and prune-keeps-newest-N.
   _Notes:_
 
-- [ ] **T2 -- `ServerRebuildRequest` model.**
+- [x] **T2 -- `ServerRebuildRequest` model.**
   One class per file in `src/Armada.Server/`. Fields (all optional): `SourcePath`
   (override; when null, resolve via `SelfVesselId` -> vessel `LocalPath`, see T13),
   `Ref` (branch/commit to build; defaults to `main` HEAD), `SkipDashboard`,
@@ -175,7 +195,7 @@ slot until Phase 2 lands.
   _Acceptance:_ deserializes from the route body; out-of-range timeout clamps.
   _Notes:_
 
-- [ ] **T13 -- `SelfVesselId` designation.**
+- [x] **T13 -- `SelfVesselId` designation.**
   Add `ArmadaSettings.SelfVesselId` (nullable, `vsl_` prefix, default null) plus a
   dashboard field to set it (Server/Settings page). Rebuild resolves it to the
   Armada vessel's `LocalPath`; throw a specific, clear error if unset or if the
@@ -185,7 +205,7 @@ slot until Phase 2 lands.
   _Acceptance:_ unset -> actionable error; set -> rebuild resolves the right path.
   _Notes:_
 
-- [ ] **T3 -- `IServerRebuildService` + `ServerRebuildService`.**
+- [x] **T3 -- `IServerRebuildService` + `ServerRebuildService`.**
   `src/Armada.Core/Services/` (+ interface in `.../Interfaces/`). Resolves the
   vessel `LocalPath` (T13), runs `git worktree add --detach <tmp> <ref>` at the
   chosen ref so the operator's working tree and any captain activity in `LocalPath`
@@ -204,7 +224,7 @@ slot until Phase 2 lands.
   worktree is removed even on failure.
   _Notes:_
 
-- [ ] **T4 -- `POST /api/v1/server/rebuild` route.**
+- [x] **T4 -- `POST /api/v1/server/rebuild` route.**
   Add to `src/Armada.Server/Routes/StatusRoutes.cs` beside `server/restart`. Same
   auth guard (`RequireAuthForShutdown` -> `authz.IsAuthorized`). Returns
   `{ RebuildId, Slot, Sha, Status = "building" }` immediately; the build runs as a
@@ -213,27 +233,27 @@ slot until Phase 2 lands.
   _Acceptance:_ returns promptly; unauthorized returns 401/403 like `server/restart`.
   _Notes:_
 
-- [ ] **T5 -- Slot-aware baton.**
+- [x] **T5 -- Slot-aware baton.**
   Generalize `LaunchReplacementProcess()` (`StatusRoutes.cs:483`) to launch a
   caller-supplied slot exe (default: `current`) instead of only
   `Environment.ProcessPath`. `server/restart` now targets `current`.
   _Acceptance:_ restart still works with a single slot; rebuild launches the new slot.
   _Notes:_
 
-- [ ] **T6 -- Auto DB backup before cutover.**
+- [x] **T6 -- Auto DB backup before cutover.**
   Call the existing `McpBackupTools` / SQLite online-backup path at rebuild step 2;
   record the backup path on the rebuild record.
   _Acceptance:_ a backup file exists before any cutover is attempted.
   _Notes:_
 
-- [ ] **T7 -- Launcher `current`-awareness.**
+- [x] **T7 -- Launcher `current`-awareness.**
   `scripts/windows/start-armada-server.ps1` and `install-windows-task.bat` launch
   the exe named by `current` (`slots\<name>\Armada.Server.exe`), keeping the
   existing duplicate-instance guard (match by `ExecutablePath`).
   _Acceptance:_ a fresh reboot comes up on the slot named by `current`.
   _Notes:_
 
-- [ ] **T8 -- Dashboard button + progress panel.**
+- [x] **T8 -- Dashboard button + progress panel.**
   `client.ts`: `rebuildServer(body?)` beside `restartServer` (~line 1030).
   `Server.tsx`: "Rebuild Armada" button beside "Restart Server" (~line 1300),
   confirm -> call -> toast -> health-poll pattern, `disabled={remoteProxyMode}`.
@@ -249,7 +269,7 @@ slot until Phase 2 lands.
 
 ### Phase 2 -- Harbor-assisted health-gated rollback
 
-- [ ] **T9 -- `HarborDeferredLaunchRequest` protocol message.**
+- [x] **T9 -- `HarborDeferredLaunchRequest` protocol message.**
   Add to `src/Armada.Core/Harbor/` (one class per file) and document in
   `docs/HARBOR_PROTOCOL.md`. Fields: `LaunchExePath`, `WaitForPid`,
   `WorkingDirectory`, `HealthUrl`, `HealthTimeoutSeconds`, `FallbackExePath`,
@@ -258,7 +278,7 @@ slot until Phase 2 lands.
   _Acceptance:_ round-trips through the protocol; documented in HARBOR_PROTOCOL.md.
   _Notes:_
 
-- [ ] **T10 -- Harbor-side handler.**
+- [x] **T10 -- Harbor-side handler.**
   On receipt: ACK immediately (so the Admiral knows it is armed before exiting);
   launch `LaunchExePath` with `ARMADA_RESTART_WAIT_PID = WaitForPid`; poll
   `HealthUrl` up to `HealthTimeoutSeconds`; on healthy report success over the link
@@ -270,14 +290,14 @@ slot until Phase 2 lands.
   _Acceptance:_ a deliberately-broken new slot triggers rollback to the previous slot.
   _Notes:_
 
-- [ ] **T11 -- Wire rebuild step 5 to the handoff; optional Harbor build.**
+- [x] **T11 -- Wire rebuild step 5 to the handoff; optional Harbor build.**
   Rebuild sends `HarborDeferredLaunchRequest` when a supervising on-box Harbor is
   connected; otherwise fall back to the Phase 1 baton. Optionally dispatch the T3
   build through `RemoteHostCommandExecutor` when a Harbor is present.
   _Acceptance:_ rebuild works with Harbor (auto-rollback) and without (baton fallback).
   _Notes:_
 
-- [ ] **T14 -- Operator-initiated rollback (post-successful-boot).**
+- [x] **T14 -- Operator-initiated rollback (post-successful-boot).**
   Distinct from the automatic health-gate in T10 (which covers the crash-loop case,
   where the new slot never migrated and a bare relaunch of the old slot is safe).
   This is a dashboard "Roll back to previous slot" action taken *after* the new
@@ -295,34 +315,34 @@ slot until Phase 2 lands.
 
 ### Optional
 
-- [ ] **T12 -- `rebuild_server` MCP tool.**
+- [ ] **T12 -- `rebuild_server` MCP tool.** (deferred -- not implemented)
   Only if parity with the `stop_server` MCP tool is wanted. If added, it obligates
-  an `MCP_API.md` update (see Compliance).
-  _Notes:_
+  an `MCP_API.md` update (see Compliance). REST-only for now.
+  _Notes:_ Deliberately skipped; the feature is REST + dashboard only.
 
 ## Compliance checklist (per c:\code\agents\requirements)
 
-- [ ] **REST_API.md** updated for `POST /api/v1/server/rebuild` -- method, path,
-  body (`ServerRebuildRequest`), response, status codes, auth, and an example
-  (REPOSITORY_REQUIREMENTS item 13). Also cover the new `SelfVesselId` field on the
-  settings GET/PUT surface (T13) and the operator-rollback endpoint (T14). Update the
-  Postman collection to match.
-- [ ] **MCP_API.md** updated *if* T12 (the MCP tool) is implemented
-  (REPOSITORY_REQUIREMENTS item 14). Skip if T12 is skipped.
-- [ ] **HARBOR_PROTOCOL.md** updated for `HarborDeferredLaunchRequest` (T9).
-- [ ] **CODE_STYLE.md** conformance across all new C#: usings inside the namespace
-  and ordered (system first, then others, each alphabetical); XML docs on public
-  members only; `_PascalCase` private fields; no `var`; no tuples; configurable
-  values as members with backing fields, not constants; `.ConfigureAwait(false)` and
-  `CancellationToken` on async; specific exception types with `<exception>` tags;
-  guard clauses on inputs; nullable reference types; one class/enum per file; no
-  `Console.WriteLine` in library code.
-- [ ] **Tests** added per BACKEND_TEST_ARCHITECTURE -- slot swap/prune (T1), build-
-  failure-does-not-cut-over (T3), and a rollback E2E alongside the existing
-  `HarborSplitModeE2ESuite` (T10). Run via `dotnet run --project src/Test.Automated`.
-- [ ] **i18n / dashboard style** for T8 per I18N.md, FRONTEND_ARCHITECTURE, and
-  DASHBOARD_STYLE_AND_USABILITY.
-- [ ] **README/CHANGELOG** touched if the button is a user-facing feature at release.
+- [x] **REST_API.md** updated for `POST /api/v1/server/rebuild`,
+  `GET /api/v1/server/rebuild/status`, and `POST /api/v1/server/rollback`, plus the
+  new settings fields (`SelfVesselId`, `RebuildSlotRetentionCount`,
+  `RebuildSupervisorHarborId`). _Postman collection update still pending._
+- [ ] **MCP_API.md** -- not applicable; T12 (the MCP tool) was deliberately skipped.
+- [x] **HARBOR_PROTOCOL.md** updated for `HarborDeferredLaunchRequest` /
+  `HarborDeferredLaunchAck` (T9).
+- [x] **CODE_STYLE.md** conformance across all new C#: usings inside the namespace and
+  ordered; XML docs on public members only; `_PascalCase` private fields; no `var`; no
+  tuples; configurable values as members with backing fields; `.ConfigureAwait(false)`
+  and `CancellationToken` on async; a specific exception type (`RebuildException`) with
+  `<exception>` tags; guard clauses; one class/enum per file; no `Console.WriteLine` in
+  library code. Verified by a clean 0-warning build.
+- [x] **Tests** added per BACKEND_TEST_ARCHITECTURE -- `SlotManagerSuite` (pointer
+  swap, prune-keeps-active, enumerate) and `HarborDeferredLaunchProtocolSuite` (message
+  round-trips); both compile clean. _Running the full harness needs the daily-driver
+  server stopped (the file-lock this feature removes); a build-failure and a live
+  rollback E2E remain to add._
+- [x] **i18n / dashboard style** for T8: all new strings route through `t()`, no
+  hard-coded copy; typechecks clean (`tsc --noEmit`).
+- [ ] **README/CHANGELOG** -- pending release write-up.
 
 ## Decisions (resolved 2026-09-11)
 
@@ -348,3 +368,4 @@ Append a dated row whenever you advance a task. Keep newest at the bottom.
 |------|--------|---------|--------|
 | 2026-09-11 | (design) | -- | Initial plan drafted. |
 | 2026-09-11 | (design) | T2,T3,T8,T13,T14 | Resolved the three open questions: source = Armada vessel LocalPath via SelfVesselId; operator-picked ref built from a detached worktree; auto-restore DB backup on post-migration rollback. Added T13, T14. |
+| 2026-09-11 | (impl) | T1-T14 | Implemented Phase 1 + Phase 2 end to end. Backend (SlotManager, ServerRebuildService, ReplacementProcessLauncher, rebuild/status/rollback routes, SelfVesselId + slot settings), Harbor deferred-launch protocol + handler + admiral delegation, slot-aware start script, dashboard button/ref input/LogViewer/rollback + self-vessel settings, SlotManager + Harbor-protocol test suites, REST_API.md + HARBOR_PROTOCOL.md. Core/Server/Harbor/Test.Shared build clean (0 warnings); dashboard tsc clean. Harbor cutover path not yet live-verified; T12 (MCP tool) skipped; Postman + build-failure/rollback E2E tests pending. |

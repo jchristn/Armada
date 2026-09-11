@@ -559,6 +559,32 @@ namespace Armada.Core.Settings
         public string? DefaultRuntime { get; set; } = null;
 
         /// <summary>
+        /// Identifier (vsl_ prefix) of the vessel that holds Armada's own source, used by the dashboard
+        /// "Rebuild Armada" feature to know which repository to build from. Null disables self-rebuild until
+        /// an operator designates the vessel. Preferred over a per-vessel flag so exactly one vessel can be
+        /// Armada itself. See docs/SERVER_REBUILD.md.
+        /// </summary>
+        public string? SelfVesselId { get; set; } = null;
+
+        /// <summary>
+        /// Number of published rebuild "slots" to retain on disk for rollback. Clamped to a minimum of 1;
+        /// defaults to 3. See docs/SERVER_REBUILD.md.
+        /// </summary>
+        public int RebuildSlotRetentionCount
+        {
+            get => _RebuildSlotRetentionCount;
+            set => _RebuildSlotRetentionCount = value < 1 ? 1 : value;
+        }
+
+        /// <summary>
+        /// Identifier (hbr_ prefix) of an on-box Harbor that performs the health-gated cutover during a
+        /// rebuild: it launches the new slot, polls health, and rolls back to the previous slot on failure.
+        /// Null uses the built-in in-process baton (no automatic rollback). Only meaningful when the Harbor is
+        /// co-located with the Admiral. See docs/SERVER_REBUILD.md.
+        /// </summary>
+        public string? RebuildSupervisorHarborId { get; set; } = null;
+
+        /// <summary>
         /// Enable desktop notifications on mission completion/failure.
         /// </summary>
         public bool Notifications { get; set; } = true;
@@ -669,6 +695,7 @@ namespace Armada.Core.Settings
 
         private int _AdmiralPort = Constants.DefaultAdmiralPort;
         private int _McpPort = Constants.DefaultMcpPort;
+        private int _RebuildSlotRetentionCount = 3;
         private long _MinAvailableMemoryBytesForLaunch = Constants.DefaultMinAvailableMemoryBytesForLaunch;
         private int _CaptainQuarantineMinutes = 15;
         private int _CaptainCrashLoopThreshold = 3;

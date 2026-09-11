@@ -1040,6 +1040,30 @@ export const stopServer = () => post<void>('/api/v1/server/stop');
 export const restartServer = () => post<void>('/api/v1/server/restart');
 export const resetServer = () => post<void>('/api/v1/server/reset');
 
+export interface RebuildStatus {
+  rebuildId?: string;
+  slot?: string | null;
+  previousSlot?: string | null;
+  sha?: string | null;
+  ref?: string | null;
+  backupPath?: string | null;
+  status: 'Building' | 'CuttingOver' | 'Succeeded' | 'Failed' | 'RolledBack' | 'none';
+  startedUtc?: string;
+  completedUtc?: string | null;
+  error?: string | null;
+  log?: string;
+}
+
+/** Kick off a server rebuild. Body keys are PascalCase for the C# server. */
+export const rebuildServer = (body?: { Ref?: string; SkipDashboard?: boolean; RollbackTimeoutSeconds?: number }) =>
+  post<RebuildStatus>('/api/v1/server/rebuild', body ?? {});
+
+/** Poll the latest rebuild status and its accumulated build log. */
+export const getRebuildStatus = () => get<RebuildStatus>('/api/v1/server/rebuild/status');
+
+/** Roll back the last rebuild to the previous slot (restores the pre-rebuild DB backup if the schema changed). */
+export const rollbackServer = () => post<RebuildStatus>('/api/v1/server/rollback');
+
 // ==================== Backup / Restore ====================
 /** Download backup as a ZIP file blob. The server endpoint is GET and returns binary. */
 export async function downloadBackup(): Promise<void> {

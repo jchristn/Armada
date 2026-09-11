@@ -607,7 +607,9 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Status, health, doctor, settings, server control
-            new StatusRoutes(_Database, _Settings, _Admiral, () => Stop(), _StartUtc, _JsonOptions, _Logging, _RemoteTunnel.GetStatus, _RemoteTunnel.ReloadAsync)
+            SlotManager slotManager = new SlotManager(Path.Combine(_Settings.DataDirectory, "bin"), retentionCount: _Settings.RebuildSlotRetentionCount);
+            ServerRebuildService rebuildService = new ServerRebuildService(_Database, _Settings, slotManager, new LocalHostCommandExecutor(), _Logging, () => Stop(), _HarborConnectionManager);
+            new StatusRoutes(_Database, _Settings, _Admiral, () => Stop(), _StartUtc, _JsonOptions, _Logging, slotManager, rebuildService, _RemoteTunnel.GetStatus, _RemoteTunnel.ReloadAsync)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Fleets
