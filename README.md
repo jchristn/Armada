@@ -148,7 +148,8 @@ Each step is a **persona** with its own prompt template. A sequence of personas 
 | **WorkerOnly** | Implement | Quick fixes, one-liners |
 | **Reviewed** | Implement -> Review | Normal development |
 | **Tested** | Implement -> Test -> Review | When you need coverage |
-| **FullPipeline** | Plan -> Implement -> Test -> Review | Big features, unfamiliar codebases |
+| **Recorded** | Implement -> Record | Capture durable memories from the work |
+| **FullPipeline** | Plan -> Implement -> Test -> Review -> Record | Big features, unfamiliar codebases |
 
 You can set a default pipeline per repository and override it on a single dispatch when needed. If the built-in roles are not enough, define your own personas and compose them into custom pipelines for security review, documentation, migration planning, release checks, architecture review, or any other project-specific step.
 
@@ -337,6 +338,13 @@ Pipelines are the workflow layer in Armada. They let you run work through explic
 | **Worker** | Implement | Writes code. The default -- this is what you get without pipelines. |
 | **TestEngineer** | Test | Receives the Worker's diff, identifies gaps in coverage, writes tests |
 | **Judge** | Review | Examines the diff against the original mission description. Checks completeness, correctness, scope violations, style. Produces a verdict. |
+| **Recorder** | Record | Reviews the voyage conversation and distills durable memories (episodic/semantic/procedural) into the vessel model context, the Armada memory store, and any external memory facilities. Runs as a non-gating final stage. |
+
+Every working persona is also told to recall the vessel's existing memory (via the `search_memory` MCP tool and the vessel model context) before it starts, so recorded knowledge is reused instead of re-derived.
+
+### Agent memory
+
+Armada gives agents durable **memory** that survives across sessions. The Recorder persona writes it; the memory store keeps it as episodic (what happened), semantic (standalone facts), and procedural (how-to) records with provenance, tags, and a salience used to order recall. Manage it over MCP (`search_memory`, `create_memory`, `update_memory`, `delete_memory`), over REST (`/api/v1/memories`), or in the dashboard under `Configuration > Memory`.
 
 ### Pipeline Resolution
 

@@ -515,7 +515,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 {
   "type": "object",
   "properties": {
-    "entityType": { "type": "string", "description": "Entity type to enumerate (fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, prompt_templates, pipelines, workflow_profiles, check_runs, releases, model_endpoints)" },
+    "entityType": { "type": "string", "description": "Entity type to enumerate (fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, prompt_templates, pipelines, workflow_profiles, check_runs, releases, model_endpoints, memories)" },
     "pageNumber": { "type": "integer", "description": "Page number (1-based, default 1)" },
     "pageSize": { "type": "integer", "description": "Results per page (default 10, max 1000)" },
     "order": { "type": "string", "description": "Sort order: CreatedAscending, CreatedDescending" },
@@ -596,6 +596,40 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 ```
 
 > **Note:** When enumerating `missions`, the `DiffSnapshot` field is excluded from results to keep payloads compact. Use `get_mission_diff` to retrieve the full diff for a specific mission.
+
+---
+
+## Memory
+
+Durable agent memory. The Recorder persona uses these tools to persist and consolidate what a voyage produced; other personas use `search_memory` to recall it. Memories are classified as **Episodic** (what happened), **Semantic** (standalone facts), or **Procedural** (how-to). Working memory is never stored. All memory tools are scoped to the authenticated caller.
+
+### search_memory
+
+Search memories (use before writing, to consolidate against existing ones). Ordered by salience, newest first.
+
+- `search` (string) -- substring across content, topic, tags
+- `type` (string) -- `Episodic`, `Semantic`, or `Procedural`
+- `topic` (string) -- exact topic/grouping
+- `vesselId` (string) -- associated or originating vessel
+- `pageNumber`, `pageSize` (integer)
+
+Returns a paged `EnumerationResult` of memories.
+
+### get_memory
+
+Read one memory (full content). Args: `memoryId` (required).
+
+### create_memory
+
+Create a memory, or update it in place when a memory with the same `key` already exists (idempotent consolidation). Args: `content` (required); optional `type` (default `Semantic`), `topic`, `key`, `summary`, `salience` (0.0-1.0, default 0.5), `tags`, `sourceKind`, `sourceVoyageId`, `sourceMissionId`, `sourceVesselId`, `sourceDetail`, `vesselId`, `scope`.
+
+### update_memory
+
+Update an existing memory by id; only supplied fields change; increments `version`. Args: `memoryId` (required), then any of `type`, `topic`, `key`, `summary`, `content`, `salience`, `tags`, `vesselId`, `sourceDetail`, `scope`.
+
+### delete_memory
+
+Delete a memory that has become stale or is no longer relevant. Args: `memoryId` (required).
 
 ---
 

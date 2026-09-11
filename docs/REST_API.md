@@ -3134,6 +3134,39 @@ Probe all enabled model endpoints, deduplicated by base URL, and persist each en
 
 ---
 
+### Memories
+
+Durable agent memories distilled from voyages (episodic, semantic, procedural). Scoped to the caller like other configuration entities. The API key is authenticated on every request.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/memories` | List/search memories visible to the caller. Query: `type` (Episodic/Semantic/Procedural), `topic`, `vesselId`, `search`, `pageNumber`, `pageSize`. Ordered by salience then recency. Returns a paged `EnumerationResult`. |
+| POST | `/api/v1/memories` | Create a memory, or update it in place when a memory with the same `key` already exists in the caller's tenant. Returns `201`. |
+| GET | `/api/v1/memories/{id}` | Read one memory by id. |
+| PUT | `/api/v1/memories/{id}` | Update a memory's fields; increments its `version`. |
+| DELETE | `/api/v1/memories/{id}` | Delete a memory (e.g. a stale one). Returns `204`. |
+
+**Memory fields:** `type` (`Episodic`\|`Semantic`\|`Procedural`), `topic`, `key` (stable idempotency slug), `summary` (one-line recall hook), `content`, `salience` (0.0-1.0, orders recall), `version`, `sourceKind` (`Voyage`\|`Mission`\|`Vessel`\|`Conversation`\|`Manual`\|`Other`), `sourceVoyageId`, `sourceMissionId`, `sourceVesselId`, `sourceDetail`, `vesselId`, `tags`, `scope` (`TenantWide`\|`UserSpecific`).
+
+**Create/upsert example:**
+
+```bash
+curl -X POST http://127.0.0.1:7890/api/v1/memories \
+  -H "X-Api-Key: $ARMADA_API_KEY" -H "Content-Type: application/json" \
+  -d '{
+    "type": "Semantic",
+    "topic": "code-style",
+    "key": "code-style/no-var",
+    "summary": "No var in C#",
+    "content": "This user dislikes the use of var in C# code.",
+    "salience": 0.9,
+    "tags": ["csharp", "style"],
+    "sourceKind": "Voyage"
+  }'
+```
+
+---
+
 ### Backup and Restore
 
 #### GET /api/v1/backup

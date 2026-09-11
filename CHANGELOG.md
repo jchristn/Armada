@@ -18,6 +18,16 @@ Focus: Harbors -- detaching the Admiral from the developer's machine so it can r
 - New guide `docs/HARBOR.md` covering Local vs Split mode, the link, installing and running the app, the management surfaces, and dock-affinity routing.
 - Status: the Harbor entity, management REST + MCP APIs, wire-protocol contract, and host-runner app exist today; the live split-mode link transport (the server-side WebSocket endpoint that accepts Harbor links, credential auth on the upgrade, and remote captain-process delegation) is still being rolled out.
 
+### Agent memory (Recorder persona)
+- Added durable agent memory: the new built-in **Recorder** persona reviews a voyage's conversation, classifies what is worth keeping into **episodic** / **semantic** / **procedural** memory (working memory is never stored), reconciles it against what already exists, and persists it to three targets -- the vessel model context, a native Armada memory store, and any external memory MCP tools/skills it discovers at runtime.
+- New `Memory` entity (`mem_`) with type, topic, a stable idempotency `key`, one-line `summary`, content, `salience` (used to order recall), monotonic `version`, provenance (source kind + voyage/mission/vessel ids + detail), a vessel association, and tags. Tenant/user ownership scope like other configuration entities. Persisted across SQLite, PostgreSQL, MySQL, and SQL Server (schema migration 70 adds the `memories` and `memory_tags` tables).
+- Memory REST API under `/api/v1/memories`: list/search (filter by `type`, `topic`, `vesselId`, `search`; paged; ordered by salience then recency), create/upsert, read, update, and delete.
+- Memory MCP tools: `search_memory`, `get_memory`, `create_memory` (idempotent upsert by `key`), `update_memory`, and `delete_memory`, plus a new `memories` entityType on the `enumerate` tool. All are scoped to the authenticated caller.
+- Pipelines: the Recorder is appended as a final **non-gating** stage of the built-in `FullPipeline` (existing installs upgrade in place), and a new built-in `Recorded` pipeline (Worker -> Recorder) is seeded.
+- Every other built-in persona template (Worker, Architect, Product Manager, Usability Engineer, Test Engineer, Judge) now carries a "Recall Existing Memory" note telling the agent to read the vessel model context and use `search_memory` before acting. Existing deployments pick this up on the next startup via an idempotent template upgrade that never overwrites operator edits.
+- Dashboard: a Memory tab under the Configuration hub (list/filter/view/delete memories), and the Pipelines table now renders the Built-in and Active columns as compact checkmark icons.
+- The `persona.recorder` prompt (and all persona prompts) remain editable under Configuration > Prompts. Design informed by the Isis agent-memory platform: a stable upsert key to fight duplicate sprawl, salience actually used in recall ordering, and a summary recall hook.
+
 ---
 
 ## v0.9.0
