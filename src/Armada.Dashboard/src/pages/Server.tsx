@@ -9,11 +9,13 @@ import {
   rebuildServer,
   getRebuildStatus,
   rollbackServer,
+  getVesselBranches,
   downloadBackup,
   restoreBackup,
   getProxySessionContext,
   type ProxySessionContext,
   type RebuildStatus,
+  type BranchInfo,
 } from '../api/client';
 import LogViewer from '../components/shared/LogViewer';
 import RefreshButton from '../components/shared/RefreshButton';
@@ -189,6 +191,7 @@ export default function Server() {
   const restoreFileRef = useRef<HTMLInputElement>(null);
 
   const [buildRef, setBuildRef] = useState('');
+  const [branches, setBranches] = useState<BranchInfo[]>([]);
   const [rebuildLogOpen, setRebuildLogOpen] = useState(false);
   const [rebuild, setRebuild] = useState<RebuildStatus | null>(null);
   const rebuildPollRef = useRef<number | null>(null);
@@ -221,6 +224,22 @@ export default function Server() {
   }, [stopRebuildPoll]);
 
   useEffect(() => stopRebuildPoll, [stopRebuildPoll]);
+
+  // Load the branches of the Armada source vessel so the rebuild ref can be picked from a dropdown.
+  const selfVesselId = settings?.selfVesselId ?? null;
+  useEffect(() => {
+    if (!selfVesselId) { setBranches([]); return; }
+    let cancelled = false;
+    getVesselBranches(selfVesselId)
+      .then((r) => {
+        if (cancelled) return;
+        setBranches(r.branches || []);
+        const preferred = r.defaultBranch || r.branches?.find((b) => b.isDefault)?.name;
+        if (preferred) setBuildRef((current) => current || preferred);
+      })
+      .catch(() => { if (!cancelled) setBranches([]); });
+    return () => { cancelled = true; };
+  }, [selfVesselId]);
 
   const closeConfirmDialog = useCallback(() => {
     setConfirmDialog({ open: false, message: '', onConfirm: () => {} });
@@ -1441,6 +1460,21 @@ export default function Server() {
             >
               {t('Restart Server')}
             </button>
+            {branches.length > 0 && (
+              <select
+                value={branches.some((b) => b.name === buildRef) ? buildRef : ''}
+                onChange={(e) => setBuildRef(e.target.value)}
+                disabled={remoteProxyMode}
+                title={t('Branch to build. Choose a branch or type a tag/commit in the box.')}
+              >
+                <option value="">{t('current HEAD')}</option>
+                {branches.map((b) => (
+                  <option key={b.name} value={b.name}>
+                    {b.name}{b.isDefault ? t(' (default)') : ''}
+                  </option>
+                ))}
+              </select>
+            )}
             <input
               type="text"
               value={buildRef}

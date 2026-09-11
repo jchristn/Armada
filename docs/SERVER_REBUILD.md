@@ -19,8 +19,9 @@
 - The dashboard build is **best-effort and non-fatal**: only a failed *server* publish blocks cutover. The
   dashboard is rebuilt from the live working tree into the shared `<dataDir>/dashboard` (served by whichever
   slot is active), not per-slot, so a non-HEAD ref still ships the working-tree dashboard.
-- The build-ref control is a text input (blank = HEAD), not a branch dropdown. Functional; a dropdown backed
-  by `getVesselBranches` is a future enhancement.
+- The build-ref control is a branch **dropdown** (populated from `getVesselBranches` for the self vessel,
+  default first option = current HEAD) alongside a text box for an arbitrary tag/commit; both bind the same
+  ref.
 - Harbor supervision is opt-in via `settings.RebuildSupervisorHarborId`; when set and connected the cutover is
   delegated for health-gated rollback, otherwise the in-process baton runs. The Harbor-side handler
   (launch + health poll + rollback) compiles and has protocol round-trip tests, but the live cutover path has
@@ -325,7 +326,8 @@ slot until Phase 2 lands.
 - [x] **REST_API.md** updated for `POST /api/v1/server/rebuild`,
   `GET /api/v1/server/rebuild/status`, and `POST /api/v1/server/rollback`, plus the
   new settings fields (`SelfVesselId`, `RebuildSlotRetentionCount`,
-  `RebuildSupervisorHarborId`). _Postman collection update still pending._
+  `RebuildSupervisorHarborId`). Postman collection updated (Rebuild Armada, Rebuild
+  Status, Rollback Rebuild requests + settings example).
 - [ ] **MCP_API.md** -- not applicable; T12 (the MCP tool) was deliberately skipped.
 - [x] **HARBOR_PROTOCOL.md** updated for `HarborDeferredLaunchRequest` /
   `HarborDeferredLaunchAck` (T9).
@@ -337,9 +339,9 @@ slot until Phase 2 lands.
   library code. Verified by a clean 0-warning build.
 - [x] **Tests** added per BACKEND_TEST_ARCHITECTURE -- `SlotManagerSuite` (pointer
   swap, prune-keeps-active, enumerate) and `HarborDeferredLaunchProtocolSuite` (message
-  round-trips); both compile clean. _Running the full harness needs the daily-driver
-  server stopped (the file-lock this feature removes); a build-failure and a live
-  rollback E2E remain to add._
+  round-trips); **6/6 passing** (`dotnet run --project src/Test.Automated`, suite
+  filter `Services.SlotManager,Services.HarborDeferredLaunchProtocol`). A
+  build-failure and a live Harbor-rollback E2E remain to add.
 - [x] **i18n / dashboard style** for T8: all new strings route through `t()`, no
   hard-coded copy; typechecks clean (`tsc --noEmit`).
 - [ ] **README/CHANGELOG** -- pending release write-up.
@@ -368,4 +370,5 @@ Append a dated row whenever you advance a task. Keep newest at the bottom.
 |------|--------|---------|--------|
 | 2026-09-11 | (design) | -- | Initial plan drafted. |
 | 2026-09-11 | (design) | T2,T3,T8,T13,T14 | Resolved the three open questions: source = Armada vessel LocalPath via SelfVesselId; operator-picked ref built from a detached worktree; auto-restore DB backup on post-migration rollback. Added T13, T14. |
+| 2026-09-11 | (impl) | T8 | Branch dropdown (getVesselBranches) added to the rebuild ref control; Postman collection updated with the 3 server endpoints + settings fields; ran the new suites with the server stopped -- 6/6 passing; server relaunched. |
 | 2026-09-11 | (impl) | T1-T14 | Implemented Phase 1 + Phase 2 end to end. Backend (SlotManager, ServerRebuildService, ReplacementProcessLauncher, rebuild/status/rollback routes, SelfVesselId + slot settings), Harbor deferred-launch protocol + handler + admiral delegation, slot-aware start script, dashboard button/ref input/LogViewer/rollback + self-vessel settings, SlotManager + Harbor-protocol test suites, REST_API.md + HARBOR_PROTOCOL.md. Core/Server/Harbor/Test.Shared build clean (0 warnings); dashboard tsc clean. Harbor cutover path not yet live-verified; T12 (MCP tool) skipped; Postman + build-failure/rollback E2E tests pending. |

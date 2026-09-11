@@ -932,7 +932,7 @@
               "name": "Settings",
               "status": "OK",
               "code": 200,
-              "body": "{\n  \"AdmiralPort\": 7890,\n  \"McpPort\": 7891,\n  \"MaxCaptains\": 0,\n  \"HeartbeatIntervalSeconds\": 30,\n  \"StallThresholdMinutes\": 10,\n  \"IdleCaptainTimeoutSeconds\": 0,\n  \"AutoCreatePr\": false,\n  \"DataDirectory\": \"C:\\\\Users\\\\joelc\\\\.armada\",\n  \"DatabasePath\": \"C:\\\\Users\\\\joelc\\\\.armada\\\\armada.db\",\n  \"LogDirectory\": \"C:\\\\Users\\\\joelc\\\\.armada\\\\logs\",\n  \"DocksDirectory\": \"C:\\\\Users\\\\joelc\\\\.armada\\\\docks\",\n  \"ReposDirectory\": \"C:\\\\Users\\\\joelc\\\\.armada\\\\repos\",\n  \"RemoteControl\": {\n    \"Enabled\": false,\n    \"TunnelUrl\": null,\n    \"InstanceId\": null,\n    \"EnrollmentToken\": null,\n    \"ConnectTimeoutSeconds\": 15,\n    \"HeartbeatIntervalSeconds\": 30,\n    \"ReconnectBaseDelaySeconds\": 5,\n    \"ReconnectMaxDelaySeconds\": 60,\n    \"AllowInvalidCertificates\": false\n  }\n}"
+              "body": "{\n  \"AdmiralPort\": 7890,\n  \"McpPort\": 7891,\n  \"MaxCaptains\": 0,\n  \"HeartbeatIntervalSeconds\": 30,\n  \"StallThresholdMinutes\": 10,\n  \"IdleCaptainTimeoutSeconds\": 0,\n  \"AutoCreatePr\": false,\n  \"DataDirectory\": \"C:\\\\Users\\\\joelc\\\\.armada\",\n  \"DatabasePath\": \"C:\\\\Users\\\\joelc\\\\.armada\\\\armada.db\",\n  \"LogDirectory\": \"C:\\\\Users\\\\joelc\\\\.armada\\\\logs\",\n  \"DocksDirectory\": \"C:\\\\Users\\\\joelc\\\\.armada\\\\docks\",\n  \"ReposDirectory\": \"C:\\\\Users\\\\joelc\\\\.armada\\\\repos\",\n  \"SelfVesselId\": null,\n  \"RebuildSlotRetentionCount\": 3,\n  \"RemoteControl\": {\n    \"Enabled\": false,\n    \"TunnelUrl\": null,\n    \"InstanceId\": null,\n    \"EnrollmentToken\": null,\n    \"ConnectTimeoutSeconds\": 15,\n    \"HeartbeatIntervalSeconds\": 30,\n    \"ReconnectBaseDelaySeconds\": 5,\n    \"ReconnectMaxDelaySeconds\": 60,\n    \"AllowInvalidCertificates\": false\n  }\n}"
             }
           ]
         },
@@ -997,6 +997,118 @@
               "status": "OK",
               "code": 200,
               "body": "{\n  \"Status\": \"shutting_down\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Rebuild Armada",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Ref\": \"main\",\n  \"SkipDashboard\": false,\n  \"RollbackTimeoutSeconds\": 120\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/server/rebuild",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "server",
+                "rebuild"
+              ]
+            },
+            "description": "Rebuilds the Admiral from source and cuts over to the new build. Publishes the configured Armada source (resolved from SelfVesselId, or an explicit SourcePath) into a fresh versioned slot from a detached git worktree at the requested ref, backs up the database, flips the active-slot pointer, and hands over to the new build. The build runs while the current instance keeps serving; only a successful server publish triggers a cutover. All body fields are optional (Ref blank builds current HEAD). Poll GET /api/v1/server/rebuild/status for progress. Requires global admin when RequireAuthForShutdown is true."
+          },
+          "response": [
+            {
+              "name": "Building",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"RebuildId\": \"rbd_1f2e3d4c5b6a\",\n  \"Slot\": \"2026-09-11_120000_a1b2c3d\",\n  \"PreviousSlot\": \"2026-09-08_083000_f9e8d7c\",\n  \"Sha\": \"a1b2c3d4e5f6\",\n  \"Ref\": \"main\",\n  \"BackupPath\": null,\n  \"Status\": \"Building\",\n  \"StartedUtc\": \"2026-09-11T12:00:00Z\",\n  \"CompletedUtc\": null,\n  \"Error\": null,\n  \"Log\": \"[12:00:00] Rebuild rbd_1f2e3d4c5b6a started.\\n\"\n}"
+            },
+            {
+              "name": "Rebuild Already In Progress",
+              "status": "Conflict",
+              "code": 409,
+              "body": "{\n  \"Error\": \"Conflict\",\n  \"Message\": \"A rebuild is already in progress.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Rebuild Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/server/rebuild/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "server",
+                "rebuild",
+                "status"
+              ]
+            },
+            "description": "Returns the most recent rebuild status and its accumulated build log, or {\"status\":\"none\"} when no rebuild has run. Status values: Building, CuttingOver, Succeeded, Failed, RolledBack. Admin only."
+          },
+          "response": [
+            {
+              "name": "Succeeded",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"RebuildId\": \"rbd_1f2e3d4c5b6a\",\n  \"Slot\": \"2026-09-11_120000_a1b2c3d\",\n  \"PreviousSlot\": \"2026-09-08_083000_f9e8d7c\",\n  \"Sha\": \"a1b2c3d4e5f6\",\n  \"Ref\": \"main\",\n  \"BackupPath\": \"C:\\\\Users\\\\joelc\\\\.armada\\\\backups\\\\pre-rebuild-2026-09-11_120000_a1b2c3d.zip\",\n  \"PreRebuildSchemaVersion\": 69,\n  \"Status\": \"Succeeded\",\n  \"StartedUtc\": \"2026-09-11T12:00:00Z\",\n  \"CompletedUtc\": \"2026-09-11T12:02:10Z\",\n  \"Error\": null,\n  \"Log\": \"[12:00:00] Rebuild started.\\n[12:02:05] Server publish complete.\\n[12:02:06] Flipped current pointer to 2026-09-11_120000_a1b2c3d.\\n\"\n}"
+            },
+            {
+              "name": "None",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"Status\": \"none\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Rollback Rebuild",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/server/rollback",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "server",
+                "rollback"
+              ]
+            },
+            "description": "Rolls the last rebuild back to the previous slot. When the rebuild migrated the database schema (the live schema version differs from the version recorded before the rebuild), the pre-rebuild backup is restored first, discarding any data written since the cutover; otherwise the previous slot is relaunched with no restore. Then this instance stops so the previous slot binds. Requires global admin when RequireAuthForShutdown is true."
+          },
+          "response": [
+            {
+              "name": "Rolled Back",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"RebuildId\": \"rbd_1f2e3d4c5b6a\",\n  \"Slot\": \"2026-09-11_120000_a1b2c3d\",\n  \"PreviousSlot\": \"2026-09-08_083000_f9e8d7c\",\n  \"Status\": \"RolledBack\",\n  \"CompletedUtc\": \"2026-09-11T12:05:00Z\"\n}"
+            },
+            {
+              "name": "Nothing To Roll Back",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"Error\": \"BadRequest\",\n  \"Message\": \"There is no previous slot to roll back to.\"\n}"
             }
           ]
         }
