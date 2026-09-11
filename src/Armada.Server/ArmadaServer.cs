@@ -658,6 +658,9 @@ namespace Armada.Server
             new ModelEndpointRoutes(_ModelEndpointService)
                 .Register(_App, authenticate, _AuthorizationService);
 
+            new MemoryRoutes(new MemoryService(_Database, _Logging))
+                .Register(_App, authenticate, _AuthorizationService);
+
             // Harbors (host runners)
             new HarborRoutes(_HarborService, _HarborConnectionManager)
                 .Register(_App, authenticate, _AuthorizationService);
