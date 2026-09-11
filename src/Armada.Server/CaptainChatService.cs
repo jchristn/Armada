@@ -151,6 +151,7 @@ namespace Armada.Server
                 bool isMux = captain.Runtime == AgentRuntimeEnum.Mux;
                 bool isOpenCode = captain.Runtime == AgentRuntimeEnum.OpenCode;
                 bool isClaude = captain.Runtime == AgentRuntimeEnum.ClaudeCode;
+                bool isApiEndpoint = captain.Runtime == AgentRuntimeEnum.ApiEndpoint;
                 double? reportedDurationMs = null;
                 int? reportedTokens = null;
                 string? reportedModel = null;
@@ -181,6 +182,16 @@ namespace Armada.Server
                             }
                         }
                         catch (JsonException) { }
+                        return;
+                    }
+
+                    // The in-process (ApiEndpoint) runtime interleaves human-readable diagnostics
+                    // ([mcp] ..., [tool] ..., [tool:result] ..., and lifecycle [error]/[warning]/[cancelled])
+                    // on the same stdout channel as the model's reply text. Those belong in the tool cards
+                    // (delivered separately as TOOLEVENT lines), not in the answer -- drop them so they never
+                    // stream into or accumulate as the reply.
+                    if (isApiEndpoint && IsApiRuntimeDiagnostic(line))
+                    {
                         return;
                     }
 
@@ -686,6 +697,22 @@ namespace Armada.Server
         {
             if (String.IsNullOrEmpty(value) || value!.Length <= max) return value;
             return value.Substring(0, max) + "... (truncated)";
+        }
+
+        /// <summary>
+        /// Whether a stdout line from the in-process (ApiEndpoint) runtime is diagnostic chatter (MCP status,
+        /// tool call/result echoes, or a lifecycle marker) rather than the model's reply text. Such lines are
+        /// surfaced as tool cards separately and must not leak into the answer.
+        /// </summary>
+        private static bool IsApiRuntimeDiagnostic(string line)
+        {
+            if (String.IsNullOrEmpty(line)) return false;
+            return line.StartsWith("[mcp]", StringComparison.Ordinal)
+                || line.StartsWith("[tool]", StringComparison.Ordinal)
+                || line.StartsWith("[tool:result]", StringComparison.Ordinal)
+                || line.StartsWith("[error]", StringComparison.Ordinal)
+                || line.StartsWith("[warning]", StringComparison.Ordinal)
+                || line.StartsWith("[cancelled]", StringComparison.Ordinal);
         }
 
         private static CaptainChatResponse Fail(string error)
