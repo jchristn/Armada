@@ -30,6 +30,7 @@ Machine-readable OpenAPI is available at `/openapi.json`, and the interactive Sw
   - [Voyages](#voyages)
   - [Missions](#missions)
   - [Captains](#captains)
+  - [Ask](#ask)
   - [Planning Sessions](#planning-sessions)
   - [Objectives](#objectives)
   - [Signals](#signals)
@@ -37,6 +38,10 @@ Machine-readable OpenAPI is available at `/openapi.json`, and the interactive Sw
   - [Docks](#docks)
   - [Merge Queue](#merge-queue)
   - [Harbors](#harbors)
+  - [Jobs](#jobs)
+  - [Inbox](#inbox)
+  - [Skills](#skills)
+  - [Project Profiles](#project-profiles)
   - [Workflow Profiles](#workflow-profiles)
   - [Check Runs](#check-runs)
   - [Environments](#environments)
@@ -587,12 +592,6 @@ List all tenants (paginated). Global admin only.
 
 ---
 
-#### POST /api/v1/tenants/enumerate
-
-Enumerate tenants with filtering and sorting via JSON body. Global admin only.
-
----
-
 #### POST /api/v1/tenants
 
 Create a new tenant. Global admin only.
@@ -654,12 +653,6 @@ List users (paginated). Global admins can list all users. Tenant admins can list
 **Response:** `200 OK` - [EnumerationResult](#enumerationresult)\<[UserMaster](#usermaster)\>
 
 Password fields are redacted in responses.
-
----
-
-#### POST /api/v1/users/enumerate
-
-Enumerate users with filtering and sorting via JSON body. Global admins can enumerate all users. Tenant admins are limited to their own tenant.
 
 ---
 
@@ -742,12 +735,6 @@ Deleting an unprotected user cascades through that user's subordinate resources 
 List credentials (paginated). Global admin: all credentials. Tenant admin: credentials in own tenant. Regular user: own credentials only.
 
 **Response:** `200 OK` - [EnumerationResult](#enumerationresult)\<[Credential](#credential)\>
-
----
-
-#### POST /api/v1/credentials/enumerate
-
-Enumerate credentials with filtering and sorting via JSON body. Results are scoped by role.
 
 ---
 
@@ -877,6 +864,30 @@ Health check endpoint. **Does not require authentication.**
   }
 }
 ```
+
+---
+
+#### GET /api/v1/doctor
+
+Runs a set of system health diagnostics and returns the results as a JSON array. Checks cover the settings file, git availability, the database file, the Admiral server, stalled captains, failed missions, and each optional agent runtime (Claude Code, Codex, Gemini CLI, Cursor, Mux).
+
+**Permission:** Authenticated
+
+**Response:** `200 OK` - an array of check results
+
+```json
+[
+  { "Name": "Settings", "Status": "Pass", "Message": "Settings loaded from /home/user/.armada/armada.json" },
+  { "Name": "Git", "Status": "Pass", "Message": "git version 2.44.0" },
+  { "Name": "Database", "Status": "Pass", "Message": "Database exists (256 KB) at /home/user/.armada/armada.db" },
+  { "Name": "Admiral Server", "Status": "Pass", "Message": "Server is healthy" },
+  { "Name": "Stalled Captains", "Status": "Pass", "Message": "No stalled captains" },
+  { "Name": "Failed Missions", "Status": "Warn", "Message": "2 mission(s) have failed" },
+  { "Name": "Claude Code", "Status": "Pass", "Message": "Claude Code found at /usr/local/bin/claude" }
+]
+```
+
+Each result has a `Status` of `Pass`, `Warn`, or `Fail`. Stalled-captain and failed-mission counts are scoped to the caller's tenant for non-admin callers.
 
 ---
 
@@ -1016,6 +1027,42 @@ Rolls the last rebuild back to the previous slot. When the rebuild migrated the 
 **Permission:** NoAuthRequired by default. When `RequireAuthForShutdown` is `true`, requires global admin (`IsAdmin = true`).
 
 **Response:** `200 OK` - the updated `ServerRebuildStatus` (`Status` = `RolledBack`). `400 Bad Request` when there is no previous slot, the previous executable is missing, or a required backup is absent.
+
+---
+
+#### POST /api/v1/server/restart
+
+Launches a replacement Admiral process that waits for this instance to exit, then gracefully stops this instance so the replacement can bind the listening port. When the active slot pointer resolves to a rebuilt slot, the replacement comes up on that build.
+
+**Permission:** NoAuthRequired by default. When `RequireAuthForShutdown` is `true`, requires global admin (`IsAdmin = true`).
+
+**Response:** `200 OK`
+
+```json
+{
+  "Status": "restarting"
+}
+```
+
+**Error:** `500 Internal Error` - Unable to launch a replacement Admiral process; server was not restarted.
+
+---
+
+#### POST /api/v1/server/reset
+
+Performs a factory reset: deletes the log, docks, and repos directories and the database file, then re-creates the empty directory structure. The settings file is preserved. **This cannot be undone.**
+
+**Permission:** Authenticated
+
+**Response:** `200 OK`
+
+```json
+{
+  "Status": "reset_complete",
+  "Message": "Factory reset complete. Deleted: logs, docks, repos, database. Settings file preserved.",
+  "Deleted": ["logs", "docks", "repos", "database"]
+}
+```
 
 ---
 
@@ -1318,6 +1365,193 @@ curl -X PATCH http://localhost:7890/api/v1/vessels/vsl_abc123/context \
 
 ---
 
+#### GET /api/v1/vessels/{id}/git-status
+
+Return how far the vessel working directory is ahead of and behind the remote default branch. Performs a best-effort `git fetch` first.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Vessel ID (`vsl_` prefix) |
+
+**Response:** `200 OK`
+
+```json
+{
+  "VesselId": "vsl_abc123",
+  "CommitsAhead": 2,
+  "CommitsBehind": 0
+}
+```
+
+When no working directory is configured or a git error occurs, `CommitsAhead` and `CommitsBehind` are `null` and an `Error` field describes the problem.
+
+**Error:** `404` - Vessel not found
+
+---
+
+#### GET /api/v1/vessels/{id}/branches
+
+List the branches in the vessel repository, each with a current flag and ahead/behind counts relative to the default branch.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Vessel ID (`vsl_` prefix) |
+
+**Response:** `200 OK` - `BranchListResponse`
+
+```json
+{
+  "VesselId": "vsl_abc123",
+  "DefaultBranch": "main",
+  "Branches": [],
+  "BranchCount": 0
+}
+```
+
+When the repository cannot be resolved or a git error occurs, the response carries an `Error` field instead of branches.
+
+**Error:** `404` - Vessel not found
+**Error:** `503` - Git service is not available
+
+---
+
+#### POST /api/v1/vessels/{id}/branches/push
+
+Push the named local branch to the vessel's remote.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Vessel ID (`vsl_` prefix) |
+
+**Request Body:** `BranchActionRequest`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `Branch` | string | yes | Branch name to push |
+
+**Response:** `200 OK` - `BranchPushResponse`
+
+```json
+{
+  "VesselId": "vsl_abc123",
+  "Branch": "armada/msn_abc123",
+  "Pushed": true
+}
+```
+
+**Error:** `400` - Branch is required
+**Error:** `404` - Vessel not found, or no repository found for this vessel
+**Error:** `422` - Push failed
+**Error:** `503` - Git service is not available
+
+---
+
+#### POST /api/v1/vessels/{id}/branches/merge
+
+Merge the source branch into the target branch, optionally pushing the target afterward.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Vessel ID (`vsl_` prefix) |
+
+**Request Body:** `BranchMergeRequest`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `Source` | string | yes | Branch to merge from |
+| `Target` | string | yes | Branch to merge into |
+| `Push` | bool | no | Push the target after a successful merge (default: `false`) |
+
+**Response:** `200 OK` - `BranchMergeResponse`
+
+```json
+{
+  "VesselId": "vsl_abc123",
+  "Source": "armada/msn_abc123",
+  "Target": "main",
+  "Merged": true,
+  "Pushed": false
+}
+```
+
+**Error:** `400` - Source and target are required
+**Error:** `404` - Vessel not found, or no repository found for this vessel
+**Error:** `422` - Merge failed
+**Error:** `503` - Git service is not available
+
+---
+
+#### GET /api/v1/vessels/{id}/readiness
+
+Return readiness warnings and blocking issues for a vessel, optionally scoped to a requested workflow check.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Vessel ID (`vsl_` prefix) |
+
+**Query Parameters:**
+| Parameter | Type | Description |
+|---|---|---|
+| `workflowProfileId` | string | Optional explicit workflow-profile override |
+| `checkType` | string | Optional check type to evaluate as a preflight |
+| `environmentName` | string | Optional environment name for deploy, rollback, smoke-test, or health-check readiness |
+| `includeWorkflowRequirements` | bool | When `false`, only vessel and repository basics are evaluated (default: `true`) |
+
+**Response:** `200 OK` - `VesselReadinessResult`
+**Error:** `400` - Invalid `checkType`
+**Error:** `404` - Vessel not found
+
+---
+
+#### GET /api/v1/vessels/{id}/landing-preview
+
+Predict how Armada would land a branch for this vessel, including branch policy, check requirements, and likely blockers.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Vessel ID (`vsl_` prefix) |
+
+**Query Parameters:**
+| Parameter | Type | Description |
+|---|---|---|
+| `sourceBranch` | string | Optional branch name to preview |
+
+**Response:** `200 OK` - `LandingPreviewResult`
+**Error:** `404` - Vessel not found
+
+---
+
+#### POST /api/v1/vessels/{id}/build-context
+
+Launch the chosen captain in a worktree of the vessel repository to analyze it and write a Model Context document, refining the existing context when one is present. Runs synchronously and can take several minutes.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Vessel ID (`vsl_` prefix) |
+
+**Request Body:** `VesselBuildContextRequest`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `CaptainId` | string | yes | Captain (`cpt_` prefix) whose runtime analyzes the repository |
+| `Notes` | string | no | Optional operator guidance for the captain to focus on |
+
+**Response:** `200 OK` - [Vessel](#vessel) (with the new Model Context)
+**Error:** `400` - `captainId` is required
+**Error:** `404` - Vessel not found
+**Error:** `409` - A build is already in progress for this vessel
+**Error:** `501` - Model Context building is not available on this server
+**Error:** `504` - The build timed out
+
+---
+
 ### Voyages
 
 A voyage is a batch of related missions tracked together.
@@ -1523,6 +1757,43 @@ curl -X POST http://localhost:7890/api/v1/missions/enumerate \
 
 ---
 
+#### GET /api/v1/missions/summaries
+
+List lightweight mission summaries without large description, diff, or agent-output payloads. Useful for context-conserving overviews.
+
+**Query Parameters:** [Pagination parameters](#pagination-parameters), plus `status`, `vesselId`, `captainId`, and `voyageId` filters.
+
+**Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<`MissionSummary`\>
+
+---
+
+#### POST /api/v1/missions/summaries/enumerate
+
+Paginated enumeration of lightweight mission summaries with optional filtering and sorting.
+
+**Request Body:** [EnumerationQuery](#enumerationquery) (optional)
+
+**Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<`MissionSummary`\>
+
+---
+
+#### GET /api/v1/missions/history
+
+Return aggregated mission counts by time bucket for dashboard history charts.
+
+**Query Parameters:**
+| Parameter | Type | Description |
+|---|---|---|
+| `fromUtc` | datetime | Inclusive UTC start time |
+| `toUtc` | datetime | Exclusive UTC end time |
+| `bucketMinutes` | int | Bucket size in minutes |
+| `fleetId` | string | Optional fleet filter |
+| `vesselId` | string | Optional vessel filter |
+
+**Response:** `200 OK` - `MissionHistorySummaryResult`
+
+---
+
 #### POST /api/v1/missions
 
 Create and dispatch a new mission. If a `VesselId` is provided, the Admiral will assign a captain and set up a worktree.
@@ -1580,6 +1851,21 @@ Read normalized GitHub pull-request evidence for one mission when that mission h
 **Error:** `404` - Mission not found
 
 > **Note:** The response includes PR state, requested reviewers, reviews, issue comments, and commit check-run evidence. Token resolution follows `GitHubTokenOverride` first, then the global `GitHubToken`.
+
+---
+
+#### GET /api/v1/missions/{id}/landing-preview
+
+Predict how Armada would land this mission, including branch policy, check requirements, and likely blockers.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Mission ID (`msn_` prefix) |
+
+**Response:** `200 OK` - `LandingPreviewResult`
+**Error:** `400` - Mission does not have an associated vessel
+**Error:** `404` - Mission not found, or mission vessel not found
 
 ---
 
@@ -1642,6 +1928,50 @@ curl -X PUT http://localhost:7890/api/v1/missions/msn_abc123/status \
 
 ---
 
+#### POST /api/v1/missions/{id}/review/approve
+
+Approve a mission waiting at a review gate. Non-terminal stages continue to the next pipeline stage; terminal stages continue to landing.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Mission ID (`msn_` prefix) |
+
+**Request Body:** `MissionReviewDecisionRequest` (optional)
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `Comment` | string | no | Reviewer comment |
+| `Conditional` | bool | no | When `true`, the comment is attached to the next pipeline stage as guidance the next captain must take into account ("Conditionally Approve"). Ignored when there is no downstream stage. |
+
+**Response:** `200 OK` - [Mission](#mission)
+**Error:** `400` - Mission is not waiting at a review gate
+**Error:** `404` - Mission not found
+
+---
+
+#### POST /api/v1/missions/{id}/review/deny
+
+Deny a mission waiting at a review gate. The mission either returns for rework or fails the pipeline, depending on its review policy or the supplied action.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Mission ID (`msn_` prefix) |
+
+**Request Body:** `MissionReviewDecisionRequest` (optional)
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `Comment` | string | no | Reviewer comment (injected into the re-run mission prompt) |
+| `Action` | string | no | Overrides the mission's configured deny action. `RetryStage` revisits the same stage with the feedback ("More Work Required"); `FailPipeline` rejects the stage and cancels dependents ("Deny"). When omitted, the mission's configured deny action is used. |
+
+**Response:** `200 OK` - [Mission](#mission)
+**Error:** `400` - Mission is not waiting at a review gate
+**Error:** `404` - Mission not found
+
+---
+
 #### DELETE /api/v1/missions/{id}
 
 Cancel a mission by setting its status to `Cancelled`. Returns the full updated mission.
@@ -1652,6 +1982,28 @@ Cancel a mission by setting its status to `Cancelled`. Returns the full updated 
 | `id` | Mission ID (`msn_` prefix) |
 
 **Response:** `200 OK` - [Mission](#mission) (with `Status: "Cancelled"`)
+
+**Error:** `404` - Mission not found
+
+---
+
+#### DELETE /api/v1/missions/{id}/purge
+
+Permanently delete a mission from the database, removing telemetry events that referenced it. **This cannot be undone.**
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Mission ID (`msn_` prefix) |
+
+**Response:** `200 OK`
+
+```json
+{
+  "Status": "deleted",
+  "MissionId": "msn_abc123"
+}
+```
 
 **Error:** `404` - Mission not found
 
@@ -1710,6 +2062,32 @@ Restart a failed or cancelled mission by resetting it to `Pending` for re-dispat
 **Errors:**
 - `400` - Mission is not in `Failed` or `Cancelled` status
 - `404` - Mission not found
+
+---
+
+#### POST /api/v1/missions/{id}/retry-landing
+
+Rebase the mission branch onto the current target and re-attempt landing. Only available for `WorkProduced` or `LandingFailed` missions.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Mission ID (`msn_` prefix) |
+
+**Response:** `200 OK`
+
+```json
+{
+  "Status": "landed",
+  "MissionId": "msn_abc123",
+  "MissionStatus": "Complete"
+}
+```
+
+**Errors:**
+- `400` - Mission is not in `WorkProduced` or `LandingFailed` status
+- `404` - Mission not found
+- `409` - Landing did not complete (for example, the branch has conflicts, has no branch/vessel, or no landing mode is configured); the response message explains the specific reason
 
 ---
 
@@ -1798,6 +2176,29 @@ curl http://localhost:8080/api/v1/missions/msn_abc123/log?lines=50 \
 curl http://localhost:8080/api/v1/missions/msn_abc123/log?offset=100&lines=100 \
   -H "X-Api-Key: your-key"
 ```
+
+---
+
+#### GET /api/v1/missions/{id}/instructions
+
+Return the instructions file the captain was given for a mission. Resolves the live dock/worktree first (using the runtime-specific instructions file name, then common fallbacks such as `CLAUDE.md`, `CODEX.md`, `AGENTS.md`), and falls back to a saved instructions snapshot when no live worktree exists.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Mission ID (`msn_` prefix) |
+
+**Response:** `200 OK`
+
+```json
+{
+  "MissionId": "msn_abc123",
+  "FileName": "CLAUDE.md",
+  "Content": "You are an Armada captain executing a mission..."
+}
+```
+
+**Error:** `404` - Mission not found, or instructions are unavailable (no live dock/worktree and no saved snapshot)
 
 ---
 
@@ -1942,6 +2343,21 @@ curl -X PUT http://localhost:7890/api/v1/captains/cpt_abc123 \
 
 ---
 
+#### POST /api/v1/captains/{id}/unquarantine
+
+Lift a captain's quarantine, returning it to `Idle` and clearing the quarantine deadline and reason.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Captain ID (`cpt_` prefix) |
+
+**Response:** `200 OK` - [Captain](#captain) (with `State: "Idle"`). When the captain is not quarantined, returns `{ "Status": "not_quarantined", "CaptainId": "cpt_abc123" }` and makes no change.
+
+**Error:** `404` - Captain not found
+
+---
+
 #### POST /api/v1/captains/{id}/stop
 
 Stop a running captain agent. Kills its OS process and recalls it to idle state.
@@ -2065,6 +2481,67 @@ Skipped entries include the entity ID and the reason (e.g., "Not found", "Cannot
 
 ---
 
+### Ask
+
+The Ask surface backs two conversational features: a lightweight read-only assistant that answers questions about fleet state, and a direct chat channel to a captain's configured model.
+
+#### POST /api/v1/ask
+
+Ask the Armada assistant a read-only question about fleet state. The assistant answers and returns suggested navigation links.
+
+**Request Body:** `AskRequest`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `Message` | string | yes | The natural-language question |
+
+**Response:** `200 OK` - `AskResponse`
+
+```json
+{
+  "Reply": "There are 3 missions in progress across 2 vessels.",
+  "Kind": "Answer",
+  "Links": [
+    { "Label": "In-progress missions", "Href": "/missions?status=InProgress" }
+  ]
+}
+```
+
+---
+
+#### POST /api/v1/captains/{id}/chat
+
+Send a chat turn directly to a captain's configured model (Mux/Ollama endpoints) and return the reply plus per-turn timing and token metrics.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Captain ID (`cpt_` prefix) |
+
+**Request Body:** `CaptainChatRequest`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `Message` | string | yes | The new user message to send to the captain's model |
+| `History` | array | no | Prior conversation turns (oldest first), excluding the new message |
+| `TurnId` | string | no | Client-generated turn id; when set, the reply is also streamed as `ask.chunk` WebSocket events tagged with this id |
+| `ShowThinking` | bool | no | When `true`, ask the runtime to surface the model's reasoning (honored by the Mux runtime) |
+
+**Response:** `200 OK` - `CaptainChatResponse`
+
+```json
+{
+  "Success": true,
+  "Reply": "Here is a summary of the changes...",
+  "Model": "gpt-oss:20b",
+  "Metrics": {},
+  "Error": null,
+  "Thinking": null
+}
+```
+
+---
+
 ### Signals
 
 A signal is a message between the admiral and captains or between captains.
@@ -2119,6 +2596,79 @@ curl -X POST http://localhost:7890/api/v1/signals \
   -H "Content-Type: application/json" \
   -d '{"Type": "Mail", "Payload": "Please check the test results", "ToCaptainId": "cpt_abc123"}'
 ```
+
+---
+
+#### GET /api/v1/signals/recent
+
+Return the most recent signals, ordered by creation time descending.
+
+**Query Parameters:**
+| Parameter | Type | Description |
+|---|---|---|
+| `count` | integer | Maximum number of signals to return (default: 50) |
+
+**Response:** `200 OK` - [Signal](#signal)`[]` (a plain array, not a paged envelope)
+
+---
+
+#### GET /api/v1/signals/{id}
+
+Get a single signal by ID.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Signal ID (`sig_` prefix) |
+
+**Response:** `200 OK` - [Signal](#signal)
+**Error:** `404` - Signal not found
+
+---
+
+#### PUT /api/v1/signals/{id}/read
+
+Mark a signal as read.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Signal ID (`sig_` prefix) |
+
+**Response:** `200 OK` - [Signal](#signal) (the updated signal)
+**Error:** `404` - Signal not found
+
+---
+
+#### GET /api/v1/signals/recipient/{captainId}
+
+Return signals addressed to a specific captain. Defaults to unread only.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `captainId` | Captain ID (`cpt_` prefix) |
+
+**Query Parameters:**
+| Parameter | Type | Description |
+|---|---|---|
+| `unreadOnly` | bool | Filter to unread signals only (default: `true`) |
+
+**Response:** `200 OK` - [Signal](#signal)`[]` (a plain array, not a paged envelope)
+
+---
+
+#### DELETE /api/v1/signals/{id}
+
+Permanently delete a signal by ID.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Signal ID (`sig_` prefix) |
+
+**Response:** `204 No Content`
+**Error:** `404` - Signal not found
 
 ---
 
@@ -2334,6 +2884,52 @@ Force purge a dock and its git worktree, even if a mission references it. **This
 
 ---
 
+#### `POST /api/v1/docks/{id}/repair`
+
+Run `git worktree repair` on the dock's worktree to fix a corrupted or relocated registration. Non-destructive: no work is removed.
+
+**Path Parameters:**
+
+| Parameter | Description |
+|---|---|
+| `id` | Dock ID (`dck_` prefix) |
+
+**Response:** `200 OK`
+
+```json
+{
+  "Status": "repaired",
+  "DockId": "dck_abc123"
+}
+```
+
+**Error:** `404` - Dock not found
+
+---
+
+#### `POST /api/v1/docks/{id}/unstick`
+
+Release any captain still holding the dock back to `Idle` and reclaim its worktree so it stops pinning capacity. Committed branch history is preserved.
+
+**Path Parameters:**
+
+| Parameter | Description |
+|---|---|
+| `id` | Dock ID (`dck_` prefix) |
+
+**Response:** `200 OK`
+
+```json
+{
+  "Status": "unstuck",
+  "DockId": "dck_abc123"
+}
+```
+
+**Error:** `404` - Dock not found
+
+---
+
 #### `POST /api/v1/docks/delete/multiple`
 
 Batch delete multiple docks and their git worktrees from the database by ID. Returns a summary of deleted and skipped entries. **This cannot be undone.**
@@ -2437,6 +3033,20 @@ Cancel a queued merge entry.
 | `id` | Merge entry ID (`mrg_` prefix) |
 
 **Response:** `204 No Content`
+
+---
+
+#### POST /api/v1/merge-queue/{id}/process
+
+Process a single merge queue entry by ID: create the integration branch, run tests, and land it if passing.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Merge entry ID (`mrg_` prefix) |
+
+**Response:** `200 OK` - [MergeEntry](#mergeentry) (the processed entry)
+**Error:** `404` - Merge entry not found or not in `Queued` status
 
 ---
 
@@ -2570,6 +3180,284 @@ Disable one Harbor. A disabled Harbor keeps its docks but receives no new missio
 
 - Response: `200 OK` - `Harbor`
 - Errors: `404 Not Found`
+
+#### POST /api/v1/harbors/{id}/probe
+
+Run a one-off host command on a connected Harbor over its link and return the result, verifying the end-to-end server-issues-work / Harbor-replies loop. Defaults to `git --version`.
+
+**Request Body:** `HarborProbeRequest` (optional)
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `Executable` | string | no | Executable to run on the Harbor host (default: `git`) |
+| `Arguments` | array | no | Command-line arguments (default: `["--version"]`) |
+| `WorkingDirectory` | string | no | Working directory on the Harbor host, or empty for the Harbor's default |
+| `TimeoutMs` | int | no | Timeout in milliseconds (default: `15000`) |
+
+- Response: `200 OK` - `HostCommandResult`
+- Errors: `404 Not Found`; `409 Conflict` when the Harbor is not connected (no link to probe over)
+
+---
+
+### Jobs
+
+Jobs are background tasks tracked for status polling.
+
+#### GET /api/v1/jobs
+
+List background jobs, newest first, scoped to the caller.
+
+**Response:** `200 OK`
+
+```json
+{
+  "Success": true,
+  "Objects": [],
+  "TotalRecords": 0
+}
+```
+
+#### GET /api/v1/jobs/{id}
+
+Get a single background job by ID.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Job ID (`job_` prefix) |
+
+- Response: `200 OK` - `Job`
+- Errors: `404 Not Found`
+
+#### POST /api/v1/jobs/{id}/cancel
+
+Cancel a background job.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Job ID (`job_` prefix) |
+
+- Response: `200 OK` - `Job` (the cancelled job)
+- Errors: `404 Not Found`; `409 Conflict` when the job cannot be cancelled in its current state
+
+---
+
+### Inbox
+
+The inbox is a consolidated, most-urgent-first list of items awaiting operator attention (reviews to approve, failed landings, failed missions, stalled captains).
+
+#### GET /api/v1/inbox
+
+Return the operator "needs you" inbox.
+
+**Response:** `200 OK` - `InboxItem[]`
+
+```json
+[
+  {
+    "Kind": "review",
+    "Severity": "Warning",
+    "Title": "Mission awaiting review",
+    "Detail": "msn_abc123 is waiting at a review gate",
+    "EntityType": "mission",
+    "EntityId": "msn_abc123",
+    "Href": "/missions/msn_abc123"
+  }
+]
+```
+
+---
+
+### Skills
+
+Skills are Category B shared configuration entities (`scope`: `TenantWide` or `UserSpecific`). Reads return tenant-wide plus the caller's own user-specific skills; a regular user creates/edits/deletes only their own user-specific skills, and a tenant-wide skill requires a tenant admin.
+
+#### GET /api/v1/skills
+
+List skills scoped to the authenticated tenant.
+
+**Query Parameters:**
+| Parameter | Type | Description |
+|---|---|---|
+| `pageNumber` | integer | One-based page number |
+| `pageSize` | integer | Page size |
+| `category` | string | Optional category filter |
+| `search` | string | Optional name/description search |
+| `active` | bool | Optional active-state filter |
+
+**Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<`Skill`\>
+
+#### POST /api/v1/skills/enumerate
+
+Paginated enumeration of skills. Query-string parameters override body values.
+
+**Request Body:** `SkillQuery` (optional)
+
+**Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<`Skill`\>
+
+#### POST /api/v1/skills
+
+Create a skill. A regular user may create only user-specific skills; the requested scope is coerced accordingly.
+
+**Request Body:** `Skill`
+
+- Response: `201 Created` - `Skill`
+- Errors: `400 Bad Request` when `Name` is missing
+
+#### GET /api/v1/skills/{id}
+
+Get a single skill by ID.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Skill ID (`skl_` prefix) |
+
+- Response: `200 OK` - `Skill`
+- Errors: `404 Not Found`
+
+#### PUT /api/v1/skills/{id}
+
+Update a skill. Only tenant/global admins may change an existing skill's ownership scope.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Skill ID (`skl_` prefix) |
+
+**Request Body:** `Skill`
+
+- Response: `200 OK` - `Skill`
+- Errors: `404 Not Found`; `403 Forbidden` when modifying a skill the caller does not own
+
+#### DELETE /api/v1/skills/{id}
+
+Delete a skill.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Skill ID (`skl_` prefix) |
+
+- Response: `204 No Content`
+- Errors: `404 Not Found`; `403 Forbidden` when deleting a skill the caller does not own
+
+---
+
+### Project Profiles
+
+Project profiles are Category B shared configuration entities that bundle a project's pipeline, workflow profile, persona overrides, and skills. Ownership is expressed via `ownershipScope` (`TenantWide` or `UserSpecific`), while `scope` carries the application scope (`Global`, `Fleet`, or `Vessel`). Reads return tenant-wide plus the caller's own user-specific profiles.
+
+#### GET /api/v1/project-profiles
+
+List project profiles scoped to the authenticated tenant.
+
+**Query Parameters:**
+| Parameter | Type | Description |
+|---|---|---|
+| `pageNumber` | integer | One-based page number |
+| `pageSize` | integer | Page size |
+| `scope` | string | Optional scope filter (`Global`, `Fleet`, `Vessel`) |
+| `fleetId` | string | Optional fleet filter |
+| `vesselId` | string | Optional vessel filter |
+| `search` | string | Optional name/description search |
+| `active` | bool | Optional active-state filter |
+
+**Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<`ProjectProfile`\>
+
+#### POST /api/v1/project-profiles/enumerate
+
+Paginated enumeration of project profiles. Query-string parameters override body values.
+
+**Request Body:** `ProjectProfileQuery` (optional)
+
+**Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<`ProjectProfile`\>
+
+#### POST /api/v1/project-profiles/validate
+
+Validate a project-profile definition (scope consistency, referenced entities, persona overrides) without saving it.
+
+**Request Body:** `ProjectProfile`
+
+**Response:** `200 OK` - `ProjectProfileValidationResult`
+
+#### GET /api/v1/project-profiles/resolve/vessels/{vesselId}
+
+Resolve the best matching active project profile for a vessel using vessel, then fleet, then global precedence.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `vesselId` | Vessel ID (`vsl_` prefix) |
+
+**Query Parameters:**
+| Parameter | Type | Description |
+|---|---|---|
+| `projectProfileId` | string | Optional explicit project-profile override |
+
+- Response: `200 OK` - `ProjectProfileResolutionResult`
+- Errors: `404 Not Found` when the vessel is not found or no profile can be resolved
+
+#### GET /api/v1/project-profiles/{id}/persona-preview/{persona}
+
+Return the base and effective (override-applied) persona prompt so the dashboard can render a live diff.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Project profile ID (`ppf_` prefix) |
+| `persona` | Persona name (e.g. `Architect`, `Worker`, `Test Engineer`) |
+
+- Response: `200 OK` - `PersonaPromptPreview`
+- Errors: `404 Not Found`
+
+#### POST /api/v1/project-profiles
+
+Create a project profile. A regular user may create only user-specific profiles; the requested ownership scope is coerced accordingly.
+
+**Request Body:** `ProjectProfile`
+
+- Response: `201 Created` - `ProjectProfile`
+- Errors: `400 Bad Request` when validation fails
+
+#### GET /api/v1/project-profiles/{id}
+
+Get a single project profile by ID.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Project profile ID (`ppf_` prefix) |
+
+- Response: `200 OK` - `ProjectProfile`
+- Errors: `404 Not Found`
+
+#### PUT /api/v1/project-profiles/{id}
+
+Update a project profile. Only tenant/global admins may change the ownership scope.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Project profile ID (`ppf_` prefix) |
+
+**Request Body:** `ProjectProfile`
+
+- Response: `200 OK` - `ProjectProfile`
+- Errors: `404 Not Found`; `403 Forbidden` when modifying a profile the caller does not own; `400 Bad Request` when validation fails
+
+#### DELETE /api/v1/project-profiles/{id}
+
+Delete a project profile.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Project profile ID (`ppf_` prefix) |
+
+- Response: `204 No Content`
+- Errors: `404 Not Found`; `403 Forbidden` when deleting a profile the caller does not own
 
 ---
 
@@ -3306,6 +4194,13 @@ List one directory in the vessel workspace.
 - Query: optional `path`
 - Response: `200 OK` - `WorkspaceTreeResult`
 
+#### GET /api/v1/workspace/vessels/{vesselId}/diff
+
+Return a unified git diff of the vessel working tree against HEAD, optionally scoped to one path.
+
+- Query: optional `path` to scope the diff
+- Response: `200 OK` - `WorkspaceDiffResult`
+
 #### GET /api/v1/workspace/vessels/{vesselId}/file
 
 Read one file in the vessel workspace.
@@ -3328,6 +4223,20 @@ Save one text file with optimistic concurrency validation.
 
 - Response: `200 OK` - `WorkspaceSaveResult`
 - Errors: `409 Conflict` when the on-disk hash no longer matches `ExpectedHash`
+
+#### POST /api/v1/workspace/vessels/{vesselId}/exec
+
+Execute a shell command in the vessel working tree (the in-browser dock terminal), bounded by a timeout. Tenant administrators only.
+
+**Request Body:** `WorkspaceExecRequest`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `Command` | string | yes | The command line to execute in the workspace root via the platform shell |
+| `TimeoutSeconds` | int | no | Timeout before the command (and its process tree) is killed. Clamped to `[1, 600]` (default: `60`) |
+
+- Response: `200 OK` - `WorkspaceExecResult`
+- Errors: `403 Forbidden` when the caller is not a tenant administrator; `404 Not Found` when the vessel is not found
 
 #### POST /api/v1/workspace/vessels/{vesselId}/directory
 
@@ -3470,6 +4379,18 @@ Create a voyage directly from planning output.
 Stop an active planning session and release its resources.
 
 - Response: `200 OK` - same detail shape as `GET /api/v1/planning-sessions/{id}`
+
+#### POST /api/v1/planning-sessions/{id}/stop-turn
+
+Abort the in-flight planning turn (cancelling the captain runtime) while keeping the session active so the user can keep chatting.
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Planning session ID (`psn_` prefix) |
+
+- Response: `200 OK` - same detail shape as `GET /api/v1/planning-sessions/{id}`
+- Errors: `404 Not Found`; `501 Not Supported` on database backends other than SQLite
 
 #### DELETE /api/v1/planning-sessions/{id}
 
@@ -5729,26 +6650,26 @@ This table is a quick route index, not the canonical exhaustive contract. Use `/
 | 3 | POST | `/api/v1/tenants/lookup` | Lookup tenants by email | No |
 | 4 | POST | `/api/v1/onboarding` | Self-register new user | No* |
 | 5 | GET | `/api/v1/tenants` | List tenants (paginated) | Admin |
-| 6 | POST | `/api/v1/tenants/enumerate` | Enumerate tenants | Admin |
-| 7 | POST | `/api/v1/tenants` | Create tenant | Admin |
-| 8 | GET | `/api/v1/tenants/{id}` | Get tenant | Yes** |
-| 9 | PUT | `/api/v1/tenants/{id}` | Update tenant | Admin |
-| 10 | DELETE | `/api/v1/tenants/{id}` | Delete tenant | Admin |
-| 11 | GET | `/api/v1/users` | List users (paginated) | Admin |
-| 12 | POST | `/api/v1/users/enumerate` | Enumerate users | Admin |
-| 13 | POST | `/api/v1/users` | Create user | Admin |
-| 14 | GET | `/api/v1/users/{id}` | Get user | Yes** |
-| 15 | PUT | `/api/v1/users/{id}` | Update user | Admin |
-| 16 | DELETE | `/api/v1/users/{id}` | Delete user | Admin |
-| 17 | GET | `/api/v1/credentials` | List credentials (paginated) | Yes** |
-| 18 | POST | `/api/v1/credentials/enumerate` | Enumerate credentials | Yes** |
-| 19 | POST | `/api/v1/credentials` | Create credential | Yes** |
-| 20 | GET | `/api/v1/credentials/{id}` | Get credential | Yes** |
-| 21 | PUT | `/api/v1/credentials/{id}` | Update credential | Yes** |
-| 22 | DELETE | `/api/v1/credentials/{id}` | Delete credential | Yes** |
-| 23 | GET | `/api/v1/status` | System status dashboard | Yes |
-| 24 | GET | `/api/v1/status/health` | Health check | No |
-| 25 | POST | `/api/v1/server/stop` | Graceful shutdown | \*\*\* |
+| 6 | POST | `/api/v1/tenants` | Create tenant | Admin |
+| 7 | GET | `/api/v1/tenants/{id}` | Get tenant | Yes** |
+| 8 | PUT | `/api/v1/tenants/{id}` | Update tenant | Admin |
+| 9 | DELETE | `/api/v1/tenants/{id}` | Delete tenant | Admin |
+| 10 | GET | `/api/v1/users` | List users (paginated) | Admin |
+| 11 | POST | `/api/v1/users` | Create user | Admin |
+| 12 | GET | `/api/v1/users/{id}` | Get user | Yes** |
+| 13 | PUT | `/api/v1/users/{id}` | Update user | Admin |
+| 14 | DELETE | `/api/v1/users/{id}` | Delete user | Admin |
+| 15 | GET | `/api/v1/credentials` | List credentials (paginated) | Yes** |
+| 16 | POST | `/api/v1/credentials` | Create credential | Yes** |
+| 17 | GET | `/api/v1/credentials/{id}` | Get credential | Yes** |
+| 18 | PUT | `/api/v1/credentials/{id}` | Update credential | Yes** |
+| 19 | DELETE | `/api/v1/credentials/{id}` | Delete credential | Yes** |
+| 20 | GET | `/api/v1/status` | System status dashboard | Yes |
+| 21 | GET | `/api/v1/status/health` | Health check | No |
+| 22 | GET | `/api/v1/doctor` | System health diagnostics | Yes |
+| 23 | POST | `/api/v1/server/stop` | Graceful shutdown | \*\*\* |
+| 24 | POST | `/api/v1/server/restart` | Restart the Admiral server | \*\*\* |
+| 25 | POST | `/api/v1/server/reset` | Factory reset | Yes |
 | 26 | GET | `/api/v1/fleets` | List fleets (paginated) | Yes |
 | 27 | POST | `/api/v1/fleets/enumerate` | Enumerate fleets | Yes |
 | 28 | POST | `/api/v1/fleets` | Create fleet | Yes |
@@ -5761,42 +6682,93 @@ This table is a quick route index, not the canonical exhaustive contract. Use `/
 | 35 | GET | `/api/v1/vessels/{id}` | Get vessel | Yes |
 | 36 | PUT | `/api/v1/vessels/{id}` | Update vessel | Yes |
 | 37 | DELETE | `/api/v1/vessels/{id}` | Delete vessel | Yes |
-| 38 | GET | `/api/v1/voyages` | List voyages (paginated) | Yes |
-| 39 | POST | `/api/v1/voyages/enumerate` | Enumerate voyages | Yes |
-| 40 | POST | `/api/v1/voyages` | Create voyage with missions | Yes |
-| 41 | GET | `/api/v1/voyages/{id}` | Get voyage with missions | Yes |
-| 42 | DELETE | `/api/v1/voyages/{id}` | Cancel voyage | Yes |
-| 43 | DELETE | `/api/v1/voyages/{id}/purge` | Permanently delete voyage | Yes |
-| 44 | GET | `/api/v1/missions` | List missions (paginated) | Yes |
-| 45 | POST | `/api/v1/missions/enumerate` | Enumerate missions | Yes |
-| 46 | POST | `/api/v1/missions` | Create mission | Yes |
-| 47 | GET | `/api/v1/missions/{id}` | Get mission | Yes |
-| 48 | PUT | `/api/v1/missions/{id}` | Update mission | Yes |
-| 49 | PUT | `/api/v1/missions/{id}/status` | Transition mission status | Yes |
-| 50 | DELETE | `/api/v1/missions/{id}` | Cancel mission | Yes |
-| 51 | POST | `/api/v1/missions/{id}/restart` | Restart failed/cancelled mission | Yes |
-| 52 | GET | `/api/v1/missions/{id}/diff` | Get mission diff | Yes |
-| 53 | GET | `/api/v1/missions/{id}/log` | Get mission log | Yes |
-| 54 | GET | `/api/v1/captains` | List captains (paginated) | Yes |
-| 55 | POST | `/api/v1/captains/enumerate` | Enumerate captains | Yes |
-| 56 | POST | `/api/v1/captains` | Create captain | Yes |
-| 57 | GET | `/api/v1/captains/{id}` | Get captain | Yes |
-| 58 | PUT | `/api/v1/captains/{id}` | Update captain | Yes |
-| 59 | POST | `/api/v1/captains/{id}/stop` | Stop captain | Yes |
-| 60 | POST | `/api/v1/captains/stop-all` | Stop all captains | Yes |
-| 61 | GET | `/api/v1/captains/{id}/log` | Get captain current log | Yes |
-| 62 | DELETE | `/api/v1/captains/{id}` | Delete captain | Yes |
-| 63 | GET | `/api/v1/signals` | List signals (paginated) | Yes |
-| 64 | POST | `/api/v1/signals/enumerate` | Enumerate signals | Yes |
-| 65 | POST | `/api/v1/signals` | Send signal | Yes |
-| 66 | GET | `/api/v1/events` | List events (paginated) | Yes |
-| 67 | POST | `/api/v1/events/enumerate` | Enumerate events | Yes |
-| 68 | GET | `/api/v1/merge-queue` | List merge queue (paginated) | Yes |
-| 69 | POST | `/api/v1/merge-queue/enumerate` | Enumerate merge queue | Yes |
-| 70 | POST | `/api/v1/merge-queue` | Enqueue branch | Yes |
-| 71 | GET | `/api/v1/merge-queue/{id}` | Get merge entry | Yes |
-| 72 | DELETE | `/api/v1/merge-queue/{id}` | Cancel merge entry | Yes |
-| 73 | POST | `/api/v1/merge-queue/process` | Process merge queue | Yes |
+| 38 | GET | `/api/v1/vessels/{id}/git-status` | Get vessel git status | Yes |
+| 39 | GET | `/api/v1/vessels/{id}/branches` | List vessel branches | Yes |
+| 40 | POST | `/api/v1/vessels/{id}/branches/push` | Push a vessel branch | Yes |
+| 41 | POST | `/api/v1/vessels/{id}/branches/merge` | Merge vessel branches | Yes |
+| 42 | GET | `/api/v1/vessels/{id}/readiness` | Get vessel readiness | Yes |
+| 43 | GET | `/api/v1/vessels/{id}/landing-preview` | Preview vessel landing | Yes |
+| 44 | POST | `/api/v1/vessels/{id}/build-context` | Build vessel Model Context | Yes |
+| 45 | GET | `/api/v1/voyages` | List voyages (paginated) | Yes |
+| 46 | POST | `/api/v1/voyages/enumerate` | Enumerate voyages | Yes |
+| 47 | POST | `/api/v1/voyages` | Create voyage with missions | Yes |
+| 48 | GET | `/api/v1/voyages/{id}` | Get voyage with missions | Yes |
+| 49 | DELETE | `/api/v1/voyages/{id}` | Cancel voyage | Yes |
+| 50 | DELETE | `/api/v1/voyages/{id}/purge` | Permanently delete voyage | Yes |
+| 51 | GET | `/api/v1/missions` | List missions (paginated) | Yes |
+| 52 | POST | `/api/v1/missions/enumerate` | Enumerate missions | Yes |
+| 53 | GET | `/api/v1/missions/summaries` | List mission summaries | Yes |
+| 54 | POST | `/api/v1/missions/summaries/enumerate` | Enumerate mission summaries | Yes |
+| 55 | GET | `/api/v1/missions/history` | Aggregated mission history | Yes |
+| 56 | POST | `/api/v1/missions` | Create mission | Yes |
+| 57 | GET | `/api/v1/missions/{id}` | Get mission | Yes |
+| 58 | PUT | `/api/v1/missions/{id}` | Update mission | Yes |
+| 59 | PUT | `/api/v1/missions/{id}/status` | Transition mission status | Yes |
+| 60 | POST | `/api/v1/missions/{id}/review/approve` | Approve mission review gate | Yes |
+| 61 | POST | `/api/v1/missions/{id}/review/deny` | Deny mission review gate | Yes |
+| 62 | DELETE | `/api/v1/missions/{id}` | Cancel mission | Yes |
+| 63 | DELETE | `/api/v1/missions/{id}/purge` | Permanently delete mission | Yes |
+| 64 | POST | `/api/v1/missions/{id}/restart` | Restart failed/cancelled mission | Yes |
+| 65 | POST | `/api/v1/missions/{id}/retry-landing` | Retry mission landing | Yes |
+| 66 | GET | `/api/v1/missions/{id}/landing-preview` | Preview mission landing | Yes |
+| 67 | GET | `/api/v1/missions/{id}/evaluate-autoland` | Dry-run auto-land predicate | Yes |
+| 68 | GET | `/api/v1/missions/{id}/diff` | Get mission diff | Yes |
+| 69 | GET | `/api/v1/missions/{id}/log` | Get mission log | Yes |
+| 70 | GET | `/api/v1/missions/{id}/instructions` | Get mission instructions | Yes |
+| 71 | GET | `/api/v1/captains` | List captains (paginated) | Yes |
+| 72 | POST | `/api/v1/captains/enumerate` | Enumerate captains | Yes |
+| 73 | POST | `/api/v1/captains` | Create captain | Yes |
+| 74 | GET | `/api/v1/captains/{id}` | Get captain | Yes |
+| 75 | PUT | `/api/v1/captains/{id}` | Update captain | Yes |
+| 76 | POST | `/api/v1/captains/{id}/unquarantine` | Lift captain quarantine | Yes |
+| 77 | POST | `/api/v1/captains/{id}/stop` | Stop captain | Yes |
+| 78 | POST | `/api/v1/captains/stop-all` | Stop all captains | Yes |
+| 79 | GET | `/api/v1/captains/{id}/log` | Get captain current log | Yes |
+| 80 | DELETE | `/api/v1/captains/{id}` | Delete captain | Yes |
+| 81 | POST | `/api/v1/ask` | Ask Armada a question | Yes |
+| 82 | POST | `/api/v1/captains/{id}/chat` | Chat with a captain | Yes |
+| 83 | GET | `/api/v1/signals` | List signals (paginated) | Yes |
+| 84 | POST | `/api/v1/signals/enumerate` | Enumerate signals | Yes |
+| 85 | POST | `/api/v1/signals` | Send signal | Yes |
+| 86 | GET | `/api/v1/signals/recent` | Get recent signals | Yes |
+| 87 | GET | `/api/v1/signals/{id}` | Get signal | Yes |
+| 88 | PUT | `/api/v1/signals/{id}/read` | Mark signal as read | Yes |
+| 89 | GET | `/api/v1/signals/recipient/{captainId}` | Signals by recipient | Yes |
+| 90 | DELETE | `/api/v1/signals/{id}` | Delete signal | Yes |
+| 91 | GET | `/api/v1/events` | List events (paginated) | Yes |
+| 92 | POST | `/api/v1/events/enumerate` | Enumerate events | Yes |
+| 93 | POST | `/api/v1/docks/{id}/repair` | Repair dock worktree | Yes |
+| 94 | POST | `/api/v1/docks/{id}/unstick` | Unstick a wedged dock | Yes |
+| 95 | GET | `/api/v1/merge-queue` | List merge queue (paginated) | Yes |
+| 96 | POST | `/api/v1/merge-queue/enumerate` | Enumerate merge queue | Yes |
+| 97 | POST | `/api/v1/merge-queue` | Enqueue branch | Yes |
+| 98 | GET | `/api/v1/merge-queue/{id}` | Get merge entry | Yes |
+| 99 | DELETE | `/api/v1/merge-queue/{id}` | Cancel merge entry | Yes |
+| 100 | POST | `/api/v1/merge-queue/{id}/process` | Process single merge entry | Yes |
+| 101 | POST | `/api/v1/merge-queue/process` | Process merge queue | Yes |
+| 102 | POST | `/api/v1/harbors/{id}/probe` | Probe a Harbor | Yes |
+| 103 | GET | `/api/v1/workspace/vessels/{vesselId}/diff` | Get working-tree diff | Yes |
+| 104 | POST | `/api/v1/workspace/vessels/{vesselId}/exec` | Run workspace command | Yes |
+| 105 | POST | `/api/v1/planning-sessions/{id}/stop-turn` | Stop current planning turn | Yes |
+| 106 | GET | `/api/v1/jobs` | List background jobs | Yes |
+| 107 | GET | `/api/v1/jobs/{id}` | Get background job | Yes |
+| 108 | POST | `/api/v1/jobs/{id}/cancel` | Cancel background job | Yes |
+| 109 | GET | `/api/v1/inbox` | Get needs-you inbox | Yes |
+| 110 | GET | `/api/v1/skills` | List skills (paginated) | Yes |
+| 111 | POST | `/api/v1/skills/enumerate` | Enumerate skills | Yes |
+| 112 | POST | `/api/v1/skills` | Create skill | Yes |
+| 113 | GET | `/api/v1/skills/{id}` | Get skill | Yes |
+| 114 | PUT | `/api/v1/skills/{id}` | Update skill | Yes |
+| 115 | DELETE | `/api/v1/skills/{id}` | Delete skill | Yes |
+| 116 | GET | `/api/v1/project-profiles` | List project profiles (paginated) | Yes |
+| 117 | POST | `/api/v1/project-profiles/enumerate` | Enumerate project profiles | Yes |
+| 118 | POST | `/api/v1/project-profiles/validate` | Validate project profile | Yes |
+| 119 | GET | `/api/v1/project-profiles/resolve/vessels/{vesselId}` | Resolve project profile for vessel | Yes |
+| 120 | GET | `/api/v1/project-profiles/{id}/persona-preview/{persona}` | Preview persona prompt | Yes |
+| 121 | POST | `/api/v1/project-profiles` | Create project profile | Yes |
+| 122 | GET | `/api/v1/project-profiles/{id}` | Get project profile | Yes |
+| 123 | PUT | `/api/v1/project-profiles/{id}` | Update project profile | Yes |
+| 124 | DELETE | `/api/v1/project-profiles/{id}` | Delete project profile | Yes |
 
 \* Gated by `AllowSelfRegistration` setting.
 \*\* Non-admin users are scoped to their own records only.

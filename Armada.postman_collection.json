@@ -196,6 +196,30 @@
       "value": "",
       "type": "string",
       "description": "Model endpoint ID for detail, update, delete, and validate requests."
+    },
+    {
+      "key": "dockId",
+      "value": "",
+      "type": "string",
+      "description": "Dock ID (dck_ prefix) for dock action requests."
+    },
+    {
+      "key": "jobId",
+      "value": "",
+      "type": "string",
+      "description": "Background job ID for job detail and cancel requests."
+    },
+    {
+      "key": "skillId",
+      "value": "",
+      "type": "string",
+      "description": "Skill ID (skl_ prefix) for skill detail requests."
+    },
+    {
+      "key": "projectProfileId",
+      "value": "",
+      "type": "string",
+      "description": "Project profile ID (ppf_ prefix) for project profile requests."
     }
   ],
   "item": [
@@ -398,35 +422,6 @@
           }
         },
         {
-          "name": "Enumerate Tenants",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 100\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/tenants/enumerate",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "tenants",
-                "enumerate"
-              ]
-            },
-            "description": "Enumerate tenants with filtering and sorting. Global admin only."
-          }
-        },
-        {
           "name": "Create Tenant",
           "request": {
             "method": "POST",
@@ -559,35 +554,6 @@
           }
         },
         {
-          "name": "Enumerate Users",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 100\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/users/enumerate",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "enumerate"
-              ]
-            },
-            "description": "Enumerate users with filtering and sorting. Global admins can enumerate all users. Tenant admins are limited to their own tenant."
-          }
-        },
-        {
           "name": "Create User",
           "request": {
             "method": "POST",
@@ -717,35 +683,6 @@
               ]
             },
             "description": "List credentials (paginated). Global admin: all. Tenant admin: credentials in own tenant. Regular user: own credentials only."
-          }
-        },
-        {
-          "name": "Enumerate Credentials",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 100\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/credentials/enumerate",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "credentials",
-                "enumerate"
-              ]
-            },
-            "description": "Enumerate credentials with filtering. Results are scoped by role: global admin all, tenant admin own tenant, regular user own only."
           }
         },
         {
@@ -1111,6 +1048,118 @@
               "body": "{\n  \"Error\": \"BadRequest\",\n  \"Message\": \"There is no previous slot to roll back to.\"\n}"
             }
           ]
+        },
+        {
+          "name": "Run Diagnostics (Doctor)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/doctor",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "doctor"
+              ]
+            },
+            "description": "Runs system health diagnostics (settings, git, database, runtimes, stalled captains, failed missions) and returns results as a JSON array."
+          }
+        },
+        {
+          "name": "Restart Server",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/server/restart",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "server",
+                "restart"
+              ]
+            },
+            "description": "Launches a replacement Admiral process that waits for this instance to exit, then gracefully stops this instance so the replacement can bind the listening port."
+          }
+        },
+        {
+          "name": "Factory Reset",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/server/reset",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "server",
+                "reset"
+              ]
+            },
+            "description": "Deletes database, logs, docks, and repos directories. Preserves settings file."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Backup",
+      "description": "Backup and restore of the Armada database and settings.",
+      "item": [
+        {
+          "name": "Download Backup",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/backup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "backup"
+              ]
+            },
+            "description": "Creates and streams a ZIP backup of the database and settings."
+          }
+        },
+        {
+          "name": "Restore From Backup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/zip"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": ""
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/restore",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "restore"
+              ]
+            },
+            "description": "Accepts a ZIP backup file in the request body and restores the database and settings. Server restart recommended after restore. Send the ZIP as the raw binary body (this JSON body is illustrative only)."
+          }
         }
       ]
     },
@@ -2090,6 +2139,212 @@
               "body": "{\n  \"Status\": \"deleted\",\n  \"Deleted\": 2,\n  \"Skipped\": []\n}"
             }
           ]
+        },
+        {
+          "name": "Update Vessel Context",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ProjectContext\": \"Repository conventions and architecture notes for captains.\",\n  \"StyleGuide\": \"No var; XML docs on public members; one class per file.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessels/{{vesselId}}/context",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessels",
+                "{{vesselId}}",
+                "context"
+              ]
+            },
+            "description": "Updates only the ProjectContext, StyleGuide, and ModelContext fields of a vessel."
+          }
+        },
+        {
+          "name": "Get Vessel Git Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessels/{{vesselId}}/git-status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessels",
+                "{{vesselId}}",
+                "git-status"
+              ]
+            },
+            "description": "Returns the current git status (branch, ahead/behind, dirty files) for the vessel repository."
+          }
+        },
+        {
+          "name": "List Vessel Branches",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessels/{{vesselId}}/branches",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessels",
+                "{{vesselId}}",
+                "branches"
+              ]
+            },
+            "description": "Returns the list of local and remote branches for the vessel repository."
+          }
+        },
+        {
+          "name": "Push Vessel Branch",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Branch\": \"main\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessels/{{vesselId}}/branches/push",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessels",
+                "{{vesselId}}",
+                "branches",
+                "push"
+              ]
+            },
+            "description": "Pushes the specified branch of the vessel repository to its remote."
+          }
+        },
+        {
+          "name": "Merge Vessel Branch",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Source\": \"feature/example\",\n  \"Target\": \"main\",\n  \"Push\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessels/{{vesselId}}/branches/merge",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessels",
+                "{{vesselId}}",
+                "branches",
+                "merge"
+              ]
+            },
+            "description": "Merges a source branch into a target branch in the vessel repository, optionally pushing the result."
+          }
+        },
+        {
+          "name": "Get Vessel Readiness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessels/{{vesselId}}/readiness",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessels",
+                "{{vesselId}}",
+                "readiness"
+              ]
+            },
+            "description": "Returns readiness diagnostics for the vessel (clone state, remote reachability, default branch, and other preflight checks)."
+          }
+        },
+        {
+          "name": "Get Vessel Landing Preview",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessels/{{vesselId}}/landing-preview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessels",
+                "{{vesselId}}",
+                "landing-preview"
+              ]
+            },
+            "description": "Previews the merge queue landing plan for the vessel."
+          }
+        },
+        {
+          "name": "Build Vessel Context",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"CaptainId\": \"{{captainId}}\",\n  \"Notes\": \"Focus on the service layer and database interfaces.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessels/{{vesselId}}/build-context",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessels",
+                "{{vesselId}}",
+                "build-context"
+              ]
+            },
+            "description": "Generates project context for the vessel using a captain, optionally guided by notes."
+          }
         }
       ]
     },
@@ -3890,6 +4145,243 @@
               "body": "{\n  \"Status\": \"deleted\",\n  \"Deleted\": 2,\n  \"Skipped\": []\n}"
             }
           ]
+        },
+        {
+          "name": "List Mission Summaries",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/missions/summaries",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "missions",
+                "summaries"
+              ]
+            },
+            "description": "Returns lightweight mission summaries (reduced payload) for the caller scope."
+          }
+        },
+        {
+          "name": "Enumerate Mission Summaries",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/missions/summaries/enumerate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "missions",
+                "summaries",
+                "enumerate"
+              ]
+            },
+            "description": "Paginated enumeration of lightweight mission summaries via a JSON body."
+          }
+        },
+        {
+          "name": "Get Mission History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/missions/history",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "missions",
+                "history"
+              ]
+            },
+            "description": "Returns cross-entity history events related to missions."
+          }
+        },
+        {
+          "name": "Get Mission Landing Preview",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/missions/{{missionId}}/landing-preview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "missions",
+                "{{missionId}}",
+                "landing-preview"
+              ]
+            },
+            "description": "Previews the landing plan and diff for a single mission before it is enqueued to the merge queue."
+          }
+        },
+        {
+          "name": "Purge Mission (Permanent Delete)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/missions/{{missionId}}/purge",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "missions",
+                "{{missionId}}",
+                "purge"
+              ]
+            },
+            "description": "Permanently deletes a mission and its associated artifacts from the database. This cannot be undone."
+          }
+        },
+        {
+          "name": "Retry Mission Landing",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/missions/{{missionId}}/retry-landing",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "missions",
+                "{{missionId}}",
+                "retry-landing"
+              ]
+            },
+            "description": "Re-attempts landing for a mission whose previous landing attempt failed."
+          }
+        },
+        {
+          "name": "Get Mission Instructions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/missions/{{missionId}}/instructions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "missions",
+                "{{missionId}}",
+                "instructions"
+              ]
+            },
+            "description": "Returns the fully rendered instructions/prompt that were (or would be) delivered to the captain for this mission."
+          }
+        },
+        {
+          "name": "Approve Mission Review",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Comment\": \"Looks good. Approved.\",\n  \"Conditional\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/missions/{{missionId}}/review/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "missions",
+                "{{missionId}}",
+                "review",
+                "approve"
+              ]
+            },
+            "description": "Approves a mission that is awaiting review, optionally with a comment and conditional approval."
+          }
+        },
+        {
+          "name": "Deny Mission Review",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Comment\": \"Please address the failing test before resubmitting.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/missions/{{missionId}}/review/deny",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "missions",
+                "{{missionId}}",
+                "review",
+                "deny"
+              ]
+            },
+            "description": "Denies a mission that is awaiting review, optionally with a comment describing required changes."
+          }
+        },
+        {
+          "name": "Evaluate Mission Autoland",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/missions/{{missionId}}/evaluate-autoland",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "missions",
+                "{{missionId}}",
+                "evaluate-autoland"
+              ]
+            },
+            "description": "Evaluates whether a mission is eligible for automatic landing and returns the decision with reasoning."
+          }
         }
       ]
     },
@@ -4244,6 +4736,47 @@
               "body": "{\n  \"Status\": \"deleted\",\n  \"Deleted\": 2,\n  \"Skipped\": []\n}"
             }
           ]
+        },
+        {
+          "name": "Unquarantine Captain",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/captains/{{captainId}}/unquarantine",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "captains",
+                "{{captainId}}",
+                "unquarantine"
+              ]
+            },
+            "description": "Clears a captain quarantine flag so the router may dispatch missions to it again."
+          }
+        },
+        {
+          "name": "Stop All Captains",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/captains/stop-all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "captains",
+                "stop-all"
+              ]
+            },
+            "description": "Stops all running captain agents and recalls them to idle state."
+          }
         }
       ]
     },
@@ -4490,6 +5023,27 @@
             "description": "Delete a planning session and its transcript. Active sessions are stopped first."
           },
           "response": []
+        },
+        {
+          "name": "Stop Planning Session Turn",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/planning-sessions/{{planningSessionId}}/stop-turn",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "planning-sessions",
+                "{{planningSessionId}}",
+                "stop-turn"
+              ]
+            },
+            "description": "Stops the in-progress assistant turn for a planning session without ending the session."
+          }
         }
       ]
     },
@@ -4680,6 +5234,108 @@
               "body": "{\n  \"Status\": \"deleted\",\n  \"Deleted\": 2,\n  \"Skipped\": []\n}"
             }
           ]
+        },
+        {
+          "name": "List Recent Signals",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/signals/recent",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "signals",
+                "recent"
+              ]
+            },
+            "description": "Returns the most recent signals for the caller scope."
+          }
+        },
+        {
+          "name": "Get Signal",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/signals/{{signalId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "signals",
+                "{{signalId}}"
+              ]
+            },
+            "description": "Returns a single signal by ID."
+          }
+        },
+        {
+          "name": "Mark Signal Read",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/signals/{{signalId}}/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "signals",
+                "{{signalId}}",
+                "read"
+              ]
+            },
+            "description": "Marks a single signal as read."
+          }
+        },
+        {
+          "name": "List Signals By Recipient",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/signals/recipient/{{captainId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "signals",
+                "recipient",
+                "{{captainId}}"
+              ]
+            },
+            "description": "Returns signals addressed to a specific captain recipient."
+          }
+        },
+        {
+          "name": "Delete Signal",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/signals/{{signalId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "signals",
+                "{{signalId}}"
+              ]
+            },
+            "description": "Deletes a single signal by ID."
+          }
         }
       ]
     },
@@ -5134,6 +5790,27 @@
               "body": "{\n  \"Status\": \"purged\",\n  \"EntriesPurged\": 2,\n  \"Skipped\": []\n}"
             }
           ]
+        },
+        {
+          "name": "Process Merge Entry",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/merge-queue/{{mergeEntryId}}/process",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "merge-queue",
+                "{{mergeEntryId}}",
+                "process"
+              ]
+            },
+            "description": "Triggers processing of a single merge queue entry by ID."
+          }
         }
       ]
     },
@@ -5328,6 +6005,27 @@
             },
             "description": "Disables a Harbor. A disabled Harbor keeps its docks but receives no new missions."
           }
+        },
+        {
+          "name": "Probe Harbor",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/harbors/{{harborId}}/probe",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "harbors",
+                "{{harborId}}",
+                "probe"
+              ]
+            },
+            "description": "Probes a Harbor for liveness and capability, updating its status."
+          }
         }
       ]
     },
@@ -5441,6 +6139,96 @@
               "body": "{\n  \"Status\": \"deleted\",\n  \"Deleted\": 2,\n  \"Skipped\": []\n}"
             }
           ]
+        },
+        {
+          "name": "List Docks",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/docks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "docks"
+              ]
+            },
+            "description": "Returns all docks (git worktrees) for the caller scope."
+          }
+        },
+        {
+          "name": "Enumerate Docks",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/docks/enumerate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "docks",
+                "enumerate"
+              ]
+            },
+            "description": "Paginated enumeration of docks with optional filtering and sorting via JSON body."
+          }
+        },
+        {
+          "name": "Repair Dock",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/docks/{{dockId}}/repair",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "docks",
+                "{{dockId}}",
+                "repair"
+              ]
+            },
+            "description": "Repairs a dock git worktree (re-links the worktree and resets it to a clean state)."
+          }
+        },
+        {
+          "name": "Unstick Dock",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/docks/{{dockId}}/unstick",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "docks",
+                "{{dockId}}",
+                "unstick"
+              ]
+            },
+            "description": "Clears a stuck lock/state on a dock so it can be reused."
+          }
         }
       ]
     },
@@ -5682,6 +6470,35 @@
                   ]
                 },
                 "description": "Delete the current workflow profile."
+              }
+            },
+            {
+              "name": "Enumerate Workflow Profiles",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/workflow-profiles/enumerate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "workflow-profiles",
+                    "enumerate"
+                  ]
+                },
+                "description": "Paginated enumeration of workflow profiles via a JSON body."
               }
             }
           ]
@@ -5942,6 +6759,35 @@
                 },
                 "description": "Delete one structured check run."
               }
+            },
+            {
+              "name": "Enumerate Check Runs",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/check-runs/enumerate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "check-runs",
+                    "enumerate"
+                  ]
+                },
+                "description": "Paginated enumeration of check runs via a JSON body."
+              }
             }
           ]
         },
@@ -6165,6 +7011,35 @@
                   ]
                 },
                 "description": "Delete one release record."
+              }
+            },
+            {
+              "name": "Enumerate Releases",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/releases/enumerate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "releases",
+                    "enumerate"
+                  ]
+                },
+                "description": "Paginated enumeration of releases via a JSON body."
               }
             }
           ]
@@ -6443,1105 +7318,6 @@
             },
             "description": "Step 8: View the event audit trail for all activity related to this voyage."
           }
-        }
-      ]
-    },
-    {
-      "name": "Proxy",
-      "description": "Remote-control proxy endpoints.",
-      "item": [
-        {
-          "name": "Shell & Inspection",
-          "description": "Read-oriented proxy endpoints and live inspection routes.",
-          "item": [
-            {
-              "name": "Health Check",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/status/health",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "status",
-                    "health"
-                  ]
-                },
-                "description": "Returns proxy health and connected-instance counts."
-              },
-              "response": [
-                {
-                  "name": "Proxy Healthy",
-                  "status": "OK",
-                  "code": 200,
-                  "body": "{\n  \"healthy\": true,\n  \"product\": \"Armada.Proxy\",\n  \"version\": \"0.9.0\",\n  \"protocolVersion\": \"2026-04-03\",\n  \"port\": 7893,\n  \"startedUtc\": \"2026-04-03T21:00:00Z\",\n  \"instances\": {\n    \"total\": 2,\n    \"connected\": 1,\n    \"stale\": 1,\n    \"offline\": 0\n  }\n}"
-                }
-              ]
-            },
-            {
-              "name": "List Instances",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances"
-                  ]
-                },
-                "description": "Returns summary rows for known Armada instances."
-              },
-              "response": [
-                {
-                  "name": "Instance List",
-                  "status": "OK",
-                  "code": 200,
-                  "body": "{\n  \"count\": 1,\n  \"instances\": [\n    {\n      \"instanceId\": \"armada-1f2e3d4c5b6a\",\n      \"state\": \"connected\",\n      \"armadaVersion\": \"0.9.0\",\n      \"protocolVersion\": \"2026-04-03\",\n      \"capabilities\": [\n        \"remoteControl.handshake\",\n        \"remoteControl.heartbeat\",\n        \"remoteControl.events\",\n        \"remoteControl.requests\",\n        \"status.health\",\n        \"status.snapshot\",\n        \"settings.remoteControl\"\n      ],\n      \"remoteAddress\": \"127.0.0.1\",\n      \"firstSeenUtc\": \"2026-04-03T21:00:00Z\",\n      \"connectedUtc\": \"2026-04-03T21:00:00Z\",\n      \"lastSeenUtc\": \"2026-04-03T21:02:00Z\",\n      \"lastEventUtc\": \"2026-04-03T21:01:30Z\",\n      \"lastDisconnectUtc\": null,\n      \"lastError\": null,\n      \"recentEventCount\": 3,\n      \"pendingRequestCount\": 0\n    }\n  ]\n}"
-                }
-              ]
-            },
-            {
-              "name": "Get Instance Detail",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}"
-                  ]
-                },
-                "description": "Returns current summary and recent forwarded events for an instance."
-              },
-              "response": [
-                {
-                  "name": "Instance Detail",
-                  "status": "OK",
-                  "code": 200,
-                  "body": "{\n  \"summary\": {\n    \"instanceId\": \"armada-1f2e3d4c5b6a\",\n    \"state\": \"connected\",\n    \"armadaVersion\": \"0.9.0\",\n    \"protocolVersion\": \"2026-04-03\",\n    \"capabilities\": [\n      \"remoteControl.handshake\",\n      \"remoteControl.heartbeat\",\n      \"remoteControl.events\",\n      \"remoteControl.requests\",\n      \"status.health\",\n      \"status.snapshot\",\n      \"settings.remoteControl\"\n    ],\n    \"remoteAddress\": \"127.0.0.1\",\n    \"firstSeenUtc\": \"2026-04-03T21:00:00Z\",\n    \"connectedUtc\": \"2026-04-03T21:00:00Z\",\n    \"lastSeenUtc\": \"2026-04-03T21:02:00Z\",\n    \"lastEventUtc\": \"2026-04-03T21:01:30Z\",\n    \"lastDisconnectUtc\": null,\n    \"lastError\": null,\n    \"recentEventCount\": 1,\n    \"pendingRequestCount\": 0\n  },\n  \"recentEvents\": [\n    {\n      \"method\": \"mission.completed\",\n      \"correlationId\": \"b0f3d61d59d74e5a855f6b2e3953c64f\",\n      \"message\": null,\n      \"timestampUtc\": \"2026-04-03T21:01:30Z\",\n      \"payload\": {\n        \"message\": \"Mission completed: Update prompt templates\",\n        \"missionId\": \"msn_abc123\"\n      }\n    }\n  ]\n}"
-                }
-              ]
-            },
-            {
-              "name": "Live Status Snapshot",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/status/snapshot",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "status",
-                    "snapshot"
-                  ]
-                },
-                "description": "Sends a live tunnel request for armada.status.snapshot."
-              },
-              "response": [
-                {
-                  "name": "Live Snapshot",
-                  "status": "OK",
-                  "code": 200,
-                  "body": "{\n  \"correlationId\": \"62cf28fa232f49a5aab48debe031eb89\",\n  \"success\": true,\n  \"statusCode\": 200,\n  \"errorCode\": null,\n  \"message\": \"Armada status snapshot captured.\",\n  \"payload\": {\n    \"totalCaptains\": 2,\n    \"workingCaptains\": 1,\n    \"activeVoyages\": 1\n  }\n}"
-                }
-              ]
-            },
-            {
-              "name": "Live Health",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/health",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "health"
-                  ]
-                },
-                "description": "Sends a live tunnel request for armada.status.health."
-              },
-              "response": [
-                {
-                  "name": "Live Health",
-                  "status": "OK",
-                  "code": 200,
-                  "body": "{\n  \"correlationId\": \"a81ec0a5ee024679b719046d1bf8de85\",\n  \"success\": true,\n  \"statusCode\": 200,\n  \"errorCode\": null,\n  \"message\": \"Armada health snapshot captured.\",\n  \"payload\": {\n    \"status\": \"healthy\",\n    \"timestamp\": \"2026-04-03T21:02:00Z\",\n    \"startUtc\": \"2026-04-03T20:00:00Z\",\n    \"uptime\": \"0.01:02:00\",\n    \"version\": \"0.9.0\",\n    \"ports\": {\n      \"admiral\": 7890,\n      \"mcp\": 7891\n    },\n    \"remoteTunnel\": {\n      \"enabled\": true,\n      \"state\": \"Connected\",\n      \"tunnelUrl\": \"wss://proxy.example.com/tunnel\",\n      \"instanceId\": \"armada-1f2e3d4c5b6a\",\n      \"lastError\": null,\n      \"reconnectAttempts\": 0,\n      \"latencyMs\": 42\n    }\n  }\n}"
-                }
-              ]
-            },
-            {
-              "name": "Remote Shell Summary",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/summary",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "summary"
-                  ]
-                },
-                "description": "Returns the aggregated remote-operations shell summary for a connected instance."
-              },
-              "response": []
-            },
-            {
-              "name": "Recent Activity",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/activity?limit=20",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "activity"
-                  ],
-                  "query": [
-                    {
-                      "key": "limit",
-                      "value": "20"
-                    }
-                  ]
-                },
-                "description": "Returns recent Armada activity rows for the selected instance."
-              },
-              "response": []
-            },
-            {
-              "name": "Recent Missions",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/missions/recent?limit=10",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "missions",
-                    "recent"
-                  ],
-                  "query": [
-                    {
-                      "key": "limit",
-                      "value": "10"
-                    }
-                  ]
-                },
-                "description": "Returns recently updated missions for the selected instance."
-              },
-              "response": []
-            },
-            {
-              "name": "Recent Voyages",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/voyages/recent?limit=10",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "voyages",
-                    "recent"
-                  ],
-                  "query": [
-                    {
-                      "key": "limit",
-                      "value": "10"
-                    }
-                  ]
-                },
-                "description": "Returns recently updated voyages for the selected instance."
-              },
-              "response": []
-            },
-            {
-              "name": "Recent Captains",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/captains/recent?limit=10",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "captains",
-                    "recent"
-                  ],
-                  "query": [
-                    {
-                      "key": "limit",
-                      "value": "10"
-                    }
-                  ]
-                },
-                "description": "Returns recently updated captains for the selected instance."
-              },
-              "response": []
-            },
-            {
-              "name": "Get Mission Detail",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/missions/{{missionId}}",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "missions",
-                    "{{missionId}}"
-                  ]
-                },
-                "description": "Returns focused mission detail including related captain, voyage, vessel, and dock when available."
-              },
-              "response": []
-            },
-            {
-              "name": "Get Mission Log",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/missions/{{missionId}}/log?lines=200&offset=0",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "missions",
-                    "{{missionId}}",
-                    "log"
-                  ],
-                  "query": [
-                    {
-                      "key": "lines",
-                      "value": "200"
-                    },
-                    {
-                      "key": "offset",
-                      "value": "0"
-                    }
-                  ]
-                },
-                "description": "Returns a paged mission log slice."
-              },
-              "response": []
-            },
-            {
-              "name": "Get Mission Diff",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/missions/{{missionId}}/diff",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "missions",
-                    "{{missionId}}",
-                    "diff"
-                  ]
-                },
-                "description": "Returns a saved or live mission diff for the selected mission."
-              },
-              "response": []
-            },
-            {
-              "name": "Get Voyage Detail",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/voyages/{{voyageId}}",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "voyages",
-                    "{{voyageId}}"
-                  ]
-                },
-                "description": "Returns voyage detail and the associated mission chain."
-              },
-              "response": []
-            },
-            {
-              "name": "Get Captain Detail",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/captains/{{captainId}}",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "captains",
-                    "{{captainId}}"
-                  ]
-                },
-                "description": "Returns captain detail including current mission/dock and recent mission history."
-              },
-              "response": []
-            },
-            {
-              "name": "Get Captain Log",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/captains/{{captainId}}/log?lines=50&offset=0",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "captains",
-                    "{{captainId}}",
-                    "log"
-                  ],
-                  "query": [
-                    {
-                      "key": "lines",
-                      "value": "50"
-                    },
-                    {
-                      "key": "offset",
-                      "value": "0"
-                    }
-                  ]
-                },
-                "description": "Returns a paged captain log slice."
-              },
-              "response": []
-            }
-          ]
-        },
-        {
-          "name": "Management",
-          "description": "Write-oriented proxy endpoints for fleets, vessels, voyages, missions, and captain control.",
-          "item": [
-            {
-              "name": "List Fleets",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/fleets?limit=25",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "fleets"
-                  ],
-                  "query": [
-                    {
-                      "key": "limit",
-                      "value": "25"
-                    }
-                  ]
-                },
-                "description": "List fleets on the connected Armada instance through the proxy."
-              },
-              "response": []
-            },
-            {
-              "name": "Get Fleet Detail",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/fleets/{{fleetId}}",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "fleets",
-                    "{{fleetId}}"
-                  ]
-                },
-                "description": "Get fleet detail from the connected Armada instance."
-              },
-              "response": []
-            },
-            {
-              "name": "Create Fleet",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/fleets",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "fleets"
-                  ]
-                },
-                "description": "Create a fleet on the connected Armada instance.",
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"name\": \"Remote Control Fleet\",\n  \"description\": \"Created through the proxy management API.\",\n  \"defaultPipelineId\": null,\n  \"active\": true\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                }
-              },
-              "response": []
-            },
-            {
-              "name": "Update Fleet",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "PUT",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/fleets/{{fleetId}}",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "fleets",
-                    "{{fleetId}}"
-                  ]
-                },
-                "description": "Update an existing fleet through the proxy.",
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"name\": \"Remote Control Fleet\",\n  \"description\": \"Updated through the proxy management API.\",\n  \"defaultPipelineId\": null,\n  \"active\": true\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                }
-              },
-              "response": []
-            },
-            {
-              "name": "List Vessels",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/vessels?limit=25&fleetId={{fleetId}}",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "vessels"
-                  ],
-                  "query": [
-                    {
-                      "key": "limit",
-                      "value": "25"
-                    },
-                    {
-                      "key": "fleetId",
-                      "value": "{{fleetId}}"
-                    }
-                  ]
-                },
-                "description": "List vessels on the connected Armada instance through the proxy."
-              },
-              "response": []
-            },
-            {
-              "name": "Get Vessel Detail",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/vessels/{{vesselId}}",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "vessels",
-                    "{{vesselId}}"
-                  ]
-                },
-                "description": "Get vessel detail from the connected Armada instance."
-              },
-              "response": []
-            },
-            {
-              "name": "Create Vessel",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/vessels",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "vessels"
-                  ]
-                },
-                "description": "Create a vessel on the connected Armada instance.",
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"fleetId\": \"{{fleetId}}\",\n  \"name\": \"armada-remote-vessel\",\n  \"repoUrl\": \"https://github.com/jchristn/armada\",\n  \"workingDirectory\": \"C:\\\\code\\\\armada\\\\armada\",\n  \"defaultBranch\": \"main\",\n  \"defaultPipelineId\": null,\n  \"allowConcurrentMissions\": false,\n  \"active\": true\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                }
-              },
-              "response": []
-            },
-            {
-              "name": "Update Vessel",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "PUT",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/vessels/{{vesselId}}",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "vessels",
-                    "{{vesselId}}"
-                  ]
-                },
-                "description": "Update a vessel through the proxy.",
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"fleetId\": \"{{fleetId}}\",\n  \"name\": \"armada-remote-vessel\",\n  \"repoUrl\": \"https://github.com/jchristn/armada\",\n  \"workingDirectory\": \"C:\\\\code\\\\armada\\\\armada\",\n  \"defaultBranch\": \"main\",\n  \"defaultPipelineId\": null,\n  \"allowConcurrentMissions\": false,\n  \"active\": true\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                }
-              },
-              "response": []
-            },
-            {
-              "name": "List Voyages",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/voyages?limit=25&status=InProgress",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "voyages"
-                  ],
-                  "query": [
-                    {
-                      "key": "limit",
-                      "value": "25"
-                    },
-                    {
-                      "key": "status",
-                      "value": "InProgress"
-                    }
-                  ]
-                },
-                "description": "List voyages on the connected Armada instance through the proxy."
-              },
-              "response": []
-            },
-            {
-              "name": "Dispatch Voyage",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/voyages/dispatch",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "voyages",
-                    "dispatch"
-                  ]
-                },
-                "description": "Dispatch a voyage on the connected Armada instance.",
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"title\": \"Remote Control Dispatch\",\n  \"description\": \"Create a bounded proxy management test voyage.\",\n  \"vesselId\": \"{{vesselId}}\",\n  \"pipeline\": \"FullPipeline\",\n  \"missions\": [\n    {\n      \"title\": \"Update docs\",\n      \"description\": \"Refresh the proxy operator docs.\"\n    },\n    {\n      \"title\": \"Validate shell UX\",\n      \"description\": \"Verify the remote shell can browse and manage the new surface.\"\n    }\n  ]\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                }
-              },
-              "response": []
-            },
-            {
-              "name": "Cancel Voyage",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "DELETE",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/voyages/{{voyageId}}",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "voyages",
-                    "{{voyageId}}"
-                  ]
-                },
-                "description": "Cancel an active or pending voyage through the proxy."
-              },
-              "response": []
-            },
-            {
-              "name": "List Missions",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/missions?limit=25&status=InProgress&voyageId={{voyageId}}&vesselId={{vesselId}}",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "missions"
-                  ],
-                  "query": [
-                    {
-                      "key": "limit",
-                      "value": "25"
-                    },
-                    {
-                      "key": "status",
-                      "value": "InProgress"
-                    },
-                    {
-                      "key": "voyageId",
-                      "value": "{{voyageId}}"
-                    },
-                    {
-                      "key": "vesselId",
-                      "value": "{{vesselId}}"
-                    }
-                  ]
-                },
-                "description": "List missions on the connected Armada instance through the proxy."
-              },
-              "response": []
-            },
-            {
-              "name": "Create Mission",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/missions",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "missions"
-                  ]
-                },
-                "description": "Create a mission through the proxy.",
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"title\": \"Investigate proxy regression\",\n  \"description\": \"Inspect the remote shell and fix issues as needed.\",\n  \"vesselId\": \"{{vesselId}}\",\n  \"voyageId\": \"{{voyageId}}\",\n  \"persona\": \"Worker\",\n  \"priority\": 100\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                }
-              },
-              "response": []
-            },
-            {
-              "name": "Update Mission",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "PUT",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/missions/{{missionId}}",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "missions",
-                    "{{missionId}}"
-                  ]
-                },
-                "description": "Update a mission through the proxy.",
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"title\": \"Investigate proxy regression\",\n  \"description\": \"Inspect the remote shell and fix issues as needed.\",\n  \"vesselId\": \"{{vesselId}}\",\n  \"voyageId\": \"{{voyageId}}\",\n  \"persona\": \"Worker\",\n  \"priority\": 50\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                }
-              },
-              "response": []
-            },
-            {
-              "name": "Cancel Mission",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "DELETE",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/missions/{{missionId}}",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "missions",
-                    "{{missionId}}"
-                  ]
-                },
-                "description": "Cancel a mission through the proxy."
-              },
-              "response": []
-            },
-            {
-              "name": "Restart Mission",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/missions/{{missionId}}/restart",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "missions",
-                    "{{missionId}}",
-                    "restart"
-                  ]
-                },
-                "description": "Restart a mission through the proxy.",
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"title\": \"Investigate proxy regression\",\n  \"description\": \"Re-run the mission after fixes land.\"\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                }
-              },
-              "response": []
-            },
-            {
-              "name": "Stop Captain",
-              "request": {
-                "auth": {
-                  "type": "noauth"
-                },
-                "method": "POST",
-                "header": [],
-                "url": {
-                  "raw": "{{proxyBaseUrl}}/api/v1/instances/{{instanceId}}/captains/{{captainId}}/stop",
-                  "host": [
-                    "{{proxyBaseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "instances",
-                    "{{instanceId}}",
-                    "captains",
-                    "{{captainId}}",
-                    "stop"
-                  ]
-                },
-                "description": "Stop a captain through the proxy."
-              },
-              "response": []
-            }
-          ]
         }
       ]
     },
@@ -8109,6 +7885,162 @@
               "raw": "{\n  \"Title\": \"Backlog follow-through voyage\",\n  \"Description\": \"Dispatch implementation from the backlog item.\",\n  \"VesselId\": \"{{vesselId}}\",\n  \"ObjectiveId\": \"{{objectiveId}}\",\n  \"Missions\": [\n    {\n      \"Title\": \"Backlog follow-through mission\",\n      \"Description\": \"Implement the linked backlog item\"\n    }\n  ]\n}"
             }
           }
+        },
+        {
+          "name": "Enumerate Objectives",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/objectives/enumerate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "objectives",
+                "enumerate"
+              ]
+            },
+            "description": "Paginated objective enumeration using a JSON body and optional querystring overrides."
+          }
+        },
+        {
+          "name": "Reorder Objectives",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Items\": [\n    {\n      \"ObjectiveId\": \"{{objectiveId}}\",\n      \"Rank\": 1\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/objectives/reorder",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "objectives",
+                "reorder"
+              ]
+            },
+            "description": "Applies one or more explicit backlog rank updates to objectives."
+          }
+        },
+        {
+          "name": "Enumerate Backlog",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/backlog/enumerate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "backlog",
+                "enumerate"
+              ]
+            },
+            "description": "Paginated backlog enumeration using a JSON body and optional querystring overrides."
+          }
+        },
+        {
+          "name": "Get Backlog Item",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/backlog/{{objectiveId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "backlog",
+                "{{objectiveId}}"
+              ]
+            },
+            "description": "Returns one backlog item by ID (obj_ prefix)."
+          }
+        },
+        {
+          "name": "Update Backlog Item",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Title\": \"Improve login latency\",\n  \"Priority\": \"High\",\n  \"Rank\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/backlog/{{objectiveId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "backlog",
+                "{{objectiveId}}"
+              ]
+            },
+            "description": "Updates backlog scope, rank, prioritization, and linked entities."
+          }
+        },
+        {
+          "name": "Delete Backlog Item",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/backlog/{{objectiveId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "backlog",
+                "{{objectiveId}}"
+              ]
+            },
+            "description": "Deletes one backlog item and its snapshot chain."
+          }
         }
       ]
     },
@@ -8262,6 +8194,35 @@
               ]
             },
             "description": "Delete one environment record."
+          }
+        },
+        {
+          "name": "Enumerate Environments",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/environments/enumerate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "environments",
+                "enumerate"
+              ]
+            },
+            "description": "Paginated enumeration of environments via a JSON body."
           }
         }
       ]
@@ -8536,6 +8497,35 @@
             },
             "description": "Delete one deployment record."
           }
+        },
+        {
+          "name": "Enumerate Deployments",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/deployments/enumerate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "deployments",
+                "enumerate"
+              ]
+            },
+            "description": "Paginated enumeration of deployments via a JSON body."
+          }
         }
       ]
     },
@@ -8689,6 +8679,35 @@
               ]
             },
             "description": "Delete one incident record."
+          }
+        },
+        {
+          "name": "Enumerate Incidents",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/incidents/enumerate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "incidents",
+                "enumerate"
+              ]
+            },
+            "description": "Paginated enumeration of incidents via a JSON body."
           }
         }
       ]
@@ -8983,6 +9002,64 @@
               ]
             },
             "description": "Delete one runbook execution."
+          }
+        },
+        {
+          "name": "Enumerate Runbooks",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/runbooks/enumerate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "runbooks",
+                "enumerate"
+              ]
+            },
+            "description": "Paginated enumeration of runbooks via a JSON body."
+          }
+        },
+        {
+          "name": "Enumerate Runbook Executions",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/runbook-executions/enumerate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "runbook-executions",
+                "enumerate"
+              ]
+            },
+            "description": "Paginated enumeration of runbook executions via a JSON body."
           }
         }
       ]
@@ -9297,6 +9374,536 @@
               ]
             },
             "description": "Delete a memory (e.g. a stale one). Returns 204."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Ask",
+      "description": "Conversational assistants: Ask Armada (read-only fleet Q&A) and direct captain chat.",
+      "item": [
+        {
+          "name": "Ask Armada",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Message\": \"How many missions are currently in progress?\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ask",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ask"
+              ]
+            },
+            "description": "A lightweight conversational assistant that answers read-only questions about fleet state and returns suggested navigation links."
+          }
+        },
+        {
+          "name": "Chat With Captain",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Message\": \"Summarize what you changed in your last mission.\",\n  \"History\": [],\n  \"ShowThinking\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/captains/{{captainId}}/chat",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "captains",
+                "{{captainId}}",
+                "chat"
+              ]
+            },
+            "description": "Send a chat turn directly to a captain configured model and return the reply plus per-turn timing and token metrics."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Jobs",
+      "description": "Background jobs: list, read, and cancel for status polling.",
+      "item": [
+        {
+          "name": "List Jobs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "jobs"
+              ]
+            },
+            "description": "Returns background jobs newest first, scoped to the caller."
+          }
+        },
+        {
+          "name": "Get Job",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "jobs",
+                "{{jobId}}"
+              ]
+            },
+            "description": "Returns a single background job by ID."
+          }
+        },
+        {
+          "name": "Cancel Job",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/jobs/{{jobId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "jobs",
+                "{{jobId}}",
+                "cancel"
+              ]
+            },
+            "description": "Cancels a background job that is pending or running."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inbox",
+      "description": "The operator needs-you inbox.",
+      "item": [
+        {
+          "name": "Get Inbox",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/inbox",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "inbox"
+              ]
+            },
+            "description": "Returns a consolidated, most-urgent-first list of items awaiting operator attention (reviews, failed landings, failed missions, stalled captains)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Skills",
+      "description": "Reusable skills captains can apply. Category B shared configuration entity (scope: UserSpecific or TenantWide).",
+      "item": [
+        {
+          "name": "List Skills",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/skills",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "skills"
+              ]
+            },
+            "description": "Returns skills visible to the caller (tenant-wide plus own user-specific)."
+          }
+        },
+        {
+          "name": "Enumerate Skills",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/skills/enumerate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "skills",
+                "enumerate"
+              ]
+            },
+            "description": "Paginated enumeration of skills via a JSON body."
+          }
+        },
+        {
+          "name": "Create Skill",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Name\": \"Run Unit Tests\",\n  \"Description\": \"Runs the project unit test suite.\",\n  \"Category\": \"Testing\",\n  \"Content\": \"Execute: dotnet test src/Test.Xunit\",\n  \"Active\": true,\n  \"Scope\": \"UserSpecific\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/skills",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "skills"
+              ]
+            },
+            "description": "Creates a skill. Regular users may create only user-specific skills; tenant-wide requires a tenant admin."
+          }
+        },
+        {
+          "name": "Get Skill",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/skills/{{skillId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "skills",
+                "{{skillId}}"
+              ]
+            },
+            "description": "Returns a single skill by ID (skl_ prefix)."
+          }
+        },
+        {
+          "name": "Update Skill",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Name\": \"Run Unit Tests\",\n  \"Description\": \"Runs the project unit test suite.\",\n  \"Category\": \"Testing\",\n  \"Content\": \"Execute: dotnet test src/Test.Xunit\",\n  \"Active\": true,\n  \"Scope\": \"UserSpecific\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/skills/{{skillId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "skills",
+                "{{skillId}}"
+              ]
+            },
+            "description": "Updates a skill. You may only modify your own skills; a tenant-wide skill requires a tenant admin."
+          }
+        },
+        {
+          "name": "Delete Skill",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/skills/{{skillId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "skills",
+                "{{skillId}}"
+              ]
+            },
+            "description": "Deletes a single skill by ID."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Project Profiles",
+      "description": "Project profiles bind personas, pipelines, workflow profiles, and skills to a scope. Category B shared configuration entity (ownershipScope: UserSpecific or TenantWide).",
+      "item": [
+        {
+          "name": "List Project Profiles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/project-profiles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "project-profiles"
+              ]
+            },
+            "description": "Returns project profiles visible to the caller (tenant-wide plus own user-specific)."
+          }
+        },
+        {
+          "name": "Enumerate Project Profiles",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/project-profiles/enumerate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "project-profiles",
+                "enumerate"
+              ]
+            },
+            "description": "Paginated enumeration of project profiles via a JSON body."
+          }
+        },
+        {
+          "name": "Validate Project Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Name\": \"Default C# Service Profile\",\n  \"Description\": \"Profile for C#/.NET service repositories.\",\n  \"Scope\": \"Global\",\n  \"OwnershipScope\": \"TenantWide\",\n  \"Active\": true,\n  \"IsDefault\": false,\n  \"PersonaOverrides\": [],\n  \"Skills\": []\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/project-profiles/validate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "project-profiles",
+                "validate"
+              ]
+            },
+            "description": "Validates a project profile body without persisting it and returns validation results."
+          }
+        },
+        {
+          "name": "Resolve Project Profile For Vessel",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/project-profiles/resolve/vessels/{{vesselId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "project-profiles",
+                "resolve",
+                "vessels",
+                "{{vesselId}}"
+              ]
+            },
+            "description": "Resolves the effective project profile that applies to a given vessel."
+          }
+        },
+        {
+          "name": "Preview Persona Prompt",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/project-profiles/{{projectProfileId}}/persona-preview/Architect",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "project-profiles",
+                "{{projectProfileId}}",
+                "persona-preview",
+                "Architect"
+              ]
+            },
+            "description": "Returns the base and effective (override-applied) persona prompt for a persona so the dashboard can render a live diff. Replace the persona path segment (e.g. Architect, Worker, Test Engineer)."
+          }
+        },
+        {
+          "name": "Create Project Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Name\": \"Default C# Service Profile\",\n  \"Description\": \"Profile for C#/.NET service repositories.\",\n  \"Scope\": \"Global\",\n  \"OwnershipScope\": \"TenantWide\",\n  \"Active\": true,\n  \"IsDefault\": false,\n  \"PersonaOverrides\": [],\n  \"Skills\": []\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/project-profiles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "project-profiles"
+              ]
+            },
+            "description": "Creates a project profile. The body is validated before persistence."
+          }
+        },
+        {
+          "name": "Get Project Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/project-profiles/{{projectProfileId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "project-profiles",
+                "{{projectProfileId}}"
+              ]
+            },
+            "description": "Returns a single project profile by ID (ppf_ prefix)."
+          }
+        },
+        {
+          "name": "Update Project Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Name\": \"Default C# Service Profile\",\n  \"Description\": \"Profile for C#/.NET service repositories.\",\n  \"Scope\": \"Global\",\n  \"OwnershipScope\": \"TenantWide\",\n  \"Active\": true,\n  \"IsDefault\": false,\n  \"PersonaOverrides\": [],\n  \"Skills\": []\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/project-profiles/{{projectProfileId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "project-profiles",
+                "{{projectProfileId}}"
+              ]
+            },
+            "description": "Updates a project profile. The merged profile is validated before persistence."
+          }
+        },
+        {
+          "name": "Delete Project Profile",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/project-profiles/{{projectProfileId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "project-profiles",
+                "{{projectProfileId}}"
+              ]
+            },
+            "description": "Deletes a single project profile by ID."
           }
         }
       ]

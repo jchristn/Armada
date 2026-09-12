@@ -118,7 +118,13 @@ an honest summary noting that per-server tool visibility is not yet available ov
 
 ## Related dashboard change
 
-Independently, the "Ask Armada" banner was made correct for `ApiEndpoint` captains, which never act as an
-MCP client (they run Armada's built-in coding tools in-process). The probe now classifies `ApiEndpoint`
-intentionally instead of falling through to `unsupported-runtime`, and the dashboard shows an accurate note
-for it rather than the inapplicable "add the Armada MCP server to this captain's runtime config" warning.
+Independently, the "Ask Armada" banner was made correct for `ApiEndpoint` captains. The probe now
+classifies `ApiEndpoint` intentionally instead of falling through to `unsupported-runtime`, and the
+dashboard shows an accurate note for it rather than the inapplicable "add the Armada MCP server to this
+captain's runtime config" warning.
+
+Update: `ApiEndpoint` captains run Armada's built-in coding tools in-process, and, in an Ask Armada chat,
+they now also act as an MCP client against Armada's own `/mcp` endpoint -- the runtime is handed the local
+MCP URL plus a short-lived per-caller session token and merges the discovered Armada tools into its
+tool-calling loop, scoped to the asking user. The dashboard note reflects this (it no longer states that
+orchestration tools are unavailable to `ApiEndpoint` captains in chat).

@@ -34,6 +34,7 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [status](#status)
     - [inbox](#inbox)
     - [token_usage_summary](#token_usage_summary)
+    - [papercut_summary](#papercut_summary)
     - [stop_server](#stop_server)
   - **Enumeration**
     - [enumerate](#enumerate)
@@ -63,6 +64,7 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [update_mission](#update_mission)
     - [cancel_mission](#cancel_mission)
     - [restart_mission](#restart_mission)
+    - [retry_landing](#retry_landing)
     - [purge_mission](#purge_mission)
     - [delete_missions](#delete_missions)
     - [transition_mission_status](#transition_mission_status)
@@ -88,6 +90,8 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [get_dock](#get_dock)
     - [delete_dock](#delete_dock)
     - [purge_dock](#purge_dock)
+    - [repair_dock](#repair_dock)
+    - [unstick_dock](#unstick_dock)
     - [delete_docks](#delete_docks)
   - **Playbooks**
     - [get_playbook](#get_playbook)
@@ -480,6 +484,52 @@ Counts are normalized across providers: `input` covers prompt tokens, `output` c
 
 ---
 
+### papercut_summary
+
+List friction that captains reported during missions ("papercuts"), collapsed into groups of the same vessel, category, and problem. Use the count and distinct-captain count to tell a one-off from a real defect, then promote a group to a backlog item or objective. All parameters are optional.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "vesselId": { "type": "string", "description": "Filter to one vessel (vsl_ prefix)" },
+    "category": { "type": "string", "description": "Filter to one category: BriefContradiction, ToolFailure, MissingDoc, BrokenLink, RepoFriction, TestFlake, EnvSetup, PlatformBug, Other" },
+    "minSeverity": { "type": "string", "description": "Minimum severity: Low, Medium, or High" },
+    "sinceHours": { "type": "integer", "description": "Only include reports newer than this many hours" },
+    "ungrouped": { "type": "boolean", "description": "Return every report instead of groups (default false)" },
+    "limit": { "type": "integer", "description": "Maximum rows returned (default 25, maximum 200)" },
+    "scanLimit": { "type": "integer", "description": "Stored reports to scan before filtering (default 500, maximum 5000)" }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `vesselId` | string | No | Filter to one vessel (prefix `vsl_`) |
+| `category` | string | No | Filter to one category: `BriefContradiction`, `ToolFailure`, `MissingDoc`, `BrokenLink`, `RepoFriction`, `TestFlake`, `EnvSetup`, `PlatformBug`, `Other`. An unknown name returns an error. |
+| `minSeverity` | string | No | Minimum severity to include: `Low`, `Medium`, or `High`. An unknown name returns an error. |
+| `sinceHours` | integer | No | Only include reports newer than this many hours |
+| `ungrouped` | boolean | No | Return every matching report instead of collapsing repeats into groups (default `false`) |
+| `limit` | integer | No | Maximum rows returned (default 25, clamped to [1, 200]) |
+| `scanLimit` | integer | No | Number of stored reports to scan before filtering (default 500, clamped to [1, 5000]) |
+
+**Response (grouped, default):** `Scanned`, `Matched`, `GroupCount`, and a `Groups` array.
+
+```json
+{
+  "Scanned": 500,
+  "Matched": 42,
+  "GroupCount": 7,
+  "Groups": [ { "...": "..." } ]
+}
+```
+
+**Response (with `ungrouped: true`):** `Scanned`, `Matched`, and a `Papercuts` array (most-recently-reported first).
+
+---
+
 ### stop_server
 
 Initiate a graceful shutdown of the Admiral server.
@@ -507,7 +557,7 @@ No parameters required.
 
 ### enumerate
 
-Paginated enumeration of any entity type with filtering and sorting. This is the MCP equivalent of the `POST /api/v1/{entity}/enumerate` REST endpoints. Returns paginated results with total counts, page metadata, and query timing. Supports: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, prompt_templates, pipelines, workflow_profiles, check_runs, releases, model_endpoints.
+Paginated enumeration of any entity type with filtering and sorting. This is the MCP equivalent of the `POST /api/v1/{entity}/enumerate` REST endpoints. Returns paginated results with total counts, page metadata, and query timing. Supports: objectives (aliases `backlog`, `backlog_item`, `backlog_items`), fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, memories, prompt_templates, pipelines, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, jobs, model_endpoints.
 
 **Input Schema:**
 
@@ -515,13 +565,14 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 {
   "type": "object",
   "properties": {
-    "entityType": { "type": "string", "description": "Entity type to enumerate (fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, prompt_templates, pipelines, workflow_profiles, check_runs, releases, model_endpoints, memories)" },
+    "entityType": { "type": "string", "description": "Entity type to enumerate (objectives [aliases backlog, backlog_item, backlog_items], fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, memories, prompt_templates, pipelines, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, jobs, model_endpoints)" },
     "pageNumber": { "type": "integer", "description": "Page number (1-based, default 1)" },
     "pageSize": { "type": "integer", "description": "Results per page (default 10, max 1000)" },
     "order": { "type": "string", "description": "Sort order: CreatedAscending, CreatedDescending" },
     "createdAfter": { "type": "string", "description": "ISO 8601 timestamp filter" },
     "createdBefore": { "type": "string", "description": "ISO 8601 timestamp filter" },
     "status": { "type": "string", "description": "Filter by status (entity-specific)" },
+    "search": { "type": "string", "description": "Free-text search where supported (releases, deployments, incidents, runbooks, runbook_executions, memories, objectives)" },
     "fleetId": { "type": "string", "description": "Filter by fleet ID (vessels)" },
     "vesselId": { "type": "string", "description": "Filter by vessel ID (missions, docks)" },
     "captainId": { "type": "string", "description": "Filter by captain ID (missions, events, signals)" },
@@ -543,6 +594,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 
 | `entityType` value | Supported filters |
 |---|---|
+| `objectives` (aliases `backlog`, `backlog_item`, `backlog_items`) | `status`, `vesselId`, `voyageId`, `missionId`, `search` |
 | `fleets` | `createdAfter`, `createdBefore` |
 | `vessels` | `fleetId`, `createdAfter`, `createdBefore` |
 | `captains` | `status` (Idle/Working/Stalled), `createdAfter`, `createdBefore` |
@@ -560,6 +612,14 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 | `workflow_profiles` | `createdAfter`, `createdBefore` (current MCP enumeration is primarily paginated browse) |
 | `check_runs` | `createdAfter`, `createdBefore` (current MCP enumeration is primarily paginated browse) |
 | `releases` | `status`, `vesselId`, `search`, `createdAfter`, `createdBefore` |
+| `deployments` | `status`, `vesselId`, `missionId`, `voyageId`, `search`, `createdAfter`, `createdBefore` |
+| `incidents` | `vesselId`, `missionId`, `voyageId`, `search` |
+| `runbooks` | `search` (current MCP enumeration is primarily paginated browse) |
+| `runbook_executions` (aliases `runbook-executions`, `runbookexecution`) | `search` (current MCP enumeration is primarily paginated browse) |
+| `project_profiles` | `createdAfter`, `createdBefore` (current MCP enumeration is primarily paginated browse) |
+| `skills` | `createdAfter`, `createdBefore` (current MCP enumeration is primarily paginated browse) |
+| `memories` | `search` (plus paginated browse) |
+| `jobs` | (paginated browse only) |
 | `model_endpoints` | `createdAfter`, `createdBefore` (current MCP enumeration is primarily paginated browse) |
 
 | Include flag | Applies to | Default | Description |
@@ -684,6 +744,23 @@ Dispatch a new voyage with missions to a vessel. This is the primary way to assi
         },
         "required": ["playbookId", "deliveryMode"]
       }
+    },
+    "objectiveId": {
+      "type": "string",
+      "description": "Optional objective (obj_ prefix) to link this voyage to; must exist. Parity with REST dispatch."
+    },
+    "captainAssignments": {
+      "type": "array",
+      "description": "Optional per-persona captain overrides. Each entry binds a pipeline step (persona) to a preferred captain and a fallback tier.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "persona": { "type": "string", "description": "Persona name the override applies to (e.g. Worker, Architect, Judge)" },
+          "captainId": { "type": "string", "description": "Preferred captain id (cpt_ prefix), or omit for tier-only routing" },
+          "fallbackTier": { "type": "string", "description": "Fallback tier when the preferred captain is busy: Economy, Standard, or Premium" }
+        },
+        "required": ["persona"]
+      }
     }
   },
   "required": ["title"]
@@ -700,7 +777,7 @@ Dispatch a new voyage with missions to a vessel. This is the primary way to assi
 | `pipeline` | string | No | Pipeline name to use (convenience alias for `pipelineId` -- resolves by name; a bad name is rejected) |
 | `objectiveId` | string | No | Objective (prefix `obj_`) to link this voyage to; must exist |
 | `selectedPlaybooks` | array | No | Ordered playbook selections with `playbookId` and `deliveryMode` |
-| `captainAssignments` | array | No | Per-persona captain overrides (preferred captain + fallback tier) |
+| `captainAssignments` | array | No | Per-persona captain overrides. Array of `{ persona` (required)`, captainId, fallbackTier` (`Economy`/`Standard`/`Premium`)` }` -- binds a pipeline step (persona) to a preferred captain and a fallback tier. |
 
 > **Parity with REST.** This tool and `POST /api/v1/voyages` funnel through the same validation: a linked
 > objective must exist, a pipeline name must resolve, and a request with no vessel or no missions is created
@@ -985,15 +1062,19 @@ Register a new vessel (git repository) in a fleet.
     },
     "workingDirectory": {
       "type": "string",
-      "description": "Optional local directory where completed mission changes will be pulled after merge"
+      "description": "Optional local directory where completed mission changes will be pulled after merge. When repoUrl is a local clone (a file:// URL or an existing local path) and this is omitted, it is set automatically to that local clone so the vessel is immediately usable (e.g. for Rebuild Armada)."
     },
     "gitHubTokenOverride": {
       "type": "string",
       "description": "Optional per-vessel GitHub token override. Leave unset to use the global configured token."
     },
+    "allowConcurrentMissions": {
+      "type": "boolean",
+      "description": "Allow multiple concurrent missions on this vessel (default false)"
+    },
     "enableModelContext": {
       "type": "boolean",
-      "description": "Enable model context accumulation -- agents will update context with key information discovered during missions (default false)"
+      "description": "Enable model context accumulation -- agents will update context with key information discovered during missions (default true)"
     },
     "defaultPipelineId": {
       "type": "string",
@@ -1012,9 +1093,10 @@ Register a new vessel (git repository) in a fleet.
 | `defaultBranch` | string | No | Default branch name (defaults to `"main"`) |
 | `projectContext` | string | No | Project context describing architecture, key files, and dependencies |
 | `styleGuide` | string | No | Style guide describing naming conventions, patterns, and library preferences |
-| `workingDirectory` | string | No | Optional local directory where completed mission changes will be pulled after merge |
+| `workingDirectory` | string | No | Optional local directory where completed mission changes will be pulled after merge. When `repoUrl` is a local clone (a `file://` URL or an existing local path) and this is omitted, it is set automatically to that local clone so the vessel is immediately usable (e.g. for Rebuild Armada). |
 | `gitHubTokenOverride` | string | No | Optional per-vessel GitHub token override. The raw token is accepted on create but never returned by MCP reads. |
-| `enableModelContext` | boolean | No | Enable model context accumulation (default false) |
+| `allowConcurrentMissions` | boolean | No | Allow multiple concurrent missions on this vessel (default false) |
+| `enableModelContext` | boolean | No | Enable model context accumulation (default true) |
 | `defaultPipelineId` | string | No | Default pipeline ID for voyages dispatched to this vessel |
 
 **Example Input:**
@@ -1322,6 +1404,30 @@ Only `Failed` or `Cancelled` missions can be restarted. Returns `{"error": "..."
 
 ---
 
+### retry_landing
+
+Retry landing for a mission in `LandingFailed` status. Rebases the mission branch onto the current target and re-attempts landing.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "missionId": { "type": "string", "description": "Mission ID (msn_ prefix) to retry landing for" }
+  },
+  "required": ["missionId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `missionId` | string | Yes | Mission ID to retry landing for (prefix `msn_`) |
+
+**Response:** `{ "Success": true, "Mission": { "...": "..." } }` where `Success` reports whether the landing succeeded and `Mission` is the refreshed [Mission](#mission) object. Returns `{ "Error": "Landing service not configured" }` when the landing service is unavailable.
+
+---
+
 ### cancel_voyage
 
 Cancel an entire voyage and all its pending missions. Missions that are already `Complete` or `Cancelled` are not affected.
@@ -1570,9 +1676,15 @@ Update an existing vessel's properties.
     "styleGuide": { "type": "string", "description": "New style guide" },
     "workingDirectory": { "type": "string", "description": "New local directory where completed mission changes will be pulled after merge" },
     "gitHubTokenOverride": { "type": "string", "description": "Optional per-vessel GitHub token override. Empty string clears the existing override." },
+    "allowConcurrentMissions": { "type": "boolean", "description": "Allow multiple concurrent missions on this vessel" },
     "enableModelContext": { "type": "boolean", "description": "Enable or disable model context accumulation" },
     "modelContext": { "type": "string", "description": "Agent-accumulated context about this repository" },
     "defaultPipelineId": { "type": "string", "description": "Default pipeline ID for voyages dispatched to this vessel" },
+    "autoLandEnabled": { "type": "boolean", "description": "Whether the auto-land predicate gates unattended landing on this vessel" },
+    "autoLandMaxFiles": { "type": "integer", "description": "Maximum number of changed files that may auto-land unattended (0 = no limit)" },
+    "autoLandMaxLines": { "type": "integer", "description": "Maximum number of changed lines that may auto-land unattended (0 = no limit)" },
+    "autoLandPathAllowGlobs": { "type": "array", "items": { "type": "string" }, "description": "Glob patterns a changed path must match to be auto-landable" },
+    "autoLandPathDenyGlobs": { "type": "array", "items": { "type": "string" }, "description": "Glob patterns that force a hold: a change touching any matching path never auto-lands" },
     "definitionOfDoneEnabled": { "type": "boolean", "description": "Run the in-dock build + unit tests before acceptance; a failure blocks landing with a classified reason (Compile/TestFail/Timeout/Infra)" },
     "definitionOfDoneBuildCommand": { "type": "string", "description": "Shell command that builds the project inside the mission checkout (e.g. dotnet build)" },
     "definitionOfDoneTestCommand": { "type": "string", "description": "Shell command that runs unit tests inside the mission checkout (e.g. dotnet test)" },
@@ -1694,6 +1806,7 @@ Create and dispatch a standalone mission to a vessel. The Admiral assigns a capt
     "voyageId": { "type": "string", "description": "Optional voyage ID to associate with (vyg_ prefix)" },
     "persona": { "type": "string", "description": "Persona for this mission (e.g. Worker, Architect, Judge, Test Engineer)" },
     "mode": { "type": "string", "description": "Execution mode: Implementation (default), Audit, or Research. Audit and Research are read-only modes that produce a written report instead of a commit; their empty diff is treated as success, not a no-op failure." },
+    "tier": { "type": "string", "description": "Optional required capability tier for dispatch routing: Economy, Standard, or Premium. Null routes to any idle captain (default)." },
     "selectedPlaybooks": {
       "type": "array",
       "description": "Optional ordered playbook selections for this mission",
@@ -1932,9 +2045,19 @@ Register a new captain (AI agent).
     "name": { "type": "string", "description": "Captain display name" },
     "runtime": { "type": "string", "description": "Agent runtime: ClaudeCode, Codex, Gemini, Cursor, Mux, OpenCode, or Custom" },
     "model": { "type": "string", "description": "Optional model override for this captain. When omitted, the runtime chooses automatically" },
+    "reasoningEffort": { "type": "string", "description": "Reasoning effort: Off, Minimal, Low, Medium, or High. Translated per runtime (Claude thinking budget, Codex reasoning effort, Mux --effort). Ignored by runtimes without a control." },
+    "tier": { "type": "string", "description": "Capability tier for dispatch routing: Economy, Standard, or Premium. Empty auto-classifies from the model name." },
     "systemInstructions": { "type": "string", "description": "System instructions for this captain -- injected into every mission prompt to specialize behavior" },
     "allowedPersonas": { "type": "string", "description": "JSON array of persona names this captain is allowed to use" },
-    "preferredPersona": { "type": "string", "description": "Preferred persona name for this captain" }
+    "preferredPersona": { "type": "string", "description": "Preferred persona name for this captain" },
+    "muxConfigDirectory": { "type": "string", "description": "Optional Mux config directory override" },
+    "muxEndpoint": { "type": "string", "description": "Named Mux endpoint for this captain" },
+    "muxBaseUrl": { "type": "string", "description": "Optional Mux base URL override" },
+    "muxAdapterType": { "type": "string", "description": "Optional Mux adapter type override" },
+    "muxTemperature": { "type": "number", "description": "Optional Mux temperature override" },
+    "muxMaxTokens": { "type": "integer", "description": "Optional Mux max tokens override" },
+    "muxSystemPromptPath": { "type": "string", "description": "Optional Mux system prompt file path" },
+    "muxApprovalPolicy": { "type": "string", "description": "Optional Mux approval policy override" }
   },
   "required": ["name"]
 }
@@ -1945,11 +2068,21 @@ Register a new captain (AI agent).
 | `name` | string | Yes | Captain display name |
 | `runtime` | string | No | Agent runtime: `ClaudeCode`, `Codex`, `Gemini`, `Cursor`, `Mux`, `OpenCode`, or `Custom` |
 | `model` | string | No | Optional model override. When omitted, the runtime chooses automatically |
+| `reasoningEffort` | string | No | Reasoning effort: `Off`, `Minimal`, `Low`, `Medium`, or `High`. Translated to each runtime's native control at launch |
+| `tier` | string | No | Capability tier for dispatch routing: `Economy`, `Standard`, or `Premium`. Empty/null auto-classifies from the model name |
 | `systemInstructions` | string | No | System instructions injected into every mission prompt for this captain |
 | `allowedPersonas` | string | No | JSON array of persona names this captain is allowed to use, for example `["Worker","Judge"]` |
 | `preferredPersona` | string | No | Preferred persona name for this captain |
+| `muxConfigDirectory` | string | No | Optional Mux config directory override (Mux runtime only) |
+| `muxEndpoint` | string | No | Named Mux endpoint to use for this captain (Mux runtime only) |
+| `muxBaseUrl` | string | No | Optional Mux base URL override (Mux runtime only) |
+| `muxAdapterType` | string | No | Optional Mux adapter type override (Mux runtime only) |
+| `muxTemperature` | number | No | Optional Mux temperature override (Mux runtime only) |
+| `muxMaxTokens` | integer | No | Optional Mux max tokens override (Mux runtime only) |
+| `muxSystemPromptPath` | string | No | Optional Mux system prompt file path (Mux runtime only) |
+| `muxApprovalPolicy` | string | No | Optional Mux approval policy override (Mux runtime only) |
 
-**Response:** [Captain](#captain) object. Invalid or unavailable models are returned as MCP tool errors.
+**Response:** [Captain](#captain) object. Invalid or unavailable models are returned as MCP tool errors. The Mux options apply only when `runtime` is `Mux`.
 
 ---
 
@@ -2007,9 +2140,19 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
     "name": { "type": "string", "description": "New display name" },
     "runtime": { "type": "string", "description": "New agent runtime: ClaudeCode, Codex, Gemini, Cursor, Mux, OpenCode, or Custom" },
     "model": { "type": "string", "description": "New optional model override for this captain" },
+    "reasoningEffort": { "type": "string", "description": "Reasoning effort: Off, Minimal, Low, Medium, or High. Empty string clears it. Translated per runtime (Claude thinking budget, Codex reasoning effort, Mux --effort)." },
+    "tier": { "type": "string", "description": "Capability tier: Economy, Standard, or Premium. Empty string clears it (auto-classify from model)." },
     "systemInstructions": { "type": "string", "description": "New system instructions for this captain" },
     "allowedPersonas": { "type": "string", "description": "New JSON array of persona names this captain is allowed to use" },
-    "preferredPersona": { "type": "string", "description": "New preferred persona name for this captain" }
+    "preferredPersona": { "type": "string", "description": "New preferred persona name for this captain" },
+    "muxConfigDirectory": { "type": "string", "description": "Optional Mux config directory override; empty string clears it" },
+    "muxEndpoint": { "type": "string", "description": "Named Mux endpoint; empty string clears it" },
+    "muxBaseUrl": { "type": "string", "description": "Optional Mux base URL override; empty string clears it" },
+    "muxAdapterType": { "type": "string", "description": "Optional Mux adapter type override; empty string clears it" },
+    "muxTemperature": { "type": "number", "description": "Optional Mux temperature override" },
+    "muxMaxTokens": { "type": "integer", "description": "Optional Mux max tokens override" },
+    "muxSystemPromptPath": { "type": "string", "description": "Optional Mux system prompt file path; empty string clears it" },
+    "muxApprovalPolicy": { "type": "string", "description": "Optional Mux approval policy override; empty string clears it" }
   },
   "required": ["captainId"]
 }
@@ -2021,11 +2164,21 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
 | `name` | string | No | New display name |
 | `runtime` | string | No | New agent runtime: `ClaudeCode`, `Codex`, `Gemini`, `Cursor`, `Mux`, `OpenCode`, or `Custom` |
 | `model` | string | No | New optional model override. When omitted, the existing value is preserved |
+| `reasoningEffort` | string | No | Reasoning effort: `Off`, `Minimal`, `Low`, `Medium`, or `High`. Empty string clears it |
+| `tier` | string | No | Capability tier: `Economy`, `Standard`, or `Premium`. Empty string clears it (auto-classify from model) |
 | `systemInstructions` | string | No | New system instructions for this captain |
 | `allowedPersonas` | string | No | New JSON array of persona names this captain is allowed to use, for example `["Worker","Judge"]` |
 | `preferredPersona` | string | No | New preferred persona name for this captain |
+| `muxConfigDirectory` | string | No | Optional Mux config directory override; empty string clears it (Mux runtime only) |
+| `muxEndpoint` | string | No | Named Mux endpoint; empty string clears it (Mux runtime only) |
+| `muxBaseUrl` | string | No | Optional Mux base URL override; empty string clears it (Mux runtime only) |
+| `muxAdapterType` | string | No | Optional Mux adapter type override; empty string clears it (Mux runtime only) |
+| `muxTemperature` | number | No | Optional Mux temperature override (Mux runtime only) |
+| `muxMaxTokens` | integer | No | Optional Mux max tokens override (Mux runtime only) |
+| `muxSystemPromptPath` | string | No | Optional Mux system prompt file path; empty string clears it (Mux runtime only) |
+| `muxApprovalPolicy` | string | No | Optional Mux approval policy override; empty string clears it (Mux runtime only) |
 
-**Response:** Updated [Captain](#captain) object, or `{ "Error": "Captain not found" }`. Invalid or unavailable models are returned as MCP tool errors.
+**Response:** Updated [Captain](#captain) object, or `{ "Error": "Captain not found" }`. Invalid or unavailable models are returned as MCP tool errors. The Mux options apply only when the captain's `runtime` is `Mux`.
 
 ---
 
@@ -2199,6 +2352,66 @@ Force purge a dock and its git worktree, even if a mission references it. **This
 
 ```json
 { "Status": "purged", "DockId": "dck_..." }
+```
+
+Returns `{ "Error": "Dock not found" }` if the ID does not exist.
+
+---
+
+### repair_dock
+
+Repair a dock's git worktree to fix a corrupted or relocated registration. Non-destructive: no work is removed.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "dockId": { "type": "string", "description": "Dock ID (dck_ prefix)" }
+  },
+  "required": ["dockId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `dockId` | string | Yes | Dock ID to repair (prefix `dck_`) |
+
+**Response:**
+
+```json
+{ "Status": "repaired", "DockId": "dck_..." }
+```
+
+Returns `{ "Error": "Dock not found" }` if the ID does not exist.
+
+---
+
+### unstick_dock
+
+Unstick a wedged dock: release any captain still holding it back to Idle and reclaim its worktree so it stops pinning capacity. Committed branch history is preserved.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "dockId": { "type": "string", "description": "Dock ID (dck_ prefix)" }
+  },
+  "required": ["dockId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `dockId` | string | Yes | Dock ID to unstick (prefix `dck_`) |
+
+**Response:**
+
+```json
+{ "Status": "unstuck", "DockId": "dck_..." }
 ```
 
 Returns `{ "Error": "Dock not found" }` if the ID does not exist.
@@ -2794,6 +3007,7 @@ Core CRUD and reorder tools:
 | `create_objective` | Create one objective | Accepts the expanded backlog metadata fields |
 | `create_backlog_item` | Create one backlog item | Preferred user-facing alias |
 | `update_objective` | Update one objective/backlog entry | Requires `objectiveId` plus any fields to mutate |
+| `update_backlog_item` | Update one backlog item | Preferred user-facing alias of `update_objective` -- identical schema (`objectiveId` plus any fields to mutate) |
 | `reorder_objectives` | Apply explicit rank updates | Uses `{ items: [{ objectiveId, rank }] }` |
 | `reorder_backlog_items` | Apply explicit rank updates | Preferred user-facing alias |
 | `delete_objective` | Delete one objective | Removes the normalized row and snapshot-backed current-state chain |
@@ -2822,6 +3036,7 @@ Planning handoff tools:
 Shared input notes:
 
 - `update_objective` accepts the same expanded backlog fields as `create_objective`, plus the required `objectiveId`
+- `update_backlog_item` is a backlog-named alias of `update_objective` with an identical input schema (both mutate the same normalized `Objective` record)
 - `create_backlog_item` mirrors `create_objective` but uses backlog terminology in the tool name and descriptions
 - refinement sessions are lighter than planning and do not provision a dock/worktree by default
 - planning handoff tools are repository-aware and require an explicit vessel

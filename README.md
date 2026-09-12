@@ -49,14 +49,14 @@ Everything else in Armada exists to support that: isolated worktrees, parallel d
 - **Integrated API tooling.** `Activity` preserves request history (filter by the Requests source), while `API Explorer` lets you execute live OpenAPI-backed requests and replay captured traffic without leaving the dashboard.
 - **A first-class repository workspace.** The `Vessels > Workspace` tab gives you a vessel-aware file tree, in-browser editing, search, git-aware status, and direct handoff into planning, dispatch, and context curation.
 - **Project-specific delivery profiles.** `Configuration > Workflow Profiles` lets each vessel or fleet declare how it lints, builds, tests, packages, versions, deploys, rolls back, and verifies itself.
-- **Managed model endpoints.** Register external embedding or inference providers (Ollama, OpenAI, OpenAI-compatible, Anthropic, Gemini, VoyageAI), health-check them deduplicated by base URL, and validate one with a real request. Stored API keys are write-only and never returned on reads. See [docs/REST_API.md](docs/REST_API.md#model-endpoints) and [docs/MCP_API.md](docs/MCP_API.md).
+- **Managed model endpoints.** Register external embedding or inference providers (Ollama, OpenAI, OpenAI-compatible, Anthropic, Gemini, VoyageAI), health-check them deduplicated by base URL, and validate one with a real request. Stored API keys are write-only and never returned on reads. A registered inference endpoint can also back an `Ask Armada` captain, so the assistant can run against a hosted model instead of a local CLI runtime. See [docs/REST_API.md](docs/REST_API.md#model-endpoints) and [docs/MCP_API.md](docs/MCP_API.md).
 - **Structured check execution.** `Delivery > Checks` turns build, test, deploy, and verification runs into queryable records with logs, artifacts, retry, branch/commit metadata, and links back to missions and voyages.
 - **Scoped objectives and delivery memory.** `Dispatch > Backlog` captures acceptance criteria, non-goals, linked vessels, and evidence so work can be scoped before dispatch without falling back to external notes.
 - **Pull-based GitHub delivery context.** Objectives can import GitHub issue or PR scope, deployments can sync GitHub Actions into `Delivery > Checks`, and mission or release detail can show GitHub PR review/check evidence without exposing raw tokens on reads.
 - **First-class delivery records and timeline history.** `Delivery > Environments`, `Deployments`, and `Releases` group rollout targets, approvals, verification evidence, linked voyages, missions, checks, versions, notes, and artifacts, while `Activity` (All Activity) lets you reconstruct the current cross-entity delivery story from one place.
 - **Operational incident and runbook support.** `Delivery > Incidents` and `Delivery > Runbooks` carry rollback context, hotfix handoff, step-by-step execution, and deployment-linked operational guidance inside Armada itself.
 - **Persistent vessel context.** Models can maintain repository-specific context, hints, and working notes on each vessel to speed up future dispatches. The `Build Context` / `Refine Context` action on a vessel launches a captain to write or refine that context from an editable prompt template plus your notes.
-- **A captain-backed assistant.** `Ask Armada` is a conversational chat that dispatches each turn to a live captain over its CLI runtime, so it can reason about and act on fleet state through the captain's MCP tools, with per-turn metrics, optional streaming, and Markdown replies.
+- **A captain-backed assistant.** `Ask Armada` is a conversational chat that dispatches each turn to a live captain so it can reason about and act on fleet state, with per-turn metrics, optional streaming, and Markdown replies. The backing captain can be either a CLI runtime (Claude Code, Codex, Gemini, Cursor, Mux, OpenCode) that reaches Armada through the captain's own MCP tools, or an inference endpoint (`ApiEndpoint`) that runs an in-process tool-calling loop and calls Armada's own MCP tools scoped to the asking user through a short-lived, minted session token. Either way, tool activity surfaces inline as chat tool cards.
 - **Interactive planning before dispatch.** Chat with a captain in the dashboard, keep the transcript, then open the result in Dispatch or launch the work directly from the planning screen.
 - **Parallel execution across repos.** Dispatch work to multiple agents across multiple repositories at once.
 - **Quality gates that run automatically.** Every piece of work can flow through a pipeline: plan it, implement it, test it, review it. No manual intervention between steps.
@@ -168,6 +168,23 @@ armada go "1. Add auth middleware 2. Add login endpoint 3. Add token validation"
 ### Auto-Recovery
 
 If a captain crashes, the Admiral can repair the worktree and relaunch the agent up to `MaxRecoveryAttempts` times (default: 3).
+
+## Components and Concepts
+
+Armada is a single C#/.NET solution split into a handful of projects. The table below explains each moving part and which project implements it. The [Architecture](#architecture) section further down has the full data model, relationships, and ID prefixes.
+
+- **Admiral** (`Armada.Server`) -- the coordinator process. It is the one long-running server: the REST API and WebSocket (built on [Watson](https://github.com/jchristn/watson)), the MCP server (built on [Voltaic](https://github.com/jchristn/voltaic)), and the embedded web dashboard all live here, alongside the orchestration logic that resolves pipelines, assigns captains, provisions worktrees, and tracks mission state. It owns the database.
+- **Captain** (`Armada.Runtimes`) -- a worker agent the Admiral dispatches to do the actual coding. A captain is backed by one of two kinds of runtime, both behind the `IAgentRuntime` seam: a **CLI runtime** that drives an installed agent binary (Claude Code, Codex, Gemini, Cursor, Mux, OpenCode), or an in-process **`ApiEndpoint`** runtime that runs a tool-calling loop directly against a registered inference endpoint. The runtime layer is pluggable, so new agents can be added without touching the orchestrator.
+- **Fleet** -- a named group of vessels (repositories). A default fleet is created automatically. See `Armada.Core` domain models.
+- **Vessel** -- a single git repository registered with Armada, with its own default pipeline, project context, style guide, and accumulated model memory (`Armada.Core`).
+- **Mission** -- one atomic unit of work assigned to one captain, targeting one vessel (`Armada.Core`).
+- **Voyage** -- a batch of related missions dispatched together (`Armada.Core`).
+- **Dock** -- the git worktree provisioned for a captain so its work stays isolated on its own branch (`Armada.Core`). A dock lives on exactly one host's filesystem, which is what pins a mission to a single Harbor once it has one.
+- **Signal** -- a message passed between the Admiral and captains for progress and coordination (`Armada.Core`).
+- **Harbor** (`Armada.Harbor`) -- a host-side runner. It executes the agent CLIs, git, and worktrees on the machine where your repositories and tool logins actually live, dialing outward to the Admiral over an authenticated link so the Admiral can run detached (in a container or on another host) without reaching back into your machine. See [docs/HARBOR.md](docs/HARBOR.md).
+- **`armada` (Helm CLI)** (`Armada.Helm`) -- the command-line client, built with [Spectre.Console](https://spectreconsole.net/). It is a thin HTTP client to the Admiral's REST API; it does not do orchestration itself.
+
+Supporting projects: `Armada.Core` holds the domain models, database interfaces, service interfaces, and settings shared by everything else; `Armada.Dashboard` is the standalone React dashboard used for Docker/production deployments (the Admiral also serves an embedded copy); and `Armada.Proxy` is the optional remote-access portal and relay.
 
 ## Community
 
@@ -329,6 +346,8 @@ See [docs/REMOTE_MGMT.md](docs/REMOTE_MGMT.md) and [docs/PROXY_API.md](docs/PROX
 ### Rebuilding Armada from the Dashboard
 
 When Armada's own source is one of its vessels, you can rebuild the Admiral and pick up landed changes without leaving the dashboard. Set **Self Vessel ID** on the Server page to the vessel holding Armada's source, then use **Rebuild Armada**: pick a branch (or type a tag/commit), and Armada builds that ref from a throwaway `git worktree` into a fresh versioned slot while the current server keeps running, backs up the database, and cuts over to the new build. The build runs with no downtime, and a failed build never disturbs the running server -- only a successful publish triggers the cutover.
+
+A vessel cloned from a local path works here too. When a vessel's repo URL is a `file://` URL (or an existing local directory), `add_vessel` records that local clone as the vessel's `WorkingDirectory`, and the rebuild builds from that `WorkingDirectory`. That means a local checkout of Armada's source can serve as the self vessel with no extra setup. Each successful rebuild also prunes older slots and their pre-rebuild database backups down to the newest `RebuildSlotRetentionCount` (default 3, configurable).
 
 If the new build does not come up, **Roll Back** reverts to the previous slot (restoring the pre-rebuild database backup when the rebuild changed the schema). On a single machine you can also point `RebuildSupervisorHarborId` at an on-box Harbor to get an automatic, health-gated rollback during the cutover.
 
@@ -890,6 +909,93 @@ Claude Code (orchestrator) --MCP--> Armada Server --spawns--> Captain agents (wo
 For detailed setup and examples, see:
 - [Claude Code as Orchestrator](docs/CLAUDE_CODE_AS_ORCHESTRATOR.md)
 - [Codex as Orchestrator](docs/CODEX_AS_ORCHESTRATOR.md)
+
+## Deployment
+
+Armada ships everything you need to run it three ways: a local developer install, a containerized deployment, and a split Admiral/Harbor topology. This section is the overview and the fast path; the [Running Locally (without Docker)](#running-locally-without-docker) and [Running Locally (with Docker)](#running-locally-with-docker) sections below have the full detail, and [docs/DOCKER.md](docs/DOCKER.md) and [docs/HARBOR.md](docs/HARBOR.md) go deeper still.
+
+### Deployment modes
+
+Armada runs in one of two modes (see [docs/HARBOR.md](docs/HARBOR.md)):
+
+- **Local mode (default).** The Admiral and the agent processes share one machine. There is no Harbor and no link -- the Admiral launches captains in-process on its own box. This is the right mode for a single developer running Armada on the same machine they code on, and it is fully functional today.
+- **Split mode.** The Admiral runs detached -- containerized or on another host -- while one or more **Harbors** run on the machines where the code and tool logins live. The Admiral routes each unit of host work (agent CLIs, git, worktrees) to a Harbor over an authenticated outbound link, the Harbor executes it locally, and results stream back. This is what lets a single containerized Admiral drive agents across several developer machines. The Harbor entity, its REST/MCP management APIs, the wire protocol, and the host-runner app ship today; the live split-mode link transport is still being rolled out.
+
+### Deploy locally
+
+Platform entrypoints live under `scripts/windows/` (`.bat`), `scripts/linux/` (`.sh`), and `scripts/macos/` (`.sh`); shared shell implementations live under `scripts/common/`.
+
+- **From-source install.** `scripts/<os>/install.sh` (or `install.bat`) builds the solution, deploys the dashboard assets, and installs `Armada.Helm` as a global `armada` tool from the checkout. Add `--insecure` behind a TLS-inspecting proxy; on Windows pass a framework override first (e.g. `install.bat net8.0`).
+- **Publish server + dashboard.** `scripts/<os>/publish-server.sh` (or `.bat`) publishes `Armada.Server` into `~/.armada/bin` (`%USERPROFILE%\.armada\bin` on Windows) and deploys the dashboard into `~/.armada/dashboard`. If Node.js is absent it falls back to the pre-built dashboard bundle committed in the repo. The dashboard build step alone is `scripts/<os>/deploy-dashboard.sh`.
+- **Run on startup.** Register the published server as a user-scoped background service: `install-systemd-user.sh` (Linux), `install-launchd-agent.sh` (macOS), or `install-windows-task.bat` (Windows). Paired `update-*` and `remove-*` scripts republish/restart or unregister it, and `healthcheck-server.*` verifies it. See [docs/RUN_ON_STARTUP.md](docs/RUN_ON_STARTUP.md).
+- **Foreground dev run.** `scripts/<os>/run-local.sh` (or `.bat`) builds and starts the server in the background, waits for health, then runs a Harbor in the foreground -- handy for exercising the Harbor link locally. For a plain server-only session, `dotnet run --project src/Armada.Server`.
+
+The Admiral serves its REST API and the embedded dashboard on port **7890** (`http://localhost:7890/dashboard`, WebSocket at `/ws`) and the MCP server on port **7891** (both configurable via `AdmiralPort` / `McpPort` in `~/.armada/settings.json`). On first run Armada creates the SQLite database, applies migrations, and seeds default data.
+
+### Deploy with Docker
+
+Docker Compose runs the server (and the optional standalone React dashboard) in containers, so the host does not need the .NET SDK:
+
+```bash
+cd docker/armada
+docker compose up -d
+```
+
+This brings up `armada-server` (7890 REST/dashboard/WebSocket, 7891 MCP, 9464 Prometheus scrape) and `armada-dashboard` (3000), and the default stack also starts a Prometheus/Loki/Grafana observability stack. Images are built from `src/Armada.Server/Dockerfile`, `src/Armada.Dashboard/Dockerfile`, and `src/Armada.Proxy/Dockerfile`; you can build them locally with `docker build -f <dockerfile> -t <tag> .` or via the `scripts/<os>/build-*` helpers. Configuration lives in `docker/armada/armada.json`, and data persists under `docker/armada/`. Full reference, including the proxy stack and volume layout, is in [docs/DOCKER.md](docs/DOCKER.md).
+
+### Install and run Harbor
+
+The host runner ships as `src/Armada.Harbor`, an Avalonia desktop app. Build and run it on the machine where your repositories and agent logins live:
+
+```bash
+dotnet run --project src/Armada.Harbor
+```
+
+On first run it writes `~/.armada-harbor/settings.json` (`%USERPROFILE%\.armada-harbor\settings.json` on Windows), generating a Harbor id and defaulting the name to the machine name. Edit that file to point the Harbor at your Admiral and describe the host. Key settings:
+
+| Field | Description |
+|---|---|
+| `serverLinkUrl` | WebSocket URL of the Admiral's Harbor link (`ws://` or `wss://`). Default `ws://127.0.0.1:7891/v1.0/harbor/connect`. |
+| `dashboardUrl` | Dashboard URL opened by the app's "Open Dashboard" action. Default `http://127.0.0.1:7890/dashboard`. |
+| `harborId` | Harbor identifier (`hbr_` prefix); generated on first run when empty. |
+| `name` | Human-facing Harbor name; defaults to the machine name. |
+| `capabilities` | Runtimes and host tools advertised at handshake (e.g. `git`, `claude`); drives capability-based routing. |
+| `maxConcurrentJobs` | Maximum concurrent jobs this Harbor accepts. Default 4. |
+| `heartbeatIntervalMs` | Heartbeat interval in ms; `0` disables heartbeats. Default 15000. |
+| `accessKey` / `secret` | Credential material presented on the link. Leave empty for an unauthenticated local link; the secret is never logged. |
+
+The Harbor dials outward to the Admiral and **self-registers on its first handshake** -- pre-registration is optional and only needed to reserve a name/capacity or set routing preferences ahead of time. Harbors are managed over REST at `/api/v1/harbors` and over MCP (`get_harbor`, `create_harbor`, `update_harbor`, `delete_harbor`, `set_harbor_enabled`, plus `enumerate` with entityType `harbors`). See [docs/HARBOR.md](docs/HARBOR.md) and the wire contract in [docs/HARBOR_PROTOCOL.md](docs/HARBOR_PROTOCOL.md).
+
+### Run the `armada` CLI interactively
+
+The `armada` CLI is a thin HTTP client to the Admiral. Run `armada` (or `armada help`) for the grouped command menu, and `armada <command> --help` (also `-h`, `/?`, `-?`) for per-command help. The command groups are:
+
+| Group | Commands |
+|-------|----------|
+| Common | `go`, `status`, `watch`, `ask`, `inbox`, `log`, `diff`, `doctor` |
+| `mission` | `list`, `create`, `show`, `cancel`, `restart`, `retry` |
+| `voyage` | `list`, `create`, `show`, `cancel`, `retry` |
+| `backlog` | `list`, `show`, `create`, `update`, `delete`, `reorder` |
+| `playbook` | `list`, `add`, `show`, `remove` |
+| `vessel` | `list`, `add`, `remove` |
+| `captain` | `list`, `add`, `update`, `stop`, `remove`, `stop-all` |
+| `fleet` | `list`, `add`, `remove` |
+| `server` | `start`, `status`, `stop`, `restart` |
+| `config` | `show`, `set`, `init` |
+| `mcp` | `install`, `remove`, `stdio` |
+| Danger zone | `reset` |
+
+Representative usage:
+
+```bash
+armada go "Add input validation to the signup form"   # quick dispatch, infers repo from CWD
+armada watch                                            # live status dashboard
+armada ask "any failures across the fleet?"            # conversational query
+armada mission show msn_abc123 --help                  # per-command help
+armada captain add claude-2 --runtime claude           # register another agent
+```
+
+The CLI talks to the Admiral at `http://127.0.0.1:<AdmiralPort>` (default port 7890), reading `AdmiralPort` from `~/.armada/settings.json`; if the server is not running, commands that need it can auto-start an embedded server. To point the CLI at a non-default port or to send a credential, use `armada config set` (e.g. `armada config set AdmiralPort 7890`, `armada config set ApiKey <key>` -- the key is sent as the `X-Api-Key` header). `armada config show` prints the resolved settings.
 
 ## Running Locally (without Docker)
 
