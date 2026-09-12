@@ -71,9 +71,17 @@ namespace Armada.Core.Services
                 return false;
             }
 
-            if (mission.Status != MissionStatusEnum.LandingFailed && mission.Status != MissionStatusEnum.WorkProduced)
+            // Landable directly: work produced but not yet landed, a prior landing that failed, or a mission
+            // sitting in Review that carries no explicit review gate (requiresReview=false) -- such a mission
+            // has no Approve/Deny decision to make, so landing is the way to graduate it out of Review. A
+            // Review mission that DOES require review must still be resolved via Approve/Deny, not landed here.
+            bool landableReview = mission.Status == MissionStatusEnum.Review && !mission.RequiresReview;
+            if (mission.Status != MissionStatusEnum.LandingFailed
+                && mission.Status != MissionStatusEnum.WorkProduced
+                && !landableReview)
             {
-                _Logging.Warn(_Header + "mission " + missionId + " is in status " + mission.Status + ", not LandingFailed or WorkProduced -- cannot retry");
+                _Logging.Warn(_Header + "mission " + missionId + " is in status " + mission.Status
+                    + " (requiresReview=" + mission.RequiresReview + ") -- not landable via retry");
                 return false;
             }
 
@@ -140,7 +148,7 @@ namespace Armada.Core.Services
                     return false;
                 }
 
-                _Logging.Info(_Header + "retrying landing for mission " + missionId + " branch " + missionBranch);
+                _Logging.Debug(_Header + "retrying landing for mission " + missionId + " branch " + missionBranch);
 
                 // Transition back to WorkProduced for landing attempt
                 mission.Status = MissionStatusEnum.WorkProduced;
@@ -169,7 +177,7 @@ namespace Armada.Core.Services
                 if (OnPerformLanding != null)
                 {
                     await OnPerformLanding.Invoke(mission, dock).ConfigureAwait(false);
-                    _Logging.Info(_Header + "landing retry completed for mission " + missionId);
+                    _Logging.Debug(_Header + "landing retry completed for mission " + missionId);
 
                     // Re-read mission to get updated status from landing handler
                     mission = !String.IsNullOrEmpty(tenantId)
@@ -188,7 +196,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "landing retry failed for mission " + missionId + ": " + ex.Message);
+                _Logging.Warn(_Header + "landing retry failed for mission " + missionId + ": " + ex.ToString());
 
                 // Capture any merge-conflict file list so the operator sees exactly what to fix.
                 string failureReason = "Landing retry failed: " + ex.Message;

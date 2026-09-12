@@ -49,6 +49,16 @@ function prettyJson(raw: string): string {
   try { return JSON.stringify(JSON.parse(raw), null, 2); } catch { return raw; }
 }
 
+// A compact one-line preview of a tool result for the collapsed card summary: JSON is flattened to a
+// single line, whitespace collapsed, and the whole thing truncated so it never wraps the summary row.
+function resultPreview(raw: string): string {
+  let text = raw;
+  try { text = JSON.stringify(JSON.parse(raw)); } catch { /* not JSON: use as-is */ }
+  text = text.replace(/\s+/g, ' ').trim();
+  const max = 80;
+  return text.length > max ? text.slice(0, max) + '…' : text;
+}
+
 // Compact runtime label for a tool call.
 function formatToolMs(ms: number | null | undefined): string {
   if (ms == null) return '';
@@ -58,13 +68,15 @@ function formatToolMs(ms: number | null | undefined): string {
 
 interface ChatToolChipsProps {
   tools: ToolEvent[] | undefined;
+  /** Runtime that executed these tools (e.g. "ApiEndpoint", "Mux"); shown as a badge on each card. */
+  runtimeLabel?: string;
   runningLabel: string;
   argumentsLabel: string;
   resultLabel: string;
   noDetailsLabel: string;
 }
 
-export default function ChatToolChips({ tools, runningLabel, argumentsLabel, resultLabel, noDetailsLabel }: ChatToolChipsProps) {
+export default function ChatToolChips({ tools, runtimeLabel, runningLabel, argumentsLabel, resultLabel, noDetailsLabel }: ChatToolChipsProps) {
   if (!tools || tools.length === 0) return null;
   return (
     <div className="chat-tools">
@@ -75,6 +87,10 @@ export default function ChatToolChips({ tools, runningLabel, argumentsLabel, res
               {tool.status === 'running' ? '…' : tool.status === 'success' ? '✓' : '✕'}
             </span>
             <span className="chat-tool-name">{tool.name}</span>
+            {runtimeLabel && <span className="chat-tool-runtime">{runtimeLabel}</span>}
+            {tool.status !== 'running' && tool.result && (
+              <span className="chat-tool-result-preview" title={resultPreview(tool.result)}>{resultPreview(tool.result)}</span>
+            )}
             <span className="chat-tool-meta">
               {tool.status === 'running' ? runningLabel : formatToolMs(tool.elapsedMs)}
             </span>

@@ -40,6 +40,7 @@ import RecordDetailModal from '../components/shared/RecordDetailModal';
 import RefreshButton from '../components/shared/RefreshButton';
 import StatusBadge from '../components/shared/StatusBadge';
 import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
+import UserScopeFilter from '../components/shared/UserScopeFilter';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { buildObjectiveDuplicatePayload } from '../lib/duplicates';
 
@@ -54,6 +55,7 @@ export default function Objectives() {
   const [fleets, setFleets] = useState<Fleet[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userScope, setUserScope] = useState('');
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | Objective['status']>('all');
@@ -88,7 +90,7 @@ export default function Objectives() {
     try {
       setLoading(true);
       const [objectiveResult, fleetResult, vesselResult] = await Promise.all([
-        listBacklog({ pageSize: 9999 }),
+        listBacklog({ pageSize: 9999, userId: userScope || undefined }),
         listFleets({ pageSize: 9999 }),
         listVessels({ pageSize: 9999 }),
       ]);
@@ -107,7 +109,8 @@ export default function Objectives() {
 
   useEffect(() => {
     void load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userScope]);
 
   const { seconds: refreshSeconds, setSeconds: setRefreshSeconds } = useAutoRefresh('objectives', load);
 
@@ -353,6 +356,7 @@ export default function Objectives() {
         subtitle={t('Capture future work, refine it, and carry the same record through planning, dispatch, release, deployment, and incident follow-through.')}
         actions={(
           <>
+            <UserScopeFilter value={userScope} onChange={setUserScope} />
             <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
             <RefreshButton onRefresh={load} title={t('Refresh backlog')} />
             {canManage && (

@@ -35,6 +35,21 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(line.Text.Contains("enumerate"), "expected tool name in text");
             }));
 
+            cases.Add(Case("claude_tool_use_block_resolves_name", "A Claude assistant tool_use content block resolves the tool name", TestTags.Positive, () =>
+            {
+                FormattedLogLine line = RuntimeLogFormatter.Format(
+                    "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Bash\"}]}}", AgentRuntimeEnum.ClaudeCode);
+                AssertTrue(line.IsToolCall, "expected a tool call from the Claude tool_use block");
+                AssertEqual("Bash", line.ToolName);
+            }));
+
+            cases.Add(Case("claude_bare_tool_use_resolves_name", "A bare Claude tool_use event resolves the tool name", TestTags.Positive, () =>
+            {
+                FormattedLogLine line = RuntimeLogFormatter.Format("{\"type\":\"tool_use\",\"name\":\"Read\"}", AgentRuntimeEnum.ClaudeCode);
+                AssertTrue(line.IsToolCall, "expected a tool call");
+                AssertEqual("Read", line.ToolName);
+            }));
+
             cases.Add(Case("tool_completed_shows_status", "A tool_call_completed event shows ok/failed", TestTags.Positive, () =>
             {
                 FormattedLogLine ok = RuntimeLogFormatter.Format("{\"eventType\":\"tool_call_completed\",\"toolName\":\"dispatch\",\"result\":{\"success\":true}}", AgentRuntimeEnum.Mux);

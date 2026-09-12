@@ -90,6 +90,9 @@ namespace Armada.Core.Database.Sqlite
             Releases = new ReleaseMethods(this, _Settings, _Logging);
             Deployments = new DeploymentMethods(this, _Settings, _Logging);
             CoordinationLeases = new CoordinationLeaseMethods(this, _Settings, _Logging);
+            ModelEndpoints = new ModelEndpointMethods(this, _Settings, _Logging);
+            Harbors = new HarborMethods(this, _Settings, _Logging);
+            Memories = new MemoryMethods(this, _Settings, _Logging);
         }
 
         /// <summary>
@@ -136,6 +139,9 @@ namespace Armada.Core.Database.Sqlite
             Releases = new ReleaseMethods(this, _Settings, _Logging);
             Deployments = new DeploymentMethods(this, _Settings, _Logging);
             CoordinationLeases = new CoordinationLeaseMethods(this, _Settings, _Logging);
+            ModelEndpoints = new ModelEndpointMethods(this, _Settings, _Logging);
+            Harbors = new HarborMethods(this, _Settings, _Logging);
+            Memories = new MemoryMethods(this, _Settings, _Logging);
         }
 
         /// <summary>
@@ -166,7 +172,7 @@ namespace Armada.Core.Database.Sqlite
         /// <returns>Task.</returns>
         public override async Task InitializeAsync(CancellationToken token = default)
         {
-            _Logging.Info(_Header + "initializing database");
+            _Logging.Debug(_Header + "initializing database");
 
             using (SqliteConnection conn = new SqliteConnection(_ConnectionString))
             {
@@ -231,7 +237,7 @@ namespace Armada.Core.Database.Sqlite
                                     // Column already exists in the CREATE TABLE definition.
                                     // This happens when migrations add columns that were later
                                     // incorporated into the initial schema. Safe to skip.
-                                    _Logging.Info(_Header + "migration v" + migration.Version + ": column already exists, skipping");
+                                    _Logging.Debug(_Header + "migration v" + migration.Version + ": column already exists, skipping");
                                 }
                             }
                         }
@@ -255,10 +261,10 @@ namespace Armada.Core.Database.Sqlite
                 if (applied > 0)
                     _Logging.Info(_Header + "applied " + applied + " migration(s), schema now at v" + migrations[migrations.Count - 1].Version);
                 else
-                    _Logging.Info(_Header + "schema is up to date at v" + currentVersion);
+                    _Logging.Debug(_Header + "schema is up to date at v" + currentVersion);
             }
 
-            _Logging.Info(_Header + "database initialized successfully");
+            _Logging.Debug(_Header + "database initialized successfully");
 
             // Seed default data on first boot (or after migration that created tenant but not user)
             bool anyTenants = await Tenants.ExistsAnyAsync(token).ConfigureAwait(false);
@@ -339,7 +345,7 @@ namespace Armada.Core.Database.Sqlite
             if (_Disposed) return;
             _Disposed = true;
             _Semaphore.Dispose();
-            _Logging.Info(_Header + "disposed");
+            _Logging.Debug(_Header + "disposed");
         }
 
         #endregion
@@ -469,6 +475,8 @@ namespace Armada.Core.Database.Sqlite
             vessel.RepoUrl = NullableString(reader["repo_url"]);
             vessel.LocalPath = NullableString(reader["local_path"]);
             vessel.WorkingDirectory = NullableString(reader["working_directory"]);
+            vessel.PreferredHarborId = NullableString(reader["preferred_harbor_id"]);
+            vessel.RequiredCapabilities = NullableString(reader["required_capabilities"]);
             vessel.ProjectContext = NullableString(reader["project_context"]);
             vessel.StyleGuide = NullableString(reader["style_guide"]);
             try { vessel.EnableModelContext = Convert.ToInt64(reader["enable_model_context"]) == 1; }
@@ -530,6 +538,10 @@ namespace Armada.Core.Database.Sqlite
                     vessel.AutoLandPathDenyGlobs = JsonSerializer.Deserialize<List<string>>(denyGlobsJson) ?? new List<string>();
             }
             catch { }
+            try { vessel.DefinitionOfDoneEnabled = Convert.ToInt64(reader["definition_of_done_enabled"]) == 1; } catch { }
+            try { vessel.DefinitionOfDoneBuildCommand = NullableString(reader["definition_of_done_build_command"]); } catch { }
+            try { vessel.DefinitionOfDoneTestCommand = NullableString(reader["definition_of_done_test_command"]); } catch { }
+            try { vessel.DefinitionOfDoneTimeoutSeconds = Convert.ToInt32(reader["definition_of_done_timeout_seconds"]); } catch { }
             try { vessel.ReleaseBranchPrefix = NullableString(reader["release_branch_prefix"]) ?? "release/"; } catch { vessel.ReleaseBranchPrefix = "release/"; }
             try { vessel.HotfixBranchPrefix = NullableString(reader["hotfix_branch_prefix"]) ?? "hotfix/"; } catch { vessel.HotfixBranchPrefix = "hotfix/"; }
             try { vessel.RequirePullRequestForProtectedBranches = Convert.ToInt64(reader["require_pull_request_for_protected_branches"]) == 1; }
@@ -557,6 +569,7 @@ namespace Armada.Core.Database.Sqlite
             captain.Name = reader["name"].ToString()!;
             captain.Runtime = Enum.Parse<AgentRuntimeEnum>(reader["runtime"].ToString()!);
             try { captain.Model = NullableString(reader["model"]); } catch { }
+            try { captain.ModelEndpointId = NullableString(reader["model_endpoint_id"]); } catch { }
             captain.SystemInstructions = NullableString(reader["system_instructions"]);
             captain.State = Enum.Parse<CaptainStateEnum>(reader["state"].ToString()!);
             captain.CurrentMissionId = NullableString(reader["current_mission_id"]);
@@ -604,9 +617,17 @@ namespace Armada.Core.Database.Sqlite
             mission.VesselId = NullableString(reader["vessel_id"]);
             mission.CaptainId = NullableString(reader["captain_id"]);
             try { mission.RequestedCaptainId = NullableString(reader["requested_captain_id"]); } catch { }
+            try { mission.AssignedHarborId = NullableString(reader["assigned_harbor_id"]); } catch { }
             mission.Title = reader["title"].ToString()!;
             mission.Description = NullableString(reader["description"]);
             mission.Status = Enum.Parse<MissionStatusEnum>(reader["status"].ToString()!);
+            try
+            {
+                string? missionMode = NullableString(reader["mode"]);
+                if (!String.IsNullOrEmpty(missionMode) && Enum.TryParse<MissionModeEnum>(missionMode, out MissionModeEnum parsedMissionMode))
+                    mission.Mode = parsedMissionMode;
+            }
+            catch { }
             mission.Priority = Convert.ToInt32(reader["priority"]);
             mission.ParentMissionId = NullableString(reader["parent_mission_id"]);
             mission.BranchName = NullableString(reader["branch_name"]);
@@ -747,6 +768,7 @@ namespace Armada.Core.Database.Sqlite
             dock.VesselId = reader["vessel_id"].ToString()!;
             dock.CaptainId = NullableString(reader["captain_id"]);
             dock.WorktreePath = NullableString(reader["worktree_path"]);
+            dock.HarborId = NullableString(reader["harbor_id"]);
             dock.BranchName = NullableString(reader["branch_name"]);
             dock.Active = Convert.ToInt64(reader["active"]) == 1;
             dock.CreatedUtc = FromIso8601(reader["created_utc"].ToString()!);
@@ -760,6 +782,7 @@ namespace Armada.Core.Database.Sqlite
             catch { }
             try { dock.LeaseExpiresUtc = FromIso8601Nullable(reader["lease_expires_utc"]); } catch { }
             try { dock.OwnerToken = NullableString(reader["owner_token"]); } catch { }
+            try { dock.GitAnchorsJson = NullableString(reader["git_anchors_json"]); } catch { }
             return dock;
         }
 

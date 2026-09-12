@@ -68,7 +68,10 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     MergeEnqueueArgs request = JsonSerializer.Deserialize<MergeEnqueueArgs>(args!.Value, _JsonOptions)!;
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     MergeEntry entry = new MergeEntry();
+                    entry.TenantId = String.IsNullOrEmpty(caller.TenantId) ? Constants.DefaultTenantId : caller.TenantId;
+                    entry.UserId = caller.UserId;
                     entry.VesselId = request.VesselId;
                     entry.BranchName = request.BranchName;
                     if (request.MissionId != null)

@@ -1,0 +1,38 @@
+{
+  "dataDirectory": "/app/data",
+  "logDirectory": "/app/data/logs",
+  "docksDirectory": "/app/data/docks",
+  "reposDirectory": "/app/data/repos",
+  "admiralPort": 7890,
+  "mcpPort": 7891,
+  "gitHubToken": null,
+  "webSocketEnabled": true,
+  "deploymentMode": "Split",
+  "requireHarborForLaunch": true,
+  "harbor": {
+    "advertisedMcpBaseUrl": "http://127.0.0.1:7891/mcp"
+  },
+  "syslogServers": [
+    {
+      "hostname": "127.0.0.1",
+      "port": 514
+    }
+  ],
+  "allowSelfRegistration": true,
+  "requireAuthForShutdown": true,
+  "rest": {
+    "hostname": "0.0.0.0"
+  },
+  "database": {
+    "type": "Sqlite",
+    "filename": "/app/data/db/armada.db"
+  },
+  "telemetry": {
+    "enabled": true,
+    "serviceName": "armada",
+    "otlpEndpoint": null,
+    "prometheusEnabled": true,
+    "prometheusPort": 9464,
+    "lokiEndpoint": "http://loki:3100"
+  }
+}

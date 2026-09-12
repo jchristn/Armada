@@ -1,6 +1,7 @@
 namespace Armada.Core.Services.Interfaces
 {
     using System.Collections.Generic;
+    using Armada.Core.Models;
 
     /// <summary>
     /// Git operations for repository and worktree management.
@@ -190,6 +191,34 @@ namespace Armada.Core.Services.Interfaces
         Task<bool> EnsureLocalBranchAsync(string repoPath, string branchName, CancellationToken token = default);
 
         /// <summary>
+        /// List local branches with their tip commit and ahead/behind position relative to the default branch.
+        /// </summary>
+        /// <param name="repoPath">Repository path (bare repo or worktree).</param>
+        /// <param name="defaultBranch">Default branch to measure divergence against.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The branches, default branch first, then by name.</returns>
+        Task<IReadOnlyList<BranchInfo>> ListBranchesAsync(string repoPath, string defaultBranch = "main", CancellationToken token = default);
+
+        /// <summary>
+        /// Push a named local branch to the remote.
+        /// </summary>
+        /// <param name="repoPath">Repository path.</param>
+        /// <param name="branchName">Branch to push.</param>
+        /// <param name="remoteName">Remote name.</param>
+        /// <param name="token">Cancellation token.</param>
+        Task PushLocalBranchAsync(string repoPath, string branchName, string remoteName = "origin", CancellationToken token = default);
+
+        /// <summary>
+        /// Merge one branch into another within a repository, optionally pushing the updated target.
+        /// </summary>
+        /// <param name="repoPath">Bare repository path.</param>
+        /// <param name="sourceBranch">Branch to merge from.</param>
+        /// <param name="targetBranch">Branch to merge into.</param>
+        /// <param name="push">Whether to push the target branch after a successful merge.</param>
+        /// <param name="token">Cancellation token.</param>
+        Task MergeBranchesAsync(string repoPath, string sourceBranch, string targetBranch, bool push, CancellationToken token = default);
+
+        /// <summary>
         /// Check if a path is registered as a git worktree.
         /// </summary>
         /// <param name="repoPath">Path to the repository.</param>
@@ -197,5 +226,42 @@ namespace Armada.Core.Services.Interfaces
         /// <param name="token">Cancellation token.</param>
         /// <returns>True if the path is a registered worktree.</returns>
         Task<bool> IsWorktreeRegisteredAsync(string repoPath, string worktreePath, CancellationToken token = default);
+
+        /// <summary>
+        /// Force-advance a local branch ref to a specific commit. Unlike <c>git branch -f</c>, this uses
+        /// <c>git update-ref</c>, which tolerates a branch that is currently checked out (or detached) in a
+        /// worktree that shares the same repository. Used by pipeline stage handoff to lift a prior stage's
+        /// produced commit -- resolved from a detached dock's live HEAD -- onto the shared branch ref so the
+        /// next stage's checkout sees the work.
+        /// </summary>
+        /// <param name="worktreePath">A worktree (or repository) path that shares the target branch's repository.</param>
+        /// <param name="branchName">Branch name to advance (without the refs/heads/ prefix).</param>
+        /// <param name="commitHash">Commit hash the branch ref should point to.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when the ref was updated; false when inputs were missing or the update failed.</returns>
+        Task<bool> ForceAdvanceBranchAsync(string worktreePath, string branchName, string commitHash, CancellationToken token = default);
+
+        /// <summary>
+        /// Return recent commit summaries touching the given repository paths, as "path: shorthash subject"
+        /// lines, so a mission brief can state what changed under the paths it names. Best-effort: unknown
+        /// paths and git failures yield fewer (or no) entries rather than throwing.
+        /// </summary>
+        /// <param name="worktreePath">Worktree/repository path.</param>
+        /// <param name="paths">Repository-relative paths the mission names.</param>
+        /// <param name="maxPerPath">Maximum commits to report per path.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Formatted recent-commit lines.</returns>
+        Task<IReadOnlyList<string>> GetRecentCommitsForPathsAsync(string worktreePath, IReadOnlyList<string> paths, int maxPerPath, CancellationToken token = default);
+
+        /// <summary>
+        /// Return the subset of the given subject terms that already appear in the tracked tree (as a path
+        /// substring or in file contents), so a mission brief can tell a captain which terms already exist.
+        /// Best-effort: git failures yield an empty set rather than throwing.
+        /// </summary>
+        /// <param name="worktreePath">Worktree/repository path.</param>
+        /// <param name="terms">Candidate subject terms.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The terms found in the tree.</returns>
+        Task<IReadOnlyList<string>> FindExistingSubjectTermsAsync(string worktreePath, IReadOnlyList<string> terms, CancellationToken token = default);
     }
 }

@@ -61,6 +61,14 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(d.Admit, "expected defer");
             }));
 
+            cases.Add(Case("settings_floor_clamps_negative_to_zero", "The settings memory floor clamps a negative value to zero", TestTags.Negative, () =>
+            {
+                Armada.Core.Settings.ArmadaSettings settings = new Armada.Core.Settings.ArmadaSettings();
+                settings.MinAvailableMemoryBytesForLaunch = -5;
+                AssertEqual(0L, settings.MinAvailableMemoryBytesForLaunch, "a negative floor clamps to 0 (gate disabled)");
+                AssertEqual(Armada.Core.Constants.DefaultMinAvailableMemoryBytesForLaunch, new Armada.Core.Settings.ArmadaSettings().MinAvailableMemoryBytesForLaunch, "the default floor comes from Constants");
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: "Services.ResourceAdmission",
                 displayName: "Resource Admission",

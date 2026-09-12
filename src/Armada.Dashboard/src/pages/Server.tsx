@@ -6,11 +6,20 @@ import {
   stopServer,
   restartServer,
   resetServer,
+  rebuildServer,
+  getRebuildStatus,
+  rollbackServer,
+  getVesselBranches,
+  listVessels,
   downloadBackup,
   restoreBackup,
   getProxySessionContext,
   type ProxySessionContext,
+  type RebuildStatus,
+  type BranchInfo,
 } from '../api/client';
+import type { Vessel } from '../types/models';
+import LogViewer from '../components/shared/LogViewer';
 import RefreshButton from '../components/shared/RefreshButton';
 import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
@@ -87,6 +96,8 @@ interface ServerSettings {
   logDirectory: string;
   docksDirectory: string;
   reposDirectory: string;
+  selfVesselId?: string | null;
+  rebuildSlotRetentionCount?: number;
   remoteControl: RemoteControlSettings;
 }
 
@@ -181,9 +192,66 @@ export default function Server() {
 
   const restoreFileRef = useRef<HTMLInputElement>(null);
 
+  const [buildRef, setBuildRef] = useState('');
+  const [branches, setBranches] = useState<BranchInfo[]>([]);
+  const [vessels, setVessels] = useState<Vessel[]>([]);
+  const [rebuildLogOpen, setRebuildLogOpen] = useState(false);
+  const [rebuild, setRebuild] = useState<RebuildStatus | null>(null);
+  const rebuildPollRef = useRef<number | null>(null);
+
+  const rebuildTerminal = (s?: RebuildStatus | null) =>
+    !!s && (s.status === 'Succeeded' || s.status === 'Failed' || s.status === 'RolledBack');
+
   const showToast = useCallback((severity: Severity, msg: string) => {
     pushToast(severity, msg);
   }, [pushToast]);
+
+  const stopRebuildPoll = useCallback(() => {
+    if (rebuildPollRef.current !== null) {
+      window.clearInterval(rebuildPollRef.current);
+      rebuildPollRef.current = null;
+    }
+  }, []);
+
+  const refreshRebuildStatus = useCallback(async () => {
+    try {
+      const s = await getRebuildStatus();
+      setRebuild(s);
+      // Once the server begins cutting over it stops responding; stop polling and let the health check
+      // surface when the new build is back up.
+      if (rebuildTerminal(s) || s.status === 'CuttingOver') stopRebuildPoll();
+    } catch {
+      // Server may be down mid-cutover; keep the last-known log and stop polling.
+      stopRebuildPoll();
+    }
+  }, [stopRebuildPoll]);
+
+  useEffect(() => stopRebuildPoll, [stopRebuildPoll]);
+
+  // Load vessels so the Armada source vessel can be picked from a dropdown.
+  useEffect(() => {
+    let cancelled = false;
+    listVessels({ pageSize: 9999 })
+      .then((r) => { if (!cancelled) setVessels(r.objects || []); })
+      .catch(() => { if (!cancelled) setVessels([]); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Load the branches of the Armada source vessel so the rebuild ref can be picked from a dropdown.
+  const selfVesselId = settings?.selfVesselId ?? null;
+  useEffect(() => {
+    if (!selfVesselId) { setBranches([]); return; }
+    let cancelled = false;
+    getVesselBranches(selfVesselId)
+      .then((r) => {
+        if (cancelled) return;
+        setBranches(r.branches || []);
+        const preferred = r.defaultBranch || r.branches?.find((b) => b.isDefault)?.name;
+        if (preferred) setBuildRef((current) => current || preferred);
+      })
+      .catch(() => { if (!cancelled) setBranches([]); });
+    return () => { cancelled = true; };
+  }, [selfVesselId]);
 
   const closeConfirmDialog = useCallback(() => {
     setConfirmDialog({ open: false, message: '', onConfirm: () => {} });
@@ -259,6 +327,21 @@ export default function Server() {
       });
       setSettings(mergeServerSettings(updated as unknown as ServerSettings));
       showToast('success', t('Server configuration saved'));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : t('Unknown error');
+      showToast('error', t('Failed: {{message}}', { message: msg }));
+    }
+  };
+
+  const handleSaveRebuildSettings = async () => {
+    if (!settings) return;
+    try {
+      const updated = await updateSettings({
+        selfVesselId: settings.selfVesselId ?? '',
+        rebuildSlotRetentionCount: settings.rebuildSlotRetentionCount ?? 3,
+      });
+      setSettings(mergeServerSettings(updated as unknown as ServerSettings));
+      showToast('success', t('Rebuild settings saved'));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : t('Unknown error');
       showToast('error', t('Failed: {{message}}', { message: msg }));
@@ -420,6 +503,49 @@ export default function Server() {
           showToast('error', t('Failed: {{message}}', { message: msg }));
         }
         closeConfirmDialog();
+      },
+    });
+  };
+
+  const handleRebuild = () => {
+    const trimmedRef = buildRef.trim();
+    const refLabel = trimmedRef || t('current HEAD');
+    setConfirmDialog({
+      open: true,
+      title: t('Rebuild Armada'),
+      message: t('Rebuild the Admiral from source at {{ref}}? The new build is published into a fresh slot while this instance keeps running; on success the database is backed up and the server cuts over to the new build. A failed build will not disturb the running server.', { ref: refLabel }),
+      onConfirm: async () => {
+        closeConfirmDialog();
+        try {
+          const started = await rebuildServer(trimmedRef ? { Ref: trimmedRef } : {});
+          setRebuild(started);
+          setRebuildLogOpen(true);
+          showToast('warning', t('Rebuild started; building slot {{slot}}...', { slot: started.slot || t('(pending)') }));
+          stopRebuildPoll();
+          rebuildPollRef.current = window.setInterval(refreshRebuildStatus, 1500);
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : t('Unknown error');
+          showToast('error', t('Rebuild failed to start: {{message}}', { message: msg }));
+        }
+      },
+    });
+  };
+
+  const handleRollback = () => {
+    setConfirmDialog({
+      open: true,
+      title: t('Roll Back Rebuild'),
+      message: t('Roll back to the previous build ({{slot}})? If the last rebuild changed the database schema, the pre-rebuild backup is restored and any data written since the cutover is permanently lost. The server then restarts on the previous build.', { slot: rebuild?.previousSlot || t('previous slot') }),
+      onConfirm: async () => {
+        closeConfirmDialog();
+        try {
+          const s = await rollbackServer();
+          setRebuild(s);
+          showToast('warning', t('Rolling back to {{slot}}; the dashboard will reconnect shortly.', { slot: s.previousSlot || t('previous slot') }));
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : t('Unknown error');
+          showToast('error', t('Rollback failed: {{message}}', { message: msg }));
+        }
       },
     });
   };
@@ -738,6 +864,50 @@ export default function Server() {
               title={t('Save server configuration changes')}
             >
               {t('Save Server Config')}
+            </button>
+          </fieldset>
+        </div>
+      )}
+
+      {/* Rebuild (self-update) */}
+      {settings && (
+        <div className="settings-section" style={{ marginTop: '1.5rem' }}>
+          <h3>{t('Rebuild Armada')}</h3>
+          <p className="settings-hint" style={{ marginBottom: '1rem' }}>
+            {t('Designate the vessel that holds Armada\'s own source so the "Rebuild Armada" button knows what to build. Rebuilding forces a server restart; if you are running Harbor, restart it manually afterward.')}
+          </p>
+          <fieldset disabled={remoteSettingsLocked} style={{ border: 'none', margin: 0, padding: 0 }}>
+            <div className="settings-grid">
+              <div className="form-group">
+                <label title={t('The vessel holding Armada source. Select none to disable rebuild.')}>{t('Self Vessel ID')}</label>
+                <select
+                  value={settings.selfVesselId ?? ''}
+                  onChange={(e) => setSettings({ ...settings, selfVesselId: e.target.value })}
+                  title={t('The vessel that holds Armada source')}
+                >
+                  <option value="">{t('-- none --')}</option>
+                  {vessels.map((v) => (
+                    <option key={v.id} value={v.id}>{v.name} ({v.id})</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label title={t('Number of published build slots to keep on disk for rollback.')}>{t('Slot Retention')}</label>
+                <input
+                  type="number"
+                  value={settings.rebuildSlotRetentionCount ?? 3}
+                  onChange={(e) => setSettings({ ...settings, rebuildSlotRetentionCount: parseInt(e.target.value) || 1 })}
+                  min={1}
+                  title={t('Number of build slots to retain (minimum 1)')}
+                />
+              </div>
+            </div>
+            <button
+              className="btn-primary btn-sm"
+              onClick={handleSaveRebuildSettings}
+              title={t('Save rebuild settings')}
+            >
+              {t('Save Rebuild Settings')}
             </button>
           </fieldset>
         </div>
@@ -1305,6 +1475,57 @@ export default function Server() {
             >
               {t('Restart Server')}
             </button>
+            {branches.length > 0 && (
+              <select
+                value={branches.some((b) => b.name === buildRef) ? buildRef : ''}
+                onChange={(e) => setBuildRef(e.target.value)}
+                disabled={remoteProxyMode}
+                title={t('Branch to build. Choose a branch or type a tag/commit in the box.')}
+              >
+                <option value="">{t('current HEAD')}</option>
+                {branches.map((b) => (
+                  <option key={b.name} value={b.name}>
+                    {b.name}{b.isDefault ? t(' (default)') : ''}
+                  </option>
+                ))}
+              </select>
+            )}
+            <input
+              type="text"
+              value={buildRef}
+              onChange={(e) => setBuildRef(e.target.value)}
+              placeholder={t('ref (blank = HEAD)')}
+              disabled={remoteProxyMode}
+              style={{ width: 160 }}
+              title={t('Branch, tag, or commit to build. Leave blank to build the current HEAD.')}
+            />
+            <button
+              className="btn btn-sm"
+              disabled={remoteProxyMode}
+              onClick={handleRebuild}
+              title={remoteProxyMode ? t('Rebuild Armada is blocked in proxy mode') : t('Rebuild the admiral from source and cut over to the new build')}
+            >
+              {t('Rebuild Armada')}
+            </button>
+            {rebuild && rebuild.status !== 'none' && (
+              <button
+                className="btn btn-sm"
+                onClick={() => { setRebuildLogOpen(true); refreshRebuildStatus(); }}
+                title={t('View the latest rebuild log')}
+              >
+                {t('Build Log')}
+              </button>
+            )}
+            {rebuild && rebuild.status === 'Succeeded' && rebuild.previousSlot && (
+              <button
+                className="btn btn-danger btn-sm"
+                disabled={remoteProxyMode}
+                onClick={handleRollback}
+                title={remoteProxyMode ? t('Rollback is blocked in proxy mode') : t('Roll back to the previous build')}
+              >
+                {t('Roll Back')}
+              </button>
+            )}
             <button
               className="btn btn-danger btn-sm"
               disabled={remoteProxyMode}
@@ -1324,6 +1545,16 @@ export default function Server() {
           </div>
         </div>
       )}
+
+      {/* Rebuild build log */}
+      <LogViewer
+        open={rebuildLogOpen}
+        title={t('Rebuild Armada{{slot}}', { slot: rebuild?.slot ? ' - ' + rebuild.slot : '' })}
+        content={rebuild?.log || ''}
+        completed={rebuildTerminal(rebuild) || rebuild?.status === 'CuttingOver'}
+        onClose={() => setRebuildLogOpen(false)}
+        onRefresh={refreshRebuildStatus}
+      />
 
       {/* Confirm Dialog */}
       <ConfirmDialog

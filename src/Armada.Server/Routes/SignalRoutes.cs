@@ -60,11 +60,7 @@ namespace Armada.Server.Routes
                 EnumerationQuery query = new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
                 Stopwatch sw = Stopwatch.StartNew();
-                EnumerationResult<Signal> result = ctx.IsAdmin
-                    ? await _database.Signals.EnumerateAsync(query).ConfigureAwait(false)
-                    : ctx.IsTenantAdmin
-                        ? await _database.Signals.EnumerateAsync(ctx.TenantId!, query).ConfigureAwait(false)
-                        : await _database.Signals.EnumerateAsync(ctx.TenantId!, ctx.UserId!, query).ConfigureAwait(false);
+                EnumerationResult<Signal> result = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, query, q => _database.Signals.EnumerateAsync(q), (t, q) => _database.Signals.EnumerateAsync(t, q), (t, u, q) => _database.Signals.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
                 return result;
             },
@@ -86,11 +82,7 @@ namespace Armada.Server.Routes
                 EnumerationQuery query = JsonSerializer.Deserialize<EnumerationQuery>(req.Http.Request.DataAsString, _jsonOptions) ?? new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
                 Stopwatch sw = Stopwatch.StartNew();
-                EnumerationResult<Signal> result = ctx.IsAdmin
-                    ? await _database.Signals.EnumerateAsync(query).ConfigureAwait(false)
-                    : ctx.IsTenantAdmin
-                        ? await _database.Signals.EnumerateAsync(ctx.TenantId!, query).ConfigureAwait(false)
-                        : await _database.Signals.EnumerateAsync(ctx.TenantId!, ctx.UserId!, query).ConfigureAwait(false);
+                EnumerationResult<Signal> result = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, query, q => _database.Signals.EnumerateAsync(q), (t, q) => _database.Signals.EnumerateAsync(t, q), (t, u, q) => _database.Signals.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
                 return result;
             },
@@ -139,6 +131,8 @@ namespace Armada.Server.Routes
                 List<Signal> signals = ctx.IsAdmin
                     ? await _database.Signals.EnumerateRecentAsync(count).ConfigureAwait(false)
                     : await _database.Signals.EnumerateRecentAsync(ctx.TenantId!, count).ConfigureAwait(false);
+                if (!ctx.IsAdmin && !ctx.IsTenantAdmin)
+                    signals = signals.Where(s => String.Equals(s.UserId, ctx.UserId, StringComparison.Ordinal)).ToList();
                 return signals;
             },
             api => api
@@ -233,6 +227,8 @@ namespace Armada.Server.Routes
                 List<Signal> signals = ctx.IsAdmin
                     ? await _database.Signals.EnumerateByRecipientAsync(captainId, unreadOnly).ConfigureAwait(false)
                     : await _database.Signals.EnumerateByRecipientAsync(ctx.TenantId!, captainId, unreadOnly).ConfigureAwait(false);
+                if (!ctx.IsAdmin && !ctx.IsTenantAdmin)
+                    signals = signals.Where(s => String.Equals(s.UserId, ctx.UserId, StringComparison.Ordinal)).ToList();
                 return signals;
             },
             api => api

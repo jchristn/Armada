@@ -53,10 +53,12 @@ namespace Armada.Core.Database.Mysql.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (MySqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = @"INSERT INTO personas (id, tenant_id, name, description, prompt_template_name, is_built_in, active, default_captain_id, created_utc, last_update_utc)
-                        VALUES (@id, @tenant_id, @name, @description, @prompt_template_name, @is_built_in, @active, @default_captain_id, @created_utc, @last_update_utc);";
+                    cmd.CommandText = @"INSERT INTO personas (id, tenant_id, user_id, scope, name, description, prompt_template_name, is_built_in, active, default_captain_id, created_utc, last_update_utc)
+                        VALUES (@id, @tenant_id, @user_id, @scope, @name, @description, @prompt_template_name, @is_built_in, @active, @default_captain_id, @created_utc, @last_update_utc);";
                     cmd.Parameters.AddWithValue("@id", persona.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)persona.TenantId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@user_id", (object?)persona.UserId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@scope", persona.Scope.ToString());
                     cmd.Parameters.AddWithValue("@name", persona.Name);
                     cmd.Parameters.AddWithValue("@description", (object?)persona.Description ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@prompt_template_name", persona.PromptTemplateName);
@@ -177,6 +179,8 @@ namespace Armada.Core.Database.Mysql.Implementations
                 {
                     cmd.CommandText = @"UPDATE personas SET
                         tenant_id = @tenant_id,
+                        user_id = @user_id,
+                        scope = @scope,
                         name = @name,
                         description = @description,
                         prompt_template_name = @prompt_template_name,
@@ -187,6 +191,8 @@ namespace Armada.Core.Database.Mysql.Implementations
                         WHERE id = @id;";
                     cmd.Parameters.AddWithValue("@id", persona.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)persona.TenantId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@user_id", (object?)persona.UserId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@scope", persona.Scope.ToString());
                     cmd.Parameters.AddWithValue("@name", persona.Name);
                     cmd.Parameters.AddWithValue("@description", (object?)persona.Description ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@prompt_template_name", persona.PromptTemplateName);
@@ -368,6 +374,8 @@ namespace Armada.Core.Database.Mysql.Implementations
             Persona persona = new Persona();
             persona.Id = reader["id"].ToString()!;
             persona.TenantId = MysqlDatabaseDriver.NullableString(reader["tenant_id"]);
+            persona.UserId = MysqlDatabaseDriver.NullableString(reader["user_id"]);
+            persona.Scope = System.Enum.TryParse<Armada.Core.Enums.ScopeEnum>(reader["scope"]?.ToString(), true, out Armada.Core.Enums.ScopeEnum __sc) ? __sc : Armada.Core.Enums.ScopeEnum.TenantWide;
             persona.Name = reader["name"].ToString()!;
             persona.Description = MysqlDatabaseDriver.NullableString(reader["description"]);
             persona.PromptTemplateName = reader["prompt_template_name"].ToString()!;

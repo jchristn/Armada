@@ -60,6 +60,7 @@ namespace Armada.Server
 
         private IMergeQueueService _MergeQueue = null!;
         private Armada.Core.Services.JobService _JobService = null!;
+        private Armada.Core.Services.MissionRecoveryCoordinator _MissionRecovery = null!;
         private LandingService _LandingService = null!;
         private IMessageTemplateService _TemplateService = null!;
         private IPromptTemplateService _PromptTemplateService = null!;
@@ -85,6 +86,10 @@ namespace Armada.Server
         private GitHubIntegrationService _GitHubIntegrationService = null!;
         private LandingPreviewService _LandingPreviewService = null!;
         private HistoricalTimelineService _HistoricalTimelineService = null!;
+        private ModelEndpointService _ModelEndpointService = null!;
+        private HarborService _HarborService = null!;
+        private HarborConnectionManager _HarborConnectionManager = null!;
+        private HarborLinkEndpoint _HarborLinkEndpoint = null!;
 
         private ISessionTokenService _SessionTokenService = null!;
         private IAuthenticationService _AuthenticationService = null!;
@@ -140,7 +145,7 @@ namespace Armada.Server
             // Initialize database
             _Database = DatabaseDriverFactory.Create(_Settings.Database, _Logging);
             await _Database.InitializeAsync().ConfigureAwait(false);
-            _Logging.Info(_Header + "database initialized");
+            _Logging.Debug(_Header + "database initialized");
 
             // Ensure a local API key exists so trusted local clients (the armada CLI) can authenticate
             // to the REST API. Generated once and persisted to settings.json, which the CLI also reads.
@@ -154,7 +159,8 @@ namespace Armada.Server
             // Prompt template service must be created before MissionService so it can resolve templates
             _PromptTemplateService = new PromptTemplateService(_Database, _Logging);
 
-            MissionService missionService = new MissionService(_Logging, _Database, _Settings, dockService, captainService, _PromptTemplateService, _Git);
+            IDefinitionOfDoneGate definitionOfDoneGate = new DefinitionOfDoneGate(_Logging);
+            MissionService missionService = new MissionService(_Logging, _Database, _Settings, dockService, captainService, _PromptTemplateService, _Git, definitionOfDoneGate);
             _MissionService = missionService;
             IVoyageService voyageService = new VoyageService(_Logging, _Database);
             IEscalationService escalationService = new EscalationService(_Logging, _Database, _Settings);
@@ -162,9 +168,10 @@ namespace Armada.Server
             _Admiral = admiralService;
             _MergeQueue = new MergeQueueService(_Logging, _Database, _Settings, _Git);
             _JobService = new Armada.Core.Services.JobService(_Database, _Logging);
+            _MissionRecovery = new Armada.Core.Services.MissionRecoveryCoordinator(_Logging, _Database, _Settings);
             _LandingService = new LandingService(_Logging, _Database, _Settings, _Git);
             _TemplateService = new MessageTemplateService(_Logging, _PromptTemplateService);
-            _RuntimeFactory = new AgentRuntimeFactory(_Logging);
+            _RuntimeFactory = new AgentRuntimeFactory(_Logging, ResolveInferenceEndpoint);
             _Workspace = new WorkspaceService();
             _RequestHistoryCapture = new RequestHistoryCaptureService(_Settings);
             _WorkflowProfileService = new WorkflowProfileService(_Database, _Logging);
@@ -180,19 +187,26 @@ namespace Armada.Server
             _GitHubIntegrationService = new GitHubIntegrationService(_Database, _ObjectiveService, _CheckRunService, _DeploymentService, _Settings, _Logging);
             _LandingPreviewService = new LandingPreviewService(_Database, _Logging);
             _HistoricalTimelineService = new HistoricalTimelineService(_Database);
+            _ModelEndpointService = new ModelEndpointService(_Database, _Logging);
+            _HarborService = new HarborService(_Database, _Logging);
+            string harborMcpUrl = String.IsNullOrWhiteSpace(_Settings.Harbor.AdvertisedMcpBaseUrl)
+                ? ArmadaMcpConfigBuilder.GetMcpUrl(_Settings.McpPort)
+                : _Settings.Harbor.AdvertisedMcpBaseUrl!;
+            _HarborConnectionManager = new HarborConnectionManager(_HarborService, _Logging, harborMcpUrl);
+            _HarborLinkEndpoint = new HarborLinkEndpoint(_HarborConnectionManager, _Settings.Harbor, _Logging);
             _RemoteTunnel = new RemoteTunnelManager(_Logging, _Settings);
             _RemoteDashboardRelay = new RemoteDashboardRelayService(_Logging, _Settings, _RemoteTunnel.PublishEventAsync);
             admiralService.OnGetRemoteTunnelStatus = _RemoteTunnel.GetStatus;
             // Seed built-in prompt templates, personas, and pipelines
             await _PromptTemplateService.SeedDefaultsAsync().ConfigureAwait(false);
-            _Logging.Info(_Header + "prompt template seeding completed");
+            _Logging.Debug(_Header + "prompt template seeding completed");
 
             _PersonaSeedService = new PersonaSeedService(_Database, _Logging);
             await _PersonaSeedService.SeedAsync().ConfigureAwait(false);
-            _Logging.Info(_Header + "persona and pipeline seeding completed");
+            _Logging.Debug(_Header + "persona and pipeline seeding completed");
 
             await _EnvironmentService.SeedDefaultsAsync().ConfigureAwait(false);
-            _Logging.Info(_Header + "deployment environment seeding completed");
+            _Logging.Debug(_Header + "deployment environment seeding completed");
 
             // Initialize authentication services
             _SessionTokenService = new SessionTokenService(_Settings.SessionTokenEncryptionKey);
@@ -221,12 +235,27 @@ namespace Armada.Server
             _AgentLifecycle = new AgentLifecycleHandler(
                 _Logging, _Database, _Settings, _RuntimeFactory, _Admiral, _TemplateService, _PromptTemplateService, null, EmitEventAsync);
 
+            // Delegate captain launches to a connected Harbor by default; falls back to local when none is eligible.
+            _AgentLifecycle.SetHarborConnections(_HarborConnectionManager);
+            // Enable API-endpoint captains delegated to a Harbor to carry their resolved inference endpoint.
+            _AgentLifecycle.SetEndpointResolver(ResolveInferenceEndpoint);
+
             // Wire up agent lifecycle events
             _Admiral.OnLaunchAgent = _AgentLifecycle.HandleLaunchAgentAsync;
             _Admiral.OnStopAgent = _AgentLifecycle.HandleStopAgentAsync;
             _Admiral.OnCaptureDiff = _MissionLanding.HandleCaptureDiffAsync;
             _Admiral.OnIsProcessExitHandled = _AgentLifecycle.IsProcessExitHandled;
             missionService.OnGetMissionOutput = _AgentLifecycle.GetAndClearMissionOutput;
+
+            // When RequireHarborForLaunch is set, defer a mission until an eligible Harbor owned by the
+            // requesting user is connected -- never run it in-process or on another user's Harbor.
+            missionService.CanAssignMissionAsync = async (mission, captain) =>
+            {
+                if (!_Settings.RequireHarborForLaunch) return true;
+                if (_HarborConnectionManager == null) return false;
+                Armada.Core.Services.HarborRoutingRequest request = new Armada.Core.Services.HarborRoutingRequest { RequestedRuntime = captain.Runtime.ToString() };
+                return await _HarborConnectionManager.HasEligibleHarborForUserAsync(mission.UserId, request).ConfigureAwait(false);
+            };
             _Admiral.OnMissionComplete = _MissionLanding.HandleMissionCompleteAsync;
             _Admiral.OnVoyageComplete = _MissionLanding.HandleVoyageCompleteAsync;
             _Admiral.OnReconcilePullRequest = _MissionLanding.HandleReconcilePullRequestAsync;
@@ -349,7 +378,8 @@ namespace Armada.Server
 
             _CaptainTools = new CaptainToolService(
                 _Logging,
-                _Database);
+                _Database,
+                _HarborConnectionManager);
 
             _RemoteTunnel.OnHandleRequest = HandleRemoteTunnelRequestAsync;
 
@@ -358,7 +388,10 @@ namespace Armada.Server
 
             // Register WebSocket route on the main REST server
             _App.WebSocket("/ws", _WebSocketHub.HandleWebSocketAsync);
-            _Logging.Info(_Header + "WebSocket route registered at /ws");
+            _Logging.Debug(_Header + "WebSocket route registered at /ws");
+
+            _App.WebSocket(_Settings.Harbor.LinkPath, _HarborLinkEndpoint.HandleWebSocketAsync);
+            _Logging.Debug(_Header + "Harbor link route registered at " + _Settings.Harbor.LinkPath);
 
             // Watson 7 StartAsync is long-running; Start() binds and returns after
             // scheduling the accept loop.
@@ -369,6 +402,7 @@ namespace Armada.Server
             _McpServer = new McpHttpServer(_Settings.Rest.Hostname, _Settings.McpPort);
             _McpServer.ServerName = ArmadaConstants.ProductName;
             _McpServer.ServerVersion = ArmadaConstants.ProductVersion;
+            _McpServer.AuthenticationHandler = AuthenticateMcpRequestAsync;
             RegisterMcpTools();
 
             Task mcpTask = Task.Run(() => _McpServer.StartAsync(_TokenSource.Token));
@@ -380,41 +414,41 @@ namespace Armada.Server
             try
             {
                 await _PlanningSessions.RecoverSessionsAsync(_TokenSource.Token).ConfigureAwait(false);
-                _Logging.Info(_Header + "planning session recovery completed");
+                _Logging.Debug(_Header + "planning session recovery completed");
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "planning session recovery error: " + ex.Message);
+                _Logging.Warn(_Header + "planning session recovery error: " + ex.ToString());
             }
 
             try
             {
                 await _PlanningSessions.MaintainSessionsAsync(_TokenSource.Token).ConfigureAwait(false);
-                _Logging.Info(_Header + "planning session maintenance completed");
+                _Logging.Debug(_Header + "planning session maintenance completed");
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "planning session maintenance error: " + ex.Message);
+                _Logging.Warn(_Header + "planning session maintenance error: " + ex.ToString());
             }
 
             try
             {
                 await _ObjectiveRefinementSessions.RecoverSessionsAsync(_TokenSource.Token).ConfigureAwait(false);
-                _Logging.Info(_Header + "objective refinement session recovery completed");
+                _Logging.Debug(_Header + "objective refinement session recovery completed");
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "objective refinement session recovery error: " + ex.Message);
+                _Logging.Warn(_Header + "objective refinement session recovery error: " + ex.ToString());
             }
 
             try
             {
                 await _ObjectiveRefinementSessions.MaintainSessionsAsync(_TokenSource.Token).ConfigureAwait(false);
-                _Logging.Info(_Header + "objective refinement session maintenance completed");
+                _Logging.Debug(_Header + "objective refinement session maintenance completed");
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "objective refinement session maintenance error: " + ex.Message);
+                _Logging.Warn(_Header + "objective refinement session maintenance error: " + ex.ToString());
             }
 
             // Start health check loop
@@ -434,7 +468,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "REST API stop error: " + ex.Message);
+                _Logging.Warn(_Header + "REST API stop error: " + ex.ToString());
             }
             // Kill agent subprocesses so none survive as orphans after the Admiral exits.
             // Runs before the token is cancelled and the database is disposed (it needs both).
@@ -444,7 +478,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error stopping agent processes on shutdown: " + ex.Message);
+                _Logging.Warn(_Header + "error stopping agent processes on shutdown: " + ex.ToString());
             }
 
             _TokenSource.Cancel();
@@ -471,6 +505,45 @@ namespace Armada.Server
             return result;
         }
 
+        private async Task<AuthenticationResult> AuthenticateMcpRequestAsync(System.Net.HttpListenerRequest request)
+        {
+            // Populate the caller's identity for the MCP tool handlers when a credential is presented.
+            // This is additive: unauthenticated local/stdio callers still succeed (IsAuthenticated = true with
+            // no claims), and the tool handlers fall back to the default tenant-admin context. When a valid
+            // credential is presented, the resolved tenant/user/role claims flow into the handlers via
+            // Voltaic's ambient RpcCallContext so MCP tools are scoped per-user, matching the REST API.
+            AuthenticationResult result = new AuthenticationResult { IsAuthenticated = true };
+            try
+            {
+                string? authHeader = request.Headers["Authorization"];
+                string? tokenHeader = request.Headers["X-Token"];
+                string? apiKeyHeader = request.Headers["X-Api-Key"];
+                if (!String.IsNullOrEmpty(authHeader) || !String.IsNullOrEmpty(tokenHeader) || !String.IsNullOrEmpty(apiKeyHeader))
+                {
+                    AuthContext ctx = await _AuthenticationService.AuthenticateAsync(authHeader, tokenHeader, apiKeyHeader).ConfigureAwait(false);
+                    if (ctx != null && ctx.IsAuthenticated && !String.IsNullOrEmpty(ctx.UserId))
+                    {
+                        result.Principal = ctx.UserId;
+                        result.Claims = new Dictionary<string, string>
+                        {
+                            ["tenantId"] = ctx.TenantId ?? String.Empty,
+                            ["userId"] = ctx.UserId ?? String.Empty,
+                            ["isAdmin"] = ctx.IsAdmin ? "true" : "false",
+                            ["isTenantAdmin"] = ctx.IsTenantAdmin ? "true" : "false",
+                            ["authMethod"] = ctx.AuthMethod ?? "Mcp"
+                        };
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Never fail the MCP request on an auth-resolution error; treat as an anonymous local caller.
+                _Logging.Debug(_Header + "MCP caller authentication skipped: " + ex.Message);
+            }
+
+            return result;
+        }
+
         private async Task EnsureApiKeyAsync()
         {
             if (!String.IsNullOrEmpty(_Settings.ApiKey))
@@ -484,13 +557,13 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "generated API key but could not persist settings: " + ex.Message);
+                _Logging.Warn(_Header + "generated API key but could not persist settings: " + ex.ToString());
             }
         }
 
         private async Task SeedSyntheticAdminAsync()
         {
-            _Logging.Info(_Header + "seeding synthetic admin identity for API key");
+            _Logging.Debug(_Header + "seeding synthetic admin identity for API key");
 
             // Create system tenant if not exists
             TenantMetadata? existingTenant = await _Database.Tenants.ReadAsync(ArmadaConstants.SystemTenantId).ConfigureAwait(false);
@@ -518,7 +591,7 @@ namespace Armada.Server
                 await _Database.Users.CreateAsync(systemUser).ConfigureAwait(false);
             }
 
-            _Logging.Info(_Header + "synthetic admin identity ready");
+            _Logging.Debug(_Header + "synthetic admin identity ready");
         }
 
         private void RegisterRoutes()
@@ -534,7 +607,9 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Status, health, doctor, settings, server control
-            new StatusRoutes(_Database, _Settings, _Admiral, () => Stop(), _StartUtc, _JsonOptions, _Logging, _RemoteTunnel.GetStatus, _RemoteTunnel.ReloadAsync)
+            SlotManager slotManager = new SlotManager(Path.Combine(_Settings.DataDirectory, "bin"), retentionCount: _Settings.RebuildSlotRetentionCount);
+            ServerRebuildService rebuildService = new ServerRebuildService(_Database, _Settings, slotManager, new LocalHostCommandExecutor(), _Logging, () => Stop(), _HarborConnectionManager);
+            new StatusRoutes(_Database, _Settings, _Admiral, () => Stop(), _StartUtc, _JsonOptions, _Logging, slotManager, rebuildService, _RemoteTunnel.GetStatus, _RemoteTunnel.ReloadAsync)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Fleets
@@ -543,7 +618,7 @@ namespace Armada.Server
 
             // Vessels
             VesselContextService vesselContextService = new VesselContextService(_Database, _RuntimeFactory, _Docks, _PromptTemplateService, _Logging);
-            new VesselRoutes(_Database, _VesselReadinessService, _LandingPreviewService, EmitEventAsync, _JsonOptions, _Docks, vesselContextService)
+            new VesselRoutes(_Database, _VesselReadinessService, _LandingPreviewService, EmitEventAsync, _JsonOptions, _Docks, vesselContextService, _Git, _Settings)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Workspace
@@ -563,7 +638,7 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Ask Armada assistant
-            new AskRoutes(new AskArmadaService(_Database, _Admiral, _Logging), new CaptainChatService(_Database, _RuntimeFactory, _WebSocketHub, _PromptTemplateService, _Logging), _JsonOptions)
+            new AskRoutes(new AskArmadaService(_Database, _Admiral, _Logging), new CaptainChatService(_Database, _RuntimeFactory, _WebSocketHub, _PromptTemplateService, _SessionTokenService, _Settings.McpPort, _Logging), _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Needs-you inbox
@@ -579,6 +654,17 @@ namespace Armada.Server
 
             // Environments
             new EnvironmentRoutes(_EnvironmentService)
+                .Register(_App, authenticate, _AuthorizationService);
+
+            // Model endpoints (embedding/inference)
+            new ModelEndpointRoutes(_ModelEndpointService)
+                .Register(_App, authenticate, _AuthorizationService);
+
+            new MemoryRoutes(new MemoryService(_Database, _Logging))
+                .Register(_App, authenticate, _AuthorizationService);
+
+            // Harbors (host runners)
+            new HarborRoutes(_HarborService, _HarborConnectionManager)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Structured check runs
@@ -686,7 +772,7 @@ namespace Armada.Server
                 if (Directory.Exists(path))
                 {
                     Dashboard.StaticFileHandler.SetExternalPath(path);
-                    _Logging.Info(_Header + "dashboard serving from external path: " + path);
+                    _Logging.Debug(_Header + "dashboard serving from external path: " + path);
                     return;
                 }
                 else
@@ -700,7 +786,7 @@ namespace Armada.Server
             if (Directory.Exists(dashboardInData) && File.Exists(Path.Combine(dashboardInData, "index.html")))
             {
                 Dashboard.StaticFileHandler.SetExternalPath(dashboardInData);
-                _Logging.Info(_Header + "dashboard auto-detected at: " + dashboardInData);
+                _Logging.Debug(_Header + "dashboard auto-detected at: " + dashboardInData);
                 return;
             }
 
@@ -712,13 +798,13 @@ namespace Armada.Server
                 if (Directory.Exists(dashboardNextToExe) && File.Exists(Path.Combine(dashboardNextToExe, "index.html")))
                 {
                     Dashboard.StaticFileHandler.SetExternalPath(dashboardNextToExe);
-                    _Logging.Info(_Header + "dashboard auto-detected at: " + dashboardNextToExe);
+                    _Logging.Debug(_Header + "dashboard auto-detected at: " + dashboardNextToExe);
                     return;
                 }
             }
 
             // Fallback: use embedded wwwroot resources (legacy dashboard, not the React dashboard)
-            _Logging.Info(_Header + "using embedded legacy dashboard because no external React dashboard was found");
+            _Logging.Debug(_Header + "using embedded legacy dashboard because no external React dashboard was found");
         }
 
         private static void ApplyCorsHeaders(HttpContextBase ctx)
@@ -766,7 +852,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "request history capture error: " + ex.Message);
+                _Logging.Warn(_Header + "request history capture error: " + ex.ToString());
             }
         }
 
@@ -1017,7 +1103,31 @@ namespace Armada.Server
                 _AgentLifecycle,
                 _PromptTemplateService,
                 _Logging,
-                _CaptainTools);
+                _CaptainTools,
+                _ModelEndpointService,
+                _HarborService);
+        }
+
+        /// <summary>
+        /// Resolve a model-endpoint id to a usable inference endpoint (enabled, Inference-kind), or null.
+        /// Shared by the runtime factory (in-process captains) and the lifecycle handler (Harbor-delegated
+        /// captains, whose endpoint is shipped in the launch).
+        /// </summary>
+        /// <param name="endpointId">Model-endpoint identifier.</param>
+        /// <returns>The endpoint, or null when missing, disabled, or not an Inference endpoint.</returns>
+        private Armada.Core.Models.ModelEndpoint? ResolveInferenceEndpoint(string endpointId)
+        {
+            if (String.IsNullOrEmpty(endpointId)) return null;
+            try
+            {
+                Armada.Core.Models.ModelEndpoint? endpoint = _Database.ModelEndpoints.ReadAsync(endpointId).GetAwaiter().GetResult();
+                if (endpoint == null || !endpoint.Enabled || endpoint.Kind != Armada.Core.Enums.ModelEndpointKindEnum.Inference) return null;
+                return endpoint;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private async Task EmitEventAsync(string eventType, string message,
@@ -1063,7 +1173,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error emitting event: " + ex.Message);
+                _Logging.Warn(_Header + "error emitting event: " + ex.ToString());
             }
         }
 
@@ -1073,11 +1183,11 @@ namespace Armada.Server
             try
             {
                 await _Admiral.CleanupStaleCaptainsAsync(token).ConfigureAwait(false);
-                _Logging.Info(_Header + "startup stale captain cleanup completed");
+                _Logging.Debug(_Header + "startup stale captain cleanup completed");
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "startup stale captain cleanup error: " + ex.Message);
+                _Logging.Warn(_Header + "startup stale captain cleanup error: " + ex.ToString());
             }
 
             // Run an immediate health check on startup to dispatch any pending missions
@@ -1085,11 +1195,11 @@ namespace Armada.Server
             {
                 await _Admiral.HealthCheckAsync(token).ConfigureAwait(false);
                 await _DeploymentService.MonitorRolloutWindowsAsync(token).ConfigureAwait(false);
-                _Logging.Info(_Header + "startup health check completed");
+                _Logging.Debug(_Header + "startup health check completed");
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "startup health check error: " + ex.Message);
+                _Logging.Warn(_Header + "startup health check error: " + ex.ToString());
             }
 
             while (!token.IsCancellationRequested)
@@ -1108,6 +1218,11 @@ namespace Armada.Server
                     try { await _JobService.MaintainAsync(token).ConfigureAwait(false); }
                     catch (Exception jobEx) { _Logging.Warn(_Header + "job maintenance error: " + jobEx.Message); }
 
+                    // Autonomous mission recovery: classify failures, open/link incidents, dispatch bounded
+                    // rescue missions, and advance incidents Open -> Mitigated -> Closed from mission evidence.
+                    try { await _MissionRecovery.MaintainAsync(token).ConfigureAwait(false); }
+                    catch (Exception recoveryEx) { _Logging.Warn(_Header + "mission recovery error: " + recoveryEx.Message); }
+
                     // Run log rotation every 10 health check cycles
                     _HealthCheckCycles++;
                     if (_HealthCheckCycles % 10 == 0)
@@ -1117,6 +1232,10 @@ namespace Armada.Server
                         _LogRotation.RotateIfNeeded(Path.Combine(_Settings.LogDirectory, "admiral.log"));
                         await _PlanningSessions.MaintainSessionsAsync(token).ConfigureAwait(false);
                         await _ObjectiveRefinementSessions.MaintainSessionsAsync(token).ConfigureAwait(false);
+
+                        // Sweep managed model endpoints, deduplicated by base URL, so their health status stays current.
+                        try { await _ModelEndpointService.CheckHealthAllAsync(token).ConfigureAwait(false); }
+                        catch (Exception epEx) { _Logging.Warn(_Header + "model endpoint health sweep error: " + epEx.Message); }
                     }
 
                     // Run data expiry every 100 health check cycles (~50 min at default interval)
@@ -1132,7 +1251,7 @@ namespace Armada.Server
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "health check error: " + ex.Message);
+                    _Logging.Warn(_Header + "health check error: " + ex.ToString());
                 }
             }
         }
@@ -1171,12 +1290,12 @@ namespace Armada.Server
 
                 if (deleted > 0)
                 {
-                    _Logging.Info(_Header + "purged " + deleted + " expired request history records");
+                    _Logging.Debug(_Header + "purged " + deleted + " expired request history records");
                 }
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "request history purge error: " + ex.Message);
+                _Logging.Warn(_Header + "request history purge error: " + ex.ToString());
             }
         }
 

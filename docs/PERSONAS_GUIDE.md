@@ -73,11 +73,20 @@ Plans work and decomposes goals into right-sized missions.
 
 ### Judge
 
-Reviews completed work for correctness and completeness.
+Reviews completed work through a bounded three-lens contract.
 
-- **Purpose:** Examine the Worker's diff against the mission description. Check
-  completeness, correctness, scope, and style. Produce a verdict: PASS, FAIL, or
-  NEEDS_REVISION.
+- **Purpose:** Examine the Worker's diff against the mission description through
+  exactly three lenses -- **Correctness** (is the change logically correct for the
+  inputs it can receive?), **Blast Radius** (what else could it break, and how far
+  do its effects reach?), and **Source Fidelity** (does it faithfully implement the
+  mission, stay in scope, and match the real codebase without inventing behavior?).
+  Produce a verdict: PASS, FAIL, or NEEDS_REVISION.
+- **Bounded blocking:** To block (FAIL or NEEDS_REVISION) the Judge MUST include a
+  `## Affected Case` section exhibiting one concrete affected case -- a specific
+  file, line, or scenario. A blocking verdict without a concrete affected case is
+  not accepted. A PASS must fill all three lens sections with real reasoning; a
+  shallow or verdict-only PASS is rejected and the mission fails terminally rather
+  than silently re-running.
 - **Prompt template:** `persona.judge`
 - **When to use:** Quality gate after Worker and/or Test Engineer stages.
 

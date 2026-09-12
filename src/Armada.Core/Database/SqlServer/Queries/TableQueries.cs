@@ -924,6 +924,182 @@ namespace Armada.Core.Database.SqlServer.Queries
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_token_usage_created') CREATE INDEX idx_token_usage_created ON token_usage(created_utc DESC);",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_token_usage_tenant_created') CREATE INDEX idx_token_usage_tenant_created ON token_usage(tenant_id, created_utc DESC);",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_token_usage_model') CREATE INDEX idx_token_usage_model ON token_usage(model);"
+                ),
+                new SchemaMigration(
+                    57,
+                    "Add mission execution mode (Implementation/Audit/Research)",
+                    @"IF COL_LENGTH('missions', 'mode') IS NULL ALTER TABLE missions ADD mode NVARCHAR(32) NOT NULL CONSTRAINT DF_missions_mode DEFAULT 'Implementation';"
+                ),
+                new SchemaMigration(
+                    58,
+                    "Add in-dock Definition-of-Done gate config to vessels",
+                    @"IF COL_LENGTH('vessels', 'definition_of_done_enabled') IS NULL ALTER TABLE vessels ADD definition_of_done_enabled BIT NOT NULL CONSTRAINT DF_vessels_dod_enabled DEFAULT 0;",
+                    @"IF COL_LENGTH('vessels', 'definition_of_done_build_command') IS NULL ALTER TABLE vessels ADD definition_of_done_build_command NVARCHAR(MAX) NULL;",
+                    @"IF COL_LENGTH('vessels', 'definition_of_done_test_command') IS NULL ALTER TABLE vessels ADD definition_of_done_test_command NVARCHAR(MAX) NULL;",
+                    @"IF COL_LENGTH('vessels', 'definition_of_done_timeout_seconds') IS NULL ALTER TABLE vessels ADD definition_of_done_timeout_seconds INT NOT NULL CONSTRAINT DF_vessels_dod_timeout DEFAULT 1800;"
+                ),
+                new SchemaMigration(
+                    59,
+                    "Add git_anchors_json to docks",
+                    @"IF COL_LENGTH('docks','git_anchors_json') IS NULL ALTER TABLE docks ADD git_anchors_json NVARCHAR(MAX) NULL;"
+                ),
+                new SchemaMigration(
+                    60,
+                    "Add model_endpoints table for managed embedding/inference endpoints",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'model_endpoints')
+                    CREATE TABLE model_endpoints (
+                        id NVARCHAR(450) NOT NULL PRIMARY KEY,
+                        tenant_id NVARCHAR(450),
+                        user_id NVARCHAR(450),
+                        name NVARCHAR(450) NOT NULL,
+                        kind NVARCHAR(64) NOT NULL,
+                        provider NVARCHAR(64) NOT NULL,
+                        base_url NVARCHAR(2048) NOT NULL,
+                        api_key NVARCHAR(MAX),
+                        model NVARCHAR(450),
+                        dimensionality INT NOT NULL CONSTRAINT DF_model_endpoints_dimensionality DEFAULT 0,
+                        timeout_ms INT NOT NULL CONSTRAINT DF_model_endpoints_timeout_ms DEFAULT 120000,
+                        enabled BIT NOT NULL CONSTRAINT DF_model_endpoints_enabled DEFAULT 1,
+                        health_status NVARCHAR(64) NOT NULL CONSTRAINT DF_model_endpoints_health_status DEFAULT 'Unknown',
+                        last_health_check_utc NVARCHAR(450),
+                        last_health_error NVARCHAR(MAX),
+                        last_latency_ms BIGINT,
+                        created_utc NVARCHAR(450) NOT NULL,
+                        last_update_utc NVARCHAR(450) NOT NULL
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_model_endpoints_created') CREATE INDEX idx_model_endpoints_created ON model_endpoints(created_utc DESC);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_model_endpoints_tenant') CREATE INDEX idx_model_endpoints_tenant ON model_endpoints(tenant_id);"
+                ),
+                new SchemaMigration(
+                    61,
+                    "Add rolling health-check history to model_endpoints",
+                    @"IF COL_LENGTH('model_endpoints', 'health_history_json') IS NULL ALTER TABLE model_endpoints ADD health_history_json NVARCHAR(MAX) NULL;"
+                ),
+                new SchemaMigration(
+                    62,
+                    "Add harbors and harbor_capabilities tables for host runners",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'harbors')
+                    CREATE TABLE harbors (
+                        id NVARCHAR(450) NOT NULL PRIMARY KEY,
+                        tenant_id NVARCHAR(450),
+                        user_id NVARCHAR(450),
+                        name NVARCHAR(450) NOT NULL,
+                        connection_status NVARCHAR(64) NOT NULL CONSTRAINT DF_harbors_connection_status DEFAULT 'Unknown',
+                        max_concurrent_jobs INT NOT NULL CONSTRAINT DF_harbors_max_concurrent_jobs DEFAULT 4,
+                        enabled BIT NOT NULL CONSTRAINT DF_harbors_enabled DEFAULT 1,
+                        protocol_version NVARCHAR(450),
+                        os_platform NVARCHAR(450),
+                        architecture NVARCHAR(450),
+                        last_seen_utc NVARCHAR(450),
+                        last_connected_utc NVARCHAR(450),
+                        created_utc NVARCHAR(450) NOT NULL,
+                        last_update_utc NVARCHAR(450) NOT NULL
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_harbors_created') CREATE INDEX idx_harbors_created ON harbors(created_utc DESC);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_harbors_tenant') CREATE INDEX idx_harbors_tenant ON harbors(tenant_id);",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'harbor_capabilities')
+                    CREATE TABLE harbor_capabilities (
+                        harbor_id NVARCHAR(450) NOT NULL,
+                        name NVARCHAR(450) NOT NULL,
+                        available BIT NOT NULL CONSTRAINT DF_harbor_capabilities_available DEFAULT 1,
+                        detail NVARCHAR(MAX),
+                        CONSTRAINT PK_harbor_capabilities PRIMARY KEY (harbor_id, name),
+                        CONSTRAINT FK_harbor_capabilities_harbor FOREIGN KEY (harbor_id) REFERENCES harbors(id) ON DELETE CASCADE
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_harbor_capabilities_harbor') CREATE INDEX idx_harbor_capabilities_harbor ON harbor_capabilities(harbor_id);"
+                ),
+                new SchemaMigration(
+                    63,
+                    "Add Harbor routing and affinity columns",
+                    @"IF COL_LENGTH('docks','harbor_id') IS NULL ALTER TABLE docks ADD harbor_id NVARCHAR(450) NULL;",
+                    @"IF COL_LENGTH('missions','assigned_harbor_id') IS NULL ALTER TABLE missions ADD assigned_harbor_id NVARCHAR(450) NULL;",
+                    @"IF COL_LENGTH('vessels','preferred_harbor_id') IS NULL ALTER TABLE vessels ADD preferred_harbor_id NVARCHAR(450) NULL;",
+                    @"IF COL_LENGTH('vessels','required_capabilities') IS NULL ALTER TABLE vessels ADD required_capabilities NVARCHAR(MAX) NULL;"
+                ),
+                new SchemaMigration(
+                    64,
+                    "Add model_endpoint_id to captains for API-endpoint captains",
+                    @"IF COL_LENGTH('captains','model_endpoint_id') IS NULL ALTER TABLE captains ADD model_endpoint_id NVARCHAR(450) NULL;"
+                ),
+                new SchemaMigration(
+                    65,
+                    "Add scope to model_endpoints (tenant-wide vs user-specific)",
+                    @"IF COL_LENGTH('model_endpoints','scope') IS NULL ALTER TABLE model_endpoints ADD scope NVARCHAR(32) NOT NULL DEFAULT 'TenantWide';"
+                ),
+                new SchemaMigration(
+                    66,
+                    "Add ownership scope to playbooks and skills",
+                    @"IF COL_LENGTH('playbooks','scope') IS NULL ALTER TABLE playbooks ADD scope NVARCHAR(32) NOT NULL DEFAULT 'TenantWide';",
+                    @"IF COL_LENGTH('skills','scope') IS NULL ALTER TABLE skills ADD scope NVARCHAR(32) NOT NULL DEFAULT 'TenantWide';"
+                ),
+                new SchemaMigration(
+                    67,
+                    "Add ownership (user_id + scope) to personas, pipelines, prompt_templates",
+                    @"IF COL_LENGTH('personas','user_id') IS NULL ALTER TABLE personas ADD user_id NVARCHAR(450);",
+                    @"IF COL_LENGTH('personas','scope') IS NULL ALTER TABLE personas ADD scope NVARCHAR(32) NOT NULL DEFAULT 'TenantWide';",
+                    @"IF COL_LENGTH('pipelines','user_id') IS NULL ALTER TABLE pipelines ADD user_id NVARCHAR(450);",
+                    @"IF COL_LENGTH('pipelines','scope') IS NULL ALTER TABLE pipelines ADD scope NVARCHAR(32) NOT NULL DEFAULT 'TenantWide';",
+                    @"IF COL_LENGTH('prompt_templates','user_id') IS NULL ALTER TABLE prompt_templates ADD user_id NVARCHAR(450);",
+                    @"IF COL_LENGTH('prompt_templates','scope') IS NULL ALTER TABLE prompt_templates ADD scope NVARCHAR(32) NOT NULL DEFAULT 'TenantWide';"
+                ),
+                new SchemaMigration(
+                    68,
+                    "Add ownership_scope to workflow_profiles and project_profiles",
+                    @"IF COL_LENGTH('workflow_profiles','ownership_scope') IS NULL ALTER TABLE workflow_profiles ADD ownership_scope NVARCHAR(32) NOT NULL DEFAULT 'TenantWide';",
+                    @"IF COL_LENGTH('project_profiles','ownership_scope') IS NULL ALTER TABLE project_profiles ADD ownership_scope NVARCHAR(32) NOT NULL DEFAULT 'TenantWide';"
+                ),
+                new SchemaMigration(
+                    69,
+                    "Add cloud-provider fields (region, project, api_version, access_key_id) to model_endpoints",
+                    @"IF COL_LENGTH('model_endpoints','region') IS NULL ALTER TABLE model_endpoints ADD region NVARCHAR(256) NULL;",
+                    @"IF COL_LENGTH('model_endpoints','project') IS NULL ALTER TABLE model_endpoints ADD project NVARCHAR(256) NULL;",
+                    @"IF COL_LENGTH('model_endpoints','api_version') IS NULL ALTER TABLE model_endpoints ADD api_version NVARCHAR(64) NULL;",
+                    @"IF COL_LENGTH('model_endpoints','access_key_id') IS NULL ALTER TABLE model_endpoints ADD access_key_id NVARCHAR(256) NULL;"
+                ),
+                new SchemaMigration(
+                    70,
+                    "Add memories and memory_tags tables for durable agent memory",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'memories')
+                    CREATE TABLE memories (
+                        id NVARCHAR(450) NOT NULL PRIMARY KEY,
+                        tenant_id NVARCHAR(450),
+                        user_id NVARCHAR(450),
+                        scope NVARCHAR(64) NOT NULL CONSTRAINT DF_memories_scope DEFAULT 'TenantWide',
+                        type NVARCHAR(64) NOT NULL CONSTRAINT DF_memories_type DEFAULT 'Semantic',
+                        topic NVARCHAR(450),
+                        memory_key NVARCHAR(450),
+                        summary NVARCHAR(MAX),
+                        content NVARCHAR(MAX) NOT NULL CONSTRAINT DF_memories_content DEFAULT '',
+                        salience FLOAT NOT NULL CONSTRAINT DF_memories_salience DEFAULT 0.5,
+                        version INT NOT NULL CONSTRAINT DF_memories_version DEFAULT 1,
+                        source_kind NVARCHAR(64) NOT NULL CONSTRAINT DF_memories_source_kind DEFAULT 'Manual',
+                        source_voyage_id NVARCHAR(450),
+                        source_mission_id NVARCHAR(450),
+                        source_vessel_id NVARCHAR(450),
+                        source_detail NVARCHAR(MAX),
+                        vessel_id NVARCHAR(450),
+                        created_utc NVARCHAR(450) NOT NULL,
+                        last_update_utc NVARCHAR(450) NOT NULL
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_memories_created') CREATE INDEX idx_memories_created ON memories(created_utc DESC);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_memories_tenant') CREATE INDEX idx_memories_tenant ON memories(tenant_id);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_memories_tenant_user') CREATE INDEX idx_memories_tenant_user ON memories(tenant_id, user_id);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_memories_type') CREATE INDEX idx_memories_type ON memories(type);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_memories_vessel') CREATE INDEX idx_memories_vessel ON memories(vessel_id);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_memories_key') CREATE INDEX idx_memories_key ON memories(tenant_id, memory_key);",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'memory_tags')
+                    CREATE TABLE memory_tags (
+                        memory_id NVARCHAR(450) NOT NULL,
+                        tag NVARCHAR(450) NOT NULL,
+                        CONSTRAINT PK_memory_tags PRIMARY KEY (memory_id, tag),
+                        CONSTRAINT FK_memory_tags_memory FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_memory_tags_memory') CREATE INDEX idx_memory_tags_memory ON memory_tags(memory_id);"
                 )
             };
         }

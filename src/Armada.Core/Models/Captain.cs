@@ -78,6 +78,17 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
+        /// Identifier of the inference ModelEndpoint this captain drives, when <see cref="Runtime"/> is
+        /// <see cref="AgentRuntimeEnum.ApiEndpoint"/>. Null for CLI-harness runtimes. Must reference a
+        /// configured Inference endpoint.
+        /// </summary>
+        public string? ModelEndpointId
+        {
+            get => _ModelEndpointId;
+            set => _ModelEndpointId = String.IsNullOrEmpty(value) ? null : value;
+        }
+
+        /// <summary>
         /// User-supplied system instructions for this captain. Injected into every mission's
         /// instructions before vessel context and mission details. Use this to specialize
         /// captain behavior, add guardrails, or provide persistent context.
@@ -184,6 +195,7 @@ namespace Armada.Core.Models
         private string _Id = Constants.IdGenerator.GenerateKSortable(Constants.CaptainIdPrefix, 24);
         private string _Name = "Captain";
         private string? _Model = null;
+        private string? _ModelEndpointId = null;
 
         #endregion
 

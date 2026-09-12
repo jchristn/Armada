@@ -23,8 +23,10 @@ namespace Armada.Server.Mcp.Tools
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         };
 
-        // NOTE: Enumerate operations use unscoped (admin-level) methods since MCP has no auth context.
-        // When MCP auth is added, these should switch to tenant-scoped overloads.
+        // Owned (Category A) entities are enumerated through EnumerationScope.EnumerateScopedAsync using the
+        // caller identity resolved from the authenticated MCP transport (McpToolHelpers.ResolveCallerContext),
+        // so a regular caller sees only their own records. Configuration (Category B) entities remain
+        // tenant-visible here; per-object ownership editing is enforced by their services/routes.
         /// <summary>
         /// Registers the enumerate MCP tool with the server.
         /// </summary>
@@ -41,7 +43,7 @@ namespace Armada.Server.Mcp.Tools
                     type = "object",
                     properties = new
                     {
-                        entityType = new { type = "string", description = "Entity type to enumerate: objectives, jobs, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions" },
+                        entityType = new { type = "string", description = "Entity type to enumerate: objectives, jobs, model_endpoints, harbors, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions" },
                         pageNumber = new { type = "integer", description = "Page number (1-based, default 1)" },
                         pageSize = new { type = "integer", description = "Results per page (default 10, max 1000)" },
                         order = new { type = "string", description = "Sort order: CreatedAscending, CreatedDescending (default)" },
@@ -71,6 +73,10 @@ namespace Armada.Server.Mcp.Tools
                     EnumerateArgs request = JsonSerializer.Deserialize<EnumerateArgs>(args!.Value, _JsonOptions)!;
                     string entityType = (request.EntityType ?? "").ToLowerInvariant();
                     EnumerationQuery query = request.ToEnumerationQuery();
+                    // Scope owned (Category A) entities to the authenticated MCP caller. When the caller is a
+                    // regular user this returns only their records; a tenant/global admin sees the tenant/system,
+                    // and an unauthenticated local caller falls back to the default tenant-admin identity.
+                    AuthContext callerCtx = McpToolHelpers.ResolveCallerContext();
 
                     switch (entityType)
                     {
@@ -83,7 +89,7 @@ namespace Armada.Server.Mcp.Tools
                         case "backlog-items":
                             ObjectiveService objectives = new ObjectiveService(database);
                             EnumerationResult<Objective> objectiveResult = await objectives.EnumerateAsync(
-                                McpToolHelpers.CreateDefaultTenantAdminContext(),
+                                McpToolHelpers.ResolveCallerContext(),
                                 new ObjectiveQuery
                                 {
                                     PageNumber = query.PageNumber,
@@ -107,13 +113,35 @@ namespace Armada.Server.Mcp.Tools
                                 .Take(jobPageSize)
                                 .ToList();
                             return (object)new { Success = true, PageNumber = jobPageNumber, PageSize = jobPageSize, TotalRecords = allJobs.Count, Objects = jobPage };
+                        case "model_endpoints":
+                        case "model-endpoints":
+                        case "model_endpoint":
+                        case "endpoints":
+                            System.Collections.Generic.List<ModelEndpoint> allEndpoints = await database.ModelEndpoints.EnumerateAsync().ConfigureAwait(false);
+                            int mepPageSize = query.PageSize > 0 ? query.PageSize : 25;
+                            int mepPageNumber = query.PageNumber > 0 ? query.PageNumber : 1;
+                            System.Collections.Generic.List<ModelEndpoint> mepPage = allEndpoints
+                                .Skip((mepPageNumber - 1) * mepPageSize)
+                                .Take(mepPageSize)
+                                .ToList();
+                            return (object)new { Success = true, PageNumber = mepPageNumber, PageSize = mepPageSize, TotalRecords = allEndpoints.Count, Objects = mepPage };
+                        case "harbors":
+                        case "harbor":
+                            System.Collections.Generic.List<Harbor> allHarbors = await database.Harbors.EnumerateAsync().ConfigureAwait(false);
+                            int hbrPageSize = query.PageSize > 0 ? query.PageSize : 25;
+                            int hbrPageNumber = query.PageNumber > 0 ? query.PageNumber : 1;
+                            System.Collections.Generic.List<Harbor> hbrPage = allHarbors
+                                .Skip((hbrPageNumber - 1) * hbrPageSize)
+                                .Take(hbrPageSize)
+                                .ToList();
+                            return (object)new { Success = true, PageNumber = hbrPageNumber, PageSize = hbrPageSize, TotalRecords = allHarbors.Count, Objects = hbrPage };
                         case "fleets":
                         case "fleet":
-                            EnumerationResult<Fleet> fleets = await database.Fleets.EnumerateAsync(query).ConfigureAwait(false);
+                            EnumerationResult<Fleet> fleets = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(callerCtx, query, q => database.Fleets.EnumerateAsync(q), (t, q) => database.Fleets.EnumerateAsync(t, q), (t, u, q) => database.Fleets.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                             return (object)fleets;
                         case "vessels":
                         case "vessel":
-                            EnumerationResult<Vessel> vessels = await database.Vessels.EnumerateAsync(query).ConfigureAwait(false);
+                            EnumerationResult<Vessel> vessels = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(callerCtx, query, q => database.Vessels.EnumerateAsync(q), (t, q) => database.Vessels.EnumerateAsync(t, q), (t, u, q) => database.Vessels.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                             if (request.IncludeContext != true)
                             {
                                 object projectedVessels = new
@@ -141,7 +169,7 @@ namespace Armada.Server.Mcp.Tools
                             return (object)vessels;
                         case "captains":
                         case "captain":
-                            EnumerationResult<Captain> captains = await database.Captains.EnumerateAsync(query).ConfigureAwait(false);
+                            EnumerationResult<Captain> captains = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(callerCtx, query, q => database.Captains.EnumerateAsync(q), (t, q) => database.Captains.EnumerateAsync(t, q), (t, u, q) => database.Captains.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                             object projectedCaptains = new
                             {
                                 captains.Success,
@@ -183,12 +211,12 @@ namespace Armada.Server.Mcp.Tools
                                 };
                                 return (object)projectedMissions;
                             }
-                            EnumerationResult<Mission> missions = await database.Missions.EnumerateAsync(query).ConfigureAwait(false);
+                            EnumerationResult<Mission> missions = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(callerCtx, query, q => database.Missions.EnumerateAsync(q), (t, q) => database.Missions.EnumerateAsync(t, q), (t, u, q) => database.Missions.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                             foreach (Mission m in missions.Objects) m.DiffSnapshot = null;
                             return (object)missions;
                         case "voyages":
                         case "voyage":
-                            EnumerationResult<Voyage> voyages = await database.Voyages.EnumerateAsync(query).ConfigureAwait(false);
+                            EnumerationResult<Voyage> voyages = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(callerCtx, query, q => database.Voyages.EnumerateAsync(q), (t, q) => database.Voyages.EnumerateAsync(t, q), (t, u, q) => database.Voyages.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                             if (request.IncludeDescription != true)
                             {
                                 object projectedVoyages = new
@@ -211,11 +239,11 @@ namespace Armada.Server.Mcp.Tools
                             return (object)voyages;
                         case "docks":
                         case "dock":
-                            EnumerationResult<Dock> docks = await database.Docks.EnumerateAsync(query).ConfigureAwait(false);
+                            EnumerationResult<Dock> docks = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(callerCtx, query, q => database.Docks.EnumerateAsync(q), (t, q) => database.Docks.EnumerateAsync(t, q), (t, u, q) => database.Docks.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                             return (object)docks;
                         case "signals":
                         case "signal":
-                            EnumerationResult<Signal> signals = await database.Signals.EnumerateAsync(query).ConfigureAwait(false);
+                            EnumerationResult<Signal> signals = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(callerCtx, query, q => database.Signals.EnumerateAsync(q), (t, q) => database.Signals.EnumerateAsync(t, q), (t, u, q) => database.Signals.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                             if (request.IncludeMessage != true)
                             {
                                 object projectedSignals = new
@@ -237,7 +265,7 @@ namespace Armada.Server.Mcp.Tools
                             return (object)signals;
                         case "events":
                         case "event":
-                            EnumerationResult<ArmadaEvent> events = await database.Events.EnumerateAsync(query).ConfigureAwait(false);
+                            EnumerationResult<ArmadaEvent> events = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(callerCtx, query, q => database.Events.EnumerateAsync(q), (t, q) => database.Events.EnumerateAsync(t, q), (t, u, q) => database.Events.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                             if (request.IncludePayload != true)
                             {
                                 object projectedEvents = new
@@ -296,7 +324,7 @@ namespace Armada.Server.Mcp.Tools
                         case "incident":
                             IncidentService incidents = new IncidentService(database);
                             EnumerationResult<Incident> incidentResult = await incidents.EnumerateAsync(
-                                McpToolHelpers.CreateDefaultTenantAdminContext(),
+                                McpToolHelpers.ResolveCallerContext(),
                                 new IncidentQuery
                                 {
                                     PageNumber = query.PageNumber,
@@ -311,7 +339,7 @@ namespace Armada.Server.Mcp.Tools
                         case "runbook":
                             RunbookService runbooks = new RunbookService(database, new SyslogLogging.LoggingModule());
                             EnumerationResult<Runbook> runbookResult = await runbooks.EnumerateAsync(
-                                McpToolHelpers.CreateDefaultTenantAdminContext(),
+                                McpToolHelpers.ResolveCallerContext(),
                                 new RunbookQuery
                                 {
                                     PageNumber = query.PageNumber,
@@ -324,7 +352,7 @@ namespace Armada.Server.Mcp.Tools
                         case "runbookexecution":
                             RunbookService executionService = new RunbookService(database, new SyslogLogging.LoggingModule());
                             EnumerationResult<RunbookExecution> runbookExecutions = await executionService.EnumerateExecutionsAsync(
-                                McpToolHelpers.CreateDefaultTenantAdminContext(),
+                                McpToolHelpers.ResolveCallerContext(),
                                 new RunbookExecutionQuery
                                 {
                                     PageNumber = query.PageNumber,
@@ -336,7 +364,7 @@ namespace Armada.Server.Mcp.Tools
                         case "merge-queue":
                         case "mergequeue":
                         case "merge_entries":
-                            EnumerationResult<MergeEntry> mqResult = await database.MergeEntries.EnumerateAsync(query).ConfigureAwait(false);
+                            EnumerationResult<MergeEntry> mqResult = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(callerCtx, query, q => database.MergeEntries.EnumerateAsync(q), (t, q) => database.MergeEntries.EnumerateAsync(t, q), (t, u, q) => database.MergeEntries.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                             if (request.IncludeTestOutput != true)
                             {
                                 object projectedMerge = new
@@ -362,6 +390,11 @@ namespace Armada.Server.Mcp.Tools
                         case "persona":
                             EnumerationResult<Persona> personas = await database.Personas.EnumerateAsync(query).ConfigureAwait(false);
                             return (object)personas;
+                        case "memories":
+                        case "memory":
+                            EnumerationResult<Memory> memoryResult = await new MemoryService(database, new SyslogLogging.LoggingModule())
+                                .EnumerateAsync(callerCtx, query, request.Search).ConfigureAwait(false);
+                            return (object)memoryResult;
                         case "prompt_templates":
                         case "prompt_template":
                         case "templates":
@@ -450,7 +483,7 @@ namespace Armada.Server.Mcp.Tools
                             }).ConfigureAwait(false);
                             return (object)checkRuns;
                         default:
-                            return (object)new { Error = "Unknown entity type: " + entityType + ". Valid types: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases" };
+                            return (object)new { Error = "Unknown entity type: " + entityType + ". Valid types: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, jobs, model_endpoints" };
                     }
                 });
         }

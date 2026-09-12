@@ -108,5 +108,20 @@ namespace Armada.Core.Models
         /// Optional closure timestamp override.
         /// </summary>
         public DateTime? ClosedUtc { get; set; } = null;
+
+        /// <summary>
+        /// Optional classified failure kind (for autonomous-recovery incidents).
+        /// </summary>
+        public string? FailureKind { get; set; } = null;
+
+        /// <summary>
+        /// Optional count of rescue missions dispatched for this incident.
+        /// </summary>
+        public int? RecoveryAttempts { get; set; } = null;
+
+        /// <summary>
+        /// Optional set of rescue-mission identifiers linked to this incident.
+        /// </summary>
+        public List<string>? RescueMissionIds { get; set; } = null;
     }
 }

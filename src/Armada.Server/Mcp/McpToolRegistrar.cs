@@ -59,6 +59,8 @@ namespace Armada.Server.Mcp
         /// <param name="templateService">Prompt template service for template operations.</param>
         /// <param name="logging">Logging module for tools that need validation services.</param>
         /// <param name="captainToolService">Captain tool availability service for captain tool discovery.</param>
+        /// <param name="modelEndpointService">Optional model endpoint service for embedding/inference endpoint tools.</param>
+        /// <param name="harborService">Optional Harbor service for host-runner management tools.</param>
         public static void RegisterAll(
             RegisterToolDelegate register,
             DatabaseDriver database,
@@ -80,7 +82,9 @@ namespace Armada.Server.Mcp
             AgentLifecycleHandler? agentLifecycle = null,
             IPromptTemplateService? templateService = null,
             LoggingModule? logging = null,
-            CaptainToolService? captainToolService = null)
+            CaptainToolService? captainToolService = null,
+            ModelEndpointService? modelEndpointService = null,
+            HarborService? harborService = null)
         {
             McpStatusTools.Register(register, admiral, onStop);
             if (logging != null) McpInboxTools.Register(register, database, logging);
@@ -105,7 +109,10 @@ namespace Armada.Server.Mcp
             if (templateService != null) McpPromptTemplateTools.Register(register, database, templateService);
             McpPersonaTools.Register(register, database);
             McpPipelineTools.Register(register, database);
+            if (logging != null) McpMemoryTools.Register(register, database, logging);
             if (settings != null) McpBackupTools.Register(register, database, settings);
+            if (modelEndpointService != null) McpModelEndpointTools.Register(register, modelEndpointService);
+            if (harborService != null) McpHarborTools.Register(register, harborService);
         }
 
         /// <summary>
@@ -131,7 +138,9 @@ namespace Armada.Server.Mcp
             Func<string, Task>? onStopCaptain = null,
             AgentLifecycleHandler? agentLifecycle = null,
             IPromptTemplateService? templateService = null,
-            LoggingModule? logging = null)
+            LoggingModule? logging = null,
+            ModelEndpointService? modelEndpointService = null,
+            HarborService? harborService = null)
         {
             List<CaptainToolSummary> tools = new List<CaptainToolSummary>();
 
@@ -174,7 +183,10 @@ namespace Armada.Server.Mcp
             if (templateService != null) RegisterCatalogGroup("Armada MCP / Prompt Templates", register => McpPromptTemplateTools.Register(register, database, templateService));
             RegisterCatalogGroup("Armada MCP / Personas", register => McpPersonaTools.Register(register, database));
             RegisterCatalogGroup("Armada MCP / Pipelines", register => McpPipelineTools.Register(register, database));
+            if (logging != null) RegisterCatalogGroup("Armada MCP / Memory", register => McpMemoryTools.Register(register, database, logging));
             if (settings != null) RegisterCatalogGroup("Armada MCP / Backup", register => McpBackupTools.Register(register, database, settings));
+            if (modelEndpointService != null) RegisterCatalogGroup("Armada MCP / Model Endpoints", register => McpModelEndpointTools.Register(register, modelEndpointService));
+            if (harborService != null) RegisterCatalogGroup("Armada MCP / Harbors", register => McpHarborTools.Register(register, harborService));
 
             return tools
                 .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase)

@@ -2,6 +2,7 @@ namespace Armada.Server.Routes
 {
     using System;
     using System.Diagnostics;
+    using System.Linq;
     using System.Text.Json;
     using WatsonWebserver;
     using WatsonWebserver.Core;
@@ -58,6 +59,7 @@ namespace Armada.Server.Routes
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Pipeline> result = await _database.Pipelines.EnumerateAsync(query).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
+                if (!ctx.IsAdmin) result.Objects = result.Objects.Where(p => ScopedVisibility.CanView(ctx, p.Scope, p.TenantId, p.UserId)).ToList();
                 return result;
             },
             api => api
@@ -81,6 +83,7 @@ namespace Armada.Server.Routes
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Pipeline> result = await _database.Pipelines.EnumerateAsync(query).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
+                if (!ctx.IsAdmin) result.Objects = result.Objects.Where(p => ScopedVisibility.CanView(ctx, p.Scope, p.TenantId, p.UserId)).ToList();
                 return result;
             },
             api => api
@@ -101,7 +104,7 @@ namespace Armada.Server.Routes
                 }
                 string name = req.Parameters["name"];
                 Pipeline? pipeline = await _database.Pipelines.ReadByNameAsync(name).ConfigureAwait(false);
-                if (pipeline == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Pipeline not found" }; }
+                if (pipeline == null || !ScopedVisibility.CanView(ctx, pipeline.Scope, pipeline.TenantId, pipeline.UserId)) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Pipeline not found" }; }
                 return (object)pipeline;
             },
             api => api
@@ -124,6 +127,9 @@ namespace Armada.Server.Routes
                 }
                 Pipeline pipeline = JsonSerializer.Deserialize<Pipeline>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Pipeline.");
+                pipeline.TenantId = ctx.TenantId;
+                pipeline.UserId = ctx.UserId;
+                pipeline.Scope = ScopedVisibility.ResolveCreateScope(ctx, pipeline.Scope);
                 pipeline = await _database.Pipelines.CreateAsync(pipeline).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 201;
                 return pipeline;
@@ -147,11 +153,13 @@ namespace Armada.Server.Routes
                 }
                 string name = req.Parameters["name"];
                 Pipeline? existing = await _database.Pipelines.ReadByNameAsync(name).ConfigureAwait(false);
-                if (existing == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Pipeline not found" }; }
+                if (existing == null || !ScopedVisibility.CanView(ctx, existing.Scope, existing.TenantId, existing.UserId)) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Pipeline not found" }; }
+                if (!ScopedVisibility.CanEdit(ctx, existing.Scope, existing.TenantId, existing.UserId)) { req.Http.Response.StatusCode = 403; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "You may only modify your own pipelines; a tenant-wide pipeline requires a tenant admin." }; }
                 Pipeline body = JsonSerializer.Deserialize<Pipeline>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Pipeline.");
                 if (body.Description != null) existing.Description = body.Description;
                 if (body.Stages != null && body.Stages.Count > 0) existing.Stages = body.Stages;
+                if (ctx.IsAdmin || ctx.IsTenantAdmin) existing.Scope = body.Scope;
                 existing.LastUpdateUtc = DateTime.UtcNow;
                 Pipeline updated = await _database.Pipelines.UpdateAsync(existing).ConfigureAwait(false);
                 return (object)updated;
@@ -177,7 +185,8 @@ namespace Armada.Server.Routes
                 }
                 string name = req.Parameters["name"];
                 Pipeline? existing = await _database.Pipelines.ReadByNameAsync(name).ConfigureAwait(false);
-                if (existing == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Pipeline not found" }; }
+                if (existing == null || !ScopedVisibility.CanView(ctx, existing.Scope, existing.TenantId, existing.UserId)) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Pipeline not found" }; }
+                if (!ScopedVisibility.CanEdit(ctx, existing.Scope, existing.TenantId, existing.UserId)) { req.Http.Response.StatusCode = 403; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "You may only delete your own pipelines; a tenant-wide pipeline requires a tenant admin." }; }
                 if (existing.IsBuiltIn) { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Built-in pipelines cannot be deleted" }; }
                 await _database.Pipelines.DeleteAsync(existing.Id).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 204;

@@ -66,6 +66,7 @@ namespace Armada.Server.Routes
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<ProjectProfile> result = await _database.ProjectProfiles.EnumerateAsync(query).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
+                if (!ctx.IsAdmin) result.Objects = result.Objects.Where(p => ScopedVisibility.CanView(ctx, p.OwnershipScope, p.TenantId, p.UserId)).ToList();
                 return result;
             },
             api => api
@@ -95,6 +96,7 @@ namespace Armada.Server.Routes
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<ProjectProfile> result = await _database.ProjectProfiles.EnumerateAsync(query).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
+                if (!ctx.IsAdmin) result.Objects = result.Objects.Where(p => ScopedVisibility.CanView(ctx, p.OwnershipScope, p.TenantId, p.UserId)).ToList();
                 return result;
             },
             api => api
@@ -167,7 +169,7 @@ namespace Armada.Server.Routes
                 ProjectProfile? profile = await _database.ProjectProfiles.ReadAsync(
                     req.Parameters["id"],
                     BuildScopedReadQuery(ctx)).ConfigureAwait(false);
-                if (profile == null)
+                if (profile == null || !ScopedVisibility.CanView(ctx, profile.OwnershipScope, profile.TenantId, profile.UserId))
                 {
                     req.Http.Response.StatusCode = 404;
                     return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Project profile not found" };
@@ -191,17 +193,13 @@ namespace Armada.Server.Routes
             {
                 AuthContext? ctx = await AuthorizeAsync(req, authenticate, authz).ConfigureAwait(false);
                 if (ctx == null) return BuildAuthError(req);
-                if (!CanManage(ctx))
-                {
-                    req.Http.Response.StatusCode = 403;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Only tenant administrators can manage project profiles" };
-                }
 
                 ProjectProfile profile = JsonSerializer.Deserialize<ProjectProfile>(req.Http.Request.DataAsString, _bodyJsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as ProjectProfile.");
 
                 profile.TenantId = ctx.IsAdmin ? (NormalizeEmpty(profile.TenantId) ?? ctx.TenantId) : ctx.TenantId;
                 profile.UserId = ctx.UserId;
+                profile.OwnershipScope = ScopedVisibility.ResolveCreateScope(ctx, profile.OwnershipScope);
 
                 ProjectProfileValidationResult validation = await _projectProfiles.ValidateAsync(profile).ConfigureAwait(false);
                 if (!validation.IsValid)
@@ -231,7 +229,7 @@ namespace Armada.Server.Routes
                 ProjectProfile? profile = await _database.ProjectProfiles.ReadAsync(
                     req.Parameters["id"],
                     BuildScopedReadQuery(ctx)).ConfigureAwait(false);
-                if (profile == null)
+                if (profile == null || !ScopedVisibility.CanView(ctx, profile.OwnershipScope, profile.TenantId, profile.UserId))
                 {
                     req.Http.Response.StatusCode = 404;
                     return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Project profile not found" };
@@ -252,19 +250,19 @@ namespace Armada.Server.Routes
             {
                 AuthContext? ctx = await AuthorizeAsync(req, authenticate, authz).ConfigureAwait(false);
                 if (ctx == null) return BuildAuthError(req);
-                if (!CanManage(ctx))
-                {
-                    req.Http.Response.StatusCode = 403;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Only tenant administrators can manage project profiles" };
-                }
 
                 ProjectProfile? existing = await _database.ProjectProfiles.ReadAsync(
                     req.Parameters["id"],
                     BuildScopedReadQuery(ctx)).ConfigureAwait(false);
-                if (existing == null)
+                if (existing == null || !ScopedVisibility.CanView(ctx, existing.OwnershipScope, existing.TenantId, existing.UserId))
                 {
                     req.Http.Response.StatusCode = 404;
                     return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Project profile not found" };
+                }
+                if (!ScopedVisibility.CanEdit(ctx, existing.OwnershipScope, existing.TenantId, existing.UserId))
+                {
+                    req.Http.Response.StatusCode = 403;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "You may only modify your own project profiles; a tenant-wide profile requires a tenant admin." };
                 }
 
                 ProjectProfile incoming = JsonSerializer.Deserialize<ProjectProfile>(req.Http.Request.DataAsString, _bodyJsonOptions)
@@ -273,6 +271,7 @@ namespace Armada.Server.Routes
                 existing.Name = incoming.Name;
                 existing.Description = incoming.Description;
                 existing.Scope = incoming.Scope;
+                if (ctx.IsAdmin || ctx.IsTenantAdmin) existing.OwnershipScope = incoming.OwnershipScope;
                 existing.FleetId = NormalizeEmpty(incoming.FleetId);
                 existing.VesselId = NormalizeEmpty(incoming.VesselId);
                 existing.IsDefault = incoming.IsDefault;
@@ -308,19 +307,19 @@ namespace Armada.Server.Routes
             {
                 AuthContext? ctx = await AuthorizeAsync(req, authenticate, authz).ConfigureAwait(false);
                 if (ctx == null) return BuildAuthError(req);
-                if (!CanManage(ctx))
-                {
-                    req.Http.Response.StatusCode = 403;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Only tenant administrators can manage project profiles" };
-                }
 
                 ProjectProfile? existing = await _database.ProjectProfiles.ReadAsync(
                     req.Parameters["id"],
                     BuildScopedReadQuery(ctx)).ConfigureAwait(false);
-                if (existing == null)
+                if (existing == null || !ScopedVisibility.CanView(ctx, existing.OwnershipScope, existing.TenantId, existing.UserId))
                 {
                     req.Http.Response.StatusCode = 404;
                     return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Project profile not found" };
+                }
+                if (!ScopedVisibility.CanEdit(ctx, existing.OwnershipScope, existing.TenantId, existing.UserId))
+                {
+                    req.Http.Response.StatusCode = 403;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "You may only delete your own project profiles; a tenant-wide profile requires a tenant admin." };
                 }
 
                 await _database.ProjectProfiles.DeleteAsync(existing.Id, BuildScopedReadQuery(ctx)).ConfigureAwait(false);
@@ -335,11 +334,6 @@ namespace Armada.Server.Routes
                 .WithResponse(204, OpenApiResponseMetadata.NoContent())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
-        }
-
-        private static bool CanManage(AuthContext ctx)
-        {
-            return ctx.IsAdmin || ctx.IsTenantAdmin;
         }
 
         private static ApiErrorResponse BuildAuthError(ApiRequest req)

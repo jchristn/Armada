@@ -16,6 +16,7 @@ import RecordDetailModal from '../components/shared/RecordDetailModal';
 import CopyButton from '../components/shared/CopyButton';
 import RefreshButton from '../components/shared/RefreshButton';
 import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
+import UserScopeFilter from '../components/shared/UserScopeFilter';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
@@ -45,6 +46,7 @@ export default function Signals() {
 
   // Filters
   const [filterType, setFilterType] = useState('');
+  const [userScope, setUserScope] = useState('');
   const [filterToCaptain, setFilterToCaptain] = useState('');
   const [filterUnreadOnly, setFilterUnreadOnly] = useState(false);
 
@@ -79,6 +81,7 @@ export default function Signals() {
       if (filterType) filters.type = filterType;
       if (filterToCaptain) filters.toCaptainId = filterToCaptain;
       if (filterUnreadOnly) filters.unreadOnly = 'true';
+      if (userScope) filters.userId = userScope;
       const result = await listSignals({ pageNumber: page, pageSize, filters });
       setSignals(result.objects || []);
       setTotalPages(result.totalPages || 0);
@@ -90,7 +93,7 @@ export default function Signals() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, filterType, filterToCaptain, filterUnreadOnly, t]);
+  }, [page, pageSize, filterType, filterToCaptain, filterUnreadOnly, userScope, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -249,6 +252,7 @@ export default function Signals() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Pagination pageNumber={page} totalPages={totalPages} totalRecords={totalRecords} totalMs={totalMs}
             pageSize={pageSize} onPageChange={setPage} onPageSizeChange={handlePageSizeChange} />
+          <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPage(1); }} />
           <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
           <RefreshButton onRefresh={load} title={t('Refresh signals')} />
         </div>

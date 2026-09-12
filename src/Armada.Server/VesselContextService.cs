@@ -114,14 +114,14 @@ namespace Armada.Server
                 vessel.EnableModelContext = true;
                 vessel = await _Database.Vessels.UpdateAsync(vessel).ConfigureAwait(false);
 
-                _Logging.Info(_Header + (refine ? "refined" : "built") + " Model Context for vessel " + vesselId +
+                _Logging.Debug(_Header + (refine ? "refined" : "built") + " Model Context for vessel " + vesselId +
                     " using captain " + captainId + " (" + context.Length + " chars)");
                 return vessel;
             }
             finally
             {
                 try { if (File.Exists(finalMessageFilePath)) File.Delete(finalMessageFilePath); } catch { }
-                try { await _Docks.ReclaimAsync(dock.Id, vessel.TenantId, CancellationToken.None).ConfigureAwait(false); } catch (Exception ex) { _Logging.Warn(_Header + "failed to reclaim context dock " + dock.Id + ": " + ex.Message); }
+                try { await _Docks.ReclaimAsync(dock.Id, vessel.TenantId, CancellationToken.None).ConfigureAwait(false); } catch (Exception ex) { _Logging.Warn(_Header + "failed to reclaim context dock " + dock.Id + ": " + ex.ToString()); }
             }
         }
 
@@ -139,7 +139,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "could not resolve vessel.build_context template; using fallback: " + ex.Message);
+                _Logging.Warn(_Header + "could not resolve vessel.build_context template; using fallback: " + ex.ToString());
             }
 
             StringBuilder builder = new StringBuilder();

@@ -11,18 +11,20 @@ import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
+import { canEdit as canEditScoped, type ScopeViewer } from '../lib/scoping';
 
 export default function SkillDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { isAdmin, isTenantAdmin } = useAuth();
+  const { isAdmin, isTenantAdmin, user } = useAuth();
+  const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const { t, formatDateTime } = useLocale();
   const { pushToast } = useNotifications();
 
   const createMode = id === 'new';
-  const canManage = isAdmin || isTenantAdmin;
 
   const [skill, setSkill] = useState<Skill | null>(null);
+  const canManage = createMode ? true : (skill ? canEditScoped(viewer, skill) : (isAdmin || isTenantAdmin));
   const [name, setName] = useState('Untitled Skill');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');

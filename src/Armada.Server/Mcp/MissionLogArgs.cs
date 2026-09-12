@@ -19,5 +19,11 @@ namespace Armada.Server.Mcp
         /// Line offset to start from (default 0).
         /// </summary>
         public int? Offset { get; set; }
+
+        /// <summary>
+        /// When true, apply the readable runtime-log formatter (resolve tool names, redact secret-shaped
+        /// values, drop noise) instead of returning raw lines.
+        /// </summary>
+        public bool? Formatted { get; set; }
     }
 }

@@ -112,7 +112,7 @@ namespace Armada.Core.Database.Postgresql
         /// <param name="token">Cancellation token.</param>
         public override async Task InitializeAsync(CancellationToken token = default)
         {
-            _Logging.Info(_Header + "initializing database");
+            _Logging.Debug(_Header + "initializing database");
 
             using (NpgsqlConnection conn = new NpgsqlConnection(_ConnectionString))
             {
@@ -183,10 +183,10 @@ namespace Armada.Core.Database.Postgresql
                 if (applied > 0)
                     _Logging.Info(_Header + "applied " + applied + " migration(s), schema now at v" + migrations[migrations.Count - 1].Version);
                 else
-                    _Logging.Info(_Header + "schema is up to date at v" + currentVersion);
+                    _Logging.Debug(_Header + "schema is up to date at v" + currentVersion);
             }
 
-            _Logging.Info(_Header + "database initialized successfully");
+            _Logging.Debug(_Header + "database initialized successfully");
 
             // Seed default data on first boot (or after migration that created tenant but not user)
             bool anyTenants = await Tenants.ExistsAnyAsync(token).ConfigureAwait(false);
@@ -264,6 +264,9 @@ namespace Armada.Core.Database.Postgresql
             PlanningSessionMessages = new PlanningSessionMessageMethods(this, _Settings, _Logging);
             Objectives = new ObjectiveMethods(this, _Settings, _Logging);
             Jobs = new JobMethods(this, _Settings, _Logging);
+            ModelEndpoints = new ModelEndpointMethods(this, _Settings, _Logging);
+            Harbors = new HarborMethods(this, _Settings, _Logging);
+            Memories = new MemoryMethods(this, _Settings, _Logging);
             ObjectiveRefinementSessions = new ObjectiveRefinementSessionMethods(this, _Settings, _Logging);
             ObjectiveRefinementMessages = new ObjectiveRefinementMessageMethods(this, _Settings, _Logging);
             Docks = new DockMethods(this, _Settings, _Logging);

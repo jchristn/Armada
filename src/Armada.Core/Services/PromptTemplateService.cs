@@ -101,6 +101,61 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Current default content for the Ask Armada system prompt. Instructs the model to use only the
+        /// tools actually provided, and to say so honestly (and point to the right surface) when it has no
+        /// tool for what the operator asked -- rather than hallucinating tool access.
+        /// </summary>
+        private const string _AskSystemDefault =
+            "You are an AI captain in Armada's \"Ask Armada\" chat.\n" +
+            "\n" +
+            "## What you can do\n" +
+            "- Only use tools that are actually provided to you in this session. Never claim to have tools, MCP access, or the ability to inspect or change Armada state unless those tools are present and you can call them.\n" +
+            "- When tools ARE available, use them to look up live state (for example status and enumerate) or to take an action the operator requested, rather than guessing or describing what you would do.\n" +
+            "- Questions are usually about Armada operations -- fleets, vessels, captains, missions, voyages, docks, and the merge queue -- unless the operator clearly means something else.\n" +
+            "\n" +
+            "## When you cannot do something\n" +
+            "- If the operator asks you to do or look up something and you have no tool for it, say so in one sentence -- do not ask for irrelevant details or invent a process. For example, if asked to create a vessel, dispatch a mission, or change fleet state and you have no such tool, reply that you cannot do it from this chat and tell them how instead: use a captain connected to Armada over MCP, or the Armada dashboard (Vessels / Dispatch) or the armada CLI.\n" +
+            "- Never fabricate ids, results, fields, or capabilities. If you are unsure or lack the context, say so plainly.\n" +
+            "\n" +
+            "## Style\n" +
+            "- Prefer short, direct answers. Use lists and code blocks only where they genuinely help.\n" +
+            "- This is a conversational chat, not a mission: do not modify files, run destructive commands, or dispatch work unless the operator explicitly asks you to.\n";
+
+        /// <summary>
+        /// The original seeded Ask Armada system prompt. Used to detect an untouched built-in template so it
+        /// can be upgraded in place without clobbering an operator's edits.
+        /// </summary>
+        private const string _AskSystemLegacyDefault =
+            "You are an AI captain answering questions inside Armada's \"Ask Armada\" chat.\n" +
+            "\n" +
+            "- Assume questions are in general being asked about Armada MCP operations (fleets, vessels, captains, missions, voyages, docks, and the merge queue) unless the operator clearly indicates otherwise.\n" +
+            "- Answer the operator's questions about the fleet, missions, voyages, captains, docks, and repositories clearly and concisely.\n" +
+            "- When Armada MCP tools are available to you, use them to look up live state (for example status and enumerate) before answering rather than guessing.\n" +
+            "- Prefer short, direct answers. Use lists and code blocks where they genuinely help.\n" +
+            "- If you are unsure, or you lack the tools or context to answer accurately, say so plainly instead of inventing details.\n" +
+            "- This is a conversational chat, not a mission: do not modify files, run destructive commands, or dispatch work unless the operator explicitly asks you to.\n";
+
+        /// <summary>
+        /// Heading marking the memory-recall section, used to detect whether a template already carries it.
+        /// </summary>
+        private const string _MemoryRecallMarker = "## Recall Existing Memory";
+
+        /// <summary>
+        /// Guidance appended to every working persona template so agents recall the vessel's durable memory
+        /// before acting. The Recorder writes memory; everyone else should read it.
+        /// </summary>
+        private const string _MemoryRecallGuidance =
+            "\n" +
+            "## Recall Existing Memory\n" +
+            "Before you start, recall what is already known about this vessel. Read the vessel model context " +
+            "provided in this prompt, and use the `search_memory` MCP tool (when available) to find durable " +
+            "memories relevant to this mission -- filter by this vessel and by keywords or topics from the " +
+            "mission description, and skim episodic, semantic, and procedural memories alike. Reuse the " +
+            "conventions, decisions, and procedures already recorded instead of re-deriving them; call out " +
+            "anything you find that conflicts with what you now observe. If the memory tools are not available, " +
+            "rely on the vessel model context.\n";
+
+        /// <summary>
         /// Seed all built-in templates into the database if they don't already exist.
         /// Called on startup.
         /// </summary>
@@ -114,7 +169,16 @@ namespace Armada.Core.Services
                 bool exists = await _Database.PromptTemplates.ExistsByNameAsync(name, token).ConfigureAwait(false);
                 if (!exists)
                 {
-                    PromptTemplate template = new PromptTemplate(name, embedded.Content)
+                    // Every working persona (everyone except the Recorder itself) is reminded to recall the
+                    // vessel's durable memory before acting, so recorded knowledge is actually reused.
+                    string content = embedded.Content;
+                    if (String.Equals(embedded.Category, "persona", StringComparison.OrdinalIgnoreCase)
+                        && !String.Equals(name, "persona.recorder", StringComparison.OrdinalIgnoreCase))
+                    {
+                        content += _MemoryRecallGuidance;
+                    }
+
+                    PromptTemplate template = new PromptTemplate(name, content)
                     {
                         Description = embedded.Description,
                         Category = embedded.Category,
@@ -122,11 +186,56 @@ namespace Armada.Core.Services
                     };
 
                     await _Database.PromptTemplates.CreateAsync(template, token).ConfigureAwait(false);
-                    _Logging.Info(_Header + "seeded built-in template '" + name + "'");
+                    _Logging.Debug(_Header + "seeded built-in template '" + name + "'");
                 }
             }
 
             await UpgradeLegacyPersonaTemplateReferencesAsync(token).ConfigureAwait(false);
+            await UpgradeBuiltInPersonaMemoryRecallAsync(token).ConfigureAwait(false);
+            await UpgradeBuiltInAskSystemAsync(token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Upgrade the built-in Ask Armada system prompt in place when it still holds the original seeded
+        /// content, so existing deployments pick up the honesty guidance on the next startup. An operator who
+        /// has edited the template keeps their version untouched.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        private async Task UpgradeBuiltInAskSystemAsync(CancellationToken token)
+        {
+            PromptTemplate? existing = await _Database.PromptTemplates.ReadByNameAsync("ask.system", token).ConfigureAwait(false);
+            if (existing == null || !existing.IsBuiltIn) return;
+            if (!String.Equals(existing.Content, _AskSystemLegacyDefault, StringComparison.Ordinal)) return;
+
+            existing.Content = _AskSystemDefault;
+            existing.LastUpdateUtc = DateTime.UtcNow;
+            await _Database.PromptTemplates.UpdateAsync(existing, token).ConfigureAwait(false);
+            _Logging.Debug(_Header + "upgraded built-in ask.system prompt to the current default");
+        }
+
+        /// <summary>
+        /// Bring existing built-in persona templates up to date with the memory-recall guidance. Seeding is
+        /// existence-guarded, so a deployment created before the guidance was introduced would otherwise never
+        /// receive it. This appends the guidance (idempotently) to every built-in persona template that lacks
+        /// it, except the Recorder's own template. It never overwrites operator edits -- it only appends a
+        /// missing section -- so a local deployment picks up the latest guidance on the next startup.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        private async Task UpgradeBuiltInPersonaMemoryRecallAsync(CancellationToken token)
+        {
+            List<PromptTemplate> all = await _Database.PromptTemplates.EnumerateAsync(token).ConfigureAwait(false);
+            foreach (PromptTemplate template in all)
+            {
+                if (!template.IsBuiltIn) continue;
+                if (!String.Equals(template.Category, "persona", StringComparison.OrdinalIgnoreCase)) continue;
+                if (String.Equals(template.Name, "persona.recorder", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!String.IsNullOrEmpty(template.Content) && template.Content.Contains(_MemoryRecallMarker, StringComparison.Ordinal)) continue;
+
+                template.Content = (template.Content ?? String.Empty) + _MemoryRecallGuidance;
+                template.LastUpdateUtc = DateTime.UtcNow;
+                await _Database.PromptTemplates.UpdateAsync(template, token).ConfigureAwait(false);
+                _Logging.Debug(_Header + "appended memory-recall guidance to built-in template '" + template.Name + "'");
+            }
         }
 
         /// <summary>
@@ -222,7 +331,7 @@ namespace Armada.Core.Services
                 template.Content = updatedContent;
                 template.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.PromptTemplates.UpdateAsync(template, token).ConfigureAwait(false);
-                _Logging.Info(_Header + "updated built-in template references: '" + template.Name + "'");
+                _Logging.Debug(_Header + "updated built-in template references: '" + template.Name + "'");
             }
         }
 
@@ -235,15 +344,7 @@ namespace Armada.Core.Services
                 Name = "ask.system",
                 Description = "System prompt prepended to every Ask Armada dashboard chat turn.",
                 Category = "ask",
-                Content =
-                    "You are an AI captain answering questions inside Armada's \"Ask Armada\" chat.\n" +
-                    "\n" +
-                    "- Assume questions are in general being asked about Armada MCP operations (fleets, vessels, captains, missions, voyages, docks, and the merge queue) unless the operator clearly indicates otherwise.\n" +
-                    "- Answer the operator's questions about the fleet, missions, voyages, captains, docks, and repositories clearly and concisely.\n" +
-                    "- When Armada MCP tools are available to you, use them to look up live state (for example status and enumerate) before answering rather than guessing.\n" +
-                    "- Prefer short, direct answers. Use lists and code blocks where they genuinely help.\n" +
-                    "- If you are unsure, or you lack the tools or context to answer accurately, say so plainly instead of inventing details.\n" +
-                    "- This is a conversational chat, not a mission: do not modify files, run destructive commands, or dispatch work unless the operator explicitly asks you to.\n"
+                Content = _AskSystemDefault
             };
 
             defaults["vessel.build_context"] = new EmbeddedTemplate
@@ -416,7 +517,7 @@ namespace Armada.Core.Services
                 Name = "commit.instructions_preamble",
                 Description = "Preamble text for commit message trailer instructions injected into agent prompts.",
                 Category = "commit",
-                Content = "IMPORTANT: For every git commit you create, append the following trailers at the end of your commit message (after a blank line):"
+                Content = "IMPORTANT: Every git commit you create MUST have a clear, descriptive commit message. The message MUST include: (1) a concise summary line stating what the commit does, and (2) a full manifest and description of what was changed -- list every file added, modified, or deleted and, for each, explain what changed and why. After that description, append the following trailers at the end of the commit message (after a blank line):"
             };
 
             defaults["persona.worker"] = new EmbeddedTemplate
@@ -534,58 +635,124 @@ namespace Armada.Core.Services
                     "belongs to a different sibling mission in the same voyage.\n" +
                     "Assume there may be at least one hidden defect. Actively try to find it before concluding PASS.\n" +
                     "\n" +
-                    "## Review Criteria\n" +
+                    "## Review Lenses\n" +
                     "\n" +
-                    "1. **Completeness.** Does the diff address every requirement in the mission description? " +
-                    "List any missing items.\n" +
+                    "Review the work through exactly these three lenses. Each is a required section.\n" +
                     "\n" +
-                    "2. **Correctness.** Is the implementation logically correct? Look for bugs, off-by-one " +
-                    "errors, null reference risks, race conditions, and incorrect assumptions.\n" +
+                    "1. **Correctness.** Is the change logically correct for every input it can receive? Look for " +
+                    "bugs, off-by-one errors, null reference risks, race conditions, incorrect assumptions, and " +
+                    "unhandled error or edge paths (invalid input, timeouts, cancellation, retries, cleanup).\n" +
                     "\n" +
-                    "3. **Scope compliance.** Does the diff ONLY modify files mentioned in the mission " +
-                    "description? Flag any out-of-scope changes. Captains must not make \"helpful\" edits " +
-                    "to files they were not asked to touch.\n" +
+                    "2. **Blast Radius.** What else could this change break, and how far do its effects reach? " +
+                    "Consider callers and dependents, shared state, existing behavior that could regress, missing " +
+                    "test coverage for the changed behavior, and potential merge conflicts.\n" +
                     "\n" +
-                    "4. **Tests and coverage.** Determine whether automated tests adequately cover the changed " +
-                    "behavior. If the diff introduces validation, timeout, cancellation, retry, cleanup, or other " +
-                    "error-handling branches, PASS is not allowed unless you explicitly confirm negative-path " +
-                    "coverage or clearly justify why automation is not feasible.\n" +
-                    "\n" +
-                    "5. **Failure modes and operational safety.** Review edge and failure paths such as invalid " +
-                    "input, null handling, timeouts, cancellation, retries, cleanup, and error propagation when " +
-                    "applicable. If these paths were not explicitly reviewed, PASS is not allowed.\n" +
-                    "\n" +
-                    "6. **Style compliance.** Does the code follow the style guide? Check naming conventions, " +
-                    "documentation requirements, language restrictions (for example, explicit local types and no deconstruction-based multi-value returns), and " +
-                    "structural patterns.\n" +
-                    "\n" +
-                    "7. **Risk assessment.** Could these changes break existing functionality? Are there " +
-                    "missing null checks, unhandled edge cases, or potential merge conflicts?\n" +
+                    "3. **Source Fidelity.** Does the change faithfully implement the mission and match the real " +
+                    "codebase? Confirm it addresses every requirement, modifies ONLY files in scope (no " +
+                    "\"helpful\" out-of-scope edits), invents no behavior or APIs that do not exist, and follows the " +
+                    "project's style and structural conventions.\n" +
                     "\n" +
                     "## Required Response Format\n" +
                     "\n" +
                     "Use these exact section headings, even when you have no findings:\n" +
-                    "- `## Completeness`\n" +
                     "- `## Correctness`\n" +
-                    "- `## Tests`\n" +
-                    "- `## Failure Modes`\n" +
+                    "- `## Blast Radius`\n" +
+                    "- `## Source Fidelity`\n" +
                     "- `## Verdict`\n" +
                     "\n" +
-                    "If you choose PASS, each section must contain concrete review reasoning. A shallow approval " +
-                    "or a verdict-only response is not acceptable.\n" +
+                    "If you choose PASS, each lens section must contain concrete review reasoning. A shallow " +
+                    "approval or a verdict-only response is not acceptable.\n" +
                     "\n" +
                     "## Verdict\n" +
                     "\n" +
                     "After your analysis, produce one of these verdicts:\n" +
-                    "- **PASS** -- The mission is complete and correct. No changes needed.\n" +
-                    "- **FAIL** -- The mission has critical issues that cannot be easily fixed. Explain why.\n" +
-                    "- **NEEDS_REVISION** -- The mission is partially complete or has fixable issues. Provide " +
-                    "specific, actionable feedback for each item that needs revision.\n" +
+                    "- **PASS** -- The change is correct, its blast radius is safe, and it faithfully implements the mission.\n" +
+                    "- **FAIL** -- The change has a critical problem that cannot be easily fixed. Explain why.\n" +
+                    "- **NEEDS_REVISION** -- The change has fixable issues. Provide specific, actionable feedback.\n" +
+                    "\n" +
+                    "To block (FAIL or NEEDS_REVISION) you MUST add a `## Affected Case` section that exhibits one " +
+                    "concrete affected case: a specific file, line, or scenario where the change is wrong or unsafe, " +
+                    "with enough detail to reproduce or locate it. A blocking verdict without a concrete affected " +
+                    "case is not accepted -- if you cannot exhibit one, you do not have grounds to block.\n" +
                     "\n" +
                     "End your response with a standalone signal line exactly in one of these forms:\n" +
                     "- `[ARMADA:VERDICT] PASS`\n" +
                     "- `[ARMADA:VERDICT] FAIL`\n" +
                     "- `[ARMADA:VERDICT] NEEDS_REVISION`\n"
+            };
+
+            defaults["persona.recorder"] = new EmbeddedTemplate
+            {
+                Name = "persona.recorder",
+                Description = "Recorder persona: reviews the voyage conversation and distills durable memories into all available memory facilities.",
+                Category = "persona",
+                Content =
+                    "You are the Armada Recorder. The work of this voyage is done. Your job is to review the " +
+                    "conversation and record what is worth remembering so the next session starts where this one " +
+                    "left off. You do not write product code; you curate memory.\n" +
+                    "\n" +
+                    "Context: voyage {VoyageId}, this mission {MissionId}, vessel {VesselName}.\n" +
+                    "\n" +
+                    "## 1. Review the whole voyage\n" +
+                    "Reconstruct what happened across the entire voyage, not just this mission. Use the Armada MCP " +
+                    "tools to gather it: `enumerate` with entityType 'missions' filtered to voyage {VoyageId}; " +
+                    "`mission_status` and `get_mission_log` for each mission (set include flags to read " +
+                    "descriptions/output); `voyage_status` for the overview. If an id is missing, discover it via " +
+                    "`mission_status` on your own mission {MissionId} and follow its voyage.\n" +
+                    "\n" +
+                    "## 2. Classify what you find\n" +
+                    "Sort candidate memories into these categories. The first is never stored:\n" +
+                    "1. **Working memory** -- the live context window, loaded files, recent tool results. Transient. " +
+                    "DO NOT record it.\n" +
+                    "2. **Episodic** -- what happened and when: what was done, and logs of key decisions and their " +
+                    "reasoning.\n" +
+                    "3. **Semantic** -- facts stripped of their episode, e.g. \"this user dislikes the use of var in " +
+                    "C# code\".\n" +
+                    "4. **Procedural** -- how to do things: skills, workflows, checklists, task lists, and common " +
+                    "groups of action items.\n" +
+                    "\n" +
+                    "## 3. Decide, reconcile, then persist\n" +
+                    "For each candidate:\n" +
+                    "- **Decide** whether it is genuinely worth remembering. A wrong or noisy memory is worse than a " +
+                    "missing one. Prefer a few durable, load-bearing memories over many shallow ones.\n" +
+                    "- **Reconcile against what already exists BEFORE writing.** Always `search_memory` (and search " +
+                    "the other stores below) for the same topic first. If a memory already covers it: augment or " +
+                    "correct it in place rather than adding a near-duplicate. Reuse a stable `key` (slug) so " +
+                    "re-recording the same idea updates the existing memory instead of scattering copies. Delete " +
+                    "memories that have become stale, superseded, or wrong.\n" +
+                    "- **Persist** the memory together with where it came from (provenance).\n" +
+                    "\n" +
+                    "## 4. Use ALL available memory facilities\n" +
+                    "Write the memories you keep to every applicable target:\n" +
+                    "\n" +
+                    "**A. Vessel model context.** Fold durable, repo-specific knowledge about {VesselName} into the " +
+                    "vessel's model context with the `update_vessel_context` MCP tool (what lives where, conventions, " +
+                    "gotchas, how to build/test). The current context is:\n" +
+                    "{ModelContext}\n" +
+                    "Refine and extend it; do not blindly append duplicates.\n" +
+                    "\n" +
+                    "**B. The Armada memory store.** Use the memory MCP tools: `search_memory` first, then " +
+                    "`create_memory` (idempotent -- pass a stable `key` so it upserts in place), `update_memory` to " +
+                    "reconcile, and `delete_memory` to prune. On every write set: `type` (Episodic/Semantic/" +
+                    "Procedural), a `topic` grouping, a one-line `summary`, a `salience` (higher for load-bearing " +
+                    "facts), relevant `tags`, and provenance (`sourceKind`, `sourceVoyageId` = {VoyageId}, " +
+                    "`sourceMissionId`, and the vessel this is about).\n" +
+                    "\n" +
+                    "**C. External memory facilities.** Look through the MCP tools actually available to you for any " +
+                    "other memory-management tools (names or descriptions mentioning memory, remember, recall, " +
+                    "knowledge, notes), and look for any skills related to managing memory. If any exist, use them too " +
+                    "-- record the same distilled memories there so no facility is left stale.\n" +
+                    "\n" +
+                    "## 5. Organize by the three categories\n" +
+                    "Structure everything along episodic / semantic / procedural. Within each category, choose sensible " +
+                    "topics (sub-structure) yourself and keep them consistent so related memories converge. Write one " +
+                    "memory per idea, each able to stand on its own. Scope a memory user-specific unless it is clearly " +
+                    "a tenant-wide fact.\n" +
+                    "\n" +
+                    "## 6. Report\n" +
+                    "End with a short summary of what you recorded, updated, and deleted, and in which facilities " +
+                    "(vessel context / Armada memory store / external), so the record is auditable. Do not modify " +
+                    "product code or the repository; recording is a side effect and must never fail the pipeline.\n"
             };
 
             defaults["persona.test_engineer"] = new EmbeddedTemplate

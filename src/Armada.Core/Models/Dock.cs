@@ -52,6 +52,13 @@ namespace Armada.Core.Models
         public string? CaptainId { get; set; } = null;
 
         /// <summary>
+        /// Identifier of the Harbor (host runner) that owns this dock, or null when the dock is on the
+        /// Admiral's own host (Local mode). A dock's worktree lives on exactly one host, so this pins the
+        /// mission's later host operations to that Harbor (dock affinity).
+        /// </summary>
+        public string? HarborId { get; set; } = null;
+
+        /// <summary>
         /// Local filesystem path to the worktree.
         /// </summary>
         public string? WorktreePath { get; set; } = null;
@@ -86,6 +93,14 @@ namespace Armada.Core.Models
         /// instances cannot both claim the same dock. Null when the dock is not leased.
         /// </summary>
         public string? OwnerToken { get; set; } = null;
+
+        /// <summary>
+        /// Resolved git anchors captured at dock provisioning, serialized as JSON (start commit, target
+        /// branch, working branch, recent-commit and subject-term summaries). This is a documented,
+        /// intentional raw-JSON snapshot for the dashboard and for a resuming captain -- not a general
+        /// data blob. Null when anchors were not resolved.
+        /// </summary>
+        public string? GitAnchorsJson { get; set; } = null;
 
         /// <summary>
         /// Creation timestamp in UTC.

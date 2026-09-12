@@ -143,6 +143,27 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
+        /// Number of non-clean captain crashes within <see cref="CaptainCrashLoopWindowMinutes"/> that trips
+        /// crash-loop detection and quarantines the captain. Set to 0 to disable crash-loop quarantine.
+        /// Clamped to [0, 20]. Defaults to 3.
+        /// </summary>
+        public int CaptainCrashLoopThreshold
+        {
+            get => _CaptainCrashLoopThreshold;
+            set => _CaptainCrashLoopThreshold = value < 0 ? 0 : (value > 20 ? 20 : value);
+        }
+
+        /// <summary>
+        /// The sliding window, in minutes, over which captain crashes are counted for crash-loop detection.
+        /// Clamped to a minimum of 1. Defaults to 15.
+        /// </summary>
+        public int CaptainCrashLoopWindowMinutes
+        {
+            get => _CaptainCrashLoopWindowMinutes;
+            set => _CaptainCrashLoopWindowMinutes = value < 1 ? 1 : value;
+        }
+
+        /// <summary>
         /// Heartbeat check interval in seconds. Must be >= 5.
         /// </summary>
         public int HeartbeatIntervalSeconds
@@ -196,6 +217,22 @@ namespace Armada.Core.Settings
                 if (value < 0) value = 0;
                 if (value > 5) value = 5;
                 _MaxNoOpRedispatchAttempts = value;
+            }
+        }
+
+        /// <summary>
+        /// Maximum number of bounded rescue missions the autonomous-recovery coordinator dispatches for a
+        /// single incident before it stops and leaves the incident open for a human. Set to 0 to disable
+        /// autonomous rescue (incidents are still opened for visibility). Clamped to [0, 5].
+        /// </summary>
+        public int MaxMissionRecoveryAttempts
+        {
+            get => _MaxMissionRecoveryAttempts;
+            set
+            {
+                if (value < 0) value = 0;
+                if (value > 5) value = 5;
+                _MaxMissionRecoveryAttempts = value;
             }
         }
 
@@ -501,6 +538,15 @@ namespace Armada.Core.Settings
         public bool RequireAuthForShutdown { get; set; } = false;
 
         /// <summary>
+        /// When true, a mission is only assigned when an eligible Harbor owned by the requesting user (the
+        /// mission's user) is connected; the Admiral never falls back to running the captain in-process or on
+        /// another user's Harbor. Missions wait (stay Pending and are retried) until that user's Harbor
+        /// connects. When false (default), the Admiral delegates to a connected Harbor when one is available
+        /// and otherwise runs the captain locally.
+        /// </summary>
+        public bool RequireHarborForLaunch { get; set; } = false;
+
+        /// <summary>
         /// AES-256 encryption key for session tokens.
         /// Auto-generated if not provided.
         /// </summary>
@@ -511,6 +557,32 @@ namespace Armada.Core.Settings
         /// Null means auto-detect from PATH.
         /// </summary>
         public string? DefaultRuntime { get; set; } = null;
+
+        /// <summary>
+        /// Identifier (vsl_ prefix) of the vessel that holds Armada's own source, used by the dashboard
+        /// "Rebuild Armada" feature to know which repository to build from. Null disables self-rebuild until
+        /// an operator designates the vessel. Preferred over a per-vessel flag so exactly one vessel can be
+        /// Armada itself. See docs/SERVER_REBUILD.md.
+        /// </summary>
+        public string? SelfVesselId { get; set; } = null;
+
+        /// <summary>
+        /// Number of published rebuild "slots" to retain on disk for rollback. Clamped to a minimum of 1;
+        /// defaults to 3. See docs/SERVER_REBUILD.md.
+        /// </summary>
+        public int RebuildSlotRetentionCount
+        {
+            get => _RebuildSlotRetentionCount;
+            set => _RebuildSlotRetentionCount = value < 1 ? 1 : value;
+        }
+
+        /// <summary>
+        /// Identifier (hbr_ prefix) of an on-box Harbor that performs the health-gated cutover during a
+        /// rebuild: it launches the new slot, polls health, and rolls back to the previous slot on failure.
+        /// Null uses the built-in in-process baton (no automatic rollback). Only meaningful when the Harbor is
+        /// co-located with the Admiral. See docs/SERVER_REBUILD.md.
+        /// </summary>
+        public string? RebuildSupervisorHarborId { get; set; } = null;
 
         /// <summary>
         /// Enable desktop notifications on mission completion/failure.
@@ -584,6 +656,21 @@ namespace Armada.Core.Settings
             set => _Telemetry = value ?? new TelemetrySettings();
         }
 
+        /// <summary>
+        /// How the Admiral executes host operations: Local (in-process, standalone) or Split (delegated to
+        /// attached Harbor runners). Defaults to Local.
+        /// </summary>
+        public DeploymentModeEnum DeploymentMode { get; set; } = DeploymentModeEnum.Local;
+
+        /// <summary>
+        /// Server-side Harbor subsystem settings (link endpoint, auth, heartbeats, routing capacity).
+        /// </summary>
+        public HarborServerSettings Harbor
+        {
+            get => _Harbor;
+            set => _Harbor = value ?? new HarborServerSettings();
+        }
+
         #endregion
 
         #region Private-Members
@@ -608,8 +695,11 @@ namespace Armada.Core.Settings
 
         private int _AdmiralPort = Constants.DefaultAdmiralPort;
         private int _McpPort = Constants.DefaultMcpPort;
-        private long _MinAvailableMemoryBytesForLaunch = 0;
+        private int _RebuildSlotRetentionCount = 3;
+        private long _MinAvailableMemoryBytesForLaunch = Constants.DefaultMinAvailableMemoryBytesForLaunch;
         private int _CaptainQuarantineMinutes = 15;
+        private int _CaptainCrashLoopThreshold = 3;
+        private int _CaptainCrashLoopWindowMinutes = 15;
         private int _HeartbeatIntervalSeconds = Constants.DefaultHeartbeatIntervalSeconds;
         private int _StallThresholdMinutes = Constants.DefaultStallThresholdMinutes;
         private int _MaxRecoveryAttempts = Constants.DefaultMaxRecoveryAttempts;
@@ -625,12 +715,14 @@ namespace Armada.Core.Settings
         private int _PlanningSessionAbandonmentTimeoutMinutes = Constants.DefaultPlanningSessionAbandonmentTimeoutMinutes;
         private int _MaxLandingRetries = 3;
         private int _MaxNoOpRedispatchAttempts = 1;
+        private int _MaxMissionRecoveryAttempts = 2;
         private int _MinIdleCaptains = 0;
         private int _MaxCaptains = 0;
         private int _MaxConcurrentMissions = Constants.DefaultMaxConcurrentMissions;
         private int _IdleCaptainTimeoutSeconds = Constants.DefaultIdleCaptainTimeoutSeconds;
         private RemoteControlSettings _RemoteControl = new RemoteControlSettings();
         private TelemetrySettings _Telemetry = new TelemetrySettings();
+        private HarborServerSettings _Harbor = new HarborServerSettings();
         private DatabaseSettings _Database = new DatabaseSettings();
         private bool _DatabasePathConfigured = false;
 

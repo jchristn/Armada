@@ -9,6 +9,7 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import CaptainChatPanel, { type ChatTurn } from '../components/shared/CaptainChatPanel';
 import { applyToolEvent } from '../components/shared/ChatToolChips';
 import { randomThinkingMessage } from '../components/askThinkingMessages';
+import { randomGreeting } from '../components/askGreetings';
 
 // Ask Armada is available with any captain.
 function isChattable(_captain: Captain): boolean {
@@ -43,6 +44,8 @@ export default function AskArmada() {
   const [toolsLoading, setToolsLoading] = useState(false);
   const [streamingEnabled, setStreamingEnabled] = useState(true);
   const [showThinking, setShowThinking] = useState(false);
+  // A single random greeting chosen once per page load, shown large on the blank chat screen.
+  const [greeting] = useState(() => randomGreeting());
   const [thinking, setThinking] = useState('');
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -84,7 +87,10 @@ export default function AskArmada() {
   }, [captainId]);
 
   const selectedCaptain = captains.find((c) => c.id === captainId) || null;
-  const armadaMcpMissing = tools != null && tools.armadaToolCount <= 0;
+  // API-endpoint captains run Armada's built-in coding tools in-process and never act as an MCP
+  // client, so the "connect over MCP" warning does not apply to them -- show an accurate note instead.
+  const isApiEndpoint = tools != null && tools.runtime === 'ApiEndpoint';
+  const armadaMcpMissing = tools != null && tools.armadaToolCount <= 0 && !isApiEndpoint;
 
   // Replace the in-flight streaming assistant turn (the last one) via the updater.
   function updateStreamingTurn(mutate: (turn: ChatTurn) => ChatTurn) {
@@ -219,6 +225,11 @@ export default function AskArmada() {
               {t('Checking whether this captain is connected to Armada over MCP...')}
             </div>
           )}
+          {isApiEndpoint && (
+            <div className="text-dim" style={{ fontSize: '0.78rem', marginBottom: '0.6rem' }}>
+              {t('This is an API-endpoint captain. It runs Armada’s built-in coding tools (read, edit, search, run) in-process, and in this chat it can also use Armada’s orchestration tools (fleet, missions, voyages, and more), scoped to you.')}
+            </div>
+          )}
           {armadaMcpMissing && (
             <div className="mcp-warning-banner">
               <span className="mcp-warning-icon" aria-hidden="true">
@@ -246,7 +257,13 @@ export default function AskArmada() {
             turns={turns}
             notice={selectedCaptain?.runtime === 'Codex' ? t('Codex responses cannot be streamed and will arrive upon completion.') : undefined}
             assistantName={selectedCaptain?.name}
-            emptyState={<p>{selectedCaptain ? t('Chatting with {{name}}', { name: selectedCaptain.name }) : t('Select a captain to begin.')}</p>}
+            toolRuntimeLabel={selectedCaptain?.runtime || tools?.runtime || undefined}
+            emptyState={(
+              <div className="ask-empty">
+                <p className="ask-empty-greeting">{greeting}</p>
+                <p className="ask-empty-sub">{selectedCaptain ? t('Chatting with {{name}}', { name: selectedCaptain.name }) : t('Select a captain to begin.')}</p>
+              </div>
+            )}
             input={input}
             onInputChange={setInput}
             onSend={() => send(input)}

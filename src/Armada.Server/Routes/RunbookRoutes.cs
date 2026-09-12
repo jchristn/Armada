@@ -113,6 +113,11 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 201;
                     return runbook;
                 }
+                catch (UnauthorizedAccessException ex)
+                {
+                    req.Http.Response.StatusCode = 403;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
+                }
                 catch (InvalidOperationException ex)
                 {
                     req.Http.Response.StatusCode = 400;
@@ -137,6 +142,11 @@ namespace Armada.Server.Routes
                 try
                 {
                     return await _Runbooks.UpdateAsync(ctx, req.Parameters["id"], request).ConfigureAwait(false);
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    req.Http.Response.StatusCode = 403;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
                 }
                 catch (InvalidOperationException ex)
                 {
@@ -167,6 +177,11 @@ namespace Armada.Server.Routes
                     await _Runbooks.DeleteAsync(ctx, req.Parameters["id"]).ConfigureAwait(false);
                     req.Http.Response.StatusCode = 204;
                     return null;
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    req.Http.Response.StatusCode = 403;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
                 }
                 catch (InvalidOperationException ex)
                 {

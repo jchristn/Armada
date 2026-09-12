@@ -81,11 +81,7 @@ namespace Armada.Server.Routes
                 EnumerationQuery query = new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
                 Stopwatch sw = Stopwatch.StartNew();
-                EnumerationResult<Voyage> result = ctx.IsAdmin
-                    ? await _database.Voyages.EnumerateAsync(query).ConfigureAwait(false)
-                    : ctx.IsTenantAdmin
-                        ? await _database.Voyages.EnumerateAsync(ctx.TenantId!, query).ConfigureAwait(false)
-                        : await _database.Voyages.EnumerateAsync(ctx.TenantId!, ctx.UserId!, query).ConfigureAwait(false);
+                EnumerationResult<Voyage> result = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, query, q => _database.Voyages.EnumerateAsync(q), (t, q) => _database.Voyages.EnumerateAsync(t, q), (t, u, q) => _database.Voyages.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
                 return result;
             },
@@ -108,11 +104,7 @@ namespace Armada.Server.Routes
                 EnumerationQuery query = JsonSerializer.Deserialize<EnumerationQuery>(req.Http.Request.DataAsString, _jsonOptions) ?? new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
                 Stopwatch sw = Stopwatch.StartNew();
-                EnumerationResult<Voyage> result = ctx.IsAdmin
-                    ? await _database.Voyages.EnumerateAsync(query).ConfigureAwait(false)
-                    : ctx.IsTenantAdmin
-                        ? await _database.Voyages.EnumerateAsync(ctx.TenantId!, query).ConfigureAwait(false)
-                        : await _database.Voyages.EnumerateAsync(ctx.TenantId!, ctx.UserId!, query).ConfigureAwait(false);
+                EnumerationResult<Voyage> result = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, query, q => _database.Voyages.EnumerateAsync(q), (t, q) => _database.Voyages.EnumerateAsync(t, q), (t, u, q) => _database.Voyages.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
                 return result;
             },
@@ -133,15 +125,6 @@ namespace Armada.Server.Routes
                 }
                 VoyageRequest voyageReq = JsonSerializer.Deserialize<VoyageRequest>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as VoyageRequest.");
-                if (!String.IsNullOrWhiteSpace(voyageReq.ObjectiveId))
-                {
-                    Objective? objective = await _objectives.ReadAsync(ctx, voyageReq.ObjectiveId).ConfigureAwait(false);
-                    if (objective == null)
-                    {
-                        req.Http.Response.StatusCode = 404;
-                        return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Objective not found" };
-                    }
-                }
                 List<MissionDescription> missions = new List<MissionDescription>();
                 if (voyageReq.Missions != null)
                 {
@@ -151,17 +134,21 @@ namespace Armada.Server.Routes
                     }
                 }
 
-                // Resolve pipeline: explicit ID > name lookup > null (falls through to vessel/fleet default)
-                string? pipelineId = voyageReq.PipelineId;
-                if (String.IsNullOrEmpty(pipelineId) && !String.IsNullOrEmpty(voyageReq.Pipeline))
+                // Shared validation: objective existence, pipeline-by-name resolution, and bare-voyage
+                // detection all live in one place so REST and MCP accept and reject the same inputs.
+                DispatchValidationResult validation = await _admiral.ValidateDispatchAsync(
+                    voyageReq.ObjectiveId, voyageReq.PipelineId, voyageReq.Pipeline, voyageReq.VesselId, missions.Count, allowBareVoyage: true).ConfigureAwait(false);
+                if (!validation.IsValid)
                 {
-                    Pipeline? namedPipeline = await _database.Pipelines.ReadByNameAsync(voyageReq.Pipeline).ConfigureAwait(false);
-                    if (namedPipeline != null) pipelineId = namedPipeline.Id;
-                    else { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Pipeline not found: " + voyageReq.Pipeline }; }
+                    bool notFound = validation.Error == DispatchValidationErrorEnum.ObjectiveNotFound;
+                    req.Http.Response.StatusCode = notFound ? 404 : 400;
+                    return new ApiErrorResponse { Error = notFound ? ApiResultEnum.NotFound : ApiResultEnum.BadRequest, Message = validation.Message ?? "Invalid dispatch request" };
                 }
 
+                string? pipelineId = validation.ResolvedPipelineId;
+
                 Voyage voyage;
-                if (String.IsNullOrEmpty(voyageReq.VesselId) || missions.Count == 0)
+                if (validation.IsBareVoyage)
                 {
                     // Bare voyage creation (missions added separately)
                     voyage = new Voyage(voyageReq.Title, voyageReq.Description);
@@ -179,13 +166,21 @@ namespace Armada.Server.Routes
                 }
                 else
                 {
+                    // Serialize the per-persona captain overrides and pass them in so they are persisted on the
+                    // voyage BEFORE any mission is created and assigned -- otherwise the first stage's inline
+                    // assignment runs before the overrides exist and auto-assigns an arbitrary idle captain.
+                    string? overridesJson = (voyageReq.CaptainAssignments != null && voyageReq.CaptainAssignments.Count > 0)
+                        ? MissionService.SerializeCaptainOverrides(voyageReq.CaptainAssignments)
+                        : null;
+
                     voyage = await _admiral.DispatchVoyageAsync(
                         voyageReq.Title,
                         voyageReq.Description,
                         voyageReq.VesselId,
                         missions,
                         pipelineId,
-                        voyageReq.SelectedPlaybooks).ConfigureAwait(false);
+                        voyageReq.SelectedPlaybooks,
+                        overridesJson).ConfigureAwait(false);
                 }
 
                 if (!String.IsNullOrWhiteSpace(voyageReq.ObjectiveId))
@@ -193,9 +188,9 @@ namespace Armada.Server.Routes
                     await _objectives.LinkVoyageAsync(ctx, voyageReq.ObjectiveId, voyage.Id).ConfigureAwait(false);
                 }
 
-                // Persist per-persona captain overrides so assignment resolves the preferred captain and
-                // fallback tier for every mission of a step, including fan-out missions created later.
-                if (voyageReq.CaptainAssignments != null && voyageReq.CaptainAssignments.Count > 0)
+                // For a bare voyage (missions added separately), there was no inline dispatch, so persist the
+                // overrides now; they will apply when missions are added later.
+                if (validation.IsBareVoyage && voyageReq.CaptainAssignments != null && voyageReq.CaptainAssignments.Count > 0)
                 {
                     voyage.CaptainOverridesJson = MissionService.SerializeCaptainOverrides(voyageReq.CaptainAssignments);
                     voyage = await _database.Voyages.UpdateAsync(voyage).ConfigureAwait(false);

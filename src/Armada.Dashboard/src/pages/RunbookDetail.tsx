@@ -33,6 +33,7 @@ import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import StatusBadge from '../components/shared/StatusBadge';
+import { canEdit as canEditScoped, type ScopeViewer } from '../lib/scoping';
 import { buildRunbookDuplicatePayload } from '../lib/duplicates';
 
 const RUNBOOK_EXECUTION_STATUSES: RunbookExecutionStatus[] = ['Running', 'Completed', 'Cancelled'];
@@ -80,15 +81,16 @@ export default function RunbookDetail() {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { isAdmin, isTenantAdmin } = useAuth();
+  const { isAdmin, isTenantAdmin, user } = useAuth();
+  const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const { t, formatDateTime, formatRelativeTime } = useLocale();
   const { pushToast } = useNotifications();
 
   const createMode = id === 'new';
-  const canManage = isAdmin || isTenantAdmin;
   const pageState = (location.state as RunbookPageState | null) || null;
 
   const [runbook, setRunbook] = useState<Runbook | null>(null);
+  const canManage = createMode ? true : (runbook ? canEditScoped(viewer, runbook) : (isAdmin || isTenantAdmin));
   const [profiles, setProfiles] = useState<WorkflowProfile[]>([]);
   const [environments, setEnvironments] = useState<DeploymentEnvironment[]>([]);
   const [executions, setExecutions] = useState<RunbookExecution[]>([]);

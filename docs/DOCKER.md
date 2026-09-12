@@ -86,10 +86,12 @@ services:
     ports:
       - "7890:7890"
       - "7891:7891"
+    environment:
+      # Relocate the entire data directory (settings.json, database, logs, docks, repos) with one variable
+      # instead of mapping individual paths. Defaults to ~/.armada when unset.
+      - ARMADA_DATA_DIR=/app/data
     volumes:
-      - ./armada.json:/app/data/armada.json
-      - ./db:/app/data/db
-      - ./logs:/app/data/logs
+      - ./data:/app/data
 
   armada-dashboard:
     build:
@@ -225,7 +227,7 @@ Both scripts prompt for confirmation, stop containers, and delete local SQLite d
 
 ## Building Images from Source
 
-Build scripts are split by platform under `scripts/windows/`, `scripts/linux/`, and `scripts/macos/`. Shared shell implementations live under `scripts/common/`. They build multi-platform images (amd64 + arm64) and push to Docker Hub.
+Build scripts are split by platform under `scripts/windows/`, `scripts/linux/`, and `scripts/macos/`. Shared shell implementations live under `scripts/common/`. They build multi-platform images (amd64 + arm64) with a single builder invocation, push the manifest to Docker Hub, and then pull the pushed tags back into the local Docker registry so the same images are available locally.
 
 ### Build latest only
 
@@ -271,7 +273,24 @@ Windows:
 scripts\windows\build-dashboard.bat v0.9.0
 ```
 
-This produces both `jchristn77/armada-server:latest` and `jchristn77/armada-server:v0.9.0` (and the same for the dashboard).
+This produces both `jchristn77/armada-server:latest` and `jchristn77/armada-server:v0.9.0` (and the same for the dashboard). After the push completes, each script pulls those tags back into the local registry so they are also available for local `docker run` / compose use.
+
+### Build everything at once
+
+To build, push, and locally pull the server, dashboard, and proxy images in one command, use the `build-all` script with an optional version tag:
+
+```bash
+Linux:
+./scripts/linux/build-all.sh v0.9.0
+
+macOS:
+./scripts/macos/build-all.sh v0.9.0
+
+Windows:
+scripts\windows\build-all.bat v0.9.0
+```
+
+The Windows `build-all.bat` covers server, dashboard, and proxy; the shell `build-all.sh` covers server and dashboard (the proxy image is published from Windows only). Omit the tag argument to build and push `:latest` only.
 
 ### Building locally (no push)
 

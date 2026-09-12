@@ -59,6 +59,28 @@ namespace Armada.Server.Mcp.Tools
                 });
 
             register(
+                "evaluate_autoland",
+                "Dry-run the vessel's auto-land predicate against a mission's captured diff without landing it. Returns whether the change would auto-land and, if not, the hold reason.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        missionId = new { type = "string", description = "Mission ID (msn_ prefix)" }
+                    },
+                    required = new[] { "missionId" }
+                },
+                async (args) =>
+                {
+                    MissionIdArgs request = JsonSerializer.Deserialize<MissionIdArgs>(args!.Value, _JsonOptions)!;
+                    Mission? mission = await database.Missions.ReadAsync(request.MissionId).ConfigureAwait(false);
+                    if (mission == null) return (object)new { Error = "Mission not found" };
+                    Armada.Core.Services.AutoLandDecision? decision = await admiral.EvaluateAutoLandAsync(request.MissionId).ConfigureAwait(false);
+                    if (decision == null) return (object)new { Error = "Mission does not have an associated vessel" };
+                    return (object)decision;
+                });
+
+            register(
                 "create_mission",
                 "Create and dispatch a standalone mission to a vessel",
                 new
@@ -71,6 +93,7 @@ namespace Armada.Server.Mcp.Tools
                         vesselId = new { type = "string", description = "Target vessel ID (vsl_ prefix)" },
                         voyageId = new { type = "string", description = "Optional voyage ID to associate with (vyg_ prefix)" },
                         persona = new { type = "string", description = "Persona for this mission (e.g. Worker, Architect, Judge, Test Engineer)" },
+                        mode = new { type = "string", description = "Execution mode: Implementation (default), Audit, or Research. Audit and Research are read-only modes that produce a written report instead of a commit; their empty diff is treated as success." },
                         selectedPlaybooks = new
                         {
                             type = "array",
@@ -92,8 +115,10 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     MissionCreateArgs request = JsonSerializer.Deserialize<MissionCreateArgs>(args!.Value, _JsonOptions)!;
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Mission mission = new Mission();
-                    mission.TenantId = ArmadaConstants.DefaultTenantId;
+                    mission.TenantId = String.IsNullOrEmpty(caller.TenantId) ? ArmadaConstants.DefaultTenantId : caller.TenantId;
+                    mission.UserId = caller.UserId;
                     mission.Title = request.Title;
                     mission.Description = request.Description;
                     mission.VesselId = request.VesselId;
@@ -102,6 +127,8 @@ namespace Armada.Server.Mcp.Tools
                     mission.Persona = request.Persona;
                     if (!String.IsNullOrWhiteSpace(request.Tier) && Enum.TryParse<CaptainTierEnum>(request.Tier.Trim(), true, out CaptainTierEnum missionTier))
                         mission.Tier = missionTier;
+                    if (!String.IsNullOrWhiteSpace(request.Mode) && Enum.TryParse<MissionModeEnum>(request.Mode.Trim(), true, out MissionModeEnum missionMode))
+                        mission.Mode = missionMode;
                     mission.SelectedPlaybooks = request.SelectedPlaybooks ?? new List<SelectedPlaybook>();
                     mission = await admiral.DispatchMissionAsync(mission).ConfigureAwait(false);
                     if (mission.Status == Armada.Core.Enums.MissionStatusEnum.Pending)
@@ -132,7 +159,8 @@ namespace Armada.Server.Mcp.Tools
                         branchName = new { type = "string", description = "Git branch name for this mission" },
                         prUrl = new { type = "string", description = "Pull request URL" },
                         parentMissionId = new { type = "string", description = "Parent mission ID for sub-tasks (msn_ prefix)" },
-                        persona = new { type = "string", description = "Persona for this mission (e.g. Worker, Architect, Judge, Test Engineer)" }
+                        persona = new { type = "string", description = "Persona for this mission (e.g. Worker, Architect, Judge, Test Engineer)" },
+                        mode = new { type = "string", description = "Execution mode: Implementation, Audit, or Research (read-only report modes)" }
                     },
                     required = new[] { "missionId" }
                 },
@@ -160,6 +188,8 @@ namespace Armada.Server.Mcp.Tools
                         mission.ParentMissionId = request.ParentMissionId;
                     if (request.Persona != null)
                         mission.Persona = request.Persona;
+                    if (!String.IsNullOrWhiteSpace(request.Mode) && Enum.TryParse<MissionModeEnum>(request.Mode.Trim(), true, out MissionModeEnum updatedMode))
+                        mission.Mode = updatedMode;
                     mission.LastUpdateUtc = DateTime.UtcNow;
                     mission = await database.Missions.UpdateAsync(mission).ConfigureAwait(false);
                     return (object)mission;
@@ -384,7 +414,8 @@ namespace Armada.Server.Mcp.Tools
                     mission = await database.Missions.UpdateAsync(mission).ConfigureAwait(false);
 
                     Signal signal = new Signal(SignalTypeEnum.Progress, "Mission " + missionId + " restarted");
-                    signal.TenantId = ArmadaConstants.DefaultTenantId;
+                    signal.TenantId = mission.TenantId;
+                    signal.UserId = mission.UserId;
                     await database.Signals.CreateAsync(signal).ConfigureAwait(false);
 
                     return (object)mission;
@@ -448,7 +479,8 @@ namespace Armada.Server.Mcp.Tools
                     mission = await database.Missions.UpdateAsync(mission).ConfigureAwait(false);
 
                     Signal signal = new Signal(SignalTypeEnum.Progress, "Mission " + missionId + " transitioned to " + newStatus);
-                    signal.TenantId = ArmadaConstants.DefaultTenantId;
+                    signal.TenantId = mission.TenantId;
+                    signal.UserId = mission.UserId;
                     if (!String.IsNullOrEmpty(mission.CaptainId)) signal.FromCaptainId = mission.CaptainId;
                     await database.Signals.CreateAsync(signal).ConfigureAwait(false);
 
@@ -538,7 +570,8 @@ namespace Armada.Server.Mcp.Tools
                         {
                             missionId = new { type = "string", description = "Mission ID (msn_ prefix)" },
                             lines = new { type = "integer", description = "Number of lines to return (default 100)" },
-                            offset = new { type = "integer", description = "Line offset to start from (default 0)" }
+                            offset = new { type = "integer", description = "Line offset to start from (default 0)" },
+                            formatted = new { type = "boolean", description = "Apply the readable runtime-log formatter (tool names, secret redaction, noise removal) instead of raw lines (default false)" }
                         },
                         required = new[] { "missionId" }
                     },
@@ -560,6 +593,29 @@ namespace Armada.Server.Mcp.Tools
                         int lineCount = Math.Max(1, request.Lines ?? 100);
 
                         string[] slice = allLines.Skip(offset).Take(lineCount).ToArray();
+
+                        if (request.Formatted == true)
+                        {
+                            // Resolve the mission's captain runtime so per-runtime tool-name resolution applies;
+                            // default to Claude Code when the captain is unknown.
+                            Armada.Core.Enums.AgentRuntimeEnum runtime = Armada.Core.Enums.AgentRuntimeEnum.ClaudeCode;
+                            if (!String.IsNullOrEmpty(mission.CaptainId))
+                            {
+                                Captain? logCaptain = await database.Captains.ReadAsync(mission.CaptainId).ConfigureAwait(false);
+                                if (logCaptain != null) runtime = logCaptain.Runtime;
+                            }
+
+                            List<string> formattedLines = new List<string>();
+                            foreach (string raw in slice)
+                            {
+                                Armada.Core.Services.FormattedLogLine formatted = Armada.Core.Services.RuntimeLogFormatter.Format(raw, runtime);
+                                if (formatted.Dropped) continue;
+                                formattedLines.Add(formatted.Text);
+                            }
+                            string formattedLog = String.Join("\n", formattedLines);
+                            return (object)new { MissionId = missionId, Log = formattedLog, Lines = formattedLines.Count, TotalLines = totalLines, Formatted = true };
+                        }
+
                         string log = String.Join("\n", slice);
                         return (object)new { MissionId = missionId, Log = log, Lines = slice.Length, TotalLines = totalLines };
                     });

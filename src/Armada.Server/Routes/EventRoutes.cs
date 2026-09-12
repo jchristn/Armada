@@ -61,11 +61,7 @@ namespace Armada.Server.Routes
                 string limitStr = req.Query.GetValueOrDefault("limit");
                 if (!String.IsNullOrEmpty(limitStr) && int.TryParse(limitStr, out int limit)) query.PageSize = limit;
                 Stopwatch sw = Stopwatch.StartNew();
-                EnumerationResult<ArmadaEvent> result = ctx.IsAdmin
-                    ? await _database.Events.EnumerateAsync(query).ConfigureAwait(false)
-                    : ctx.IsTenantAdmin
-                        ? await _database.Events.EnumerateAsync(ctx.TenantId!, query).ConfigureAwait(false)
-                        : await _database.Events.EnumerateAsync(ctx.TenantId!, ctx.UserId!, query).ConfigureAwait(false);
+                EnumerationResult<ArmadaEvent> result = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, query, q => _database.Events.EnumerateAsync(q), (t, q) => _database.Events.EnumerateAsync(t, q), (t, u, q) => _database.Events.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
                 return result;
             },
@@ -95,11 +91,7 @@ namespace Armada.Server.Routes
                 string limitStr = req.Query.GetValueOrDefault("limit");
                 if (!String.IsNullOrEmpty(limitStr) && int.TryParse(limitStr, out int limit)) query.PageSize = limit;
                 Stopwatch sw = Stopwatch.StartNew();
-                EnumerationResult<ArmadaEvent> result = ctx.IsAdmin
-                    ? await _database.Events.EnumerateAsync(query).ConfigureAwait(false)
-                    : ctx.IsTenantAdmin
-                        ? await _database.Events.EnumerateAsync(ctx.TenantId!, query).ConfigureAwait(false)
-                        : await _database.Events.EnumerateAsync(ctx.TenantId!, ctx.UserId!, query).ConfigureAwait(false);
+                EnumerationResult<ArmadaEvent> result = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, query, q => _database.Events.EnumerateAsync(q), (t, q) => _database.Events.EnumerateAsync(t, q), (t, u, q) => _database.Events.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
                 return result;
             },

@@ -324,7 +324,7 @@ namespace Armada.Server
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "objective refinement summary fallback for session " + session.Id + ": " + ex.Message);
+                    _Logging.Warn(_Header + "objective refinement summary fallback for session " + session.Id + ": " + ex.ToString());
                 }
 
                 _WebSocketHub?.BroadcastEvent(
@@ -538,7 +538,7 @@ namespace Armada.Server
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "objective refinement recovery error for " + session.Id + ": " + ex.Message);
+                    _Logging.Warn(_Header + "objective refinement recovery error for " + session.Id + ": " + ex.ToString());
                 }
             }
         }
@@ -667,7 +667,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "objective refinement turn error for session " + sessionId + ": " + ex.Message);
+                _Logging.Warn(_Header + "objective refinement turn error for session " + sessionId + ": " + ex.ToString());
                 try
                 {
                     ObjectiveRefinementSession? session = await _Database.ObjectiveRefinementSessions.ReadAsync(sessionId).ConfigureAwait(false);
@@ -923,7 +923,7 @@ namespace Armada.Server
                     }
                     catch (Exception ex)
                     {
-                        _Logging.Warn(_Header + "objective refinement summary session cleanup failed for " + session.Id + ": " + ex.Message);
+                        _Logging.Warn(_Header + "objective refinement summary session cleanup failed for " + session.Id + ": " + ex.ToString());
                     }
 
                     try
@@ -940,7 +940,7 @@ namespace Armada.Server
                     }
                     catch (Exception ex)
                     {
-                        _Logging.Warn(_Header + "objective refinement summary captain cleanup failed for " + captain.Id + ": " + ex.Message);
+                        _Logging.Warn(_Header + "objective refinement summary captain cleanup failed for " + captain.Id + ": " + ex.ToString());
                     }
                 }
             }
@@ -1041,7 +1041,7 @@ namespace Armada.Server
                     }
                     catch (Exception ex)
                     {
-                        _Logging.Warn(_Header + "error stopping objective refinement process " + session.ProcessId.Value + " for session " + session.Id + ": " + ex.Message);
+                        _Logging.Warn(_Header + "error stopping objective refinement process " + session.ProcessId.Value + " for session " + session.Id + ": " + ex.ToString());
                     }
                 }
 

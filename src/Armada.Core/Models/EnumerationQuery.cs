@@ -107,6 +107,19 @@ namespace Armada.Core.Models
         /// </summary>
         public bool? UnreadOnly { get; set; }
 
+        /// <summary>
+        /// Owner-user filter for privileged callers. Ignored for a regular user (always scoped to self). A
+        /// tenant admin may set this to view a specific user's records within their tenant; a global admin may
+        /// combine it with <see cref="TenantId"/>. Empty means "all users in scope".
+        /// </summary>
+        public string? UserId { get; set; }
+
+        /// <summary>
+        /// Owner-tenant filter for a global admin. Ignored for tenant admins and regular users (locked to their
+        /// own tenant). Empty means "all tenants" for a global admin.
+        /// </summary>
+        public string? TenantId { get; set; }
+
         #endregion
 
         #region Constructors-and-Factories
@@ -153,6 +166,12 @@ namespace Armada.Core.Models
 
             val = queryGetter("status");
             if (!String.IsNullOrEmpty(val)) Status = val;
+
+            val = queryGetter("userId");
+            if (!String.IsNullOrEmpty(val)) UserId = val;
+
+            val = queryGetter("tenantId");
+            if (!String.IsNullOrEmpty(val)) TenantId = val;
 
             val = queryGetter("fleetId");
             if (!String.IsNullOrEmpty(val)) FleetId = val;

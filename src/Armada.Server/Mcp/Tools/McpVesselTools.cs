@@ -65,7 +65,7 @@ namespace Armada.Server.Mcp.Tools
                         defaultBranch = new { type = "string", description = "Default branch name (defaults to main)" },
                         projectContext = new { type = "string", description = "Project context describing architecture, key files, and dependencies" },
                         styleGuide = new { type = "string", description = "Style guide describing naming conventions, patterns, and library preferences" },
-                        workingDirectory = new { type = "string", description = "Optional local directory where completed mission changes will be pulled after merge" },
+                        workingDirectory = new { type = "string", description = "Optional local directory where completed mission changes will be pulled after merge. When repoUrl is a local clone (a file:// URL or an existing local path) and this is omitted, it is set automatically to that local clone so the vessel is immediately usable (e.g. for Rebuild Armada)." },
                         gitHubTokenOverride = new { type = "string", description = "Optional per-vessel GitHub token override. Leave unset to use the global configured token." },
                         allowConcurrentMissions = new { type = "boolean", description = "Allow multiple concurrent missions on this vessel (default false)" },
                         enableModelContext = new { type = "boolean", description = "Enable model context accumulation -- agents will update context with key information discovered during missions (default false)" },
@@ -76,8 +76,10 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     VesselAddArgs request = JsonSerializer.Deserialize<VesselAddArgs>(args!.Value, _JsonOptions)!;
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Vessel vessel = new Vessel();
-                    vessel.TenantId = ArmadaConstants.DefaultTenantId;
+                    vessel.TenantId = String.IsNullOrEmpty(caller.TenantId) ? ArmadaConstants.DefaultTenantId : caller.TenantId;
+                    vessel.UserId = caller.UserId;
                     vessel.Name = request.Name;
                     vessel.RepoUrl = request.RepoUrl;
                     vessel.FleetId = request.FleetId;
@@ -85,6 +87,16 @@ namespace Armada.Server.Mcp.Tools
                     vessel.ProjectContext = request.ProjectContext;
                     vessel.StyleGuide = request.StyleGuide;
                     vessel.WorkingDirectory = request.WorkingDirectory;
+                    // When the repo is a local clone (file:// URL or an existing local path) and no explicit
+                    // working directory was given, point the working directory at that clone so the vessel is
+                    // immediately buildable/usable (notably for Settings > Rebuild Armada). We deliberately do
+                    // NOT set LocalPath here: LocalPath is treated as an Armada-managed bare repo and is
+                    // deleted on vessel removal, which must never wipe the user's own working clone.
+                    if (String.IsNullOrWhiteSpace(vessel.WorkingDirectory)
+                        && TryResolveLocalClonePath(request.RepoUrl, out string? localClone))
+                    {
+                        vessel.WorkingDirectory = localClone;
+                    }
                     vessel.GitHubTokenOverride = request.GitHubTokenOverride;
                     vessel.NormalizeGitHubTokenOverride();
                     vessel.AllowConcurrentMissions = request.AllowConcurrentMissions ?? false;
@@ -158,6 +170,14 @@ namespace Armada.Server.Mcp.Tools
                         vessel.AutoLandPathAllowGlobs = request.AutoLandPathAllowGlobs;
                     if (request.AutoLandPathDenyGlobs != null)
                         vessel.AutoLandPathDenyGlobs = request.AutoLandPathDenyGlobs;
+                    if (request.DefinitionOfDoneEnabled.HasValue)
+                        vessel.DefinitionOfDoneEnabled = request.DefinitionOfDoneEnabled.Value;
+                    if (request.DefinitionOfDoneBuildCommand != null)
+                        vessel.DefinitionOfDoneBuildCommand = request.DefinitionOfDoneBuildCommand;
+                    if (request.DefinitionOfDoneTestCommand != null)
+                        vessel.DefinitionOfDoneTestCommand = request.DefinitionOfDoneTestCommand;
+                    if (request.DefinitionOfDoneTimeoutSeconds.HasValue)
+                        vessel.DefinitionOfDoneTimeoutSeconds = request.DefinitionOfDoneTimeoutSeconds.Value;
                     vessel = await database.Vessels.UpdateAsync(vessel).ConfigureAwait(false);
                     return (object)vessel;
                 });
@@ -260,6 +280,51 @@ namespace Armada.Server.Mcp.Tools
                     vessel = await database.Vessels.UpdateAsync(vessel).ConfigureAwait(false);
                     return (object)vessel;
                 });
+        }
+
+        /// <summary>
+        /// Resolve a repository URL to a local clone directory when it refers to one: a <c>file://</c> URL or
+        /// an existing local filesystem path. Returns true and the normalized path when the target exists as a
+        /// git repository (contains a <c>.git</c> entry); false otherwise. Used to auto-populate a vessel's
+        /// working directory so a locally-cloned repo is immediately usable without a separate provision step.
+        /// </summary>
+        private static bool TryResolveLocalClonePath(string? repoUrl, out string? localPath)
+        {
+            localPath = null;
+            if (String.IsNullOrWhiteSpace(repoUrl)) return false;
+
+            string candidate;
+            if (repoUrl.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+            {
+                try { candidate = new Uri(repoUrl).LocalPath; }
+                catch (Exception) { return false; }
+            }
+            else if (Path.IsPathRooted(repoUrl) && (repoUrl.Contains(Path.DirectorySeparatorChar) || repoUrl.Contains('/')))
+            {
+                candidate = repoUrl;
+            }
+            else
+            {
+                return false;
+            }
+
+            if (String.IsNullOrWhiteSpace(candidate)) return false;
+            try
+            {
+                candidate = Path.GetFullPath(candidate);
+                if (!Directory.Exists(candidate)) return false;
+                // Only accept an actual git repository (working tree with .git, or a bare repo directory).
+                bool isGit = Directory.Exists(Path.Combine(candidate, ".git"))
+                    || File.Exists(Path.Combine(candidate, ".git"))
+                    || Directory.Exists(Path.Combine(candidate, "hooks")) && File.Exists(Path.Combine(candidate, "HEAD"));
+                if (!isGit) return false;
+                localPath = candidate;
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
         }
 
         /// <summary>

@@ -39,7 +39,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     DeploymentIdArgs request = JsonSerializer.Deserialize<DeploymentIdArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize DeploymentIdArgs.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     Deployment? deployment = await deploymentService.ReadAsync(auth, request.DeploymentId).ConfigureAwait(false);
                     if (deployment == null) return (object)new { Error = "Deployment not found" };
                     return (object)deployment;
@@ -71,7 +71,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     DeploymentUpsertRequest request = JsonSerializer.Deserialize<DeploymentUpsertRequest>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize DeploymentUpsertRequest.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     return (object)await deploymentService.CreateAsync(auth, request).ConfigureAwait(false);
                 });
 
@@ -93,7 +93,7 @@ namespace Armada.Server.Mcp.Tools
                     JsonElement value = args!.Value;
                     string deploymentId = value.GetProperty("deploymentId").GetString() ?? String.Empty;
                     string? comment = value.TryGetProperty("comment", out JsonElement commentElement) ? commentElement.GetString() : null;
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     return (object)await deploymentService.ApproveAsync(auth, deploymentId, comment).ConfigureAwait(false);
                 });
 
@@ -113,7 +113,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     DeploymentIdArgs request = JsonSerializer.Deserialize<DeploymentIdArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize DeploymentIdArgs.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     return (object)await deploymentService.VerifyAsync(auth, request.DeploymentId).ConfigureAwait(false);
                 });
 
@@ -133,7 +133,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     DeploymentIdArgs request = JsonSerializer.Deserialize<DeploymentIdArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize DeploymentIdArgs.");
-                    AuthContext auth = McpToolHelpers.CreateDefaultTenantAdminContext();
+                    AuthContext auth = McpToolHelpers.ResolveCallerContext();
                     return (object)await deploymentService.RollbackAsync(auth, request.DeploymentId).ConfigureAwait(false);
                 });
         }

@@ -34,6 +34,7 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [status](#status)
     - [inbox](#inbox)
     - [token_usage_summary](#token_usage_summary)
+    - [papercut_summary](#papercut_summary)
     - [stop_server](#stop_server)
   - **Enumeration**
     - [enumerate](#enumerate)
@@ -58,10 +59,12 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [delete_voyages](#delete_voyages)
   - **Missions**
     - [mission_status](#mission_status)
+    - [evaluate_autoland](#evaluate_autoland)
     - [create_mission](#create_mission)
     - [update_mission](#update_mission)
     - [cancel_mission](#cancel_mission)
     - [restart_mission](#restart_mission)
+    - [retry_landing](#retry_landing)
     - [purge_mission](#purge_mission)
     - [delete_missions](#delete_missions)
     - [transition_mission_status](#transition_mission_status)
@@ -72,6 +75,7 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [create_captain](#create_captain)
     - [update_captain](#update_captain)
     - [stop_captain](#stop_captain)
+    - [release_captain](#release_captain)
     - [stop_all](#stop_all)
     - [delete_captain](#delete_captain)
     - [delete_captains](#delete_captains)
@@ -86,6 +90,8 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [get_dock](#get_dock)
     - [delete_dock](#delete_dock)
     - [purge_dock](#purge_dock)
+    - [repair_dock](#repair_dock)
+    - [unstick_dock](#unstick_dock)
     - [delete_docks](#delete_docks)
   - **Playbooks**
     - [get_playbook](#get_playbook)
@@ -102,6 +108,12 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [purge_merge_queue](#purge_merge_queue)
     - [purge_merge_entry](#purge_merge_entry)
     - [purge_merge_entries](#purge_merge_entries)
+  - **Harbors**
+    - [get_harbor](#get_harbor)
+    - [create_harbor](#create_harbor)
+    - [update_harbor](#update_harbor)
+    - [delete_harbor](#delete_harbor)
+    - [set_harbor_enabled](#set_harbor_enabled)
   - **Objectives**
     - [get_objective](#get_objective)
     - [create_objective](#create_objective)
@@ -135,6 +147,13 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [get_pipeline](#get_pipeline)
     - [update_pipeline](#update_pipeline)
     - [delete_pipeline](#delete_pipeline)
+  - **Model Endpoints**
+    - [get_model_endpoint](#get_model_endpoint)
+    - [create_model_endpoint](#create_model_endpoint)
+    - [update_model_endpoint](#update_model_endpoint)
+    - [delete_model_endpoint](#delete_model_endpoint)
+    - [validate_model_endpoint](#validate_model_endpoint)
+    - [health_check_model_endpoints](#health_check_model_endpoints)
   - **Backup and Restore**
     - [backup](#backup)
     - [restore](#restore)
@@ -168,6 +187,8 @@ Armada exposes a full MCP server that allows AI agents and MCP-compatible client
 - Send signals to captains
 - Stop individual captains or all captains (emergency stop)
 - Manage the merge queue (enqueue, cancel, process, inspect)
+- Register and manage Harbors (host runners): inspect, create, update, enable/disable, and delete them
+- Manage model endpoints (external embedding/inference providers), validate them with a real request, and sweep their health
 
 MCP does **not** currently expose the newer dashboard/system helper REST surfaces such as:
 
@@ -231,13 +252,13 @@ The MCP port can be configured in the Armada settings file. The hostname is shar
 
 ## Authentication
 
-The MCP server does **not** currently enforce authentication. All MCP operations run in the context of the default tenant. Access control should be managed at the network level (firewall, bind address).
+The MCP server accepts an **optional** credential and scopes tool calls to the authenticated caller. Present a credential with the same headers the REST API accepts - `Authorization: Bearer <token>`, `X-Token: <session token>`, or `X-Api-Key: <api key>`. When a valid credential is presented, the caller's tenant/user/role identity flows into every tool handler and the tools are scoped **per-user exactly like the REST API** (a regular user sees only their own owned records and only tenant-wide plus their own configuration objects; a tenant/global admin sees the tenant/system). When no credential is presented, the request still succeeds and runs under the default tenant-admin context, so existing local/stdio workflows keep working unchanged.
 
-> **Note:** Unlike the REST API, which supports bearer tokens, encrypted session tokens, and API keys as of v0.3.0, the MCP server remains unauthenticated. Multi-tenant MCP authentication is planned for a future release. For now, MCP clients have unrestricted access to all operations within the default tenant context.
+> **Design:** authentication is additive, not mandatory. The transport does not reject anonymous calls (the local orchestrating agent is assumed trusted); it simply uses the caller's identity for scoping when one is supplied. Under the hood, `McpHttpServer.AuthenticationHandler` resolves the credential to an identity and Voltaic publishes it on the ambient `RpcCallContext`, which the tool handlers read via `McpToolHelpers.ResolveCallerContext()`. See [REST_API.md - Data Scoping](REST_API.md#data-scoping-who-sees-and-edits-what) for the full scoping model.
 
 ### MCP Authentication Scope
 
-MCP tools (served via stdio) remain **unauthenticated by design**. The MCP transport assumes the orchestrating agent (e.g., Claude Code) is already trusted and running locally. All MCP tool operations use the default tenant context (`ten_default`). If multi-tenant isolation is required for MCP clients, use the authenticated REST API instead.
+Owned (Category A) entities - fleets, vessels, captains, missions, voyages, docks, signals, events, merge queue, objectives/backlog - are scoped to the authenticated caller across `enumerate` and the entity tools. Configuration (Category B) entities remain tenant-visible through MCP; per-object ownership editing is enforced by their services. If you need strict multi-tenant isolation for untrusted MCP clients, bind the MCP port to localhost or a firewalled interface and require a credential at the network layer.
 
 ---
 
@@ -264,7 +285,7 @@ Common error responses across tools:
 
 MCP tools do not return HTTP status codes (MCP uses JSON-RPC, not HTTP). The presence of an `Error` field in the response indicates failure. On success, the response contains the requested data (entity object, status, list, etc.) without an `Error` field.
 
-This is a deliberate architectural decision, not a missing feature. The stdio transport has no network attack surface -- the only caller is the parent process that spawned Armada. Adding authentication to stdio would add complexity without meaningful security benefit. The HTTP MCP transport inherits the same unauthenticated model for consistency, but should be bound to `localhost` or protected by a firewall in production.
+The stdio transport has no network attack surface -- the only caller is the parent process that spawned Armada -- so it runs anonymously under the default tenant-admin context. The HTTP MCP transport accepts an optional credential and scopes tool calls to the authenticated caller when one is supplied (see [Authentication](#authentication)); it should still be bound to `localhost` or protected by a firewall in production.
 
 ---
 
@@ -463,6 +484,52 @@ Counts are normalized across providers: `input` covers prompt tokens, `output` c
 
 ---
 
+### papercut_summary
+
+List friction that captains reported during missions ("papercuts"), collapsed into groups of the same vessel, category, and problem. Use the count and distinct-captain count to tell a one-off from a real defect, then promote a group to a backlog item or objective. All parameters are optional.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "vesselId": { "type": "string", "description": "Filter to one vessel (vsl_ prefix)" },
+    "category": { "type": "string", "description": "Filter to one category: BriefContradiction, ToolFailure, MissingDoc, BrokenLink, RepoFriction, TestFlake, EnvSetup, PlatformBug, Other" },
+    "minSeverity": { "type": "string", "description": "Minimum severity: Low, Medium, or High" },
+    "sinceHours": { "type": "integer", "description": "Only include reports newer than this many hours" },
+    "ungrouped": { "type": "boolean", "description": "Return every report instead of groups (default false)" },
+    "limit": { "type": "integer", "description": "Maximum rows returned (default 25, maximum 200)" },
+    "scanLimit": { "type": "integer", "description": "Stored reports to scan before filtering (default 500, maximum 5000)" }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `vesselId` | string | No | Filter to one vessel (prefix `vsl_`) |
+| `category` | string | No | Filter to one category: `BriefContradiction`, `ToolFailure`, `MissingDoc`, `BrokenLink`, `RepoFriction`, `TestFlake`, `EnvSetup`, `PlatformBug`, `Other`. An unknown name returns an error. |
+| `minSeverity` | string | No | Minimum severity to include: `Low`, `Medium`, or `High`. An unknown name returns an error. |
+| `sinceHours` | integer | No | Only include reports newer than this many hours |
+| `ungrouped` | boolean | No | Return every matching report instead of collapsing repeats into groups (default `false`) |
+| `limit` | integer | No | Maximum rows returned (default 25, clamped to [1, 200]) |
+| `scanLimit` | integer | No | Number of stored reports to scan before filtering (default 500, clamped to [1, 5000]) |
+
+**Response (grouped, default):** `Scanned`, `Matched`, `GroupCount`, and a `Groups` array.
+
+```json
+{
+  "Scanned": 500,
+  "Matched": 42,
+  "GroupCount": 7,
+  "Groups": [ { "...": "..." } ]
+}
+```
+
+**Response (with `ungrouped: true`):** `Scanned`, `Matched`, and a `Papercuts` array (most-recently-reported first).
+
+---
+
 ### stop_server
 
 Initiate a graceful shutdown of the Admiral server.
@@ -490,7 +557,7 @@ No parameters required.
 
 ### enumerate
 
-Paginated enumeration of any entity type with filtering and sorting. This is the MCP equivalent of the `POST /api/v1/{entity}/enumerate` REST endpoints. Returns paginated results with total counts, page metadata, and query timing. Supports: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, playbooks, personas, prompt_templates, pipelines, workflow_profiles, check_runs, releases.
+Paginated enumeration of any entity type with filtering and sorting. This is the MCP equivalent of the `POST /api/v1/{entity}/enumerate` REST endpoints. Returns paginated results with total counts, page metadata, and query timing. Supports: objectives (aliases `backlog`, `backlog_item`, `backlog_items`), fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, memories, prompt_templates, pipelines, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, jobs, model_endpoints.
 
 **Input Schema:**
 
@@ -498,13 +565,14 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 {
   "type": "object",
   "properties": {
-    "entityType": { "type": "string", "description": "Entity type to enumerate (fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, playbooks, personas, prompt_templates, pipelines, workflow_profiles, check_runs, releases)" },
+    "entityType": { "type": "string", "description": "Entity type to enumerate (objectives [aliases backlog, backlog_item, backlog_items], fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, memories, prompt_templates, pipelines, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, jobs, model_endpoints)" },
     "pageNumber": { "type": "integer", "description": "Page number (1-based, default 1)" },
     "pageSize": { "type": "integer", "description": "Results per page (default 10, max 1000)" },
     "order": { "type": "string", "description": "Sort order: CreatedAscending, CreatedDescending" },
     "createdAfter": { "type": "string", "description": "ISO 8601 timestamp filter" },
     "createdBefore": { "type": "string", "description": "ISO 8601 timestamp filter" },
     "status": { "type": "string", "description": "Filter by status (entity-specific)" },
+    "search": { "type": "string", "description": "Free-text search where supported (releases, deployments, incidents, runbooks, runbook_executions, memories, objectives)" },
     "fleetId": { "type": "string", "description": "Filter by fleet ID (vessels)" },
     "vesselId": { "type": "string", "description": "Filter by vessel ID (missions, docks)" },
     "captainId": { "type": "string", "description": "Filter by captain ID (missions, events, signals)" },
@@ -526,6 +594,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 
 | `entityType` value | Supported filters |
 |---|---|
+| `objectives` (aliases `backlog`, `backlog_item`, `backlog_items`) | `status`, `vesselId`, `voyageId`, `missionId`, `search` |
 | `fleets` | `createdAfter`, `createdBefore` |
 | `vessels` | `fleetId`, `createdAfter`, `createdBefore` |
 | `captains` | `status` (Idle/Working/Stalled), `createdAfter`, `createdBefore` |
@@ -535,6 +604,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 | `signals` | `signalType`, `captainId`, `toCaptainId`, `unreadOnly`, `createdAfter`, `createdBefore` |
 | `events` | `eventType`, `captainId`, `missionId`, `vesselId`, `voyageId`, `createdAfter`, `createdBefore` |
 | `merge_queue` | `status` (Queued/Testing/Passed/Failed/Landed/Cancelled), `createdAfter`, `createdBefore` |
+| `harbors` | `createdAfter`, `createdBefore` (current MCP enumeration is primarily paginated browse) |
 | `personas` | `createdAfter`, `createdBefore` |
 | `playbooks` | `createdAfter`, `createdBefore` |
 | `prompt_templates` | `createdAfter`, `createdBefore` |
@@ -542,6 +612,15 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 | `workflow_profiles` | `createdAfter`, `createdBefore` (current MCP enumeration is primarily paginated browse) |
 | `check_runs` | `createdAfter`, `createdBefore` (current MCP enumeration is primarily paginated browse) |
 | `releases` | `status`, `vesselId`, `search`, `createdAfter`, `createdBefore` |
+| `deployments` | `status`, `vesselId`, `missionId`, `voyageId`, `search`, `createdAfter`, `createdBefore` |
+| `incidents` | `vesselId`, `missionId`, `voyageId`, `search` |
+| `runbooks` | `search` (current MCP enumeration is primarily paginated browse) |
+| `runbook_executions` (aliases `runbook-executions`, `runbookexecution`) | `search` (current MCP enumeration is primarily paginated browse) |
+| `project_profiles` | `createdAfter`, `createdBefore` (current MCP enumeration is primarily paginated browse) |
+| `skills` | `createdAfter`, `createdBefore` (current MCP enumeration is primarily paginated browse) |
+| `memories` | `search` (plus paginated browse) |
+| `jobs` | (paginated browse only) |
+| `model_endpoints` | `createdAfter`, `createdBefore` (current MCP enumeration is primarily paginated browse) |
 
 | Include flag | Applies to | Default | Description |
 |---|---|---|---|
@@ -577,6 +656,40 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 ```
 
 > **Note:** When enumerating `missions`, the `DiffSnapshot` field is excluded from results to keep payloads compact. Use `get_mission_diff` to retrieve the full diff for a specific mission.
+
+---
+
+## Memory
+
+Durable agent memory. The Recorder persona uses these tools to persist and consolidate what a voyage produced; other personas use `search_memory` to recall it. Memories are classified as **Episodic** (what happened), **Semantic** (standalone facts), or **Procedural** (how-to). Working memory is never stored. All memory tools are scoped to the authenticated caller.
+
+### search_memory
+
+Search memories (use before writing, to consolidate against existing ones). Ordered by salience, newest first.
+
+- `search` (string) -- substring across content, topic, tags
+- `type` (string) -- `Episodic`, `Semantic`, or `Procedural`
+- `topic` (string) -- exact topic/grouping
+- `vesselId` (string) -- associated or originating vessel
+- `pageNumber`, `pageSize` (integer)
+
+Returns a paged `EnumerationResult` of memories.
+
+### get_memory
+
+Read one memory (full content). Args: `memoryId` (required).
+
+### create_memory
+
+Create a memory, or update it in place when a memory with the same `key` already exists (idempotent consolidation). Args: `content` (required); optional `type` (default `Semantic`), `topic`, `key`, `summary`, `salience` (0.0-1.0, default 0.5), `tags`, `sourceKind`, `sourceVoyageId`, `sourceMissionId`, `sourceVesselId`, `sourceDetail`, `vesselId`, `scope`.
+
+### update_memory
+
+Update an existing memory by id; only supplied fields change; increments `version`. Args: `memoryId` (required), then any of `type`, `topic`, `key`, `summary`, `content`, `salience`, `tags`, `vesselId`, `sourceDetail`, `scope`.
+
+### delete_memory
+
+Delete a memory that has become stale or is no longer relevant. Args: `memoryId` (required).
 
 ---
 
@@ -631,9 +744,26 @@ Dispatch a new voyage with missions to a vessel. This is the primary way to assi
         },
         "required": ["playbookId", "deliveryMode"]
       }
+    },
+    "objectiveId": {
+      "type": "string",
+      "description": "Optional objective (obj_ prefix) to link this voyage to; must exist. Parity with REST dispatch."
+    },
+    "captainAssignments": {
+      "type": "array",
+      "description": "Optional per-persona captain overrides. Each entry binds a pipeline step (persona) to a preferred captain and a fallback tier.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "persona": { "type": "string", "description": "Persona name the override applies to (e.g. Worker, Architect, Judge)" },
+          "captainId": { "type": "string", "description": "Preferred captain id (cpt_ prefix), or omit for tier-only routing" },
+          "fallbackTier": { "type": "string", "description": "Fallback tier when the preferred captain is busy: Economy, Standard, or Premium" }
+        },
+        "required": ["persona"]
+      }
     }
   },
-  "required": ["title", "vesselId", "missions"]
+  "required": ["title"]
 }
 ```
 
@@ -641,11 +771,18 @@ Dispatch a new voyage with missions to a vessel. This is the primary way to assi
 |---|---|---|---|
 | `title` | string | Yes | Voyage title |
 | `description` | string | No | Voyage description |
-| `vesselId` | string | Yes | Target vessel ID (prefix `vsl_`) |
-| `missions` | array | Yes | Array of mission objects with `title` and optional `description` |
+| `vesselId` | string | No | Target vessel ID (prefix `vsl_`). Omit (with no `missions`) to create a bare voyage; missions are added later. |
+| `missions` | array | No | Array of mission objects with `title` and optional `description`. Omit for a bare voyage. |
 | `pipelineId` | string | No | Pipeline ID to use for this voyage (overrides vessel/fleet default) |
-| `pipeline` | string | No | Pipeline name to use (convenience alias for `pipelineId` -- resolves by name) |
+| `pipeline` | string | No | Pipeline name to use (convenience alias for `pipelineId` -- resolves by name; a bad name is rejected) |
+| `objectiveId` | string | No | Objective (prefix `obj_`) to link this voyage to; must exist |
 | `selectedPlaybooks` | array | No | Ordered playbook selections with `playbookId` and `deliveryMode` |
+| `captainAssignments` | array | No | Per-persona captain overrides. Array of `{ persona` (required)`, captainId, fallbackTier` (`Economy`/`Standard`/`Premium`)` }` -- binds a pipeline step (persona) to a preferred captain and a fallback tier. |
+
+> **Parity with REST.** This tool and `POST /api/v1/voyages` funnel through the same validation: a linked
+> objective must exist, a pipeline name must resolve, and a request with no vessel or no missions is created
+> as a **bare voyage** rather than dispatched. Both surfaces accept and reject the same inputs; only the error
+> shape differs (structured `{ "Error": ..., "Code": ... }` here, HTTP status codes over REST).
 
 **Example Input:**
 
@@ -817,6 +954,26 @@ Get status of a specific mission.
 
 ---
 
+### evaluate_autoland
+
+Dry-run the vessel's auto-land predicate against a mission's captured diff without landing it. Returns whether the change would auto-land unattended and, if not, the hold reason.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "missionId": { "type": "string", "description": "Mission ID (msn_ prefix)" }
+  },
+  "required": ["missionId"]
+}
+```
+
+**Response:** `{ "Land": true }` or `{ "Land": false, "HoldReason": "..." }`, or `{ "Error": "Mission not found" }` / `{ "Error": "Mission does not have an associated vessel" }`.
+
+---
+
 ### get_fleet
 
 Get details of a specific fleet including all its vessels.
@@ -905,15 +1062,19 @@ Register a new vessel (git repository) in a fleet.
     },
     "workingDirectory": {
       "type": "string",
-      "description": "Optional local directory where completed mission changes will be pulled after merge"
+      "description": "Optional local directory where completed mission changes will be pulled after merge. When repoUrl is a local clone (a file:// URL or an existing local path) and this is omitted, it is set automatically to that local clone so the vessel is immediately usable (e.g. for Rebuild Armada)."
     },
     "gitHubTokenOverride": {
       "type": "string",
       "description": "Optional per-vessel GitHub token override. Leave unset to use the global configured token."
     },
+    "allowConcurrentMissions": {
+      "type": "boolean",
+      "description": "Allow multiple concurrent missions on this vessel (default false)"
+    },
     "enableModelContext": {
       "type": "boolean",
-      "description": "Enable model context accumulation -- agents will update context with key information discovered during missions (default false)"
+      "description": "Enable model context accumulation -- agents will update context with key information discovered during missions (default true)"
     },
     "defaultPipelineId": {
       "type": "string",
@@ -932,9 +1093,10 @@ Register a new vessel (git repository) in a fleet.
 | `defaultBranch` | string | No | Default branch name (defaults to `"main"`) |
 | `projectContext` | string | No | Project context describing architecture, key files, and dependencies |
 | `styleGuide` | string | No | Style guide describing naming conventions, patterns, and library preferences |
-| `workingDirectory` | string | No | Optional local directory where completed mission changes will be pulled after merge |
+| `workingDirectory` | string | No | Optional local directory where completed mission changes will be pulled after merge. When `repoUrl` is a local clone (a `file://` URL or an existing local path) and this is omitted, it is set automatically to that local clone so the vessel is immediately usable (e.g. for Rebuild Armada). |
 | `gitHubTokenOverride` | string | No | Optional per-vessel GitHub token override. The raw token is accepted on create but never returned by MCP reads. |
-| `enableModelContext` | boolean | No | Enable model context accumulation (default false) |
+| `allowConcurrentMissions` | boolean | No | Allow multiple concurrent missions on this vessel (default false) |
+| `enableModelContext` | boolean | No | Enable model context accumulation (default true) |
 | `defaultPipelineId` | string | No | Default pipeline ID for voyages dispatched to this vessel |
 
 **Example Input:**
@@ -1129,6 +1291,26 @@ Stop a specific captain agent.
 
 ---
 
+### release_captain
+
+Lift a captain's quarantine, returning it to the Idle pool so tier selection can hand it work again. Captains are auto-quarantined on provider usage-limit / auth failures (until the parsed reset time or a configured backoff) and on crash loops; this manually clears that state.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "captainId": { "type": "string", "description": "Captain ID (cpt_ prefix)" }
+  },
+  "required": ["captainId"]
+}
+```
+
+**Response:** The updated [Captain](#captain) object, or `{ "Status": "not_quarantined", "CaptainId": "..." }` when the captain was not quarantined, or `{ "Error": "Captain not found" }`.
+
+---
+
 ### stop_all
 
 Emergency stop all running captains.
@@ -1219,6 +1401,30 @@ Restart a failed or cancelled mission, resetting it to `Pending` for re-dispatch
 Only `Failed` or `Cancelled` missions can be restarted. Returns `{"error": "..."}` if the mission is not found or is in an invalid status.
 
 **Response:** The updated [Mission](#mission) object with status `Pending`.
+
+---
+
+### retry_landing
+
+Retry landing for a mission in `LandingFailed` status. Rebases the mission branch onto the current target and re-attempts landing.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "missionId": { "type": "string", "description": "Mission ID (msn_ prefix) to retry landing for" }
+  },
+  "required": ["missionId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `missionId` | string | Yes | Mission ID to retry landing for (prefix `msn_`) |
+
+**Response:** `{ "Success": true, "Mission": { "...": "..." } }` where `Success` reports whether the landing succeeded and `Mission` is the refreshed [Mission](#mission) object. Returns `{ "Error": "Landing service not configured" }` when the landing service is unavailable.
 
 ---
 
@@ -1470,9 +1676,19 @@ Update an existing vessel's properties.
     "styleGuide": { "type": "string", "description": "New style guide" },
     "workingDirectory": { "type": "string", "description": "New local directory where completed mission changes will be pulled after merge" },
     "gitHubTokenOverride": { "type": "string", "description": "Optional per-vessel GitHub token override. Empty string clears the existing override." },
+    "allowConcurrentMissions": { "type": "boolean", "description": "Allow multiple concurrent missions on this vessel" },
     "enableModelContext": { "type": "boolean", "description": "Enable or disable model context accumulation" },
     "modelContext": { "type": "string", "description": "Agent-accumulated context about this repository" },
-    "defaultPipelineId": { "type": "string", "description": "Default pipeline ID for voyages dispatched to this vessel" }
+    "defaultPipelineId": { "type": "string", "description": "Default pipeline ID for voyages dispatched to this vessel" },
+    "autoLandEnabled": { "type": "boolean", "description": "Whether the auto-land predicate gates unattended landing on this vessel" },
+    "autoLandMaxFiles": { "type": "integer", "description": "Maximum number of changed files that may auto-land unattended (0 = no limit)" },
+    "autoLandMaxLines": { "type": "integer", "description": "Maximum number of changed lines that may auto-land unattended (0 = no limit)" },
+    "autoLandPathAllowGlobs": { "type": "array", "items": { "type": "string" }, "description": "Glob patterns a changed path must match to be auto-landable" },
+    "autoLandPathDenyGlobs": { "type": "array", "items": { "type": "string" }, "description": "Glob patterns that force a hold: a change touching any matching path never auto-lands" },
+    "definitionOfDoneEnabled": { "type": "boolean", "description": "Run the in-dock build + unit tests before acceptance; a failure blocks landing with a classified reason (Compile/TestFail/Timeout/Infra)" },
+    "definitionOfDoneBuildCommand": { "type": "string", "description": "Shell command that builds the project inside the mission checkout (e.g. dotnet build)" },
+    "definitionOfDoneTestCommand": { "type": "string", "description": "Shell command that runs unit tests inside the mission checkout (e.g. dotnet test)" },
+    "definitionOfDoneTimeoutSeconds": { "type": "integer", "description": "Per-phase timeout in seconds, clamped to [30, 7200] (default 1800)" }
   },
   "required": ["vesselId"]
 }
@@ -1588,6 +1804,9 @@ Create and dispatch a standalone mission to a vessel. The Admiral assigns a capt
     "description": { "type": "string", "description": "Mission description/instructions" },
     "vesselId": { "type": "string", "description": "Target vessel ID (vsl_ prefix)" },
     "voyageId": { "type": "string", "description": "Optional voyage ID to associate with (vyg_ prefix)" },
+    "persona": { "type": "string", "description": "Persona for this mission (e.g. Worker, Architect, Judge, Test Engineer)" },
+    "mode": { "type": "string", "description": "Execution mode: Implementation (default), Audit, or Research. Audit and Research are read-only modes that produce a written report instead of a commit; their empty diff is treated as success, not a no-op failure." },
+    "tier": { "type": "string", "description": "Optional required capability tier for dispatch routing: Economy, Standard, or Premium. Null routes to any idle captain (default)." },
     "selectedPlaybooks": {
       "type": "array",
       "description": "Optional ordered playbook selections for this mission",
@@ -1627,7 +1846,9 @@ Update an existing mission's metadata fields. Operational fields (status, timest
     "priority": { "type": "integer", "description": "New priority (lower is higher priority)" },
     "branchName": { "type": "string", "description": "Git branch name for this mission" },
     "prUrl": { "type": "string", "description": "Pull request URL" },
-    "parentMissionId": { "type": "string", "description": "Parent mission ID for sub-tasks (msn_ prefix)" }
+    "parentMissionId": { "type": "string", "description": "Parent mission ID for sub-tasks (msn_ prefix)" },
+    "persona": { "type": "string", "description": "Persona for this mission (e.g. Worker, Architect, Judge, Test Engineer)" },
+    "mode": { "type": "string", "description": "Execution mode: Implementation, Audit, or Research (read-only report modes)" }
   },
   "required": ["missionId"]
 }
@@ -1644,6 +1865,8 @@ Update an existing mission's metadata fields. Operational fields (status, timest
 | `branchName` | No | Git branch name |
 | `prUrl` | No | Pull request URL |
 | `parentMissionId` | No | Parent mission ID for sub-tasks |
+| `persona` | No | Persona for this mission |
+| `mode` | No | Execution mode: Implementation, Audit, or Research |
 
 **Response:** Updated [Mission](#mission) object, or `{ "Error": "Mission not found" }`.
 
@@ -1789,7 +2012,8 @@ Get the session log for a mission. Supports pagination.
   "properties": {
     "missionId": { "type": "string", "description": "Mission ID (msn_ prefix)" },
     "lines": { "type": "integer", "description": "Number of lines to return (default 100)" },
-    "offset": { "type": "integer", "description": "Line offset to start from (default 0)" }
+    "offset": { "type": "integer", "description": "Line offset to start from (default 0)" },
+    "formatted": { "type": "boolean", "description": "Apply the readable runtime-log formatter (resolve tool names per runtime, redact secret-shaped values, drop noise) instead of returning raw lines (default false)" }
   },
   "required": ["missionId"]
 }
@@ -1821,9 +2045,19 @@ Register a new captain (AI agent).
     "name": { "type": "string", "description": "Captain display name" },
     "runtime": { "type": "string", "description": "Agent runtime: ClaudeCode, Codex, Gemini, Cursor, Mux, OpenCode, or Custom" },
     "model": { "type": "string", "description": "Optional model override for this captain. When omitted, the runtime chooses automatically" },
+    "reasoningEffort": { "type": "string", "description": "Reasoning effort: Off, Minimal, Low, Medium, or High. Translated per runtime (Claude thinking budget, Codex reasoning effort, Mux --effort). Ignored by runtimes without a control." },
+    "tier": { "type": "string", "description": "Capability tier for dispatch routing: Economy, Standard, or Premium. Empty auto-classifies from the model name." },
     "systemInstructions": { "type": "string", "description": "System instructions for this captain -- injected into every mission prompt to specialize behavior" },
     "allowedPersonas": { "type": "string", "description": "JSON array of persona names this captain is allowed to use" },
-    "preferredPersona": { "type": "string", "description": "Preferred persona name for this captain" }
+    "preferredPersona": { "type": "string", "description": "Preferred persona name for this captain" },
+    "muxConfigDirectory": { "type": "string", "description": "Optional Mux config directory override" },
+    "muxEndpoint": { "type": "string", "description": "Named Mux endpoint for this captain" },
+    "muxBaseUrl": { "type": "string", "description": "Optional Mux base URL override" },
+    "muxAdapterType": { "type": "string", "description": "Optional Mux adapter type override" },
+    "muxTemperature": { "type": "number", "description": "Optional Mux temperature override" },
+    "muxMaxTokens": { "type": "integer", "description": "Optional Mux max tokens override" },
+    "muxSystemPromptPath": { "type": "string", "description": "Optional Mux system prompt file path" },
+    "muxApprovalPolicy": { "type": "string", "description": "Optional Mux approval policy override" }
   },
   "required": ["name"]
 }
@@ -1834,11 +2068,21 @@ Register a new captain (AI agent).
 | `name` | string | Yes | Captain display name |
 | `runtime` | string | No | Agent runtime: `ClaudeCode`, `Codex`, `Gemini`, `Cursor`, `Mux`, `OpenCode`, or `Custom` |
 | `model` | string | No | Optional model override. When omitted, the runtime chooses automatically |
+| `reasoningEffort` | string | No | Reasoning effort: `Off`, `Minimal`, `Low`, `Medium`, or `High`. Translated to each runtime's native control at launch |
+| `tier` | string | No | Capability tier for dispatch routing: `Economy`, `Standard`, or `Premium`. Empty/null auto-classifies from the model name |
 | `systemInstructions` | string | No | System instructions injected into every mission prompt for this captain |
 | `allowedPersonas` | string | No | JSON array of persona names this captain is allowed to use, for example `["Worker","Judge"]` |
 | `preferredPersona` | string | No | Preferred persona name for this captain |
+| `muxConfigDirectory` | string | No | Optional Mux config directory override (Mux runtime only) |
+| `muxEndpoint` | string | No | Named Mux endpoint to use for this captain (Mux runtime only) |
+| `muxBaseUrl` | string | No | Optional Mux base URL override (Mux runtime only) |
+| `muxAdapterType` | string | No | Optional Mux adapter type override (Mux runtime only) |
+| `muxTemperature` | number | No | Optional Mux temperature override (Mux runtime only) |
+| `muxMaxTokens` | integer | No | Optional Mux max tokens override (Mux runtime only) |
+| `muxSystemPromptPath` | string | No | Optional Mux system prompt file path (Mux runtime only) |
+| `muxApprovalPolicy` | string | No | Optional Mux approval policy override (Mux runtime only) |
 
-**Response:** [Captain](#captain) object. Invalid or unavailable models are returned as MCP tool errors.
+**Response:** [Captain](#captain) object. Invalid or unavailable models are returned as MCP tool errors. The Mux options apply only when `runtime` is `Mux`.
 
 ---
 
@@ -1896,9 +2140,19 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
     "name": { "type": "string", "description": "New display name" },
     "runtime": { "type": "string", "description": "New agent runtime: ClaudeCode, Codex, Gemini, Cursor, Mux, OpenCode, or Custom" },
     "model": { "type": "string", "description": "New optional model override for this captain" },
+    "reasoningEffort": { "type": "string", "description": "Reasoning effort: Off, Minimal, Low, Medium, or High. Empty string clears it. Translated per runtime (Claude thinking budget, Codex reasoning effort, Mux --effort)." },
+    "tier": { "type": "string", "description": "Capability tier: Economy, Standard, or Premium. Empty string clears it (auto-classify from model)." },
     "systemInstructions": { "type": "string", "description": "New system instructions for this captain" },
     "allowedPersonas": { "type": "string", "description": "New JSON array of persona names this captain is allowed to use" },
-    "preferredPersona": { "type": "string", "description": "New preferred persona name for this captain" }
+    "preferredPersona": { "type": "string", "description": "New preferred persona name for this captain" },
+    "muxConfigDirectory": { "type": "string", "description": "Optional Mux config directory override; empty string clears it" },
+    "muxEndpoint": { "type": "string", "description": "Named Mux endpoint; empty string clears it" },
+    "muxBaseUrl": { "type": "string", "description": "Optional Mux base URL override; empty string clears it" },
+    "muxAdapterType": { "type": "string", "description": "Optional Mux adapter type override; empty string clears it" },
+    "muxTemperature": { "type": "number", "description": "Optional Mux temperature override" },
+    "muxMaxTokens": { "type": "integer", "description": "Optional Mux max tokens override" },
+    "muxSystemPromptPath": { "type": "string", "description": "Optional Mux system prompt file path; empty string clears it" },
+    "muxApprovalPolicy": { "type": "string", "description": "Optional Mux approval policy override; empty string clears it" }
   },
   "required": ["captainId"]
 }
@@ -1910,11 +2164,21 @@ Update a captain's name or runtime. Operational fields (state, process, mission)
 | `name` | string | No | New display name |
 | `runtime` | string | No | New agent runtime: `ClaudeCode`, `Codex`, `Gemini`, `Cursor`, `Mux`, `OpenCode`, or `Custom` |
 | `model` | string | No | New optional model override. When omitted, the existing value is preserved |
+| `reasoningEffort` | string | No | Reasoning effort: `Off`, `Minimal`, `Low`, `Medium`, or `High`. Empty string clears it |
+| `tier` | string | No | Capability tier: `Economy`, `Standard`, or `Premium`. Empty string clears it (auto-classify from model) |
 | `systemInstructions` | string | No | New system instructions for this captain |
 | `allowedPersonas` | string | No | New JSON array of persona names this captain is allowed to use, for example `["Worker","Judge"]` |
 | `preferredPersona` | string | No | New preferred persona name for this captain |
+| `muxConfigDirectory` | string | No | Optional Mux config directory override; empty string clears it (Mux runtime only) |
+| `muxEndpoint` | string | No | Named Mux endpoint; empty string clears it (Mux runtime only) |
+| `muxBaseUrl` | string | No | Optional Mux base URL override; empty string clears it (Mux runtime only) |
+| `muxAdapterType` | string | No | Optional Mux adapter type override; empty string clears it (Mux runtime only) |
+| `muxTemperature` | number | No | Optional Mux temperature override (Mux runtime only) |
+| `muxMaxTokens` | integer | No | Optional Mux max tokens override (Mux runtime only) |
+| `muxSystemPromptPath` | string | No | Optional Mux system prompt file path; empty string clears it (Mux runtime only) |
+| `muxApprovalPolicy` | string | No | Optional Mux approval policy override; empty string clears it (Mux runtime only) |
 
-**Response:** Updated [Captain](#captain) object, or `{ "Error": "Captain not found" }`. Invalid or unavailable models are returned as MCP tool errors.
+**Response:** Updated [Captain](#captain) object, or `{ "Error": "Captain not found" }`. Invalid or unavailable models are returned as MCP tool errors. The Mux options apply only when the captain's `runtime` is `Mux`.
 
 ---
 
@@ -2088,6 +2352,66 @@ Force purge a dock and its git worktree, even if a mission references it. **This
 
 ```json
 { "Status": "purged", "DockId": "dck_..." }
+```
+
+Returns `{ "Error": "Dock not found" }` if the ID does not exist.
+
+---
+
+### repair_dock
+
+Repair a dock's git worktree to fix a corrupted or relocated registration. Non-destructive: no work is removed.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "dockId": { "type": "string", "description": "Dock ID (dck_ prefix)" }
+  },
+  "required": ["dockId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `dockId` | string | Yes | Dock ID to repair (prefix `dck_`) |
+
+**Response:**
+
+```json
+{ "Status": "repaired", "DockId": "dck_..." }
+```
+
+Returns `{ "Error": "Dock not found" }` if the ID does not exist.
+
+---
+
+### unstick_dock
+
+Unstick a wedged dock: release any captain still holding it back to Idle and reclaim its worktree so it stops pinning capacity. Committed branch history is preserved.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "dockId": { "type": "string", "description": "Dock ID (dck_ prefix)" }
+  },
+  "required": ["dockId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `dockId` | string | Yes | Dock ID to unstick (prefix `dck_`) |
+
+**Response:**
+
+```json
+{ "Status": "unstuck", "DockId": "dck_..." }
 ```
 
 Returns `{ "Error": "Dock not found" }` if the ID does not exist.
@@ -2460,6 +2784,144 @@ Returns `{ "Error": "entryIds is required and must not be empty" }` if no IDs ar
 
 ---
 
+### get_harbor
+
+Inspect one registered Harbor (host runner) by ID, including its advertised capabilities and connection status.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "harborId": { "type": "string", "description": "Harbor ID (hbr_ prefix)" }
+  },
+  "required": ["harborId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `harborId` | string | Yes | Harbor ID (prefix `hbr_`) |
+
+**Response:** [Harbor](#harbor) object, or `{ "Error": "Harbor not found" }`.
+
+---
+
+### create_harbor
+
+Pre-register a Harbor. A Harbor also self-registers on first handshake; use this to reserve a name and capacity before it connects. Only `name`, `maxConcurrentJobs`, and `enabled` are honored; all other fields are managed by the link.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": { "type": "string", "description": "Human-facing Harbor name" },
+    "maxConcurrentJobs": { "type": "integer", "description": "Maximum concurrent jobs (default 4)" },
+    "enabled": { "type": "boolean", "description": "Whether the Harbor is enabled for routing (default true)" }
+  },
+  "required": ["name"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Human-facing Harbor name |
+| `maxConcurrentJobs` | int | No | Maximum concurrent jobs (default 4, clamped to a minimum of 1) |
+| `enabled` | bool | No | Whether the Harbor is enabled for routing (default true) |
+
+**Response:** The newly created [Harbor](#harbor) object, or `{ "Error": "..." }` on invalid input.
+
+---
+
+### update_harbor
+
+Update a Harbor's operator-editable fields (`name`, `maxConcurrentJobs`, `enabled`). Runtime state reported by the link is preserved server-side.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "harborId": { "type": "string", "description": "Harbor ID (hbr_ prefix)" },
+    "name": { "type": "string", "description": "Human-facing Harbor name" },
+    "maxConcurrentJobs": { "type": "integer", "description": "Maximum concurrent jobs" },
+    "enabled": { "type": "boolean", "description": "Whether the Harbor is enabled for routing" }
+  },
+  "required": ["harborId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `harborId` | string | Yes | Harbor ID (prefix `hbr_`) |
+| `name` | string | No | New Harbor name. Omit to keep the current value. |
+| `maxConcurrentJobs` | int | No | New concurrency cap. Omit to keep the current value. |
+| `enabled` | bool | No | New enabled flag. Omit to keep the current value. |
+
+**Response:** The updated [Harbor](#harbor) object, or `{ "Error": "Harbor not found" }`.
+
+---
+
+### delete_harbor
+
+Delete a Harbor registration by ID.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "harborId": { "type": "string", "description": "Harbor ID (hbr_ prefix)" }
+  },
+  "required": ["harborId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `harborId` | string | Yes | Harbor ID (prefix `hbr_`) |
+
+**Response:**
+
+```json
+{ "Deleted": true, "HarborId": "hbr_abc123" }
+```
+
+Returns `{ "Error": "..." }` if the Harbor does not exist.
+
+---
+
+### set_harbor_enabled
+
+Enable or disable a Harbor for routing. A disabled Harbor keeps its docks but receives no new missions.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "harborId": { "type": "string", "description": "Harbor ID (hbr_ prefix)" },
+    "enabled": { "type": "boolean", "description": "Whether the Harbor is enabled for routing" }
+  },
+  "required": ["harborId", "enabled"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `harborId` | string | Yes | Harbor ID (prefix `hbr_`) |
+| `enabled` | bool | Yes | `true` to enable, `false` to disable |
+
+**Response:** The updated [Harbor](#harbor) object, or `{ "Error": "..." }`.
+
+---
+
 ### get_objective
 
 Inspect one scoped objective or intake-style record, including linked vessels, planning sessions, refinement sessions, voyages, checks, releases, deployments, incidents, and acceptance criteria.
@@ -2545,6 +3007,7 @@ Core CRUD and reorder tools:
 | `create_objective` | Create one objective | Accepts the expanded backlog metadata fields |
 | `create_backlog_item` | Create one backlog item | Preferred user-facing alias |
 | `update_objective` | Update one objective/backlog entry | Requires `objectiveId` plus any fields to mutate |
+| `update_backlog_item` | Update one backlog item | Preferred user-facing alias of `update_objective` -- identical schema (`objectiveId` plus any fields to mutate) |
 | `reorder_objectives` | Apply explicit rank updates | Uses `{ items: [{ objectiveId, rank }] }` |
 | `reorder_backlog_items` | Apply explicit rank updates | Preferred user-facing alias |
 | `delete_objective` | Delete one objective | Removes the normalized row and snapshot-backed current-state chain |
@@ -2573,6 +3036,7 @@ Planning handoff tools:
 Shared input notes:
 
 - `update_objective` accepts the same expanded backlog fields as `create_objective`, plus the required `objectiveId`
+- `update_backlog_item` is a backlog-named alias of `update_objective` with an identical input schema (both mutate the same normalized `Objective` record)
 - `create_backlog_item` mirrors `create_objective` but uses backlog terminology in the tool name and descriptions
 - refinement sessions are lighter than planning and do not provision a dock/worktree by default
 - planning handoff tools are repository-aware and require an explicit vessel
@@ -3315,6 +3779,222 @@ Returns `{ "Error": "Cannot delete built-in pipeline" }` if the pipeline is buil
 
 ---
 
+### get_model_endpoint
+
+Get details of a specific model endpoint (managed embedding or inference provider reference). The stored API key is never returned; `hasApiKey` indicates whether one is set.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "endpointId": { "type": "string", "description": "Model endpoint ID (mep_ prefix)" }
+  },
+  "required": ["endpointId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `endpointId` | string | Yes | Model endpoint ID (prefix `mep_`) |
+
+**Response:** [ModelEndpoint](#modelendpoint) object, or `{ "Error": "Model endpoint not found" }`.
+
+---
+
+### create_model_endpoint
+
+Create a model endpoint. Supply `apiKey` to store a provider key; it is write-only and is never returned on reads.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": { "type": "string", "description": "Display name" },
+    "baseUrl": { "type": "string", "description": "Provider API base URL" },
+    "kind": { "type": "string", "description": "Embedding (default) or Inference" },
+    "provider": { "type": "string", "description": "Ollama, OpenAI, OpenAICompatible, Anthropic, Gemini, VoyageAI, AzureOpenAI, VertexAI, or Bedrock" },
+    "model": { "type": "string", "description": "Model name to target" },
+    "apiKey": { "type": "string", "description": "Provider API key. Write-only: accepted here, never returned on reads." },
+    "dimensionality": { "type": "integer", "description": "Embedding dimensionality (default 0)" },
+    "timeoutMs": { "type": "integer", "description": "Request timeout in milliseconds (default 120000, clamped to [1000, 600000])" },
+    "enabled": { "type": "boolean", "description": "Whether the endpoint participates in health sweeps (default true)" }
+  },
+  "required": ["name", "baseUrl"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Display name |
+| `baseUrl` | string | Yes | Provider API base URL |
+| `kind` | string | No | `Embedding` (default) or `Inference` |
+| `provider` | string | No | `Ollama`, `OpenAI`, `OpenAICompatible`, `Anthropic`, `Gemini`, `VoyageAI`, `AzureOpenAI`, `VertexAI`, or `Bedrock` |
+| `model` | string | No | Model name to target |
+| `apiKey` | string | No | Provider API key. Write-only: accepted here, never returned on reads. |
+| `dimensionality` | integer | No | Embedding dimensionality (default 0) |
+| `timeoutMs` | integer | No | Request timeout in milliseconds (default 120000, clamped to [1000, 600000]) |
+| `enabled` | boolean | No | Whether the endpoint participates in health sweeps (default true) |
+
+**Example Input:**
+
+```json
+{
+  "name": "Primary embeddings",
+  "kind": "Embedding",
+  "provider": "OpenAI",
+  "baseUrl": "https://api.openai.com/v1",
+  "model": "text-embedding-3-small",
+  "dimensionality": 1536,
+  "apiKey": "sk-example-key"
+}
+```
+
+**Response:** The newly created [ModelEndpoint](#modelendpoint) object (with `hasApiKey: true`, no `apiKey` field). Returns `{ "Error": "..." }` when `Anthropic` is paired with `Embedding`, or `VoyageAI` is paired with `Inference`.
+
+**Provider-specific fields** (accepted on create and update): `AzureOpenAI` uses `baseUrl` (resource endpoint), `model` (deployment name), `apiKey`, and optional `apiVersion`. `VertexAI` requires `project` and `region`, with the service-account JSON supplied write-only as `apiKey`; `baseUrl` is an optional override. `Bedrock` requires `region` and `accessKeyId`, with the AWS secret access key supplied write-only as `apiKey`; `model` is the Bedrock model id and `baseUrl` is an optional override.
+
+---
+
+### update_model_endpoint
+
+Update an existing model endpoint. Omit `apiKey` to keep the stored key; send `apiKey` to replace it.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "endpointId": { "type": "string", "description": "Model endpoint ID (mep_ prefix)" },
+    "name": { "type": "string", "description": "New display name" },
+    "kind": { "type": "string", "description": "Embedding or Inference" },
+    "provider": { "type": "string", "description": "Ollama, OpenAI, OpenAICompatible, Anthropic, Gemini, VoyageAI, AzureOpenAI, VertexAI, or Bedrock" },
+    "baseUrl": { "type": "string", "description": "New provider API base URL" },
+    "model": { "type": "string", "description": "New model name to target" },
+    "apiKey": { "type": "string", "description": "New provider API key. Omit to keep the stored key." },
+    "dimensionality": { "type": "integer", "description": "Embedding dimensionality" },
+    "timeoutMs": { "type": "integer", "description": "Request timeout in milliseconds (clamped to [1000, 600000])" },
+    "enabled": { "type": "boolean", "description": "Whether the endpoint participates in health sweeps" }
+  },
+  "required": ["endpointId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `endpointId` | string | Yes | Model endpoint ID (prefix `mep_`) |
+| `name` | string | No | New display name |
+| `kind` | string | No | `Embedding` or `Inference` |
+| `provider` | string | No | `Ollama`, `OpenAI`, `OpenAICompatible`, `Anthropic`, `Gemini`, `VoyageAI`, `AzureOpenAI`, `VertexAI`, or `Bedrock` |
+| `baseUrl` | string | No | New provider API base URL |
+| `model` | string | No | New model name to target |
+| `apiKey` | string | No | New provider API key. Omit to keep the stored key. |
+| `dimensionality` | integer | No | Embedding dimensionality |
+| `timeoutMs` | integer | No | Request timeout in milliseconds (clamped to [1000, 600000]) |
+| `enabled` | boolean | No | Whether the endpoint participates in health sweeps |
+
+**Response:** Updated [ModelEndpoint](#modelendpoint) object, or `{ "Error": "Model endpoint not found" }`. A rejected provider/kind combination returns `{ "Error": "..." }`.
+
+When `apiKey` is omitted, MCP preserves the current stored key.
+
+---
+
+### delete_model_endpoint
+
+Delete a model endpoint by ID.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "endpointId": { "type": "string", "description": "Model endpoint ID (mep_ prefix)" }
+  },
+  "required": ["endpointId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `endpointId` | string | Yes | Model endpoint ID (prefix `mep_`) |
+
+**Response:**
+
+```json
+{ "Status": "deleted", "EndpointId": "mep_abc123" }
+```
+
+Returns `{ "Error": "Model endpoint not found" }` if the ID does not exist.
+
+---
+
+### validate_model_endpoint
+
+Validate one endpoint by issuing a real request against the provider: an embedding request for `Embedding` endpoints, or a completion request for `Inference` endpoints. The resulting health status, timestamp, latency, and any error are persisted on the endpoint.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "endpointId": { "type": "string", "description": "Model endpoint ID (mep_ prefix)" }
+  },
+  "required": ["endpointId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `endpointId` | string | Yes | Model endpoint ID (prefix `mep_`) |
+
+**Response:** [ModelEndpointProbeResult](#modelendpointproberesult) object.
+
+```json
+{
+  "success": true,
+  "baseUrl": "https://api.openai.com/v1",
+  "latencyMs": 92,
+  "statusCode": 200,
+  "error": null,
+  "embeddingDimensions": 1536,
+  "sampleText": null,
+  "timestampUtc": "2026-03-07T12:00:00Z"
+}
+```
+
+Returns `{ "Error": "Model endpoint not found" }` if the ID does not exist.
+
+---
+
+### health_check_model_endpoints
+
+Probe all enabled model endpoints, deduplicated by base URL, and persist each endpoint's health status. Returns the number of distinct base URLs that were probed.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+No parameters required.
+
+**Response:** [ModelEndpointHealthSweepResponse](#modelendpointhealthsweepresponse) object.
+
+```json
+{ "distinctBaseUrlsProbed": 3 }
+```
+
+---
+
 ### backup
 
 Create a backup of the Armada database and settings as a ZIP archive.
@@ -3666,6 +4346,36 @@ Paginated result wrapper returned by `enumerate`.
 | `testStartedUtc` | string \| null | ISO 8601 test start timestamp |
 | `completedUtc` | string \| null | ISO 8601 completion timestamp |
 
+#### Harbor
+
+A registered host-side runner. Only `name`, `maxConcurrentJobs`, and `enabled` are operator-editable via MCP; the remaining runtime fields are reported by the link.
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Harbor ID (prefix `hbr_`) |
+| `tenantId` | string \| null | Owning tenant ID |
+| `userId` | string \| null | Owning user ID |
+| `name` | string | Human-facing Harbor name |
+| `capabilities` | array | Advertised [HarborCapability](#harborcapability) entries |
+| `connectionStatus` | string | [HarborConnectionStatusEnum](#harborconnectionstatusenum) value |
+| `maxConcurrentJobs` | int | Maximum concurrent jobs the Harbor accepts (default 4, minimum 1) |
+| `enabled` | bool | Whether the Harbor is enabled for routing (default true) |
+| `protocolVersion` | string \| null | Protocol version reported at handshake |
+| `osPlatform` | string \| null | OS platform reported at handshake (e.g. `Windows`, `Linux`, `macOS`) |
+| `architecture` | string \| null | Processor architecture reported at handshake (e.g. `X64`, `Arm64`) |
+| `lastSeenUtc` | string \| null | ISO 8601 last heartbeat or message timestamp |
+| `lastConnectedUtc` | string \| null | ISO 8601 last link-establishment timestamp |
+| `createdUtc` | string | ISO 8601 creation timestamp |
+| `lastUpdateUtc` | string | ISO 8601 last update timestamp |
+
+#### HarborCapability
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | string | Capability name (e.g. a runtime like `claude` or a host tool like `git`) |
+| `available` | bool | Whether the capability is currently available on the host |
+| `detail` | string \| null | Optional human-readable detail (e.g. a version string) |
+
 #### PromptTemplate
 
 | Field | Type | Description |
@@ -3707,6 +4417,67 @@ Paginated result wrapper returned by `enumerate`.
 | `personaName` | string | Persona name for this stage |
 | `isOptional` | bool | Whether this stage is optional |
 | `description` | string \| null | Stage description |
+
+#### ModelEndpoint
+
+A managed reference to an external embedding or inference model behind a provider API. The `apiKey` is write-only: it is accepted on create/update but is never returned on reads. Reads expose `hasApiKey` instead.
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Model endpoint ID (prefix `mep_`) |
+| `tenantId` | string \| null | Owning tenant ID |
+| `userId` | string \| null | Owning user ID |
+| `name` | string | Display name |
+| `kind` | string | `Embedding` or `Inference` |
+| `provider` | string | `Ollama`, `OpenAI`, `OpenAICompatible`, `Anthropic`, `Gemini`, `VoyageAI`, `AzureOpenAI`, `VertexAI`, or `Bedrock` |
+| `baseUrl` | string | Provider API base URL. For Azure OpenAI this is the resource endpoint; for Vertex AI and Bedrock it is an optional override (the endpoint is derived from `region`). |
+| `model` | string \| null | Model name to target. For Azure OpenAI this is the deployment name; for Bedrock, the Bedrock model id. |
+| `region` | string \| null | Cloud region. Required for `VertexAI` and `Bedrock`. |
+| `project` | string \| null | GCP project id. Required for `VertexAI`. |
+| `apiVersion` | string \| null | API version for `AzureOpenAI` (defaults to the provider's current GA version when omitted). |
+| `accessKeyId` | string \| null | AWS access key id for `Bedrock`. The paired secret access key is supplied write-only via `apiKey`. |
+| `dimensionality` | int | Embedding dimensionality (default 0) |
+| `timeoutMs` | int | Request timeout in milliseconds (default 120000, clamped to [1000, 600000]) |
+| `enabled` | bool | Whether the endpoint participates in health sweeps (default true) |
+| `hasApiKey` | bool | Read-only. Whether a provider key/credential is stored. For `AzureOpenAI` this is the API key, for `VertexAI` the service-account JSON, for `Bedrock` the AWS secret access key. |
+| `healthStatus` | string | `Unknown`, `Healthy`, or `Unhealthy` |
+| `lastHealthCheckUtc` | string \| null | ISO 8601 timestamp of the last probe |
+| `lastHealthError` | string \| null | Error text from the last failed probe |
+| `lastLatencyMs` | int \| null | Latency of the last probe in milliseconds |
+| `healthHistory` | array | Rolling series of recent probes (oldest first), each `{ timestampUtc, success }`, capped at 500 |
+| `uptimePercentage` | double | Read-only. Percentage of retained probes that succeeded (0-100), derived from `healthHistory` |
+| `consecutiveSuccesses` | int | Read-only. Trailing run of successful probes |
+| `consecutiveFailures` | int | Read-only. Trailing run of failed probes |
+| `firstHealthCheckUtc` | string \| null | Read-only. Earliest retained probe timestamp |
+| `lastHealthyUtc` | string \| null | Read-only. Most recent successful probe timestamp |
+| `lastUnhealthyUtc` | string \| null | Read-only. Most recent failed probe timestamp |
+| `createdUtc` | string | ISO 8601 creation timestamp |
+| `lastUpdateUtc` | string | ISO 8601 last update timestamp |
+
+`Anthropic` cannot be paired with `kind` `Embedding`, and `VoyageAI` cannot be paired with `kind` `Inference`; both combinations are rejected with an error.
+
+#### ModelEndpointProbeResult
+
+Returned by `validate_model_endpoint`.
+
+| Field | Type | Description |
+|---|---|---|
+| `success` | bool | Whether the probe request succeeded |
+| `baseUrl` | string \| null | Base URL that was probed |
+| `latencyMs` | int | Round-trip latency in milliseconds |
+| `statusCode` | int \| null | HTTP status code returned by the provider, when available |
+| `error` | string \| null | Error text when the probe failed |
+| `embeddingDimensions` | int \| null | Dimensionality returned by an embedding probe |
+| `sampleText` | string \| null | Sample completion text returned by an inference probe |
+| `timestampUtc` | string | ISO 8601 timestamp of when the probe ran |
+
+#### ModelEndpointHealthSweepResponse
+
+Returned by `health_check_model_endpoints`.
+
+| Field | Type | Description |
+|---|---|---|
+| `distinctBaseUrlsProbed` | int | Number of distinct base URLs probed during the sweep |
 
 ---
 
@@ -3793,6 +4564,15 @@ Paginated result wrapper returned by `enumerate`.
 | `Failed` | Tests failed |
 | `Landed` | Successfully merged to target |
 | `Cancelled` | Removed from queue |
+
+#### HarborConnectionStatusEnum
+
+| Value | Description |
+|---|---|
+| `Unknown` | No link established yet, or the state is not yet known |
+| `Connected` | The Harbor currently has a live link to the Admiral |
+| `Degraded` | The link is present but impaired (e.g. missed heartbeats) |
+| `Disconnected` | The Harbor is registered but has no live link |
 
 #### AgentRuntimeEnum
 

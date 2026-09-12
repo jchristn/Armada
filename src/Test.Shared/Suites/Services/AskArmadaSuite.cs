@@ -50,7 +50,7 @@ namespace Test.Shared.Suites.Services
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
                     AskArmadaService ask = CreateAsk(testDb.Driver);
-                    AskResponse response = await ask.AskAsync("what can you do?");
+                    AskResponse response = await ask.AskAsync("what can you do?", AuthContext.Authenticated("ten_ask", "usr_ask", true, false, "Test"));
                     AssertEqual(AskResponseKindEnum.Help, response.Kind);
                     AssertTrue(response.Links.Count > 0, "Help should offer links");
                 }
@@ -61,7 +61,7 @@ namespace Test.Shared.Suites.Services
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
                     AskArmadaService ask = CreateAsk(testDb.Driver);
-                    AskResponse response = await ask.AskAsync("   ");
+                    AskResponse response = await ask.AskAsync("   ", AuthContext.Authenticated("ten_ask", "usr_ask", true, false, "Test"));
                     AssertEqual(AskResponseKindEnum.Help, response.Kind);
                 }
             }));
@@ -71,7 +71,7 @@ namespace Test.Shared.Suites.Services
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
                     AskArmadaService ask = CreateAsk(testDb.Driver);
-                    AskResponse response = await ask.AskAsync("xyzzy plugh frobnicate");
+                    AskResponse response = await ask.AskAsync("xyzzy plugh frobnicate", AuthContext.Authenticated("ten_ask", "usr_ask", true, false, "Test"));
                     AssertEqual(AskResponseKindEnum.Unknown, response.Kind);
                 }
             }));
@@ -87,7 +87,7 @@ namespace Test.Shared.Suites.Services
                     await db.Captains.CreateAsync(working);
 
                     AskArmadaService ask = CreateAsk(db);
-                    AskResponse response = await ask.AskAsync("how are things going?");
+                    AskResponse response = await ask.AskAsync("how are things going?", AuthContext.Authenticated("ten_ask", "usr_ask", true, false, "Test"));
                     AssertEqual(AskResponseKindEnum.Answer, response.Kind);
                     AssertContains("2 captains", response.Reply);
                 }
@@ -100,7 +100,7 @@ namespace Test.Shared.Suites.Services
                     DatabaseDriver db = testDb.Driver;
                     await db.Captains.CreateAsync(new Captain("c1") { State = CaptainStateEnum.Idle });
                     AskArmadaService ask = CreateAsk(db);
-                    AskResponse response = await ask.AskAsync("how many captains?");
+                    AskResponse response = await ask.AskAsync("how many captains?", AuthContext.Authenticated("ten_ask", "usr_ask", true, false, "Test"));
                     AssertEqual(AskResponseKindEnum.Answer, response.Kind);
                     AssertContains("captains", response.Reply);
                 }
@@ -114,7 +114,7 @@ namespace Test.Shared.Suites.Services
                     Mission m = new Mission("Broken") { Status = MissionStatusEnum.Failed };
                     await db.Missions.CreateAsync(m);
                     AskArmadaService ask = CreateAsk(db);
-                    AskResponse response = await ask.AskAsync("any failures?");
+                    AskResponse response = await ask.AskAsync("any failures?", AuthContext.Authenticated("ten_ask", "usr_ask", true, false, "Test"));
                     AssertEqual(AskResponseKindEnum.Answer, response.Kind);
                     AssertContains("1 failed mission", response.Reply);
                 }

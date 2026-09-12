@@ -31,6 +31,7 @@ import DiffViewer from '../components/shared/DiffViewer';
 import LogViewer from '../components/shared/LogViewer';
 import PageHeader from '../components/shared/PageHeader';
 import CopyButton from '../components/shared/CopyButton';
+import Markdown from '../components/shared/Markdown';
 import Button from '../components/shared/Button';
 import CaptainRef from '../components/shared/CaptainRef';
 import { useLocale } from '../context/LocaleContext';
@@ -287,6 +288,25 @@ export default function MissionDetail() {
     }
   }
 
+  function handleMarkComplete() {
+    if (!mission) return;
+    setConfirm({
+      open: true,
+      title: t('Mark Complete'),
+      message: t('Mark mission "{{title}}" as Complete? Use this when the work has already landed and the mission just needs to graduate out of Review.', { title: mission.title }),
+      onConfirm: async () => {
+        setConfirm(c => ({ ...c, open: false }));
+        try {
+          await transitionMission(mission.id, { status: 'Complete' });
+          pushToast('success', t('Mission "{{title}}" marked Complete.', { title: mission.title }));
+          loadMission();
+        } catch (e: unknown) {
+          setError(t('Mark Complete failed: {{message}}', { message: e instanceof Error ? e.message : String(e) }));
+        }
+      },
+    });
+  }
+
   async function submitReview(verdict: 'approve' | 'conditional' | 'morework' | 'deny') {
     if (!mission || !reviewDecision) return;
 
@@ -373,6 +393,13 @@ export default function MissionDetail() {
   if (loading) return <p className="text-dim">{t('Loading...')}</p>;
   if (!mission) return <ErrorModal error={error || t('Mission not found.')} onClose={() => navigate('/missions')} />;
   const canResolveReview = mission.status === 'Review' && mission.requiresReview;
+  const canMarkComplete = mission.status === 'Review' && !mission.requiresReview;
+  // A mission is landable when work is produced, a prior landing failed, or it sits in Review with no
+  // explicit review gate to resolve (requiresReview=false) -- in which case landing is how it graduates
+  // out of Review.
+  const canLand = mission.status === 'WorkProduced' || mission.status === 'LandingFailed'
+    || (mission.status === 'Review' && !mission.requiresReview);
+  const landLabel = mission.status === 'LandingFailed' ? t('Retry Landing') : t('Land');
 
   return (
     <div>
@@ -388,6 +415,9 @@ export default function MissionDetail() {
             {canResolveReview && (
               <button className="btn btn-sm btn-primary" onClick={() => setReviewDecision({ comment: mission.reviewComment || '' })}>{t('Resolve Review')}</button>
             )}
+            {canMarkComplete && (
+              <button className="btn btn-sm btn-primary" onClick={handleMarkComplete} title={t('Graduate this mission out of Review to Complete')}>{t('Mark Complete')}</button>
+            )}
             <button className="btn btn-sm" onClick={handleViewDiff} title={t('View mission diff')}>{t('Diff')}</button>
             <button className="btn btn-sm" onClick={handleViewLog} title={t('View mission log')}>{t('Log')}</button>
             <button className="btn btn-sm" onClick={handleViewInstructions} title={t('View mission instructions')}>{t('Instructions')}</button>
@@ -396,13 +426,16 @@ export default function MissionDetail() {
                 {t('Run Check')}
               </button>
             )}
-            {(mission.status === 'WorkProduced' || mission.status === 'LandingFailed') && (
-              <Button className="btn btn-sm btn-primary" onClick={async () => { try { await retryMissionLanding(mission.id); pushToast('success', t('Landing succeeded! Mission status updated.')); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : t('Retry landing failed.')); } }} title={t('Rebase the mission branch and re-attempt merge into the target branch')}>{t('Retry Landing')}</Button>
+            {canLand && (
+              <Button className="btn btn-sm btn-primary" onClick={async () => { try { await retryMissionLanding(mission.id); pushToast('success', t('Landing succeeded! Mission status updated.')); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : t('Landing failed.')); } }} title={t('Rebase the mission branch and merge it into the target branch, then complete the mission')}>{landLabel}</Button>
             )}
             <ActionMenu id={`mission-action-${mission.id}`} items={[
               { label: 'Edit', onClick: openEdit },
               ...(canResolveReview ? [
                 { label: 'Resolve Review', onClick: () => setReviewDecision({ comment: mission.reviewComment || '' }) },
+              ] : []),
+              ...(canMarkComplete ? [
+                { label: 'Mark Complete', onClick: handleMarkComplete },
               ] : []),
               { label: 'View Diff', onClick: handleViewDiff },
               { label: 'View Log', onClick: handleViewLog },
@@ -411,7 +444,7 @@ export default function MissionDetail() {
               { label: 'Transition Status', onClick: () => setShowTransition(true) },
               { label: 'View JSON', onClick: () => setJsonData({ open: true, title: t('Mission: {{title}}', { title: mission.title }), data: mission }) },
               { label: 'Restart', onClick: handleRestart },
-              ...((mission.status === 'WorkProduced' || mission.status === 'LandingFailed') ? [{ label: 'Retry Landing', onClick: async () => { try { await retryMissionLanding(mission.id); pushToast('success', t('Landing succeeded! Mission status updated.')); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : t('Retry landing failed.')); } } }] : []),
+              ...(canLand ? [{ label: mission.status === 'LandingFailed' ? 'Retry Landing' : 'Land', onClick: async () => { try { await retryMissionLanding(mission.id); pushToast('success', t('Landing succeeded! Mission status updated.')); loadMission(); } catch (e) { setError(e instanceof Error ? e.message : t('Landing failed.')); } } }] : []),
               { label: 'Purge', danger: true, onClick: handlePurge },
               { label: 'Delete', danger: true, onClick: handleDelete },
             ]} />
@@ -492,6 +525,7 @@ export default function MissionDetail() {
         open={logModal.open}
         title={logModal.title}
         content={logModal.content}
+        markdown
         totalLines={logModal.totalLines}
         completed={mission != null && ['Complete', 'Failed', 'Cancelled', 'WorkProduced', 'LandingFailed', 'Review'].includes(mission.status)}
         onClose={() => setLogModal({ open: false, title: '', missionId: '', content: '', totalLines: 0, lineCount: 200 })}
@@ -502,6 +536,7 @@ export default function MissionDetail() {
         open={instructionsModal.open}
         title={instructionsModal.title}
         content={instructionsModal.content}
+        markdown
         completed={true}
         onClose={() => setInstructionsModal({ open: false, title: '', content: '' })}
       />
@@ -648,6 +683,10 @@ export default function MissionDetail() {
         <div className="detail-field">
           <span className="detail-label">{t('Status')}</span>
           <StatusBadge status={mission.status} />
+        </div>
+        <div className="detail-field">
+          <span className="detail-label">{t('Mode')}</span>
+          <span>{t(mission.mode || 'Implementation')}</span>
         </div>
         <div className="detail-field">
           <span className="detail-label">{t('Review Gate')}</span>
@@ -852,8 +891,13 @@ export default function MissionDetail() {
       {/* Description */}
       {mission.description && (
         <div style={{ marginTop: '1rem' }}>
-          <h3>{t('Description')}</h3>
-          <div className="card" style={{ padding: '1rem', whiteSpace: 'pre-wrap' }}>{mission.description}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <h3 style={{ margin: 0 }}>{t('Description')}</h3>
+            <CopyButton text={mission.description} title={t('Copy raw markdown')} />
+          </div>
+          <div className="card markdown" style={{ padding: '1rem', marginTop: '0.5rem' }}>
+            <Markdown>{mission.description}</Markdown>
+          </div>
         </div>
       )}
 

@@ -2,8 +2,10 @@ namespace Armada.Core.Services
 {
     using System.Collections.Generic;
     using System.Diagnostics;
+    using System.IO;
     using System.Linq;
     using SyslogLogging;
+    using Armada.Core.Models;
     using Armada.Core.Services.Interfaces;
 
     /// <summary>
@@ -50,7 +52,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(repoUrl)) throw new ArgumentNullException(nameof(repoUrl));
             if (String.IsNullOrEmpty(localPath)) throw new ArgumentNullException(nameof(localPath));
 
-            _Logging.Info(_Header + "cloning bare: " + repoUrl + " -> " + localPath);
+            _Logging.Debug(_Header + "cloning bare: " + repoUrl + " -> " + localPath);
             await RunGitAsync(null, "clone", "--bare", repoUrl, localPath).ConfigureAwait(false);
 
             // Keep fetches on remote-tracking refs so active mission branches checked out
@@ -67,7 +69,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(worktreePath)) throw new ArgumentNullException(nameof(worktreePath));
             if (String.IsNullOrEmpty(branchName)) throw new ArgumentNullException(nameof(branchName));
 
-            _Logging.Info(_Header + "creating worktree: " + worktreePath + " branch: " + branchName);
+            _Logging.Debug(_Header + "creating worktree: " + worktreePath + " branch: " + branchName);
 
             string normalizedRepoPath = Path.GetFullPath(repoPath);
             SemaphoreSlim repoLock = _RepoLocks.GetOrAdd(normalizedRepoPath, _ => new SemaphoreSlim(1, 1));
@@ -90,7 +92,7 @@ namespace Armada.Core.Services
 
                 if (branchExists)
                 {
-                    _Logging.Info(_Header + "attaching worktree to existing branch: " + branchName);
+                    _Logging.Debug(_Header + "attaching worktree to existing branch: " + branchName);
                     await RunGitAsync(repoPath, "worktree", "add", worktreePath, branchName).ConfigureAwait(false);
                 }
                 else
@@ -167,7 +169,7 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrEmpty(worktreePath)) throw new ArgumentNullException(nameof(worktreePath));
 
-            _Logging.Info(_Header + "removing worktree: " + worktreePath);
+            _Logging.Debug(_Header + "removing worktree: " + worktreePath);
             string repoPath = await ResolveWorktreeRepoPathAsync(worktreePath).ConfigureAwait(false);
             await RunGitAsync(repoPath, token, "worktree", "remove", "--force", worktreePath).ConfigureAwait(false);
         }
@@ -215,7 +217,7 @@ namespace Armada.Core.Services
             {
                 // A checked-out worktree is blocking the full fetch.
                 // Fall back to fetching just the remote refs without updating local branches.
-                _Logging.Warn(_Header + "full fetch blocked by checked-out worktree, trying fetch origin: " + ex.Message);
+                _Logging.Warn(_Header + "full fetch blocked by checked-out worktree, trying fetch origin: " + ex.ToString());
                 try
                 {
                     await RunGitAsync(repoPath, "fetch", "origin").ConfigureAwait(false);
@@ -236,7 +238,7 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrEmpty(worktreePath)) throw new ArgumentNullException(nameof(worktreePath));
 
-            _Logging.Info(_Header + "pushing branch from: " + worktreePath);
+            _Logging.Debug(_Header + "pushing branch from: " + worktreePath);
             await RunGitAsync(worktreePath, "push", "-u", remoteName, "HEAD").ConfigureAwait(false);
         }
 
@@ -248,12 +250,12 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(worktreePath)) throw new ArgumentNullException(nameof(worktreePath));
             if (String.IsNullOrEmpty(title)) throw new ArgumentNullException(nameof(title));
 
-            _Logging.Info(_Header + "creating PR: " + title);
+            _Logging.Debug(_Header + "creating PR: " + title);
 
             string result = await RunProcessAsync(worktreePath, "gh", "pr", "create", "--title", title, "--body", body ?? "").ConfigureAwait(false);
             string prUrl = result.Trim();
 
-            _Logging.Info(_Header + "PR created: " + prUrl);
+            _Logging.Debug(_Header + "PR created: " + prUrl);
             return prUrl;
         }
 
@@ -264,7 +266,7 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrEmpty(worktreePath)) throw new ArgumentNullException(nameof(worktreePath));
 
-            _Logging.Info(_Header + "repairing worktree: " + worktreePath);
+            _Logging.Debug(_Header + "repairing worktree: " + worktreePath);
 
             // Reset any uncommitted changes
             await RunGitAsync(worktreePath, "checkout", "--", ".").ConfigureAwait(false);
@@ -272,7 +274,7 @@ namespace Armada.Core.Services
             // Remove untracked files
             await RunGitAsync(worktreePath, "clean", "-fd").ConfigureAwait(false);
 
-            _Logging.Info(_Header + "worktree repaired: " + worktreePath);
+            _Logging.Debug(_Header + "worktree repaired: " + worktreePath);
         }
 
         /// <summary>
@@ -294,7 +296,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(worktreePath)) throw new ArgumentNullException(nameof(worktreePath));
             if (String.IsNullOrEmpty(prUrl)) throw new ArgumentNullException(nameof(prUrl));
 
-            _Logging.Info(_Header + "enabling auto-merge for PR: " + prUrl);
+            _Logging.Debug(_Header + "enabling auto-merge for PR: " + prUrl);
             await RunProcessAsync(worktreePath, "gh", "pr", "merge", prUrl, "--merge", "--auto").ConfigureAwait(false);
         }
 
@@ -307,7 +309,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(sourceRepoPath)) throw new ArgumentNullException(nameof(sourceRepoPath));
             if (String.IsNullOrEmpty(branchName)) throw new ArgumentNullException(nameof(branchName));
 
-            _Logging.Info(_Header + "merging branch " + branchName + " from " + sourceRepoPath + " into " + targetWorkDir);
+            _Logging.Debug(_Header + "merging branch " + branchName + " from " + sourceRepoPath + " into " + targetWorkDir);
             await EnsureTrackedFilesCleanAsync(targetWorkDir, token).ConfigureAwait(false);
 
             // Ensure we are on the correct target branch before merging.
@@ -345,7 +347,7 @@ namespace Armada.Core.Services
                 throw;
             }
 
-            _Logging.Info(_Header + "merged " + branchName + " into " + targetWorkDir + (String.IsNullOrEmpty(targetBranch) ? "" : " (target: " + targetBranch + ")"));
+            _Logging.Debug(_Header + "merged " + branchName + " into " + targetWorkDir + (String.IsNullOrEmpty(targetBranch) ? "" : " (target: " + targetBranch + ")"));
         }
 
         /// <summary>
@@ -355,7 +357,7 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrEmpty(workingDirectory)) throw new ArgumentNullException(nameof(workingDirectory));
 
-            _Logging.Info(_Header + "pulling latest in " + workingDirectory);
+            _Logging.Debug(_Header + "pulling latest in " + workingDirectory);
             await RunGitAsync(workingDirectory, "pull").ConfigureAwait(false);
         }
 
@@ -452,6 +454,89 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
+        public async Task<bool> ForceAdvanceBranchAsync(string worktreePath, string branchName, string commitHash, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(worktreePath) || String.IsNullOrEmpty(branchName) || String.IsNullOrEmpty(commitHash))
+                return false;
+
+            try
+            {
+                await RunGitAsync(worktreePath, token, "update-ref", "refs/heads/" + branchName, commitHash).ConfigureAwait(false);
+                _Logging.Debug(_Header + "force-advanced branch " + branchName + " to " + commitHash + " via " + worktreePath);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "force-advance of branch " + branchName + " to " + commitHash + " failed: " + ex.ToString());
+                return false;
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<IReadOnlyList<string>> GetRecentCommitsForPathsAsync(string worktreePath, IReadOnlyList<string> paths, int maxPerPath, CancellationToken token = default)
+        {
+            List<string> results = new List<string>();
+            if (String.IsNullOrEmpty(worktreePath) || paths == null || paths.Count == 0) return results;
+
+            int perPath = Math.Max(1, maxPerPath);
+            foreach (string path in paths)
+            {
+                if (String.IsNullOrWhiteSpace(path)) continue;
+                try
+                {
+                    string output = await RunGitAsync(worktreePath, token,
+                        "log", "-n", perPath.ToString(), "--pretty=format:%h %s", "--", path).ConfigureAwait(false);
+                    foreach (string raw in output.Replace("\r\n", "\n").Split('\n'))
+                    {
+                        string line = raw.Trim();
+                        if (line.Length == 0) continue;
+                        results.Add(path.Trim() + ": " + line);
+                    }
+                }
+                catch
+                {
+                    // Best-effort: an unknown path or a git failure contributes no entries.
+                }
+            }
+            return results;
+        }
+
+        /// <inheritdoc />
+        public async Task<IReadOnlyList<string>> FindExistingSubjectTermsAsync(string worktreePath, IReadOnlyList<string> terms, CancellationToken token = default)
+        {
+            List<string> found = new List<string>();
+            if (String.IsNullOrEmpty(worktreePath) || terms == null || terms.Count == 0) return found;
+
+            foreach (string term in terms)
+            {
+                if (String.IsNullOrWhiteSpace(term)) continue;
+                bool present = false;
+
+                // A tracked filename containing the term.
+                try
+                {
+                    string files = await RunGitAsync(worktreePath, token, "ls-files", "*" + term + "*").ConfigureAwait(false);
+                    if (!String.IsNullOrWhiteSpace(files)) present = true;
+                }
+                catch { }
+
+                // Or the term appears in tracked file contents.
+                if (!present)
+                {
+                    try
+                    {
+                        string grep = await RunGitAsync(worktreePath, token, "grep", "-l", "-F", "-e", term).ConfigureAwait(false);
+                        if (!String.IsNullOrWhiteSpace(grep)) present = true;
+                    }
+                    catch { }
+                }
+
+                if (present) found.Add(term.Trim());
+            }
+            return found;
+        }
+
+        /// <inheritdoc />
         public async Task<IReadOnlyList<string>> GetChangedFilesSinceAsync(string worktreePath, string startCommit, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(worktreePath)) throw new ArgumentNullException(nameof(worktreePath));
@@ -533,6 +618,134 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// List the local branches in a repository with their tip commit and their position (ahead/behind)
+        /// relative to the given default branch. The default branch is flagged and marked at zero divergence.
+        /// </summary>
+        /// <param name="repoPath">Repository path (bare repo or worktree).</param>
+        /// <param name="defaultBranch">Default branch to measure divergence against (for example "main").</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The branches, default branch first, then by name.</returns>
+        public async Task<IReadOnlyList<BranchInfo>> ListBranchesAsync(string repoPath, string defaultBranch = "main", CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
+
+            // Field-separated, one line per branch. Unit separator (\x1f) avoids collisions with commit text.
+            string format = "%(refname:short)\x1f%(HEAD)\x1f%(objectname:short)\x1f%(committerdate:iso8601)\x1f%(contents:subject)";
+            string raw = await RunGitAsync(repoPath, "for-each-ref", "--format=" + format, "refs/heads/").ConfigureAwait(false);
+
+            List<BranchInfo> branches = new List<BranchInfo>();
+            string[] lines = raw.Replace("\r\n", "\n").Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            foreach (string line in lines)
+            {
+                string[] parts = line.Split('\x1f');
+                if (parts.Length < 3) continue;
+
+                BranchInfo info = new BranchInfo();
+                info.Name = parts[0].Trim();
+                info.IsCurrent = parts.Length > 1 && parts[1].Trim() == "*";
+                info.CommitHash = parts.Length > 2 ? parts[2].Trim() : null;
+                if (parts.Length > 3 && DateTime.TryParse(parts[3].Trim(), out DateTime parsedDate))
+                    info.CommitDate = parsedDate.ToUniversalTime();
+                info.CommitSubject = parts.Length > 4 ? parts[4].Trim() : null;
+                info.IsDefault = String.Equals(info.Name, defaultBranch, StringComparison.Ordinal);
+
+                if (!info.IsDefault)
+                {
+                    try
+                    {
+                        string counts = await RunGitAsync(repoPath, "rev-list", "--left-right", "--count", defaultBranch + "..." + info.Name).ConfigureAwait(false);
+                        string[] countParts = counts.Trim().Split(new char[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (countParts.Length == 2)
+                        {
+                            // left = commits on default not on branch (branch is behind); right = commits on branch not on default (ahead).
+                            Int32.TryParse(countParts[0], out int behind);
+                            Int32.TryParse(countParts[1], out int ahead);
+                            info.Behind = behind;
+                            info.Ahead = ahead;
+                        }
+                    }
+                    catch
+                    {
+                        // Divergence unknown (for example the default branch does not exist yet); leave zeros.
+                    }
+                }
+
+                branches.Add(info);
+            }
+
+            branches.Sort((a, b) =>
+            {
+                if (a.IsDefault && !b.IsDefault) return -1;
+                if (!a.IsDefault && b.IsDefault) return 1;
+                return String.Compare(a.Name, b.Name, StringComparison.Ordinal);
+            });
+
+            return branches;
+        }
+
+        /// <summary>
+        /// Push a named local branch to the remote.
+        /// </summary>
+        /// <param name="repoPath">Repository path (bare repo or worktree).</param>
+        /// <param name="branchName">Branch to push.</param>
+        /// <param name="remoteName">Remote name (default "origin").</param>
+        /// <param name="token">Cancellation token.</param>
+        public async Task PushLocalBranchAsync(string repoPath, string branchName, string remoteName = "origin", CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
+            if (String.IsNullOrEmpty(branchName)) throw new ArgumentNullException(nameof(branchName));
+
+            _Logging.Debug(_Header + "pushing branch " + branchName + " to " + remoteName + " from " + repoPath);
+            await RunGitAsync(repoPath, "push", remoteName, "refs/heads/" + branchName + ":refs/heads/" + branchName).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Merge one branch into another within a repository using a temporary worktree, then optionally push
+        /// the updated target. A merge conflict throws with the git error, leaving the target branch unchanged.
+        /// </summary>
+        /// <param name="repoPath">Bare repository path.</param>
+        /// <param name="sourceBranch">Branch to merge from.</param>
+        /// <param name="targetBranch">Branch to merge into.</param>
+        /// <param name="push">Whether to push the target branch to the remote after a successful merge.</param>
+        /// <param name="token">Cancellation token.</param>
+        public async Task MergeBranchesAsync(string repoPath, string sourceBranch, string targetBranch, bool push, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
+            if (String.IsNullOrEmpty(sourceBranch)) throw new ArgumentNullException(nameof(sourceBranch));
+            if (String.IsNullOrEmpty(targetBranch)) throw new ArgumentNullException(nameof(targetBranch));
+            if (String.Equals(sourceBranch, targetBranch, StringComparison.Ordinal))
+                throw new InvalidOperationException("Cannot merge a branch into itself.");
+
+            string mergeDirName = "merge-" + Guid.NewGuid().ToString("N");
+            string worktreePath = Path.Combine(Path.GetDirectoryName(repoPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+                ?? Path.GetTempPath(), mergeDirName);
+
+            _Logging.Debug(_Header + "merging " + sourceBranch + " into " + targetBranch + " via " + worktreePath);
+            try
+            {
+                await RunGitAsync(repoPath, "worktree", "add", worktreePath, targetBranch).ConfigureAwait(false);
+
+                try
+                {
+                    await RunGitAsync(worktreePath, "merge", "--no-edit", sourceBranch).ConfigureAwait(false);
+                }
+                catch
+                {
+                    try { await RunGitAsync(worktreePath, "merge", "--abort").ConfigureAwait(false); } catch { }
+                    throw;
+                }
+
+                if (push)
+                    await RunGitAsync(worktreePath, "push", "origin", "HEAD:refs/heads/" + targetBranch).ConfigureAwait(false);
+            }
+            finally
+            {
+                try { await RunGitAsync(repoPath, "worktree", "remove", "--force", worktreePath).ConfigureAwait(false); } catch { }
+                try { if (Directory.Exists(worktreePath)) Directory.Delete(worktreePath, true); } catch { }
+            }
+        }
+
+        /// <summary>
         /// Ensure a local branch exists, preferring the matching remote branch and otherwise
         /// creating it from the repository's default available history.
         /// </summary>
@@ -559,7 +772,7 @@ namespace Armada.Core.Services
                 return false;
             }
 
-            _Logging.Info(_Header + "creating local branch " + branchName + " from " + baseRef);
+            _Logging.Debug(_Header + "creating local branch " + branchName + " from " + baseRef);
             await RunGitAsync(repoPath, "branch", branchName, baseRef).ConfigureAwait(false);
             return true;
         }
@@ -838,7 +1051,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "unable to abort failed merge in " + targetWorkDir + ": " + ex.Message);
+                _Logging.Warn(_Header + "unable to abort failed merge in " + targetWorkDir + ": " + ex.ToString());
             }
 
             try
@@ -848,7 +1061,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "unable to reset merge state in " + targetWorkDir + ": " + ex.Message);
+                _Logging.Warn(_Header + "unable to reset merge state in " + targetWorkDir + ": " + ex.ToString());
             }
 
             if (!String.IsNullOrEmpty(targetBranch))
@@ -859,7 +1072,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "unable to return to target branch " + targetBranch + " after failed merge in " + targetWorkDir + ": " + ex.Message);
+                    _Logging.Warn(_Header + "unable to return to target branch " + targetBranch + " after failed merge in " + targetWorkDir + ": " + ex.ToString());
                 }
             }
         }
@@ -919,7 +1132,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "unable to sync target branch " + branchName + " from origin in " + repoPath + ": " + ex.Message);
+                _Logging.Warn(_Header + "unable to sync target branch " + branchName + " from origin in " + repoPath + ": " + ex.ToString());
                 return false;
             }
         }

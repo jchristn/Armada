@@ -25,7 +25,8 @@ namespace Armada.Core.Services
             (new Regex(@"opus|gpt-?5(\.\d+)?($|[^-])|o3|o4|gemini-\d*.*pro", RegexOptions.IgnoreCase | RegexOptions.Compiled), CaptainTierEnum.Premium),
             // \bmini avoids matching "geMINI"; the others are distinctive enough to leave unanchored.
             (new Regex(@"haiku|\bmini|nano|flash|gpt-?oss|small|-lite", RegexOptions.IgnoreCase | RegexOptions.Compiled), CaptainTierEnum.Economy),
-            (new Regex(@"sonnet|gpt-?4|gemini-\d*.*(?!pro)", RegexOptions.IgnoreCase | RegexOptions.Compiled), CaptainTierEnum.Standard),
+            // OpenCode / OpenAI-compatible open model families default to Standard unless matched as economy above.
+            (new Regex(@"sonnet|gpt-?4|gemini-\d*.*(?!pro)|glm|qwen|kimi|deepseek|\bllama|mistral|codestral|devstral|command-?r", RegexOptions.IgnoreCase | RegexOptions.Compiled), CaptainTierEnum.Standard),
         };
 
         #endregion

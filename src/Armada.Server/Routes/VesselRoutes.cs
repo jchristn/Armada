@@ -13,6 +13,7 @@ namespace Armada.Server.Routes
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
+    using Armada.Core.Settings;
 
     /// <summary>
     /// REST API routes for vessel management.
@@ -26,6 +27,8 @@ namespace Armada.Server.Routes
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly IDockService? _dockService;
         private readonly VesselContextService? _contextService;
+        private readonly IGitService? _git;
+        private readonly ArmadaSettings? _settings;
 
         /// <summary>
         /// Instantiate.
@@ -37,6 +40,8 @@ namespace Armada.Server.Routes
         /// <param name="jsonOptions">JSON serializer options.</param>
         /// <param name="dockService">Optional dock service for worktree cleanup during vessel deletion.</param>
         /// <param name="contextService">Optional service that builds/refines a vessel's Model Context.</param>
+        /// <param name="git">Optional git service for branch management operations.</param>
+        /// <param name="settings">Optional application settings for repository path resolution.</param>
         public VesselRoutes(
             DatabaseDriver database,
             VesselReadinessService readiness,
@@ -44,7 +49,9 @@ namespace Armada.Server.Routes
             Func<string, string, string?, string?, string?, string?, string?, string?, Task> emitEvent,
             JsonSerializerOptions jsonOptions,
             IDockService? dockService = null,
-            VesselContextService? contextService = null)
+            VesselContextService? contextService = null,
+            IGitService? git = null,
+            ArmadaSettings? settings = null)
         {
             _database = database;
             _readiness = readiness ?? throw new ArgumentNullException(nameof(readiness));
@@ -53,6 +60,29 @@ namespace Armada.Server.Routes
             _jsonOptions = jsonOptions;
             _dockService = dockService;
             _contextService = contextService;
+            _git = git;
+            _settings = settings;
+        }
+
+        /// <summary>
+        /// Resolve the bare repository path for a vessel, where all mission branches live.
+        /// </summary>
+        /// <param name="vessel">Vessel.</param>
+        /// <returns>The bare repository path, or null when it cannot be resolved or does not exist.</returns>
+        private string? ResolveRepoPath(Vessel vessel)
+        {
+            if (!String.IsNullOrEmpty(vessel.LocalPath) && Directory.Exists(vessel.LocalPath)) return vessel.LocalPath;
+            // A local-clone vessel (e.g. one created from a file:// URL, as the Armada self-rebuild vessel is)
+            // carries only a WorkingDirectory -- the operator's own clone. Fall back to it so git operations
+            // such as branch listing work, which is what populates the Rebuild page's branch picker.
+            if (!String.IsNullOrEmpty(vessel.WorkingDirectory) && Directory.Exists(vessel.WorkingDirectory)) return vessel.WorkingDirectory;
+            if (_settings != null && !String.IsNullOrEmpty(vessel.Name))
+            {
+                string candidate = Path.Combine(_settings.ReposDirectory, vessel.Name + ".git");
+                if (Directory.Exists(candidate)) return candidate;
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -78,11 +108,7 @@ namespace Armada.Server.Routes
                 EnumerationQuery query = new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
                 Stopwatch sw = Stopwatch.StartNew();
-                EnumerationResult<Vessel> result = ctx.IsAdmin
-                    ? await _database.Vessels.EnumerateAsync(query).ConfigureAwait(false)
-                    : ctx.IsTenantAdmin
-                        ? await _database.Vessels.EnumerateAsync(ctx.TenantId!, query).ConfigureAwait(false)
-                        : await _database.Vessels.EnumerateAsync(ctx.TenantId!, ctx.UserId!, query).ConfigureAwait(false);
+                EnumerationResult<Vessel> result = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, query, q => _database.Vessels.EnumerateAsync(q), (t, q) => _database.Vessels.EnumerateAsync(t, q), (t, u, q) => _database.Vessels.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
                 return result;
             },
@@ -105,11 +131,7 @@ namespace Armada.Server.Routes
                 EnumerationQuery query = JsonSerializer.Deserialize<EnumerationQuery>(req.Http.Request.DataAsString, _jsonOptions) ?? new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
                 Stopwatch sw = Stopwatch.StartNew();
-                EnumerationResult<Vessel> result = ctx.IsAdmin
-                    ? await _database.Vessels.EnumerateAsync(query).ConfigureAwait(false)
-                    : ctx.IsTenantAdmin
-                        ? await _database.Vessels.EnumerateAsync(ctx.TenantId!, query).ConfigureAwait(false)
-                        : await _database.Vessels.EnumerateAsync(ctx.TenantId!, ctx.UserId!, query).ConfigureAwait(false);
+                EnumerationResult<Vessel> result = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, query, q => _database.Vessels.EnumerateAsync(q), (t, q) => _database.Vessels.EnumerateAsync(t, q), (t, u, q) => _database.Vessels.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
                 return result;
             },
@@ -264,7 +286,9 @@ namespace Armada.Server.Routes
                 string id = req.Parameters["id"];
                 Vessel? vessel = ctx.IsAdmin
                     ? await _database.Vessels.ReadAsync(id).ConfigureAwait(false)
-                    : await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false);
+                    : ctx.IsTenantAdmin
+                        ? await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
+                        : await _database.Vessels.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (vessel == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
                 if (String.IsNullOrEmpty(vessel.WorkingDirectory) || !Directory.Exists(vessel.WorkingDirectory))
                     return (object)new { VesselId = id, CommitsAhead = (int?)null, CommitsBehind = (int?)null, Error = "No working directory configured or directory does not exist" };
@@ -294,6 +318,131 @@ namespace Armada.Server.Routes
                 .WithTag("Vessels")
                 .WithSummary("Get vessel git status")
                 .WithDescription("Returns commits ahead/behind the remote default branch for the vessel's working directory.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
+                .WithSecurity("ApiKey"));
+
+            app.Get("/api/v1/vessels/{id}/branches", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
+                {
+                    req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                }
+                string id = req.Parameters["id"];
+                Vessel? vessel = ctx.IsAdmin
+                    ? await _database.Vessels.ReadAsync(id).ConfigureAwait(false)
+                    : ctx.IsTenantAdmin
+                        ? await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
+                        : await _database.Vessels.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
+                if (vessel == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
+                if (_git == null) { req.Http.Response.StatusCode = 503; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Git service is not available" }; }
+
+                string? repoPath = ResolveRepoPath(vessel);
+                if (repoPath == null)
+                    return new BranchListResponse { VesselId = id, DefaultBranch = vessel.DefaultBranch ?? "main", Error = "No repository found for this vessel" };
+
+                try
+                {
+                    IReadOnlyList<BranchInfo> branches = await _git.ListBranchesAsync(repoPath, vessel.DefaultBranch ?? "main").ConfigureAwait(false);
+                    return new BranchListResponse
+                    {
+                        VesselId = id,
+                        DefaultBranch = vessel.DefaultBranch ?? "main",
+                        Branches = new List<BranchInfo>(branches),
+                        BranchCount = branches.Count
+                    };
+                }
+                catch (Exception ex)
+                {
+                    return new BranchListResponse { VesselId = id, DefaultBranch = vessel.DefaultBranch ?? "main", Error = "Git error: " + ex.Message };
+                }
+            },
+            api => api
+                .WithTag("Vessels")
+                .WithSummary("List vessel branches")
+                .WithDescription("Returns the vessel repository's branches with current flag and ahead/behind counts relative to the default branch.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
+                .WithSecurity("ApiKey"));
+
+            app.Post<BranchActionRequest>("/api/v1/vessels/{id}/branches/push", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
+                {
+                    req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                }
+                string id = req.Parameters["id"];
+                Vessel? vessel = ctx.IsAdmin
+                    ? await _database.Vessels.ReadAsync(id).ConfigureAwait(false)
+                    : ctx.IsTenantAdmin
+                        ? await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
+                        : await _database.Vessels.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
+                if (vessel == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
+                if (_git == null) { req.Http.Response.StatusCode = 503; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Git service is not available" }; }
+                BranchActionRequest pushBody = JsonSerializer.Deserialize<BranchActionRequest>(req.Http.Request.DataAsString, _jsonOptions) ?? new BranchActionRequest();
+                if (String.IsNullOrWhiteSpace(pushBody.Branch)) { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Branch is required" }; }
+
+                string? repoPath = ResolveRepoPath(vessel);
+                if (repoPath == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "No repository found for this vessel" }; }
+
+                try
+                {
+                    await _git.PushLocalBranchAsync(repoPath, pushBody.Branch!).ConfigureAwait(false);
+                    return new BranchPushResponse { VesselId = id, Branch = pushBody.Branch!, Pushed = true };
+                }
+                catch (Exception ex)
+                {
+                    req.Http.Response.StatusCode = 422;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Push failed: " + ex.Message };
+                }
+            },
+            api => api
+                .WithTag("Vessels")
+                .WithSummary("Push a vessel branch")
+                .WithDescription("Pushes the named local branch to the vessel's remote.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
+                .WithSecurity("ApiKey"));
+
+            app.Post<BranchMergeRequest>("/api/v1/vessels/{id}/branches/merge", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
+                {
+                    req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                }
+                string id = req.Parameters["id"];
+                Vessel? vessel = ctx.IsAdmin
+                    ? await _database.Vessels.ReadAsync(id).ConfigureAwait(false)
+                    : ctx.IsTenantAdmin
+                        ? await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
+                        : await _database.Vessels.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
+                if (vessel == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
+                if (_git == null) { req.Http.Response.StatusCode = 503; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Git service is not available" }; }
+                BranchMergeRequest mergeBody = JsonSerializer.Deserialize<BranchMergeRequest>(req.Http.Request.DataAsString, _jsonOptions) ?? new BranchMergeRequest();
+                if (String.IsNullOrWhiteSpace(mergeBody.Source) || String.IsNullOrWhiteSpace(mergeBody.Target))
+                { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Source and target are required" }; }
+
+                string? repoPath = ResolveRepoPath(vessel);
+                if (repoPath == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "No repository found for this vessel" }; }
+
+                try
+                {
+                    await _git.MergeBranchesAsync(repoPath, mergeBody.Source!, mergeBody.Target!, mergeBody.Push).ConfigureAwait(false);
+                    return new BranchMergeResponse { VesselId = id, Source = mergeBody.Source!, Target = mergeBody.Target!, Merged = true, Pushed = mergeBody.Push };
+                }
+                catch (Exception ex)
+                {
+                    req.Http.Response.StatusCode = 422;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Merge failed: " + ex.Message };
+                }
+            },
+            api => api
+                .WithTag("Vessels")
+                .WithSummary("Merge a vessel branch into another")
+                .WithDescription("Merges the source branch into the target branch, optionally pushing the target.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
                 .WithSecurity("ApiKey"));
 

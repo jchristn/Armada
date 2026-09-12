@@ -50,8 +50,10 @@ namespace Armada.Server.Mcp.Tools
                     if (!String.IsNullOrEmpty(request.DefaultCaptainId) && await database.Captains.ReadAsync(request.DefaultCaptainId).ConfigureAwait(false) == null)
                         return (object)new { Error = "Default captain not found: " + request.DefaultCaptainId };
 
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Persona persona = new Persona(request.Name, request.PromptTemplateName);
-                    persona.TenantId = ArmadaConstants.DefaultTenantId;
+                    persona.TenantId = String.IsNullOrEmpty(caller.TenantId) ? ArmadaConstants.DefaultTenantId : caller.TenantId;
+                    persona.UserId = caller.UserId;
                     if (request.Description != null)
                         persona.Description = request.Description;
                     persona.DefaultCaptainId = request.DefaultCaptainId;

@@ -17,16 +17,6 @@ namespace Armada.Core.Services
 
         private const int _MaxLineChars = 2000;
 
-        // Secret-shaped values to redact. Order matters only in that each is applied independently.
-        private static readonly (Regex Pattern, string Replacement)[] _Redactions = new (Regex, string)[]
-        {
-            (new Regex(@"(?i)\bBearer\s+[A-Za-z0-9._\-]{8,}", RegexOptions.Compiled), "Bearer [REDACTED]"),
-            (new Regex(@"\bsk-[A-Za-z0-9]{16,}", RegexOptions.Compiled), "sk-[REDACTED]"),
-            (new Regex(@"\bgh[pousr]_[A-Za-z0-9]{20,}", RegexOptions.Compiled), "gh_[REDACTED]"),
-            (new Regex(@"\bAKIA[0-9A-Z]{16}\b", RegexOptions.Compiled), "AKIA[REDACTED]"),
-            (new Regex(@"(?i)(api[_\-]?key|apikey|secret|token|password)(\s*[=:]\s*)([""']?)[^\s""']{6,}", RegexOptions.Compiled), "$1$2$3[REDACTED]"),
-        };
-
         // Lines that are pure noise and should not clutter the readable view.
         private static readonly Regex _NoiseLine = new Regex(@"^\s*(\[dotnet\]|Determining projects to restore|Restored\s|MSBuild version|Welcome to \.NET)", RegexOptions.Compiled);
 
@@ -50,9 +40,11 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(line)) { result.Dropped = true; return result; }
             if (_NoiseLine.IsMatch(line)) { result.Dropped = true; return result; }
 
-            // Structured JSONL event (Mux / OpenCode style): resolve a readable tool-call summary.
+            // Structured JSONL event: resolve a readable tool-call summary, trying the runtime's own event
+            // shape first (Claude Code / Codex stream-json) and falling back to the shared Mux/OpenCode shape.
             string trimmed = line.TrimStart();
-            if (trimmed.StartsWith("{", StringComparison.Ordinal) && TryFormatJsonEvent(trimmed, result))
+            if (trimmed.StartsWith("{", StringComparison.Ordinal)
+                && (TryFormatRuntimeSpecificEvent(trimmed, runtime, result) || TryFormatJsonEvent(trimmed, result)))
             {
                 ApplyRedactionAndTruncation(result);
                 return result;
@@ -66,6 +58,86 @@ namespace Armada.Core.Services
         #endregion
 
         #region Private-Methods
+
+        private static bool TryFormatRuntimeSpecificEvent(string json, Armada.Core.Enums.AgentRuntimeEnum runtime, FormattedLogLine result)
+        {
+            // Claude Code / Codex stream a "type"-tagged event with tool_use content blocks; OpenCode streams
+            // its own "type"-tagged events with a nested "part"; other runtimes use the shared eventType shape.
+            if (runtime != Armada.Core.Enums.AgentRuntimeEnum.ClaudeCode
+                && runtime != Armada.Core.Enums.AgentRuntimeEnum.Codex
+                && runtime != Armada.Core.Enums.AgentRuntimeEnum.OpenCode)
+                return false;
+
+            try
+            {
+                using JsonDocument doc = JsonDocument.Parse(json);
+                JsonElement root = doc.RootElement;
+                if (root.ValueKind != JsonValueKind.Object) return false;
+
+                string type = root.TryGetProperty("type", out JsonElement ty) && ty.ValueKind == JsonValueKind.String ? ty.GetString() ?? "" : "";
+
+                // OpenCode events: a nested "part" carries the tool name / assistant text.
+                if (runtime == Armada.Core.Enums.AgentRuntimeEnum.OpenCode
+                    && root.TryGetProperty("part", out JsonElement ocPart) && ocPart.ValueKind == JsonValueKind.Object)
+                {
+                    if (type == "tool_use" && ocPart.TryGetProperty("tool", out JsonElement ocTool) && ocTool.ValueKind == JsonValueKind.String)
+                    {
+                        string? status = ocPart.TryGetProperty("state", out JsonElement st) && st.ValueKind == JsonValueKind.Object
+                            && st.TryGetProperty("status", out JsonElement ss) && ss.ValueKind == JsonValueKind.String ? ss.GetString() : null;
+                        result.IsToolCall = true;
+                        result.ToolName = ocTool.GetString();
+                        result.Text = "-> tool " + (result.ToolName ?? "unknown") + (String.IsNullOrEmpty(status) ? "" : " (" + status + ")");
+                        return true;
+                    }
+                    if ((type == "text" || type == "reasoning") && ocPart.TryGetProperty("text", out JsonElement ocText) && ocText.ValueKind == JsonValueKind.String)
+                    {
+                        result.Text = (type == "reasoning" ? "(thinking) " : "") + (ocText.GetString() ?? "");
+                        return true;
+                    }
+                    // A step/other OpenCode event with no display text: drop it rather than echo raw JSON.
+                    if (type == "step_start" || type == "step_finish")
+                    {
+                        result.Dropped = true;
+                        return true;
+                    }
+                }
+
+                // A bare tool_use event.
+                if (type == "tool_use" && root.TryGetProperty("name", out JsonElement directName) && directName.ValueKind == JsonValueKind.String)
+                {
+                    result.IsToolCall = true;
+                    result.ToolName = directName.GetString();
+                    result.Text = "-> tool " + (result.ToolName ?? "unknown");
+                    return true;
+                }
+
+                // An assistant message carrying content blocks, one of which may be a tool_use.
+                JsonElement contentHolder = root;
+                if (root.TryGetProperty("message", out JsonElement message) && message.ValueKind == JsonValueKind.Object)
+                    contentHolder = message;
+
+                if (contentHolder.TryGetProperty("content", out JsonElement content) && content.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (JsonElement block in content.EnumerateArray())
+                    {
+                        if (block.ValueKind != JsonValueKind.Object) continue;
+                        string blockType = block.TryGetProperty("type", out JsonElement bt) && bt.ValueKind == JsonValueKind.String ? bt.GetString() ?? "" : "";
+                        if (blockType == "tool_use" && block.TryGetProperty("name", out JsonElement bn) && bn.ValueKind == JsonValueKind.String)
+                        {
+                            result.IsToolCall = true;
+                            result.ToolName = bn.GetString();
+                            result.Text = "-> tool " + (result.ToolName ?? "unknown");
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+            }
+
+            return false;
+        }
 
         private static bool TryFormatJsonEvent(string json, FormattedLogLine result)
         {
@@ -115,13 +187,9 @@ namespace Armada.Core.Services
 
         private static void ApplyRedactionAndTruncation(FormattedLogLine result)
         {
-            string text = result.Text;
-            foreach ((Regex pattern, string replacement) in _Redactions)
-            {
-                string next = pattern.Replace(text, replacement);
-                if (!ReferenceEquals(next, text) && next != text) result.Redacted = true;
-                text = next;
-            }
+            // Shared "secret-shaped value" definition, used by request-history capture too.
+            string text = SecretRedactor.Redact(result.Text, out bool redacted);
+            if (redacted) result.Redacted = true;
 
             if (text.Length > _MaxLineChars)
             {

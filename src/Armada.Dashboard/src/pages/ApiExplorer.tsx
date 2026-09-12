@@ -673,9 +673,6 @@ export default function ApiExplorer() {
         subtitle={t('Browse the live OpenAPI document, execute authenticated requests, inspect responses, and replay captured traffic.')}
         actions={(
           <>
-            <button className="btn btn-sm" onClick={() => navigate('/requests')}>
-              {t('Requests')}
-            </button>
             <a className="btn btn-sm" href={buildRequestUrl('/openapi.json')} target="_blank" rel="noreferrer">
               {t('OpenAPI JSON')}
             </a>

@@ -33,6 +33,15 @@ namespace Armada.Core.Services.Interfaces
         Task<bool> TryAssignAsync(Mission mission, Vessel vessel, CancellationToken token = default);
 
         /// <summary>
+        /// Evaluate the vessel's auto-land predicate against a mission's captured diff without landing it
+        /// (a dry run). Returns the decision, or null when the mission or its vessel cannot be found.
+        /// </summary>
+        /// <param name="missionId">Mission identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The auto-land decision, or null when the mission/vessel is missing.</returns>
+        Task<AutoLandDecision?> EvaluateAutoLandAsync(string missionId, CancellationToken token = default);
+
+        /// <summary>
         /// Handle mission completion for a captain whose agent process exited successfully.
         /// </summary>
         /// <param name="captain">Captain that completed the mission.</param>

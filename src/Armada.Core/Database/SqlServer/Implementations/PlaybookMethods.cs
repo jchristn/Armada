@@ -42,8 +42,8 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = @"INSERT INTO playbooks
-                        (id, tenant_id, user_id, file_name, description, content, active, created_utc, last_update_utc)
-                        VALUES (@id, @tenant_id, @user_id, @file_name, @description, @content, @active, @created_utc, @last_update_utc);";
+                        (id, tenant_id, user_id, scope, file_name, description, content, active, created_utc, last_update_utc)
+                        VALUES (@id, @tenant_id, @user_id, @scope, @file_name, @description, @content, @active, @created_utc, @last_update_utc);";
                     AddPlaybookParameters(cmd, playbook);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
@@ -139,6 +139,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     cmd.CommandText = @"UPDATE playbooks SET
                         tenant_id = @tenant_id,
                         user_id = @user_id,
+                        scope = @scope,
                         file_name = @file_name,
                         description = @description,
                         content = @content,
@@ -487,6 +488,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
             cmd.Parameters.AddWithValue("@id", playbook.Id);
             cmd.Parameters.AddWithValue("@tenant_id", (object?)playbook.TenantId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@user_id", (object?)playbook.UserId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@scope", playbook.Scope.ToString());
             cmd.Parameters.AddWithValue("@file_name", playbook.FileName);
             cmd.Parameters.AddWithValue("@description", (object?)playbook.Description ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@content", playbook.Content);
@@ -502,7 +504,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 Id = reader["id"].ToString() ?? String.Empty,
                 TenantId = SqlServerDatabaseDriver.NullableString(reader["tenant_id"]),
                 UserId = SqlServerDatabaseDriver.NullableString(reader["user_id"]),
-                FileName = reader["file_name"].ToString() ?? String.Empty,
+                Scope = System.Enum.TryParse<Armada.Core.Enums.ScopeEnum>(reader["scope"]?.ToString(), true, out Armada.Core.Enums.ScopeEnum __sc) ? __sc : Armada.Core.Enums.ScopeEnum.TenantWide,                FileName = reader["file_name"].ToString() ?? String.Empty,
                 Description = SqlServerDatabaseDriver.NullableString(reader["description"]),
                 Content = reader["content"].ToString() ?? String.Empty,
                 Active = Convert.ToBoolean(reader["active"]),

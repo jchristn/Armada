@@ -2,6 +2,7 @@ namespace Armada.Runtimes
 {
     using SyslogLogging;
     using Armada.Core.Enums;
+    using Armada.Core.Models;
     using Armada.Runtimes.Interfaces;
 
     /// <summary>
@@ -17,6 +18,7 @@ namespace Armada.Runtimes
 
         private string _Header = "[AgentRuntimeFactory] ";
         private LoggingModule _Logging;
+        private Func<string, ModelEndpoint?>? _EndpointResolver;
         private Dictionary<string, Func<IAgentRuntime>> _CustomRuntimes = new Dictionary<string, Func<IAgentRuntime>>();
 
         #endregion
@@ -27,9 +29,12 @@ namespace Armada.Runtimes
         /// Instantiate.
         /// </summary>
         /// <param name="logging">Logging module.</param>
-        public AgentRuntimeFactory(LoggingModule logging)
+        /// <param name="endpointResolver">Optional resolver mapping a captain's model-endpoint id to a
+        /// configured <see cref="ModelEndpoint"/>, enabling API-endpoint captains. Null disables them.</param>
+        public AgentRuntimeFactory(LoggingModule logging, Func<string, ModelEndpoint?>? endpointResolver = null)
         {
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
+            _EndpointResolver = endpointResolver;
         }
 
         #endregion
@@ -57,6 +62,10 @@ namespace Armada.Runtimes
                     return new MuxRuntime(_Logging);
                 case AgentRuntimeEnum.OpenCode:
                     return new OpenCodeRuntime(_Logging);
+                case AgentRuntimeEnum.ApiEndpoint:
+                    if (_EndpointResolver == null)
+                        throw new InvalidOperationException("API-endpoint captains are not enabled: no model-endpoint resolver was configured.");
+                    return new ApiAgentRuntime(_EndpointResolver, _Logging);
                 case AgentRuntimeEnum.Custom:
                     throw new InvalidOperationException("Use Create(string name) for custom runtimes");
                 default:
@@ -92,7 +101,7 @@ namespace Armada.Runtimes
             if (factory == null) throw new ArgumentNullException(nameof(factory));
 
             _CustomRuntimes[name] = factory;
-            _Logging.Info(_Header + "registered custom runtime: " + name);
+            _Logging.Debug(_Header + "registered custom runtime: " + name);
         }
 
         #endregion

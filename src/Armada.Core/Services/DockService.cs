@@ -157,7 +157,7 @@ namespace Armada.Core.Services
                             bool isRegistered = await _Git.IsWorktreeRegisteredAsync(repoPath, existingDir, token).ConfigureAwait(false);
                             if (isRegistered)
                             {
-                                _Logging.Info(_Header + "cleaning up stale worktree from previous captain: " + existingDir);
+                                _Logging.Debug(_Header + "cleaning up stale worktree from previous captain: " + existingDir);
                                 try
                                 {
                                     await _Git.RemoveWorktreeAsync(existingDir, token).ConfigureAwait(false);
@@ -190,7 +190,7 @@ namespace Armada.Core.Services
                     bool isRegistered = await _Git.IsWorktreeRegisteredAsync(repoPath, worktreePath, token).ConfigureAwait(false);
                     if (isRegistered)
                     {
-                        _Logging.Info(_Header + "removing stale dock directory: " + worktreePath);
+                        _Logging.Debug(_Header + "removing stale dock directory: " + worktreePath);
                         try
                         {
                             await _Git.RemoveWorktreeAsync(worktreePath, token).ConfigureAwait(false);
@@ -243,7 +243,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "provisioning failed for vessel " + vessel.Id + " captain " + captain.Id + " repo " + (vessel.RepoUrl ?? "unknown") + ": " + ex.Message);
+                _Logging.Warn(_Header + "provisioning failed for vessel " + vessel.Id + " captain " + captain.Id + " repo " + (vessel.RepoUrl ?? "unknown") + ": " + ex.ToString());
 
                 // Clean up partial state -- remove worktree directory if it was partially created
                 if (Directory.Exists(worktreePath))
@@ -300,7 +300,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "error removing worktree for dock " + dockId + ": " + ex.Message);
+                    _Logging.Warn(_Header + "error removing worktree for dock " + dockId + ": " + ex.ToString());
                 }
 
                 // Ensure the directory is actually removed -- on Windows, file handles
@@ -427,11 +427,11 @@ namespace Armada.Core.Services
                 try
                 {
                     await _Git.RemoveWorktreeAsync(dock.WorktreePath, token).ConfigureAwait(false);
-                    _Logging.Info(_Header + "removed worktree for dock " + dock.Id + " at " + dock.WorktreePath);
+                    _Logging.Debug(_Header + "removed worktree for dock " + dock.Id + " at " + dock.WorktreePath);
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "error removing worktree for dock " + dock.Id + ": " + ex.Message);
+                    _Logging.Warn(_Header + "error removing worktree for dock " + dock.Id + ": " + ex.ToString());
                 }
 
                 await ForceRemoveDirectoryAsync(dock.WorktreePath, token).ConfigureAwait(false);
@@ -501,7 +501,7 @@ namespace Armada.Core.Services
                 {
                     await RunGitInDirAsync(tempPath, "remote add origin " + vessel.RepoUrl, token).ConfigureAwait(false);
                     await RunGitInDirAsync(tempPath, "push -u origin " + vessel.DefaultBranch, token).ConfigureAwait(false);
-                    _Logging.Info(_Header + "pushed initial commit to remote for " + vessel.Name);
+                    _Logging.Debug(_Header + "pushed initial commit to remote for " + vessel.Name);
                 }
 
                 // Delete the stale bare repo (if it exists) and re-clone fresh
@@ -515,7 +515,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "failed to seed empty repo for " + vessel.Name + ": " + ex.Message);
+                _Logging.Warn(_Header + "failed to seed empty repo for " + vessel.Name + ": " + ex.ToString());
                 // Clean up any debris
                 try { if (Directory.Exists(repoPath)) await ForceRemoveDirectoryAsync(repoPath, token).ConfigureAwait(false); }
                 catch { }
@@ -594,7 +594,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "failed to remove directory after " + maxAttempts + " attempts: " + path + ": " + ex.Message);
+                    _Logging.Warn(_Header + "failed to remove directory after " + maxAttempts + " attempts: " + path + ": " + ex.ToString());
                     return;
                 }
             }

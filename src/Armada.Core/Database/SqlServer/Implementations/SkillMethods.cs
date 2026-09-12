@@ -35,9 +35,9 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = @"INSERT INTO skills
-                        (id, tenant_id, user_id, name, description, category, content, is_built_in, active, created_utc, last_update_utc)
+                        (id, tenant_id, user_id, scope, name, description, category, content, is_built_in, active, created_utc, last_update_utc)
                         VALUES
-                        (@id, @tenant_id, @user_id, @name, @description, @category, @content, @is_built_in, @active, @created_utc, @last_update_utc);";
+                        (@id, @tenant_id, @user_id, @scope, @name, @description, @category, @content, @is_built_in, @active, @created_utc, @last_update_utc);";
                     AddParameters(cmd, skill);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
@@ -86,6 +86,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     cmd.CommandText = @"UPDATE skills SET
                         tenant_id = @tenant_id,
                         user_id = @user_id,
+                scope = @scope,
                         name = @name,
                         description = @description,
                         category = @category,
@@ -246,6 +247,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
             cmd.Parameters.AddWithValue("@id", skill.Id);
             cmd.Parameters.AddWithValue("@tenant_id", (object?)skill.TenantId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@user_id", (object?)skill.UserId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@scope", skill.Scope.ToString());
             cmd.Parameters.AddWithValue("@name", skill.Name);
             cmd.Parameters.AddWithValue("@description", (object?)skill.Description ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@category", (object?)skill.Category ?? DBNull.Value);
@@ -263,7 +265,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 Id = reader["id"].ToString() ?? String.Empty,
                 TenantId = SqlServerDatabaseDriver.NullableString(reader["tenant_id"]),
                 UserId = SqlServerDatabaseDriver.NullableString(reader["user_id"]),
-                Name = reader["name"].ToString() ?? String.Empty,
+                Scope = System.Enum.TryParse<Armada.Core.Enums.ScopeEnum>(reader["scope"]?.ToString(), true, out Armada.Core.Enums.ScopeEnum __sc) ? __sc : Armada.Core.Enums.ScopeEnum.TenantWide,                Name = reader["name"].ToString() ?? String.Empty,
                 Description = SqlServerDatabaseDriver.NullableString(reader["description"]),
                 Category = SqlServerDatabaseDriver.NullableString(reader["category"]),
                 Content = SqlServerDatabaseDriver.NullableString(reader["content"]) ?? String.Empty,

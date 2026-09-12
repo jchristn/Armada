@@ -275,7 +275,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "HTTP relay failed for " + requestUri + ": " + ex.Message);
+                _Logging.Warn(_Header + "HTTP relay failed for " + requestUri + ": " + ex.ToString());
                 return new RemoteTunnelRequestResult
                 {
                     StatusCode = 502,
@@ -339,7 +339,7 @@ namespace Armada.Server
             {
                 _WebSocketSessions.TryRemove(proxySocketId, out RelayWebSocketSession? _);
                 relaySession.Dispose();
-                _Logging.Warn(_Header + "websocket relay open failed for " + proxySocketId + ": " + ex.Message);
+                _Logging.Warn(_Header + "websocket relay open failed for " + proxySocketId + ": " + ex.ToString());
                 return new RemoteTunnelRequestResult
                 {
                     StatusCode = 502,
@@ -383,7 +383,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "websocket relay send failed for " + relaySession.ProxySocketId + ": " + ex.Message);
+                _Logging.Warn(_Header + "websocket relay send failed for " + relaySession.ProxySocketId + ": " + ex.ToString());
                 return new RemoteTunnelRequestResult
                 {
                     StatusCode = 502,
@@ -488,7 +488,7 @@ namespace Armada.Server
             }
             catch (WebSocketException ex)
             {
-                _Logging.Warn(_Header + "websocket relay receive loop failed for " + relaySession.ProxySocketId + ": " + ex.Message);
+                _Logging.Warn(_Header + "websocket relay receive loop failed for " + relaySession.ProxySocketId + ": " + ex.ToString());
                 await _PublishEventAsync(
                     "armada.ws.error",
                     new RemoteTunnelWebSocketCloseRequest
@@ -500,7 +500,7 @@ namespace Armada.Server
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "unexpected websocket relay failure for " + relaySession.ProxySocketId + ": " + ex.Message);
+                _Logging.Warn(_Header + "unexpected websocket relay failure for " + relaySession.ProxySocketId + ": " + ex.ToString());
                 await _PublishEventAsync(
                     "armada.ws.error",
                     new RemoteTunnelWebSocketCloseRequest

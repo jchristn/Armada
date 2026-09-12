@@ -11,6 +11,7 @@ namespace Armada.Server.Mcp.Tools
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
 
@@ -93,7 +94,7 @@ namespace Armada.Server.Mcp.Tools
                             }
                         }
                     },
-                    required = new[] { "title", "vesselId", "missions" }
+                    required = new[] { "title" }
                 },
                 async (args) =>
                 {
@@ -104,24 +105,38 @@ namespace Armada.Server.Mcp.Tools
                     List<MissionDescription> missions = request.Missions;
                     List<SelectedPlaybook> selectedPlaybooks = request.SelectedPlaybooks ?? new List<SelectedPlaybook>();
 
-                    // Validate the objective link up front (parity with the REST dispatch path).
+                    // Shared validation: objective existence, pipeline-by-name resolution, and bare-voyage
+                    // detection live in one place so MCP accepts and rejects the same inputs as REST.
+                    DispatchValidationResult validation = await admiral.ValidateDispatchAsync(
+                        request.ObjectiveId, request.PipelineId, request.Pipeline, vesselId, missions.Count, allowBareVoyage: true).ConfigureAwait(false);
+                    if (!validation.IsValid)
+                        return (object)new { Error = validation.Message ?? "Invalid dispatch request", Code = validation.Error.ToString() };
+
                     Objective? linkObjective = null;
                     if (!String.IsNullOrWhiteSpace(request.ObjectiveId))
-                    {
                         linkObjective = await database.Objectives.ReadAsync(request.ObjectiveId!).ConfigureAwait(false);
-                        if (linkObjective == null) return (object)new { Error = "Objective not found: " + request.ObjectiveId };
-                    }
 
-                    // Use pipeline-aware dispatch if pipelineId is provided
-                    string? pipelineId = request.PipelineId;
-                    if (String.IsNullOrEmpty(pipelineId) && !String.IsNullOrEmpty(request.Pipeline))
+                    string? pipelineId = validation.ResolvedPipelineId;
+
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    Voyage voyage;
+                    if (validation.IsBareVoyage)
                     {
-                        // Resolve pipeline name to ID
-                        Pipeline? namedPipeline = await database.Pipelines.ReadByNameAsync(request.Pipeline).ConfigureAwait(false);
-                        if (namedPipeline != null) pipelineId = namedPipeline.Id;
-                        else return (object)new { Error = "Pipeline not found: " + request.Pipeline };
+                        // Bare voyage (missions added separately) -- parity with the REST bare-voyage path.
+                        voyage = new Voyage(title, description);
+                        voyage.TenantId = String.IsNullOrEmpty(caller.TenantId) ? ArmadaConstants.DefaultTenantId : caller.TenantId;
+                        voyage.UserId = caller.UserId;
+                        voyage = await database.Voyages.CreateAsync(voyage).ConfigureAwait(false);
+                        if (selectedPlaybooks.Count > 0)
+                        {
+                            voyage.SelectedPlaybooks = selectedPlaybooks;
+                            await database.Playbooks.SetVoyageSelectionsAsync(voyage.Id, selectedPlaybooks).ConfigureAwait(false);
+                        }
                     }
-                    Voyage voyage = await admiral.DispatchVoyageAsync(title, description, vesselId, missions, pipelineId, selectedPlaybooks).ConfigureAwait(false);
+                    else
+                    {
+                        voyage = await admiral.DispatchVoyageAsync(title, description, vesselId, missions, pipelineId, selectedPlaybooks).ConfigureAwait(false);
+                    }
 
                     // Persist per-persona captain overrides (parity with REST) so assignment resolves the
                     // preferred captain and fallback tier for every mission of a step, fan-out included.

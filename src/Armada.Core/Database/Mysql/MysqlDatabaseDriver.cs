@@ -62,6 +62,9 @@ namespace Armada.Core.Database.Mysql
             PlanningSessionMessages = new PlanningSessionMessageMethods(_ConnectionString);
             Objectives = new ObjectiveMethods(_ConnectionString);
             Jobs = new JobMethods(_ConnectionString);
+            ModelEndpoints = new ModelEndpointMethods(_ConnectionString);
+            Harbors = new HarborMethods(_ConnectionString);
+            Memories = new MemoryMethods(_ConnectionString);
             ObjectiveRefinementSessions = new ObjectiveRefinementSessionMethods(_ConnectionString);
             ObjectiveRefinementMessages = new ObjectiveRefinementMessageMethods(_ConnectionString);
             Docks = new DockMethods(_ConnectionString);
@@ -99,7 +102,7 @@ namespace Armada.Core.Database.Mysql
         /// <returns>Task.</returns>
         public override async Task InitializeAsync(CancellationToken token = default)
         {
-            _Logging.Info(_Header + "initializing database");
+            _Logging.Debug(_Header + "initializing database");
 
             using (MySqlConnection conn = await GetConnectionAsync(token).ConfigureAwait(false))
             {
@@ -155,10 +158,10 @@ namespace Armada.Core.Database.Mysql
                 if (applied > 0)
                     _Logging.Info(_Header + "applied " + applied + " migration(s), schema now at v" + migrations[migrations.Count - 1].Version);
                 else
-                    _Logging.Info(_Header + "schema is up to date at v" + currentVersion);
+                    _Logging.Debug(_Header + "schema is up to date at v" + currentVersion);
             }
 
-            _Logging.Info(_Header + "database initialized successfully");
+            _Logging.Debug(_Header + "database initialized successfully");
 
             // Seed default data on first boot (or after migration that created tenant but not user)
             bool anyTenants = await Tenants.ExistsAnyAsync(token).ConfigureAwait(false);
@@ -326,7 +329,7 @@ namespace Armada.Core.Database.Mysql
         {
             if (_Disposed) return;
             _Disposed = true;
-            _Logging.Info(_Header + "disposed");
+            _Logging.Debug(_Header + "disposed");
         }
 
         #endregion
@@ -556,6 +559,76 @@ namespace Armada.Core.Database.Mysql
                     56,
                     "Add token_usage table for per-model token accounting",
                     TableQueries.MigrationV56Statements
+                ),
+                new SchemaMigration(
+                    57,
+                    "Add mission execution mode (Implementation/Audit/Research)",
+                    TableQueries.MigrationV57Statements
+                ),
+                new SchemaMigration(
+                    58,
+                    "Add in-dock Definition-of-Done gate config to vessels",
+                    TableQueries.MigrationV58Statements
+                ),
+                new SchemaMigration(
+                    59,
+                    "Add git_anchors_json to docks",
+                    TableQueries.MigrationV59Statements
+                ),
+                new SchemaMigration(
+                    60,
+                    "Add model_endpoints table for managed embedding/inference endpoints",
+                    TableQueries.MigrationV60Statements
+                ),
+                new SchemaMigration(
+                    61,
+                    "Add rolling health-check history to model_endpoints",
+                    TableQueries.MigrationV61Statements
+                ),
+                new SchemaMigration(
+                    62,
+                    "Add harbors and harbor_capabilities tables for host runners",
+                    TableQueries.MigrationV62Statements
+                ),
+                new SchemaMigration(
+                    63,
+                    "Add Harbor routing and affinity columns",
+                    TableQueries.MigrationV63Statements
+                ),
+                new SchemaMigration(
+                    64,
+                    "Add model_endpoint_id to captains for API-endpoint captains",
+                    TableQueries.MigrationV64Statements
+                ),
+                new SchemaMigration(
+                    65,
+                    "Add scope to model_endpoints (tenant-wide vs user-specific)",
+                    TableQueries.MigrationV65Statements
+                ),
+                new SchemaMigration(
+                    66,
+                    "Add ownership scope to playbooks and skills",
+                    TableQueries.MigrationV66Statements
+                ),
+                new SchemaMigration(
+                    67,
+                    "Add ownership (user_id + scope) to personas, pipelines, prompt_templates",
+                    TableQueries.MigrationV67Statements
+                ),
+                new SchemaMigration(
+                    68,
+                    "Add ownership_scope to workflow_profiles and project_profiles",
+                    TableQueries.MigrationV68Statements
+                ),
+                new SchemaMigration(
+                    69,
+                    "Add cloud-provider fields (region, project, api_version, access_key_id) to model_endpoints",
+                    TableQueries.MigrationV69Statements
+                ),
+                new SchemaMigration(
+                    70,
+                    "Add memories and memory_tags tables for durable agent memory",
+                    TableQueries.MigrationV70Statements
                 )
             };
         }
@@ -725,6 +798,7 @@ namespace Armada.Core.Database.Mysql
             captain.Name = reader["name"].ToString()!;
             captain.Runtime = Enum.Parse<AgentRuntimeEnum>(reader["runtime"].ToString()!);
             try { captain.Model = NullableString(reader["model"]); } catch { }
+            try { captain.ModelEndpointId = NullableString(reader["model_endpoint_id"]); } catch { }
             captain.SystemInstructions = NullableString(reader["system_instructions"]);
             try { captain.RuntimeOptionsJson = NullableString(reader["runtime_options_json"]); } catch { }
             captain.State = Enum.Parse<CaptainStateEnum>(reader["state"].ToString()!);
@@ -817,7 +891,7 @@ namespace Armada.Core.Database.Mysql
                 }
                 catch (MySqlException ex) when (IsIgnorableReplayError(ex))
                 {
-                    _Logging.Info(_Header + "ignoring duplicate schema artifact while replaying migration: " + ex.Message);
+                    _Logging.Debug(_Header + "ignoring duplicate schema artifact while replaying migration: " + ex.Message);
                 }
             }
         }

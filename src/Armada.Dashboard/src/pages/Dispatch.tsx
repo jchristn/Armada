@@ -74,15 +74,16 @@ export default function Dispatch() {
     ? Array.from(new Set(selectedPipelineObj.stages.slice().sort((a, b) => a.order - b.order).map((s) => s.personaName)))
     : [];
 
+  // With a specific pipeline, offer a captain per step. With "Inherit" (no explicit pipeline) the resolved
+  // stages are not known at dispatch time, so offer a single wildcard ("*") picker that applies to every
+  // step -- letting an operator pin a captain (e.g. an API-endpoint captain) regardless of pipeline.
+  const effectivePersonas: string[] = stepPersonas.length > 0 ? stepPersonas : ['*'];
+
   // Seed each step's preferred captain from that persona's default whenever the pipeline (or personas) change.
   useEffect(() => {
-    if (stepPersonas.length === 0) {
-      setStepAssignments({});
-      return;
-    }
     setStepAssignments((current) => {
       const next: Record<string, StepAssignment> = {};
-      for (const personaName of stepPersonas) {
+      for (const personaName of effectivePersonas) {
         if (current[personaName]) {
           next[personaName] = current[personaName];
         } else {
@@ -299,14 +300,16 @@ Armada will dispatch this request as a voyage on the selected vessel.`)}
 
           <PlaybookSelector value={selectedPlaybooks} onChange={setSelectedPlaybooks} disabled={dispatching} />
 
-          {stepPersonas.length > 0 && (
+          {effectivePersonas.length > 0 && (
             <div className="form-group">
               <div className="form-label-row">
                 <label>{t('Captain Assignments')}</label>
                 <Link to="/personas" className="form-label-link">{t('Manage persona defaults')}</Link>
               </div>
               <p className="text-dim" style={{ fontSize: '0.8rem', margin: '0 0 0.5rem' }}>
-                {t('Pick a preferred captain per pipeline step. When it is busy, Armada falls back to an idle captain at or above the fallback tier. Defaults come from each persona.')}
+                {stepPersonas.length > 0
+                  ? t('Pick a preferred captain per pipeline step. When it is busy, Armada falls back to an idle captain at or above the fallback tier. Defaults come from each persona.')
+                  : t('No specific pipeline selected. This captain applies to every step of the mission; leave blank to let Armada auto-assign an idle captain.')}
               </p>
               <div className="card" style={{ padding: '0.5rem 0.85rem' }}>
                 <div className="captain-assignment-row" style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-dim)' }}>
@@ -314,11 +317,11 @@ Armada will dispatch this request as a voyage on the selected vessel.`)}
                   <span>{t('Preferred Captain')}</span>
                   <span>{t('Fallback Tier')}</span>
                 </div>
-                {stepPersonas.map((persona) => {
+                {effectivePersonas.map((persona) => {
                   const assignment = stepAssignments[persona] ?? { captainId: null, fallbackTier: null };
                   return (
                     <div className="captain-assignment-row" key={persona}>
-                      <span>{persona}</span>
+                      <span>{persona === '*' ? t('All steps') : persona}</span>
                       <CaptainPicker
                         captains={captains}
                         value={assignment.captainId}

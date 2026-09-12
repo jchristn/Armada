@@ -2,6 +2,7 @@ namespace Armada.Server.Routes
 {
     using System;
     using System.Diagnostics;
+    using System.Linq;
     using System.Text.Json;
     using WatsonWebserver;
     using WatsonWebserver.Core;
@@ -58,6 +59,7 @@ namespace Armada.Server.Routes
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Persona> result = await _database.Personas.EnumerateAsync(query).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
+                if (!ctx.IsAdmin) result.Objects = result.Objects.Where(p => ScopedVisibility.CanView(ctx, p.Scope, p.TenantId, p.UserId)).ToList();
                 return result;
             },
             api => api
@@ -81,6 +83,7 @@ namespace Armada.Server.Routes
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Persona> result = await _database.Personas.EnumerateAsync(query).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
+                if (!ctx.IsAdmin) result.Objects = result.Objects.Where(p => ScopedVisibility.CanView(ctx, p.Scope, p.TenantId, p.UserId)).ToList();
                 return result;
             },
             api => api
@@ -101,7 +104,7 @@ namespace Armada.Server.Routes
                 }
                 string name = req.Parameters["name"];
                 Persona? persona = await _database.Personas.ReadByNameAsync(name).ConfigureAwait(false);
-                if (persona == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Persona not found" }; }
+                if (persona == null || !ScopedVisibility.CanView(ctx, persona.Scope, persona.TenantId, persona.UserId)) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Persona not found" }; }
                 return (object)persona;
             },
             api => api
@@ -129,6 +132,9 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 400;
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Default captain '" + persona.DefaultCaptainId + "' not found" };
                 }
+                persona.TenantId = ctx.TenantId;
+                persona.UserId = ctx.UserId;
+                persona.Scope = ScopedVisibility.ResolveCreateScope(ctx, persona.Scope);
                 persona = await _database.Personas.CreateAsync(persona).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 201;
                 return persona;
@@ -152,7 +158,8 @@ namespace Armada.Server.Routes
                 }
                 string name = req.Parameters["name"];
                 Persona? existing = await _database.Personas.ReadByNameAsync(name).ConfigureAwait(false);
-                if (existing == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Persona not found" }; }
+                if (existing == null || !ScopedVisibility.CanView(ctx, existing.Scope, existing.TenantId, existing.UserId)) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Persona not found" }; }
+                if (!ScopedVisibility.CanEdit(ctx, existing.Scope, existing.TenantId, existing.UserId)) { req.Http.Response.StatusCode = 403; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "You may only modify your own personas; a tenant-wide persona requires a tenant admin." }; }
                 Persona body = JsonSerializer.Deserialize<Persona>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Persona.");
                 if (!String.IsNullOrEmpty(body.DefaultCaptainId) && await _database.Captains.ReadAsync(body.DefaultCaptainId).ConfigureAwait(false) == null)
@@ -165,6 +172,7 @@ namespace Armada.Server.Routes
                 // Default captain is set to whatever the body carries (including null to clear the default),
                 // so the persona-detail editor can both assign and remove a default captain.
                 existing.DefaultCaptainId = body.DefaultCaptainId;
+                if (ctx.IsAdmin || ctx.IsTenantAdmin) existing.Scope = body.Scope;
                 existing.LastUpdateUtc = DateTime.UtcNow;
                 Persona updated = await _database.Personas.UpdateAsync(existing).ConfigureAwait(false);
                 return (object)updated;
@@ -190,7 +198,8 @@ namespace Armada.Server.Routes
                 }
                 string name = req.Parameters["name"];
                 Persona? existing = await _database.Personas.ReadByNameAsync(name).ConfigureAwait(false);
-                if (existing == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Persona not found" }; }
+                if (existing == null || !ScopedVisibility.CanView(ctx, existing.Scope, existing.TenantId, existing.UserId)) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Persona not found" }; }
+                if (!ScopedVisibility.CanEdit(ctx, existing.Scope, existing.TenantId, existing.UserId)) { req.Http.Response.StatusCode = 403; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "You may only delete your own personas; a tenant-wide persona requires a tenant admin." }; }
                 if (existing.IsBuiltIn) { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Built-in personas cannot be deleted" }; }
                 await _database.Personas.DeleteAsync(existing.Id).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 204;

@@ -61,6 +61,12 @@ namespace Armada.Core.Models
         public string? RequestedCaptainId { get; set; } = null;
 
         /// <summary>
+        /// Identifier of the Harbor (host runner) this mission was routed to when its dock was provisioned,
+        /// or null when it runs on the Admiral's own host (Local mode) or has not yet been routed.
+        /// </summary>
+        public string? AssignedHarborId { get; set; } = null;
+
+        /// <summary>
         /// Mission title.
         /// </summary>
         public string Title
@@ -82,6 +88,13 @@ namespace Armada.Core.Models
         /// Current mission status.
         /// </summary>
         public MissionStatusEnum Status { get; set; } = MissionStatusEnum.Pending;
+
+        /// <summary>
+        /// Execution mode. Implementation (default) is a write mission that lands its diff; Audit and
+        /// Research are read-only modes that produce a written report and whose empty diff is treated as
+        /// success rather than a no-op failure.
+        /// </summary>
+        public MissionModeEnum Mode { get; set; } = MissionModeEnum.Implementation;
 
         /// <summary>
         /// Mission priority (lower is higher priority).

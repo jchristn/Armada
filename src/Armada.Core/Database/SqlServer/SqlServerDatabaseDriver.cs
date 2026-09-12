@@ -66,6 +66,9 @@ namespace Armada.Core.Database.SqlServer
             PlanningSessionMessages = new PlanningSessionMessageMethods(this, _Settings, _Logging);
             Objectives = new ObjectiveMethods(this, _Settings, _Logging);
             Jobs = new JobMethods(this, _Settings, _Logging);
+            ModelEndpoints = new ModelEndpointMethods(this, _Settings, _Logging);
+            Harbors = new HarborMethods(this, _Settings, _Logging);
+            Memories = new MemoryMethods(this, _Settings, _Logging);
             ObjectiveRefinementSessions = new ObjectiveRefinementSessionMethods(this, _Settings, _Logging);
             ObjectiveRefinementMessages = new ObjectiveRefinementMessageMethods(this, _Settings, _Logging);
             Docks = new DockMethods(this, _Settings, _Logging);
@@ -102,7 +105,7 @@ namespace Armada.Core.Database.SqlServer
         /// <returns>Task.</returns>
         public override async Task InitializeAsync(CancellationToken token = default)
         {
-            _Logging.Info(_Header + "initializing database");
+            _Logging.Debug(_Header + "initializing database");
 
             using (SqlConnection conn = new SqlConnection(_ConnectionString))
             {
@@ -165,10 +168,10 @@ namespace Armada.Core.Database.SqlServer
                 if (applied > 0)
                     _Logging.Info(_Header + "applied " + applied + " migration(s), schema now at v" + migrations[migrations.Count - 1].Version);
                 else
-                    _Logging.Info(_Header + "schema is up to date at v" + currentVersion);
+                    _Logging.Debug(_Header + "schema is up to date at v" + currentVersion);
             }
 
-            _Logging.Info(_Header + "database initialized successfully");
+            _Logging.Debug(_Header + "database initialized successfully");
 
             // Seed default data on first boot (or after migration that created tenant but not user)
             bool anyTenants = await Tenants.ExistsAnyAsync(token).ConfigureAwait(false);
@@ -249,7 +252,7 @@ namespace Armada.Core.Database.SqlServer
         {
             if (_Disposed) return;
             _Disposed = true;
-            _Logging.Info(_Header + "disposed");
+            _Logging.Debug(_Header + "disposed");
         }
 
         #endregion
@@ -382,6 +385,8 @@ namespace Armada.Core.Database.SqlServer
             vessel.RepoUrl = NullableString(reader["repo_url"]);
             vessel.LocalPath = NullableString(reader["local_path"]);
             vessel.WorkingDirectory = NullableString(reader["working_directory"]);
+            vessel.PreferredHarborId = NullableString(reader["preferred_harbor_id"]);
+            vessel.RequiredCapabilities = NullableString(reader["required_capabilities"]);
             vessel.ProjectContext = NullableString(reader["project_context"]);
             vessel.StyleGuide = NullableString(reader["style_guide"]);
             try { vessel.EnableModelContext = Convert.ToBoolean(reader["enable_model_context"]); }
@@ -449,6 +454,14 @@ namespace Armada.Core.Database.SqlServer
                     vessel.AutoLandPathDenyGlobs = JsonSerializer.Deserialize<List<string>>(autoLandPathDenyGlobsJson) ?? new List<string>();
             }
             catch { }
+            try { vessel.DefinitionOfDoneEnabled = Convert.ToBoolean(reader["definition_of_done_enabled"]); }
+            catch { vessel.DefinitionOfDoneEnabled = false; }
+            try { vessel.DefinitionOfDoneBuildCommand = NullableString(reader["definition_of_done_build_command"]); }
+            catch { vessel.DefinitionOfDoneBuildCommand = null; }
+            try { vessel.DefinitionOfDoneTestCommand = NullableString(reader["definition_of_done_test_command"]); }
+            catch { vessel.DefinitionOfDoneTestCommand = null; }
+            try { vessel.DefinitionOfDoneTimeoutSeconds = Convert.ToInt32(reader["definition_of_done_timeout_seconds"]); }
+            catch { vessel.DefinitionOfDoneTimeoutSeconds = 1800; }
             vessel.DefaultBranch = reader["default_branch"].ToString()!;
             vessel.Active = Convert.ToBoolean(reader["active"]);
             vessel.CreatedUtc = FromIso8601(reader["created_utc"].ToString()!);
@@ -470,6 +483,7 @@ namespace Armada.Core.Database.SqlServer
             captain.Name = reader["name"].ToString()!;
             captain.Runtime = Enum.Parse<AgentRuntimeEnum>(reader["runtime"].ToString()!);
             try { captain.Model = NullableString(reader["model"]); } catch { }
+            try { captain.ModelEndpointId = NullableString(reader["model_endpoint_id"]); } catch { }
             captain.SystemInstructions = NullableString(reader["system_instructions"]);
             captain.State = Enum.Parse<CaptainStateEnum>(reader["state"].ToString()!);
             captain.CurrentMissionId = NullableString(reader["current_mission_id"]);
@@ -517,9 +531,17 @@ namespace Armada.Core.Database.SqlServer
             mission.VesselId = NullableString(reader["vessel_id"]);
             mission.CaptainId = NullableString(reader["captain_id"]);
             try { mission.RequestedCaptainId = NullableString(reader["requested_captain_id"]); } catch { }
+            try { mission.AssignedHarborId = NullableString(reader["assigned_harbor_id"]); } catch { }
             mission.Title = reader["title"].ToString()!;
             mission.Description = NullableString(reader["description"]);
             mission.Status = Enum.Parse<MissionStatusEnum>(reader["status"].ToString()!);
+            try
+            {
+                string? missionMode = NullableString(reader["mode"]);
+                if (!String.IsNullOrEmpty(missionMode) && Enum.TryParse<MissionModeEnum>(missionMode, out MissionModeEnum parsedMissionMode))
+                    mission.Mode = parsedMissionMode;
+            }
+            catch { }
             mission.Priority = Convert.ToInt32(reader["priority"]);
             try { mission.RedispatchAttempts = Convert.ToInt32(reader["redispatch_attempts"]); } catch { }
             try
@@ -604,6 +626,7 @@ namespace Armada.Core.Database.SqlServer
             dock.VesselId = reader["vessel_id"].ToString()!;
             dock.CaptainId = NullableString(reader["captain_id"]);
             dock.WorktreePath = NullableString(reader["worktree_path"]);
+            dock.HarborId = NullableString(reader["harbor_id"]);
             dock.BranchName = NullableString(reader["branch_name"]);
             dock.Active = Convert.ToBoolean(reader["active"]);
             try
@@ -615,6 +638,7 @@ namespace Armada.Core.Database.SqlServer
             catch { }
             try { dock.LeaseExpiresUtc = NullableDateTime(reader["lease_expires_utc"]); } catch { }
             try { dock.OwnerToken = NullableString(reader["owner_token"]); } catch { }
+            try { dock.GitAnchorsJson = NullableString(reader["git_anchors_json"]); } catch { }
             dock.CreatedUtc = FromIso8601(reader["created_utc"].ToString()!);
             dock.LastUpdateUtc = FromIso8601(reader["last_update_utc"].ToString()!);
             return dock;

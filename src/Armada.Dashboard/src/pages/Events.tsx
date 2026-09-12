@@ -12,6 +12,7 @@ import RefreshButton from '../components/shared/RefreshButton';
 import PageHeader from '../components/shared/PageHeader';
 import ErrorModal from '../components/shared/ErrorModal';
 import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
+import UserScopeFilter from '../components/shared/UserScopeFilter';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
@@ -33,6 +34,7 @@ export default function Events() {
 
   // Pagination (server-side)
   const [pageNumber, setPageNumber] = useState(1);
+  const [userScope, setUserScope] = useState('');
   const [pageSize, setPageSize] = useState(50);
   const [totalPages, setTotalPages] = useState(1);
   const [totalRecords, setTotalRecords] = useState(0);
@@ -68,7 +70,7 @@ export default function Events() {
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const result = await listEvents({ pageNumber, pageSize });
+      const result = await listEvents({ pageNumber, pageSize, filters: userScope ? { userId: userScope } : undefined });
       setEvents(result.objects || []);
       setTotalPages(result.totalPages || 1);
       setTotalRecords(result.totalRecords || 0);
@@ -79,7 +81,7 @@ export default function Events() {
     } finally {
       setLoading(false);
     }
-  }, [pageNumber, pageSize, t]);
+  }, [pageNumber, pageSize, userScope, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -175,13 +177,14 @@ export default function Events() {
         subtitle={t('System event log capturing state changes, completions, failures, and other notable occurrences.')}
         actions={(
           <>
+            <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPageNumber(1); }} />
+            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
+            <RefreshButton onRefresh={load} title={t('Refresh event data')} />
             {selected.length > 0 && (
               <button className="btn btn-sm btn-danger" onClick={handleBulkDelete}>
                 {t('Delete Selected')} ({selected.length})
               </button>
             )}
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title={t('Refresh event data')} />
           </>
         )}
       />

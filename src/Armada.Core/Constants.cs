@@ -23,11 +23,27 @@ namespace Armada.Core
         public static readonly string ProductVersion = "0.9.0";
 
         /// <summary>
-        /// Default data directory.
+        /// Environment variable that overrides the default data directory. When set to a non-empty path it is
+        /// used verbatim as the data directory (holding settings.json, the database, logs, docks, and repos),
+        /// which enables isolated/ephemeral instances, side-by-side servers, and containerized deployments.
+        /// When unset, the data directory defaults to <c>~/.armada</c>.
         /// </summary>
-        public static readonly string DefaultDataDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".armada");
+        public const string DataDirectoryEnvVar = "ARMADA_DATA_DIR";
+
+        /// <summary>
+        /// Default data directory. Honors the <see cref="DataDirectoryEnvVar"/> environment variable when set,
+        /// otherwise <c>~/.armada</c> under the current user's profile.
+        /// </summary>
+        public static readonly string DefaultDataDirectory = ResolveDefaultDataDirectory();
+
+        private static string ResolveDefaultDataDirectory()
+        {
+            string? overrideDir = Environment.GetEnvironmentVariable(DataDirectoryEnvVar);
+            if (!String.IsNullOrWhiteSpace(overrideDir)) return overrideDir;
+            return Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                ".armada");
+        }
 
         /// <summary>
         /// Default database filename.
@@ -119,9 +135,40 @@ namespace Armada.Core
         public static readonly string JobIdPrefix = "job_";
 
         /// <summary>
+        /// ID prefix for Admiral self-rebuild records.
+        /// </summary>
+        public static readonly string RebuildIdPrefix = "rbd_";
+
+        /// <summary>
         /// Token-usage record ID prefix.
         /// </summary>
         public static readonly string TokenUsageIdPrefix = "tku_";
+
+        /// <summary>
+        /// Model endpoint ID prefix.
+        /// </summary>
+        public static readonly string ModelEndpointIdPrefix = "mep_";
+
+        /// <summary>
+        /// Harbor (host runner) ID prefix.
+        /// </summary>
+        public static readonly string HarborIdPrefix = "hbr_";
+
+        /// <summary>
+        /// Memory (durable agent memory) ID prefix.
+        /// </summary>
+        public static readonly string MemoryIdPrefix = "mem_";
+
+        /// <summary>
+        /// Default per-phase timeout, in seconds, for the in-dock Definition-of-Done gate (30 minutes).
+        /// </summary>
+        public const int DefaultDefinitionOfDoneTimeoutSeconds = 1800;
+
+        /// <summary>
+        /// Default minimum available physical memory, in bytes, required to launch a captain. 0 disables the
+        /// resource-pressure admission gate (the default: opt in by raising it).
+        /// </summary>
+        public const long DefaultMinAvailableMemoryBytesForLaunch = 0;
 
         /// <summary>
         /// Fleet ID prefix.

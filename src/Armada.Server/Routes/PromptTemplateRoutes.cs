@@ -2,6 +2,7 @@ namespace Armada.Server.Routes
 {
     using System;
     using System.Diagnostics;
+    using System.Linq;
     using System.Text.Json;
     using WatsonWebserver;
     using WatsonWebserver.Core;
@@ -62,6 +63,7 @@ namespace Armada.Server.Routes
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<PromptTemplate> result = await _database.PromptTemplates.EnumerateAsync(query).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
+                if (!ctx.IsAdmin) result.Objects = result.Objects.Where(p => ScopedVisibility.CanView(ctx, p.Scope, p.TenantId, p.UserId)).ToList();
                 return result;
             },
             api => api
@@ -85,6 +87,7 @@ namespace Armada.Server.Routes
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<PromptTemplate> result = await _database.PromptTemplates.EnumerateAsync(query).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
+                if (!ctx.IsAdmin) result.Objects = result.Objects.Where(p => ScopedVisibility.CanView(ctx, p.Scope, p.TenantId, p.UserId)).ToList();
                 return result;
             },
             api => api
@@ -129,6 +132,9 @@ namespace Armada.Server.Routes
                 template.Category = normalizedCategory;
                 template.Description = String.IsNullOrWhiteSpace(template.Description) ? null : template.Description.Trim();
                 template.IsBuiltIn = false;
+                template.TenantId = ctx.TenantId;
+                template.UserId = ctx.UserId;
+                template.Scope = ScopedVisibility.ResolveCreateScope(ctx, template.Scope);
                 template.CreatedUtc = DateTime.UtcNow;
                 template.LastUpdateUtc = DateTime.UtcNow;
 
@@ -162,7 +168,7 @@ namespace Armada.Server.Routes
                 }
                 string name = req.Parameters["name"];
                 PromptTemplate? template = await _database.PromptTemplates.ReadByNameAsync(name).ConfigureAwait(false);
-                if (template == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Prompt template not found" }; }
+                if (template == null || !ScopedVisibility.CanView(ctx, template.Scope, template.TenantId, template.UserId)) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Prompt template not found" }; }
                 return (object)template;
             },
             api => api
@@ -185,11 +191,13 @@ namespace Armada.Server.Routes
                 }
                 string name = req.Parameters["name"];
                 PromptTemplate? existing = await _database.PromptTemplates.ReadByNameAsync(name).ConfigureAwait(false);
-                if (existing == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Prompt template not found" }; }
+                if (existing == null || !ScopedVisibility.CanView(ctx, existing.Scope, existing.TenantId, existing.UserId)) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Prompt template not found" }; }
+                if (!ScopedVisibility.CanEdit(ctx, existing.Scope, existing.TenantId, existing.UserId)) { req.Http.Response.StatusCode = 403; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "You may only modify your own prompt templates; a tenant-wide template requires a tenant admin." }; }
                 PromptTemplate body = JsonSerializer.Deserialize<PromptTemplate>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as PromptTemplate.");
                 if (body.Content != null) existing.Content = body.Content;
                 if (body.Description != null) existing.Description = body.Description;
+                if (ctx.IsAdmin || ctx.IsTenantAdmin) existing.Scope = body.Scope;
                 existing.LastUpdateUtc = DateTime.UtcNow;
                 PromptTemplate updated = await _database.PromptTemplates.UpdateAsync(existing).ConfigureAwait(false);
                 return (object)updated;
@@ -214,6 +222,8 @@ namespace Armada.Server.Routes
                     return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 string name = req.Parameters["name"];
+                PromptTemplate? current = await _database.PromptTemplates.ReadByNameAsync(name).ConfigureAwait(false);
+                if (current != null && !ScopedVisibility.CanEdit(ctx, current.Scope, current.TenantId, current.UserId)) { req.Http.Response.StatusCode = 403; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "You may only reset your own prompt templates; a tenant-wide template requires a tenant admin." }; }
                 PromptTemplate? result = await _promptTemplateService.ResetToDefaultAsync(name).ConfigureAwait(false);
                 if (result == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "No embedded default exists for template '" + name + "'" }; }
                 return (object)result;

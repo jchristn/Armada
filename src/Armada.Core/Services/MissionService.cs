@@ -30,6 +30,14 @@ namespace Armada.Core.Services
         /// </summary>
         public Action<Mission>? OnReviewRequested { get; set; }
 
+        /// <summary>
+        /// Optional gate consulted before a mission is assigned to the selected captain. Returns true to allow
+        /// the assignment, or false to defer it (the mission stays Pending and is retried). Used to enforce the
+        /// "require a connected Harbor" policy: when set and it returns false, the mission waits instead of
+        /// running in-process.
+        /// </summary>
+        public Func<Mission, Captain, Task<bool>>? CanAssignMissionAsync { get; set; }
+
         #endregion
 
         #region Private-Members
@@ -42,6 +50,7 @@ namespace Armada.Core.Services
         private IDockService _Docks;
         private ICaptainService _Captains;
         private IPromptTemplateService? _PromptTemplates;
+        private IDefinitionOfDoneGate? _DefinitionOfDone;
         private const string ArchitectHandoffMarker = "<!-- ARMADA:ARCHITECT-HANDOFF -->";
         private const string ReviewFeedbackMarker = "<!-- ARMADA:REVIEW-FEEDBACK -->";
         private const string ReviewerGuidanceMarker = "<!-- ARMADA:REVIEWER-GUIDANCE -->";
@@ -149,6 +158,7 @@ namespace Armada.Core.Services
         /// <param name="captains">Captain service.</param>
         /// <param name="promptTemplates">Prompt template service (optional for backward compatibility).</param>
         /// <param name="git">Git service used for branch cleanup on non-landed intermediate stages.</param>
+        /// <param name="definitionOfDone">Optional in-dock Definition-of-Done gate.</param>
         public MissionService(
             LoggingModule logging,
             DatabaseDriver database,
@@ -156,7 +166,8 @@ namespace Armada.Core.Services
             IDockService docks,
             ICaptainService captains,
             IPromptTemplateService? promptTemplates = null,
-            IGitService? git = null)
+            IGitService? git = null,
+            IDefinitionOfDoneGate? definitionOfDone = null)
         {
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _Database = database ?? throw new ArgumentNullException(nameof(database));
@@ -165,6 +176,7 @@ namespace Armada.Core.Services
             _Docks = docks ?? throw new ArgumentNullException(nameof(docks));
             _Captains = captains ?? throw new ArgumentNullException(nameof(captains));
             _PromptTemplates = promptTemplates;
+            _DefinitionOfDone = definitionOfDone;
         }
 
         #endregion
@@ -265,7 +277,7 @@ namespace Armada.Core.Services
                 if (dependency.Status == MissionStatusEnum.WorkProduced &&
                     !IsPipelineHandoffPrepared(mission, dependency))
                 {
-                    _Logging.Info(_Header + "mission " + mission.Id + " depends on " + dependency.Id +
+                    _Logging.Debug(_Header + "mission " + mission.Id + " depends on " + dependency.Id +
                         " which is WorkProduced, but handoff is not prepared yet -- deferring assignment");
                     return false;
                 }
@@ -273,7 +285,7 @@ namespace Armada.Core.Services
 
             if (await ShouldDeferArchitectSequencedMissionAsync(mission, token).ConfigureAwait(false))
             {
-                _Logging.Info(_Header + "mission " + mission.Id +
+                _Logging.Debug(_Header + "mission " + mission.Id +
                     " is architect-marked as sequential after implementation work -- deferring assignment");
                 return false;
             }
@@ -331,6 +343,19 @@ namespace Armada.Core.Services
                 return false;
             }
 
+            // Policy gate: when the deployment requires a connected Harbor, defer assignment until one is
+            // available for this mission rather than running the captain in-process. The mission stays Pending
+            // and is retried on the next dispatch cycle.
+            if (CanAssignMissionAsync != null)
+            {
+                bool allowed = await CanAssignMissionAsync(mission, captain).ConfigureAwait(false);
+                if (!allowed)
+                {
+                    _Logging.Info(_Header + "deferring mission " + mission.Id + ": launch policy requires the requesting user's Harbor to be connected and eligible, and none is yet");
+                    return false;
+                }
+            }
+
             // Missions with an existing branch continue work on that branch. This covers
             // downstream pipeline stages, review rework loops, and resumed missions.
             bool preserveExistingBranch = !String.IsNullOrEmpty(mission.BranchName);
@@ -347,12 +372,12 @@ namespace Armada.Core.Services
             Dock? dock;
             try
             {
-                _Logging.Info(_Header + "provisioning dock for mission " + mission.Id + " on vessel " + vessel.Id + " with captain " + captain.Id);
+                _Logging.Debug(_Header + "provisioning dock for mission " + mission.Id + " on vessel " + vessel.Id + " with captain " + captain.Id);
                 dock = await _Docks.ProvisionAsync(vessel, captain, branchName, mission.Id, token).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "dock provisioning threw for mission " + mission.Id + " vessel " + vessel.Id + " captain " + captain.Id + ": " + ex.Message);
+                _Logging.Warn(_Header + "dock provisioning threw for mission " + mission.Id + " vessel " + vessel.Id + " captain " + captain.Id + ": " + ex.ToString());
 
                 // Revert mission to Pending
                 mission.Status = MissionStatusEnum.Pending;
@@ -446,7 +471,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "failed to launch agent for captain " + captain.Id + ": " + ex.Message);
+                    _Logging.Warn(_Header + "failed to launch agent for captain " + captain.Id + ": " + ex.ToString());
 
                     // Rollback captain state — release back to idle so it can accept future work
                     await _Captains.ReleaseAsync(captain, token).ConfigureAwait(false);
@@ -726,7 +751,7 @@ namespace Armada.Core.Services
             if (dock != null)
             {
                 try { await ReclaimMissionDockAsync(dock.Id, token).ConfigureAwait(false); }
-                catch (Exception ex) { _Logging.Warn(_Header + "boundary reclaim error for mission " + mission.Id + ": " + ex.Message); }
+                catch (Exception ex) { _Logging.Warn(_Header + "boundary reclaim error for mission " + mission.Id + ": " + ex.ToString()); }
             }
 
             mission.Status = MissionStatusEnum.Failed;
@@ -781,6 +806,60 @@ namespace Armada.Core.Services
         /// the caller holds instead of landing. Returns false when auto-land is disabled or the change is
         /// within the rules.
         /// </summary>
+        /// <summary>
+        /// Run the vessel's in-dock Definition-of-Done gate for a mission about to land. On a classified
+        /// failure (Compile/TestFail/Timeout/Infra), fail the mission with the classified reason, cancel
+        /// dependent pipeline stages, and return true so the caller does not land. Returns false when the
+        /// gate is disabled/unconfigured or the change passed.
+        /// </summary>
+        private async Task<bool> TryFailForDefinitionOfDoneAsync(Mission mission, Dock? dock, CancellationToken token)
+        {
+            if (_DefinitionOfDone == null) return false;
+            if (String.IsNullOrEmpty(mission.VesselId)) return false;
+            if (dock == null || String.IsNullOrEmpty(dock.WorktreePath)) return false;
+
+            Vessel? vessel = await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
+            if (vessel == null || !vessel.DefinitionOfDoneEnabled) return false;
+
+            DefinitionOfDoneResult result = await _DefinitionOfDone.EvaluateAsync(vessel, dock.WorktreePath!, token).ConfigureAwait(false);
+            if (result.Passed) return false;
+
+            mission.Status = MissionStatusEnum.Failed;
+            mission.FailureReason = "definition_of_done_" + result.Outcome.ToString().ToLowerInvariant() + ": " + result.Detail;
+            mission.CompletedUtc = DateTime.UtcNow;
+            mission.LastUpdateUtc = DateTime.UtcNow;
+            await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+            _Logging.Warn(_Header + "mission " + mission.Id + " failed the Definition-of-Done gate (" + result.Outcome + ")");
+
+            await CancelDependentPipelineStagesAsync(mission, token).ConfigureAwait(false);
+            await UpdateVoyageTerminalStatusAsync(mission.VoyageId, token).ConfigureAwait(false);
+            return true;
+        }
+
+        /// <inheritdoc />
+        public async Task<AutoLandDecision?> EvaluateAutoLandAsync(string missionId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));
+
+            Mission? mission = await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
+            if (mission == null || String.IsNullOrEmpty(mission.VesselId)) return null;
+
+            Vessel? vessel = await _Database.Vessels.ReadAsync(mission.VesselId!, token).ConfigureAwait(false);
+            if (vessel == null) return null;
+
+            List<string> changedPaths = ExtractChangedPathsFromDiff(mission.DiffSnapshot);
+            AutoLandPolicy policy = new AutoLandPolicy
+            {
+                Enabled = vessel.AutoLandEnabled,
+                MaxFiles = vessel.AutoLandMaxFiles,
+                MaxLines = vessel.AutoLandMaxLines,
+                PathAllowGlobs = vessel.AutoLandPathAllowGlobs ?? new List<string>(),
+                PathDenyGlobs = vessel.AutoLandPathDenyGlobs ?? new List<string>(),
+            };
+
+            return AutoLandPredicate.Evaluate(changedPaths.Count, CountChangedDiffLines(mission.DiffSnapshot), changedPaths, policy);
+        }
+
         private async Task<bool> TryHoldForAutoLandAsync(Mission mission, CancellationToken token)
         {
             if (String.IsNullOrEmpty(mission.VesselId)) return false;
@@ -828,7 +907,7 @@ namespace Armada.Core.Services
             if (dock != null)
             {
                 try { await ReclaimMissionDockAsync(dock.Id, token).ConfigureAwait(false); }
-                catch (Exception ex) { _Logging.Warn(_Header + "no-op reclaim error for mission " + mission.Id + ": " + ex.Message); }
+                catch (Exception ex) { _Logging.Warn(_Header + "no-op reclaim error for mission " + mission.Id + ": " + ex.ToString()); }
             }
 
             int maxAttempts = _Settings.MaxNoOpRedispatchAttempts;
@@ -903,6 +982,10 @@ namespace Armada.Core.Services
                 return;
             }
 
+            // Read-only modes (Audit/Research) produce a written report, not a commit. Their empty diff is a
+            // successful outcome, so they skip no-op rejection and never attempt landing.
+            bool isReadOnlyMission = MissionModeContract.IsReadOnly(mission.Mode);
+
             // Mark mission as work produced (agent finished, landing not yet attempted)
             mission.Status = MissionStatusEnum.WorkProduced;
             mission.ProcessId = null;
@@ -925,7 +1008,7 @@ namespace Armada.Core.Services
                 mission.BranchName = dock.BranchName;
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
-                _Logging.Info(_Header + "backfilled branch " + dock.BranchName + " onto mission " + mission.Id +
+                _Logging.Debug(_Header + "backfilled branch " + dock.BranchName + " onto mission " + mission.Id +
                     " from dock " + dock.Id + " before pipeline handoff");
             }
 
@@ -944,7 +1027,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "error capturing diff for mission " + mission.Id + ": " + ex.Message);
+                    _Logging.Warn(_Header + "error capturing diff for mission " + mission.Id + ": " + ex.ToString());
                 }
             }
 
@@ -986,7 +1069,7 @@ namespace Armada.Core.Services
             // Reject a no-op false-complete (fast exit, empty diff, trivial output): re-dispatch to a
             // fresh captain up to a bounded number of times, then fail to the operator inbox. Skipped
             // when the mission already failed scope validation.
-            if (!failedForScopeViolation &&
+            if (!failedForScopeViolation && !isReadOnlyMission &&
                 await TryRejectNoOpCompletionAsync(mission, dock, token).ConfigureAwait(false))
             {
                 return;
@@ -1004,24 +1087,51 @@ namespace Armada.Core.Services
             {
                 JudgeVerdict verdict = ParseJudgeVerdict(mission.AgentOutput);
                 string? verdictFailureReason = null;
+                bool rejectedPass = false;
+
+                // A PASS must be substantiated (three lenses + real narrative). A rejected PASS is not
+                // silently re-run: it is downgraded to a blocking verdict and the mission fails terminally
+                // with an explicit reason so an operator sees it rather than a quiet re-dispatch.
                 if (verdict == JudgeVerdict.Pass && !TryValidateJudgePassOutput(mission.AgentOutput, out verdictFailureReason))
                 {
                     verdict = JudgeVerdict.NeedsRevision;
+                    rejectedPass = true;
                 }
 
                 if (verdict != JudgeVerdict.Pass)
                 {
+                    // To block, the Judge must exhibit a concrete affected case. A block without one is a
+                    // contract violation: the mission still fails terminally, but the reason makes clear the
+                    // Judge did not substantiate the block rather than the work being definitively wrong.
+                    bool isBlockingVerdict = verdict == JudgeVerdict.Fail || verdict == JudgeVerdict.NeedsRevision;
+                    bool exhibitsAffectedCase = JudgeContract.ExhibitsAffectedCase(mission.AgentOutput);
+
+                    string blockingReason;
+                    if (rejectedPass)
+                    {
+                        blockingReason = "Judge PASS rejected (" + (verdictFailureReason ?? "unsubstantiated approval") + ")";
+                    }
+                    else if (isBlockingVerdict && !exhibitsAffectedCase)
+                    {
+                        blockingReason = "Judge verdict: " + (verdict == JudgeVerdict.Fail ? "FAIL" : "NEEDS_REVISION") +
+                            " but did not exhibit a concrete affected case; a block must cite a real affected file, line, or scenario";
+                    }
+                    else
+                    {
+                        blockingReason = verdict switch
+                        {
+                            JudgeVerdict.Fail => "Judge verdict: FAIL",
+                            JudgeVerdict.NeedsRevision => "Judge verdict: NEEDS_REVISION",
+                            _ => "Judge mission did not emit an explicit PASS verdict"
+                        };
+                    }
+
                     mission.Status = MissionStatusEnum.Failed;
                     mission.CompletedUtc = DateTime.UtcNow;
                     mission.LastUpdateUtc = DateTime.UtcNow;
-                    mission.FailureReason = verdictFailureReason ?? verdict switch
-                    {
-                        JudgeVerdict.Fail => "Judge verdict: FAIL",
-                        JudgeVerdict.NeedsRevision => "Judge verdict: NEEDS_REVISION",
-                        _ => "Judge mission did not emit an explicit PASS verdict"
-                    };
+                    mission.FailureReason = blockingReason;
                     await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
-                    _Logging.Warn(_Header + "judge mission " + mission.Id + " blocked landing with verdict " + verdict);
+                    _Logging.Warn(_Header + "judge mission " + mission.Id + " blocked landing: " + blockingReason);
                 }
             }
 
@@ -1073,8 +1183,34 @@ namespace Armada.Core.Services
                 !awaitingManualReview &&
                 !preparedDownstreamStages &&
                 !hasDependentPipelineStages &&
+                !isReadOnlyMission &&
                 (mission.Status == MissionStatusEnum.WorkProduced ||
                 mission.Status == MissionStatusEnum.PullRequestOpen);
+
+            // Read-only missions (Audit/Research) that are not held for review or feeding a pipeline stage
+            // complete directly: there is nothing to land, and an empty diff is the expected outcome.
+            if (isReadOnlyMission &&
+                !awaitingManualReview &&
+                !preparedDownstreamStages &&
+                !hasDependentPipelineStages &&
+                mission.Status == MissionStatusEnum.WorkProduced)
+            {
+                mission.Status = MissionStatusEnum.Complete;
+                mission.CompletedUtc = DateTime.UtcNow;
+                mission.LastUpdateUtc = DateTime.UtcNow;
+                await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                await UpdateVoyageTerminalStatusAsync(mission.VoyageId, token).ConfigureAwait(false);
+                _Logging.Info(_Header + "read-only " + mission.Mode + " mission " + mission.Id +
+                    " completed without landing (no commit expected)");
+            }
+
+            // In-dock Definition-of-Done gate: run the vessel's build + unit tests inside the mission's own
+            // checkout before acceptance. A classified failure (Compile/TestFail/Timeout/Infra) blocks
+            // landing and fails the mission so it surfaces (and can be recovered).
+            if (shouldAttemptLanding && await TryFailForDefinitionOfDoneAsync(mission, dock, token).ConfigureAwait(false))
+            {
+                shouldAttemptLanding = false;
+            }
 
             // Per-vessel auto-land predicate: a change that is too large or touches denied/out-of-scope
             // paths holds for review instead of landing unattended.
@@ -1086,7 +1222,7 @@ namespace Armada.Core.Services
 
             if (!shouldAttemptLanding)
             {
-                _Logging.Info(_Header + "skipping landing for mission " + mission.Id +
+                _Logging.Debug(_Header + "skipping landing for mission " + mission.Id +
                     " because it is not a terminal landed stage yet (status: " + mission.Status + ")");
             }
 
@@ -1095,14 +1231,14 @@ namespace Armada.Core.Services
             // from being reassigned while git operations are still in progress.
             if (shouldAttemptLanding && dock != null && OnMissionComplete != null)
             {
-                _Logging.Info(_Header + "executing synchronous landing handoff for mission " + mission.Id);
+                _Logging.Debug(_Header + "executing synchronous landing handoff for mission " + mission.Id);
                 try
                 {
                     await OnMissionComplete.Invoke(mission, dock).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "error in mission complete handler for " + mission.Id + ": " + ex.Message);
+                    _Logging.Warn(_Header + "error in mission complete handler for " + mission.Id + ": " + ex.ToString());
                 }
             }
 
@@ -1148,7 +1284,7 @@ namespace Armada.Core.Services
             }
             else
             {
-                _Logging.Info(_Header + "skipping captain release for mission " + mission.Id +
+                _Logging.Debug(_Header + "skipping captain release for mission " + mission.Id +
                     " because captain " + captain.Id + " is now assigned to " + (latestCaptain?.CurrentMissionId ?? "nothing"));
             }
 
@@ -1253,19 +1389,76 @@ namespace Armada.Core.Services
             content += await ResolveSectionAsync("mission.metadata", templateParams, token).ConfigureAwait(false);
             content += "\n";
 
-            // Resolved git anchors (start commit, target branch, working branch) so the captain does not
-            // burn opening turns deriving them. Best-effort: a git failure degrades to no section.
+            // Mission-mode contract: read-only modes (Audit/Research) get a report-shaped brief that forbids
+            // repository changes and states that an empty diff is a successful outcome. Write missions add nothing.
+            string missionModeSection = MissionModeContract.BuildBriefSection(mission.Mode);
+            if (!String.IsNullOrEmpty(missionModeSection))
+            {
+                content += missionModeSection;
+                content += "\n";
+            }
+
+            // Resolved git anchors (start commit, target branch, working branch, recent commits on the paths
+            // the mission names, and which subject terms already exist in the tree) so the captain does not
+            // burn opening turns deriving them. Best-effort: a git failure degrades to a smaller section.
             string? headCommit = null;
+            IReadOnlyList<string>? recentPathCommits = null;
+            IReadOnlyList<string>? subjectTermsPresent = null;
             if (_Git != null)
             {
                 try { headCommit = await _Git.GetHeadCommitHashAsync(worktreePath, token).ConfigureAwait(false); }
                 catch { headCommit = null; }
+
+                string missionText = (mission.Title ?? "") + "\n" + (mission.Description ?? "");
+                try
+                {
+                    IReadOnlyList<string> namedPaths = GitAnchorInputs.ExtractPaths(missionText);
+                    if (namedPaths.Count > 0)
+                        recentPathCommits = await _Git.GetRecentCommitsForPathsAsync(worktreePath, namedPaths, 3, token).ConfigureAwait(false);
+                }
+                catch { recentPathCommits = null; }
+
+                try
+                {
+                    IReadOnlyList<string> terms = GitAnchorInputs.ExtractSubjectTerms(mission.Title, mission.Description);
+                    if (terms.Count > 0)
+                        subjectTermsPresent = await _Git.FindExistingSubjectTermsAsync(worktreePath, terms, token).ConfigureAwait(false);
+                }
+                catch { subjectTermsPresent = null; }
             }
-            string gitAnchors = GitAnchorsFormatter.Render(headCommit, vessel.DefaultBranch, mission.BranchName);
+            string gitAnchors = GitAnchorsFormatter.Render(headCommit, vessel.DefaultBranch, mission.BranchName, recentPathCommits, subjectTermsPresent);
             if (!String.IsNullOrEmpty(gitAnchors))
             {
                 content += gitAnchors;
                 content += "\n";
+
+                // Persist the resolved anchors on the dock (documented raw-JSON snapshot) so the dashboard
+                // and a resuming captain can read them without re-deriving. Best-effort.
+                if (!String.IsNullOrEmpty(mission.DockId))
+                {
+                    try
+                    {
+                        GitAnchorsSnapshot snapshot = new GitAnchorsSnapshot
+                        {
+                            StartCommit = headCommit,
+                            TargetBranch = vessel.DefaultBranch,
+                            WorkingBranch = mission.BranchName,
+                            RecentPathCommits = recentPathCommits != null ? new List<string>(recentPathCommits) : new List<string>(),
+                            SubjectTermsPresent = subjectTermsPresent != null ? new List<string>(subjectTermsPresent) : new List<string>(),
+                        };
+                        Dock? anchorDock = await _Database.Docks.ReadAsync(mission.DockId!, token).ConfigureAwait(false);
+                        if (anchorDock != null)
+                        {
+                            anchorDock.GitAnchorsJson = System.Text.Json.JsonSerializer.Serialize(snapshot);
+                            anchorDock.LastUpdateUtc = DateTime.UtcNow;
+                            await _Database.Docks.UpdateAsync(anchorDock, token).ConfigureAwait(false);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _Logging.Debug(_Header + "could not persist git anchors on dock " + mission.DockId + ": " + ex.Message);
+                    }
+                }
             }
 
             // Rules, context conservation, merge conflicts, progress signals -- from templates or hardcoded fallback
@@ -1304,7 +1497,7 @@ namespace Armada.Core.Services
                 {
                     if (!String.Equals(existing, sanitizedExisting, StringComparison.Ordinal))
                     {
-                        _Logging.Info(_Header + "sanitized generated mission sections from existing instructions at " + instructionsPath);
+                        _Logging.Debug(_Header + "sanitized generated mission sections from existing instructions at " + instructionsPath);
                     }
 
                     templateParams["ExistingClaudeMd"] = sanitizedExisting;
@@ -1326,7 +1519,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "could not persist mission instructions snapshot for " + mission.Id + ": " + ex.Message);
+                _Logging.Warn(_Header + "could not persist mission instructions snapshot for " + mission.Id + ": " + ex.ToString());
             }
 
             // Ensure the generated instruction file is ignored locally so agents don't commit it.
@@ -1353,10 +1546,10 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "could not update git exclude for " + instructionsFileName + ": " + ex.Message);
+                _Logging.Warn(_Header + "could not update git exclude for " + instructionsFileName + ": " + ex.ToString());
             }
 
-            _Logging.Info(_Header + "generated mission instructions at " + instructionsPath);
+            _Logging.Debug(_Header + "generated mission instructions at " + instructionsPath);
         }
 
         private async Task<List<MissionPlaybookSnapshot>> LoadMissionPlaybookSnapshotsAsync(Mission mission, CancellationToken token)
@@ -1556,7 +1749,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error resolving persona override for vessel " + vessel.Id + ": " + ex.Message);
+                _Logging.Warn(_Header + "error resolving persona override for vessel " + vessel.Id + ": " + ex.ToString());
                 return null;
             }
         }
@@ -1608,7 +1801,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error resolving skills for vessel " + vessel.Id + ": " + ex.Message);
+                _Logging.Warn(_Header + "error resolving skills for vessel " + vessel.Id + ": " + ex.ToString());
                 return String.Empty;
             }
         }
@@ -1934,14 +2127,14 @@ namespace Armada.Core.Services
             BranchCleanupPolicyEnum cleanupPolicy = vessel.BranchCleanupPolicy ?? _Settings.BranchCleanupPolicy;
             if (cleanupPolicy == BranchCleanupPolicyEnum.None)
             {
-                _Logging.Info(_Header + "branch cleanup policy is None - retaining architect branch " + branchName + " after handoff");
+                _Logging.Debug(_Header + "branch cleanup policy is None - retaining architect branch " + branchName + " after handoff");
                 return;
             }
 
             try
             {
                 await _Git.DeleteLocalBranchAsync(vessel.LocalPath, branchName, token).ConfigureAwait(false);
-                _Logging.Info(_Header + "deleted architect branch " + branchName + " from bare repo after successful handoff");
+                _Logging.Debug(_Header + "deleted architect branch " + branchName + " from bare repo after successful handoff");
             }
             catch (Exception branchEx)
             {
@@ -1960,7 +2153,7 @@ namespace Armada.Core.Services
                 try
                 {
                     await _Git.DeleteRemoteBranchAsync(vessel.WorkingDirectory, branchName, token).ConfigureAwait(false);
-                    _Logging.Info(_Header + "deleted remote architect branch " + branchName + " after successful handoff");
+                    _Logging.Debug(_Header + "deleted remote architect branch " + branchName + " after successful handoff");
                 }
                 catch (Exception remoteBranchEx)
                 {
@@ -2010,7 +2203,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "error re-driving handoff for mission " + produced.Id + ": " + ex.Message);
+                    _Logging.Warn(_Header + "error re-driving handoff for mission " + produced.Id + ": " + ex.ToString());
                 }
             }
 
@@ -2036,7 +2229,7 @@ namespace Armada.Core.Services
                 if (parsed.Count > 0)
                 {
                     await ProjectArchitectMissionsToLogAsync(completedMission, parsed, token).ConfigureAwait(false);
-                    _Logging.Info(_Header + "architect produced " + parsed.Count + " mission definitions");
+                    _Logging.Debug(_Header + "architect produced " + parsed.Count + " mission definitions");
 
                     foreach (Mission nextMission in dependentMissions)
                     {
@@ -2094,6 +2287,12 @@ namespace Armada.Core.Services
                 return false;
             }
 
+            // Stage-lag hardening: the just-completed stage's dock may have committed on a detached HEAD,
+            // leaving its produced commit off the shared branch ref. The next stage reuses that same branch,
+            // so resolve the dock's live HEAD and force-advance the branch ref before handing off, otherwise
+            // the next stage would check out stale code. Best-effort: a git failure is logged, not fatal.
+            await HardenStageBranchAsync(completedMission, token).ConfigureAwait(false);
+
             foreach (Mission nextMission in dependentMissions)
             {
                 // Build persona-specific preamble for the next stage
@@ -2133,13 +2332,13 @@ namespace Armada.Core.Services
                         break;
                     case PersonaCatalog.Judge:
                         personaPreamble = "## Your Role: Judge (Review)\n\n" +
-                            "You are reviewing the completed work for correctness, completeness, scope compliance, " +
-                            "test adequacy, and failure-mode safety. Examine the diff below against the current mission " +
-                            "description only, not sibling missions in the same voyage. Assume there may be at least " +
-                            "one hidden bug. Your response must include `## Completeness`, `## Correctness`, `## Tests`, " +
-                            "`## Failure Modes`, and `## Verdict` sections. A PASS is only allowed when tests are adequate, " +
-                            "negative-path coverage for validation, timeout, cancellation, retry, cleanup, and error-handling " +
-                            "changes is present or justified, and failure modes were explicitly reviewed. End with a standalone line " +
+                            "You are reviewing the completed work through three lenses: correctness, blast radius, and " +
+                            "source fidelity. Examine the diff below against the current mission description only, not " +
+                            "sibling missions in the same voyage. Assume there may be at least one hidden defect. " +
+                            "Your response must include `## Correctness`, `## Blast Radius`, `## Source Fidelity`, and " +
+                            "`## Verdict` sections. To block (FAIL or NEEDS_REVISION) you MUST add a `## Affected Case` " +
+                            "section exhibiting one concrete affected case (a specific file, line, or scenario); a block " +
+                            "without a concrete affected case is not accepted. End with a standalone line " +
                             "`[ARMADA:VERDICT] PASS`, `[ARMADA:VERDICT] FAIL`, or `[ARMADA:VERDICT] NEEDS_REVISION`.\n\n";
                         break;
                 }
@@ -2184,13 +2383,47 @@ namespace Armada.Core.Services
                 nextMission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(nextMission, token).ConfigureAwait(false);
 
-                _Logging.Info(_Header + "pipeline handoff: prepared mission " + nextMission.Id +
+                _Logging.Debug(_Header + "pipeline handoff: prepared mission " + nextMission.Id +
                     " (" + nextMission.Persona + ") with context from " + completedMission.Id +
                     " (" + completedMission.Persona + ")");
 
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Force-advance the shared pipeline branch to the just-completed stage's produced commit. A prior
+        /// stage's dock can end on a detached HEAD (its commit is not on the branch ref), so the next stage --
+        /// which reuses the same branch -- would otherwise check out stale code. Resolve the dock's live HEAD
+        /// and lift it onto the branch ref. Best-effort: any failure is logged and the handoff continues.
+        /// </summary>
+        private async Task HardenStageBranchAsync(Mission completedMission, CancellationToken token)
+        {
+            if (_Git == null) return;
+            if (String.IsNullOrEmpty(completedMission.BranchName) || String.IsNullOrEmpty(completedMission.DockId)) return;
+
+            Dock? dock = !String.IsNullOrEmpty(completedMission.TenantId)
+                ? await _Database.Docks.ReadAsync(completedMission.TenantId, completedMission.DockId!, token).ConfigureAwait(false)
+                : await _Database.Docks.ReadAsync(completedMission.DockId!, token).ConfigureAwait(false);
+            if (dock == null || String.IsNullOrEmpty(dock.WorktreePath) || !Directory.Exists(dock.WorktreePath)) return;
+
+            try
+            {
+                string? headCommit = await _Git.GetHeadCommitHashAsync(dock.WorktreePath!, token).ConfigureAwait(false);
+                if (String.IsNullOrEmpty(headCommit)) return;
+
+                bool advanced = await _Git.ForceAdvanceBranchAsync(dock.WorktreePath!, completedMission.BranchName!, headCommit!, token).ConfigureAwait(false);
+                if (advanced)
+                {
+                    _Logging.Debug(_Header + "stage-lag hardening: advanced branch " + completedMission.BranchName +
+                        " to " + headCommit + " from dock " + dock.Id + " before handoff from mission " + completedMission.Id);
+                }
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "stage-lag hardening failed for mission " + completedMission.Id + ": " + ex.ToString());
+            }
         }
 
         private async Task CancelDependentPipelineStagesAsync(Mission failedMission, CancellationToken token)
@@ -2382,7 +2615,7 @@ namespace Armada.Core.Services
                 workerRoot.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(workerRoot, token).ConfigureAwait(false);
 
-                _Logging.Info(_Header + "architect sequenced worker mission " + workerRoot.Id +
+                _Logging.Debug(_Header + "architect sequenced worker mission " + workerRoot.Id +
                     " to depend on terminal stage " + resolvedDependency.Id +
                     " from reference '" + dependencyReference + "'");
             }
@@ -3024,7 +3257,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "could not read dock start commit metadata for " + dockId + ": " + ex.Message);
+                _Logging.Warn(_Header + "could not read dock start commit metadata for " + dockId + ": " + ex.ToString());
                 return null;
             }
         }
@@ -3086,46 +3319,15 @@ namespace Armada.Core.Services
 
         private bool TryValidateJudgePassOutput(string? agentOutput, out string? failureReason)
         {
-            failureReason = null;
-
-            if (String.IsNullOrWhiteSpace(agentOutput))
+            // Delegate the bounded three-lens PASS contract to the pure JudgeContract so the prompt builders,
+            // this gate, and the tests share one definition.
+            string narrative = ExtractJudgeNarrative(agentOutput ?? String.Empty);
+            if (JudgeContract.ValidatePass(agentOutput, narrative, out failureReason))
             {
-                failureReason = "Judge PASS verdict missing review output";
-                return false;
+                return true;
             }
 
-            List<string> missingSections = new List<string>();
-            if (!ContainsJudgeReviewSection(agentOutput, "Completeness")) missingSections.Add("Completeness");
-            if (!ContainsJudgeReviewSection(agentOutput, "Correctness")) missingSections.Add("Correctness");
-            if (!ContainsJudgeReviewSection(agentOutput, "Tests")) missingSections.Add("Tests");
-            if (!ContainsJudgeReviewSection(agentOutput, "Failure Modes")) missingSections.Add("Failure Modes");
-
-            if (missingSections.Count > 0)
-            {
-                failureReason = "Judge PASS verdict missing required review sections: " + String.Join(", ", missingSections);
-                return false;
-            }
-
-            string substantiveReview = ExtractJudgeNarrative(agentOutput);
-            if (substantiveReview.Length < 120)
-            {
-                failureReason = "Judge PASS verdict review is too short to justify approval";
-                return false;
-            }
-
-            return true;
-        }
-
-        private static bool ContainsJudgeReviewSection(string agentOutput, string sectionName)
-        {
-            if (String.IsNullOrWhiteSpace(agentOutput) || String.IsNullOrWhiteSpace(sectionName)) return false;
-
-            string pattern =
-                @"(?im)^\s*(?:#{1,6}\s*)?(?:[-*]\s*)?(?:\d+\.\s*)?(?:\*\*|__|`)?"
-                + System.Text.RegularExpressions.Regex.Escape(sectionName)
-                + @"(?:\*\*|__|`)?\s*(?::|-)?(?:\s|$)";
-
-            return System.Text.RegularExpressions.Regex.IsMatch(agentOutput, pattern);
+            return false;
         }
 
         private static string ExtractJudgeNarrative(string agentOutput)
@@ -3335,7 +3537,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "could not project architect mission definitions into log for " + architectMission.Id + ": " + ex.Message);
+                _Logging.Warn(_Header + "could not project architect mission definitions into log for " + architectMission.Id + ": " + ex.ToString());
             }
         }
 
@@ -3565,12 +3767,32 @@ namespace Armada.Core.Services
             CaptainTierEnum? resolvedTier = null;
 
             List<CaptainAssignmentOverride> overrides = await ReadVoyageCaptainOverridesAsync(mission.VoyageId, token).ConfigureAwait(false);
+
+            // An exact per-persona override wins; a wildcard override ("*" or empty persona) applies to every
+            // step and is the fallback. The wildcard lets a dispatch pin one captain regardless of pipeline
+            // (including "Inherit", where the resolved stages are not known at dispatch time).
+            CaptainAssignmentOverride? exactMatch = null;
+            CaptainAssignmentOverride? wildcardMatch = null;
             foreach (CaptainAssignmentOverride ov in overrides)
             {
-                if (!PersonaCatalog.Matches(ov.Persona, mission.Persona)) continue;
-                resolvedCaptainId = String.IsNullOrEmpty(ov.CaptainId) ? null : ov.CaptainId;
-                resolvedTier = ov.FallbackTier;
-                break;
+                if (String.IsNullOrEmpty(ov.Persona) || ov.Persona == "*")
+                {
+                    if (wildcardMatch == null) wildcardMatch = ov;
+                    continue;
+                }
+
+                if (PersonaCatalog.Matches(ov.Persona, mission.Persona))
+                {
+                    exactMatch = ov;
+                    break;
+                }
+            }
+
+            CaptainAssignmentOverride? chosen = exactMatch ?? wildcardMatch;
+            if (chosen != null)
+            {
+                resolvedCaptainId = String.IsNullOrEmpty(chosen.CaptainId) ? null : chosen.CaptainId;
+                resolvedTier = chosen.FallbackTier;
             }
 
             if (String.IsNullOrEmpty(resolvedCaptainId))

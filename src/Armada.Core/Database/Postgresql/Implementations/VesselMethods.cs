@@ -59,8 +59,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = @"INSERT INTO vessels (id, tenant_id, user_id, fleet_id, name, repo_url, local_path, working_directory, project_context, style_guide, enable_model_context, model_context, github_token_override, landing_mode, branch_cleanup_policy, require_passing_checks_to_land, allow_concurrent_missions, default_pipeline_id, default_branch, protected_branch_patterns_json, release_branch_prefix, hotfix_branch_prefix, require_pull_request_for_protected_branches, require_merge_queue_for_release_branches, secret_scan_enabled, protected_path_patterns_json, private_identifier_denylist_json, auto_land_enabled, auto_land_max_files, auto_land_max_lines, auto_land_path_allow_globs_json, auto_land_path_deny_globs_json, active, created_utc, last_update_utc)
-                        VALUES (@id, @tenant_id, @user_id, @fleet_id, @name, @repo_url, @local_path, @working_directory, @project_context, @style_guide, @enable_model_context, @model_context, @github_token_override, @landing_mode, @branch_cleanup_policy, @require_passing_checks_to_land, @allow_concurrent_missions, @default_pipeline_id, @default_branch, @protected_branch_patterns_json, @release_branch_prefix, @hotfix_branch_prefix, @require_pull_request_for_protected_branches, @require_merge_queue_for_release_branches, @secret_scan_enabled, @protected_path_patterns_json, @private_identifier_denylist_json, @auto_land_enabled, @auto_land_max_files, @auto_land_max_lines, @auto_land_path_allow_globs_json, @auto_land_path_deny_globs_json, @active, @created_utc, @last_update_utc);";
+                    cmd.CommandText = @"INSERT INTO vessels (id, tenant_id, user_id, fleet_id, name, repo_url, local_path, working_directory, preferred_harbor_id, required_capabilities, project_context, style_guide, enable_model_context, model_context, github_token_override, landing_mode, branch_cleanup_policy, require_passing_checks_to_land, allow_concurrent_missions, default_pipeline_id, default_branch, protected_branch_patterns_json, release_branch_prefix, hotfix_branch_prefix, require_pull_request_for_protected_branches, require_merge_queue_for_release_branches, secret_scan_enabled, protected_path_patterns_json, private_identifier_denylist_json, auto_land_enabled, auto_land_max_files, auto_land_max_lines, auto_land_path_allow_globs_json, auto_land_path_deny_globs_json, definition_of_done_enabled, definition_of_done_build_command, definition_of_done_test_command, definition_of_done_timeout_seconds, active, created_utc, last_update_utc)
+                        VALUES (@id, @tenant_id, @user_id, @fleet_id, @name, @repo_url, @local_path, @working_directory, @preferred_harbor_id, @required_capabilities, @project_context, @style_guide, @enable_model_context, @model_context, @github_token_override, @landing_mode, @branch_cleanup_policy, @require_passing_checks_to_land, @allow_concurrent_missions, @default_pipeline_id, @default_branch, @protected_branch_patterns_json, @release_branch_prefix, @hotfix_branch_prefix, @require_pull_request_for_protected_branches, @require_merge_queue_for_release_branches, @secret_scan_enabled, @protected_path_patterns_json, @private_identifier_denylist_json, @auto_land_enabled, @auto_land_max_files, @auto_land_max_lines, @auto_land_path_allow_globs_json, @auto_land_path_deny_globs_json, @definition_of_done_enabled, @definition_of_done_build_command, @definition_of_done_test_command, @definition_of_done_timeout_seconds, @active, @created_utc, @last_update_utc);";
                     cmd.Parameters.AddWithValue("@id", vessel.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)vessel.TenantId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@user_id", (object?)vessel.UserId ?? DBNull.Value);
@@ -69,6 +69,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@repo_url", (object?)vessel.RepoUrl ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@local_path", (object?)vessel.LocalPath ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@working_directory", (object?)vessel.WorkingDirectory ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@preferred_harbor_id", (object?)vessel.PreferredHarborId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@required_capabilities", (object?)vessel.RequiredCapabilities ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@project_context", (object?)vessel.ProjectContext ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@style_guide", (object?)vessel.StyleGuide ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@enable_model_context", vessel.EnableModelContext);
@@ -93,6 +95,10 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@auto_land_max_lines", vessel.AutoLandMaxLines);
                     cmd.Parameters.AddWithValue("@auto_land_path_allow_globs_json", JsonSerializer.Serialize(vessel.AutoLandPathAllowGlobs ?? new List<string>()));
                     cmd.Parameters.AddWithValue("@auto_land_path_deny_globs_json", JsonSerializer.Serialize(vessel.AutoLandPathDenyGlobs ?? new List<string>()));
+                    cmd.Parameters.AddWithValue("@definition_of_done_enabled", vessel.DefinitionOfDoneEnabled);
+                    cmd.Parameters.AddWithValue("@definition_of_done_build_command", (object?)vessel.DefinitionOfDoneBuildCommand ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@definition_of_done_test_command", (object?)vessel.DefinitionOfDoneTestCommand ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@definition_of_done_timeout_seconds", vessel.DefinitionOfDoneTimeoutSeconds);
                     cmd.Parameters.AddWithValue("@active", vessel.Active);
                     cmd.Parameters.AddWithValue("@created_utc", vessel.CreatedUtc);
                     cmd.Parameters.AddWithValue("@last_update_utc", vessel.LastUpdateUtc);
@@ -171,6 +177,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         repo_url = @repo_url,
                         local_path = @local_path,
                         working_directory = @working_directory,
+                        preferred_harbor_id = @preferred_harbor_id,
+                        required_capabilities = @required_capabilities,
                         project_context = @project_context,
                         style_guide = @style_guide,
                         enable_model_context = @enable_model_context,
@@ -195,6 +203,10 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         auto_land_max_lines = @auto_land_max_lines,
                         auto_land_path_allow_globs_json = @auto_land_path_allow_globs_json,
                         auto_land_path_deny_globs_json = @auto_land_path_deny_globs_json,
+                        definition_of_done_enabled = @definition_of_done_enabled,
+                        definition_of_done_build_command = @definition_of_done_build_command,
+                        definition_of_done_test_command = @definition_of_done_test_command,
+                        definition_of_done_timeout_seconds = @definition_of_done_timeout_seconds,
                         active = @active,
                         last_update_utc = @last_update_utc
                         WHERE id = @id;";
@@ -206,6 +218,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@repo_url", (object?)vessel.RepoUrl ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@local_path", (object?)vessel.LocalPath ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@working_directory", (object?)vessel.WorkingDirectory ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@preferred_harbor_id", (object?)vessel.PreferredHarborId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@required_capabilities", (object?)vessel.RequiredCapabilities ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@project_context", (object?)vessel.ProjectContext ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@style_guide", (object?)vessel.StyleGuide ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@enable_model_context", vessel.EnableModelContext);
@@ -230,6 +244,10 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@auto_land_max_lines", vessel.AutoLandMaxLines);
                     cmd.Parameters.AddWithValue("@auto_land_path_allow_globs_json", JsonSerializer.Serialize(vessel.AutoLandPathAllowGlobs ?? new List<string>()));
                     cmd.Parameters.AddWithValue("@auto_land_path_deny_globs_json", JsonSerializer.Serialize(vessel.AutoLandPathDenyGlobs ?? new List<string>()));
+                    cmd.Parameters.AddWithValue("@definition_of_done_enabled", vessel.DefinitionOfDoneEnabled);
+                    cmd.Parameters.AddWithValue("@definition_of_done_build_command", (object?)vessel.DefinitionOfDoneBuildCommand ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@definition_of_done_test_command", (object?)vessel.DefinitionOfDoneTestCommand ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@definition_of_done_timeout_seconds", vessel.DefinitionOfDoneTimeoutSeconds);
                     cmd.Parameters.AddWithValue("@active", vessel.Active);
                     cmd.Parameters.AddWithValue("@last_update_utc", vessel.LastUpdateUtc);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
@@ -698,6 +716,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
             vessel.RepoUrl = NullableString(reader["repo_url"]);
             vessel.LocalPath = NullableString(reader["local_path"]);
             vessel.WorkingDirectory = NullableString(reader["working_directory"]);
+            try { vessel.PreferredHarborId = NullableString(reader["preferred_harbor_id"]); } catch { }
+            try { vessel.RequiredCapabilities = NullableString(reader["required_capabilities"]); } catch { }
             vessel.ProjectContext = NullableString(reader["project_context"]);
             vessel.StyleGuide = NullableString(reader["style_guide"]);
             try { vessel.EnableModelContext = Convert.ToBoolean(reader["enable_model_context"]); }
@@ -764,6 +784,11 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     vessel.AutoLandPathDenyGlobs = JsonSerializer.Deserialize<List<string>>(autoLandPathDenyGlobsJson) ?? new List<string>();
             }
             catch { }
+            try { vessel.DefinitionOfDoneEnabled = Convert.ToBoolean(reader["definition_of_done_enabled"]); }
+            catch { vessel.DefinitionOfDoneEnabled = false; }
+            try { vessel.DefinitionOfDoneBuildCommand = NullableString(reader["definition_of_done_build_command"]); } catch { }
+            try { vessel.DefinitionOfDoneTestCommand = NullableString(reader["definition_of_done_test_command"]); } catch { }
+            try { vessel.DefinitionOfDoneTimeoutSeconds = Convert.ToInt32(reader["definition_of_done_timeout_seconds"]); } catch { }
             vessel.DefaultBranch = reader["default_branch"].ToString()!;
             vessel.Active = (bool)reader["active"];
             vessel.CreatedUtc = DateTime.SpecifyKind((DateTime)reader["created_utc"], DateTimeKind.Utc);

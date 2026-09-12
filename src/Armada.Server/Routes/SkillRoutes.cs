@@ -53,6 +53,8 @@ namespace Armada.Server.Routes
 
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Skill> result = await _database.Skills.EnumerateAsync(query).ConfigureAwait(false);
+                if (!ctx.IsAdmin && !ctx.IsTenantAdmin)
+                    result.Objects = result.Objects.Where(s => ScopedVisibility.CanView(ctx, s.Scope, s.TenantId, s.UserId)).ToList();
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
                 return result;
             },
@@ -79,6 +81,8 @@ namespace Armada.Server.Routes
 
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Skill> result = await _database.Skills.EnumerateAsync(query).ConfigureAwait(false);
+                if (!ctx.IsAdmin && !ctx.IsTenantAdmin)
+                    result.Objects = result.Objects.Where(s => ScopedVisibility.CanView(ctx, s.Scope, s.TenantId, s.UserId)).ToList();
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
                 return result;
             },
@@ -93,16 +97,13 @@ namespace Armada.Server.Routes
             {
                 AuthContext? ctx = await AuthorizeAsync(req, authenticate, authz).ConfigureAwait(false);
                 if (ctx == null) return BuildAuthError(req);
-                if (!CanManage(ctx))
-                {
-                    req.Http.Response.StatusCode = 403;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Only tenant administrators can manage skills" };
-                }
 
                 Skill skill = JsonSerializer.Deserialize<Skill>(req.Http.Request.DataAsString, _bodyJsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Skill.");
                 skill.TenantId = ctx.IsAdmin ? (NormalizeEmpty(skill.TenantId) ?? ctx.TenantId) : ctx.TenantId;
                 skill.UserId = ctx.UserId;
+                // Regular users may create their own user-specific skills; admins may create tenant-wide.
+                skill.Scope = ScopedVisibility.ResolveCreateScope(ctx, skill.Scope);
 
                 if (String.IsNullOrWhiteSpace(skill.Name))
                 {
@@ -127,7 +128,7 @@ namespace Armada.Server.Routes
                 if (ctx == null) return BuildAuthError(req);
 
                 Skill? skill = await _database.Skills.ReadAsync(req.Parameters["id"], BuildScopedReadQuery(ctx)).ConfigureAwait(false);
-                if (skill == null)
+                if (skill == null || !ScopedVisibility.CanView(ctx, skill.Scope, skill.TenantId, skill.UserId))
                 {
                     req.Http.Response.StatusCode = 404;
                     return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Skill not found" };
@@ -146,17 +147,17 @@ namespace Armada.Server.Routes
             {
                 AuthContext? ctx = await AuthorizeAsync(req, authenticate, authz).ConfigureAwait(false);
                 if (ctx == null) return BuildAuthError(req);
-                if (!CanManage(ctx))
-                {
-                    req.Http.Response.StatusCode = 403;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Only tenant administrators can manage skills" };
-                }
 
                 Skill? existing = await _database.Skills.ReadAsync(req.Parameters["id"], BuildScopedReadQuery(ctx)).ConfigureAwait(false);
                 if (existing == null)
                 {
                     req.Http.Response.StatusCode = 404;
                     return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Skill not found" };
+                }
+                if (!ScopedVisibility.CanEdit(ctx, existing.Scope, existing.TenantId, existing.UserId))
+                {
+                    req.Http.Response.StatusCode = 403;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "You may only modify your own skills; a tenant-wide skill requires a tenant admin." };
                 }
 
                 Skill incoming = JsonSerializer.Deserialize<Skill>(req.Http.Request.DataAsString, _bodyJsonOptions)
@@ -166,6 +167,7 @@ namespace Armada.Server.Routes
                 existing.Category = NormalizeEmpty(incoming.Category);
                 existing.Content = incoming.Content ?? String.Empty;
                 existing.Active = incoming.Active;
+                if (ctx.IsAdmin || ctx.IsTenantAdmin) existing.Scope = incoming.Scope;
                 existing.LastUpdateUtc = DateTime.UtcNow;
 
                 Skill updated = await _database.Skills.UpdateAsync(existing).ConfigureAwait(false);
@@ -184,17 +186,17 @@ namespace Armada.Server.Routes
             {
                 AuthContext? ctx = await AuthorizeAsync(req, authenticate, authz).ConfigureAwait(false);
                 if (ctx == null) return BuildAuthError(req);
-                if (!CanManage(ctx))
-                {
-                    req.Http.Response.StatusCode = 403;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Only tenant administrators can manage skills" };
-                }
 
                 Skill? existing = await _database.Skills.ReadAsync(req.Parameters["id"], BuildScopedReadQuery(ctx)).ConfigureAwait(false);
                 if (existing == null)
                 {
                     req.Http.Response.StatusCode = 404;
                     return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Skill not found" };
+                }
+                if (!ScopedVisibility.CanEdit(ctx, existing.Scope, existing.TenantId, existing.UserId))
+                {
+                    req.Http.Response.StatusCode = 403;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "You may only delete your own skills; a tenant-wide skill requires a tenant admin." };
                 }
 
                 await _database.Skills.DeleteAsync(existing.Id, BuildScopedReadQuery(ctx)).ConfigureAwait(false);
@@ -208,11 +210,6 @@ namespace Armada.Server.Routes
                 .WithResponse(204, OpenApiResponseMetadata.NoContent())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
-        }
-
-        private static bool CanManage(AuthContext ctx)
-        {
-            return ctx.IsAdmin || ctx.IsTenantAdmin;
         }
 
         private static ApiErrorResponse BuildAuthError(ApiRequest req)

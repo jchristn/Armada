@@ -54,19 +54,21 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = @"INSERT INTO docks (id, tenant_id, user_id, vessel_id, captain_id, worktree_path, branch_name, active, state, lease_expires_utc, owner_token, created_utc, last_update_utc)
-                        VALUES (@id, @tenant_id, @user_id, @vessel_id, @captain_id, @worktree_path, @branch_name, @active, @state, @lease_expires_utc, @owner_token, @created_utc, @last_update_utc);";
+                    cmd.CommandText = @"INSERT INTO docks (id, tenant_id, user_id, vessel_id, captain_id, worktree_path, harbor_id, branch_name, active, state, lease_expires_utc, owner_token, git_anchors_json, created_utc, last_update_utc)
+                        VALUES (@id, @tenant_id, @user_id, @vessel_id, @captain_id, @worktree_path, @harbor_id, @branch_name, @active, @state, @lease_expires_utc, @owner_token, @git_anchors_json, @created_utc, @last_update_utc);";
                     cmd.Parameters.AddWithValue("@id", dock.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)dock.TenantId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@user_id", (object?)dock.UserId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@vessel_id", dock.VesselId);
                     cmd.Parameters.AddWithValue("@captain_id", (object?)dock.CaptainId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@worktree_path", (object?)dock.WorktreePath ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@harbor_id", (object?)dock.HarborId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@branch_name", (object?)dock.BranchName ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@active", dock.Active);
                     cmd.Parameters.AddWithValue("@state", dock.State.ToString());
                     cmd.Parameters.AddWithValue("@lease_expires_utc", dock.LeaseExpiresUtc.HasValue ? (object)dock.LeaseExpiresUtc.Value : DBNull.Value);
                     cmd.Parameters.AddWithValue("@owner_token", (object?)dock.OwnerToken ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@git_anchors_json", (object?)dock.GitAnchorsJson ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@created_utc", SqlServerDatabaseDriver.ToIso8601(dock.CreatedUtc));
                     cmd.Parameters.AddWithValue("@last_update_utc", SqlServerDatabaseDriver.ToIso8601(dock.LastUpdateUtc));
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
@@ -116,11 +118,13 @@ namespace Armada.Core.Database.SqlServer.Implementations
                         vessel_id = @vessel_id,
                         captain_id = @captain_id,
                         worktree_path = @worktree_path,
+                        harbor_id = @harbor_id,
                         branch_name = @branch_name,
                         active = @active,
                         state = @state,
                         lease_expires_utc = @lease_expires_utc,
                         owner_token = @owner_token,
+                        git_anchors_json = @git_anchors_json,
                         last_update_utc = @last_update_utc
                         WHERE id = @id;";
                     cmd.Parameters.AddWithValue("@id", dock.Id);
@@ -129,11 +133,13 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     cmd.Parameters.AddWithValue("@vessel_id", dock.VesselId);
                     cmd.Parameters.AddWithValue("@captain_id", (object?)dock.CaptainId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@worktree_path", (object?)dock.WorktreePath ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@harbor_id", (object?)dock.HarborId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@branch_name", (object?)dock.BranchName ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@active", dock.Active);
                     cmd.Parameters.AddWithValue("@state", dock.State.ToString());
                     cmd.Parameters.AddWithValue("@lease_expires_utc", dock.LeaseExpiresUtc.HasValue ? (object)dock.LeaseExpiresUtc.Value : DBNull.Value);
                     cmd.Parameters.AddWithValue("@owner_token", (object?)dock.OwnerToken ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@git_anchors_json", (object?)dock.GitAnchorsJson ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@last_update_utc", SqlServerDatabaseDriver.ToIso8601(dock.LastUpdateUtc));
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }

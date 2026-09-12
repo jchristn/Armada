@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System;
+    using System.Collections.Generic;
     using Armada.Core.Enums;
 
     /// <summary>
@@ -133,6 +134,23 @@ namespace Armada.Core.Models
         /// When the incident was closed.
         /// </summary>
         public DateTime? ClosedUtc { get; set; } = null;
+
+        /// <summary>
+        /// Classified failure kind that opened this incident (for autonomous-recovery incidents). Null for
+        /// incidents opened through the deployment/release lifecycle.
+        /// </summary>
+        public string? FailureKind { get; set; } = null;
+
+        /// <summary>
+        /// Number of bounded rescue missions the autonomous-recovery coordinator has dispatched for this
+        /// incident. Bounds the rescue loop before the incident is left open for a human.
+        /// </summary>
+        public int RecoveryAttempts { get; set; } = 0;
+
+        /// <summary>
+        /// Identifiers of the rescue missions dispatched for this incident, in dispatch order.
+        /// </summary>
+        public List<string> RescueMissionIds { get; set; } = new List<string>();
 
         /// <summary>
         /// Last update timestamp.

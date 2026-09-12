@@ -1278,6 +1278,214 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration v57 statements: add the mission execution mode column (Implementation/Audit/Research).
+        /// </summary>
+        public static readonly string[] MigrationV57Statements = new string[]
+        {
+            @"ALTER TABLE missions ADD COLUMN mode VARCHAR(32) NOT NULL DEFAULT 'Implementation';"
+        };
+
+        /// <summary>
+        /// Migration statements for schema version 58.
+        /// </summary>
+        public static readonly string[] MigrationV58Statements = new string[]
+        {
+            @"ALTER TABLE vessels ADD COLUMN definition_of_done_enabled TINYINT(1) NOT NULL DEFAULT 0;",
+            @"ALTER TABLE vessels ADD COLUMN definition_of_done_build_command TEXT;",
+            @"ALTER TABLE vessels ADD COLUMN definition_of_done_test_command TEXT;",
+            @"ALTER TABLE vessels ADD COLUMN definition_of_done_timeout_seconds INT NOT NULL DEFAULT 1800;"
+        };
+
+        /// <summary>
+        /// Migration statements for schema version 59.
+        /// </summary>
+        public static readonly string[] MigrationV59Statements = new string[]
+        {
+            @"ALTER TABLE docks ADD COLUMN git_anchors_json TEXT;"
+        };
+
+        /// <summary>
+        /// Migration v60 statements: add the model_endpoints table for managed embedding/inference endpoints.
+        /// </summary>
+        public static readonly string[] MigrationV60Statements = new string[]
+        {
+            @"CREATE TABLE IF NOT EXISTS model_endpoints (
+                id VARCHAR(450) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(450),
+                user_id VARCHAR(450),
+                name VARCHAR(450) NOT NULL,
+                kind VARCHAR(64) NOT NULL,
+                provider VARCHAR(64) NOT NULL,
+                base_url VARCHAR(1024) NOT NULL,
+                api_key TEXT,
+                model VARCHAR(255),
+                dimensionality INT NOT NULL DEFAULT 0,
+                timeout_ms INT NOT NULL DEFAULT 120000,
+                enabled TINYINT(1) NOT NULL DEFAULT 1,
+                health_status VARCHAR(64) NOT NULL DEFAULT 'Unknown',
+                last_health_check_utc DATETIME(6) NULL,
+                last_health_error TEXT,
+                last_latency_ms BIGINT NULL,
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL
+            );",
+            "CREATE INDEX idx_model_endpoints_created ON model_endpoints(created_utc DESC);",
+            "CREATE INDEX idx_model_endpoints_tenant ON model_endpoints(tenant_id);"
+        };
+
+        /// <summary>
+        /// Migration v61 statements: add rolling health-check history to model_endpoints.
+        /// </summary>
+        public static readonly string[] MigrationV61Statements = new string[]
+        {
+            @"ALTER TABLE model_endpoints ADD COLUMN health_history_json LONGTEXT;"
+        };
+
+        /// <summary>
+        /// Migration v62 statements: add the harbors and harbor_capabilities tables for host runners.
+        /// </summary>
+        public static readonly string[] MigrationV62Statements = new string[]
+        {
+            @"CREATE TABLE IF NOT EXISTS harbors (
+                id VARCHAR(450) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(450),
+                user_id VARCHAR(450),
+                name VARCHAR(450) NOT NULL,
+                connection_status VARCHAR(64) NOT NULL DEFAULT 'Unknown',
+                max_concurrent_jobs INT NOT NULL DEFAULT 4,
+                enabled TINYINT(1) NOT NULL DEFAULT 1,
+                protocol_version VARCHAR(64),
+                os_platform VARCHAR(64),
+                architecture VARCHAR(64),
+                last_seen_utc DATETIME(6) NULL,
+                last_connected_utc DATETIME(6) NULL,
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL
+            );",
+            "CREATE INDEX idx_harbors_created ON harbors(created_utc DESC);",
+            "CREATE INDEX idx_harbors_tenant ON harbors(tenant_id);",
+            @"CREATE TABLE IF NOT EXISTS harbor_capabilities (
+                harbor_id VARCHAR(191) NOT NULL,
+                name VARCHAR(191) NOT NULL,
+                available TINYINT(1) NOT NULL DEFAULT 1,
+                detail TEXT,
+                PRIMARY KEY (harbor_id, name),
+                FOREIGN KEY (harbor_id) REFERENCES harbors(id) ON DELETE CASCADE
+            );",
+            "CREATE INDEX idx_harbor_capabilities_harbor ON harbor_capabilities(harbor_id);"
+        };
+
+        /// <summary>
+        /// Migration v63 statements: add Harbor routing and affinity columns to docks, missions, and vessels.
+        /// </summary>
+        public static readonly string[] MigrationV63Statements = new string[]
+        {
+            "ALTER TABLE docks ADD COLUMN harbor_id VARCHAR(191);",
+            "ALTER TABLE missions ADD COLUMN assigned_harbor_id VARCHAR(191);",
+            "ALTER TABLE vessels ADD COLUMN preferred_harbor_id VARCHAR(191);",
+            "ALTER TABLE vessels ADD COLUMN required_capabilities VARCHAR(1024);"
+        };
+
+        /// <summary>
+        /// Migration v64 statements: add model_endpoint_id to captains for API-endpoint captains.
+        /// </summary>
+        public static readonly string[] MigrationV64Statements = new string[]
+        {
+            "ALTER TABLE captains ADD COLUMN model_endpoint_id VARCHAR(191);"
+        };
+
+        /// <summary>
+        /// Migration v65 statements: add scope to model_endpoints (tenant-wide vs user-specific).
+        /// </summary>
+        public static readonly string[] MigrationV65Statements = new string[]
+        {
+            "ALTER TABLE model_endpoints ADD COLUMN scope VARCHAR(32) NOT NULL DEFAULT 'TenantWide';"
+        };
+
+        /// <summary>
+        /// Migration v66 statements: add ownership scope to playbooks and skills.
+        /// </summary>
+        public static readonly string[] MigrationV66Statements = new string[]
+        {
+            "ALTER TABLE playbooks ADD COLUMN scope VARCHAR(32) NOT NULL DEFAULT 'TenantWide';",
+            "ALTER TABLE skills ADD COLUMN scope VARCHAR(32) NOT NULL DEFAULT 'TenantWide';"
+        };
+
+        /// <summary>
+        /// Migration v67 statements: add ownership (user_id + scope) to personas, pipelines, prompt_templates.
+        /// </summary>
+        public static readonly string[] MigrationV67Statements = new string[]
+        {
+            "ALTER TABLE personas ADD COLUMN user_id VARCHAR(191) NULL;",
+            "ALTER TABLE personas ADD COLUMN scope VARCHAR(32) NOT NULL DEFAULT 'TenantWide';",
+            "ALTER TABLE pipelines ADD COLUMN user_id VARCHAR(191) NULL;",
+            "ALTER TABLE pipelines ADD COLUMN scope VARCHAR(32) NOT NULL DEFAULT 'TenantWide';",
+            "ALTER TABLE prompt_templates ADD COLUMN user_id VARCHAR(191) NULL;",
+            "ALTER TABLE prompt_templates ADD COLUMN scope VARCHAR(32) NOT NULL DEFAULT 'TenantWide';"
+        };
+
+        /// <summary>
+        /// Migration v68 statements: add ownership_scope to workflow_profiles and project_profiles.
+        /// </summary>
+        public static readonly string[] MigrationV68Statements = new string[]
+        {
+            "ALTER TABLE workflow_profiles ADD COLUMN ownership_scope VARCHAR(32) NOT NULL DEFAULT 'TenantWide';",
+            "ALTER TABLE project_profiles ADD COLUMN ownership_scope VARCHAR(32) NOT NULL DEFAULT 'TenantWide';"
+        };
+
+        /// <summary>
+        /// Migration v69: cloud-provider fields on model_endpoints (Azure/Vertex/Bedrock).
+        /// </summary>
+        public static readonly string[] MigrationV69Statements = new string[]
+        {
+            "ALTER TABLE model_endpoints ADD COLUMN region VARCHAR(256) NULL;",
+            "ALTER TABLE model_endpoints ADD COLUMN project VARCHAR(256) NULL;",
+            "ALTER TABLE model_endpoints ADD COLUMN api_version VARCHAR(64) NULL;",
+            "ALTER TABLE model_endpoints ADD COLUMN access_key_id VARCHAR(256) NULL;"
+        };
+
+        /// <summary>
+        /// Migration v70 statements: add memories and memory_tags tables for durable agent memory.
+        /// </summary>
+        public static readonly string[] MigrationV70Statements = new string[]
+        {
+            @"CREATE TABLE IF NOT EXISTS memories (
+                id VARCHAR(450) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(450),
+                user_id VARCHAR(450),
+                scope VARCHAR(32) NOT NULL DEFAULT 'TenantWide',
+                type VARCHAR(64) NOT NULL DEFAULT 'Semantic',
+                topic VARCHAR(256),
+                memory_key VARCHAR(256),
+                summary TEXT,
+                content LONGTEXT NOT NULL,
+                salience DOUBLE NOT NULL DEFAULT 0.5,
+                version INT NOT NULL DEFAULT 1,
+                source_kind VARCHAR(64) NOT NULL DEFAULT 'Manual',
+                source_voyage_id VARCHAR(191),
+                source_mission_id VARCHAR(191),
+                source_vessel_id VARCHAR(191),
+                source_detail TEXT,
+                vessel_id VARCHAR(191),
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL
+            );",
+            "CREATE INDEX idx_memories_created ON memories(created_utc DESC);",
+            "CREATE INDEX idx_memories_tenant ON memories(tenant_id);",
+            "CREATE INDEX idx_memories_tenant_user ON memories(tenant_id(191), user_id(191));",
+            "CREATE INDEX idx_memories_type ON memories(type);",
+            "CREATE INDEX idx_memories_vessel ON memories(vessel_id);",
+            "CREATE INDEX idx_memories_key ON memories(tenant_id(191), memory_key(191));",
+            @"CREATE TABLE IF NOT EXISTS memory_tags (
+                memory_id VARCHAR(191) NOT NULL,
+                tag VARCHAR(191) NOT NULL,
+                PRIMARY KEY (memory_id, tag),
+                FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
+            );",
+            "CREATE INDEX idx_memory_tags_memory ON memory_tags(memory_id);"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

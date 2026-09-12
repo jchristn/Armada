@@ -43,6 +43,8 @@ interface CaptainChatPanelProps {
   inputDisabled?: boolean;
   /** Optional per-turn footer (e.g. Planning's "Open in Dispatch" action) rendered under the bubble. */
   renderTurnFooter?: (turn: ChatTurn, index: number) => ReactNode;
+  /** Optional runtime label shown on each tool card (e.g. "ApiEndpoint", "Mux"). */
+  toolRuntimeLabel?: string;
   /** Optional external ref to the scrolling chat window (callers that need to scroll it themselves). */
   windowRef?: RefObject<HTMLDivElement | null>;
   /** Optional small, always-visible notice shown at the top of the message window (e.g. a streaming caveat). */
@@ -80,10 +82,13 @@ export default function CaptainChatPanel(props: CaptainChatPanelProps) {
     notice,
     onClear,
     clearDisabled,
+    toolRuntimeLabel,
   } = props;
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const lastText = turns.length > 0 ? turns[turns.length - 1].text : '';
+  // Whether the user is currently "stuck" to the bottom (we then follow new content). Updated on every
+  // scroll; when the user scrolls up to read we stop following, and when they scroll back down we resume.
+  const stickToBottomRef = useRef(true);
 
   // Merge the internal scroll-container ref with any external windowRef the caller passed.
   const setScrollContainer = (node: HTMLDivElement | null) => {
@@ -91,18 +96,34 @@ export default function CaptainChatPanel(props: CaptainChatPanelProps) {
     if (windowRef) (windowRef as { current: HTMLDivElement | null }).current = node;
   };
 
-  // Keep the newest content in view as turns stream in. Scroll ONLY the transcript container (never via
-  // scrollIntoView, which also scrolls every scrollable ancestor and drags the whole Planning page down
-  // toward the Dispatch panel), and only when the user is already near the bottom so streaming updates
-  // never yank a user who has scrolled up to read.
-  useEffect(() => {
+  const handleScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    if (distanceFromBottom < 140) {
-      el.scrollTop = el.scrollHeight;
-    }
-  }, [turns.length, lastText, busy, thinking]);
+    stickToBottomRef.current = distanceFromBottom < 140;
+  };
+
+  // Keep the newest content in view as it grows -- streamed reply text AND tool-call cards, which enlarge
+  // the transcript without changing the reply text (so a text-only dependency misses them). We observe DOM
+  // mutations so any height change re-pins the view, but only while the user is stuck to the bottom, so a
+  // user who has scrolled up to read is never yanked back down. Scroll ONLY this container (never
+  // scrollIntoView, which also scrolls every ancestor and drags the whole Planning page down).
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return undefined;
+    const pin = () => { if (stickToBottomRef.current) el.scrollTop = el.scrollHeight; };
+    pin();
+    const observer = new MutationObserver(pin);
+    observer.observe(el, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, []);
+
+  // A new turn (typically the user's own message) means we should follow the conversation again.
+  useEffect(() => {
+    stickToBottomRef.current = true;
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [turns.length]);
 
   function roleLabel(turn: ChatTurn): string {
     if (turn.role === 'user') return t('You');
@@ -124,6 +145,7 @@ export default function CaptainChatPanel(props: CaptainChatPanelProps) {
       )}
       <div
         ref={setScrollContainer}
+        onScroll={handleScroll}
         className="card ask-chat-window"
         style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
       >
@@ -150,6 +172,7 @@ export default function CaptainChatPanel(props: CaptainChatPanelProps) {
               {turn.role === 'assistant' && (
                 <ChatToolChips
                   tools={turn.tools}
+                  runtimeLabel={toolRuntimeLabel}
                   runningLabel={t('running…')}
                   argumentsLabel={t('Arguments')}
                   resultLabel={t('Result')}
@@ -162,7 +185,7 @@ export default function CaptainChatPanel(props: CaptainChatPanelProps) {
               >
                 <div className="text-dim chat-turn-header" style={{ fontSize: '0.7rem', marginBottom: '0.2rem' }}>
                   <span>{roleLabel(turn)}</span>
-                  {turn.role === 'assistant' && turn.metrics && <ChatMetricsInfo metrics={turn.metrics} />}
+                  {turn.role === 'assistant' && turn.metrics && <ChatMetricsInfo metrics={turn.metrics} tools={turn.tools} />}
                 </div>
                 {turn.role === 'assistant' && turn.thinking && turn.thinking.trim().length > 0 && (
                   <details className="chat-thinking" open={turn.streaming} style={{ marginBottom: '0.4rem' }}>
@@ -188,8 +211,6 @@ export default function CaptainChatPanel(props: CaptainChatPanelProps) {
           </div>
         )}
       </div>
-
-      <p className="ask-disclaimer">{t('AI can make mistakes. Check answers.')}</p>
 
       <form
         className="ask-input-form"
@@ -224,6 +245,8 @@ export default function CaptainChatPanel(props: CaptainChatPanelProps) {
           />
         )}
       </form>
+
+      <p className="ask-disclaimer">{t('AI can make mistakes. Check answers.')}</p>
     </div>
   );
 }

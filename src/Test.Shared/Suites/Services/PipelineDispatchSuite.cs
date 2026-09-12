@@ -79,6 +79,50 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("wildcard_captain_override_pins_any_persona", "A wildcard captain override pins the captain for any persona/step", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    StubGitService git = new StubGitService();
+                    IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
+                    ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
+                    captainService.OnLaunchAgent = (_, _, _) => Task.FromResult(12345);
+                    IMissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService);
+
+                    Vessel vessel = new Vessel("wildcard-vessel", "https://github.com/test/repo.git");
+                    vessel.DefaultBranch = "main";
+                    vessel.AllowConcurrentMissions = true;
+                    vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    Captain target = new Captain("Target Captain");
+                    target.State = CaptainStateEnum.Idle;
+                    target = await testDb.Driver.Captains.CreateAsync(target).ConfigureAwait(false);
+
+                    Armada.Core.Models.Voyage voyage = new Armada.Core.Models.Voyage("wildcard voyage", "d");
+                    voyage.CaptainOverridesJson = MissionService.SerializeCaptainOverrides(new List<Armada.Core.Models.CaptainAssignmentOverride>
+                    {
+                        new Armada.Core.Models.CaptainAssignmentOverride { Persona = "*", CaptainId = target.Id }
+                    });
+                    voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
+
+                    Mission mission = new Mission("[Judge] review the work", "Review it.");
+                    mission.VesselId = vessel.Id;
+                    mission.VoyageId = voyage.Id;
+                    mission.Persona = "Judge";
+                    mission = await testDb.Driver.Missions.CreateAsync(mission).ConfigureAwait(false);
+
+                    bool assigned = await missionService.TryAssignAsync(mission, vessel).ConfigureAwait(false);
+                    Mission? reloaded = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+
+                    AssertTrue(assigned, "Mission should be assigned.");
+                    AssertNotNull(reloaded, "Assigned mission should persist.");
+                    AssertEqual(target.Id, reloaded!.RequestedCaptainId ?? String.Empty);
+                    AssertEqual(target.Id, reloaded.CaptainId ?? String.Empty);
+                }
+            }));
+
             cases.Add(CaseAsync("try_assign_async_skips_vessels_reusing_local_and_working_directory_path", "TryAssignAsync skips vessels that reuse the same local and working directory path", TestTags.Negative, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
@@ -861,11 +905,11 @@ namespace Test.Shared.Suites.Services
 
                     Captain? judgeCaptain = await testDb.Driver.Captains.ReadAsync(apiJudge.CaptainId!).ConfigureAwait(false);
                     missionService.OnGetMissionOutput = _ =>
-                        "## Completeness\n" +
+                        "## Blast Radius\n" +
                         "The staged work covers the assigned requirements and there are no missing deliverables in this chain.\n\n" +
                         "## Correctness\n" +
                         "The implementation and test updates are coherent, and I do not see logic or scope defects in the reviewed diff.\n\n" +
-                        "## Tests\n" +
+                        "## Source Fidelity\n" +
                         "The automated tests added in the prior stage cover the reviewed behavior adequately for this mission.\n\n" +
                         "## Failure Modes\n" +
                         "I reviewed the relevant edge and failure behavior for this scope and did not find any unresolved blockers.\n\n" +
@@ -1021,11 +1065,11 @@ namespace Test.Shared.Suites.Services
 
                     Captain? activeJudgeCaptain = await testDb.Driver.Captains.ReadAsync(coreJudge.CaptainId!).ConfigureAwait(false);
                     missionService.OnGetMissionOutput = _ =>
-                        "## Completeness\n" +
+                        "## Blast Radius\n" +
                         "The upstream worker and test stages completed the requested scope and nothing material is missing.\n\n" +
                         "## Correctness\n" +
                         "I reviewed the diff and prior output and did not find correctness issues in the completed upstream chain.\n\n" +
-                        "## Tests\n" +
+                        "## Source Fidelity\n" +
                         "The upstream tests cover the changed behavior and are sufficient for this dependency chain.\n\n" +
                         "## Failure Modes\n" +
                         "Relevant error and edge paths were reviewed for this scope and I do not see unresolved safety concerns.\n\n" +
@@ -1633,7 +1677,7 @@ namespace Test.Shared.Suites.Services
                     Mission? reloadedJudge = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
                     AssertNotNull(reloadedJudge, "Judge mission should remain readable");
                     AssertEqual(MissionStatusEnum.Failed, reloadedJudge!.Status, "Judge NEEDS_REVISION should block landing");
-                    AssertEqual("Judge verdict: NEEDS_REVISION", reloadedJudge.FailureReason, "Judge failure reason should preserve verdict");
+                    AssertContains("Judge verdict: NEEDS_REVISION", reloadedJudge.FailureReason!, "Judge failure reason should preserve verdict");
                     AssertEqual(0, landingCalls, "Judge NEEDS_REVISION must not invoke landing");
                 }
             }));
@@ -1704,7 +1748,7 @@ namespace Test.Shared.Suites.Services
                     Mission? reloadedJudge = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
                     AssertNotNull(reloadedJudge, "Judge mission should remain readable");
                     AssertEqual(MissionStatusEnum.Failed, reloadedJudge!.Status, "Judge should honor the final NEEDS_REVISION verdict instead of the legend");
-                    AssertEqual("Judge verdict: NEEDS_REVISION", reloadedJudge.FailureReason, "Judge failure reason should preserve verdict");
+                    AssertContains("Judge verdict: NEEDS_REVISION", reloadedJudge.FailureReason!, "Judge failure reason should preserve verdict");
                     AssertEqual(0, landingCalls, "Judge NEEDS_REVISION must not invoke landing");
                 }
             }));
@@ -1766,11 +1810,11 @@ namespace Test.Shared.Suites.Services
                     await testDb.Driver.Captains.UpdateAsync(judgeCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
-                        "## Completeness\n" +
+                        "## Blast Radius\n" +
                         "The mission requirements are fully implemented with no missing scope items.\n\n" +
                         "## Correctness\n" +
                         "The reviewed changes are logically consistent and I do not see defects in the touched paths.\n\n" +
-                        "## Tests\n" +
+                        "## Source Fidelity\n" +
                         "Automated coverage exists for the new behavior and the affected scenarios are exercised.\n\n" +
                         "## Failure Modes\n" +
                         "I reviewed error and edge behavior for this scope and found no unaddressed safety issues.\n\n" +
@@ -1844,11 +1888,11 @@ namespace Test.Shared.Suites.Services
                     await testDb.Driver.Captains.UpdateAsync(judgeCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
-                        "## Completeness\n" +
+                        "## Blast Radius\n" +
                         "Everything required by the mission is present and stays within the assigned scope.\n\n" +
                         "## Correctness\n" +
                         "The implementation follows the intended behavior and I did not find logic errors in the reviewed diff.\n\n" +
-                        "## Tests\n" +
+                        "## Source Fidelity\n" +
                         "The updated tests cover the changed behavior and are sufficient for this mission.\n\n" +
                         "## Failure Modes\n" +
                         "I explicitly reviewed edge and failure paths relevant to this change and found no remaining blockers.\n\n" +
@@ -1921,11 +1965,11 @@ namespace Test.Shared.Suites.Services
                     await testDb.Driver.Captains.UpdateAsync(judgeCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
-                        "## Completeness\n" +
+                        "## Blast Radius\n" +
                         "Everything required by the mission is present and stays within the assigned scope.\n\n" +
                         "## Correctness\n" +
                         "The implementation follows the intended behavior and I did not find logic errors in the reviewed diff.\n\n" +
-                        "## Tests\n" +
+                        "## Source Fidelity\n" +
                         "The updated tests cover the changed behavior and are sufficient for this mission.\n\n" +
                         "## Failure Modes\n" +
                         "I explicitly reviewed edge and failure paths relevant to this change and found no remaining blockers.\n\n" +
@@ -1994,11 +2038,11 @@ namespace Test.Shared.Suites.Services
                     await testDb.Driver.Captains.UpdateAsync(judgeCaptain).ConfigureAwait(false);
 
                     missionService.OnGetMissionOutput = _ =>
-                        "## Completeness\n" +
+                        "## Blast Radius\n" +
                         "The reviewed work is missing part of the required contract alignment.\n\n" +
                         "## Correctness\n" +
                         "The update path can still drop omitted settings, so I cannot approve it yet.\n\n" +
-                        "## Tests\n" +
+                        "## Source Fidelity\n" +
                         "Coverage is still missing for the omitted-field preservation path.\n\n" +
                         "## Failure Modes\n" +
                         "This can silently erase stored captain configuration during partial updates.\n\n" +
@@ -2009,7 +2053,7 @@ namespace Test.Shared.Suites.Services
                     Mission? reloadedJudge = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
                     AssertNotNull(reloadedJudge, "Judge mission should remain readable");
                     AssertEqual(MissionStatusEnum.Failed, reloadedJudge!.Status, "Judge failure should block landing");
-                    AssertEqual("Judge verdict: NEEDS_REVISION", reloadedJudge.FailureReason, "Failure reason should preserve the verdict");
+                    AssertContains("Judge verdict: NEEDS_REVISION", reloadedJudge.FailureReason!, "Failure reason should preserve the verdict");
                     AssertEqual(0, landingCalls, "Judge failure must not invoke landing");
 
                     List<Signal> signals = await testDb.Driver.Signals.EnumerateRecentAsync(10).ConfigureAwait(false);
@@ -2096,7 +2140,80 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(reloadedJudge, "Judge mission should remain readable");
                     AssertEqual(MissionStatusEnum.Failed, reloadedJudge!.Status, "PASS without structured review sections should be rejected");
                     AssertEqual(0, landingCalls, "Rejected PASS review should not invoke landing");
-                    AssertContains("missing required review sections", reloadedJudge.FailureReason, "Failure reason should explain why the PASS review was rejected");
+                    AssertContains("missing required lens sections", reloadedJudge.FailureReason!, "Failure reason should explain why the PASS review was rejected");
+                }
+            }));
+
+            cases.Add(CaseAsync("handoff_force_advances_shared_branch_to_dock_head", "Pipeline handoff force-advances the shared branch to the prior dock's live HEAD", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    DirCreatingGitStub git = new DirCreatingGitStub();
+                    IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
+                    ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
+                    MissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService, git: git);
+
+                    Vessel vessel = new Vessel("stage-lag-vessel", "https://github.com/test/repo.git");
+                    vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
+                    vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
+                    vessel.DefaultBranch = "main";
+                    vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    Captain workerCaptain = new Captain("stage-lag-worker");
+                    workerCaptain.State = CaptainStateEnum.Working;
+                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+
+                    Voyage voyage = new Voyage("stage-lag-voyage");
+                    voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
+
+                    Mission worker = new Mission("[Worker] Implement change", "Implement the change");
+                    worker.VesselId = vessel.Id;
+                    worker.VoyageId = voyage.Id;
+                    worker.Persona = "Worker";
+                    worker.Status = MissionStatusEnum.InProgress;
+                    worker.CaptainId = workerCaptain.Id;
+                    worker.BranchName = "armada/stage-lag/pipeline";
+                    worker = await testDb.Driver.Missions.CreateAsync(worker).ConfigureAwait(false);
+
+                    Dock workerDock = new Dock(vessel.Id);
+                    workerDock.CaptainId = workerCaptain.Id;
+                    workerDock.WorktreePath = Path.Combine(settings.DocksDirectory, vessel.Name, worker.Id);
+                    workerDock.BranchName = worker.BranchName;
+                    workerDock.Active = true;
+                    workerDock = await testDb.Driver.Docks.CreateAsync(workerDock).ConfigureAwait(false);
+                    Directory.CreateDirectory(workerDock.WorktreePath);
+
+                    worker.DockId = workerDock.Id;
+                    await testDb.Driver.Missions.UpdateAsync(worker).ConfigureAwait(false);
+
+                    workerCaptain.CurrentMissionId = worker.Id;
+                    workerCaptain.CurrentDockId = workerDock.Id;
+                    await testDb.Driver.Captains.UpdateAsync(workerCaptain).ConfigureAwait(false);
+
+                    // A dependent Judge stage that reuses the same branch -- this is the stage that would read
+                    // stale code if the shared branch ref were not advanced to the worker dock's produced commit.
+                    Mission judge = new Mission("[Judge] Review", "Review the change");
+                    judge.VesselId = vessel.Id;
+                    judge.VoyageId = voyage.Id;
+                    judge.Persona = "Judge";
+                    judge.Status = MissionStatusEnum.Pending;
+                    judge.DependsOnMissionId = worker.Id;
+                    judge = await testDb.Driver.Missions.CreateAsync(judge).ConfigureAwait(false);
+
+                    missionService.OnGetMissionOutput = _ =>
+                        "Implemented the requested change across the touched files and verified the build locally.\n" +
+                        "[ARMADA:RESULT] COMPLETE\nDone.";
+
+                    await missionService.HandleCompletionAsync(workerCaptain, worker.Id).ConfigureAwait(false);
+
+                    AssertTrue(
+                        git.ForceAdvancedBranches.Any(entry => entry.StartsWith("armada/stage-lag/pipeline=", StringComparison.Ordinal)),
+                        "handoff should force-advance the shared branch to the prior dock's live HEAD");
+                    AssertTrue(
+                        git.ForceAdvancedBranches.Contains("armada/stage-lag/pipeline=abc123def456"),
+                        "the branch should be advanced to the dock's resolved HEAD commit");
                 }
             }));
 
@@ -2678,6 +2795,21 @@ namespace Test.Shared.Suites.Services
 
             /// <inheritdoc />
             public Task<bool> IsWorktreeRegisteredAsync(string repoPath, string worktreePath, CancellationToken token = default) => Task.FromResult(false);
+
+            /// <summary>Branch ref force-advances recorded as "branchName=commitHash".</summary>
+            public List<string> ForceAdvancedBranches { get; } = new List<string>();
+
+            /// <inheritdoc />
+            public Task<bool> ForceAdvanceBranchAsync(string worktreePath, string branchName, string commitHash, CancellationToken token = default)
+            {
+                ForceAdvancedBranches.Add(branchName + "=" + commitHash);
+                return Task.FromResult(true);
+            }
+            public Task<IReadOnlyList<string>> GetRecentCommitsForPathsAsync(string worktreePath, IReadOnlyList<string> paths, int maxPerPath, CancellationToken token = default) => Task.FromResult<IReadOnlyList<string>>(new List<string>());
+            public Task<IReadOnlyList<string>> FindExistingSubjectTermsAsync(string worktreePath, IReadOnlyList<string> terms, CancellationToken token = default) => Task.FromResult<IReadOnlyList<string>>(new List<string>());
+            public Task<IReadOnlyList<Armada.Core.Models.BranchInfo>> ListBranchesAsync(string repoPath, string defaultBranch = "main", CancellationToken token = default) => Task.FromResult<IReadOnlyList<Armada.Core.Models.BranchInfo>>(new List<Armada.Core.Models.BranchInfo>());
+            public Task PushLocalBranchAsync(string repoPath, string branchName, string remoteName = "origin", CancellationToken token = default) => Task.CompletedTask;
+            public Task MergeBranchesAsync(string repoPath, string sourceBranch, string targetBranch, bool push, CancellationToken token = default) => Task.CompletedTask;
         }
 
         #endregion

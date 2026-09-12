@@ -11,6 +11,7 @@ namespace Armada.Server
     using Armada.Core.Models;
     using Armada.Core.Services;
     using SyslogLogging;
+    using ArmadaConstants = Armada.Core.Constants;
 
     /// <summary>
     /// Discovers runtime-visible MCP servers and probes them for tool inventories.
@@ -18,15 +19,17 @@ namespace Armada.Server
     internal sealed class CaptainRuntimeToolCatalogService
     {
         private readonly LoggingModule _Logging;
+        private readonly HarborConnectionManager? _HarborConnections;
         private readonly HttpClient _HttpClient = new HttpClient();
         private readonly JsonSerializerOptions _JsonOptions = new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
         };
 
-        public CaptainRuntimeToolCatalogService(LoggingModule logging)
+        public CaptainRuntimeToolCatalogService(LoggingModule logging, HarborConnectionManager? harborConnections = null)
         {
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
+            _HarborConnections = harborConnections;
         }
 
         public async Task<RuntimeToolCatalogSnapshot?> TryDescribeAsync(Captain captain, DatabaseDriver database, CancellationToken token = default)
@@ -75,7 +78,14 @@ namespace Armada.Server
                         "Cursor built-in tools are not currently enumerated by Armada.")
                         .ConfigureAwait(false);
                 case AgentRuntimeEnum.Mux:
-                    return await DescribeMuxAsync(captain, token).ConfigureAwait(false);
+                    return await DescribeMuxAsync(captain, database, token).ConfigureAwait(false);
+                case AgentRuntimeEnum.ApiEndpoint:
+                    return new RuntimeToolCatalogSnapshot
+                    {
+                        AvailabilityVerified = true,
+                        AvailabilitySource = "api-endpoint-builtin-tools",
+                        Summary = "API-endpoint captains run Armada's built-in coding tools (read, write, edit, search, run-process) in-process against a working directory. They do not act as an MCP client, so Armada's fleet, mission, and voyage orchestration tools are not exposed to them and there is no runtime MCP config to connect."
+                    };
                 case AgentRuntimeEnum.Custom:
                     return new RuntimeToolCatalogSnapshot
                     {
@@ -150,7 +160,7 @@ namespace Armada.Server
             }
         }
 
-        private async Task<RuntimeToolCatalogSnapshot> DescribeMuxAsync(Captain captain, CancellationToken token)
+        private async Task<RuntimeToolCatalogSnapshot> DescribeMuxAsync(Captain captain, DatabaseDriver database, CancellationToken token)
         {
             RuntimeToolCatalogSnapshot snapshot = new RuntimeToolCatalogSnapshot
             {
@@ -158,6 +168,12 @@ namespace Armada.Server
             };
 
             MuxCaptainOptions? options = CaptainRuntimeOptions.GetMuxOptions(captain);
+
+            // Resolve where mux should actually run. When the captain's dock is owned by a connected Harbor,
+            // run 'mux probe' on that Harbor over its link (via the remote executor) so the probe reflects the
+            // host where mux, its config directory, and its provider auth live -- not the Admiral, which in
+            // split mode may have neither mux installed nor the captain's config.
+            RuntimeHostContext host = await ResolveHostContextAsync(captain, database).ConfigureAwait(false);
 
             // The model-endpoint probe ('mux probe --require-tools') performs a live LLM inference round-trip
             // and can be slow or fail for reasons entirely unrelated to MCP connectivity: a cold model, network
@@ -169,8 +185,8 @@ namespace Armada.Server
             string? probeError = null;
             try
             {
-                MuxCliService muxCli = new MuxCliService(_Logging);
-                probe = await muxCli.ProbeAsync(captain, token).ConfigureAwait(false);
+                MuxCliService muxCli = new MuxCliService(_Logging, host.Executor);
+                probe = await muxCli.ProbeAsync(captain, host.WorkingDirectory, token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
@@ -191,6 +207,15 @@ namespace Armada.Server
                 if (probe != null && (probe.ToolsEnabled || builtInToolCount > 0))
                 {
                     snapshot.Servers.Add(CreateMuxBuiltInSummary(probe, builtInToolCount));
+                }
+
+                // In split mode the config directory and any stdio MCP servers live on the Harbor, so the
+                // Admiral cannot read mcp-servers.json or probe those servers directly. Reflect what the
+                // Harbor-side probe reported (built-in tools, whether MCP is configured, server count) and
+                // note that per-server tool enumeration over the link is not yet available.
+                if (host.IsRemote)
+                {
+                    return BuildRemoteMuxSnapshot(snapshot, probe, probeError, builtInToolCount, host);
                 }
 
                 List<RuntimeMcpServerDefinition> servers = await ReadMuxConfiguredServersAsync(configDirectory, token).ConfigureAwait(false);
@@ -247,6 +272,92 @@ namespace Armada.Server
                 snapshot.Summary = "Armada could not inspect Mux tools for this captain: " + ex.Message;
                 return snapshot;
             }
+        }
+
+        /// <summary>
+        /// Resolve where a captain's runtime CLI should be executed for probing. When the captain's current
+        /// dock is owned by a Harbor that is currently linked, return a remote executor targeting that Harbor
+        /// (so the probe runs on the Harbor host) plus the dock's worktree path. Otherwise return a local
+        /// executor. The local path preserves the standalone behavior exactly.
+        /// </summary>
+        private async Task<RuntimeHostContext> ResolveHostContextAsync(Captain captain, DatabaseDriver database)
+        {
+            if (_HarborConnections != null && !String.IsNullOrWhiteSpace(captain.CurrentDockId))
+            {
+                Dock? dock = await database.Docks.ReadAsync(captain.CurrentDockId).ConfigureAwait(false);
+                if (dock != null
+                    && !String.IsNullOrWhiteSpace(dock.HarborId)
+                    && _HarborConnections.IsConnected(dock.HarborId!))
+                {
+                    return new RuntimeHostContext
+                    {
+                        Executor = new RemoteHostCommandExecutor(_HarborConnections, dock.HarborId!),
+                        WorkingDirectory = dock.WorktreePath,
+                        IsRemote = true,
+                        HarborId = dock.HarborId
+                    };
+                }
+            }
+
+            return new RuntimeHostContext
+            {
+                Executor = new LocalHostCommandExecutor(),
+                WorkingDirectory = null,
+                IsRemote = false,
+                HarborId = null
+            };
+        }
+
+        /// <summary>
+        /// Build the Mux snapshot for a captain whose probe ran on a Harbor. The Admiral cannot read the
+        /// Harbor's mcp-servers.json or probe its stdio MCP servers directly, so the snapshot reflects the
+        /// summary counts the Harbor-side probe returned. Per-server tool enumeration (which would confirm the
+        /// Armada MCP server specifically) requires proxying MCP over the Harbor link, which is a follow-up;
+        /// until then ArmadaToolCount is left at 0 (unknown) rather than inferred from the raw server count.
+        /// </summary>
+        private RuntimeToolCatalogSnapshot BuildRemoteMuxSnapshot(
+            RuntimeToolCatalogSnapshot snapshot,
+            MuxProbeResult? probe,
+            string? probeError,
+            int builtInToolCount,
+            RuntimeHostContext host)
+        {
+            bool probeSucceeded = probe?.Success ?? false;
+            int mcpServerCount = probe != null ? Math.Max(0, probe.McpServerCount) : 0;
+            bool mcpConfigured = probe?.McpConfigured ?? false;
+
+            snapshot.AvailabilitySource = "mux-harbor-probe";
+            snapshot.ConfiguredServerCount = mcpServerCount + snapshot.Servers.Count;
+            snapshot.ReachableServerCount = snapshot.Servers.Count(s => s.Reachable);
+            snapshot.ToolsAccessible = builtInToolCount > 0 || mcpConfigured;
+            snapshot.ArmadaToolCount = 0;
+            snapshot.EffectiveToolCount = builtInToolCount;
+            snapshot.AvailabilityVerified = probeSucceeded || mcpConfigured || snapshot.Servers.Count > 0;
+
+            string harborLabel = String.IsNullOrWhiteSpace(host.HarborId) ? "a Harbor" : "Harbor " + host.HarborId;
+            string mcpClause = mcpConfigured
+                ? mcpServerCount + " MCP server(s) are configured on the Harbor"
+                : "no MCP servers are configured on the Harbor";
+
+            if (!probeSucceeded)
+            {
+                string probeDetail = !String.IsNullOrWhiteSpace(probeError)
+                    ? probeError!
+                    : FirstNonEmptyLine(probe?.ErrorMessage, probe?.ErrorCode);
+                snapshot.Summary = "Mux runs on " + harborLabel + "; the model-endpoint probe did not complete (" +
+                    (String.IsNullOrWhiteSpace(probeDetail) ? "endpoint unavailable or slow" : probeDetail) +
+                    "). " + char.ToUpperInvariant(mcpClause[0]) + mcpClause.Substring(1) +
+                    ". Per-server tool enumeration over the Harbor link is not yet available.";
+            }
+            else
+            {
+                snapshot.Summary = "Mux endpoint '" + (probe?.EndpointName ?? String.Empty) + "' runs on " +
+                    harborLabel + " and reports " + builtInToolCount + " built-in tool(s); " + mcpClause +
+                    ". Individual MCP tool names are not enumerated over the Harbor link yet, so Armada tool " +
+                    "visibility cannot be confirmed from the Admiral.";
+            }
+
+            return snapshot;
         }
 
         /// <summary>
@@ -577,7 +688,7 @@ namespace Armada.Server
                     clientInfo = new
                     {
                         name = "armada",
-                        version = "0.8.0"
+                        version = ArmadaConstants.ProductVersion
                     }
                 }
             });
@@ -749,7 +860,7 @@ namespace Armada.Server
                             clientInfo = new
                             {
                                 name = "armada",
-                                version = "0.8.0"
+                                version = ArmadaConstants.ProductVersion
                             }
                         }
                     }),
@@ -1919,6 +2030,18 @@ namespace Armada.Server
             public int ExitCode { get; set; } = 0;
             public string Stdout { get; set; } = String.Empty;
             public string Stderr { get; set; } = String.Empty;
+        }
+
+        /// <summary>
+        /// Where a captain's runtime CLI should be executed for probing, plus the working directory and
+        /// (in split mode) the owning Harbor.
+        /// </summary>
+        private sealed class RuntimeHostContext
+        {
+            public IHostCommandExecutor Executor { get; set; } = new LocalHostCommandExecutor();
+            public string? WorkingDirectory { get; set; } = null;
+            public bool IsRemote { get; set; } = false;
+            public string? HarborId { get; set; } = null;
         }
 
         private enum RpcWireProtocol

@@ -17,8 +17,12 @@ import type {
   RunbookExecutionStartRequest,
   RunbookUpsertRequest,
   WorkflowProfile,
+  ScopeEnum,
 } from '../types/models';
 import { useAuth } from '../context/AuthContext';
+import { canEdit as canEditScoped, resolveCreateScope, type ScopeViewer } from '../lib/scoping';
+import ScopeBadge from '../components/shared/ScopeBadge';
+import ScopeSelect from '../components/shared/ScopeSelect';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import ActionMenu from '../components/shared/ActionMenu';
@@ -56,7 +60,8 @@ interface RunbookPageState {
 export default function Runbooks() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAdmin, isTenantAdmin } = useAuth();
+  const { isAdmin, isTenantAdmin, user } = useAuth();
+  const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
   const { t, formatDateTime, formatRelativeTime } = useLocale();
   const { pushToast } = useNotifications();
 
@@ -89,6 +94,7 @@ export default function Runbooks() {
     environmentId: string;
     defaultCheckType: CheckRunType | '';
     active: boolean;
+    scope: ScopeEnum;
   }>({
     fileName: 'RUNBOOK.md',
     title: 'Runbook',
@@ -97,6 +103,7 @@ export default function Runbooks() {
     environmentId: '',
     defaultCheckType: '',
     active: true,
+    scope: resolveCreateScope(viewer),
   });
 
   const canManage = isAdmin || isTenantAdmin;
@@ -111,6 +118,7 @@ export default function Runbooks() {
       environmentId: '',
       defaultCheckType: '',
       active: true,
+      scope: resolveCreateScope(viewer),
     });
     setShowCreate(true);
   }
@@ -132,6 +140,7 @@ export default function Runbooks() {
         steps: [],
         overviewMarkdown: '',
         active: createForm.active,
+        scope: createForm.scope,
       };
       const created = await createRunbook(payload);
       setShowCreate(false);
@@ -236,11 +245,9 @@ export default function Runbooks() {
           <>
             <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
             <RefreshButton onRefresh={load} title={t('Refresh runbooks')} />
-            {canManage && (
-              <button className="btn btn-primary" onClick={openCreate}>
-                + {t('Runbook')}
-              </button>
-            )}
+            <button className="btn btn-primary" onClick={openCreate}>
+              + {t('Runbook')}
+            </button>
           </>
         )}
       />
@@ -311,6 +318,7 @@ export default function Runbooks() {
                 ))}
               </select>
             </label>
+            <ScopeSelect viewer={viewer} value={createForm.scope} onChange={(scope) => setCreateForm({ ...createForm, scope })} />
             <label className="checkbox-row">
               <input type="checkbox" checked={createForm.active} onChange={(event) => setCreateForm({ ...createForm, active: event.target.checked })} />
               <span>{t('Active')}</span>
@@ -374,11 +382,13 @@ export default function Runbooks() {
                 <th>{t('Binding')}</th>
                 <th>{t('Steps')}</th>
                 <th>{t('Executions')}</th>
+                <th>{t('Visibility')}</th>
                 <th>{t('Last Updated')}</th>
                 <th className="text-right">{t('Actions')}</th>
               </tr>
               <tr className="column-filter-row">
                 <td><input type="text" className="col-filter" value={colFilters.title} onChange={e => setColFilters(f => ({ ...f, title: e.target.value }))} placeholder={t('Filter...')} /></td>
+                <td></td>
                 <td></td>
                 <td></td>
                 <td></td>
@@ -411,16 +421,17 @@ export default function Runbooks() {
                       <div>{counts.total} {t('total')}</div>
                       <div>{counts.running} {t('running')}</div>
                     </td>
+                    <td><ScopeBadge scope={runbook.scope} /></td>
                     <td className="text-dim" title={formatDateTime(runbook.lastUpdateUtc)}>{formatRelativeTime(runbook.lastUpdateUtc)}</td>
                     <td className="text-right" onClick={(event) => event.stopPropagation()}>
                       <ActionMenu
                         id={`runbook-${runbook.id}`}
                         items={[
                         { label: 'Open', onClick: () => navigate(`/runbooks/${runbook.id}`, { state: carryState }) },
-                        ...(canManage ? [{ label: 'Duplicate', onClick: () => void handleDuplicate(runbook) }] : []),
+                        { label: 'Duplicate', onClick: () => void handleDuplicate(runbook) },
                         { label: 'View JSON', onClick: () => setJsonData({ open: true, title: runbook.title, data: runbook }) },
                         ...(counts.running > 0 ? [{ label: `Running: ${counts.running}`, onClick: () => navigate(`/runbooks/${runbook.id}`, { state: carryState }) }] : []),
-                        ...(canManage ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(runbook) }] : []),
+                        ...(canEditScoped(viewer, runbook) ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(runbook) }] : []),
                         ]}
                       />
                     </td>

@@ -31,6 +31,8 @@ namespace Armada.Server
         private readonly AgentRuntimeFactory _RuntimeFactory;
         private readonly ArmadaWebSocketHub? _WebSocketHub;
         private readonly IPromptTemplateService? _PromptTemplates;
+        private readonly ISessionTokenService? _SessionTokenService;
+        private readonly int _McpPort;
         private readonly LoggingModule _Logging;
         private readonly string _Header = "[CaptainChatService] ";
 
@@ -49,13 +51,20 @@ namespace Armada.Server
         /// <param name="runtimeFactory">Agent runtime factory used to launch the captain's CLI headlessly.</param>
         /// <param name="webSocketHub">WebSocket hub used to stream reply chunks live; may be null.</param>
         /// <param name="promptTemplates">Prompt template service used to resolve the Ask Armada system prompt; may be null.</param>
+        /// <param name="sessionTokenService">Session token service used to mint a short-lived per-caller token
+        /// so an in-process (ApiEndpoint) captain can reach Armada's own MCP server scoped to the caller; may
+        /// be null (MCP tool access is then disabled).</param>
+        /// <param name="mcpPort">The port Armada's MCP server listens on, used to build the in-runtime MCP
+        /// endpoint URL; a non-positive value disables MCP tool access.</param>
         /// <param name="logging">Logging module.</param>
-        public CaptainChatService(DatabaseDriver database, AgentRuntimeFactory runtimeFactory, ArmadaWebSocketHub? webSocketHub, IPromptTemplateService? promptTemplates, LoggingModule logging)
+        public CaptainChatService(DatabaseDriver database, AgentRuntimeFactory runtimeFactory, ArmadaWebSocketHub? webSocketHub, IPromptTemplateService? promptTemplates, ISessionTokenService? sessionTokenService, int mcpPort, LoggingModule logging)
         {
             _Database = database ?? throw new ArgumentNullException(nameof(database));
             _RuntimeFactory = runtimeFactory ?? throw new ArgumentNullException(nameof(runtimeFactory));
             _WebSocketHub = webSocketHub;
             _PromptTemplates = promptTemplates;
+            _SessionTokenService = sessionTokenService;
+            _McpPort = mcpPort > 0 ? mcpPort : 0;
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
         }
 
@@ -70,15 +79,23 @@ namespace Armada.Server
         /// </summary>
         /// <param name="captainId">Captain identifier (cpt_ prefix).</param>
         /// <param name="request">The new message and prior conversation.</param>
+        /// <param name="auth">Caller authentication context, used to scope which captain can be chatted with.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The assistant reply and its timing statistics.</returns>
-        public async Task<CaptainChatResponse> ChatAsync(string captainId, CaptainChatRequest request, CancellationToken token = default)
+        public async Task<CaptainChatResponse> ChatAsync(string captainId, CaptainChatRequest request, AuthContext auth, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));
             if (request == null) throw new ArgumentNullException(nameof(request));
+            if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (String.IsNullOrWhiteSpace(request.Message)) return Fail("A message is required.");
 
-            Captain? captain = await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false);
+            // Scope the captain read so a caller can only chat with a captain they can see: a global admin any,
+            // a tenant admin any in their tenant, a regular user only their own. Not-visible reads as not-found.
+            Captain? captain = auth.IsAdmin
+                ? await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false)
+                : auth.IsTenantAdmin
+                    ? await _Database.Captains.ReadAsync(auth.TenantId!, captainId, token).ConfigureAwait(false)
+                    : await _Database.Captains.ReadAsync(auth.TenantId!, auth.UserId!, captainId, token).ConfigureAwait(false);
             if (captain == null) return Fail("Captain not found.");
 
             // The editable Ask Armada system prompt (Configuration > Prompts, template 'ask.system').
@@ -132,7 +149,9 @@ namespace Armada.Server
                 // events (run_started/assistant_text/run_completed) carrying model, duration, and token
                 // estimates; CLI runtimes that only stream text still yield wall-clock timing.
                 bool isMux = captain.Runtime == AgentRuntimeEnum.Mux;
+                bool isOpenCode = captain.Runtime == AgentRuntimeEnum.OpenCode;
                 bool isClaude = captain.Runtime == AgentRuntimeEnum.ClaudeCode;
+                bool isApiEndpoint = captain.Runtime == AgentRuntimeEnum.ApiEndpoint;
                 double? reportedDurationMs = null;
                 int? reportedTokens = null;
                 string? reportedModel = null;
@@ -141,6 +160,41 @@ namespace Armada.Server
 
                 runtime.OnStdoutReceived += (pid, line) =>
                 {
+                    // Structured tool-activity events from the in-process (ApiEndpoint) runtime arrive as a
+                    // marked JSON line on stdout. Lift them into ask.tool card events (stamped with this
+                    // turn's id) and never let the marker line leak into the accumulated reply text.
+                    if (!String.IsNullOrEmpty(line) && line.StartsWith(ApiAgentRuntime.ToolEventMarker, StringComparison.Ordinal))
+                    {
+                        try
+                        {
+                            string toolJson = line.Substring(ApiAgentRuntime.ToolEventMarker.Length);
+                            using (JsonDocument doc = JsonDocument.Parse(toolJson))
+                            {
+                                JsonElement root = doc.RootElement;
+                                string? phase = root.TryGetProperty("phase", out JsonElement ph) && ph.ValueKind == JsonValueKind.String ? ph.GetString() : null;
+                                string? id = root.TryGetProperty("id", out JsonElement idv) && idv.ValueKind == JsonValueKind.String ? idv.GetString() : null;
+                                string? name = root.TryGetProperty("name", out JsonElement nmv) && nmv.ValueKind == JsonValueKind.String ? nmv.GetString() : null;
+                                string? arguments = root.TryGetProperty("arguments", out JsonElement av) && av.ValueKind == JsonValueKind.String ? av.GetString() : null;
+                                bool? ok = root.TryGetProperty("ok", out JsonElement okv) && (okv.ValueKind == JsonValueKind.True || okv.ValueKind == JsonValueKind.False) ? okv.GetBoolean() : (bool?)null;
+                                double? elapsedMs = root.TryGetProperty("elapsedMs", out JsonElement elv) && elv.ValueKind == JsonValueKind.Number ? elv.GetDouble() : (double?)null;
+                                string? resultText = root.TryGetProperty("result", out JsonElement rv) && rv.ValueKind == JsonValueKind.String ? rv.GetString() : null;
+                                EmitTool(turnId, new { turnId, phase, id, name, arguments, ok, elapsedMs, result = resultText });
+                            }
+                        }
+                        catch (JsonException) { }
+                        return;
+                    }
+
+                    // The in-process (ApiEndpoint) runtime interleaves human-readable diagnostics
+                    // ([mcp] ..., [tool] ..., [tool:result] ..., and lifecycle [error]/[warning]/[cancelled])
+                    // on the same stdout channel as the model's reply text. Those belong in the tool cards
+                    // (delivered separately as TOOLEVENT lines), not in the answer -- drop them so they never
+                    // stream into or accumulate as the reply.
+                    if (isApiEndpoint && IsApiRuntimeDiagnostic(line))
+                    {
+                        return;
+                    }
+
                     if (isClaude)
                     {
                         // Claude Code streaming-JSON: each stdout line is one JSON event. Incremental
@@ -290,6 +344,73 @@ namespace Armada.Server
                         return;
                     }
 
+                    if (isOpenCode && OpenCodeRuntime.IsProtocolEventLine(line))
+                    {
+                        // OpenCode --format json streams "type"-tagged events with a nested "part". Surface
+                        // assistant text and tool-call chips; drop the raw JSON envelope so it never leaks.
+                        try
+                        {
+                            using (JsonDocument doc = JsonDocument.Parse(line.Trim()))
+                            {
+                                JsonElement root = doc.RootElement;
+                                string ocType = root.TryGetProperty("type", out JsonElement oct) && oct.ValueKind == JsonValueKind.String ? oct.GetString() ?? "" : "";
+                                JsonElement part = root.TryGetProperty("part", out JsonElement p) && p.ValueKind == JsonValueKind.Object ? p : default;
+
+                                if (ocType == "text" && part.ValueKind == JsonValueKind.Object
+                                    && part.TryGetProperty("text", out JsonElement txt) && txt.ValueKind == JsonValueKind.String)
+                                {
+                                    string deltaText = txt.GetString() ?? String.Empty;
+                                    if (!String.IsNullOrEmpty(deltaText))
+                                    {
+                                        lock (outputLock)
+                                        {
+                                            if (firstOutputUtc == null) firstOutputUtc = DateTime.UtcNow;
+                                            if (output.Length < _MaxOutputChars) output.Append(deltaText);
+                                        }
+                                        EmitChunk(turnId, deltaText);
+                                    }
+                                }
+                                else if (ocType == "reasoning" && part.ValueKind == JsonValueKind.Object
+                                    && part.TryGetProperty("text", out JsonElement rtxt) && rtxt.ValueKind == JsonValueKind.String)
+                                {
+                                    // OpenCode --thinking streams reasoning on a separate channel; surface it as
+                                    // thinking (never as reply text).
+                                    string thinkingDelta = rtxt.GetString() ?? String.Empty;
+                                    if (!String.IsNullOrEmpty(thinkingDelta) && request.ShowThinking)
+                                    {
+                                        lock (outputLock)
+                                        {
+                                            if (thinking.Length < _MaxOutputChars) thinking.Append(thinkingDelta);
+                                        }
+                                        EmitThinking(turnId, thinkingDelta);
+                                    }
+                                }
+                                else if (ocType == "tool_use" && part.ValueKind == JsonValueKind.Object)
+                                {
+                                    string? toolName = part.TryGetProperty("tool", out JsonElement tnm) && tnm.ValueKind == JsonValueKind.String ? tnm.GetString() : null;
+                                    string? toolId = part.TryGetProperty("callID", out JsonElement cid) && cid.ValueKind == JsonValueKind.String ? cid.GetString() : null;
+                                    string? status = null;
+                                    string? argsJson = null;
+                                    string? resultJson = null;
+                                    bool? ok = null;
+                                    if (part.TryGetProperty("state", out JsonElement state) && state.ValueKind == JsonValueKind.Object)
+                                    {
+                                        status = state.TryGetProperty("status", out JsonElement stt) && stt.ValueKind == JsonValueKind.String ? stt.GetString() : null;
+                                        if (state.TryGetProperty("input", out JsonElement inp)) argsJson = Truncate(inp.GetRawText(), 4000);
+                                        if (state.TryGetProperty("output", out JsonElement outp) && outp.ValueKind == JsonValueKind.String) resultJson = Truncate(outp.GetString() ?? "", 16000);
+                                        if (state.TryGetProperty("metadata", out JsonElement md) && md.ValueKind == JsonValueKind.Object
+                                            && md.TryGetProperty("exit", out JsonElement ex) && ex.ValueKind == JsonValueKind.Number)
+                                            ok = ex.GetInt32() == 0;
+                                    }
+                                    string phase = String.Equals(status, "completed", StringComparison.OrdinalIgnoreCase) ? "completed" : "started";
+                                    EmitTool(turnId, new { turnId, phase, id = toolId, name = toolName, arguments = argsJson, ok, result = resultJson });
+                                }
+                            }
+                        }
+                        catch (JsonException) { }
+                        return;
+                    }
+
                     lock (outputLock)
                     {
                         if (firstOutputUtc == null) firstOutputUtc = DateTime.UtcNow;
@@ -303,12 +424,49 @@ namespace Armada.Server
                 };
                 runtime.OnProcessExited += (pid, code) => exitSource.TrySetResult(code);
 
+                // In-process (ApiEndpoint) captains have no CLI harness and thus no MCP config of their own.
+                // To let an Ask Armada chat actually drive Armada's orchestration tools, mint a short-lived
+                // session token for the caller and hand the runtime the local MCP endpoint URL plus that
+                // token. The runtime connects to Armada's own MCP server, which authenticates the token and
+                // scopes every tool call to this caller -- exactly as a real per-user MCP client would.
+                Dictionary<string, string>? environment = null;
+                if (captain.Runtime == AgentRuntimeEnum.ApiEndpoint
+                    && _SessionTokenService != null
+                    && _McpPort > 0
+                    && !String.IsNullOrEmpty(auth.TenantId)
+                    && !String.IsNullOrEmpty(auth.UserId))
+                {
+                    try
+                    {
+                        AuthenticateResult minted = _SessionTokenService.CreateToken(auth.TenantId!, auth.UserId!);
+                        if (!String.IsNullOrEmpty(minted.Token))
+                        {
+                            // Use the same canonical MCP URL captains' generated configs target
+                            // (http://localhost:<port>/mcp). The MCP listener binds to the configured
+                            // hostname (default "localhost"), and Windows HTTP.sys rejects a request whose
+                            // Host header does not match the registered prefix -- so a hardcoded 127.0.0.1
+                            // is refused with "400 Invalid Hostname". Aligning with GetMcpUrl avoids that.
+                            environment = new Dictionary<string, string>
+                            {
+                                ["ARMADA_MCP_URL"] = Armada.Core.Services.ArmadaMcpConfigBuilder.GetMcpUrl(_McpPort),
+                                ["ARMADA_MCP_TOKEN"] = minted.Token!
+                            };
+                        }
+                    }
+                    catch (Exception mintEx)
+                    {
+                        _Logging.Warn(_Header + "could not mint MCP session token for chat: " + mintEx.Message);
+                    }
+                }
+
                 processId = await runtime.StartAsync(
                     workingDirectory,
                     prompt,
+                    environment: environment,
                     finalMessageFilePath: finalMessageFilePath,
                     model: captain.Model,
                     captain: captain,
+                    mcpPort: _McpPort,
                     showThinking: request.ShowThinking,
                     token: token).ConfigureAwait(false);
 
@@ -429,7 +587,7 @@ namespace Armada.Server
             }
             catch (Exception e)
             {
-                _Logging.Warn(_Header + "chat turn failed for captain " + captainId + ": " + e.Message);
+                _Logging.Warn(_Header + "chat turn failed for captain " + captainId + ": " + e.ToString());
                 return Fail(e.Message);
             }
             finally
@@ -539,6 +697,22 @@ namespace Armada.Server
         {
             if (String.IsNullOrEmpty(value) || value!.Length <= max) return value;
             return value.Substring(0, max) + "... (truncated)";
+        }
+
+        /// <summary>
+        /// Whether a stdout line from the in-process (ApiEndpoint) runtime is diagnostic chatter (MCP status,
+        /// tool call/result echoes, or a lifecycle marker) rather than the model's reply text. Such lines are
+        /// surfaced as tool cards separately and must not leak into the answer.
+        /// </summary>
+        private static bool IsApiRuntimeDiagnostic(string line)
+        {
+            if (String.IsNullOrEmpty(line)) return false;
+            return line.StartsWith("[mcp]", StringComparison.Ordinal)
+                || line.StartsWith("[tool]", StringComparison.Ordinal)
+                || line.StartsWith("[tool:result]", StringComparison.Ordinal)
+                || line.StartsWith("[error]", StringComparison.Ordinal)
+                || line.StartsWith("[warning]", StringComparison.Ordinal)
+                || line.StartsWith("[cancelled]", StringComparison.Ordinal);
         }
 
         private static CaptainChatResponse Fail(string error)

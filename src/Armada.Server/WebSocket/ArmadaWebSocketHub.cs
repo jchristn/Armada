@@ -84,7 +84,7 @@ namespace Armada.Server.WebSocket
         public async Task HandleWebSocketAsync(HttpContextBase ctx, WebSocketSession session)
         {
             _Sessions.TryAdd(session.Id, session);
-            _Logging.Info(_Header + "client connected: " + session.RemoteIp + ":" + session.RemotePort);
+            _Logging.Debug(_Header + "client connected: " + session.RemoteIp + ":" + session.RemotePort);
 
             try
             {
@@ -100,12 +100,12 @@ namespace Armada.Server.WebSocket
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "session error: " + ex.Message);
+                _Logging.Warn(_Header + "session error: " + ex.ToString());
             }
             finally
             {
                 _Sessions.TryRemove(session.Id, out _);
-                _Logging.Info(_Header + "client disconnected: " + session.RemoteIp + ":" + session.RemotePort);
+                _Logging.Debug(_Header + "client disconnected: " + session.RemoteIp + ":" + session.RemotePort);
             }
         }
 
@@ -399,7 +399,7 @@ namespace Armada.Server.WebSocket
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error handling message: " + ex.Message);
+                _Logging.Warn(_Header + "error handling message: " + ex.ToString());
                 try
                 {
                     string errorJson = JsonSerializer.Serialize(new { type = "command.error", error = ex.Message }, _JsonOptions);
@@ -438,7 +438,7 @@ namespace Armada.Server.WebSocket
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "broadcast error: " + ex.Message);
+                _Logging.Warn(_Header + "broadcast error: " + ex.ToString());
             }
         }
 

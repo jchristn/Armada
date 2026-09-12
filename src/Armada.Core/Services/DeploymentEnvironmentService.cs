@@ -239,7 +239,7 @@ namespace Armada.Core.Services
                 created = await _Database.Environments.CreateAsync(created, token).ConfigureAwait(false);
                 environments.Add(created);
                 byName[created.Name] = created;
-                _Logging.Info(_Header + "seeded environment " + created.Name + " for vessel " + vessel.Id);
+                _Logging.Debug(_Header + "seeded environment " + created.Name + " for vessel " + vessel.Id);
             }
 
             if (environments.Count == 0)
@@ -266,7 +266,7 @@ namespace Armada.Core.Services
                 };
 
                 await _Database.Environments.CreateAsync(created, token).ConfigureAwait(false);
-                _Logging.Info(_Header + "seeded fallback default environment for vessel " + vessel.Id);
+                _Logging.Debug(_Header + "seeded fallback default environment for vessel " + vessel.Id);
                 return;
             }
 
@@ -276,7 +276,7 @@ namespace Armada.Core.Services
                 defaultEnvironment.IsDefault = true;
                 defaultEnvironment.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Environments.UpdateAsync(defaultEnvironment, token).ConfigureAwait(false);
-                _Logging.Info(_Header + "seeded default environment for vessel " + vessel.Id + " -> " + defaultEnvironment.Name);
+                _Logging.Debug(_Header + "seeded default environment for vessel " + vessel.Id + " -> " + defaultEnvironment.Name);
             }
         }
 

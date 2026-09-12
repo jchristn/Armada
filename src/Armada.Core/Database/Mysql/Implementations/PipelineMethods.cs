@@ -54,10 +54,12 @@ namespace Armada.Core.Database.Mysql.Implementations
 
                 using (MySqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = @"INSERT INTO pipelines (id, tenant_id, name, description, is_built_in, active, created_utc, last_update_utc)
-                        VALUES (@id, @tenant_id, @name, @description, @is_built_in, @active, @created_utc, @last_update_utc);";
+                    cmd.CommandText = @"INSERT INTO pipelines (id, tenant_id, user_id, scope, name, description, is_built_in, active, created_utc, last_update_utc)
+                        VALUES (@id, @tenant_id, @user_id, @scope, @name, @description, @is_built_in, @active, @created_utc, @last_update_utc);";
                     cmd.Parameters.AddWithValue("@id", pipeline.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)pipeline.TenantId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@user_id", (object?)pipeline.UserId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@scope", pipeline.Scope.ToString());
                     cmd.Parameters.AddWithValue("@name", pipeline.Name);
                     cmd.Parameters.AddWithValue("@description", (object?)pipeline.Description ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@is_built_in", pipeline.IsBuiltIn ? 1 : 0);
@@ -198,6 +200,8 @@ namespace Armada.Core.Database.Mysql.Implementations
                 {
                     cmd.CommandText = @"UPDATE pipelines SET
                         tenant_id = @tenant_id,
+                        user_id = @user_id,
+                        scope = @scope,
                         name = @name,
                         description = @description,
                         is_built_in = @is_built_in,
@@ -206,6 +210,8 @@ namespace Armada.Core.Database.Mysql.Implementations
                         WHERE id = @id;";
                     cmd.Parameters.AddWithValue("@id", pipeline.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)pipeline.TenantId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@user_id", (object?)pipeline.UserId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@scope", pipeline.Scope.ToString());
                     cmd.Parameters.AddWithValue("@name", pipeline.Name);
                     cmd.Parameters.AddWithValue("@description", (object?)pipeline.Description ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@is_built_in", pipeline.IsBuiltIn ? 1 : 0);
@@ -470,6 +476,8 @@ namespace Armada.Core.Database.Mysql.Implementations
             Pipeline pipeline = new Pipeline();
             pipeline.Id = reader["id"].ToString()!;
             pipeline.TenantId = MysqlDatabaseDriver.NullableString(reader["tenant_id"]);
+            pipeline.UserId = MysqlDatabaseDriver.NullableString(reader["user_id"]);
+            pipeline.Scope = System.Enum.TryParse<Armada.Core.Enums.ScopeEnum>(reader["scope"]?.ToString(), true, out Armada.Core.Enums.ScopeEnum __sc) ? __sc : Armada.Core.Enums.ScopeEnum.TenantWide;
             pipeline.Name = reader["name"].ToString()!;
             pipeline.Description = MysqlDatabaseDriver.NullableString(reader["description"]);
             pipeline.IsBuiltIn = Convert.ToInt64(reader["is_built_in"]) == 1;

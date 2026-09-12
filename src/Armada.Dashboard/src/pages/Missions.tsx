@@ -6,7 +6,7 @@ import {
   restartMission, retryMissionLanding, transitionMission, getMissionDiff, getMissionLog,
   listVessels, listCaptains, listVoyages,
 } from '../api/client';
-import type { MissionSummary, Vessel, Captain, Voyage } from '../types/models';
+import type { MissionSummary, Vessel, Captain, Voyage, MissionMode } from '../types/models';
 import Pagination from '../components/shared/Pagination';
 import LoadingIndicator from '../components/shared/LoadingIndicator';
 import ActionMenu from '../components/shared/ActionMenu';
@@ -20,6 +20,7 @@ import DiffViewer from '../components/shared/DiffViewer';
 import LogViewer from '../components/shared/LogViewer';
 import ErrorModal from '../components/shared/ErrorModal';
 import RefreshButton from '../components/shared/RefreshButton';
+import UserScopeFilter from '../components/shared/UserScopeFilter';
 import CopyButton from '../components/shared/CopyButton';
 import { useLocale } from '../context/LocaleContext';
 
@@ -47,10 +48,11 @@ export default function Missions() {
 
   // Server-side status filter
   const [statusFilter, setStatusFilter] = useState('');
+  const [userScope, setUserScope] = useState('');
 
   // Modal
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({ title: '', description: '', vesselId: '', priority: 100 });
+  const [formData, setFormData] = useState<{ title: string; description: string; vesselId: string; priority: number; mode: MissionMode }>({ title: '', description: '', vesselId: '', priority: 100, mode: 'Implementation' });
 
   // JSON viewer
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
@@ -97,6 +99,7 @@ export default function Missions() {
       setLoading(true);
       const filters: Record<string, string> = {};
       if (statusFilter) filters.status = statusFilter;
+      if (userScope) filters.userId = userScope;
       const result = await listMissionSummaries({ pageNumber, pageSize, filters });
       setMissions(result.objects || []);
       setTotalPages(result.totalPages || 1);
@@ -107,7 +110,7 @@ export default function Missions() {
     } finally {
       setLoading(false);
     }
-  }, [pageNumber, pageSize, statusFilter, t]);
+  }, [pageNumber, pageSize, statusFilter, userScope, t]);
 
   useEffect(() => {
     listVessels({ pageSize: 1000 }).then(r => setVessels(r.objects || [])).catch(() => {});
@@ -165,7 +168,7 @@ export default function Missions() {
 
   // Create
   function openCreate() {
-    setFormData({ title: '', description: '', vesselId: '', priority: 100 });
+    setFormData({ title: '', description: '', vesselId: '', priority: 100, mode: 'Implementation' });
     setShowForm(true);
   }
 
@@ -297,14 +300,15 @@ export default function Missions() {
               <option value="">{t('All Statuses')}</option>
               {MISSION_STATUSES.map(s => <option key={s} value={s}>{t(s)}</option>)}
             </select>
+            <UserScopeFilter value={userScope} onChange={(id) => { setUserScope(id); setPageNumber(1); }} />
+            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
+            <RefreshButton onRefresh={load} title="Refresh mission data" />
             {selected.length > 0 && (
               <button className="btn btn-sm btn-danger" onClick={handleBulkDelete}>
                 {t('Delete Selected')} ({selected.length})
               </button>
             )}
             <button className="btn btn-primary btn-sm" onClick={openCreate}>+ {t('Mission')}</button>
-            <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={load} title="Refresh mission data" />
           </>
         )}
       />
@@ -322,6 +326,13 @@ export default function Missions() {
               <select value={formData.vesselId} onChange={e => setFormData({ ...formData, vesselId: e.target.value })} required>
                 <option value="">{t('Select a vessel...')}</option>
                 {vessels.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+              </select>
+            </label>
+            <label>{t('Mode')}
+              <select value={formData.mode} onChange={e => setFormData({ ...formData, mode: e.target.value as MissionMode })}>
+                <option value="Implementation">{t('Implementation')}</option>
+                <option value="Audit">{t('Audit (read-only)')}</option>
+                <option value="Research">{t('Research (read-only)')}</option>
               </select>
             </label>
             <label>{t('Priority')}<input type="number" value={formData.priority} onChange={e => setFormData({ ...formData, priority: Number(e.target.value) })} /></label>

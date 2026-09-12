@@ -711,6 +711,13 @@ body {
     transition: color 0.15s;
 }
 .github-link:hover { color: var(--text); }
+.discord-link {
+    color: var(--text-dim);
+    display: inline-flex;
+    align-items: center;
+    transition: color 0.15s;
+}
+.discord-link:hover { color: var(--text); }
 
 /* Main */
 .main-content-area {
@@ -915,7 +922,12 @@ h3 { font-size: 1.1rem; margin-bottom: 0.5rem; font-weight: 600; margin-top: 1re
 .tag.idle, .tag.pending, .tag.queued { background: var(--tag-idle-bg); color: var(--tag-idle-fg); }
 .tag.working, .tag.inprogress, .tag.assigned, .tag.open, .tag.testing { background: var(--tag-working-bg); color: var(--tag-working-fg); }
 .tag.workproduced { background: var(--tag-review-bg); color: var(--tag-review-fg); }
-.tag.complete, .tag.completed, .tag.landed, .tag.passed, .tag.pass { background: var(--tag-complete-bg); color: var(--tag-complete-fg); }
+.tag.complete, .tag.completed, .tag.landed, .tag.passed, .tag.pass, .tag.healthy { background: var(--tag-complete-bg); color: var(--tag-complete-fg); }
+.tag.unhealthy { background: var(--tag-failed-bg); color: var(--tag-failed-fg); }
+.tag.unknown { background: var(--tag-idle-bg); color: var(--tag-idle-fg); }
+.tag.connected { background: var(--tag-complete-bg); color: var(--tag-complete-fg); }
+.tag.disconnected { background: var(--tag-failed-bg); color: var(--tag-failed-fg); }
+.tag.degraded { background: var(--tag-review-bg); color: var(--tag-review-fg); }
 .tag.failed, .tag.error, .tag.stalled, .tag.landingfailed { background: var(--tag-failed-bg); color: var(--tag-failed-fg); }
 .tag.fail { background: #dc2626; color: #fff; }
 .tag.review, .tag.warn { background: var(--tag-review-bg); color: var(--tag-review-fg); }
@@ -1982,6 +1994,159 @@ tr.clickable { cursor: pointer; }
     border-bottom: 1px solid var(--border);
 }
 
+/* Key/value list used inside compact modals (endpoint validate/health details). */
+.detail-list {
+    display: grid;
+    grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
+    gap: 0.35rem 1rem;
+    margin: 0.5rem 0 1rem;
+}
+
+.detail-list dt {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    align-self: center;
+}
+
+.detail-list dd {
+    margin: 0;
+    min-width: 0;
+    word-break: break-word;
+}
+
+/* Model endpoint health histogram (segmented pass/fail bar) + health-detail modal. */
+.health-histogram {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 1px;
+    overflow: hidden;
+}
+
+.health-histogram .hh-bar {
+    flex: 1 1 auto;
+    min-width: 2px;
+    border-radius: 1px;
+}
+
+.health-histogram .hh-ok { background: var(--green); }
+.health-histogram .hh-fail { background: var(--red); }
+.health-histogram .hh-mixed { background: var(--orange); }
+
+.health-cell {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.health-cell .health-histogram {
+    width: 96px;
+    min-width: 96px;
+    flex: 0 0 auto;
+}
+
+.health-modal { display: flex; flex-direction: column; gap: 1rem; }
+
+.health-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.25rem;
+    font-size: 0.82rem;
+    color: var(--text-dim);
+}
+
+.health-meta code { word-break: break-all; }
+
+.health-stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 0.75rem;
+}
+
+.health-stat-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.65rem 0.5rem;
+    border-radius: 6px;
+    background: var(--bg-hover);
+    border: 1px solid var(--border);
+    min-width: 0;
+}
+
+.health-stat-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+}
+
+.health-stat-value {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text);
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+
+.health-stat-value.health-ok { color: var(--green); }
+.health-stat-value.health-fail { color: var(--red); }
+
+.health-error-box {
+    padding: 0.65rem 0.85rem;
+    border-radius: 6px;
+    border-left: 3px solid var(--red);
+    background: color-mix(in srgb, var(--red) 10%, var(--bg-card));
+}
+
+.health-error-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--red);
+    margin-bottom: 0.25rem;
+}
+
+.health-error-message { font-size: 0.85rem; color: var(--red); word-break: break-word; }
+
+.health-section-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    margin-bottom: 0.4rem;
+}
+
+.health-histogram-container {
+    padding: 0.75rem;
+    border-radius: 6px;
+    background: var(--bg-hover);
+    border: 1px solid var(--border);
+    overflow-x: auto;
+}
+
+.health-timestamps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.5rem 1.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+}
+
+.health-timestamps > div { display: flex; flex-direction: column; gap: 0.15rem; }
+.health-timestamps span { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
+.health-timestamps strong { font-size: 0.85rem; font-weight: 500; color: var(--text); }
+
 .detail-meta-field span {
     font-size: 0.75rem;
     color: var(--text-dim);
@@ -2145,7 +2310,7 @@ tr.clickable { cursor: pointer; }
     border: 1px solid var(--border);
     border-radius: 12px;
     padding: 0.75rem 0.85rem;
-    background: rgba(255, 255, 255, 0.65);
+    background: var(--bg-hover);
 }
 
 .readiness-info-label,
@@ -2202,7 +2367,7 @@ tr.clickable { cursor: pointer; }
     border: 1px solid var(--border);
     border-radius: 12px;
     padding: 0.7rem 0.8rem;
-    background: rgba(255, 255, 255, 0.55);
+    background: var(--bg-hover);
 }
 
 .readiness-checklist-item.satisfied {
@@ -2229,15 +2394,17 @@ tr.clickable { cursor: pointer; }
     border: 1px solid var(--border);
     border-radius: 12px;
     padding: 0.7rem 0.8rem;
-    background: rgba(255, 255, 255, 0.55);
+    background: var(--bg-hover);
 }
 
 .readiness-issue.warning {
-    border-color: rgba(191, 132, 36, 0.28);
+    border-color: color-mix(in srgb, var(--yellow) 45%, var(--border));
+    background: color-mix(in srgb, var(--yellow) 10%, var(--bg-card));
 }
 
 .readiness-issue.error {
-    border-color: rgba(191, 68, 68, 0.3);
+    border-color: color-mix(in srgb, var(--red) 45%, var(--border));
+    background: color-mix(in srgb, var(--red) 10%, var(--bg-card));
 }
 
 .readiness-issue-title-row {
@@ -2253,15 +2420,15 @@ tr.clickable { cursor: pointer; }
 }
 
 .readiness-issue-severity.warning {
-    color: #8a5a12;
+    color: var(--yellow);
 }
 
 .readiness-issue-severity.error {
-    color: #9e2323;
+    color: var(--red);
 }
 
 .readiness-issue-severity.info {
-    color: var(--text-muted);
+    color: var(--text-dim);
 }
 
 .readiness-related-value {
@@ -4809,19 +4976,14 @@ tr.clickable { cursor: pointer; }
 /* Mux captains expose many more fields; give their config modal 50% more width (440px -> 660px). */
 .modal-mux { max-width: 660px; }
 
-/* Captain create/edit modal: 100% wider than the base modal and ~50% taller so the
-   runtime/instruction/endpoint fields have room. Doubles the base 440px (and the 660px mux). */
-.modal-captain { max-width: 880px; min-height: 82.5vh; display: flex; flex-direction: column; }
+/* Captain create/edit modal: 100% wider than the base modal so the runtime/instruction/endpoint
+   fields have room. The modal scrolls as a normal column (inherits .modal's max-height:90vh +
+   overflow-y:auto), so the Save/Cancel footer always sits below the content and never overlaps it.
+   (It previously used display:flex + a flex:1 instructions field, which overlapped the footer once
+   the fields overflowed -- especially for Mux, which adds many fields.) */
+.modal-captain { max-width: 880px; }
 .modal-captain.modal-mux { max-width: 1320px; }
-/* Let the System Instructions field consume the modal's remaining vertical space. */
-.modal-captain > .captain-instructions-field {
-    flex: 1 1 auto;
-    display: flex;
-    flex-direction: column;
-    min-height: 140px;
-}
-.modal-captain > .captain-instructions-field textarea {
-    flex: 1 1 auto;
+.modal-captain .captain-instructions-field textarea {
     min-height: 120px;
     resize: vertical;
 }
@@ -4956,6 +5118,8 @@ tr.clickable { cursor: pointer; }
     justify-content: flex-end;
     gap: 0.5rem;
     margin-top: 1rem;
+    /* Never let the action footer be shrunk or overlapped inside a flex-column modal. */
+    flex-shrink: 0;
 }
 
 .modal label {
@@ -4969,6 +5133,20 @@ tr.clickable { cursor: pointer; }
 .modal label select,
 .modal label textarea {
     margin-top: 0.3rem;
+}
+
+/* Inline checkbox + label text on a single centered row (used in create/edit modals). */
+.checkbox-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.checkbox-row input[type="checkbox"] {
+    margin-top: 0;
+    width: auto;
+    flex: 0 0 auto;
 }
 
 .btn-link {
@@ -5375,6 +5553,13 @@ a:hover { text-decoration: underline; }
     color: var(--text);
     margin: 0;
     background: var(--diff-bg);
+}
+
+/* When the viewer renders markdown, use normal prose flow; code blocks keep monospace via .markdown. */
+.viewer-body-markdown {
+    font-family: inherit;
+    font-size: 0.9rem;
+    white-space: normal;
 }
 
 /* Log viewer follow mode */
@@ -7398,6 +7583,35 @@ thead tr.column-filter-row td input.col-filter::placeholder {
     font-style: italic;
     animation: ask-thinking-fade 0.45s ease;
 }
+
+/* Ask Armada: blank-screen greeting. The parent empty-state wrapper already centers this block both
+   vertically and horizontally within the chat window. */
+.ask-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+.ask-empty-greeting {
+    margin: 0;
+    font-size: clamp(1.6rem, 3.2vw, 2.6rem);
+    font-weight: 700;
+    line-height: 1.15;
+    color: var(--text, #e6edf3);
+    animation: ask-empty-fade 0.5s ease;
+}
+.ask-empty-sub {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-dim, #94a3b8);
+}
+@keyframes ask-empty-fade {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .ask-empty-greeting { animation: none; }
+}
 @keyframes ask-thinking-fade {
     from { opacity: 0; }
     to { opacity: 1; }
@@ -7422,37 +7636,72 @@ thead tr.column-filter-row td input.col-filter::placeholder {
     width: 30rem;
     max-width: 100%;
     border: 1px solid var(--border, rgba(148, 163, 184, 0.2));
+    border-left-width: 3px;
     border-radius: 6px;
     background: rgba(148, 163, 184, 0.06);
     overflow: hidden;
+    transition: background 0.12s ease, border-color 0.12s ease;
 }
+/* A status-colored left accent makes the outcome scannable at a glance without opening the card. */
+.chat-tool-running { border-left-color: var(--text-dim, #94a3b8); }
+.chat-tool-success { border-left-color: #3fb950; }
+.chat-tool-failed { border-left-color: #f85149; }
+.chat-tool[open] { background: rgba(148, 163, 184, 0.10); }
 .chat-tool-summary {
     display: flex;
     align-items: center;
     gap: 0.45rem;
-    padding: 0.22rem 0.5rem;
+    padding: 0.3rem 0.55rem;
     cursor: pointer;
     font-size: 0.72rem;
     list-style: none;
     user-select: none;
 }
+.chat-tool-summary:hover { background: rgba(148, 163, 184, 0.08); }
 .chat-tool-summary::-webkit-details-marker { display: none; }
 .chat-tool-summary::marker { content: ''; }
 .chat-tool-status {
     display: inline-flex;
-    width: 1rem;
+    align-items: center;
     justify-content: center;
+    width: 1.05rem;
+    height: 1.05rem;
+    border-radius: 50%;
+    font-size: 0.66rem;
     font-weight: 700;
+    line-height: 1;
+    flex: 0 0 auto;
 }
-.chat-tool-running .chat-tool-status { color: var(--text-dim, #94a3b8); }
-.chat-tool-success .chat-tool-status { color: #3fb950; }
-.chat-tool-failed .chat-tool-status { color: #f85149; }
+.chat-tool-running .chat-tool-status { color: var(--text-dim, #94a3b8); background: rgba(148, 163, 184, 0.18); }
+.chat-tool-success .chat-tool-status { color: #fff; background: #3fb950; }
+.chat-tool-failed .chat-tool-status { color: #fff; background: #f85149; }
 .chat-tool-name {
     font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
     font-size: 0.72rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    flex: 0 0 auto;
+}
+.chat-tool-runtime {
+    flex: 0 0 auto;
+    padding: 0.02rem 0.35rem;
+    border-radius: 0.5rem;
+    background: var(--surface-muted, rgba(148, 163, 184, 0.16));
+    color: var(--text-dim, #94a3b8);
+    font-size: 0.66rem;
+    white-space: nowrap;
+}
+.chat-tool-result-preview {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-dim, #94a3b8);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 0.7rem;
+    opacity: 0.85;
 }
 .chat-tool-meta {
     margin-left: auto;
@@ -7604,7 +7853,7 @@ thead tr.column-filter-row td input.col-filter::placeholder {
 }
 .ask-input-form {
     flex-shrink: 0;
-    margin-top: 0;
+    margin-top: 0.75rem;
 }
 
 /* Shared captain-chat panel (Ask Armada + Planning current session). Fills its host so the window

@@ -24,3 +24,12 @@ else
         --push \
         .
 fi
+
+# Pull the pushed image back into the local registry (from Docker Hub, not the
+# builder) so the same tags are available locally as well.
+echo "Pulling jchristn77/armada-dashboard:latest into local registry"
+docker pull jchristn77/armada-dashboard:latest
+if [ -n "$TAG" ]; then
+    echo "Pulling jchristn77/armada-dashboard:${TAG} into local registry"
+    docker pull "jchristn77/armada-dashboard:${TAG}"
+fi

@@ -72,6 +72,18 @@ namespace Armada.Core.Models
         public string? WorkingDirectory { get; set; } = null;
 
         /// <summary>
+        /// Optional preferred Harbor (host runner) identifier for this vessel's missions. Honored by the
+        /// router when the Harbor is otherwise eligible; null lets the router choose.
+        /// </summary>
+        public string? PreferredHarborId { get; set; } = null;
+
+        /// <summary>
+        /// Optional comma-separated list of capabilities a Harbor must advertise to run this vessel's
+        /// missions (for example "claude,gh"). Null or empty imposes no capability requirement.
+        /// </summary>
+        public string? RequiredCapabilities { get; set; } = null;
+
+        /// <summary>
         /// Optional per-vessel GitHub token override.
         /// This value is accepted on create and update, but is never serialized in read responses.
         /// </summary>
@@ -232,6 +244,36 @@ namespace Armada.Core.Models
         public List<string> AutoLandPathDenyGlobs { get; set; } = new List<string>();
 
         /// <summary>
+        /// Whether the in-dock Definition-of-Done gate runs before a mission is accepted. When true, the
+        /// build and unit-test commands below run inside the mission's own checkout before landing; a
+        /// failure blocks acceptance with a classified reason (Compile/TestFail/Timeout/Infra). When false,
+        /// no gate runs and acceptance follows the usual rules.
+        /// </summary>
+        public bool DefinitionOfDoneEnabled { get; set; } = false;
+
+        /// <summary>
+        /// Shell command that builds the project inside the mission's checkout (e.g. "dotnet build").
+        /// A non-zero exit classifies as Compile. Null or empty skips the build phase.
+        /// </summary>
+        public string? DefinitionOfDoneBuildCommand { get; set; } = null;
+
+        /// <summary>
+        /// Shell command that runs unit tests inside the mission's checkout (e.g. "dotnet test").
+        /// A non-zero exit classifies as TestFail. Null or empty skips the test phase.
+        /// </summary>
+        public string? DefinitionOfDoneTestCommand { get; set; } = null;
+
+        /// <summary>
+        /// Per-phase timeout, in seconds, for each Definition-of-Done command. Exceeding it classifies as
+        /// Timeout. Clamped to [30, 7200]; defaults to <see cref="Constants.DefaultDefinitionOfDoneTimeoutSeconds"/>.
+        /// </summary>
+        public int DefinitionOfDoneTimeoutSeconds
+        {
+            get => _DefinitionOfDoneTimeoutSeconds;
+            set => _DefinitionOfDoneTimeoutSeconds = value < 30 ? 30 : (value > 7200 ? 7200 : value);
+        }
+
+        /// <summary>
         /// Prefix used to classify release branches.
         /// </summary>
         public string ReleaseBranchPrefix { get; set; } = "release/";
@@ -280,6 +322,7 @@ namespace Armada.Core.Models
         private string _Name = "My Vessel";
         private int _AutoLandMaxFiles = 0;
         private int _AutoLandMaxLines = 0;
+        private int _DefinitionOfDoneTimeoutSeconds = Constants.DefaultDefinitionOfDoneTimeoutSeconds;
         private string? _RepoUrl = null;
         private string? _GitHubTokenOverride = null;
         private bool? _HasGitHubTokenOverride = null;

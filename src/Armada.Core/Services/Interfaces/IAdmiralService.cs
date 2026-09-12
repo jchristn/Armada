@@ -112,6 +112,8 @@ namespace Armada.Core.Services.Interfaces
         /// <param name="missionDescriptions">List of mission title/description pairs.</param>
         /// <param name="pipelineId">Optional pipeline ID. Resolved: explicit > vessel default > fleet default > WorkerOnly.</param>
         /// <param name="selectedPlaybooks">Ordered playbooks to apply to every mission in the voyage.</param>
+        /// <param name="captainOverridesJson">Serialized per-persona captain overrides, persisted on the voyage
+        /// before any mission is created and dispatched so assignment can honor the preferred captain.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The created voyage.</returns>
         Task<Voyage> DispatchVoyageAsync(
@@ -121,6 +123,7 @@ namespace Armada.Core.Services.Interfaces
             List<MissionDescription> missionDescriptions,
             string? pipelineId,
             List<SelectedPlaybook>? selectedPlaybooks,
+            string? captainOverridesJson = null,
             CancellationToken token = default);
 
         /// <summary>
@@ -184,5 +187,35 @@ namespace Armada.Core.Services.Interfaces
         /// <param name="missionId">Mission identifier.</param>
         /// <param name="token">Cancellation token.</param>
         Task HandleProcessExitAsync(int processId, int? exitCode, string captainId, string missionId, CancellationToken token = default);
+
+        /// <summary>
+        /// Dry-run the vessel's auto-land predicate against a mission's captured diff without landing it.
+        /// </summary>
+        /// <param name="missionId">Mission identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The auto-land decision, or null when the mission/vessel is missing.</returns>
+        Task<AutoLandDecision?> EvaluateAutoLandAsync(string missionId, CancellationToken token = default);
+
+        /// <summary>
+        /// Validate a voyage-dispatch request once for both the REST and MCP surfaces: check that a linked
+        /// objective exists, resolve a pipeline by id or name, and decide whether the request is a bare
+        /// voyage. Returns a typed result the caller maps to its own error shape.
+        /// </summary>
+        /// <param name="objectiveId">Optional objective id to link (must exist when supplied).</param>
+        /// <param name="pipelineId">Optional explicit pipeline id.</param>
+        /// <param name="pipelineName">Optional pipeline name to resolve (used when no id is supplied).</param>
+        /// <param name="vesselId">Target vessel id.</param>
+        /// <param name="missionCount">Number of missions in the request.</param>
+        /// <param name="allowBareVoyage">Whether a missing vessel / zero missions should be treated as a bare voyage rather than an error.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The typed validation result.</returns>
+        Task<DispatchValidationResult> ValidateDispatchAsync(
+            string? objectiveId,
+            string? pipelineId,
+            string? pipelineName,
+            string? vesselId,
+            int missionCount,
+            bool allowBareVoyage,
+            CancellationToken token = default);
     }
 }

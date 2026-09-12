@@ -611,6 +611,117 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("force_advance_branch_lifts_detached_commit", "ForceAdvanceBranchAsync lifts a detached commit onto the branch ref", TestTags.Positive, async () =>
+            {
+                GitService service = CreateService();
+                string repo = TestGitRepoHelper.CreateWorkingRepoCopy();
+
+                try
+                {
+                    // A pipeline stage branch created at main, then a commit produced on a DETACHED HEAD --
+                    // exactly the stage-lag case where the branch ref is left behind the produced work.
+                    await RunGitAsync(repo, "branch", "armada/stage", "HEAD").ConfigureAwait(false);
+                    string branchStart = (await RunGitAsync(repo, "rev-parse", "armada/stage").ConfigureAwait(false)).Trim();
+
+                    await RunGitAsync(repo, "checkout", "--detach", "HEAD").ConfigureAwait(false);
+                    await File.WriteAllTextAsync(Path.Combine(repo, "stage-work.txt"), "produced by the prior stage").ConfigureAwait(false);
+                    await RunGitAsync(repo, "add", "-A").ConfigureAwait(false);
+                    await RunGitAsync(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-m", "stage work").ConfigureAwait(false);
+                    string producedCommit = (await RunGitAsync(repo, "rev-parse", "HEAD").ConfigureAwait(false)).Trim();
+
+                    string beforeRef = (await RunGitAsync(repo, "rev-parse", "armada/stage").ConfigureAwait(false)).Trim();
+                    AssertEqual(branchStart, beforeRef, "branch ref should lag the detached produced commit before hardening");
+                    AssertNotEqual(producedCommit, beforeRef, "produced commit should differ from the lagging branch ref");
+
+                    bool advanced = await service.ForceAdvanceBranchAsync(repo, "armada/stage", producedCommit).ConfigureAwait(false);
+                    AssertTrue(advanced, "force-advance should succeed");
+
+                    string afterRef = (await RunGitAsync(repo, "rev-parse", "armada/stage").ConfigureAwait(false)).Trim();
+                    AssertEqual(producedCommit, afterRef, "branch ref should point at the produced commit after hardening");
+                }
+                finally
+                {
+                    if (Directory.Exists(repo))
+                    {
+                        try { Directory.Delete(repo, true); }
+                        catch { }
+                    }
+                }
+            }));
+
+            cases.Add(CaseAsync("force_advance_branch_empty_args_returns_false", "ForceAdvanceBranchAsync returns false for empty arguments", TestTags.Negative, async () =>
+            {
+                GitService service = CreateService();
+                AssertFalse(await service.ForceAdvanceBranchAsync("", "b", "c").ConfigureAwait(false), "empty worktree path should return false");
+                AssertFalse(await service.ForceAdvanceBranchAsync("/tmp/repo", "", "c").ConfigureAwait(false), "empty branch name should return false");
+                AssertFalse(await service.ForceAdvanceBranchAsync("/tmp/repo", "b", "").ConfigureAwait(false), "empty commit hash should return false");
+            }));
+
+            cases.Add(CaseAsync("recent_commits_for_paths_reports_changes", "GetRecentCommitsForPathsAsync reports commits touching a path", TestTags.Positive, async () =>
+            {
+                GitService service = CreateService();
+                string repo = TestGitRepoHelper.CreateWorkingRepoCopy();
+                try
+                {
+                    string dir = Path.Combine(repo, "anchors");
+                    Directory.CreateDirectory(dir);
+                    await File.WriteAllTextAsync(Path.Combine(dir, "widget.cs").Replace('/', Path.DirectorySeparatorChar), "class Widget {}").ConfigureAwait(false);
+                    await RunGitAsync(repo, "add", "-A").ConfigureAwait(false);
+                    await RunGitAsync(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-m", "add widget").ConfigureAwait(false);
+
+                    System.Collections.Generic.IReadOnlyList<string> commits =
+                        await service.GetRecentCommitsForPathsAsync(repo, new System.Collections.Generic.List<string> { "anchors/widget.cs" }, 3).ConfigureAwait(false);
+                    AssertTrue(commits.Count >= 1, "expected at least one commit for the changed path");
+                    AssertTrue(commits[0].Contains("add widget"), "the commit subject should be reported");
+                }
+                finally
+                {
+                    if (Directory.Exists(repo)) { try { Directory.Delete(repo, true); } catch { } }
+                }
+            }));
+
+            cases.Add(CaseAsync("subject_terms_found_in_tree", "FindExistingSubjectTermsAsync finds a term present in the tree", TestTags.Positive, async () =>
+            {
+                GitService service = CreateService();
+                string repo = TestGitRepoHelper.CreateWorkingRepoCopy();
+                try
+                {
+                    await File.WriteAllTextAsync(Path.Combine(repo, "QuarantineReason.cs"), "public class QuarantineReason {}").ConfigureAwait(false);
+                    await RunGitAsync(repo, "add", "-A").ConfigureAwait(false);
+                    await RunGitAsync(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-m", "add term").ConfigureAwait(false);
+
+                    System.Collections.Generic.IReadOnlyList<string> found =
+                        await service.FindExistingSubjectTermsAsync(repo, new System.Collections.Generic.List<string> { "QuarantineReason", "TotallyAbsentTerm" }).ConfigureAwait(false);
+                    AssertTrue(found.Contains("QuarantineReason"), "a present term should be reported");
+                    AssertFalse(found.Contains("TotallyAbsentTerm"), "an absent term should not be reported");
+                }
+                finally
+                {
+                    if (Directory.Exists(repo)) { try { Directory.Delete(repo, true); } catch { } }
+                }
+            }));
+
+            cases.Add(CaseAsync("force_advance_branch_invalid_commit_returns_false", "ForceAdvanceBranchAsync returns false when the commit does not exist", TestTags.Negative, async () =>
+            {
+                GitService service = CreateService();
+                string repo = TestGitRepoHelper.CreateWorkingRepoCopy();
+
+                try
+                {
+                    // A ref update to a non-existent object must fail closed, not throw or silently succeed.
+                    bool advanced = await service.ForceAdvanceBranchAsync(repo, "armada/stage", "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef").ConfigureAwait(false);
+                    AssertFalse(advanced, "advancing to a non-existent commit should fail closed");
+                }
+                finally
+                {
+                    if (Directory.Exists(repo))
+                    {
+                        try { Directory.Delete(repo, true); }
+                        catch { }
+                    }
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: "Services.GitService",
                 displayName: "Git Service",

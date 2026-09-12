@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createWorkflowProfile, deleteWorkflowProfile, listFleets, listVessels, listWorkflowProfiles, updateWorkflowProfile } from '../api/client';
-import type { Fleet, Vessel, WorkflowProfile } from '../types/models';
+import type { Fleet, Vessel, WorkflowProfile, ScopeEnum } from '../types/models';
 import { useAuth } from '../context/AuthContext';
+import { canEdit as canEditScoped, resolveCreateScope, type ScopeViewer } from '../lib/scoping';
+import ScopeBadge from '../components/shared/ScopeBadge';
+import ScopeSelect from '../components/shared/ScopeSelect';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import ActionMenu from '../components/shared/ActionMenu';
@@ -47,7 +50,9 @@ function countProfileCapabilities(profile: WorkflowProfile): number {
 
 export default function WorkflowProfiles() {
   const navigate = useNavigate();
-  const { isAdmin, isTenantAdmin } = useAuth();
+  const { isAdmin, isTenantAdmin, user } = useAuth();
+  const viewer: ScopeViewer = { isAdmin, isTenantAdmin, tenantId: user?.user?.tenantId, userId: user?.user?.id };
+  const canEditProfile = (p: WorkflowProfile) => canEditScoped(viewer, { scope: p.ownershipScope, tenantId: p.tenantId, userId: p.userId });
   const { t, formatDateTime, formatRelativeTime } = useLocale();
   const { pushToast } = useNotifications();
   const [profiles, setProfiles] = useState<WorkflowProfile[]>([]);
@@ -73,6 +78,7 @@ export default function WorkflowProfiles() {
     name: 'Default Workflow',
     description: '',
     scope: 'Global' as 'Global' | 'Fleet' | 'Vessel',
+    ownershipScope: resolveCreateScope(viewer) as ScopeEnum,
     fleetId: '',
     vesselId: '',
     isDefault: false,
@@ -131,6 +137,7 @@ export default function WorkflowProfiles() {
       name: profile.name,
       description: profile.description || '',
       scope: profile.scope,
+      ownershipScope: profile.ownershipScope,
       fleetId: profile.fleetId || '',
       vesselId: profile.vesselId || '',
       isDefault: profile.isDefault,
@@ -156,6 +163,7 @@ export default function WorkflowProfiles() {
         name: createForm.name.trim(),
         description: createForm.description.trim() || null,
         scope: createForm.scope,
+        ownershipScope: createForm.ownershipScope,
         fleetId: createForm.scope === 'Fleet' ? createForm.fleetId || null : null,
         vesselId: createForm.scope === 'Vessel' ? createForm.vesselId || null : null,
         isDefault: createForm.isDefault,
@@ -245,11 +253,9 @@ export default function WorkflowProfiles() {
           <>
             <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
             <RefreshButton onRefresh={load} title={t('Refresh workflow profiles')} />
-            {canManage && (
-              <button className="btn btn-primary" onClick={openCreate}>
-                + {t('Workflow Profile')}
-              </button>
-            )}
+            <button className="btn btn-primary" onClick={openCreate}>
+              + {t('Workflow Profile')}
+            </button>
           </>
         )}
       />
@@ -291,6 +297,7 @@ export default function WorkflowProfiles() {
                 <option value="Vessel">{t('Vessel')}</option>
               </select>
             </label>
+            <ScopeSelect viewer={viewer} value={createForm.ownershipScope} onChange={(ownershipScope) => setCreateForm((current) => ({ ...current, ownershipScope }))} />
             {createForm.scope === 'Fleet' && (
               <label>{t('Fleet')}
                 <select value={createForm.fleetId} onChange={(event) => setCreateForm((current) => ({ ...current, fleetId: event.target.value }))}>
@@ -402,6 +409,7 @@ export default function WorkflowProfiles() {
               <tr>
                 <th>{t('Profile')}</th>
                 <th>{t('Scope')}</th>
+                <th>{t('Visibility')}</th>
                 <th>{t('Capabilities')}</th>
                 <th>{t('Targets')}</th>
                 <th>{t('Status')}</th>
@@ -416,11 +424,14 @@ export default function WorkflowProfiles() {
                 <td></td>
                 <td></td>
                 <td></td>
+                <td></td>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((profile) => (
-                <tr key={profile.id} className="clickable" onClick={() => canManage ? openEdit(profile) : navigate(`/workflow-profiles/${profile.id}`)}>
+              {filtered.map((profile) => {
+                const canEditRow = canEditProfile(profile);
+                return (
+                <tr key={profile.id} className="clickable" onClick={() => canEditRow ? openEdit(profile) : navigate(`/workflow-profiles/${profile.id}`)}>
                   <td>
                     <strong>{profile.name}</strong>
                     <div className="mono text-dim" style={{ fontSize: '0.78rem' }}>{profile.id}</div>
@@ -432,6 +443,7 @@ export default function WorkflowProfiles() {
                     <StatusBadge status={profile.scope} />
                     {profile.isDefault && <div className="text-dim" style={{ marginTop: '0.25rem' }}>{t('Default')}</div>}
                   </td>
+                  <td><ScopeBadge scope={profile.ownershipScope} /></td>
                   <td className="text-dim">{countProfileCapabilities(profile)} {t('commands')}</td>
                   <td className="text-dim">{profile.environments.length} {t('environments')}</td>
                   <td><StatusBadge status={profile.active ? 'Active' : 'Inactive'} /></td>
@@ -441,15 +453,16 @@ export default function WorkflowProfiles() {
                       id={`workflow-profile-${profile.id}`}
                       items={[
                         { label: 'Open', onClick: () => navigate(`/workflow-profiles/${profile.id}`) },
-                        ...(canManage ? [{ label: 'Edit', onClick: () => openEdit(profile) }] : []),
-                        ...(canManage ? [{ label: 'Duplicate', onClick: () => void handleDuplicate(profile) }] : []),
+                        ...(canEditRow ? [{ label: 'Edit', onClick: () => openEdit(profile) }] : []),
+                        { label: 'Duplicate', onClick: () => void handleDuplicate(profile) },
                         { label: 'View JSON', onClick: () => setJsonData({ open: true, title: profile.name, data: profile }) },
-                        ...(canManage ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(profile) }] : []),
+                        ...(canEditRow ? [{ label: 'Delete', danger: true as const, onClick: () => handleDelete(profile) }] : []),
                       ]}
                     />
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

@@ -237,11 +237,7 @@ namespace Armada.Server.Routes
                 EnumerationQuery query = new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
                 Stopwatch sw = Stopwatch.StartNew();
-                EnumerationResult<Mission> result = ctx.IsAdmin
-                    ? await _database.Missions.EnumerateAsync(query).ConfigureAwait(false)
-                    : ctx.IsTenantAdmin
-                        ? await _database.Missions.EnumerateAsync(ctx.TenantId!, query).ConfigureAwait(false)
-                        : await _database.Missions.EnumerateAsync(ctx.TenantId!, ctx.UserId!, query).ConfigureAwait(false);
+                EnumerationResult<Mission> result = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, query, q => _database.Missions.EnumerateAsync(q), (t, q) => _database.Missions.EnumerateAsync(t, q), (t, u, q) => _database.Missions.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
                 foreach (Mission m in result.Objects) m.DiffSnapshot = null;
                 return result;
@@ -268,11 +264,7 @@ namespace Armada.Server.Routes
                 EnumerationQuery query = JsonSerializer.Deserialize<EnumerationQuery>(req.Http.Request.DataAsString, _jsonOptions) ?? new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
                 Stopwatch sw = Stopwatch.StartNew();
-                EnumerationResult<Mission> result = ctx.IsAdmin
-                    ? await _database.Missions.EnumerateAsync(query).ConfigureAwait(false)
-                    : ctx.IsTenantAdmin
-                        ? await _database.Missions.EnumerateAsync(ctx.TenantId!, query).ConfigureAwait(false)
-                        : await _database.Missions.EnumerateAsync(ctx.TenantId!, ctx.UserId!, query).ConfigureAwait(false);
+                EnumerationResult<Mission> result = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, query, q => _database.Missions.EnumerateAsync(q), (t, q) => _database.Missions.EnumerateAsync(t, q), (t, u, q) => _database.Missions.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
                 foreach (Mission m in result.Objects) m.DiffSnapshot = null;
                 return result;
@@ -540,6 +532,46 @@ namespace Armada.Server.Routes
                 .WithDescription("Predicts how Armada would land this mission, including branch policy, check requirements, and likely blockers.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
                 .WithResponse(200, OpenApiJson.For<LandingPreviewResult>("Mission landing preview"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            app.Get("/api/v1/missions/{id}/evaluate-autoland", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
+                {
+                    req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                }
+
+                string id = req.Parameters["id"];
+                Mission? mission = ctx.IsAdmin
+                    ? await _database.Missions.ReadAsync(id).ConfigureAwait(false)
+                    : ctx.IsTenantAdmin
+                        ? await _database.Missions.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
+                        : await _database.Missions.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
+                if (mission == null)
+                {
+                    req.Http.Response.StatusCode = 404;
+                    return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Mission not found" };
+                }
+
+                AutoLandDecision? decision = await _missionService.EvaluateAutoLandAsync(id).ConfigureAwait(false);
+                if (decision == null)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Mission does not have an associated vessel" };
+                }
+
+                return decision;
+            },
+            api => api
+                .WithTag("Missions")
+                .WithSummary("Dry-run the auto-land predicate for a mission")
+                .WithDescription("Evaluates the vessel's auto-land rules against this mission's captured diff without landing it, returning whether it would auto-land and, if not, the hold reason.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
+                .WithResponse(200, OpenApiJson.For<AutoLandDecision>("Auto-land decision"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
@@ -1027,7 +1059,9 @@ namespace Armada.Server.Routes
                 string id = req.Parameters["id"];
                 Mission? mission = ctx.IsAdmin
                     ? await _database.Missions.ReadAsync(id).ConfigureAwait(false)
-                    : await _database.Missions.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false);
+                    : ctx.IsTenantAdmin
+                        ? await _database.Missions.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
+                        : await _database.Missions.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (mission == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Mission not found" }; }
 
                 if (mission.Status != MissionStatusEnum.WorkProduced && mission.Status != MissionStatusEnum.LandingFailed)
@@ -1038,16 +1072,46 @@ namespace Armada.Server.Routes
 
                 bool success = await _landingService.RetryLandingAsync(id, ctx.TenantId).ConfigureAwait(false);
                 mission = await _database.Missions.ReadAsync(id).ConfigureAwait(false);
-                mission = await _database.Missions.ReadAsync(id).ConfigureAwait(false);
                 if (!success)
                 {
                     string reason = "Landing failed.";
                     if (mission != null)
                     {
-                        if (String.IsNullOrEmpty(mission.BranchName)) reason = "Mission has no branch name -- the branch may have been cleaned up.";
-                        else if (String.IsNullOrEmpty(mission.VesselId)) reason = "Mission has no vessel assigned.";
-                        else if (mission.Status == MissionStatusEnum.LandingFailed) reason = "Rebase or merge failed -- the branch may have conflicts with the target branch.";
-                        else if (mission.Status == MissionStatusEnum.WorkProduced) reason = "Landing handler failed -- check server logs for details.";
+                        // Resolve the effective landing mode the same way the landing handler does:
+                        // voyage > vessel > global default.
+                        Vessel? landingVessel = String.IsNullOrEmpty(mission.VesselId) ? null : await _database.Vessels.ReadAsync(mission.VesselId).ConfigureAwait(false);
+                        Voyage? landingVoyage = String.IsNullOrEmpty(mission.VoyageId) ? null : await _database.Voyages.ReadAsync(mission.VoyageId).ConfigureAwait(false);
+                        LandingModeEnum? effectiveMode = landingVoyage?.LandingMode ?? landingVessel?.LandingMode ?? _settings.LandingMode;
+                        string branch = String.IsNullOrEmpty(mission.BranchName) ? "(unknown)" : mission.BranchName;
+
+                        if (String.IsNullOrEmpty(mission.BranchName))
+                        {
+                            reason = "Mission has no branch name -- the branch may have been cleaned up, so there is nothing to land.";
+                        }
+                        else if (String.IsNullOrEmpty(mission.VesselId))
+                        {
+                            reason = "Mission has no vessel assigned, so its branch cannot be landed.";
+                        }
+                        else if (!effectiveMode.HasValue || effectiveMode.Value == LandingModeEnum.None)
+                        {
+                            // Not a failure: there is simply no automatic landing configured. The work is done
+                            // and the branch is available for manual integration.
+                            reason = "No automatic landing is configured for this "
+                                + (effectiveMode.HasValue ? "vessel (landing mode: None)" : "vessel, voyage, or Admiral (landing mode: not set)")
+                                + ". The mission's work is complete and its branch '" + branch + "' is available in the repository for manual integration. "
+                                + "To land it automatically, set a landing mode (Local Merge, Pull Request, or Merge Queue) on the vessel or voyage and retry; "
+                                + "or merge the branch yourself from the vessel's Manage Branches view.";
+                        }
+                        else if (mission.Status == MissionStatusEnum.LandingFailed)
+                        {
+                            reason = "Landing for mode " + effectiveMode.Value + " failed to rebase or merge branch '" + branch
+                                + "' onto the target -- the branch likely has conflicts that must be resolved before it can land.";
+                        }
+                        else if (mission.Status == MissionStatusEnum.WorkProduced)
+                        {
+                            reason = "Landing for mode " + effectiveMode.Value + " did not complete for branch '" + branch
+                                + "'. The work is preserved as WorkProduced. Check the [MissionLanding] entries in the server log for the specific git or provider error.";
+                        }
                     }
                     req.Http.Response.StatusCode = 409;
                     return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = reason };

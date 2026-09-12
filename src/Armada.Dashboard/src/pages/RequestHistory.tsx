@@ -535,9 +535,6 @@ export default function RequestHistory() {
         subtitle={t('Inspect captured Armada API traffic, filter by route or principal, and replay stored requests into API Explorer.')}
         actions={(
           <>
-            <button className="btn btn-sm" onClick={() => navigate('/api-explorer')}>
-              {t('API Explorer')}
-            </button>
             {selectedIds.length > 0 && (
               <button className="btn btn-danger btn-sm" onClick={() => setDeleteSelectedOpen(true)}>
                 {t('Delete Selected')} ({selectedIds.length})

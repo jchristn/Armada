@@ -69,6 +69,7 @@ namespace Armada.Core.Services
             await SeedPersonaAsync(PersonaCatalog.UsabilityEngineer, "Improves usability, edge-case experience, and consistency with the surrounding product.", "persona.usability_engineer", token).ConfigureAwait(false);
             await SeedPersonaAsync(PersonaCatalog.Judge, "Reviews completed mission diffs for correctness and completeness.", "persona.judge", token).ConfigureAwait(false);
             await SeedPersonaAsync(PersonaCatalog.TestEngineer, "Writes and updates tests for mission changes.", "persona.test_engineer", token).ConfigureAwait(false);
+            await SeedPersonaAsync(PersonaCatalog.Recorder, "Reviews the voyage conversation and distills durable memories (episodic/semantic/procedural) into the vessel model context, the Armada memory store, and external memory facilities.", "persona.recorder", token).ConfigureAwait(false);
         }
 
         private async Task SeedPersonaAsync(string name, string description, string templateName, CancellationToken token)
@@ -84,7 +85,7 @@ namespace Armada.Core.Services
             persona.IsBuiltIn = true;
 
             await _Database.Personas.CreateAsync(persona, token).ConfigureAwait(false);
-            _Logging.Info(_Header + "seeded built-in persona: " + name);
+            _Logging.Debug(_Header + "seeded built-in persona: " + name);
         }
 
         private async Task SeedPipelinesAsync(CancellationToken token)
@@ -118,7 +119,7 @@ namespace Armada.Core.Services
 
             await SeedPipelineAsync(
                 "FullPipeline",
-                "Product Manager then Architect then Worker then Usability Engineer then Test Engineer then Judge.",
+                "Product Manager then Architect then Worker then Usability Engineer then Test Engineer then Judge then Recorder.",
                 new List<PipelineStage>
                 {
                     new PipelineStage(1, PersonaCatalog.ProductManager) { RequiresReview = true },
@@ -126,7 +127,18 @@ namespace Armada.Core.Services
                     new PipelineStage(3, PersonaCatalog.Worker) { RequiresReview = true },
                     new PipelineStage(4, PersonaCatalog.UsabilityEngineer) { RequiresReview = true },
                     new PipelineStage(5, PersonaCatalog.TestEngineer) { RequiresReview = true },
-                    new PipelineStage(6, PersonaCatalog.Judge) { RequiresReview = true, ReviewDenyAction = ReviewDenyActionEnum.FailPipeline }
+                    new PipelineStage(6, PersonaCatalog.Judge) { RequiresReview = true, ReviewDenyAction = ReviewDenyActionEnum.FailPipeline },
+                    new PipelineStage(7, PersonaCatalog.Recorder)
+                },
+                token).ConfigureAwait(false);
+
+            await SeedPipelineAsync(
+                "Recorded",
+                "Worker then Recorder -- do the work, then distill durable memories from it.",
+                new List<PipelineStage>
+                {
+                    new PipelineStage(1, PersonaCatalog.Worker) { RequiresReview = true },
+                    new PipelineStage(2, PersonaCatalog.Recorder)
                 },
                 token).ConfigureAwait(false);
         }
@@ -142,7 +154,7 @@ namespace Armada.Core.Services
                     existing.Stages = CloneStages(existing.Id, stages);
                     existing.LastUpdateUtc = DateTime.UtcNow;
                     await _Database.Pipelines.UpdateAsync(existing, token).ConfigureAwait(false);
-                    _Logging.Info(_Header + "upgraded built-in pipeline: " + name);
+                    _Logging.Debug(_Header + "upgraded built-in pipeline: " + name);
                 }
                 return;
             }
@@ -155,7 +167,7 @@ namespace Armada.Core.Services
             pipeline.Stages = CloneStages(pipeline.Id, stages);
 
             await _Database.Pipelines.CreateAsync(pipeline, token).ConfigureAwait(false);
-            _Logging.Info(_Header + "seeded built-in pipeline: " + name);
+            _Logging.Debug(_Header + "seeded built-in pipeline: " + name);
         }
 
         private static List<PipelineStage> CloneStages(string pipelineId, IEnumerable<PipelineStage> stages)
@@ -186,7 +198,7 @@ namespace Armada.Core.Services
             legacy.Name = PersonaCatalog.TestEngineer;
             legacy.LastUpdateUtc = DateTime.UtcNow;
             await _Database.Personas.UpdateAsync(legacy, token).ConfigureAwait(false);
-            _Logging.Info(_Header + "renamed built-in persona: " + PersonaCatalog.LegacyTestEngineer + " -> " + PersonaCatalog.TestEngineer);
+            _Logging.Debug(_Header + "renamed built-in persona: " + PersonaCatalog.LegacyTestEngineer + " -> " + PersonaCatalog.TestEngineer);
         }
 
         private async Task UpgradeCaptainPersonaReferencesAsync(CancellationToken token)
@@ -214,7 +226,7 @@ namespace Armada.Core.Services
 
                 captain.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
-                _Logging.Info(_Header + "updated captain persona references: " + captain.Name);
+                _Logging.Debug(_Header + "updated captain persona references: " + captain.Name);
             }
         }
 
@@ -243,9 +255,9 @@ namespace Armada.Core.Services
 
             if (String.Equals(existing.Name, "FullPipeline", StringComparison.Ordinal))
             {
-                return existingPersonaOrder.SequenceEqual(
-                    new[] { PersonaCatalog.Architect, PersonaCatalog.Worker, PersonaCatalog.TestEngineer, PersonaCatalog.Judge },
-                    StringComparer.Ordinal);
+                // Upgrade the built-in FullPipeline whenever its stages differ from the seeded definition,
+                // so existing installs pick up new stages (e.g. the Recorder appended after Judge).
+                return !existingPersonaOrder.SequenceEqual(desiredPersonaOrder, StringComparer.Ordinal);
             }
 
             return false;

@@ -710,7 +710,7 @@ namespace Test.Shared.Suites.Services
                 throw new NotImplementedException();
             }
 
-            public Task<Voyage> DispatchVoyageAsync(string title, string description, string vesselId, List<MissionDescription> missionDescriptions, string? pipelineId, List<SelectedPlaybook>? selectedPlaybooks, CancellationToken token = default)
+            public Task<Voyage> DispatchVoyageAsync(string title, string description, string vesselId, List<MissionDescription> missionDescriptions, string? pipelineId, List<SelectedPlaybook>? selectedPlaybooks, string? captainOverridesJson = null, CancellationToken token = default)
             {
                 throw new NotImplementedException();
             }
@@ -753,6 +753,16 @@ namespace Test.Shared.Suites.Services
             public Task HandleProcessExitAsync(int processId, int? exitCode, string captainId, string missionId, CancellationToken token = default)
             {
                 return Task.CompletedTask;
+            }
+
+            public Task<Armada.Core.Services.AutoLandDecision?> EvaluateAutoLandAsync(string missionId, CancellationToken token = default)
+            {
+                return Task.FromResult<Armada.Core.Services.AutoLandDecision?>(null);
+            }
+
+            public Task<Armada.Core.Services.DispatchValidationResult> ValidateDispatchAsync(string? objectiveId, string? pipelineId, string? pipelineName, string? vesselId, int missionCount, bool allowBareVoyage, CancellationToken token = default)
+            {
+                return Task.FromResult(Armada.Core.Services.DispatchValidationResult.Valid(pipelineId, allowBareVoyage && (string.IsNullOrEmpty(vesselId) || missionCount == 0)));
             }
         }
 

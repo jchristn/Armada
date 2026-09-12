@@ -46,6 +46,13 @@ namespace Armada.Core.Enums
         OpenCode,
 
         /// <summary>
+        /// API-endpoint captain: an in-process tool-calling loop driven by a configured inference
+        /// ModelEndpoint, using the Armada built-in coding tools instead of a CLI harness.
+        /// </summary>
+        [EnumMember(Value = "ApiEndpoint")]
+        ApiEndpoint,
+
+        /// <summary>
         /// Custom agent runtime.
         /// </summary>
         [EnumMember(Value = "Custom")]

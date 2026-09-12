@@ -41,11 +41,11 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = @"INSERT INTO project_profiles
-                        (id, tenant_id, user_id, name, description, scope, fleet_id, vessel_id, is_default, active,
+                        (id, tenant_id, user_id, name, description, scope, ownership_scope, fleet_id, vessel_id, is_default, active,
                          default_pipeline_id, workflow_profile_id, persona_overrides_json, skills_json,
                          created_utc, last_update_utc)
                         VALUES
-                        (@id, @tenant_id, @user_id, @name, @description, @scope, @fleet_id, @vessel_id, @is_default, @active,
+                        (@id, @tenant_id, @user_id, @name, @description, @scope, @ownership_scope, @fleet_id, @vessel_id, @is_default, @active,
                          @default_pipeline_id, @workflow_profile_id, @persona_overrides_json, @skills_json,
                          @created_utc, @last_update_utc);";
                     AddParameters(cmd, profile);
@@ -99,6 +99,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                         name = @name,
                         description = @description,
                         scope = @scope,
+                        ownership_scope = @ownership_scope,
                         fleet_id = @fleet_id,
                         vessel_id = @vessel_id,
                         is_default = @is_default,
@@ -274,6 +275,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
             cmd.Parameters.AddWithValue("@name", profile.Name);
             cmd.Parameters.AddWithValue("@description", (object?)profile.Description ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@scope", profile.Scope.ToString());
+            cmd.Parameters.AddWithValue("@ownership_scope", profile.OwnershipScope.ToString());
             cmd.Parameters.AddWithValue("@fleet_id", (object?)profile.FleetId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@vessel_id", (object?)profile.VesselId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@is_default", profile.IsDefault);
@@ -307,6 +309,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
 
             if (Enum.TryParse(reader["scope"].ToString(), true, out ProjectProfileScopeEnum scope))
                 profile.Scope = scope;
+                profile.OwnershipScope = System.Enum.TryParse<Armada.Core.Enums.ScopeEnum>(reader["ownership_scope"]?.ToString(), true, out Armada.Core.Enums.ScopeEnum __os) ? __os : Armada.Core.Enums.ScopeEnum.TenantWide;
 
             profile.PersonaOverrides = Deserialize<List<PersonaOverride>>(SqlServerDatabaseDriver.NullableString(reader["persona_overrides_json"])) ?? new List<PersonaOverride>();
             profile.Skills = Deserialize<List<string>>(SqlServerDatabaseDriver.NullableString(reader["skills_json"])) ?? new List<string>();

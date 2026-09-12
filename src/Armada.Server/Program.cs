@@ -115,7 +115,7 @@ namespace Armada.Server
             if (string.IsNullOrWhiteSpace(pidValue)) return;
             if (!int.TryParse(pidValue, out int pid) || pid <= 0) return;
 
-            _Logging.Info("[Program] restart: waiting for predecessor process " + pid + " to exit before binding");
+            _Logging.Debug("[Program] restart: waiting for predecessor process " + pid + " to exit before binding");
 
             System.Diagnostics.Process? predecessor = null;
             try
@@ -138,7 +138,7 @@ namespace Armada.Server
                         predecessor.Refresh();
                         if (predecessor.HasExited)
                         {
-                            _Logging.Info("[Program] restart: predecessor process " + pid + " exited");
+                            _Logging.Debug("[Program] restart: predecessor process " + pid + " exited");
                             return;
                         }
                     }

@@ -7,6 +7,14 @@ export interface TenantMetadata {
   lastUpdateUtc: string;
 }
 
+/**
+ * Ownership scope for Category B configuration entities. Tenant-wide objects are visible to everyone
+ * in the tenant but editable only by tenant/global admins; user-specific objects are owned by a user.
+ * Workflow profiles and project profiles carry this as `ownershipScope` (their `scope` field is the
+ * application scope: Global/Fleet/Vessel).
+ */
+export type ScopeEnum = 'TenantWide' | 'UserSpecific';
+
 export interface UserMaster {
   id: string;
   tenantId: string;
@@ -131,6 +139,10 @@ export interface Vessel {
   autoLandMaxLines?: number;
   autoLandPathAllowGlobs?: string[];
   autoLandPathDenyGlobs?: string[];
+  definitionOfDoneEnabled?: boolean;
+  definitionOfDoneBuildCommand?: string | null;
+  definitionOfDoneTestCommand?: string | null;
+  definitionOfDoneTimeoutSeconds?: number;
   allowConcurrentMissions: boolean;
   defaultPipelineId: string | null;
   active: boolean;
@@ -147,6 +159,7 @@ export interface Captain {
   planningSessionSupportReason: string | null;
   systemInstructions: string | null;
   model: string | null;
+  modelEndpointId?: string | null;
   reasoningEffort?: string | null;
   tier?: string | null;
   quarantineUntilUtc?: string | null;
@@ -211,6 +224,9 @@ export interface CaptainToolAccessResult {
   tools: CaptainToolSummary[];
 }
 
+/** Execution mode of a mission. Audit and Research are read-only modes that produce a report, not a commit. */
+export type MissionMode = 'Implementation' | 'Audit' | 'Research';
+
 export interface Mission {
   id: string;
   tenantId: string | null;
@@ -222,6 +238,7 @@ export interface Mission {
   title: string;
   description: string | null;
   status: string;
+  mode: MissionMode;
   priority: number;
   parentMissionId: string | null;
   persona: string | null;
@@ -749,6 +766,7 @@ export interface Playbook {
   id: string;
   tenantId: string | null;
   userId: string | null;
+  scope: ScopeEnum;
   fileName: string;
   description: string | null;
   content: string;
@@ -788,6 +806,7 @@ export interface WorkflowProfile {
   id: string;
   tenantId: string | null;
   userId: string | null;
+  ownershipScope: ScopeEnum;
   name: string;
   description: string | null;
   scope: WorkflowProfileScope;
@@ -840,6 +859,7 @@ export interface ProjectProfile {
   id: string;
   tenantId: string | null;
   userId: string | null;
+  ownershipScope: ScopeEnum;
   name: string;
   description: string | null;
   scope: ProjectProfileScope;
@@ -880,6 +900,7 @@ export interface Skill {
   id: string;
   tenantId: string | null;
   userId: string | null;
+  scope: ScopeEnum;
   name: string;
   description: string | null;
   category: string | null;
@@ -1377,6 +1398,9 @@ export interface Incident {
   rootCause: string | null;
   recoveryNotes: string | null;
   postmortem: string | null;
+  failureKind: string | null;
+  recoveryAttempts: number;
+  rescueMissionIds: string[];
   detectedUtc: string;
   mitigatedUtc: string | null;
   closedUtc: string | null;
@@ -1443,6 +1467,7 @@ export interface Runbook {
   playbookId: string;
   tenantId: string | null;
   userId: string | null;
+  scope: ScopeEnum;
   fileName: string;
   title: string;
   description: string | null;
@@ -1480,6 +1505,7 @@ export interface RunbookUpsertRequest {
   steps?: RunbookStep[] | null;
   overviewMarkdown?: string | null;
   active?: boolean | null;
+  scope?: ScopeEnum | null;
 }
 
 export interface RunbookExecution {
@@ -1683,6 +1709,7 @@ export interface Dock {
   worktreePath: string | null;
   branchName: string | null;
   active: boolean;
+  gitAnchorsJson?: string | null;
   createdUtc: string;
   lastUpdateUtc: string;
 }
@@ -1710,10 +1737,19 @@ export interface DiffResult {
   error?: string;
 }
 
+export interface FormattedLogEntry {
+  text: string;
+  isToolCall: boolean;
+  toolName: string | null;
+  redacted: boolean;
+  truncated: boolean;
+}
+
 export interface LogResult {
   log: string;
   lines: number;
   totalLines: number;
+  entries?: FormattedLogEntry[];
 }
 
 export interface InstructionsResult {
@@ -2077,6 +2113,8 @@ export interface WebSocketMessage {
 export interface PromptTemplate {
   id: string;
   tenantId: string | null;
+  userId: string | null;
+  scope: ScopeEnum;
   name: string;
   description: string | null;
   category: string;
@@ -2090,6 +2128,8 @@ export interface PromptTemplate {
 export interface Persona {
   id: string;
   tenantId: string | null;
+  userId: string | null;
+  scope: ScopeEnum;
   name: string;
   description: string | null;
   promptTemplateName: string;
@@ -2103,6 +2143,8 @@ export interface Persona {
 export interface Pipeline {
   id: string;
   tenantId: string | null;
+  userId: string | null;
+  scope: ScopeEnum;
   name: string;
   description: string | null;
   stages: PipelineStage[];
@@ -2124,3 +2166,113 @@ export interface PipelineStage {
 }
 
 export type EntityType = 'fleets' | 'vessels' | 'captains' | 'missions' | 'voyages' | 'signals' | 'events' | 'docks' | 'merge-queue' | 'personas' | 'prompt-templates' | 'pipelines' | 'playbooks' | 'releases' | 'environments' | 'deployments' | 'incidents' | 'runbooks';
+
+export type HarborConnectionStatus = 'Unknown' | 'Connected' | 'Degraded' | 'Disconnected';
+
+export interface HarborCapability {
+  name: string;
+  available: boolean;
+  detail: string | null;
+}
+
+export interface Harbor {
+  id: string;
+  tenantId: string | null;
+  userId: string | null;
+  name: string;
+  capabilities: HarborCapability[];
+  connectionStatus: HarborConnectionStatus;
+  maxConcurrentJobs: number;
+  enabled: boolean;
+  protocolVersion: string | null;
+  osPlatform: string | null;
+  architecture: string | null;
+  lastSeenUtc: string | null;
+  lastConnectedUtc: string | null;
+  createdUtc: string;
+  lastUpdateUtc: string;
+}
+
+export type ModelEndpointKind = 'Embedding' | 'Inference';
+export type ModelProvider = 'Ollama' | 'OpenAI' | 'OpenAICompatible' | 'Anthropic' | 'Gemini' | 'VoyageAI' | 'AzureOpenAI' | 'VertexAI' | 'Bedrock';
+export type EndpointHealthStatus = 'Unknown' | 'Healthy' | 'Unhealthy';
+
+export interface ModelEndpointHealthRecord {
+  timestampUtc: string;
+  success: boolean;
+}
+
+export interface ModelEndpoint {
+  id: string;
+  tenantId: string | null;
+  userId: string | null;
+  scope: ScopeEnum;
+  name: string;
+  kind: ModelEndpointKind;
+  provider: ModelProvider;
+  baseUrl: string;
+  model: string | null;
+  region: string | null;
+  project: string | null;
+  apiVersion: string | null;
+  accessKeyId: string | null;
+  dimensionality: number;
+  timeoutMs: number;
+  enabled: boolean;
+  hasApiKey: boolean;
+  healthStatus: EndpointHealthStatus;
+  lastHealthCheckUtc: string | null;
+  lastHealthError: string | null;
+  lastLatencyMs: number | null;
+  healthHistory: ModelEndpointHealthRecord[];
+  uptimePercentage: number;
+  consecutiveSuccesses: number;
+  consecutiveFailures: number;
+  firstHealthCheckUtc: string | null;
+  lastHealthyUtc: string | null;
+  lastUnhealthyUtc: string | null;
+  createdUtc: string;
+  lastUpdateUtc: string;
+}
+
+export interface ModelEndpointProbeResult {
+  success: boolean;
+  baseUrl: string | null;
+  latencyMs: number;
+  statusCode: number | null;
+  error: string | null;
+  embeddingDimensions: number | null;
+  sampleText: string | null;
+  timestampUtc: string;
+}
+
+export interface ModelEndpointHealthSweepResponse {
+  distinctBaseUrlsProbed: number;
+}
+
+export type MemoryType = 'Episodic' | 'Semantic' | 'Procedural';
+
+export type MemorySourceKind = 'Voyage' | 'Mission' | 'Vessel' | 'Conversation' | 'Manual' | 'Other';
+
+export interface Memory {
+  id: string;
+  tenantId?: string | null;
+  userId?: string | null;
+  scope: ScopeEnum;
+  type: MemoryType;
+  topic?: string | null;
+  key?: string | null;
+  summary?: string | null;
+  content: string;
+  salience: number;
+  version: number;
+  sourceKind: MemorySourceKind;
+  sourceVoyageId?: string | null;
+  sourceMissionId?: string | null;
+  sourceVesselId?: string | null;
+  sourceDetail?: string | null;
+  vesselId?: string | null;
+  tags: string[];
+  createdUtc: string;
+  lastUpdateUtc: string;
+}

@@ -304,6 +304,9 @@ namespace Armada.Core.Services
                 sanitized = sanitized.Replace($"{key}=", $"{key}=[REDACTED]", StringComparison.OrdinalIgnoreCase);
                 sanitized = sanitized.Replace($"\"{key}\":\"", $"\"{key}\":\"[REDACTED]", StringComparison.OrdinalIgnoreCase);
             }
+            // Also scrub secret-shaped values by the shared definition, so a token that appears without a
+            // known key name is still redacted the same way the runtime-log formatter redacts it.
+            sanitized = SecretRedactor.Redact(sanitized);
             return sanitized;
         }
 

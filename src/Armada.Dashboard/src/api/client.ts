@@ -1,4 +1,5 @@
 import type {
+  ScopeEnum,
   AuthenticateRequest,
   AuthenticateResult,
   WhoAmIResult,
@@ -68,6 +69,11 @@ import type {
   ProjectProfileResolutionResult,
   PersonaPromptPreview,
   Skill,
+  Harbor,
+  ModelEndpoint,
+  Memory,
+  ModelEndpointProbeResult,
+  ModelEndpointHealthSweepResponse,
   AskResponse,
   CaptainChatRequest,
   CaptainChatResponse,
@@ -359,6 +365,7 @@ function buildObjectiveQuery(params?: ObjectiveQuery): string {
   const search = new URLSearchParams();
   if (params.pageNumber) search.set('pageNumber', String(params.pageNumber));
   if (params.pageSize) search.set('pageSize', String(params.pageSize));
+  if (params.userId) search.set('userId', params.userId);
   if (params.owner) search.set('owner', params.owner);
   if (params.category) search.set('category', params.category);
   if (params.parentObjectiveId) search.set('parentObjectiveId', params.parentObjectiveId);
@@ -585,6 +592,26 @@ export const getVesselLandingPreview = (id: string, sourceBranch?: string | null
   get<LandingPreviewResult>(`/api/v1/vessels/${encodeURIComponent(id)}/landing-preview${sourceBranch ? `?sourceBranch=${encodeURIComponent(sourceBranch)}` : ''}`);
 export const getVesselGitStatus = (id: string) => get<{ vesselId: string; commitsAhead: number | null; commitsBehind: number | null; error?: string }>(`/api/v1/vessels/${id}/git-status`);
 
+export interface BranchInfo {
+  name: string;
+  isCurrent: boolean;
+  isDefault: boolean;
+  commitHash: string | null;
+  commitSubject: string | null;
+  commitDate: string | null;
+  ahead: number;
+  behind: number;
+}
+
+export const getVesselBranches = (id: string) =>
+  get<{ vesselId: string; defaultBranch?: string; branches: BranchInfo[]; branchCount: number; error?: string }>(`/api/v1/vessels/${id}/branches`);
+
+export const pushVesselBranch = (id: string, branch: string) =>
+  post<{ vesselId: string; branch: string; pushed: boolean }>(`/api/v1/vessels/${id}/branches/push`, { Branch: branch });
+
+export const mergeVesselBranch = (id: string, source: string, target: string, push: boolean) =>
+  post<{ vesselId: string; source: string; target: string; merged: boolean; pushed: boolean }>(`/api/v1/vessels/${id}/branches/merge`, { Source: source, Target: target, Push: push });
+
 // ==================== Workspace ====================
 function encodeWorkspaceQueryPath(path: string) {
   return encodeURIComponent(path).replace(/%2F/g, '/');
@@ -793,9 +820,9 @@ export const cancelMergeEntry = (id: string) => post<void>(`/api/v1/merge-queue/
 export const listPromptTemplates = (params?: { pageNumber?: number; pageSize?: number; filters?: Record<string, string> }) =>
   get<EnumerationResult<PromptTemplate>>(`/api/v1/prompt-templates${buildQuery(params)}`);
 export const getPromptTemplate = (name: string) => get<PromptTemplate>(`/api/v1/prompt-templates/${encodeURIComponent(name)}`);
-export const createPromptTemplate = (data: { name: string; category: string; content: string; description?: string; active?: boolean }) =>
+export const createPromptTemplate = (data: { name: string; category: string; content: string; description?: string; active?: boolean; scope?: ScopeEnum }) =>
   post<PromptTemplate>('/api/v1/prompt-templates', data);
-export const updatePromptTemplate = (name: string, data: { content: string; description?: string }) => put<PromptTemplate>(`/api/v1/prompt-templates/${encodeURIComponent(name)}`, data);
+export const updatePromptTemplate = (name: string, data: { content: string; description?: string; scope?: ScopeEnum }) => put<PromptTemplate>(`/api/v1/prompt-templates/${encodeURIComponent(name)}`, data);
 export const resetPromptTemplate = (name: string) => post<PromptTemplate>(`/api/v1/prompt-templates/${encodeURIComponent(name)}/reset`);
 
 // ==================== Playbooks ====================
@@ -839,6 +866,38 @@ export const getSkill = (id: string) => get<Skill>(`/api/v1/skills/${encodeURICo
 export const createSkill = (data: Partial<Skill>) => post<Skill>('/api/v1/skills', data);
 export const updateSkill = (id: string, data: Partial<Skill>) => put<Skill>(`/api/v1/skills/${encodeURIComponent(id)}`, data);
 export const deleteSkill = (id: string) => del<void>(`/api/v1/skills/${encodeURIComponent(id)}`);
+
+// Harbors (host runners)
+export const listHarbors = () => get<Harbor[]>('/api/v1/harbors');
+export const getHarbor = (id: string) => get<Harbor>(`/api/v1/harbors/${encodeURIComponent(id)}`);
+export const createHarbor = (data: Partial<Harbor>) => post<Harbor>('/api/v1/harbors', data);
+export const updateHarbor = (id: string, data: Partial<Harbor>) =>
+  put<Harbor>(`/api/v1/harbors/${encodeURIComponent(id)}`, data);
+export const deleteHarbor = (id: string) => del<void>(`/api/v1/harbors/${encodeURIComponent(id)}`);
+export const enableHarbor = (id: string) => post<Harbor>(`/api/v1/harbors/${encodeURIComponent(id)}/enable`, {});
+export const disableHarbor = (id: string) => post<Harbor>(`/api/v1/harbors/${encodeURIComponent(id)}/disable`, {});
+
+// Model endpoints (embedding/inference)
+export const listModelEndpoints = () => get<ModelEndpoint[]>('/api/v1/model-endpoints');
+export const getModelEndpoint = (id: string) => get<ModelEndpoint>(`/api/v1/model-endpoints/${encodeURIComponent(id)}`);
+export const createModelEndpoint = (data: Partial<ModelEndpoint> & { apiKey?: string | null }) =>
+  post<ModelEndpoint>('/api/v1/model-endpoints', data);
+export const updateModelEndpoint = (id: string, data: Partial<ModelEndpoint> & { apiKey?: string | null }) =>
+  put<ModelEndpoint>(`/api/v1/model-endpoints/${encodeURIComponent(id)}`, data);
+export const deleteModelEndpoint = (id: string) => del<void>(`/api/v1/model-endpoints/${encodeURIComponent(id)}`);
+export const validateModelEndpoint = (id: string) =>
+  post<ModelEndpointProbeResult>(`/api/v1/model-endpoints/${encodeURIComponent(id)}/validate`, {});
+export const healthCheckModelEndpoints = () =>
+  post<ModelEndpointHealthSweepResponse>('/api/v1/model-endpoints/health-check', {});
+
+// ==================== Memories ====================
+export const listMemories = (params?: { pageNumber?: number; pageSize?: number; filters?: Record<string, string> }) =>
+  get<EnumerationResult<Memory>>(`/api/v1/memories${buildQuery(params)}`);
+export const getMemory = (id: string) => get<Memory>(`/api/v1/memories/${encodeURIComponent(id)}`);
+export const createMemory = (data: Partial<Memory>) => post<Memory>('/api/v1/memories', data);
+export const updateMemory = (id: string, data: Partial<Memory>) =>
+  put<Memory>(`/api/v1/memories/${encodeURIComponent(id)}`, data);
+export const deleteMemory = (id: string) => del<void>(`/api/v1/memories/${encodeURIComponent(id)}`);
 
 // Ask Armada
 export const askArmada = (message: string) => post<AskResponse>('/api/v1/ask', { message });
@@ -980,6 +1039,30 @@ export const stopServer = () => post<void>('/api/v1/server/stop');
 
 export const restartServer = () => post<void>('/api/v1/server/restart');
 export const resetServer = () => post<void>('/api/v1/server/reset');
+
+export interface RebuildStatus {
+  rebuildId?: string;
+  slot?: string | null;
+  previousSlot?: string | null;
+  sha?: string | null;
+  ref?: string | null;
+  backupPath?: string | null;
+  status: 'Building' | 'CuttingOver' | 'Succeeded' | 'Failed' | 'RolledBack' | 'none';
+  startedUtc?: string;
+  completedUtc?: string | null;
+  error?: string | null;
+  log?: string;
+}
+
+/** Kick off a server rebuild. Body keys are PascalCase for the C# server. */
+export const rebuildServer = (body?: { Ref?: string; SkipDashboard?: boolean; RollbackTimeoutSeconds?: number }) =>
+  post<RebuildStatus>('/api/v1/server/rebuild', body ?? {});
+
+/** Poll the latest rebuild status and its accumulated build log. */
+export const getRebuildStatus = () => get<RebuildStatus>('/api/v1/server/rebuild/status');
+
+/** Roll back the last rebuild to the previous slot (restores the pre-rebuild DB backup if the schema changed). */
+export const rollbackServer = () => post<RebuildStatus>('/api/v1/server/rollback');
 
 // ==================== Backup / Restore ====================
 /** Download backup as a ZIP file blob. The server endpoint is GET and returns binary. */

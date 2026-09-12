@@ -73,6 +73,9 @@ namespace Armada.Core.Services
         private DatabaseDriver _Database;
         private ArmadaSettings _Settings;
         private ISystemResourceProbe _ResourceProbe = new SystemResourceProbe();
+        private long _MemoryPressureDeferrals = 0;
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, List<DateTime>> _CaptainCrashTimes =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, List<DateTime>>();
         private ICaptainService _Captains;
         private IMissionService _Missions;
         private IVoyageService _Voyages;
@@ -141,7 +144,7 @@ namespace Armada.Core.Services
             List<SelectedPlaybook>? selectedPlaybooks,
             CancellationToken token = default)
         {
-            return await DispatchStandardVoyageAsync(title, description, vesselId, missionDescriptions, selectedPlaybooks, null, token).ConfigureAwait(false);
+            return await DispatchStandardVoyageAsync(title, description, vesselId, missionDescriptions, selectedPlaybooks, null, null, token).ConfigureAwait(false);
         }
 
         private async Task<Voyage> DispatchStandardVoyageAsync(
@@ -151,6 +154,7 @@ namespace Armada.Core.Services
             List<MissionDescription> missionDescriptions,
             List<SelectedPlaybook>? selectedPlaybooks,
             PipelineStage? singleStagePolicy,
+            string? captainOverridesJson,
             CancellationToken token)
         {
             if (String.IsNullOrEmpty(title)) throw new ArgumentNullException(nameof(title));
@@ -166,11 +170,13 @@ namespace Armada.Core.Services
                 await _Playbooks.ResolveSelectionsAsync(vessel.TenantId, selectedPlaybooks, token).ConfigureAwait(false);
             }
 
-            // Create voyage
+            // Create voyage. Persist the per-persona captain overrides up front so the inline mission
+            // assignment below resolves the preferred captain.
             Voyage voyage = new Voyage(title, description);
             voyage.TenantId = vessel.TenantId;
             voyage.UserId = vessel.UserId;
             voyage.Status = VoyageStatusEnum.Open;
+            voyage.CaptainOverridesJson = captainOverridesJson;
             voyage = await _Database.Voyages.CreateAsync(voyage, token).ConfigureAwait(false);
             voyage.SelectedPlaybooks = ClonePlaybookSelections(selectedPlaybooks);
             if (voyage.SelectedPlaybooks.Count > 0)
@@ -229,7 +235,7 @@ namespace Armada.Core.Services
             string? pipelineId,
             CancellationToken token = default)
         {
-            return await DispatchVoyageAsync(title, description, vesselId, missionDescriptions, pipelineId, null, token).ConfigureAwait(false);
+            return await DispatchVoyageAsync(title, description, vesselId, missionDescriptions, pipelineId, null, null, token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
@@ -240,6 +246,7 @@ namespace Armada.Core.Services
             List<MissionDescription> missionDescriptions,
             string? pipelineId,
             List<SelectedPlaybook>? selectedPlaybooks,
+            string? captainOverridesJson = null,
             CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(title)) throw new ArgumentNullException(nameof(title));
@@ -261,19 +268,22 @@ namespace Armada.Core.Services
             // If pipeline is single-stage Worker (or null), use the standard dispatch path
             if (pipeline == null)
             {
-                return await DispatchStandardVoyageAsync(title, description, vesselId, missionDescriptions, selectedPlaybooks, null, token).ConfigureAwait(false);
+                return await DispatchStandardVoyageAsync(title, description, vesselId, missionDescriptions, selectedPlaybooks, null, captainOverridesJson, token).ConfigureAwait(false);
             }
 
             if (pipeline.Stages.Count == 1 && pipeline.Stages[0].PersonaName == "Worker")
             {
-                return await DispatchStandardVoyageAsync(title, description, vesselId, missionDescriptions, selectedPlaybooks, pipeline.Stages[0], token).ConfigureAwait(false);
+                return await DispatchStandardVoyageAsync(title, description, vesselId, missionDescriptions, selectedPlaybooks, pipeline.Stages[0], captainOverridesJson, token).ConfigureAwait(false);
             }
 
-            // Multi-stage pipeline: create voyage, then for each mission create a chain of persona stages
+            // Multi-stage pipeline: create voyage, then for each mission create a chain of persona stages.
+            // Persist the per-persona captain overrides on the voyage BEFORE creating missions so the first
+            // stage's inline assignment (below) resolves the preferred captain.
             Voyage voyage = new Voyage(title, description);
             voyage.TenantId = vessel.TenantId;
             voyage.UserId = vessel.UserId;
             voyage.Status = VoyageStatusEnum.Open;
+            voyage.CaptainOverridesJson = captainOverridesJson;
             voyage = await _Database.Voyages.CreateAsync(voyage, token).ConfigureAwait(false);
             voyage.SelectedPlaybooks = ClonePlaybookSelections(selectedPlaybooks);
             if (voyage.SelectedPlaybooks.Count > 0)
@@ -434,6 +444,7 @@ namespace Armada.Core.Services
             List<Voyage> activeVoyages = await _Database.Voyages.EnumerateByStatusAsync(VoyageStatusEnum.InProgress, token).ConfigureAwait(false);
             List<Voyage> openVoyages = await _Database.Voyages.EnumerateByStatusAsync(VoyageStatusEnum.Open, token).ConfigureAwait(false);
             status.ActiveVoyages = activeVoyages.Count + openVoyages.Count;
+            status.MemoryPressureDeferrals = System.Threading.Interlocked.Read(ref _MemoryPressureDeferrals);
 
             foreach (Voyage voyage in activeVoyages.Concat(openVoyages))
             {
@@ -473,7 +484,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "error recalling captain " + captain.Id + ": " + ex.Message);
+                    _Logging.Warn(_Header + "error recalling captain " + captain.Id + ": " + ex.ToString());
                 }
             }
         }
@@ -496,7 +507,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "error stopping agent for captain " + captain.Id + " on shutdown: " + ex.Message);
+                    _Logging.Warn(_Header + "error stopping agent for captain " + captain.Id + " on shutdown: " + ex.ToString());
                 }
             }
         }
@@ -510,7 +521,7 @@ namespace Armada.Core.Services
 
             if (workingCaptains.Count > 0)
             {
-                _Logging.Info(_Header + "starting parallel health checks for " + workingCaptains.Count + " working captain(s)");
+                _Logging.Debug(_Header + "starting parallel health checks for " + workingCaptains.Count + " working captain(s)");
 
                 List<Task> healthCheckTasks = workingCaptains.Select(captain =>
                     Task.Run(async () =>
@@ -521,13 +532,13 @@ namespace Armada.Core.Services
                         }
                         catch (Exception ex)
                         {
-                            _Logging.Warn(_Header + "error processing health check for captain " + captain.Id + ": " + ex.Message);
+                            _Logging.Warn(_Header + "error processing health check for captain " + captain.Id + ": " + ex.ToString());
                         }
                     }, token)).ToList();
 
                 await Task.WhenAll(healthCheckTasks).ConfigureAwait(false);
 
-                _Logging.Info(_Header + "completed parallel health checks for " + workingCaptains.Count + " working captain(s)");
+                _Logging.Debug(_Header + "completed parallel health checks for " + workingCaptains.Count + " working captain(s)");
             }
 
             // Safety net: detect orphaned InProgress missions whose captain has moved on.
@@ -548,7 +559,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error recovering dangling handoffs: " + ex.Message);
+                _Logging.Warn(_Header + "error recovering dangling handoffs: " + ex.ToString());
             }
 
             // Check for completed voyages
@@ -558,7 +569,7 @@ namespace Armada.Core.Services
                 foreach (Voyage completedVoyage in completedVoyages)
                 {
                     try { await OnVoyageComplete.Invoke(completedVoyage).ConfigureAwait(false); }
-                    catch (Exception ex) { _Logging.Warn(_Header + "error in OnVoyageComplete callback: " + ex.Message); }
+                    catch (Exception ex) { _Logging.Warn(_Header + "error in OnVoyageComplete callback: " + ex.ToString()); }
                 }
             }
 
@@ -658,6 +669,60 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
+        /// <inheritdoc />
+        public Task<AutoLandDecision?> EvaluateAutoLandAsync(string missionId, CancellationToken token = default)
+        {
+            return _Missions.EvaluateAutoLandAsync(missionId, token);
+        }
+
+        /// <inheritdoc />
+        public async Task<DispatchValidationResult> ValidateDispatchAsync(
+            string? objectiveId,
+            string? pipelineId,
+            string? pipelineName,
+            string? vesselId,
+            int missionCount,
+            bool allowBareVoyage,
+            CancellationToken token = default)
+        {
+            // Objective link must exist when supplied.
+            if (!String.IsNullOrWhiteSpace(objectiveId))
+            {
+                Objective? objective = await _Database.Objectives.ReadAsync(objectiveId!, token).ConfigureAwait(false);
+                if (objective == null)
+                    return DispatchValidationResult.Invalid(DispatchValidationErrorEnum.ObjectiveNotFound, "Objective not found: " + objectiveId);
+            }
+
+            // Resolve a pipeline by explicit id, else by name.
+            string? resolvedPipelineId = pipelineId;
+            if (String.IsNullOrWhiteSpace(resolvedPipelineId) && !String.IsNullOrWhiteSpace(pipelineName))
+            {
+                Pipeline? namedPipeline = await _Database.Pipelines.ReadByNameAsync(pipelineName!, token).ConfigureAwait(false);
+                if (namedPipeline == null)
+                    return DispatchValidationResult.Invalid(DispatchValidationErrorEnum.PipelineNotFound, "Pipeline not found: " + pipelineName);
+                resolvedPipelineId = namedPipeline.Id;
+            }
+
+            // A missing vessel or zero missions is a bare voyage when allowed, otherwise an error.
+            bool isBareVoyage = String.IsNullOrWhiteSpace(vesselId) || missionCount == 0;
+            if (isBareVoyage && !allowBareVoyage)
+            {
+                if (String.IsNullOrWhiteSpace(vesselId))
+                    return DispatchValidationResult.Invalid(DispatchValidationErrorEnum.MissingVessel, "A vessel id is required to dispatch a voyage.");
+                return DispatchValidationResult.Invalid(DispatchValidationErrorEnum.NoMissions, "At least one mission is required to dispatch a voyage.");
+            }
+
+            return DispatchValidationResult.Valid(resolvedPipelineId, isBareVoyage);
+        }
+
+        /// <summary>
+        /// Handle an agent process exit: reconcile the captain and mission state for the exited process.
+        /// </summary>
+        /// <param name="processId">Operating-system process id that exited.</param>
+        /// <param name="exitCode">Process exit code, or null when unavailable.</param>
+        /// <param name="captainId">Captain identifier associated with the process.</param>
+        /// <param name="missionId">Mission identifier associated with the process.</param>
+        /// <param name="token">Cancellation token.</param>
         public async Task HandleProcessExitAsync(int processId, int? exitCode, string captainId, string missionId, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));
@@ -723,6 +788,22 @@ namespace Armada.Core.Services
                 // captured runtime error, halt the voyage, and only stall the captain
                 // when the failure indicates the runtime itself is unavailable.
                 _Logging.Warn(_Header + "agent process " + processId + " exited with code " + (exitCode?.ToString() ?? "unknown") + " for mission " + missionId);
+
+                // A negative exit code is an interruption (the runtime maps OperationCanceledException from a
+                // stop/shutdown to -1, and a vanished PID reports -1), not a genuine agent failure — real
+                // agent/model/config failures exit with a positive code. Re-dispatch an interrupted mission
+                // (bounded by MaxNoOpRedispatchAttempts) instead of terminally failing the voyage, so a
+                // server/harbor restart or reconnect does not nuke an otherwise-fine pipeline.
+                if (exitCode.HasValue && exitCode.Value < 0
+                    && mission != null
+                    && mission.Status != MissionStatusEnum.Cancelled
+                    && mission.RedispatchAttempts < _Settings.MaxNoOpRedispatchAttempts)
+                {
+                    await HandleInterruptedProcessExitAsync(captain, mission, missionId, exitCode.Value, token).ConfigureAwait(false);
+                    await DispatchPendingMissionsAsync(token).ConfigureAwait(false);
+                    return;
+                }
+
                 string failureReason = await BuildProcessExitFailureReasonAsync(missionId, exitCode, token).ConfigureAwait(false);
                 await HandleTerminalProcessExitFailureAsync(captain, mission, missionId, failureReason, token).ConfigureAwait(false);
 
@@ -731,7 +812,13 @@ namespace Armada.Core.Services
                 RuntimeFailureKindEnum failureKind = RuntimeFailureClassifier.Classify(exitCode, failureReason);
                 if (failureKind == RuntimeFailureKindEnum.UsageLimit || failureKind == RuntimeFailureKindEnum.AuthFailure)
                 {
-                    await QuarantineCaptainAsync(captainId, failureKind, token).ConfigureAwait(false);
+                    await QuarantineCaptainAsync(captainId, failureKind, token, failureReason).ConfigureAwait(false);
+                }
+                else if (failureKind == RuntimeFailureKindEnum.Crash && RecordCrashAndCheckLoop(captainId))
+                {
+                    // Crash-loop detection: N non-clean failures inside the window means this captain keeps
+                    // dying on work rather than doing it; quarantine it so tier selection stops handing it more.
+                    await QuarantineCaptainAsync(captainId, RuntimeFailureKindEnum.Crash, token, failureReason).ConfigureAwait(false);
                 }
             }
 
@@ -765,15 +852,59 @@ namespace Armada.Core.Services
         /// handing it work until its provider condition clears. Re-reads the captain to override any
         /// release-to-Idle that just happened during failure handling.
         /// </summary>
-        private async Task QuarantineCaptainAsync(string captainId, RuntimeFailureKindEnum kind, CancellationToken token)
+        /// <summary>
+        /// Record a captain crash and report whether it has now crashed at least the configured threshold of
+        /// times within the configured window (a crash loop). Clears the record once the loop is detected so
+        /// the counter restarts after quarantine. Tracking is in-memory: a restart resets the counter, which
+        /// is the intended behavior for a fresh process.
+        /// </summary>
+        private bool RecordCrashAndCheckLoop(string captainId)
+        {
+            int threshold = _Settings.CaptainCrashLoopThreshold;
+            if (threshold <= 0) return false;
+
+            DateTime nowUtc = DateTime.UtcNow;
+            DateTime windowStart = nowUtc.AddMinutes(-Math.Max(1, _Settings.CaptainCrashLoopWindowMinutes));
+
+            List<DateTime> times = _CaptainCrashTimes.GetOrAdd(captainId, _ => new List<DateTime>());
+            lock (times)
+            {
+                times.RemoveAll(t => t < windowStart);
+                times.Add(nowUtc);
+                if (times.Count >= threshold)
+                {
+                    times.Clear();
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        private async Task QuarantineCaptainAsync(string captainId, RuntimeFailureKindEnum kind, CancellationToken token, string? providerOutput = null)
         {
             Captain? captain = await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false);
             if (captain == null) return;
 
-            string reason = kind == RuntimeFailureKindEnum.AuthFailure ? "provider auth failure" : "provider usage limit";
+            string reason = kind switch
+            {
+                RuntimeFailureKindEnum.AuthFailure => "provider auth failure",
+                RuntimeFailureKindEnum.Crash => "crash loop",
+                _ => "provider usage limit"
+            };
+
+            // Prefer the provider's stated reset time (parsed from output) over the configured backoff, but
+            // never trust an unparseable or out-of-range value into the quarantine window.
+            DateTime nowUtc = DateTime.UtcNow;
+            DateTime until = nowUtc.AddMinutes(_Settings.CaptainQuarantineMinutes);
+            if (ProviderResetParser.TryParseResetUtc(providerOutput, nowUtc, out DateTime? resetUtc) && resetUtc.HasValue)
+            {
+                until = resetUtc.Value;
+                reason += " (provider reset time)";
+            }
+
             captain.State = CaptainStateEnum.Quarantined;
             captain.QuarantineReason = reason;
-            captain.QuarantineUntilUtc = DateTime.UtcNow.AddMinutes(_Settings.CaptainQuarantineMinutes);
+            captain.QuarantineUntilUtc = until;
             captain.CurrentMissionId = null;
             captain.CurrentDockId = null;
             captain.ProcessId = null;
@@ -949,6 +1080,22 @@ namespace Armada.Core.Services
                         entityType: "captain", entityId: captain.Id,
                         captainId: captain.Id, missionId: missionId, token: token).ConfigureAwait(false);
 
+                    // A negative exit code signals an interruption rather than a genuine agent failure:
+                    // the runtime maps OperationCanceledException (a stop/shutdown) to -1, and the health
+                    // monitor uses -1 for a vanished PID. Real agent/model/config failures exit with a
+                    // positive code. Re-dispatch an interrupted mission (bounded by MaxNoOpRedispatchAttempts)
+                    // instead of terminally failing the voyage, so a server/harbor restart or reconnect does
+                    // not nuke an otherwise-fine pipeline. Genuine, repeatable interruptions still fail once
+                    // the redispatch budget is exhausted.
+                    if (exitCode < 0
+                        && mission != null
+                        && mission.Status != MissionStatusEnum.Cancelled
+                        && mission.RedispatchAttempts < _Settings.MaxNoOpRedispatchAttempts)
+                    {
+                        await HandleInterruptedProcessExitAsync(captain, mission, missionId, exitCode, token).ConfigureAwait(false);
+                        return;
+                    }
+
                     string failureReason = await BuildProcessExitFailureReasonAsync(missionId, exitCode, token).ConfigureAwait(false);
                     await HandleTerminalProcessExitFailureAsync(captain, mission, missionId, failureReason, token).ConfigureAwait(false);
                 }
@@ -1084,7 +1231,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error emitting event " + eventType + ": " + ex.Message);
+                _Logging.Warn(_Header + "error emitting event " + eventType + ": " + ex.ToString());
             }
         }
 
@@ -1128,7 +1275,7 @@ namespace Armada.Core.Services
                                                    reviewMissions.Any(m => m.DockId == dock.Id);
                         if (preservedForMission)
                         {
-                            _Logging.Info(_Header + "skipping reclaim of dock " + dock.Id + " -- preserved for a pending re-dispatch or an in-review mission");
+                            _Logging.Debug(_Header + "skipping reclaim of dock " + dock.Id + " -- preserved for a pending re-dispatch or an in-review mission");
                             continue;
                         }
 
@@ -1139,14 +1286,14 @@ namespace Armada.Core.Services
                         }
                         catch (Exception ex)
                         {
-                            _Logging.Warn(_Header + "error reclaiming orphaned dock " + dock.Id + ": " + ex.Message);
+                            _Logging.Warn(_Header + "error reclaiming orphaned dock " + dock.Id + ": " + ex.ToString());
                         }
                     }
                 }
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error in orphaned dock reclamation: " + ex.Message);
+                _Logging.Warn(_Header + "error in orphaned dock reclamation: " + ex.ToString());
             }
         }
 
@@ -1196,7 +1343,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error recovering overdue reviews: " + ex.Message);
+                _Logging.Warn(_Header + "error recovering overdue reviews: " + ex.ToString());
             }
         }
 
@@ -1229,16 +1376,16 @@ namespace Armada.Core.Services
                     }
                     catch (Exception ex)
                     {
-                        _Logging.Warn(_Header + "error reconciling PR for mission " + mission.Id + ": " + ex.Message);
+                        _Logging.Warn(_Header + "error reconciling PR for mission " + mission.Id + ": " + ex.ToString());
                     }
                 }
 
                 if (checked_count > 0)
-                    _Logging.Info(_Header + "reconciled " + checked_count + " PullRequestOpen mission(s)");
+                    _Logging.Debug(_Header + "reconciled " + checked_count + " PullRequestOpen mission(s)");
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error in PR reconciliation: " + ex.Message);
+                _Logging.Warn(_Header + "error in PR reconciliation: " + ex.ToString());
             }
         }
 
@@ -1347,6 +1494,25 @@ namespace Armada.Core.Services
             }
         }
 
+        private async Task<string> DescribePendingReasonAsync(Mission mission, CancellationToken token)
+        {
+            if (!String.IsNullOrEmpty(mission.DependsOnMissionId))
+            {
+                Mission? dependency = await _Database.Missions.ReadAsync(mission.DependsOnMissionId, token).ConfigureAwait(false);
+                if (dependency == null)
+                    return "its upstream mission " + mission.DependsOnMissionId + " was not found";
+                if (dependency.Status != MissionStatusEnum.Complete && dependency.Status != MissionStatusEnum.WorkProduced)
+                    return "waiting on upstream mission " + dependency.Id + " which is " + dependency.Status
+                        + (dependency.Status == MissionStatusEnum.Review ? " (awaiting your review/approval)" : "");
+                return "upstream mission " + dependency.Id + " is " + dependency.Status + " but the branch/context handoff is not yet ready";
+            }
+
+            if (!String.IsNullOrEmpty(mission.RequestedCaptainId))
+                return "no idle captain matches the requested captain " + mission.RequestedCaptainId;
+
+            return "assignment preconditions are not yet met (captain routing, vessel path configuration, or a transient in-flight assignment)";
+        }
+
         private async Task DispatchPendingMissionsAsync(CancellationToken token)
         {
             List<Mission> pendingMissions = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending, token).ConfigureAwait(false);
@@ -1358,7 +1524,7 @@ namespace Armada.Core.Services
 
             if (_RetryDispatchNeeded)
             {
-                _Logging.Info(_Header + "retrying dispatch for pending missions that previously could not be assigned");
+                _Logging.Debug(_Header + "retrying dispatch for pending missions that previously could not be assigned");
             }
 
             // Check for any idle captains with available capacity
@@ -1380,7 +1546,8 @@ namespace Armada.Core.Services
                 bool assigned = await _Missions.TryAssignAsync(mission, vessel, token).ConfigureAwait(false);
                 if (!assigned)
                 {
-                    _Logging.Warn(_Header + "could not assign pending mission " + mission.Id + " - will retry on next health check cycle");
+                    string reason = await DescribePendingReasonAsync(mission, token).ConfigureAwait(false);
+                    _Logging.Info(_Header + "pending mission " + mission.Id + " not yet assigned: " + reason + " - will retry on the next health check cycle");
                     anyFailed = true;
                 }
             }
@@ -1408,6 +1575,7 @@ namespace Armada.Core.Services
                 AdmissionDecision admission = ResourceAdmission.Evaluate(available, total, _Settings.MinAvailableMemoryBytesForLaunch);
                 if (!admission.Admit)
                 {
+                    System.Threading.Interlocked.Increment(ref _MemoryPressureDeferrals);
                     _Logging.Info(_Header + "capacity gate " + (admission.DeferReason ?? "deferred for memory pressure"));
                     return false;
                 }
@@ -1440,7 +1608,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error reclaiming dock " + dockId + " for captain " + captain.Id + ": " + ex.Message);
+                _Logging.Warn(_Header + "error reclaiming dock " + dockId + " for captain " + captain.Id + ": " + ex.ToString());
             }
 
             // Clear dock references
@@ -1481,11 +1649,53 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "could not inspect mission log for failure reason on " + missionId + ": " + ex.Message);
+                    _Logging.Warn(_Header + "could not inspect mission log for failure reason on " + missionId + ": " + ex.ToString());
                 }
             }
 
             return "Agent process exited with code " + (exitCode?.ToString() ?? "unknown");
+        }
+
+        /// <summary>
+        /// Handle an interrupted (cancelled/vanished) captain process by re-dispatching its mission instead of
+        /// terminally failing it. Used for negative exit codes (a stop/shutdown cancellation or a missing PID),
+        /// which are not genuine agent failures. The dock and captain are reclaimed, the mission is reset to
+        /// Pending for a fresh assignment, and the voyage is left running. Bounded by the caller against
+        /// <see cref="ArmadaSettings.MaxNoOpRedispatchAttempts"/>.
+        /// </summary>
+        private async Task HandleInterruptedProcessExitAsync(
+            Captain captain,
+            Mission mission,
+            string missionId,
+            int exitCode,
+            CancellationToken token)
+        {
+            // Reclaim the dock and release the captain before resetting the mission (ReclaimDockAsync keys off
+            // the captain's/mission's current dock, so do it before clearing those references).
+            await ReclaimDockAsync(captain, mission, token).ConfigureAwait(false);
+            await _Captains.ReleaseAsync(captain, token).ConfigureAwait(false);
+
+            mission.RedispatchAttempts++;
+            mission.Status = MissionStatusEnum.Pending;
+            mission.CaptainId = null;
+            mission.DockId = null;
+            mission.ProcessId = null;
+            mission.FailureReason = null;
+            mission.StartedUtc = null;
+            mission.CompletedUtc = null;
+            mission.TotalRuntimeMs = null;
+            mission.LastUpdateUtc = DateTime.UtcNow;
+            await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+
+            _Logging.Warn(_Header + "mission " + missionId + " interrupted (process exit code " + exitCode +
+                ", treated as a stop/restart cancellation rather than a failure); re-dispatching (attempt " +
+                mission.RedispatchAttempts + "/" + _Settings.MaxNoOpRedispatchAttempts + ") and leaving the voyage running");
+
+            await EmitEventAsync("mission.redispatched",
+                "Mission re-dispatched after interruption (exit code " + exitCode + "): " + mission.Title,
+                entityType: "mission", entityId: mission.Id,
+                captainId: captain.Id, missionId: mission.Id,
+                vesselId: mission.VesselId, voyageId: mission.VoyageId, token: token).ConfigureAwait(false);
         }
 
         private async Task HandleTerminalProcessExitFailureAsync(
@@ -1647,7 +1857,7 @@ namespace Armada.Core.Services
                 needed = Math.Min(needed, headroom);
             }
 
-            _Logging.Info(_Header + "captain pool: " + idleCount + " idle, need " + needed + " more to reach minimum of " + _Settings.MinIdleCaptains);
+            _Logging.Debug(_Header + "captain pool: " + idleCount + " idle, need " + needed + " more to reach minimum of " + _Settings.MinIdleCaptains);
 
             for (int i = 0; i < needed; i++)
             {

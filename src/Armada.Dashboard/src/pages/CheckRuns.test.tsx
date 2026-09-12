@@ -122,6 +122,7 @@ describe('CheckRuns', () => {
         id: 'wfp_123',
         tenantId: 'ten_123',
         userId: 'usr_123',
+        ownershipScope: 'TenantWide',
         name: 'Default Workflow',
         description: null,
         scope: 'Vessel',

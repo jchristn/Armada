@@ -53,15 +53,17 @@ namespace Armada.Core.Services
         /// <summary>
         /// Build the inbox: actionable items ordered most-urgent first.
         /// </summary>
+        /// <param name="auth">Caller authentication context, used to scope inbox items to the caller.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The list of inbox items.</returns>
-        public async Task<List<InboxItem>> GetInboxAsync(CancellationToken token = default)
+        public async Task<List<InboxItem>> GetInboxAsync(AuthContext auth, CancellationToken token = default)
         {
+            if (auth == null) throw new ArgumentNullException(nameof(auth));
             List<InboxItem> items = new List<InboxItem>();
 
             try
             {
-                List<Mission> reviews = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Review, token).ConfigureAwait(false);
+                List<Mission> reviews = await MissionsByStatusAsync(auth, MissionStatusEnum.Review, token).ConfigureAwait(false);
                 foreach (Mission mission in reviews.Take(_MaxPerCategory))
                 {
                     bool overdue = mission.ReviewDeadlineUtc.HasValue && mission.ReviewDeadlineUtc.Value < DateTime.UtcNow;
@@ -77,7 +79,7 @@ namespace Armada.Core.Services
                     });
                 }
 
-                List<Mission> landingFailed = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.LandingFailed, token).ConfigureAwait(false);
+                List<Mission> landingFailed = await MissionsByStatusAsync(auth, MissionStatusEnum.LandingFailed, token).ConfigureAwait(false);
                 foreach (Mission mission in landingFailed.Take(_MaxPerCategory))
                 {
                     items.Add(new InboxItem
@@ -92,7 +94,7 @@ namespace Armada.Core.Services
                     });
                 }
 
-                List<Mission> failed = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Failed, token).ConfigureAwait(false);
+                List<Mission> failed = await MissionsByStatusAsync(auth, MissionStatusEnum.Failed, token).ConfigureAwait(false);
                 foreach (Mission mission in failed.Take(_MaxPerCategory))
                 {
                     items.Add(new InboxItem
@@ -107,7 +109,7 @@ namespace Armada.Core.Services
                     });
                 }
 
-                List<Captain> stalled = await _Database.Captains.EnumerateByStateAsync(CaptainStateEnum.Stalled, token).ConfigureAwait(false);
+                List<Captain> stalled = await CaptainsByStateAsync(auth, CaptainStateEnum.Stalled, token).ConfigureAwait(false);
                 foreach (Captain captain in stalled.Take(_MaxPerCategory))
                 {
                     items.Add(new InboxItem
@@ -122,7 +124,7 @@ namespace Armada.Core.Services
                     });
                 }
 
-                List<MergeEntry> mergeFailed = await _Database.MergeEntries.EnumerateByStatusAsync(MergeStatusEnum.Failed, token).ConfigureAwait(false);
+                List<MergeEntry> mergeFailed = await MergeEntriesByStatusAsync(auth, MergeStatusEnum.Failed, token).ConfigureAwait(false);
                 foreach (MergeEntry entry in mergeFailed.Take(_MaxPerCategory))
                 {
                     items.Add(new InboxItem
@@ -137,7 +139,9 @@ namespace Armada.Core.Services
                     });
                 }
 
-                List<Deployment> deployments = await _Database.Deployments.EnumerateAllAsync(new DeploymentQuery(), token).ConfigureAwait(false);
+                List<Deployment> deployments = ScopeList(auth,
+                    await _Database.Deployments.EnumerateAllAsync(new DeploymentQuery(), token).ConfigureAwait(false),
+                    d => d.TenantId, d => d.UserId);
 
                 foreach (Deployment deployment in deployments.Where(d => d.Status == DeploymentStatusEnum.PendingApproval).Take(_MaxPerCategory))
                 {
@@ -171,13 +175,50 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "error building inbox: " + ex.Message);
+                _Logging.Warn(_Header + "error building inbox: " + ex.ToString());
             }
 
             return items
                 .OrderByDescending(item => (int)item.Severity)
                 .ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
                 .ToList();
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private async Task<List<Mission>> MissionsByStatusAsync(AuthContext auth, MissionStatusEnum status, CancellationToken token)
+        {
+            if (auth.IsAdmin) return await _Database.Missions.EnumerateByStatusAsync(status, token).ConfigureAwait(false);
+            List<Mission> list = await _Database.Missions.EnumerateByStatusAsync(auth.TenantId!, status, token).ConfigureAwait(false);
+            return auth.IsTenantAdmin ? list : list.Where(m => String.Equals(m.UserId, auth.UserId, StringComparison.Ordinal)).ToList();
+        }
+
+        private async Task<List<Captain>> CaptainsByStateAsync(AuthContext auth, CaptainStateEnum state, CancellationToken token)
+        {
+            if (auth.IsAdmin) return await _Database.Captains.EnumerateByStateAsync(state, token).ConfigureAwait(false);
+            List<Captain> list = await _Database.Captains.EnumerateByStateAsync(auth.TenantId!, state, token).ConfigureAwait(false);
+            return auth.IsTenantAdmin ? list : list.Where(c => String.Equals(c.UserId, auth.UserId, StringComparison.Ordinal)).ToList();
+        }
+
+        private async Task<List<MergeEntry>> MergeEntriesByStatusAsync(AuthContext auth, MergeStatusEnum status, CancellationToken token)
+        {
+            if (auth.IsAdmin) return await _Database.MergeEntries.EnumerateByStatusAsync(status, token).ConfigureAwait(false);
+            List<MergeEntry> list = await _Database.MergeEntries.EnumerateByStatusAsync(auth.TenantId!, status, token).ConfigureAwait(false);
+            return auth.IsTenantAdmin ? list : list.Where(e => String.Equals(e.UserId, auth.UserId, StringComparison.Ordinal)).ToList();
+        }
+
+        /// <summary>
+        /// Apply three-tier scoping to an in-memory list: a global admin sees all, a tenant admin sees the
+        /// tenant, and a regular user sees only their own rows.
+        /// </summary>
+        private static List<T> ScopeList<T>(AuthContext auth, List<T> list, Func<T, string?> tenantOf, Func<T, string?> userOf)
+        {
+            if (auth.IsAdmin) return list;
+            List<T> scoped = list.Where(x => String.Equals(tenantOf(x), auth.TenantId, StringComparison.Ordinal)).ToList();
+            if (auth.IsTenantAdmin) return scoped;
+            return scoped.Where(x => String.Equals(userOf(x), auth.UserId, StringComparison.Ordinal)).ToList();
         }
 
         #endregion

@@ -82,7 +82,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "error stopping agent for captain " + captainId + ": " + ex.Message);
+                    _Logging.Warn(_Header + "error stopping agent for captain " + captainId + ": " + ex.ToString());
                 }
             }
 
@@ -116,7 +116,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "error reclaiming dock " + captain.CurrentDockId + " for captain " + captainId + ": " + ex.Message);
+                    _Logging.Warn(_Header + "error reclaiming dock " + captain.CurrentDockId + " for captain " + captainId + ": " + ex.ToString());
                 }
             }
 
@@ -185,11 +185,11 @@ namespace Armada.Core.Services
                     }
                     catch (Exception ex)
                     {
-                        _Logging.Warn(_Header + "error reclaiming dock " + dock.Id + " while skipping recovery for captain " + captain.Id + ": " + ex.Message);
+                        _Logging.Warn(_Header + "error reclaiming dock " + dock.Id + " while skipping recovery for captain " + captain.Id + ": " + ex.ToString());
                     }
 
                     await ReleaseAsync(captain, token: token).ConfigureAwait(false);
-                    _Logging.Info(_Header + "skipping auto-recovery for captain " + captain.Id +
+                    _Logging.Debug(_Header + "skipping auto-recovery for captain " + captain.Id +
                         " because mission " + mission.Id + " is " + mission.Status +
                         (voyageCancelled ? " and voyage " + mission.VoyageId + " is Cancelled" : String.Empty));
                     return;
@@ -210,7 +210,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "worktree accessibility check failed for captain " + captain.Id + ": " + ex.Message);
+                    _Logging.Warn(_Header + "worktree accessibility check failed for captain " + captain.Id + ": " + ex.ToString());
                 }
 
                 // Only attempt destructive repair when the worktree is no longer usable.
@@ -224,7 +224,7 @@ namespace Armada.Core.Services
                     }
                     catch (Exception ex)
                     {
-                        _Logging.Warn(_Header + "worktree repair failed for captain " + captain.Id + ": " + ex.Message);
+                        _Logging.Warn(_Header + "worktree repair failed for captain " + captain.Id + ": " + ex.ToString());
                     }
                 }
 
@@ -269,7 +269,7 @@ namespace Armada.Core.Services
                     }
                     catch (Exception ex)
                     {
-                        _Logging.Warn(_Header + "recovery launch failed for captain " + captain.Id + ": " + ex.Message);
+                        _Logging.Warn(_Header + "recovery launch failed for captain " + captain.Id + ": " + ex.ToString());
                         string launchReason = "Auto-recovery failed while relaunching the agent: " + ex.Message;
                         await FinalizeRecoveryFailureAsync(captain, mission, launchReason, token).ConfigureAwait(false);
                     }
@@ -277,7 +277,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "unhandled error in TryRecoverAsync for captain " + captain.Id + ": " + ex.Message);
+                _Logging.Warn(_Header + "unhandled error in TryRecoverAsync for captain " + captain.Id + ": " + ex.ToString());
                 try
                 {
                     Mission? mission = !String.IsNullOrEmpty(captain.CurrentMissionId)
@@ -334,7 +334,7 @@ namespace Armada.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "error reclaiming dock " + captain.CurrentDockId + " during recovery failure cleanup: " + ex.Message);
+                    _Logging.Warn(_Header + "error reclaiming dock " + captain.CurrentDockId + " during recovery failure cleanup: " + ex.ToString());
                 }
             }
 

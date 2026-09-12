@@ -48,7 +48,7 @@ namespace Armada.Server.Routes
                     };
                 }
 
-                List<InboxItem> items = await _inbox.GetInboxAsync().ConfigureAwait(false);
+                List<InboxItem> items = await _inbox.GetInboxAsync(ctx).ConfigureAwait(false);
                 return items;
             },
             api => api
