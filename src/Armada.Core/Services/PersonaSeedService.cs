@@ -69,6 +69,7 @@ namespace Armada.Core.Services
             await SeedPersonaAsync(PersonaCatalog.UsabilityEngineer, "Improves usability, edge-case experience, and consistency with the surrounding product.", "persona.usability_engineer", token).ConfigureAwait(false);
             await SeedPersonaAsync(PersonaCatalog.Judge, "Reviews completed mission diffs for correctness and completeness.", "persona.judge", token).ConfigureAwait(false);
             await SeedPersonaAsync(PersonaCatalog.TestEngineer, "Writes and updates tests for mission changes.", "persona.test_engineer", token).ConfigureAwait(false);
+            await SeedPersonaAsync(PersonaCatalog.Linter, "Evaluates changed code and documentation for style and correctness, corrects clear in-scope violations, and reports findings.", "persona.linter", token).ConfigureAwait(false);
             await SeedPersonaAsync(PersonaCatalog.Recorder, "Reviews the voyage conversation and distills durable memories (episodic/semantic/procedural) into the vessel model context, the Armada memory store, and external memory facilities.", "persona.recorder", token).ConfigureAwait(false);
         }
 
@@ -119,7 +120,7 @@ namespace Armada.Core.Services
 
             await SeedPipelineAsync(
                 "FullPipeline",
-                "Product Manager then Architect then Worker then Usability Engineer then Test Engineer then Judge then Recorder.",
+                "Product Manager then Architect then Worker then Usability Engineer then Test Engineer then Linter then Judge then Recorder.",
                 new List<PipelineStage>
                 {
                     new PipelineStage(1, PersonaCatalog.ProductManager) { RequiresReview = true },
@@ -127,8 +128,9 @@ namespace Armada.Core.Services
                     new PipelineStage(3, PersonaCatalog.Worker) { RequiresReview = true },
                     new PipelineStage(4, PersonaCatalog.UsabilityEngineer) { RequiresReview = true },
                     new PipelineStage(5, PersonaCatalog.TestEngineer) { RequiresReview = true },
-                    new PipelineStage(6, PersonaCatalog.Judge) { RequiresReview = true, ReviewDenyAction = ReviewDenyActionEnum.FailPipeline },
-                    new PipelineStage(7, PersonaCatalog.Recorder)
+                    new PipelineStage(6, PersonaCatalog.Linter) { RequiresReview = true },
+                    new PipelineStage(7, PersonaCatalog.Judge) { RequiresReview = true, ReviewDenyAction = ReviewDenyActionEnum.FailPipeline },
+                    new PipelineStage(8, PersonaCatalog.Recorder)
                 },
                 token).ConfigureAwait(false);
 

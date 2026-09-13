@@ -173,6 +173,7 @@ namespace Armada.Core.Services
                 PersonaCatalog.UsabilityEngineer => "You are an Armada usability engineer agent. Include `## Usability`, `## Consistency`, `## Edge Cases`, and `## Residual Risks` sections before a standalone [ARMADA:RESULT] COMPLETE line.",
                 PersonaCatalog.Worker => "You are an Armada worker agent. End with a standalone [ARMADA:RESULT] COMPLETE line followed by a brief plain-text summary.",
                 PersonaCatalog.TestEngineer => "You are an Armada test engineer agent. Include `## Coverage Added`, `## Negative Paths`, and `## Residual Risks` sections before a standalone [ARMADA:RESULT] COMPLETE line.",
+                PersonaCatalog.Linter => "You are an Armada linter agent. Evaluate the changed code and documentation for style and correctness, fix clear in-scope violations, include `## Code Style`, `## Code Correctness`, `## Documentation`, `## Fixes Applied`, and `## Residual Issues` sections before a standalone [ARMADA:RESULT] COMPLETE line.",
                 PersonaCatalog.Judge => JudgeContract.RoleSummary(),
                 _ => "You are an Armada captain executing a mission."
             };
@@ -229,6 +230,8 @@ namespace Armada.Core.Services
                     "Stay within scope, make the requested changes, and end with a standalone line `[ARMADA:RESULT] COMPLETE` followed by a brief plain-text summary.",
                 PersonaCatalog.TestEngineer =>
                     "Before your result line, include short `## Coverage Added`, `## Negative Paths`, and `## Residual Risks` sections. End with a standalone line `[ARMADA:RESULT] COMPLETE` followed by a brief plain-text summary.",
+                PersonaCatalog.Linter =>
+                    "Evaluate the changed code and documentation for style and correctness, staying strictly within the files this mission changed. Fix clear in-scope violations and flag judgment calls. Before your result line, include `## Code Style`, `## Code Correctness`, `## Documentation`, `## Fixes Applied`, and `## Residual Issues` sections. End with a standalone line `[ARMADA:RESULT] COMPLETE` followed by a brief plain-text summary.",
                 PersonaCatalog.Judge => JudgeContract.OutputContract(),
                 _ => String.Empty
             };
@@ -243,6 +246,7 @@ namespace Armada.Core.Services
                 PersonaCatalog.UsabilityEngineer => "You are an Armada usability engineer agent. Improve the work through the lens of usability, consistency, and edge-case handling, include `## Usability`, `## Consistency`, `## Edge Cases`, and `## Residual Risks` sections, and end with a standalone [ARMADA:RESULT] COMPLETE line.",
                 PersonaCatalog.Worker => "You are an Armada worker agent. Implement the requested code changes carefully, stay within scope, and end with a standalone [ARMADA:RESULT] COMPLETE line.",
                 PersonaCatalog.TestEngineer => "You are an Armada test engineer agent. Write tests for the current mission scope, cover negative and edge paths for validation, timeout, cancellation, retry, cleanup, and error-handling changes when applicable, include `## Coverage Added`, `## Negative Paths`, and `## Residual Risks` sections, and end with a standalone [ARMADA:RESULT] COMPLETE line.",
+                PersonaCatalog.Linter => "You are an Armada linter agent. Evaluate the changed code and documentation for style and correctness, fix clear in-scope violations and flag judgment calls, include `## Code Style`, `## Code Correctness`, `## Documentation`, `## Fixes Applied`, and `## Residual Issues` sections, and end with a standalone [ARMADA:RESULT] COMPLETE line.",
                 PersonaCatalog.Judge => JudgeContract.PersonaPromptFallback(),
                 _ => "You are an Armada captain executing a mission. Follow these instructions carefully."
             };

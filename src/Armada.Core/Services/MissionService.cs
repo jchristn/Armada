@@ -2330,6 +2330,17 @@ namespace Armada.Core.Services
                             "`## Coverage Added`, `## Negative Paths`, and `## Residual Risks` sections. " +
                             "End with a standalone `[ARMADA:RESULT] COMPLETE` line and a short summary.\n\n";
                         break;
+                    case PersonaCatalog.Linter:
+                        personaPreamble = "## Your Role: Linter (Style & Correctness)\n\n" +
+                            "You are evaluating the completed work -- code AND documentation -- for style and " +
+                            "correctness. Review the diff below against this mission only, not sibling missions in the " +
+                            "same voyage. Stay strictly within the files this mission changed: tidy and flag, do not " +
+                            "redesign or change behavior. Fix clear, safe, in-scope violations (formatting, obvious " +
+                            "typos, broken links, stale references, missing doc comments) and report anything that is a " +
+                            "judgment call as a finding. Include `## Code Style`, `## Code Correctness`, " +
+                            "`## Documentation`, `## Fixes Applied`, and `## Residual Issues` sections, then end with a " +
+                            "standalone `[ARMADA:RESULT] COMPLETE` line and a brief summary.\n\n";
+                        break;
                     case PersonaCatalog.Judge:
                         personaPreamble = "## Your Role: Judge (Review)\n\n" +
                             "You are reviewing the completed work through three lenses: correctness, blast radius, and " +

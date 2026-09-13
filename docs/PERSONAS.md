@@ -116,6 +116,7 @@ This avoids the .csproj embedded resource complexity and keeps templates co-loca
   - `persona.architect` -- architect persona
   - `persona.judge` -- judge/reviewer persona
   - `persona.test_engineer` -- test writing persona
+  - `persona.linter` -- style/correctness linter persona (code and documentation)
 
 ### 1.4 Template Resolution Service
 

@@ -43,6 +43,12 @@ namespace Armada.Core
         public const string Judge = "Judge";
 
         /// <summary>
+        /// Linter persona name. Evaluates the mission's changed code and documentation for style and
+        /// correctness, corrects clear in-scope violations, and reports what it found and fixed.
+        /// </summary>
+        public const string Linter = "Linter";
+
+        /// <summary>
         /// Recorder persona name. Reviews a voyage's conversation and distills durable memories
         /// (episodic/semantic/procedural) into the vessel model context, the Armada memory store, and any
         /// external memory facilities.
