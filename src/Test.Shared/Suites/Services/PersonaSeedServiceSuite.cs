@@ -55,12 +55,16 @@ namespace Test.Shared.Suites.Services
                     AssertEqual("persona.usability_engineer", usabilityEngineer!.PromptTemplateName, "Usability Engineer prompt template");
                     Persona? testEngineer = await testDb.Driver.Personas.ReadByNameAsync(PersonaCatalog.TestEngineer).ConfigureAwait(false);
                     AssertNotNull(testEngineer, "Test Engineer persona should be seeded");
+                    Persona? linter = await testDb.Driver.Personas.ReadByNameAsync(PersonaCatalog.Linter).ConfigureAwait(false);
+                    AssertNotNull(linter, "Linter persona should be seeded");
+                    AssertTrue(linter!.IsBuiltIn, "Linter should be a built-in persona");
+                    AssertEqual("persona.linter", linter.PromptTemplateName, "Linter prompt template");
 
                     Pipeline? fullPipeline = await testDb.Driver.Pipelines.ReadByNameAsync("FullPipeline").ConfigureAwait(false);
                     AssertNotNull(fullPipeline, "FullPipeline should be seeded");
                     string seededOrder = String.Join(" | ", fullPipeline!.Stages.OrderBy(s => s.Order).Select(s => s.PersonaName));
                     AssertEqual(
-                        "Product Manager | Architect | Worker | Usability Engineer | Test Engineer | Judge",
+                        "Product Manager | Architect | Worker | Usability Engineer | Test Engineer | Linter | Judge | Recorder",
                         seededOrder,
                         "FullPipeline persona order");
                 }
@@ -93,7 +97,7 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(upgraded, "FullPipeline should still exist");
                     string upgradedOrder = String.Join(" | ", upgraded!.Stages.OrderBy(s => s.Order).Select(s => s.PersonaName));
                     AssertEqual(
-                        "Product Manager | Architect | Worker | Usability Engineer | Test Engineer | Judge",
+                        "Product Manager | Architect | Worker | Usability Engineer | Test Engineer | Linter | Judge | Recorder",
                         upgradedOrder,
                         "Legacy FullPipeline should be upgraded in place");
                 }

@@ -6,6 +6,11 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Linter persona
+- Added a built-in **Linter** persona that evaluates a mission's changed **code and documentation** for style and correctness -- code style (naming, formatting, import ordering, adherence to the project's style guide and idioms), code correctness (typos, obvious defects, unhandled edge paths, mismatched signatures), documentation style (Markdown formatting, headings, spelling/grammar, code-fence tags), and documentation correctness (broken/stale links, examples or commands that no longer match the code). It fixes clear, safe, in-scope violations and reports the rest, staying strictly within the files the mission changed.
+- New editable prompt template `persona.linter` (Configuration > Prompts). Like every other working persona it also carries the "Recall Existing Memory" note and reports through `## Code Style`, `## Code Correctness`, `## Documentation`, `## Fixes Applied`, and `## Residual Issues` sections, ending with a standalone `[ARMADA:RESULT] COMPLETE` line.
+- Injected into the built-in **FullPipeline** as a gating stage after Test Engineer and before Judge: Product Manager -> Architect -> Worker -> Usability Engineer -> Test Engineer -> **Linter** -> Judge -> Recorder. Existing installs pick up the new stage on the next startup via the in-place FullPipeline upgrade, and the new persona + prompt template are seeded idempotently.
+
 Focus: Harbors -- detaching the Admiral from the developer's machine so it can run standalone (Local mode, today's default) or containerized/remote (Split mode) while agent CLIs, git, and worktrees keep executing on the host where the repositories and tool logins live.
 
 ### Harbors (host runners)

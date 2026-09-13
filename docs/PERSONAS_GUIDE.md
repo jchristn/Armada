@@ -99,6 +99,21 @@ Writes tests for the changes produced by a Worker.
 - **Prompt template:** `persona.test_engineer`
 - **When to use:** After a Worker stage when you want automated test generation.
 
+### Linter
+
+Evaluates the mission's changed **code and documentation** for style and correctness.
+
+- **Purpose:** Review the diff for code style (naming, formatting, import ordering,
+  adherence to the project's style guide and idioms), code correctness (typos, obvious
+  defects, unhandled edge paths, mismatched signatures), documentation style (Markdown
+  formatting, headings, spelling/grammar, code-fence tags), and documentation correctness
+  (broken/stale links, examples or commands that no longer match the code). It corrects
+  clear, safe, in-scope violations directly and flags judgment calls as findings, staying
+  strictly within the files the mission changed.
+- **Prompt template:** `persona.linter`
+- **When to use:** As a quality gate after the work exists (typically after the Worker and
+  Test Engineer stages) and before the final Judge review.
+
 ---
 
 ## 3. Pipelines
@@ -117,7 +132,8 @@ previous one.
 | **WorkerOnly** | Worker | The default. Single-stage, backward-compatible behavior. |
 | **Reviewed** | Worker -> Judge | Work is implemented, then reviewed. |
 | **Tested** | Worker -> Test Engineer -> Judge | Work is implemented, tests are written, then everything is reviewed. |
-| **FullPipeline** | Architect -> Worker -> Test Engineer -> Judge | Full lifecycle: plan, implement, test, review. |
+| **FullPipeline** | Product Manager -> Architect -> Worker -> Usability Engineer -> Test Engineer -> Linter -> Judge -> Recorder | Full lifecycle: frame, plan, implement, refine, test, lint, review, and record durable memory. |
+| **Recorded** | Worker -> Recorder | Do the work, then distill durable memories from it. |
 
 ### Pipeline Resolution Order (Precedence)
 

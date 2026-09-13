@@ -99,8 +99,12 @@ Key design decisions:
 |------|----------|-------------|
 | Worker | `persona.worker` | Standard mission executor -- writes code, makes changes, commits |
 | Architect | `persona.architect` | Plans work, decomposes goals into missions using `[ARMADA:MISSION]` markers |
-| Judge | `persona.judge` | Reviews diffs for correctness, completeness, scope, and style |
+| Product Manager | `persona.product_manager` | Shapes the product picture, clarifies user outcomes, turns work into durable requirements |
+| Usability Engineer | `persona.usability_engineer` | Improves usability, edge-case experience, and consistency with the surrounding product |
 | Test Engineer | `persona.test_engineer` | Writes tests for changes, follows existing test patterns |
+| Linter | `persona.linter` | Evaluates changed code and documentation for style and correctness; fixes clear in-scope violations and flags the rest |
+| Judge | `persona.judge` | Reviews diffs for correctness, completeness, scope, and style |
+| Recorder | `persona.recorder` | Distills durable memories (episodic/semantic/procedural) from the voyage into the vessel context and memory store |
 
 ### Pipelines (seeded on startup by `PersonaSeedService`)
 
@@ -109,7 +113,8 @@ Key design decisions:
 | WorkerOnly | Worker | Backward-compatible default |
 | Reviewed | Worker -> Judge | Implementation + review |
 | Tested | Worker -> Test Engineer -> Judge | Implementation + testing + review |
-| FullPipeline | Architect -> Worker -> Test Engineer -> Judge | Planning + implementation + testing + review |
+| FullPipeline | Product Manager -> Architect -> Worker -> Usability Engineer -> Test Engineer -> Linter -> Judge -> Recorder | Full lifecycle: frame, plan, implement, refine, test, lint, review, and record durable memory |
+| Recorded | Worker -> Recorder | Do the work, then distill durable memories from it |
 
 **Source:** `src/Armada.Core/Services/PersonaSeedService.cs`
 

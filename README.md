@@ -125,6 +125,12 @@ Everything else in Armada exists to support that: isolated worktrees, parallel d
                                                               |
                                                               v
                          +-----------------------------------------------------------+
+                         | Linter                                                    |
+                         | Checks changed code and docs for style and correctness    |
+                         +-----------------------------------------------------------+
+                                                              |
+                                                              v
+                         +-----------------------------------------------------------+
                          | Judge                                                     |
                          | Reviews correctness, completeness, scope, and style       |
                          | Produces PASS or FAIL                                     |
@@ -139,7 +145,8 @@ Everything else in Armada exists to support that: isolated worktrees, parallel d
 4. **The Architect plans.** It reads the codebase, breaks the work into missions, and identifies likely file boundaries.
 5. **Workers implement.** Each worker runs in its own git worktree on its own branch.
 6. **TestEngineers add tests.** They get the worker diff as input.
-7. **Judges review.** They check the result against the original task and return a pass/fail verdict.
+7. **Linters check style and correctness.** They review the changed code and documentation, fix clear in-scope violations, and flag the rest.
+8. **Judges review.** They check the result against the original task and return a pass/fail verdict.
 
 Each step is a **persona** with its own prompt template. A sequence of personas is a **pipeline**. The built-ins are just defaults; pipelines are user-configurable and can be extended with whatever personas your project needs:
 
@@ -149,7 +156,7 @@ Each step is a **persona** with its own prompt template. A sequence of personas 
 | **Reviewed** | Implement -> Review | Normal development |
 | **Tested** | Implement -> Test -> Review | When you need coverage |
 | **Recorded** | Implement -> Record | Capture durable memories from the work |
-| **FullPipeline** | Plan -> Implement -> Test -> Review -> Record | Big features, unfamiliar codebases |
+| **FullPipeline** | Plan -> Implement -> Test -> Lint -> Review -> Record | Big features, unfamiliar codebases |
 
 You can set a default pipeline per repository and override it on a single dispatch when needed. If the built-in roles are not enough, define your own personas and compose them into custom pipelines for security review, documentation, migration planning, release checks, architecture review, or any other project-specific step.
 
@@ -364,6 +371,7 @@ Pipelines are the workflow layer in Armada. They let you run work through explic
 | **Architect** | Plan | Reads the codebase, decomposes a high-level goal into concrete missions with file lists and dependency ordering |
 | **Worker** | Implement | Writes code. The default -- this is what you get without pipelines. |
 | **TestEngineer** | Test | Receives the Worker's diff, identifies gaps in coverage, writes tests |
+| **Linter** | Lint | Evaluates the changed code and documentation for style and correctness, corrects clear in-scope violations, and reports what it fixed and flagged |
 | **Judge** | Review | Examines the diff against the original mission description. Checks completeness, correctness, scope violations, style. Produces a verdict. |
 | **Recorder** | Record | Reviews the voyage conversation and distills durable memories (episodic/semantic/procedural) into the vessel model context, the Armada memory store, and any external memory facilities. Runs as a non-gating final stage. |
 
@@ -386,7 +394,7 @@ When you dispatch, Armada picks the pipeline in this order:
 
 ### Custom Personas and Pipelines
 
-The four built-in personas are starting points. You can create your own:
+The built-in personas are starting points. You can create your own:
 
 ```bash
 # Create a security auditor persona with custom instructions
