@@ -23,6 +23,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Test.Automated", "Test.Auto
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Armada.Harbor", "Armada.Harbor\Armada.Harbor.csproj", "{5825AACF-23CD-4CE0-980A-74CAF3556B1A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Armada.Publisher", "Armada.Publisher\Armada.Publisher.csproj", "{F455DAB6-0862-46C1-8FF8-05F67A3F626B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -153,6 +155,18 @@ Global
 		{5825AACF-23CD-4CE0-980A-74CAF3556B1A}.Release|x64.Build.0 = Release|Any CPU
 		{5825AACF-23CD-4CE0-980A-74CAF3556B1A}.Release|x86.ActiveCfg = Release|Any CPU
 		{5825AACF-23CD-4CE0-980A-74CAF3556B1A}.Release|x86.Build.0 = Release|Any CPU
+		{F455DAB6-0862-46C1-8FF8-05F67A3F626B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F455DAB6-0862-46C1-8FF8-05F67A3F626B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F455DAB6-0862-46C1-8FF8-05F67A3F626B}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{F455DAB6-0862-46C1-8FF8-05F67A3F626B}.Debug|x64.Build.0 = Debug|Any CPU
+		{F455DAB6-0862-46C1-8FF8-05F67A3F626B}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{F455DAB6-0862-46C1-8FF8-05F67A3F626B}.Debug|x86.Build.0 = Debug|Any CPU
+		{F455DAB6-0862-46C1-8FF8-05F67A3F626B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F455DAB6-0862-46C1-8FF8-05F67A3F626B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F455DAB6-0862-46C1-8FF8-05F67A3F626B}.Release|x64.ActiveCfg = Release|Any CPU
+		{F455DAB6-0862-46C1-8FF8-05F67A3F626B}.Release|x64.Build.0 = Release|Any CPU
+		{F455DAB6-0862-46C1-8FF8-05F67A3F626B}.Release|x86.ActiveCfg = Release|Any CPU
+		{F455DAB6-0862-46C1-8FF8-05F67A3F626B}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

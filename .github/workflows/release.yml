@@ -1,0 +1,181 @@
+name: release
+
+# A release is one action: push a tag (v1.2.3) or dispatch with a version.
+# Each OS job builds, signs, packages, and uploads only the channels it owns.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (without leading v), e.g. 0.9.1"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_VERSION: "10.0.x"
+
+jobs:
+  # ------------------------------------------------------------------
+  # Resolve the version once so every OS job packages the same string.
+  # ------------------------------------------------------------------
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.derive.outputs.version }}
+    steps:
+      - id: derive
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ------------------------------------------------------------------
+  # Windows: Inno (.exe) + WiX (.msi); feeds winget + Chocolatey.
+  # ------------------------------------------------------------------
+  windows:
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Install packaging tools
+        run: |
+          choco install innosetup -y
+          dotnet tool install --global wix
+      - name: Build the publisher
+        run: dotnet build src/Armada.Publisher/Armada.Publisher.csproj -c Release
+      - name: Preflight
+        run: dotnet run --project src/Armada.Publisher -c Release -- doctor
+      - name: Package Windows channels
+        env:
+          WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+          CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          dotnet run --project src/Armada.Publisher -c Release -- --channel inno-harbor --version ${{ needs.version.outputs.version }}
+          dotnet run --project src/Armada.Publisher -c Release -- --channel wix-server   --version ${{ needs.version.outputs.version }}
+          dotnet run --project src/Armada.Publisher -c Release -- --channel choco-cli    --version ${{ needs.version.outputs.version }}
+          dotnet run --project src/Armada.Publisher -c Release -- --channel winget-cli   --version ${{ needs.version.outputs.version }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: artifacts/**/*
+
+  # ------------------------------------------------------------------
+  # macOS: .app + .dmg (Harbor) and .pkg (server); notarize + staple.
+  # ------------------------------------------------------------------
+  macos:
+    needs: version
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Install packaging tools
+        run: brew install create-dmg
+      - name: Build the publisher
+        run: dotnet build src/Armada.Publisher/Armada.Publisher.csproj -c Release
+      - name: Preflight
+        run: dotnet run --project src/Armada.Publisher -c Release -- doctor
+      - name: Package macOS channels
+        env:
+          APPLE_CERT_BASE64: ${{ secrets.APPLE_CERT_BASE64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER: ${{ secrets.APPLE_NOTARY_ISSUER }}
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          dotnet run --project src/Armada.Publisher -c Release -- --channel dmg-harbor  --version ${{ needs.version.outputs.version }}
+          dotnet run --project src/Armada.Publisher -c Release -- --channel pkg-server  --version ${{ needs.version.outputs.version }}
+          dotnet run --project src/Armada.Publisher -c Release -- --channel brew-harbor --version ${{ needs.version.outputs.version }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: artifacts/**/*
+
+  # ------------------------------------------------------------------
+  # Linux: .deb/.rpm/AppImage; GPG-signed apt/yum repo metadata.
+  # ------------------------------------------------------------------
+  linux:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Install packaging tools
+        run: |
+          sudo gem install --no-document fpm
+          sudo apt-get update && sudo apt-get install -y aptly createrepo-c
+          curl -L -o /usr/local/bin/appimagetool https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x /usr/local/bin/appimagetool
+      - name: Build the publisher
+        run: dotnet build src/Armada.Publisher/Armada.Publisher.csproj -c Release
+      - name: Preflight
+        run: dotnet run --project src/Armada.Publisher -c Release -- doctor
+      - name: Package Linux channels
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          REPO_SYNC_CREDENTIALS: ${{ secrets.REPO_SYNC_CREDENTIALS }}
+        run: |
+          dotnet run --project src/Armada.Publisher -c Release -- --channel linux-cli     --version ${{ needs.version.outputs.version }}
+          dotnet run --project src/Armada.Publisher -c Release -- --channel appimage-cli  --version ${{ needs.version.outputs.version }}
+          dotnet run --project src/Armada.Publisher -c Release -- --channel linux-harbor  --version ${{ needs.version.outputs.version }}
+          dotnet run --project src/Armada.Publisher -c Release -- --channel linux-server  --version ${{ needs.version.outputs.version }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: artifacts/**/*
+
+  # ------------------------------------------------------------------
+  # NuGet global tool: OS-agnostic, runs once.
+  # ------------------------------------------------------------------
+  nuget:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Publish CLI as a dotnet tool
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: dotnet run --project src/Armada.Publisher -c Release -- --channel nuget-cli --version ${{ needs.version.outputs.version }}
+
+  # ------------------------------------------------------------------
+  # Collect every OS's artifacts and attach them to a GitHub Release.
+  # ------------------------------------------------------------------
+  release:
+    needs: [version, windows, macos, linux, nuget]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: Create or update the GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          files: dist/**/*
+          fail_on_unmatched_files: false
+      - name: Note pending external gates
+        run: |
+          echo "Automated up to submission. Remaining manual gates:"
+          echo "  - winget PR must be merged"
+          echo "  - Chocolatey package must clear moderation"
+          echo "  - Flathub/Snap submissions are reviewed"

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- Build tool: single TFM, runs on the SDK present on the runner. -->
+    <TargetFrameworks>net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Armada.Publisher</AssemblyName>
+    <RootNamespace>Armada.Publisher</RootNamespace>
+    <Description>Packaging orchestrator: reads publisher.json and produces signed installers and package-manager entries.</Description>
+  </PropertyGroup>
+
+</Project>

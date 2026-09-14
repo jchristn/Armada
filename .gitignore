@@ -1,6 +1,8 @@
 bin/
 obj/
 out/
+installers/
+artifacts/
 *.user
 *.suo
 .vs/
