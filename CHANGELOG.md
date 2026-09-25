@@ -6,6 +6,11 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Dependencies
+- Upgraded Voltaic from 0.7.1 to 2.0.0 (Armada.Server and Armada.Helm). Behavior changes picked up from Voltaic 1.x/2.x: the MCP servers (HTTP `/mcp` + `/rpc`, and `armada mcp stdio`) now publish only Armada's own tools -- Voltaic's `ping`/`echo`/`getTime`/`getSessions` demo tools are gone (`getSessions` disclosed every client's session id); the protocol `ping` returns `{}` instead of `"pong"`; tools are callable only through `tools/call` (a bare JSON-RPC call to a tool name returns `-32601`); and tool input schemas now enforce `additionalProperties`, so `start_runbook_execution.parameterValues` rejects non-string values with `-32602`. Stateless `2026-07-28` clients (Claude Code 2.1.x) are now served correctly on both `/mcp` and `/rpc`.
+- Updated Watson 7.2.0, PolyPrompt 2.6.0, Microsoft.Data.SqlClient 7.1.0, Microsoft.Data.Sqlite 10.0.12, Microsoft.NET.Test.Sdk 18.10.1, and NUnit3TestAdapter 6.3.0. Avalonia stays on 11.3.x (12.x is a separate major migration).
+- New MCP E2E cases cover the upgrade in both directions: demo tools absent from `tools/list`, `ping` returns an empty object, bare tool-name calls and `getSessions` are rejected, and `parameterValues` schema enforcement.
+
 ### Linter persona
 - Added a built-in **Linter** persona that evaluates a mission's changed **code and documentation** for style and correctness -- code style (naming, formatting, import ordering, adherence to the project's style guide and idioms), code correctness (typos, obvious defects, unhandled edge paths, mismatched signatures), documentation style (Markdown formatting, headings, spelling/grammar, code-fence tags), and documentation correctness (broken/stale links, examples or commands that no longer match the code). It fixes clear, safe, in-scope violations and reports the rest, staying strictly within the files the mission changed.
 - New editable prompt template `persona.linter` (Configuration > Prompts). Like every other working persona it also carries the "Recall Existing Memory" note and reports through `## Code Style`, `## Code Correctness`, `## Documentation`, `## Fixes Applied`, and `## Residual Issues` sections, ending with a standalone `[ARMADA:RESULT] COMPLETE` line.

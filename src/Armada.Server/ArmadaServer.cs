@@ -1058,7 +1058,7 @@ namespace Armada.Server
         }
 
         /// <summary>
-        /// Adapts Armada's JsonElement-based tool handler to Voltaic 0.6.0's RpcParameters-based
+        /// Adapts Armada's JsonElement-based tool handler to Voltaic's RpcParameters-based
         /// RegisterTool signature, so the tool handlers themselves do not need to change.
         /// </summary>
         private void RegisterAdaptedTool(string name, string description, object inputSchema, Func<System.Text.Json.JsonElement?, Task<object>> handler)

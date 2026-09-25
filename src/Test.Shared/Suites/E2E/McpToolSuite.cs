@@ -170,6 +170,115 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual(toolNames.Count, toolNames.Distinct().Count());
             }));
 
+            cases.Add(CaseAsync("tools_list_excludes_voltaic_demo_tools", "ToolsList_ExcludesVoltaicDemoTools", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient mcpClient = fx.McpClient;
+                string sessionId = await InitMcpSessionAsync(mcpClient);
+
+                JsonElement result = await SendMcpRequestAsync(mcpClient, sessionId, "tools/list", new { }).ConfigureAwait(false);
+                JsonElement tools = result.GetProperty("tools");
+                List<string> toolNames = new List<string>();
+                foreach (JsonElement tool in tools.EnumerateArray())
+                {
+                    toolNames.Add(tool.GetProperty("name").GetString()!);
+                }
+
+                // Voltaic 2.x publishes only application-registered tools; the 0.x/1.x demo tools must be gone.
+                string[] demoTools = new string[] { "ping", "echo", "getTime", "getSessions", "getClients" };
+                foreach (string name in demoTools)
+                {
+                    AssertFalse(toolNames.Contains(name), "Tool list should not contain Voltaic demo tool " + name);
+                }
+            }));
+
+            cases.Add(CaseAsync("protocol_ping_returns_empty_object", "ProtocolPing_ReturnsEmptyObject", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient mcpClient = fx.McpClient;
+                string sessionId = await InitMcpSessionAsync(mcpClient);
+
+                JsonElement response = await SendRawMcpRequestAsync(mcpClient, sessionId, "ping").ConfigureAwait(false);
+                AssertFalse(response.TryGetProperty("error", out JsonElement _), "ping should not return an error");
+                Assert(response.TryGetProperty("result", out JsonElement pingResult), "ping should return a result");
+                AssertEqual(JsonValueKind.Object, pingResult.ValueKind);
+            }));
+
+            cases.Add(CaseAsync("bare_tool_name_method_returns_method_not_found", "BareToolNameMethod_ReturnsMethodNotFound", TestTags.Negative, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient mcpClient = fx.McpClient;
+                string sessionId = await InitMcpSessionAsync(mcpClient);
+
+                // Tools are reachable only through tools/call; invoking one as a bare JSON-RPC method must fail.
+                JsonElement response = await SendRawMcpRequestAsync(mcpClient, sessionId, "status").ConfigureAwait(false);
+                Assert(response.TryGetProperty("error", out JsonElement error), "Bare tool-name call should return an error");
+                AssertEqual(-32601, error.GetProperty("code").GetInt32());
+
+                JsonElement viaToolsCall = await CallToolAsync(mcpClient, sessionId, "status", new { }).ConfigureAwait(false);
+                AssertToolResultValid(viaToolsCall);
+            }));
+
+            cases.Add(CaseAsync("get_sessions_method_is_not_exposed", "GetSessionsMethod_IsNotExposed", TestTags.Negative, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient mcpClient = fx.McpClient;
+                string sessionId = await InitMcpSessionAsync(mcpClient);
+
+                JsonElement bare = await SendRawMcpRequestAsync(mcpClient, sessionId, "getSessions").ConfigureAwait(false);
+                Assert(bare.TryGetProperty("error", out JsonElement bareError), "getSessions should not be callable");
+                AssertEqual(-32601, bareError.GetProperty("code").GetInt32());
+
+                JsonElement viaToolsCall = await SendRawMcpRequestAsync(mcpClient, sessionId, "tools/call", new
+                {
+                    name = "getSessions",
+                    arguments = new { }
+                }).ConfigureAwait(false);
+                Assert(viaToolsCall.TryGetProperty("error", out JsonElement _), "getSessions should not be callable through tools/call");
+            }));
+
+            cases.Add(CaseAsync("runbook_parameter_values_rejects_non_string_value", "RunbookParameterValues_RejectsNonStringValue", TestTags.Negative, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient mcpClient = fx.McpClient;
+                string sessionId = await InitMcpSessionAsync(mcpClient);
+
+                // parameterValues declares additionalProperties { type: string }, which Voltaic 2.x now enforces.
+                JsonElement response = await SendRawMcpRequestAsync(mcpClient, sessionId, "tools/call", new
+                {
+                    name = "start_runbook_execution",
+                    arguments = new
+                    {
+                        runbookId = "pbk_does_not_exist",
+                        parameterValues = new { count = 5 }
+                    }
+                }).ConfigureAwait(false);
+                Assert(response.TryGetProperty("error", out JsonElement error), "Non-string parameter value should be rejected");
+                AssertEqual(-32602, error.GetProperty("code").GetInt32());
+            }));
+
+            cases.Add(CaseAsync("runbook_parameter_values_accepts_string_value", "RunbookParameterValues_AcceptsStringValue", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient mcpClient = fx.McpClient;
+                string sessionId = await InitMcpSessionAsync(mcpClient);
+
+                // String values satisfy the schema, so any failure must come from the handler, not validation.
+                JsonElement response = await SendRawMcpRequestAsync(mcpClient, sessionId, "tools/call", new
+                {
+                    name = "start_runbook_execution",
+                    arguments = new
+                    {
+                        runbookId = "pbk_does_not_exist",
+                        parameterValues = new { count = "5" }
+                    }
+                }).ConfigureAwait(false);
+                if (response.TryGetProperty("error", out JsonElement error))
+                {
+                    AssertFalse(error.GetProperty("code").GetInt32() == -32602, "String parameter values should pass schema validation: " + error.GetRawText());
+                }
+            }));
+
             cases.Add(CaseAsync("check_run_tools_run_inspect_and_retry", "CheckRunTools_RunInspectAndRetry", TestTags.Positive, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);

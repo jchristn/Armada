@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Watson" Version="7.1.1" />
+    <PackageReference Include="Watson" Version="7.2.0" />
     <ProjectReference Include="..\Armada.Core\Armada.Core.csproj" />
   </ItemGroup>
 

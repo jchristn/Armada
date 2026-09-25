@@ -100,7 +100,7 @@ namespace Armada.Helm.Commands
             RunbookService runbookService = new RunbookService(database, logging);
             ModelEndpointService modelEndpointService = new ModelEndpointService(database, logging);
             HarborService harborService = new HarborService(database, logging);
-            // Adapt Armada's JsonElement-based tool handlers to Voltaic 0.6.0's RpcParameters API.
+            // Adapt Armada's JsonElement-based tool handlers to Voltaic's RpcParameters API.
             void RegisterAdapted(string name, string description, object inputSchema, Func<JsonElement?, Task<object>> handler)
             {
                 mcpServer.RegisterTool(name, description, inputSchema, (RpcParameters? parameters) =>
