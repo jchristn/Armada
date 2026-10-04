@@ -319,7 +319,7 @@ export default function Users() {
             <table>
               <thead>
                 <tr>
-                  <th className="col-checkbox"><input type="checkbox" checked={allSelected} onChange={e => e.target.checked ? setSelected(filtered.map(u => u.id)) : setSelected([])} title={t('Select all users')} /></th>
+                  <th className="col-checkbox"><input aria-label={t('Select all users')} type="checkbox" checked={allSelected} onChange={e => e.target.checked ? setSelected(filtered.map(u => u.id)) : setSelected([])} title={t('Select all users')} /></th>
                   <th className="sortable" onClick={() => handleSort('email')}>{t('Email')}{sortIcon('email')}</th>
                   <th>{t('ID')}</th>
                   <th className="sortable" onClick={() => handleSort('firstName')}>{t('Name')}{sortIcon('firstName')}</th>
@@ -336,7 +336,7 @@ export default function Users() {
                   <td></td>
                   <td><input type="text" className="col-filter" value={colFilters.firstName} onChange={e => { setColFilters(f => ({ ...f, firstName: e.target.value })); setPageNumber(1); }} placeholder={t('Search...')} /></td>
                   <td>
-                    <select
+                    <select aria-label={t('All tenants')}
                       className="col-filter"
                       value={colFilters.tenantId}
                       onChange={e => { setColFilters(f => ({ ...f, tenantId: e.target.value })); setPageNumber(1); }}
@@ -359,7 +359,7 @@ export default function Users() {
                       ? setJsonData({ open: true, title: `User: ${u.email}`, data: u })
                       : openEdit(u)}
                   >
-                    <td className="col-checkbox" onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.includes(u.id)} onChange={() => toggleSelect(u.id)} title={t('Select this user')} /></td>
+                    <td className="col-checkbox" onClick={e => e.stopPropagation()}><input aria-label={t('Select this user')} type="checkbox" checked={selected.includes(u.id)} onChange={() => toggleSelect(u.id)} title={t('Select this user')} /></td>
                     <td><strong>{u.email}</strong></td>
                     <td className="mono text-dim table-id-cell">
                       <span className="id-display">

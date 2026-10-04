@@ -307,13 +307,13 @@ export default function Releases() {
             onChange={(event) => setSearch(event.target.value)}
             placeholder={t('Search by title, version, tag, summary, or ID...')}
           />
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
+          <select aria-label={t('All statuses')} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
             <option value="all">{t('All statuses')}</option>
             {RELEASE_STATUSES.map((status) => (
               <option key={status} value={status}>{status}</option>
             ))}
           </select>
-          <select value={vesselFilter} onChange={(event) => setVesselFilter(event.target.value)}>
+          <select aria-label={t('All vessels')} value={vesselFilter} onChange={(event) => setVesselFilter(event.target.value)}>
             <option value="all">{t('All vessels')}</option>
             {vessels.map((vessel) => (
               <option key={vessel.id} value={vessel.id}>{vessel.name}</option>

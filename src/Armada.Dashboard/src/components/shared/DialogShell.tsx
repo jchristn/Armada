@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useId, useRef, type ReactNode } from 'react';
+import { useDialog } from '../../lib/dialogA11y';
 import { useLocale } from '../../context/LocaleContext';
 
 interface DialogShellProps {
@@ -46,21 +47,8 @@ export default function DialogShell({
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
 
-  useEffect(() => {
-    if (!open) return undefined;
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && dismissible) {
-        e.stopPropagation();
-        closeRef.current();
-      }
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [open, dismissible]);
-
-  useEffect(() => {
-    if (open) panelRef.current?.focus();
-  }, [open]);
+  // Focus trap, Escape (when dismissible), initial focus and focus return come from the shared dialog stack.
+  useDialog(panelRef, open, () => closeRef.current(), dismissible);
 
   if (!open) return null;
 

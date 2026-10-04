@@ -16,7 +16,7 @@ describe('BacklogGroupPills', () => {
       />,
     );
 
-    expect(screen.getByRole('tablist', { name: 'Backlog group views' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Backlog group views' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Ready For Planning/i })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('9')).toBeInTheDocument();
 

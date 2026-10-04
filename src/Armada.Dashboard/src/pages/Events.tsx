@@ -218,7 +218,7 @@ export default function Events() {
               <thead>
                 <tr>
                   <th className="col-checkbox">
-                    <input type="checkbox" checked={allSelected} onChange={e => e.target.checked ? selectAll() : clearSelection()} title={t('Select all events')} />
+                    <input aria-label={t('Select all events')} type="checkbox" checked={allSelected} onChange={e => e.target.checked ? selectAll() : clearSelection()} title={t('Select all events')} />
                   </th>
                   <th>{t('ID')}</th>
                   <th className="sortable" onClick={() => handleSort('eventType')} title={t('Event type -- click to sort')}>
@@ -259,7 +259,7 @@ export default function Events() {
                   return (
                     <tr key={evt.id} className="clickable" onClick={() => setViewRecord(evt as unknown as Record<string, unknown>)}>
                       <td className="col-checkbox" onClick={e => e.stopPropagation()}>
-                        <input type="checkbox" checked={selected.includes(evt.id)} onChange={() => toggleSelect(evt.id)} title={t('Select this event')} />
+                        <input aria-label={t('Select this event')} type="checkbox" checked={selected.includes(evt.id)} onChange={() => toggleSelect(evt.id)} title={t('Select this event')} />
                       </td>
                       <td className="mono text-dim table-id-cell">
                         <span className="id-display">

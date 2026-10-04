@@ -1,4 +1,5 @@
-import { useEffect } from 'react';
+import { useId, useRef } from 'react';
+import { useDialog } from '../../lib/dialogA11y';
 import { useLocale } from '../../context/LocaleContext';
 
 interface ErrorModalProps {
@@ -9,24 +10,23 @@ interface ErrorModalProps {
 export default function ErrorModal({ error, onClose }: ErrorModalProps) {
   const { t } = useLocale();
 
-  useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
-  }, [onClose]);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  const messageId = useId();
+  useDialog(panelRef, !!error, onClose);
 
   if (!error) return null;
 
   return (
     <div className="modal-overlay" style={{ zIndex: 1500 }} onClick={onClose}>
-      <div className="modal error-modal" onClick={e => e.stopPropagation()}>
+      <div ref={panelRef} role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={messageId} tabIndex={-1} className="modal error-modal" onClick={e => e.stopPropagation()}>
         <div className="error-modal-header">
-          <span className="error-modal-icon">!</span>
-          <h3>{t('Error')}</h3>
+          <span className="error-modal-icon" aria-hidden="true">!</span>
+          <h3 id={titleId}>{t('Error')}</h3>
         </div>
-        <p className="error-modal-message">{t(error)}</p>
+        <p id={messageId} className="error-modal-message">{t(error)}</p>
         <div className="modal-actions">
-          <button className="btn btn-primary" onClick={onClose}>{t('Dismiss')}</button>
+          <button type="button" className="btn btn-primary" onClick={onClose}>{t('Dismiss')}</button>
         </div>
       </div>
     </div>

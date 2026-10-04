@@ -104,12 +104,13 @@ export default function CommandPalette() {
           aria-label={t('Search destinations')}
         />
         {results.length > 0 ? (
-          <ul className="command-palette-list" role="listbox">
+          <ul className="command-palette-list" aria-label={t('Search destinations')}>
             {results.map((cmd, index) => (
-              <li key={cmd.to} role="option" aria-selected={index === selectedIndex}>
+              <li key={cmd.to}>
                 <button
                   type="button"
                   className={`command-palette-item${index === selectedIndex ? ' active' : ''}`}
+                  aria-current={index === selectedIndex ? 'true' : undefined}
                   onMouseEnter={() => setSelectedIndex(index)}
                   onClick={() => runCommand(cmd.to)}
                 >

@@ -77,7 +77,7 @@ export default function DockDetail() {
   return (
     <div>
       {/* Breadcrumb */}
-      <div style={{ marginBottom: 16, fontSize: 13 }}>
+      <div className="breadcrumb" style={{ marginBottom: 16, fontSize: 13 }}>
         <Link to="/docks">{t('Docks')}</Link>
         <span className="text-muted"> / </span>
         <span className="mono">{dock.id}</span>

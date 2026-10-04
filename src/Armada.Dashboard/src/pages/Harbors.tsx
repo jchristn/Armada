@@ -248,7 +248,7 @@ export default function Harbors() {
       <div className="card" style={{ padding: '1rem', marginBottom: '1rem' }}>
         <div className="playbook-filter-row">
           <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('Search by name, platform, or ID...')} />
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+          <select aria-label={t('All statuses')} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="all">{t('All statuses')}</option>
             <option value="Connected">{t('Connected')}</option>
             <option value="Degraded">{t('Degraded')}</option>

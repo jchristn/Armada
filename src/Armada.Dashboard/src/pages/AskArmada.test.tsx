@@ -151,7 +151,7 @@ describe('AskArmada thread list', () => {
     renderAt('/ask');
     await screen.findByText('Checkout tests');
     fireEvent.click(screen.getByRole('button', { name: 'Actions for Checkout tests' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Rename' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
     const input = screen.getByLabelText('Conversation title');
     fireEvent.change(input, { target: { value: 'Checkout flake' } });
     fireEvent.submit(input.closest('form')!);
@@ -164,7 +164,7 @@ describe('AskArmada thread list', () => {
     renderAt('/ask');
     await screen.findByText('Checkout tests');
     fireEvent.click(screen.getByRole('button', { name: 'Actions for Checkout tests' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Pin' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Pin' }));
     await waitFor(() => expect(api.updateAskThread).toHaveBeenCalledWith('ath_3', { pinned: true }));
     await waitFor(() => expect(threadRows().map((r) => r.getAttribute('title'))).toEqual(['Billing fix', 'Checkout tests', 'Dependency sweep']));
   });
@@ -174,7 +174,7 @@ describe('AskArmada thread list', () => {
     renderAt('/ask');
     await screen.findByText('Checkout tests');
     fireEvent.click(screen.getByRole('button', { name: 'Actions for Checkout tests' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
     expect(deleteAskThread).not.toHaveBeenCalled();
     expect(screen.getByText(/Work it started keeps running/)).toBeInTheDocument();
     const dialog = screen.getByText('Delete conversation').closest('.modal-box') as HTMLElement;

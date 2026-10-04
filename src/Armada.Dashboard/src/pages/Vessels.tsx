@@ -606,7 +606,7 @@ export default function Vessels() {
               <thead>
                 <tr>
                   <th className="col-checkbox">
-                    <input type="checkbox" checked={table.allSelected} onChange={e => e.target.checked ? table.selectAll() : table.clearSelection()} title={t('Select all vessels')} />
+                    <input aria-label={t('Select all vessels')} type="checkbox" checked={table.allSelected} onChange={e => e.target.checked ? table.selectAll() : table.clearSelection()} title={t('Select all vessels')} />
                   </th>
                   <th className="sortable" onClick={() => table.handleSort('name')} title={t('Vessel name -- click to sort')}>
                     {t('Name')}{table.sortIcon('name')}
@@ -628,14 +628,14 @@ export default function Vessels() {
                   <td><input type="text" className="col-filter" value={table.colFilters.name ?? ''} onChange={e => table.setColFilter('name', e.target.value)} placeholder={t('Search...')} /></td>
                   <td></td>
                   <td>
-                    <select className="col-filter" title={t('Filter vessels by fleet')} value={fleetFilter} onChange={e => { setFleetFilter(e.target.value); table.setPageNumber(1); }}>
+                    <select aria-label={t('Filter vessels by fleet')} className="col-filter" title={t('Filter vessels by fleet')} value={fleetFilter} onChange={e => { setFleetFilter(e.target.value); table.setPageNumber(1); }}>
                       <option value="">{t('All Fleets')}</option>
                       {fleets.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                     </select>
                   </td>
                   <td><input type="text" className="col-filter" value={table.colFilters.repoUrl ?? ''} onChange={e => table.setColFilter('repoUrl', e.target.value)} placeholder={t('Search...')} /></td>
                   <td>
-                    <select className="col-filter" title={t('Filter vessels by landing mode')} value={landingModeFilter} onChange={e => { setLandingModeFilter(e.target.value); table.setPageNumber(1); }}>
+                    <select aria-label={t('Filter vessels by landing mode')} className="col-filter" title={t('Filter vessels by landing mode')} value={landingModeFilter} onChange={e => { setLandingModeFilter(e.target.value); table.setPageNumber(1); }}>
                       <option value="">{t('All Modes')}</option>
                       {landingModes.filter(m => m.value).map(m => (
                         <option key={m.value} value={m.value} title={m.description}>{m.value} -- {m.short}</option>
@@ -651,7 +651,7 @@ export default function Vessels() {
                 {table.paginated.map(v => (
                   <tr key={v.id} className="clickable" onClick={() => openEdit(v)}>
                     <td className="col-checkbox" onClick={e => e.stopPropagation()}>
-                      <input type="checkbox" checked={table.selected.includes(v.id)} onChange={() => table.toggleSelect(v.id)} title={t('Select this vessel')} />
+                      <input aria-label={t('Select this vessel')} type="checkbox" checked={table.selected.includes(v.id)} onChange={() => table.toggleSelect(v.id)} title={t('Select this vessel')} />
                     </td>
                     <td><strong>{v.name}</strong></td>
                     <td className="mono text-dim table-id-cell">

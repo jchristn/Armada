@@ -1082,7 +1082,7 @@ export default function ObjectiveDetail() {
           <div className="detail-form-grid backlog-item-grid">
             <div className="form-field detail-field-full">
               <label title={fieldHelp.title}>{t('Title')}</label>
-              <input
+              <input aria-label={fieldHelp.title}
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 disabled={!canManage}
@@ -1092,7 +1092,7 @@ export default function ObjectiveDetail() {
             </div>
             <div className="form-field">
               <label title={fieldHelp.vessel}>{t('Vessel')}</label>
-              <select value={primaryVesselId} onChange={(event) => handleVesselScopeChange(event.target.value)} disabled={!canManage} title={fieldHelp.vessel}>
+              <select aria-label={fieldHelp.vessel} value={primaryVesselId} onChange={(event) => handleVesselScopeChange(event.target.value)} disabled={!canManage} title={fieldHelp.vessel}>
                 <option value="">{t('No vessel selected')}</option>
                 {vessels.map((vessel) => (
                   <option key={vessel.id} value={vessel.id}>
@@ -1103,7 +1103,7 @@ export default function ObjectiveDetail() {
             </div>
             <div className="form-field">
               <label title={fieldHelp.status}>{t('Status')}</label>
-              <select value={status} onChange={(event) => setStatus(event.target.value as ObjectiveStatus)} disabled={!canManage} title={fieldHelp.status}>
+              <select aria-label={fieldHelp.status} value={status} onChange={(event) => setStatus(event.target.value as ObjectiveStatus)} disabled={!canManage} title={fieldHelp.status}>
                 {OBJECTIVE_STATUSES.map((value) => (
                   <option key={value} value={value}>{value}</option>
                 ))}
@@ -1111,25 +1111,25 @@ export default function ObjectiveDetail() {
             </div>
             <div className="form-field">
               <label title={fieldHelp.owner}>{t('Owner')}</label>
-              <input value={owner} onChange={(event) => setOwner(event.target.value)} disabled={!canManage} title={fieldHelp.owner} />
+              <input aria-label={fieldHelp.owner} value={owner} onChange={(event) => setOwner(event.target.value)} disabled={!canManage} title={fieldHelp.owner} />
             </div>
             <div className="form-field detail-field-full">
               <label title={fieldHelp.description}>{t('Description')}</label>
-              <textarea rows={5} value={description} onChange={(event) => setDescription(event.target.value)} disabled={!canManage} title={fieldHelp.description} />
+              <textarea aria-label={fieldHelp.description} rows={5} value={description} onChange={(event) => setDescription(event.target.value)} disabled={!canManage} title={fieldHelp.description} />
             </div>
             <div className="form-field detail-field-full">
               <label title={`${fieldHelp.tagKey} ${fieldHelp.tagValue}`}>{t('Tags')}</label>
               <div className="tag-entry-list">
                 {tagEntries.map((entry, index) => (
                   <div key={`tag-entry-${index}`} className="tag-entry-row">
-                    <input
+                    <input aria-label={fieldHelp.tagKey}
                       value={entry.key}
                       onChange={(event) => updateTagEntry(index, 'key', event.target.value)}
                       disabled={!canManage}
                       placeholder={t('Key')}
                       title={fieldHelp.tagKey}
                     />
-                    <input
+                    <input aria-label={fieldHelp.tagValue}
                       value={entry.value}
                       onChange={(event) => updateTagEntry(index, 'value', event.target.value)}
                       disabled={!canManage}
@@ -1187,23 +1187,23 @@ export default function ObjectiveDetail() {
             )}
             <div className="form-field detail-field-full">
               <label title={fieldHelp.refinementSummary}>{t('Refinement Summary')}</label>
-              <textarea rows={4} value={refinementSummary} onChange={(event) => setRefinementSummary(event.target.value)} disabled={!canManage} title={fieldHelp.refinementSummary} />
+              <textarea aria-label={fieldHelp.refinementSummary} rows={4} value={refinementSummary} onChange={(event) => setRefinementSummary(event.target.value)} disabled={!canManage} title={fieldHelp.refinementSummary} />
             </div>
             <div className="form-field">
               <label title={fieldHelp.acceptanceCriteria}>{t('Acceptance Criteria')}</label>
-              <textarea rows={6} value={acceptanceCriteria} onChange={(event) => setAcceptanceCriteria(event.target.value)} disabled={!canManage} title={fieldHelp.acceptanceCriteria} />
+              <textarea aria-label={fieldHelp.acceptanceCriteria} rows={6} value={acceptanceCriteria} onChange={(event) => setAcceptanceCriteria(event.target.value)} disabled={!canManage} title={fieldHelp.acceptanceCriteria} />
             </div>
             <div className="form-field">
               <label title={fieldHelp.nonGoals}>{t('Non-Goals')}</label>
-              <textarea rows={6} value={nonGoals} onChange={(event) => setNonGoals(event.target.value)} disabled={!canManage} title={fieldHelp.nonGoals} />
+              <textarea aria-label={fieldHelp.nonGoals} rows={6} value={nonGoals} onChange={(event) => setNonGoals(event.target.value)} disabled={!canManage} title={fieldHelp.nonGoals} />
             </div>
             <div className="form-field detail-field-full">
               <label title={fieldHelp.rolloutConstraints}>{t('Rollout Constraints')}</label>
-              <textarea rows={4} value={rolloutConstraints} onChange={(event) => setRolloutConstraints(event.target.value)} disabled={!canManage} title={fieldHelp.rolloutConstraints} />
+              <textarea aria-label={fieldHelp.rolloutConstraints} rows={4} value={rolloutConstraints} onChange={(event) => setRolloutConstraints(event.target.value)} disabled={!canManage} title={fieldHelp.rolloutConstraints} />
             </div>
             <div className="form-field detail-field-full">
               <label title={fieldHelp.evidenceLinks}>{t('Evidence Links')}</label>
-              <textarea rows={4} value={evidenceLinks} onChange={(event) => setEvidenceLinks(event.target.value)} disabled={!canManage} title={fieldHelp.evidenceLinks} />
+              <textarea aria-label={fieldHelp.evidenceLinks} rows={4} value={evidenceLinks} onChange={(event) => setEvidenceLinks(event.target.value)} disabled={!canManage} title={fieldHelp.evidenceLinks} />
             </div>
           </div>
         </div>
@@ -1215,7 +1215,7 @@ export default function ObjectiveDetail() {
           <div className="detail-form-grid">
             <div className="form-field">
               <label title={fieldHelp.kind}>{t('Kind')}</label>
-              <select value={kind} onChange={(event) => setKind(event.target.value as ObjectiveKind)} disabled={!canManage} title={fieldHelp.kind}>
+              <select aria-label={fieldHelp.kind} value={kind} onChange={(event) => setKind(event.target.value as ObjectiveKind)} disabled={!canManage} title={fieldHelp.kind}>
                 {OBJECTIVE_KINDS.map((value) => (
                   <option key={value} value={value}>{value}</option>
                 ))}
@@ -1223,11 +1223,11 @@ export default function ObjectiveDetail() {
             </div>
             <div className="form-field">
               <label title={fieldHelp.category}>{t('Category')}</label>
-              <input value={category} onChange={(event) => setCategory(event.target.value)} disabled={!canManage} title={fieldHelp.category} />
+              <input aria-label={fieldHelp.category} value={category} onChange={(event) => setCategory(event.target.value)} disabled={!canManage} title={fieldHelp.category} />
             </div>
             <div className="form-field">
               <label title={fieldHelp.priority}>{t('Priority')}</label>
-              <select value={priority} onChange={(event) => setPriority(event.target.value as ObjectivePriority)} disabled={!canManage} title={fieldHelp.priority}>
+              <select aria-label={fieldHelp.priority} value={priority} onChange={(event) => setPriority(event.target.value as ObjectivePriority)} disabled={!canManage} title={fieldHelp.priority}>
                 {OBJECTIVE_PRIORITIES.map((value) => (
                   <option key={value} value={value}>{value}</option>
                 ))}
@@ -1235,7 +1235,7 @@ export default function ObjectiveDetail() {
             </div>
             <div className="form-field">
               <label title={fieldHelp.backlogState}>{t('Backlog State')}</label>
-              <select value={backlogState} onChange={(event) => setBacklogState(event.target.value as ObjectiveBacklogState)} disabled={!canManage} title={fieldHelp.backlogState}>
+              <select aria-label={fieldHelp.backlogState} value={backlogState} onChange={(event) => setBacklogState(event.target.value as ObjectiveBacklogState)} disabled={!canManage} title={fieldHelp.backlogState}>
                 {OBJECTIVE_BACKLOG_STATES.map((value) => (
                   <option key={value} value={value}>{value}</option>
                 ))}
@@ -1243,7 +1243,7 @@ export default function ObjectiveDetail() {
             </div>
             <div className="form-field">
               <label title={fieldHelp.effort}>{t('Effort')}</label>
-              <select value={effort} onChange={(event) => setEffort(event.target.value as ObjectiveEffort)} disabled={!canManage} title={fieldHelp.effort}>
+              <select aria-label={fieldHelp.effort} value={effort} onChange={(event) => setEffort(event.target.value as ObjectiveEffort)} disabled={!canManage} title={fieldHelp.effort}>
                 {OBJECTIVE_EFFORTS.map((value) => (
                   <option key={value} value={value}>{value}</option>
                 ))}
@@ -1251,19 +1251,19 @@ export default function ObjectiveDetail() {
             </div>
             <div className="form-field">
               <label title={fieldHelp.rank}>{t('Rank')}</label>
-              <input type="number" value={rank} onChange={(event) => setRank(event.target.value)} disabled={!canManage} title={fieldHelp.rank} />
+              <input aria-label={fieldHelp.rank} type="number" value={rank} onChange={(event) => setRank(event.target.value)} disabled={!canManage} title={fieldHelp.rank} />
             </div>
             <div className="form-field">
               <label title={fieldHelp.targetVersion}>{t('Target Version')}</label>
-              <input value={targetVersion} onChange={(event) => setTargetVersion(event.target.value)} disabled={!canManage} title={fieldHelp.targetVersion} />
+              <input aria-label={fieldHelp.targetVersion} value={targetVersion} onChange={(event) => setTargetVersion(event.target.value)} disabled={!canManage} title={fieldHelp.targetVersion} />
             </div>
             <div className="form-field">
               <label title={fieldHelp.dueUtc}>{t('Due UTC')}</label>
-              <input type="datetime-local" value={dueUtc} onChange={(event) => setDueUtc(event.target.value)} disabled={!canManage} title={fieldHelp.dueUtc} />
+              <input aria-label={fieldHelp.dueUtc} type="datetime-local" value={dueUtc} onChange={(event) => setDueUtc(event.target.value)} disabled={!canManage} title={fieldHelp.dueUtc} />
             </div>
             <div className="form-field">
               <label title={fieldHelp.parentObjectiveId}>{t('Parent Objective')}</label>
-              <select value={parentObjectiveId} onChange={(event) => setParentObjectiveId(event.target.value)} disabled={!canManage} title={fieldHelp.parentObjectiveId}>
+              <select aria-label={fieldHelp.parentObjectiveId} value={parentObjectiveId} onChange={(event) => setParentObjectiveId(event.target.value)} disabled={!canManage} title={fieldHelp.parentObjectiveId}>
                 <option value="">{t('No parent objective')}</option>
                 {parentObjectiveId && !selectableObjectiveIdSet.has(parentObjectiveId) && (
                   <option value={parentObjectiveId}>{t('Unavailable backlog item ({{id}})', { id: parentObjectiveId })}</option>
@@ -1275,7 +1275,7 @@ export default function ObjectiveDetail() {
             </div>
             <div className="form-field">
               <label title={fieldHelp.suggestedPipeline}>{t('Suggested Pipeline')}</label>
-              <select value={suggestedPipelineId} onChange={(event) => setSuggestedPipelineId(event.target.value)} disabled={!canManage} title={fieldHelp.suggestedPipeline}>
+              <select aria-label={fieldHelp.suggestedPipeline} value={suggestedPipelineId} onChange={(event) => setSuggestedPipelineId(event.target.value)} disabled={!canManage} title={fieldHelp.suggestedPipeline}>
                 <option value="">{t('None')}</option>
                 {pipelines.map((pipeline) => (
                   <option key={pipeline.id} value={pipeline.id}>{pipeline.name}</option>
@@ -1284,7 +1284,7 @@ export default function ObjectiveDetail() {
             </div>
             <div className="form-field detail-field-full">
               <label title={fieldHelp.blockedByObjectiveIds}>{t('Blocked By Objectives')}</label>
-              <select
+              <select aria-label={fieldHelp.blockedByObjectiveIds}
                 multiple
                 size={Math.min(Math.max(selectableObjectives.length + missingBlockedObjectiveIds.length, 4), 8)}
                 value={blockedByObjectiveIds}
@@ -1304,7 +1304,7 @@ export default function ObjectiveDetail() {
             </div>
             <div className="form-field detail-field-full">
               <label title={fieldHelp.suggestedPlaybooks}>{t('Suggested Playbooks')}</label>
-              <textarea rows={4} value={suggestedPlaybooks} onChange={(event) => setSuggestedPlaybooks(event.target.value)} disabled={!canManage} placeholder={t('playbook-id:InlineFullContent')} title={fieldHelp.suggestedPlaybooks} />
+              <textarea aria-label={fieldHelp.suggestedPlaybooks} rows={4} value={suggestedPlaybooks} onChange={(event) => setSuggestedPlaybooks(event.target.value)} disabled={!canManage} placeholder={t('playbook-id:InlineFullContent')} title={fieldHelp.suggestedPlaybooks} />
             </div>
           </div>
         </div>
@@ -1386,7 +1386,7 @@ export default function ObjectiveDetail() {
                 <div className="detail-form-grid">
                   <div className="form-field">
                     <label title={fieldHelp.refinementCaptain}>{t('Captain')}</label>
-                    <select value={refinementCaptainId} onChange={(event) => setRefinementCaptainId(event.target.value)} disabled={!canManage || creatingRefinement} title={fieldHelp.refinementCaptain}>
+                    <select aria-label={fieldHelp.refinementCaptain} value={refinementCaptainId} onChange={(event) => setRefinementCaptainId(event.target.value)} disabled={!canManage || creatingRefinement} title={fieldHelp.refinementCaptain}>
                       <option value="">{t('Select a captain')}</option>
                       {captains.map((captain) => (
                         <option key={captain.id} value={captain.id}>
@@ -1397,7 +1397,7 @@ export default function ObjectiveDetail() {
                   </div>
                   <div className="form-field">
                     <label title={fieldHelp.refinementVessel}>{t('Vessel Context')}</label>
-                    <select value={refinementVesselId} onChange={(event) => setRefinementVesselId(event.target.value)} disabled={!canManage || creatingRefinement} title={fieldHelp.refinementVessel}>
+                    <select aria-label={fieldHelp.refinementVessel} value={refinementVesselId} onChange={(event) => setRefinementVesselId(event.target.value)} disabled={!canManage || creatingRefinement} title={fieldHelp.refinementVessel}>
                       <option value="">{t('No vessel context')}</option>
                       {vessels.map((vessel) => (
                         <option key={vessel.id} value={vessel.id}>{vessel.name}</option>
@@ -1406,7 +1406,7 @@ export default function ObjectiveDetail() {
                   </div>
                   <div className="form-field">
                     <label title={fieldHelp.refinementFleet}>{t('Fleet Context')}</label>
-                    <select value={refinementFleetId} onChange={(event) => setRefinementFleetId(event.target.value)} disabled={!canManage || creatingRefinement} title={fieldHelp.refinementFleet}>
+                    <select aria-label={fieldHelp.refinementFleet} value={refinementFleetId} onChange={(event) => setRefinementFleetId(event.target.value)} disabled={!canManage || creatingRefinement} title={fieldHelp.refinementFleet}>
                       <option value="">{t('No fleet context')}</option>
                       {fleets.map((fleet) => (
                         <option key={fleet.id} value={fleet.id}>{fleet.name}</option>
@@ -1415,11 +1415,11 @@ export default function ObjectiveDetail() {
                   </div>
                   <div className="form-field">
                     <label title={fieldHelp.refinementTitle}>{t('Session Title')}</label>
-                    <input value={refinementTitle} onChange={(event) => setRefinementTitle(event.target.value)} disabled={!canManage || creatingRefinement} placeholder={t('Optional refinement session title')} title={fieldHelp.refinementTitle} />
+                    <input aria-label={fieldHelp.refinementTitle} value={refinementTitle} onChange={(event) => setRefinementTitle(event.target.value)} disabled={!canManage || creatingRefinement} placeholder={t('Optional refinement session title')} title={fieldHelp.refinementTitle} />
                   </div>
                   <div className="form-field" style={{ gridColumn: '1 / -1' }}>
                     <label title={fieldHelp.refinementInitialMessage}>{t('Initial Refinement Prompt')}</label>
-                    <textarea rows={4} value={refinementInitialMessage} onChange={(event) => setRefinementInitialMessage(event.target.value)} disabled={!canManage || creatingRefinement} placeholder={t('Optional kickoff prompt for the selected captain')} title={fieldHelp.refinementInitialMessage} />
+                    <textarea aria-label={fieldHelp.refinementInitialMessage} rows={4} value={refinementInitialMessage} onChange={(event) => setRefinementInitialMessage(event.target.value)} disabled={!canManage || creatingRefinement} placeholder={t('Optional kickoff prompt for the selected captain')} title={fieldHelp.refinementInitialMessage} />
                   </div>
                 </div>
                 {selectedRefinementCaptain && (
@@ -1522,7 +1522,7 @@ export default function ObjectiveDetail() {
 
                       <div className="form-field" style={{ marginTop: '1rem' }}>
                         <label title={fieldHelp.refinementComposer}>{t('Send Refinement Message')}</label>
-                        <textarea rows={4} value={refinementComposer} onChange={(event) => setRefinementComposer(event.target.value)} disabled={!canManage || sendingRefinement} placeholder={t('Ask the selected captain to sharpen scope, acceptance criteria, non-goals, or rollout constraints.')} title={fieldHelp.refinementComposer} />
+                        <textarea aria-label={fieldHelp.refinementComposer} rows={4} value={refinementComposer} onChange={(event) => setRefinementComposer(event.target.value)} disabled={!canManage || sendingRefinement} placeholder={t('Ask the selected captain to sharpen scope, acceptance criteria, non-goals, or rollout constraints.')} title={fieldHelp.refinementComposer} />
                       </div>
 
                       <div className="form-actions">

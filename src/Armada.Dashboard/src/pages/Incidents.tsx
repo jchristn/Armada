@@ -350,13 +350,13 @@ export default function Incidents() {
             onChange={(event) => setSearch(event.target.value)}
             placeholder={t('Search by title, summary, impact, environment, or ID...')}
           />
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
+          <select aria-label={t('All statuses')} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
             <option value="all">{t('All statuses')}</option>
             {INCIDENT_STATUSES.map((status) => (
               <option key={status} value={status}>{status}</option>
             ))}
           </select>
-          <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value as typeof severityFilter)}>
+          <select aria-label={t('All severities')} value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value as typeof severityFilter)}>
             <option value="all">{t('All severities')}</option>
             {INCIDENT_SEVERITIES.map((severity) => (
               <option key={severity} value={severity}>{severity}</option>

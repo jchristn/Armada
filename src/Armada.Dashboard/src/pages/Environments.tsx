@@ -348,19 +348,19 @@ export default function Environments() {
             onChange={(event) => setSearch(event.target.value)}
             placeholder={t('Search by name, description, base URL, configuration source, or ID...')}
           />
-          <select value={kindFilter} onChange={(event) => setKindFilter(event.target.value as typeof kindFilter)}>
+          <select aria-label={t('All kinds')} value={kindFilter} onChange={(event) => setKindFilter(event.target.value as typeof kindFilter)}>
             <option value="all">{t('All kinds')}</option>
             {ENVIRONMENT_KINDS.map((kind) => (
               <option key={kind} value={kind}>{kind}</option>
             ))}
           </select>
-          <select value={vesselFilter} onChange={(event) => setVesselFilter(event.target.value)}>
+          <select aria-label={t('All vessels')} value={vesselFilter} onChange={(event) => setVesselFilter(event.target.value)}>
             <option value="all">{t('All vessels')}</option>
             {vessels.map((vessel) => (
               <option key={vessel.id} value={vessel.id}>{vessel.name}</option>
             ))}
           </select>
-          <select value={activeFilter} onChange={(event) => setActiveFilter(event.target.value as typeof activeFilter)}>
+          <select aria-label={t('All states')} value={activeFilter} onChange={(event) => setActiveFilter(event.target.value as typeof activeFilter)}>
             <option value="all">{t('All states')}</option>
             <option value="active">{t('Active')}</option>
             <option value="inactive">{t('Inactive')}</option>

@@ -700,7 +700,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
       {fleetMode === 'existing' ? (
         <div className="form-group">
           <label title={t(tooltips.fleetSelect)}>{t('Fleet')}</label>
-          <select
+          <select aria-label={t(tooltips.fleetSelect)}
             title={t(tooltips.fleetSelect)}
             value={selectedFleetId}
             onChange={(event) => setSelectedFleetId(event.target.value)}
@@ -718,7 +718,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
         <div className="wizard-form-grid">
           <div className="form-group">
             <label title={t(tooltips.fleetName)}>{t('Fleet Name')}</label>
-            <input
+            <input aria-label={t(tooltips.fleetName)}
               title={t(tooltips.fleetName)}
               value={fleetForm.name}
               onChange={(event) => setFleetForm({ ...fleetForm, name: event.target.value })}
@@ -727,7 +727,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
           </div>
           <div className="form-group">
             <label title={t(tooltips.fleetDescription)}>{t('Description')}</label>
-            <input
+            <input aria-label={t(tooltips.fleetDescription)}
               title={t(tooltips.fleetDescription)}
               value={fleetForm.description}
               onChange={(event) => setFleetForm({ ...fleetForm, description: event.target.value })}
@@ -768,7 +768,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
       {vesselMode === 'existing' ? (
         <div className="form-group">
           <label title={t(tooltips.vesselSelect)}>{t('Vessel')}</label>
-          <select
+          <select aria-label={t(tooltips.vesselSelect)}
             title={t(tooltips.vesselSelect)}
             value={selectedVesselId}
             onChange={(event) => setSelectedVesselId(event.target.value)}
@@ -787,7 +787,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
           <div className="wizard-form-grid">
             <div className="form-group">
               <label title={t(tooltips.vesselName)}>{t('Vessel Name')}</label>
-              <input
+              <input aria-label={t(tooltips.vesselName)}
                 title={t(tooltips.vesselName)}
                 value={vesselForm.name}
                 onChange={(event) => setVesselForm({ ...vesselForm, name: event.target.value })}
@@ -797,7 +797,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
             </div>
             <div className="form-group">
               <label title={t(tooltips.defaultBranch)}>{t('Default Branch')}</label>
-              <input
+              <input aria-label={t(tooltips.defaultBranch)}
                 title={t(tooltips.defaultBranch)}
                 value={vesselForm.defaultBranch}
                 onChange={(event) => setVesselForm({ ...vesselForm, defaultBranch: event.target.value })}
@@ -807,7 +807,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
           </div>
           <div className="form-group">
             <label title={t(tooltips.repoUrl)}>{t('Repository URL')}</label>
-            <input
+            <input aria-label={t(tooltips.repoUrl)}
               title={t(tooltips.repoUrl)}
               value={vesselForm.repoUrl}
               onChange={(event) => setVesselForm({ ...vesselForm, repoUrl: event.target.value })}
@@ -818,7 +818,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
           <div className="wizard-form-grid">
             <div className="form-group">
               <label title={t(tooltips.workingDirectory)}>{t('Working Directory')}</label>
-              <input
+              <input aria-label={t(tooltips.workingDirectory)}
                 title={t(tooltips.workingDirectory)}
                 value={vesselForm.workingDirectory}
                 onChange={(event) => setVesselForm({ ...vesselForm, workingDirectory: event.target.value })}
@@ -827,7 +827,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
             </div>
             <div className="form-group">
               <label title={t(tooltips.landingMode)}>{t('Landing Mode')}</label>
-              <select
+              <select aria-label={t(tooltips.landingMode)}
                 title={t(tooltips.landingMode)}
                 value={vesselForm.landingMode}
                 onChange={(event) => setVesselForm({ ...vesselForm, landingMode: event.target.value })}
@@ -864,7 +864,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
           <div className="wizard-form-grid">
             <div className="form-group">
               <label title={t(tooltips.projectContext)}>{t('Project Context')}</label>
-              <textarea
+              <textarea aria-label={t(tooltips.projectContext)}
                 title={t(tooltips.projectContext)}
                 rows={4}
                 value={vesselForm.projectContext}
@@ -874,7 +874,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
             </div>
             <div className="form-group">
               <label title={t(tooltips.styleGuide)}>{t('Style Guide')}</label>
-              <textarea
+              <textarea aria-label={t(tooltips.styleGuide)}
                 title={t(tooltips.styleGuide)}
                 rows={4}
                 value={vesselForm.styleGuide}
@@ -918,7 +918,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
       {captainMode === 'existing' ? (
         <div className="form-group">
           <label title={t(tooltips.captainSelect)}>{t('Captain')}</label>
-          <select
+          <select aria-label={t(tooltips.captainSelect)}
             title={t(tooltips.captainSelect)}
             value={selectedCaptainId}
             onChange={(event) => setSelectedCaptainId(event.target.value)}
@@ -937,7 +937,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
           <div className="wizard-form-grid">
             <div className="form-group">
               <label title={t(tooltips.captainName)}>{t('Captain Name')}</label>
-              <input
+              <input aria-label={t(tooltips.captainName)}
                 title={t(tooltips.captainName)}
                 value={captainForm.name}
                 onChange={(event) => setCaptainForm({ ...captainForm, name: event.target.value })}
@@ -946,7 +946,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
             </div>
             <div className="form-group">
               <label title={t(tooltips.runtime)}>{t('Runtime')}</label>
-              <select
+              <select aria-label={t(tooltips.runtime)}
                 title={t(tooltips.runtime)}
                 value={captainForm.runtime}
                 onChange={(event) => setCaptainForm({ ...captainForm, runtime: event.target.value })}
@@ -963,7 +963,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
           </div>
           <div className="form-group">
             <label title={t(tooltips.model)}>{t('Model')}</label>
-            <input
+            <input aria-label={t(tooltips.model)}
               title={t(tooltips.model)}
               value={captainForm.model}
               onChange={(event) => setCaptainForm({ ...captainForm, model: event.target.value })}
@@ -972,7 +972,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
           </div>
           <div className="form-group">
             <label title={t('Capability tier for routing. Cheaper tiers handle routine work; stronger tiers handle complex work and serve as fallback when a preferred captain is busy.')}>{t('Capability Tier')}</label>
-            <select
+            <select aria-label={t('Capability Tier')}
               value={captainForm.tier}
               onChange={(event) => setCaptainForm({ ...captainForm, tier: event.target.value })}
             >
@@ -984,7 +984,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
           </div>
           <div className="form-group">
             <label title={t(tooltips.systemInstructions)}>{t('System Instructions')}</label>
-            <textarea
+            <textarea aria-label={t(tooltips.systemInstructions)}
               title={t(tooltips.systemInstructions)}
               rows={4}
               value={captainForm.systemInstructions}
@@ -1024,7 +1024,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
 
       <div className="form-group">
         <label title={t(tooltips.missionTitle)}>{t('Mission Title')}</label>
-        <input
+        <input aria-label={t(tooltips.missionTitle)}
           title={t(tooltips.missionTitle)}
           value={dispatchForm.title}
           onChange={(event) => setDispatchForm({ ...dispatchForm, title: event.target.value })}
@@ -1033,7 +1033,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
       </div>
       <div className="form-group">
         <label title={t(tooltips.missionDescription)}>{t('Mission Description')}</label>
-        <textarea
+        <textarea aria-label={t(tooltips.missionDescription)}
           title={t(tooltips.missionDescription)}
           rows={7}
           value={dispatchForm.description}
@@ -1043,7 +1043,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
       </div>
       <div className="form-group">
         <label title={t(tooltips.priority)}>{t('Priority')}</label>
-        <input
+        <input aria-label={t(tooltips.priority)}
           title={t(tooltips.priority)}
           type="number"
           value={dispatchForm.priority}

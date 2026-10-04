@@ -500,11 +500,11 @@ export default function RunbookDetail() {
           <div className="detail-form-grid">
             <div className="detail-field">
               <span className="detail-label">{t('Title')}</span>
-              <input value={executionTitle} onChange={(event) => setExecutionTitle(event.target.value)} placeholder={runbook.title} />
+              <input aria-label={t('Title')} value={executionTitle} onChange={(event) => setExecutionTitle(event.target.value)} placeholder={runbook.title} />
             </div>
             <div className="detail-field">
               <span className="detail-label">{t('Workflow Profile')}</span>
-              <select value={executionWorkflowProfileId} onChange={(event) => setExecutionWorkflowProfileId(event.target.value)}>
+              <select aria-label={t('Workflow Profile')} value={executionWorkflowProfileId} onChange={(event) => setExecutionWorkflowProfileId(event.target.value)}>
                 <option value="">{t('Use runbook binding')}</option>
                 {profiles.map((profile) => (
                   <option key={profile.id} value={profile.id}>{profile.name}</option>
@@ -513,7 +513,7 @@ export default function RunbookDetail() {
             </div>
             <div className="detail-field">
               <span className="detail-label">{t('Environment')}</span>
-              <select value={executionEnvironmentId} onChange={(event) => setExecutionEnvironmentId(event.target.value)}>
+              <select aria-label={t('Environment')} value={executionEnvironmentId} onChange={(event) => setExecutionEnvironmentId(event.target.value)}>
                 <option value="">{t('Use runbook binding')}</option>
                 {environments.map((environment) => (
                   <option key={environment.id} value={environment.id}>{environment.name}</option>
@@ -522,11 +522,11 @@ export default function RunbookDetail() {
             </div>
             <div className="detail-field">
               <span className="detail-label">{t('Environment Name')}</span>
-              <input value={executionEnvironmentName} onChange={(event) => setExecutionEnvironmentName(event.target.value)} />
+              <input aria-label={t('Environment Name')} value={executionEnvironmentName} onChange={(event) => setExecutionEnvironmentName(event.target.value)} />
             </div>
             <div className="detail-field">
               <span className="detail-label">{t('Check Type')}</span>
-              <select value={executionCheckType} onChange={(event) => setExecutionCheckType(event.target.value as CheckRunType | '')}>
+              <select aria-label={t('Check Type')} value={executionCheckType} onChange={(event) => setExecutionCheckType(event.target.value as CheckRunType | '')}>
                 <option value="">{t('No default check')}</option>
                 {RUNBOOK_CHECK_TYPES.map((checkType) => (
                   <option key={checkType} value={checkType}>{checkType}</option>
@@ -535,7 +535,7 @@ export default function RunbookDetail() {
             </div>
             <div className="detail-field detail-field-full">
               <span className="detail-label">{t('Execution Notes')}</span>
-              <textarea rows={3} value={executionNotes} onChange={(event) => setExecutionNotes(event.target.value)} />
+              <textarea aria-label={t('Execution Notes')} rows={3} value={executionNotes} onChange={(event) => setExecutionNotes(event.target.value)} />
             </div>
           </div>
 
@@ -572,19 +572,19 @@ export default function RunbookDetail() {
           <div className="detail-form-grid">
             <div className="detail-field">
               <span className="detail-label">{t('File Name')}</span>
-              <input value={fileName} onChange={(event) => setFileName(event.target.value)} disabled={!canManage} />
+              <input aria-label={t('File Name')} value={fileName} onChange={(event) => setFileName(event.target.value)} disabled={!canManage} />
             </div>
             <div className="detail-field">
               <span className="detail-label">{t('Title')}</span>
-              <input value={title} onChange={(event) => setTitle(event.target.value)} disabled={!canManage} />
+              <input aria-label={t('Title')} value={title} onChange={(event) => setTitle(event.target.value)} disabled={!canManage} />
             </div>
             <div className="detail-field detail-field-full">
               <span className="detail-label">{t('Description')}</span>
-              <textarea rows={2} value={description} onChange={(event) => setDescription(event.target.value)} disabled={!canManage} />
+              <textarea aria-label={t('Description')} rows={2} value={description} onChange={(event) => setDescription(event.target.value)} disabled={!canManage} />
             </div>
             <div className="detail-field">
               <span className="detail-label">{t('Workflow Profile')}</span>
-              <select value={workflowProfileId} onChange={(event) => setWorkflowProfileId(event.target.value)} disabled={!canManage}>
+              <select aria-label={t('Workflow Profile')} value={workflowProfileId} onChange={(event) => setWorkflowProfileId(event.target.value)} disabled={!canManage}>
                 <option value="">{t('No workflow profile')}</option>
                 {profiles.map((profile) => (
                   <option key={profile.id} value={profile.id}>{profile.name}</option>
@@ -593,7 +593,7 @@ export default function RunbookDetail() {
             </div>
             <div className="detail-field">
               <span className="detail-label">{t('Environment')}</span>
-              <select value={environmentId} onChange={(event) => setEnvironmentId(event.target.value)} disabled={!canManage}>
+              <select aria-label={t('Environment')} value={environmentId} onChange={(event) => setEnvironmentId(event.target.value)} disabled={!canManage}>
                 <option value="">{t('No environment')}</option>
                 {environments.map((environment) => (
                   <option key={environment.id} value={environment.id}>{environment.name}</option>
@@ -602,11 +602,11 @@ export default function RunbookDetail() {
             </div>
             <div className="detail-field">
               <span className="detail-label">{t('Environment Name')}</span>
-              <input value={environmentName} onChange={(event) => setEnvironmentName(event.target.value)} disabled={!canManage} />
+              <input aria-label={t('Environment Name')} value={environmentName} onChange={(event) => setEnvironmentName(event.target.value)} disabled={!canManage} />
             </div>
             <div className="detail-field">
               <span className="detail-label">{t('Default Check Type')}</span>
-              <select value={defaultCheckType} onChange={(event) => setDefaultCheckType(event.target.value as CheckRunType | '')} disabled={!canManage}>
+              <select aria-label={t('Default Check Type')} value={defaultCheckType} onChange={(event) => setDefaultCheckType(event.target.value as CheckRunType | '')} disabled={!canManage}>
                 <option value="">{t('No default check')}</option>
                 {RUNBOOK_CHECK_TYPES.map((checkType) => (
                   <option key={checkType} value={checkType}>{checkType}</option>
@@ -615,7 +615,7 @@ export default function RunbookDetail() {
             </div>
             <div className="detail-field detail-field-full">
               <span className="detail-label">{t('Overview Markdown')}</span>
-              <textarea rows={10} value={overviewMarkdown} onChange={(event) => setOverviewMarkdown(event.target.value)} disabled={!canManage} />
+              <textarea aria-label={t('Overview Markdown')} rows={10} value={overviewMarkdown} onChange={(event) => setOverviewMarkdown(event.target.value)} disabled={!canManage} />
             </div>
           </div>
 
@@ -718,19 +718,19 @@ export default function RunbookDetail() {
                   <div className="detail-form-grid">
                     <div className="detail-field">
                       <span className="detail-label">{t('Name')}</span>
-                      <input value={parameter.name} onChange={(event) => updateParameter(index, 'name', event.target.value)} disabled={!canManage} />
+                      <input aria-label={t('Name')} value={parameter.name} onChange={(event) => updateParameter(index, 'name', event.target.value)} disabled={!canManage} />
                     </div>
                     <div className="detail-field">
                       <span className="detail-label">{t('Label')}</span>
-                      <input value={parameter.label || ''} onChange={(event) => updateParameter(index, 'label', event.target.value)} disabled={!canManage} />
+                      <input aria-label={t('Label')} value={parameter.label || ''} onChange={(event) => updateParameter(index, 'label', event.target.value)} disabled={!canManage} />
                     </div>
                     <div className="detail-field">
                       <span className="detail-label">{t('Default Value')}</span>
-                      <input value={parameter.defaultValue || ''} onChange={(event) => updateParameter(index, 'defaultValue', event.target.value)} disabled={!canManage} />
+                      <input aria-label={t('Default Value')} value={parameter.defaultValue || ''} onChange={(event) => updateParameter(index, 'defaultValue', event.target.value)} disabled={!canManage} />
                     </div>
                     <div className="detail-field detail-field-full">
                       <span className="detail-label">{t('Description')}</span>
-                      <textarea rows={2} value={parameter.description || ''} onChange={(event) => updateParameter(index, 'description', event.target.value)} disabled={!canManage} />
+                      <textarea aria-label={t('Description')} rows={2} value={parameter.description || ''} onChange={(event) => updateParameter(index, 'description', event.target.value)} disabled={!canManage} />
                     </div>
                   </div>
                   <div className="inline-actions" style={{ marginTop: '0.75rem' }}>
@@ -764,11 +764,11 @@ export default function RunbookDetail() {
                   <div className="detail-form-grid">
                     <div className="detail-field">
                       <span className="detail-label">{t('Title')}</span>
-                      <input value={step.title} onChange={(event) => updateStep(index, 'title', event.target.value)} disabled={!canManage} />
+                      <input aria-label={t('Title')} value={step.title} onChange={(event) => updateStep(index, 'title', event.target.value)} disabled={!canManage} />
                     </div>
                     <div className="detail-field detail-field-full">
                       <span className="detail-label">{t('Instructions')}</span>
-                      <textarea rows={4} value={step.instructions} onChange={(event) => updateStep(index, 'instructions', event.target.value)} disabled={!canManage} />
+                      <textarea aria-label={t('Instructions')} rows={4} value={step.instructions} onChange={(event) => updateStep(index, 'instructions', event.target.value)} disabled={!canManage} />
                     </div>
                   </div>
                   {canManage && (
@@ -799,7 +799,7 @@ export default function RunbookDetail() {
 
           <div className="detail-field detail-field-full" style={{ marginTop: '1rem' }}>
             <span className="detail-label">{t('Execution Notes')}</span>
-            <textarea
+            <textarea aria-label={t('Execution Notes')}
               rows={3}
               value={executionDraft.notes || ''}
               onChange={(event) => setExecutionDraft((current) => current ? { ...current, notes: event.target.value } : current)}
@@ -822,7 +822,7 @@ export default function RunbookDetail() {
                 </label>
                 <div className="detail-field detail-field-full" style={{ marginTop: '0.75rem' }}>
                   <span className="detail-label">{t('Step Notes')}</span>
-                  <textarea
+                  <textarea aria-label={t('Step Notes')}
                     rows={2}
                     value={executionDraft.stepNotes[step.id] || ''}
                     onChange={(event) => updateExecutionStepNote(step.id, event.target.value)}

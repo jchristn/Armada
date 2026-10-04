@@ -736,7 +736,7 @@ export default function VesselHealth({ onRunAction }: VesselHealthProps) {
                         ) : t(col.label)}
                       </th>
                     ))}
-                    <th scope="col" className="text-right">{t('Actions')}</th>
+                    <th scope="col" className="text-right vh-col-actions-head"><span className="vh-col-actions-label">{t('Actions')}</span></th>
                   </tr>
                 </thead>
                 <tbody>

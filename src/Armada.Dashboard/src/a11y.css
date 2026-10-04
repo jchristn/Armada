@@ -1,0 +1,96 @@
+/* Accessibility overrides (V1 readiness W6.5): contrast, focus visibility, and link affordance.
+   Kept in one file so the rules are easy to audit and do not churn the large App.css. */
+
+/* Visible keyboard focus everywhere (mouse clicks do not trigger :focus-visible). */
+:where(a, button, summary, select, input, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+.sidebar :where(a, button):focus-visible {
+    outline-color: var(--sidebar-accent);
+    outline-offset: -2px;
+}
+:where([role="dialog"], [role="alertdialog"]):focus { outline: none; }
+
+/* Sidebar section headers were 0.6 opacity (3.0:1); 0.9 keeps the hierarchy and passes 4.5:1. */
+.sidebar-section-header { opacity: 0.9; }
+.sidebar-section.section-active .sidebar-section-header,
+.sidebar-nav-item.sidebar-nav-primary,
+.sidebar-nav-item.sidebar-nav-primary svg {
+    color: var(--sidebar-accent);
+}
+
+/* Links inside running text must not rely on color alone. */
+.breadcrumb a,
+.breadcrumbs a,
+p a:not(.btn),
+li > a:not(.btn):not([class]),
+.text-block a:not(.btn) {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    text-decoration-thickness: 1px;
+}
+
+/* Login footer version and default-credentials hint were dimmed below 4.5:1. */
+.login-footer > span { opacity: 1 !important; }
+.login-default-creds { opacity: 1; }
+.login-footer .github-link { opacity: 0.8; }
+
+/* Skip link: first Tab stop on every page, visible only while focused. */
+.skip-link {
+    position: absolute;
+    left: 0.75rem;
+    top: -3rem;
+    z-index: 3000;
+    padding: 0.5rem 0.9rem;
+    border-radius: var(--radius);
+    background: var(--accent-solid);
+    color: #fff;
+    font-weight: 600;
+    text-decoration: none;
+}
+.skip-link:focus { top: 0.5rem; }
+.main:focus { outline: none; }
+
+/* Sidebar footer version text was rendered at 0.5 opacity (1.6:1). */
+.sidebar-footer span { opacity: 1 !important; color: var(--sidebar-text) !important; }
+
+/* Readiness pills use fixed light-theme text colors; give dark mode readable ones. */
+[data-theme="dark"] .readiness-pill.ready { color: #4ade80; }
+[data-theme="dark"] .readiness-pill.warning { color: #fbbf24; }
+[data-theme="dark"] .readiness-pill.error { color: #fca5a5; }
+
+/* Solid status fills that carry white text (sidebar attention badges). */
+:root { --danger: #dc2626; --warning: #b45309; }
+
+/* Git sync badges used a 15% tint of the status color behind the same color (3.9:1); use the tag pairs. */
+.git-sync-even { background: var(--tag-complete-bg); color: var(--tag-complete-fg); }
+.git-sync-ahead { background: var(--tag-working-bg); color: var(--tag-working-fg); }
+.git-sync-behind { background: var(--tag-review-bg); color: var(--tag-review-fg); }
+
+/* Light theme: status text on tinted panels needs the darker tag foregrounds. */
+:root:not([data-theme="dark"]) .readiness-issue-severity.warning { color: var(--tag-review-fg); }
+:root:not([data-theme="dark"]) .readiness-issue-severity.error { color: var(--tag-failed-fg); }
+:root:not([data-theme="dark"]) .tag.p0 { color: var(--tag-failed-fg); }
+:root:not([data-theme="dark"]) .api-tag-badge,
+:root:not([data-theme="dark"]) .segmented-option.active { color: var(--accent-hover); }
+.doctor-pass { color: var(--tag-complete-fg); }
+.doctor-warn { color: var(--tag-review-fg); }
+.doctor-fail { color: var(--tag-failed-fg); }
+
+/* Already-imported rows in the import review were faded to 0.72 opacity (3.1:1); mark them with the row tint instead. */
+tr.row-muted td { opacity: 1; background: var(--bg-hover); }
+
+/* Login default-credentials code sample. */
+.login-default-creds code { opacity: 1; }
+/* Cards rendered as <button> do not inherit the text color (black on the dark theme). */
+button.card { color: var(--text); }
+
+/* The live log badge faded its text to 50% while pulsing; pulse a ring around it instead. */
+.log-live-badge { animation-name: log-live-ring; }
+@keyframes log-live-ring {
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 55%, transparent); }
+    50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) { .log-live-badge { animation: none; } }
+[data-theme="dark"] .log-live-badge { background: #15803d; }

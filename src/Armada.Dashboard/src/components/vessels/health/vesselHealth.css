@@ -58,7 +58,7 @@
 .vh-progress { display: flex; flex-direction: column; gap: 0.25rem; }
 .vh-progress-label { font-weight: 600; color: var(--accent); }
 .vh-progress-track { display: block; height: 6px; background: var(--bg-hover); border-radius: 3px; overflow: hidden; width: 100%; min-width: 10rem; }
-.vh-progress-fill { display: block; height: 100%; background: var(--accent); transition: width 0.3s ease; }
+.vh-progress-fill { display: block; height: 100%; background: var(--accent-solid); transition: width 0.3s ease; }
 @media (prefers-reduced-motion: reduce) { .vh-progress-fill { transition: none; } }
 
 /* CTA and empty state */
@@ -208,6 +208,25 @@
    icon shape differs per status and the tooltip carries the label); the text stays for screen readers. */
 @container vh-table (max-width: 90rem) {
     .vh-table td .vh-badge-compact .vh-badge-text {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+    }
+}
+/* All columns on a laptop-width content area (about 1000px at a 1280px window): tighten cell padding and header
+   type, narrow the name columns, and keep the Actions header for screen readers only, so the full set of columns
+   fits without a horizontal scrollbar. */
+@container vh-table (max-width: 75rem) {
+    .vh-table th, .vh-table td { padding-left: 0.3rem; padding-right: 0.3rem; }
+    .vh-table th { font-size: 0.72rem; letter-spacing: 0; }
+    .vh-table .vh-sort-btn { gap: 0.1rem; }
+    .vh-col-vessel { min-width: 8rem; }
+    .vh-col-fleet { min-width: 5.5rem; }
+    .vh-table th.vh-col-actions-head { width: 2.5rem; }
+    .vh-table th.vh-col-actions-head .vh-col-actions-label {
         position: absolute;
         width: 1px;
         height: 1px;

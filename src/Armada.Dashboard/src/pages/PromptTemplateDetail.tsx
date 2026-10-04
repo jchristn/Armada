@@ -530,6 +530,7 @@ export default function PromptTemplateDetail() {
           <textarea
             ref={textareaRef}
             className="template-editor-textarea"
+            aria-label={t('Template Content')}
             value={content}
             onChange={e => handleContentChange(e.target.value)}
             rows={30}
@@ -563,7 +564,7 @@ export default function PromptTemplateDetail() {
         </div>
 
         {/* Right: Parameter Reference Panel */}
-        <div className="template-param-panel">
+        <div className="template-param-panel" role="region" aria-label={t('Parameters')} tabIndex={0}>
           <h4>{t('Parameters')}</h4>
           <p style={{ fontSize: '0.78em', color: 'var(--text-dim)', margin: '0 0 0.75rem 0' }}>
             {t('Click a parameter to insert it at the cursor position.')}

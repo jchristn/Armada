@@ -505,7 +505,7 @@ export default function Endpoints() {
       <div className="card" style={{ padding: '1rem', marginBottom: '1rem' }}>
         <div className="playbook-filter-row">
           <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('Search by name, base URL, model, or ID...')} />
-          <select value={kindFilter} onChange={(e) => setKindFilter(e.target.value)}>
+          <select aria-label={t('All kinds')} value={kindFilter} onChange={(e) => setKindFilter(e.target.value)}>
             <option value="all">{t('All kinds')}</option>
             {KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
           </select>

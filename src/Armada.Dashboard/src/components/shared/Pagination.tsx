@@ -71,6 +71,7 @@ export default function Pagination({
           <input
             type="number"
             className="page-input"
+            aria-label={t('Page number')}
             value={pageInput}
             onChange={e => handlePageInputChange(e.target.value)}
             onBlur={handlePageInputSubmit}
@@ -89,6 +90,7 @@ export default function Pagination({
         </button>
         <select
           className="page-size-select"
+          aria-label={t('Items per page')}
           value={pageSize}
           onChange={e => onPageSizeChange(parseInt(e.target.value, 10))}
         >

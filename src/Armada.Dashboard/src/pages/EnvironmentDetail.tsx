@@ -383,7 +383,7 @@ export default function EnvironmentDetail() {
           <div className="detail-form-grid">
             <div className="detail-field">
               <span className="detail-label">{t('Vessel')}</span>
-              <select value={vesselId} onChange={(event) => setVesselId(event.target.value)} disabled={!canManage}>
+              <select aria-label={t('Vessel')} value={vesselId} onChange={(event) => setVesselId(event.target.value)} disabled={!canManage}>
                 <option value="">{t('Select a vessel')}</option>
                 {vessels.map((vessel) => (
                   <option key={vessel.id} value={vessel.id}>{vessel.name}</option>
@@ -393,12 +393,12 @@ export default function EnvironmentDetail() {
 
             <div className="detail-field">
               <span className="detail-label">{t('Name')}</span>
-              <input value={name} onChange={(event) => setName(event.target.value)} disabled={!canManage} />
+              <input aria-label={t('Name')} value={name} onChange={(event) => setName(event.target.value)} disabled={!canManage} />
             </div>
 
             <div className="detail-field">
               <span className="detail-label">{t('Kind')}</span>
-              <select value={kind} onChange={(event) => setKind(event.target.value as EnvironmentKind)} disabled={!canManage}>
+              <select aria-label={t('Kind')} value={kind} onChange={(event) => setKind(event.target.value as EnvironmentKind)} disabled={!canManage}>
                 {ENVIRONMENT_KINDS.map((value) => (
                   <option key={value} value={value}>{value}</option>
                 ))}
@@ -407,32 +407,32 @@ export default function EnvironmentDetail() {
 
             <div className="detail-field">
               <span className="detail-label">{t('Configuration Source')}</span>
-              <input value={configurationSource} onChange={(event) => setConfigurationSource(event.target.value)} disabled={!canManage} placeholder={t('e.g. Helm values, appsettings.Production.json, Azure slot config')} />
+              <input aria-label={t('Configuration Source')} value={configurationSource} onChange={(event) => setConfigurationSource(event.target.value)} disabled={!canManage} placeholder={t('e.g. Helm values, appsettings.Production.json, Azure slot config')} />
             </div>
 
             <div className="detail-field">
               <span className="detail-label">{t('Base URL')}</span>
-              <input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} disabled={!canManage} placeholder="https://service.example.com" />
+              <input aria-label={t('Base URL')} value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} disabled={!canManage} placeholder="https://service.example.com" />
             </div>
 
             <div className="detail-field">
               <span className="detail-label">{t('Health Endpoint')}</span>
-              <input value={healthEndpoint} onChange={(event) => setHealthEndpoint(event.target.value)} disabled={!canManage} placeholder="/health or https://service.example.com/health" />
+              <input aria-label={t('Health Endpoint')} value={healthEndpoint} onChange={(event) => setHealthEndpoint(event.target.value)} disabled={!canManage} placeholder="/health or https://service.example.com/health" />
             </div>
 
             <div className="detail-field detail-field-full">
               <span className="detail-label">{t('Description')}</span>
-              <textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} disabled={!canManage} />
+              <textarea aria-label={t('Description')} rows={3} value={description} onChange={(event) => setDescription(event.target.value)} disabled={!canManage} />
             </div>
 
             <div className="detail-field detail-field-full">
               <span className="detail-label">{t('Access Notes')}</span>
-              <textarea rows={4} value={accessNotes} onChange={(event) => setAccessNotes(event.target.value)} disabled={!canManage} placeholder={t('How do operators reach or authenticate to this environment?')} />
+              <textarea aria-label={t('Access Notes')} rows={4} value={accessNotes} onChange={(event) => setAccessNotes(event.target.value)} disabled={!canManage} placeholder={t('How do operators reach or authenticate to this environment?')} />
             </div>
 
             <div className="detail-field detail-field-full">
               <span className="detail-label">{t('Deployment Rules')}</span>
-              <textarea rows={4} value={deploymentRules} onChange={(event) => setDeploymentRules(event.target.value)} disabled={!canManage} placeholder={t('Document freeze windows, approval policy, maintenance constraints, or rollout notes.')} />
+              <textarea aria-label={t('Deployment Rules')} rows={4} value={deploymentRules} onChange={(event) => setDeploymentRules(event.target.value)} disabled={!canManage} placeholder={t('Document freeze windows, approval policy, maintenance constraints, or rollout notes.')} />
             </div>
           </div>
 
@@ -441,11 +441,11 @@ export default function EnvironmentDetail() {
           <div className="detail-form-grid">
             <div className="detail-field">
               <span className="detail-label">{t('Rollout Monitoring Window (minutes)')}</span>
-              <input type="number" min={0} value={rolloutMonitoringWindowMinutes} onChange={(event) => setRolloutMonitoringWindowMinutes(Math.max(0, parseInt(event.target.value || '0', 10) || 0))} disabled={!canManage} />
+              <input aria-label={t('Rollout Monitoring Window (minutes)')} type="number" min={0} value={rolloutMonitoringWindowMinutes} onChange={(event) => setRolloutMonitoringWindowMinutes(Math.max(0, parseInt(event.target.value || '0', 10) || 0))} disabled={!canManage} />
             </div>
             <div className="detail-field">
               <span className="detail-label">{t('Monitoring Interval (seconds)')}</span>
-              <input type="number" min={30} value={rolloutMonitoringIntervalSeconds} onChange={(event) => setRolloutMonitoringIntervalSeconds(Math.max(30, parseInt(event.target.value || '30', 10) || 30))} disabled={!canManage} />
+              <input aria-label={t('Monitoring Interval (seconds)')} type="number" min={30} value={rolloutMonitoringIntervalSeconds} onChange={(event) => setRolloutMonitoringIntervalSeconds(Math.max(30, parseInt(event.target.value || '30', 10) || 30))} disabled={!canManage} />
             </div>
           </div>
 
@@ -472,31 +472,31 @@ export default function EnvironmentDetail() {
                   <div className="detail-form-grid">
                     <div className="detail-field">
                       <span className="detail-label">{t('Name')}</span>
-                      <input value={definition.name} onChange={(event) => setVerificationDefinitions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} disabled={!canManage} />
+                      <input aria-label={t('Name')} value={definition.name} onChange={(event) => setVerificationDefinitions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} disabled={!canManage} />
                     </div>
                     <div className="detail-field">
                       <span className="detail-label">{t('Method')}</span>
-                      <input value={definition.method} onChange={(event) => setVerificationDefinitions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: event.target.value.toUpperCase() } : item))} disabled={!canManage} />
+                      <input aria-label={t('Method')} value={definition.method} onChange={(event) => setVerificationDefinitions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: event.target.value.toUpperCase() } : item))} disabled={!canManage} />
                     </div>
                     <div className="detail-field detail-field-full">
                       <span className="detail-label">{t('Path')}</span>
-                      <input value={definition.path} onChange={(event) => setVerificationDefinitions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, path: event.target.value } : item))} disabled={!canManage} placeholder="/health or /api/status" />
+                      <input aria-label={t('Path')} value={definition.path} onChange={(event) => setVerificationDefinitions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, path: event.target.value } : item))} disabled={!canManage} placeholder="/health or /api/status" />
                     </div>
                     <div className="detail-field">
                       <span className="detail-label">{t('Expected Status')}</span>
-                      <input type="number" min={100} max={599} value={definition.expectedStatusCode ?? 200} onChange={(event) => setVerificationDefinitions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, expectedStatusCode: parseInt(event.target.value || '0', 10) || null } : item))} disabled={!canManage} />
+                      <input aria-label={t('Expected Status')} type="number" min={100} max={599} value={definition.expectedStatusCode ?? 200} onChange={(event) => setVerificationDefinitions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, expectedStatusCode: parseInt(event.target.value || '0', 10) || null } : item))} disabled={!canManage} />
                     </div>
                     <div className="detail-field">
                       <span className="detail-label">{t('Must Contain Text')}</span>
-                      <input value={definition.mustContainText || ''} onChange={(event) => setVerificationDefinitions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, mustContainText: event.target.value || null } : item))} disabled={!canManage} />
+                      <input aria-label={t('Must Contain Text')} value={definition.mustContainText || ''} onChange={(event) => setVerificationDefinitions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, mustContainText: event.target.value || null } : item))} disabled={!canManage} />
                     </div>
                     <div className="detail-field detail-field-full">
                       <span className="detail-label">{t('Headers')}</span>
-                      <textarea rows={3} value={serializeHeaderLines(definition.headers)} onChange={(event) => setVerificationDefinitions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, headers: parseHeaderLines(event.target.value) } : item))} disabled={!canManage} placeholder={t('Header-Name: value')} />
+                      <textarea aria-label={t('Headers')} rows={3} value={serializeHeaderLines(definition.headers)} onChange={(event) => setVerificationDefinitions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, headers: parseHeaderLines(event.target.value) } : item))} disabled={!canManage} placeholder={t('Header-Name: value')} />
                     </div>
                     <div className="detail-field detail-field-full">
                       <span className="detail-label">{t('Request Body')}</span>
-                      <textarea rows={4} value={definition.requestBody || ''} onChange={(event) => setVerificationDefinitions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, requestBody: event.target.value || null } : item))} disabled={!canManage} />
+                      <textarea aria-label={t('Request Body')} rows={4} value={definition.requestBody || ''} onChange={(event) => setVerificationDefinitions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, requestBody: event.target.value || null } : item))} disabled={!canManage} />
                     </div>
                   </div>
 

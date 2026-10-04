@@ -277,7 +277,7 @@ export default function Credentials() {
             <table>
               <thead>
                 <tr>
-                  <th className="col-checkbox"><input type="checkbox" checked={allSelected} onChange={e => e.target.checked ? setSelected(filtered.map(c => c.id)) : setSelected([])} title={t('Select all credentials')} /></th>
+                  <th className="col-checkbox"><input aria-label={t('Select all credentials')} type="checkbox" checked={allSelected} onChange={e => e.target.checked ? setSelected(filtered.map(c => c.id)) : setSelected([])} title={t('Select all credentials')} /></th>
                   <th className="sortable" onClick={() => handleSort('name')}>{t('Name')}{sortIcon('name')}</th>
                   <th>{t('ID')}</th>
                   <th className="sortable" onClick={() => handleSort('userId')}>{t('User')}{sortIcon('userId')}</th>
@@ -292,7 +292,7 @@ export default function Credentials() {
                   <td><input type="text" className="col-filter" value={colFilters.name} onChange={e => { setColFilters(f => ({ ...f, name: e.target.value })); setPageNumber(1); }} placeholder={t('Search...')} /></td>
                   <td></td>
                   <td>
-                    <select
+                    <select aria-label={t('All users')}
                       className="col-filter"
                       value={colFilters.userId}
                       onChange={e => { setColFilters(f => ({ ...f, userId: e.target.value })); setPageNumber(1); }}
@@ -304,7 +304,7 @@ export default function Credentials() {
                     </select>
                   </td>
                   <td>
-                    <select
+                    <select aria-label={t('All tenants')}
                       className="col-filter"
                       value={colFilters.tenantId}
                       onChange={e => { setColFilters(f => ({ ...f, tenantId: e.target.value })); setPageNumber(1); }}
@@ -327,7 +327,7 @@ export default function Credentials() {
                       ? setJsonData({ open: true, title: `Credential: ${c.name || c.id}`, data: c })
                       : openEdit(c)}
                   >
-                    <td className="col-checkbox" onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.includes(c.id)} onChange={() => toggleSelect(c.id)} title={t('Select this credential')} /></td>
+                    <td className="col-checkbox" onClick={e => e.stopPropagation()}><input aria-label={t('Select this credential')} type="checkbox" checked={selected.includes(c.id)} onChange={() => toggleSelect(c.id)} title={t('Select this credential')} /></td>
                     <td><strong>{c.name || '-'}</strong></td>
                      <td className="mono text-dim table-id-cell">
                        <span className="id-display">

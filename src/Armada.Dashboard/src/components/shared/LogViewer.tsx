@@ -144,6 +144,7 @@ export default function LogViewer({
           <div className="viewer-actions">
             <select
               className="log-line-select"
+              aria-label={t('Log lines to show')}
               value={lineCount}
               onChange={e => handleLineCountChange(parseInt(e.target.value, 10))}
             >

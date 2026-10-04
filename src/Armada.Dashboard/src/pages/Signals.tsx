@@ -230,11 +230,11 @@ export default function Signals() {
 
       {/* Filters */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-        <select value={filterType} onChange={e => { setFilterType(e.target.value); setPage(1); }} style={{ width: 'auto', padding: '6px 10px', fontSize: 13 }}>
+        <select aria-label={t('All Types')} value={filterType} onChange={e => { setFilterType(e.target.value); setPage(1); }} style={{ width: 'auto', padding: '6px 10px', fontSize: 13 }}>
           <option value="">{t('All Types')}</option>
           {SIGNAL_TYPES.map(signalType => <option key={signalType} value={signalType}>{t(signalType)}</option>)}
         </select>
-        <select value={filterToCaptain} onChange={e => { setFilterToCaptain(e.target.value); setPage(1); }} style={{ width: 'auto', padding: '6px 10px', fontSize: 13 }}>
+        <select aria-label={t('All Captains')} value={filterToCaptain} onChange={e => { setFilterToCaptain(e.target.value); setPage(1); }} style={{ width: 'auto', padding: '6px 10px', fontSize: 13 }}>
           <option value="">{t('All Captains')}</option>
           {captains.map(c => <option key={c.id} value={c.id}>{c.name || c.id}</option>)}
         </select>
@@ -265,7 +265,7 @@ export default function Signals() {
             <thead>
               <tr>
                 <th style={{ width: 32 }}>
-                  <input type="checkbox" checked={selected.length > 0 && selected.length === sorted.length} onChange={e => e.target.checked ? selectAll() : clearSelection()} title={t('Select all signals')} style={{ width: 'auto' }} />
+                  <input aria-label={t('Select all signals')} type="checkbox" checked={selected.length > 0 && selected.length === sorted.length} onChange={e => e.target.checked ? selectAll() : clearSelection()} title={t('Select all signals')} style={{ width: 'auto' }} />
                 </th>
                 <th style={{ cursor: 'pointer' }} onClick={() => handleSort('id')}>{t('ID')}{sortIcon('id')}</th>
                 <th style={{ cursor: 'pointer' }} onClick={() => handleSort('type')}>{t('Type')}{sortIcon('type')}</th>
@@ -291,7 +291,7 @@ export default function Signals() {
             <tbody>
               {sorted.map(sig => (
                 <tr key={sig.id} className="clickable" onClick={() => setViewRecord(sig as unknown as Record<string, unknown>)}>
-                  <td onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.includes(sig.id)} onChange={() => toggleSelection(sig.id)} style={{ width: 'auto' }} /></td>
+                  <td onClick={e => e.stopPropagation()}><input type="checkbox" aria-label={t('Select this signal')} checked={selected.includes(sig.id)} onChange={() => toggleSelection(sig.id)} style={{ width: 'auto' }} /></td>
                   <td className="mono table-id-cell" style={{ color: 'var(--primary)' }}>
                     <span className="id-display">
                       <span className="id-value">{sig.id}</span>

@@ -582,12 +582,13 @@ export default function RequestHistory() {
             <h3>{t('Activity')}</h3>
             <p className="text-dim">{t('Bucketed request volume with success and failure breakdown.')}</p>
           </div>
-          <div className="request-range-tabs" role="tablist" aria-label={t('Activity range')}>
+          <div className="request-range-tabs" role="group" aria-label={t('Activity range')}>
             {ACTIVITY_RANGE_OPTIONS.map((option) => (
               <button
                 key={option.id}
                 type="button"
                 className={`request-range-tab${activityRange === option.id ? ' active' : ''}`}
+                aria-pressed={activityRange === option.id}
                 onClick={() => setActivityRange(option.id)}
               >
                 {t(option.label)}
@@ -710,7 +711,7 @@ export default function RequestHistory() {
           <thead>
             <tr>
               <th className="col-checkbox">
-                <input
+                <input aria-label={t('Select all visible requests')}
                   type="checkbox"
                   checked={allSelected}
                   onChange={(event) => setSelectedIds(event.target.checked ? entries.map((entry) => entry.id) : [])}
@@ -740,7 +741,7 @@ export default function RequestHistory() {
               entries.map((entry) => (
                 <tr key={entry.id} className="clickable" onClick={() => void openDetail(entry.id)}>
                   <td className="col-checkbox" onClick={(event) => event.stopPropagation()}>
-                    <input
+                    <input aria-label={t('Select this request')}
                       type="checkbox"
                       checked={selectedIds.includes(entry.id)}
                       onChange={() => setSelectedIds((current) => current.includes(entry.id) ? current.filter((idValue) => idValue !== entry.id) : [...current, entry.id])}

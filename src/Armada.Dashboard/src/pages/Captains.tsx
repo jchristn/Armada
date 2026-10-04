@@ -506,7 +506,7 @@ export default function Captains() {
               <thead>
                 <tr>
                   <th className="col-checkbox">
-                    <input type="checkbox" checked={allSelected} onChange={e => e.target.checked ? selectAll() : clearSelection()} title={t('Select all captains')} />
+                    <input aria-label={t('Select all captains')} type="checkbox" checked={allSelected} onChange={e => e.target.checked ? selectAll() : clearSelection()} title={t('Select all captains')} />
                   </th>
                   <th className="sortable" onClick={() => handleSort('name')} title={t('Captain name -- click to sort')}>
                     {t('Name')}{sortIcon('name')}
@@ -541,7 +541,7 @@ export default function Captains() {
                 {paginated.map(c => (
                   <tr key={c.id} className="clickable" onClick={() => openEdit(c)}>
                     <td className="col-checkbox" onClick={e => e.stopPropagation()}>
-                      <input type="checkbox" checked={selected.includes(c.id)} onChange={() => toggleSelect(c.id)} title={t('Select this captain')} />
+                      <input aria-label={t('Select this captain')} type="checkbox" checked={selected.includes(c.id)} onChange={() => toggleSelect(c.id)} title={t('Select this captain')} />
                     </td>
                     <td><strong>{c.name}</strong>{c.tier ? <> <CaptainTierBadge tier={c.tier} /></> : null}</td>
                     <td className="mono text-dim table-id-cell">

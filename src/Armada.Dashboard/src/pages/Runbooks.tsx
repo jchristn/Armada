@@ -358,7 +358,7 @@ export default function Runbooks() {
             onChange={(event) => setSearch(event.target.value)}
             placeholder={t('Search by title, file name, description, environment, or ID...')}
           />
-          <select value={activeFilter} onChange={(event) => setActiveFilter(event.target.value as typeof activeFilter)}>
+          <select aria-label={t('All states')} value={activeFilter} onChange={(event) => setActiveFilter(event.target.value as typeof activeFilter)}>
             <option value="all">{t('All states')}</option>
             <option value="active">{t('Active')}</option>
             <option value="inactive">{t('Inactive')}</option>

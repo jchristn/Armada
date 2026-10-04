@@ -768,7 +768,7 @@ export default function ApiExplorer() {
                         <h4>{t('Request Body')}</h4>
                         <span>{selectedOperation.requestBodyContentType || 'application/json'}</span>
                       </div>
-                      <textarea value={bodyValue} onChange={(event) => setBodyValue(event.target.value)} spellCheck={false} rows={14} />
+                      <textarea aria-label={t('Request Body')} value={bodyValue} onChange={(event) => setBodyValue(event.target.value)} spellCheck={false} rows={14} />
                     </div>
                   )}
 

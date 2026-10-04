@@ -1,0 +1,23 @@
+/* Layout fixes from the V1 readiness visual QA pass (W6.4). Loaded after App.css. */
+
+/* Phone and tablet widths: the top bar has room for the menu button and the essential controls only. Before this,
+   the right-aligned items overflowed to the left and pushed the menu button off screen at 390px. */
+@media (max-width: 768px) {
+    .top-bar { gap: 0.5rem; padding: 0 0.75rem; min-width: 0; }
+    .top-bar .auth-badge-tenant,
+    .top-bar .auth-badge-user,
+    .top-bar .discord-link,
+    .top-bar .github-link { display: none; }
+    .top-bar .topbar-language-select { min-width: 0; flex: 0 1 auto; }
+    .top-bar .topbar-language-select .locale-select { min-width: 0; max-width: 8.5rem; }
+}
+@media (max-width: 480px) {
+    .top-bar .top-bar-status-label,
+    .top-bar .auth-badge { display: none; }
+    .top-bar .topbar-language-select .locale-select { max-width: 7.5rem; }
+}
+
+/* Workspace header toolbar wraps on phones instead of running 2px past the content edge. */
+@media (max-width: 640px) {
+    .workspace-header-toolbar { flex-wrap: wrap; }
+}

@@ -54,7 +54,7 @@ export default function PlanningDispatchCard(props: PlanningDispatchCardProps) {
       <div className="dispatch-form">
         <div className="form-group">
           <label>{t('Voyage Title')}</label>
-          <input
+          <input aria-label={t('Voyage Title')}
             value={dispatchTitle}
             onChange={(event) => onDispatchTitleChange(event.target.value)}
             placeholder={t('Optional override for the resulting voyage title')}
@@ -63,7 +63,7 @@ export default function PlanningDispatchCard(props: PlanningDispatchCardProps) {
 
         <div className="form-group">
           <label>{t('Mission Description')}</label>
-          <textarea
+          <textarea aria-label={t('Mission Description')}
             value={dispatchDescription}
             onChange={(event) => onDispatchDescriptionChange(event.target.value)}
             rows={10}

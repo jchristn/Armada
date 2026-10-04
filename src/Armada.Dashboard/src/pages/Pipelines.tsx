@@ -214,9 +214,9 @@ export default function Pipelines() {
             <div style={{ marginTop: '1rem' }}>
               <strong>{t('Stages')}</strong>
               {form.stages.map((stage, i) => (
-                <div key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem', marginTop: '0.5rem' }}>
+                <div key={i} style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem', marginTop: '0.5rem' }}>
                   <span className="text-dim" style={{ minWidth: '1.5rem' }}>{i + 1}.</span>
-                  <select
+                  <select aria-label={t('Select persona...')}
                     value={stage.personaName}
                     onChange={e => updateStage(i, 'personaName', e.target.value)}
                     required
@@ -245,7 +245,7 @@ export default function Pipelines() {
                     />
                     <span style={{ verticalAlign: 'middle' }}>{t('Review gate')}</span>
                   </label>
-                  <select
+                  <select aria-label={t('Retry stage')}
                     value={stage.reviewDenyAction}
                     disabled={!stage.requiresReview}
                     onChange={e => updateStage(i, 'reviewDenyAction', e.target.value as 'RetryStage' | 'FailPipeline')}

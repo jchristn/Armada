@@ -161,7 +161,7 @@ export default function Settings() {
             <div className="settings-grid">
               <div className="form-group">
                 <label>{t('Admiral Port')}</label>
-                <input
+                <input aria-label={t('REST API port (1-65535)')}
                   type="number"
                   value={settings.admiralPort}
                   onChange={(e) =>
@@ -174,7 +174,7 @@ export default function Settings() {
               </div>
               <div className="form-group">
                 <label>{t('MCP Port')}</label>
-                <input
+                <input aria-label={t('MCP server port (1-65535)')}
                   type="number"
                   value={settings.mcpPort}
                   onChange={(e) =>
@@ -187,7 +187,7 @@ export default function Settings() {
               </div>
               <div className="form-group">
                 <label>{t('Max Captains')}</label>
-                <input
+                <input aria-label={t('Maximum captains (0 = unlimited)')}
                   type="number"
                   value={settings.maxCaptains}
                   onChange={(e) =>
@@ -206,7 +206,7 @@ export default function Settings() {
             <div className="settings-grid">
               <div className="form-group">
                 <label>{t('Heartbeat Interval (seconds)')}</label>
-                <input
+                <input aria-label={t('Health check interval, minimum 5 seconds')}
                   type="number"
                   value={settings.heartbeatIntervalSeconds}
                   onChange={(e) =>
@@ -221,7 +221,7 @@ export default function Settings() {
               </div>
               <div className="form-group">
                 <label>{t('Stall Threshold (minutes)')}</label>
-                <input
+                <input aria-label={t('Minutes before a captain is considered stalled')}
                   type="number"
                   value={settings.stallThresholdMinutes}
                   onChange={(e) =>
@@ -236,7 +236,7 @@ export default function Settings() {
               </div>
               <div className="form-group">
                 <label>{t('Idle Captain Timeout (seconds)')}</label>
-                <input
+                <input aria-label={t('Auto-remove idle captains after this many seconds (0 = disabled)')}
                   type="number"
                   value={settings.idleCaptainTimeoutSeconds}
                   onChange={(e) =>

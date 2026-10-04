@@ -239,7 +239,7 @@ export default function Fleets() {
               <thead>
                 <tr>
                   <th className="col-checkbox">
-                    <input type="checkbox" checked={table.allSelected} onChange={e => e.target.checked ? table.selectAll() : table.clearSelection()} title={t('Select all fleets')} />
+                    <input aria-label={t('Select all fleets')} type="checkbox" checked={table.allSelected} onChange={e => e.target.checked ? table.selectAll() : table.clearSelection()} title={t('Select all fleets')} />
                   </th>
                   <th className="sortable" onClick={() => table.handleSort('name')} title={t('Fleet name -- click to sort')}>
                     {t('Name')}{table.sortIcon('name')}
@@ -272,7 +272,7 @@ export default function Fleets() {
                 {table.paginated.map(f => (
                   <tr key={f.id} className="clickable" onClick={() => setViewRecord(f as unknown as Record<string, unknown>)}>
                     <td className="col-checkbox" onClick={e => e.stopPropagation()}>
-                      <input type="checkbox" checked={table.selected.includes(f.id)} onChange={() => table.toggleSelect(f.id)} title={t('Select this fleet')} />
+                      <input aria-label={t('Select this fleet')} type="checkbox" checked={table.selected.includes(f.id)} onChange={() => table.toggleSelect(f.id)} title={t('Select this fleet')} />
                     </td>
                     <td><strong>{f.name}</strong></td>
                     <td className="mono text-dim table-id-cell">

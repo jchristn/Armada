@@ -221,7 +221,7 @@ export default function Skills() {
       <div className="card" style={{ padding: '1rem', marginBottom: '1rem' }}>
         <div className="playbook-filter-row">
           <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('Search by name, description, or ID...')} />
-          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+          <select aria-label={t('All categories')} value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
             <option value="all">{t('All categories')}</option>
             {categories.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>

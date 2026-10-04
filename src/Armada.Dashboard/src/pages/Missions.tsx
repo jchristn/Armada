@@ -296,7 +296,7 @@ export default function Missions() {
         subtitle={t('Individual work units assigned to captains')}
         actions={(
           <>
-            <select className="filter-select" value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPageNumber(1); }} title={t('Filter by status')}>
+            <select aria-label={t('Filter by status')} className="filter-select" value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPageNumber(1); }} title={t('Filter by status')}>
               <option value="">{t('All Statuses')}</option>
               {MISSION_STATUSES.map(s => <option key={s} value={s}>{t(s)}</option>)}
             </select>
@@ -393,7 +393,7 @@ export default function Missions() {
               <thead>
                 <tr>
                   <th className="col-checkbox">
-                    <input type="checkbox" checked={allSelected} onChange={e => e.target.checked ? selectAll() : clearSelection()} title={t('Select all missions')} />
+                    <input aria-label={t('Select all missions')} type="checkbox" checked={allSelected} onChange={e => e.target.checked ? selectAll() : clearSelection()} title={t('Select all missions')} />
                   </th>
                   <th className="sortable" onClick={() => handleSort('title')} title={t('Mission title -- click to sort')}>
                     {t('Title')}{sortIcon('title')}
@@ -428,7 +428,7 @@ export default function Missions() {
                 {sorted.map(m => (
                   <tr key={m.id} className="clickable" onClick={() => navigate(`/missions/${m.id}`)}>
                     <td className="col-checkbox" onClick={e => e.stopPropagation()}>
-                      <input type="checkbox" checked={selected.includes(m.id)} onChange={() => toggleSelect(m.id)} title={t('Select this mission')} />
+                      <input aria-label={t('Select this mission')} type="checkbox" checked={selected.includes(m.id)} onChange={() => toggleSelect(m.id)} title={t('Select this mission')} />
                     </td>
                     <td className="cell-title" title={m.title}>
                       <strong className="line-clamp-2">

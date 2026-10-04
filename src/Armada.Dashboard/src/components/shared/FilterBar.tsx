@@ -37,7 +37,7 @@ export default function FilterBar({ filters, values, onChange, onClear, searchVa
       {filters.map(f => {
         if (f.type === 'select') {
           return (
-            <select
+            <select aria-label={f.label}
               key={f.key}
               className="filter-select"
               value={values[f.key] || ''}
