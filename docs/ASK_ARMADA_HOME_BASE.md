@@ -259,6 +259,7 @@ default.
 | 2026-10-04 | backend agent | P1.1-P1.4 | Models, enums, prefixes, `Ask` settings, five DB interfaces with SQLite/PostgreSQL/SQL Server/MySQL implementations, migration v75 (parity verified on all four providers). `AskThreadService`, thread-aware `CaptainChatService.RunTurnAsync`, `AskTurnCoordinator`, REST routes. |
 | 2026-10-04 | backend agent | P2.1-P2.3 | Thread-scoped session token (`askThreadId` claim on the MCP request), `AskToolPolicy`, `AskActionService` gate wrapping every MCP tool, approve/reject/expire with compare-and-set, in-process execution through the registered handler, follow-up turn, quick actions, work-linking table. |
 | 2026-10-04 | backend agent | P3.1-P3.2 | `AskWorkSnapshotBuilder`, `AskWorkTracker` (hub change events + sweep), `AskMilestoneDetector`, narration with idle check and deterministic fallback, unread counts. |
+| 2026-10-04 | backend agent | P5.2 (backend part) | Real run on macOS against a throwaway server (ports 47890/47891, `ARMADA_DATA_DIR` in a scratch directory) with a real Claude Code captain: unauthenticated `/ws` got `401`; the captain called `mcp__armada__dispatch` over its thread-scoped token and got "Proposed as aap_..." (no voyage existed before approval); approve executed the real handler (voyage created in the user's tenant), a second approve got `409`; `ask.work` snapshots and `WorkUpdate` messages followed the voyage (started, work produced, finished, the last one narrated by the captain); a second tenant's socket received only its `status.snapshot` and its REST read of the thread was `404`. Fixed during the run: percent-encoded session tokens on `?token=`, and voyages Armada marks Complete while a mission is still landing are now followed until every mission settles. |
 | 2026-10-04 | backend agent | P5.1 | REST_API.md, MCP_API.md, WEBSOCKET_API.md, Postman "Ask Threads" folder, CHANGELOG. README Ask section left for the dashboard merge. |
 
 ## Backend implementation notes (2026-10-04)
@@ -299,6 +300,9 @@ These refine the contract above; the dashboard's "UI assumptions" (on `feature/a
   captain; it never changes the captain's state, uses a gated thread token, and falls back to the deterministic sentence
   on timeout or failure. Milestones are detected against an in-memory previous snapshot; after a restart only terminal
   changes are reported, so nothing is repeated.
+- **Settling.** A mission row counts as done when Complete or WorkProduced with nothing landing (no merge-queue entry
+  queued, testing, or passed); a voyage stays Active (even if Armada already marked it Complete) until every mission has
+  settled, so landing outcomes still reach the thread. Milestones add "Mission X produced its work on branch Y".
 - **Unread**: every captain or Armada message (reply, proposal card, action result, work update, summary, error)
   increments `UnreadCount`; user messages do not. `POST .../read` resets it.
 - **Retention**: none beyond delete.

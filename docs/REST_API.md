@@ -3396,8 +3396,8 @@ the MCP API, for example `{ "ToolName": "dispatch", "Arguments": { "title": "...
 `cancel_voyage`, `cancel_mission`, and `cancel_fleet_action_run` refresh the item if the thread tracks it.
 
 **Monitoring.** Active tracked work is re-snapshotted on entity change events and every `Ask.TrackerIntervalSeconds`.
-When a snapshot changes, `ask.work` is pushed; milestones (work started, a mission failed, landed, opened a pull
-request, or could not land, and the item succeeded, failed, or was cancelled) post `WorkUpdate` messages, worded by the
+When a snapshot changes, `ask.work` is pushed; milestones (work started, a mission failed, produced its work, landed,
+opened a pull request, or could not land, and the item succeeded, failed, or was cancelled) post `WorkUpdate` messages, worded by the
 thread's captain when it is idle (`Ask.NarrateMilestones`, bounded by `Ask.NarrationTimeoutSeconds`) and otherwise a
 deterministic sentence. Captain and Armada messages increment `UnreadCount`; `POST .../read` resets it.
 
