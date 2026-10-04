@@ -64,6 +64,11 @@ namespace Armada.Tui.Services
         public bool TerminalFocused { get; set; } = true;
 
         /// <summary>
+        /// Opens a route (set by the app) so notification toasts can carry an Open action.
+        /// </summary>
+        public Action<string>? RouteOpener { get; set; } = null;
+
+        /// <summary>
         /// Raised after history or toasts change.
         /// </summary>
         public event EventHandler? Changed;
@@ -194,7 +199,9 @@ namespace Armada.Tui.Services
             if (toast)
             {
                 string? route = entry.Route;
-                Toast(entry.Severity, Render(entry), route != null ? "Open" : null, null);
+                Action<string>? opener = RouteOpener;
+                bool actionable = route != null && opener != null;
+                Toast(entry.Severity, Render(entry), actionable ? "Open" : null, actionable ? () => opener!(route!) : null);
             }
 
             if (entry.Severity == NotificationSeverityEnum.Error) Attention(Render(entry));

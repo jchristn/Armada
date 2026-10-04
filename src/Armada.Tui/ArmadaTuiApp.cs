@@ -252,6 +252,10 @@ namespace Armada.Tui
                 Context.Notifications.HandleSocketMessage(message);
                 Context.Status.NudgeInbox();
             });
+            Context.Notifications.RouteOpener = route =>
+            {
+                if (Context.Session.IsSignedIn) Context.Navigate(route);
+            };
             Context.Approvals.Arrived += (s, item) => Context.Notifications.Attention(Context.Loc.T("Approval needed") + ": " + item.Title);
 
             Context.Session.SignedIn += (s, e) =>

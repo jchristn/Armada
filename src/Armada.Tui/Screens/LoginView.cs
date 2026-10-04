@@ -379,7 +379,7 @@ namespace Armada.Tui.Screens
             y += 2;
             if (ApiKeyMode)
             {
-                Label(surface, left, y, T("API Key / Bearer Token"));
+                SurfaceText.Draw(surface, left, y++, T("API Key / Bearer Token"), Theme.Muted, cardWidth);
                 Scope.RenderChild(surface, ApiKey, new Rect(left + 14, y++, cardWidth - 14, 1));
             }
             else if (Step == LoginStepEnum.Email)
@@ -401,7 +401,7 @@ namespace Armada.Tui.Screens
                 Scope.RenderChild(surface, Password, new Rect(left + 14, y++, cardWidth - 14, 1));
             }
 
-            if (ApiKeyMode || Step == LoginStepEnum.Password) SurfaceText.Draw(surface, left + 14, y, "Ctrl+R " + T("Show password"), Theme.Muted, cardWidth - 14);
+            if (ApiKeyMode || Step == LoginStepEnum.Password) SurfaceText.Draw(surface, left + 14, y, "Ctrl+R " + T(ApiKeyMode ? "Show API key" : "Show password"), Theme.Muted, cardWidth - 14);
             y += 2;
             _Primary.Label = Busy ? (ApiKeyMode ? "Connecting..." : Step == LoginStepEnum.Email ? "Looking up..." : "Signing in...") : (ApiKeyMode ? "Connect" : Step == LoginStepEnum.Password ? "Sign In" : "Continue");
             _Primary.Enabled = !Busy;
