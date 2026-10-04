@@ -1195,7 +1195,7 @@ namespace Armada.Server.Routes
                 }
 
                 if (dock == null || String.IsNullOrEmpty(dock.WorktreePath) || !Directory.Exists(dock.WorktreePath))
-                    { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "No diff available — worktree was already reclaimed and no saved diff exists" }; }
+                    { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "No diff available: the worktree was already reclaimed and no saved diff exists" }; }
 
                 string baseBranch = "main";
                 if (!String.IsNullOrEmpty(mission.VesselId))
