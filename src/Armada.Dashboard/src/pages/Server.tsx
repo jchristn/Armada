@@ -31,6 +31,7 @@ import CopyButton, { copyToClipboard } from '../components/shared/CopyButton';
 import { useAuth } from '../context/AuthContext';
 import { useLocale } from '../context/LocaleContext';
 import ErrorModal from '../components/shared/ErrorModal';
+import RepositoryHealthSettingsSection from '../components/vessels/health/RepositoryHealthSettingsSection';
 
 interface HealthInfo {
   status: string;
@@ -1050,6 +1051,9 @@ export default function Server() {
           </fieldset>
         </div>
       )}
+
+      {/* Vessel health settings: loads and saves its own RepositoryHealth section. */}
+      {settings && <RepositoryHealthSettingsSection locked={remoteSettingsLocked} />}
 
       {settings && (
         <div className="settings-section" style={{ marginTop: '1.5rem' }}>

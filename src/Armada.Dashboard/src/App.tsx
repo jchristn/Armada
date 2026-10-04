@@ -111,6 +111,7 @@ export default function App() {
                       <Route path="fleets/:id" element={<FleetDetail />} />
 
                       <Route path="vessels" element={<VesselsHub />} />
+                      <Route path="vessels/health" element={<VesselsHub />} />
                       <Route path="vessels/:id" element={<VesselDetail />} />
                       <Route path="vessels/:id/onboarding" element={<VesselOnboarding />} />
                       <Route path="workspace" element={<Navigate to="/vessels?tab=workspace" replace />} />

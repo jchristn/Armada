@@ -10,6 +10,7 @@ import StatusBadge from '../components/shared/StatusBadge';
 import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import ReadinessPanel from '../components/shared/ReadinessPanel';
+import VesselHealthButton from '../components/vessels/health/VesselHealthButton';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { buildVesselDuplicatePayload } from '../lib/duplicates';
@@ -257,6 +258,7 @@ export default function VesselDetail() {
             <button type="button" className="btn btn-sm" onClick={() => navigate(`/workspace/${vessel.id}`)}>
               {t('Open Workspace')}
             </button>
+            <VesselHealthButton vesselId={vessel.id} vesselName={vessel.name} defaultBranch={vessel.defaultBranch} />
             <ActionMenu id={`vessel-${vessel.id}`} items={[
               { label: 'Manage Objectives', onClick: handleManageObjectives },
               { label: 'Manage Fleet', onClick: () => navigate(`/fleets/${vessel.fleetId}`), disabled: !vessel.fleetId },

@@ -122,6 +122,14 @@ import type {
   RunbookExecutionUpdateRequest,
   RunbookQuery,
   RunbookUpsertRequest,
+  VesselHealth,
+  VesselHealthCriterion,
+  VesselHealthDetail,
+  VesselHealthEnumerateRequest,
+  VesselHealthEvaluateRequest,
+  VesselHealthEvaluationStart,
+  VesselHealthStatus,
+  VesselHealthSummary,
 } from '../types/models';
 
 const BASE_URL = import.meta.env.VITE_ARMADA_SERVER_URL || '';
@@ -159,6 +167,8 @@ interface RequestOptions {
   rawText?: boolean;
   /** External abort signal; when it fires the in-flight request is cancelled (used by chat Stop). */
   signal?: AbortSignal;
+  /** Non-2xx statuses whose JSON body is returned like a success instead of throwing (e.g. 409 with a payload). */
+  acceptStatuses?: number[];
 }
 
 export interface ProxySessionContext {
@@ -211,7 +221,7 @@ async function request<T>(method: string, path: string, body?: unknown, opts?: R
       throw new Error('Unauthorized');
     }
 
-    if (!res.ok) {
+    if (!res.ok && !opts?.acceptStatuses?.includes(res.status)) {
       const text = await res.text();
       let msg = `${res.status}: ${text}`;
       try {
@@ -717,6 +727,20 @@ export const stopAllCaptains = () => post<void>('/api/v1/captains/stop-all');
 export const listJobs = () => get<EnumerationResult<Job>>('/api/v1/jobs');
 export const getJob = (id: string) => get<Job>(`/api/v1/jobs/${id}`);
 export const cancelJob = (id: string) => post<Job>(`/api/v1/jobs/${id}/cancel`);
+
+// ==================== Vessel Health ====================
+export const enumerateVesselHealth = (query: VesselHealthEnumerateRequest) =>
+  post<EnumerationResult<VesselHealth>>('/api/v1/vessel-health/enumerate', query);
+export const getVesselHealthSummary = () => get<VesselHealthSummary>('/api/v1/vessel-health/summary');
+export const getVesselHealth = (vesselId: string) =>
+  get<VesselHealthDetail>(`/api/v1/vessels/${encodeURIComponent(vesselId)}/health`);
+/** Starts an evaluation job. 409 (already running) is not an error: it resolves with `alreadyRunning: true` and the running job id. */
+export const evaluateVesselHealth = (body: VesselHealthEvaluateRequest = {}) =>
+  post<VesselHealthEvaluationStart>('/api/v1/vessel-health/evaluate', body, { acceptStatuses: [409] });
+export const setVesselHealthOverride = (vesselId: string, criterion: VesselHealthCriterion, status: VesselHealthStatus, note?: string | null) =>
+  put<VesselHealthDetail>(`/api/v1/vessels/${encodeURIComponent(vesselId)}/health/overrides/${encodeURIComponent(criterion)}`, { Status: status, Note: note ?? null });
+export const deleteVesselHealthOverride = (vesselId: string, criterion: VesselHealthCriterion) =>
+  del<VesselHealthDetail>(`/api/v1/vessels/${encodeURIComponent(vesselId)}/health/overrides/${encodeURIComponent(criterion)}`);
 export const listMuxEndpoints = (configDirectory?: string | null) =>
   get<MuxEndpointListResult>(`/api/v1/runtimes/mux/endpoints${configDirectory ? `?configDirectory=${encodeURIComponent(configDirectory)}` : ''}`);
 export const getMuxEndpoint = (name: string, configDirectory?: string | null) =>
