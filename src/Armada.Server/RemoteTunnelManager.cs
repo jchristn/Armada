@@ -25,6 +25,7 @@ namespace Armada.Server
         private readonly object _SyncRoot = new object();
         private readonly ConcurrentDictionary<string, DateTime> _OutstandingPings = new ConcurrentDictionary<string, DateTime>();
         private readonly SemaphoreSlim _SendLock = new SemaphoreSlim(1, 1);
+        private bool _WarnedDefaultPassword = false;
 
         private RemoteTunnelStatus _Status = new RemoteTunnelStatus();
         private ClientWebSocket? _Socket;
@@ -294,6 +295,12 @@ namespace Armada.Server
 
                     await DelayAsync(TimeSpan.FromSeconds(5), token).ConfigureAwait(false);
                     continue;
+                }
+
+                if (!_WarnedDefaultPassword && String.Equals(remoteControl.Password, Constants.DefaultRemoteTunnelPassword, StringComparison.Ordinal))
+                {
+                    _WarnedDefaultPassword = true;
+                    _Logging.Warn(_Header + "RemoteControl.Password is the built-in default; Armada.Proxy refuses to start with the default password unless AllowDefaultPassword is set, so set the same strong value here and on the proxy");
                 }
 
                 if (!TryNormalizeTunnelUrl(remoteControl.TunnelUrl, out Uri? tunnelUri, out string? normalizationError))

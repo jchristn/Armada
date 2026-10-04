@@ -36,7 +36,7 @@ Configuration is loaded from the `ArmadaProxy` section:
     "port": 7893,
     "requireEnrollmentToken": false,
     "enrollmentTokens": [],
-    "password": "armadaadmin",
+    "password": "replace-with-a-strong-shared-secret",
     "handshakeTimeoutSeconds": 15,
     "staleAfterSeconds": 90,
     "requestTimeoutSeconds": 20,
@@ -44,6 +44,20 @@ Configuration is loaded from the `ArmadaProxy` section:
   }
 }
 ```
+
+Security settings (security review O-11):
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `password` (env `ARMADA_PROXY_PASSWORD`, which wins over the file) | none | Shared secret for browser login and the tunnel handshake. The proxy refuses to start while it is blank or the built-in default `armadaadmin`. Use the same value as `remoteControl.password` on each Armada instance. |
+| `allowDefaultPassword` (env `ARMADA_PROXY_ALLOW_DEFAULT_PASSWORD`) | `false` | Start anyway with the default password. For a throwaway local test only; the proxy logs a warning. |
+| `loginMaxFailures` | `10` | Failed browser logins or tunnel handshakes from one client address, within the window, that trigger a lockout (1-1000). |
+| `loginFailureWindowSeconds` | `900` | Window over which failures are counted (10-86400). |
+| `loginLockoutSeconds` | `900` | Lockout length; logins and handshakes from that address get `429` with `Retry-After` until it ends (1-86400). |
+| `trustForwardedHeaders` | `false` | Use `X-Forwarded-For` / `Forwarded` for the client address (rate limiting and the requester address relayed to Armada) and `X-Forwarded-Proto` for the cookie `Secure` flag. Enable only behind a reverse proxy that overwrites these headers. |
+| `secureCookie` | `false` | Always mark the session cookie `Secure`. Enable when the proxy is served over HTTPS. |
+
+The Docker compose file (`docker/proxy/compose.yaml`) requires `ARMADA_PROXY_PASSWORD` to be set before it starts.
 
 ## Browser Model
 
@@ -65,7 +79,8 @@ The proxy session is separate from the Armada application session. After opening
 The proxy browser session is primarily cookie-backed:
 
 - cookie name: `armada_proxy_session`
-- attributes: `Path=/; HttpOnly; SameSite=Lax`
+- attributes: `Path=/; HttpOnly; SameSite=Lax`, plus `Secure` when `secureCookie` is on or when `trustForwardedHeaders`
+  is on and the request arrived with `X-Forwarded-Proto: https`
 
 For non-browser callers, the proxy still accepts `X-Armada-Proxy-Session`.
 
@@ -105,6 +120,11 @@ Response:
 
 The response body still includes the token for compatibility, but browser callers normally rely on the `Set-Cookie` header instead.
 
+A wrong proof returns `401`. After `loginMaxFailures` failures from one client address within
+`loginFailureWindowSeconds`, every login from that address (even a correct one) returns `429 Too Many Requests` with a
+`Retry-After` header (seconds) until `loginLockoutSeconds` pass. Failed tunnel handshakes count against the same limit;
+a locked-out tunnel client receives a handshake response with status `429` and error code `too_many_attempts`.
+
 ### `POST /proxy-api/v1/auth/logout`
 
 Invalidates the current proxy browser session and clears the session cookie.
@@ -120,7 +140,7 @@ These routes belong to the proxy itself and are never relayed to Armada:
 | `GET /proxy-api/v1/auth/challenge` | no | Browser login challenge |
 | `POST /proxy-api/v1/auth/login` | no | Browser login |
 | `POST /proxy-api/v1/auth/logout` | yes | Proxy logout |
-| `GET /proxy-api/v1/instances` | yes | Connected deployment summaries |
+| `GET /proxy-api/v1/instances` | yes (`401` without a proxy session) | Connected deployment summaries |
 | `GET /proxy-api/v1/session/context` | yes | Current proxy session and selected deployment metadata |
 | `POST /proxy-api/v1/session/instance` | yes | Set selected deployment |
 | `POST /proxy-api/v1/session/logout-instance` | yes | Clear selected deployment |

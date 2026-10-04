@@ -58,7 +58,18 @@ namespace Armada.Proxy
 
             _Server = new ArmadaProxyServer(_Logging, _Settings);
             _Server.OnStopping = () => waitHandle.Set();
-            await _Server.StartAsync().ConfigureAwait(false);
+            try
+            {
+                await _Server.StartAsync().ConfigureAwait(false);
+            }
+            catch (InvalidOperationException ex)
+            {
+                Console.Error.WriteLine();
+                Console.Error.WriteLine(ex.Message);
+                Console.Error.WriteLine();
+                Environment.ExitCode = 1;
+                return;
+            }
 
             string displayHost = ResolveDisplayHost(_Settings.Hostname);
             Console.WriteLine("Proxy running on http://" + displayHost + ":" + _Settings.Port);
