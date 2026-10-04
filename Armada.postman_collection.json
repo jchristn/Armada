@@ -968,7 +968,7 @@
           ]
         },
         {
-          "name": "Update Import, Fleet Action, and Health Settings",
+          "name": "Update Import, Fleet Action, Health, and Retention Settings",
           "request": {
             "method": "PUT",
             "header": [
@@ -979,7 +979,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"Import\": {\n    \"AllowedRoots\": [\n      \"{{importRoot}}\"\n    ],\n    \"MaxDepth\": 6,\n    \"InlineBatchLimit\": 25\n  },\n  \"FleetActions\": {\n    \"MaxConcurrency\": 8,\n    \"DefaultTimeoutSeconds\": 300,\n    \"MaxOutputBytes\": 65536,\n    \"RunRetentionDays\": 30\n  },\n  \"RepositoryHealth\": {\n    \"IntervalMinutes\": 360,\n    \"MaxConcurrency\": 4,\n    \"FetchBeforeEvaluate\": true,\n    \"DependencyMaxAgeHours\": 24,\n    \"DependencyCommandTimeoutSeconds\": 120,\n    \"StaleBranchDays\": 90,\n    \"MissionWindowDays\": 7\n  }\n}"
+              "raw": "{\n  \"Import\": {\n    \"AllowedRoots\": [\n      \"{{importRoot}}\"\n    ],\n    \"MaxDepth\": 6,\n    \"InlineBatchLimit\": 25\n  },\n  \"FleetActions\": {\n    \"MaxConcurrency\": 8,\n    \"DefaultTimeoutSeconds\": 300,\n    \"MaxOutputBytes\": 65536,\n    \"RunRetentionDays\": 30\n  },\n  \"RepositoryHealth\": {\n    \"IntervalMinutes\": 360,\n    \"MaxConcurrency\": 4,\n    \"FetchBeforeEvaluate\": true,\n    \"DependencyMaxAgeHours\": 24,\n    \"DependencyCommandTimeoutSeconds\": 120,\n    \"StaleBranchDays\": 90,\n    \"MissionWindowDays\": 7\n  },\n  \"Retention\": {\n    \"AskThreadArchiveAfterDays\": 90,\n    \"AskThreadDeleteAfterDays\": 0,\n    \"JobRetentionDays\": 30,\n    \"ImportBatchRetentionDays\": 90\n  }\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/settings",
@@ -992,7 +992,7 @@
                 "settings"
               ]
             },
-            "description": "Updates the Import, FleetActions and RepositoryHealth settings objects. Each object, when supplied, replaces the whole object; omitted fields take their defaults and out-of-range values are clamped. All three are applied live. AdminOnly."
+            "description": "Updates the Import, FleetActions, RepositoryHealth, and Retention settings objects. Each object, when supplied, replaces the whole object; omitted fields take their defaults and out-of-range values are clamped. Retention values are days from 0 to 3650, where 0 means never. All four are applied live. AdminOnly."
           }
         },
         {
