@@ -11,6 +11,14 @@ All notable changes to Armada are documented in this file.
 - Added `armada tui`, the Armada terminal UI hosted in Helm, with server profiles and tokens stored in the OS keychain (0600 file fallback): email/tenant/password and API key login, a responsive shell with every dashboard route, a command palette that runs commands and jumps to entity IDs, help overlay, menu bar, notification center with actionable toasts, Dark/Light/High contrast/Auto themes, and the dashboard's languages. Screens arrive in later milestones; see `docs/TUI.md` and `TUI_APP_PLAN.md`.
 - Added a TUI parity manifest (`src/Armada.Tui/parity.json`) and a test that fails when a dashboard route, tab, API function, WebSocket event, or Server setting has no entry.
 
+### v1.0 readiness: security follow-ups
+- MCP tools that read or act on an entity by id are scoped to the caller's tenant and user like REST and answer not-found for other tenants' ids; ids referenced on create and update are checked the same way; `stop_all`, token usage, papercuts, the prompt template list, the model endpoint health sweep, and batch merge purge are scoped. `McpToolClient` now reads every page of `tools/list`.
+- **Upgrade note:** passwords are stored as salted PBKDF2-SHA256 (600,000 iterations) and older hashes are upgraded automatically; an upgraded database cannot be used for password login by an older Admiral.
+- Login rate limiting (`loginRateLimit` settings; 429 with `Retry-After`); the API key is compared in constant time.
+- Ask thread turns run captains without auto-approve unless `Ask.CaptainAutoApprove` (default false) is on; Claude Code still allows Armada's own MCP tools in that mode. An Ask thread token always wins over other credentials, and a request pairing it with a different identity is refused.
+- Vessels have an `AutoApprove` override (REST, MCP `autoApprove` / `clearAutoApprove`, dashboard) that wins over the captain setting for that vessel's missions; Harbor launches apply the resolved setting; Harbor ids stay bound to the identity that registered them.
+- **Breaking for proxy deployments:** Armada.Proxy refuses to start with a blank or default password unless `AllowDefaultPassword` is set (the proxy compose file requires `ARMADA_PROXY_PASSWORD`); the instance list requires a session; logins are rate limited; forwarded headers are opt-in (`TrustForwardedHeaders`); new `SecureCookie` setting.
+
 ### v1.0 readiness: usability
 - Ask Armada approval gating now covers Codex, Gemini, Cursor, Mux, and OpenCode captains as well as Claude Code and API endpoints, without changing where each CLI keeps its login; `GET /api/v1/captains/{id}/tools` reports `askApprovalGated`, and the dashboard shows a persistent note for any captain whose actions are not gated.
 - Fixed: Codex captains failed to start with codex 0.159+ (which removed `--full-auto`); Armada now passes `--sandbox workspace-write`, plus `--skip-git-repo-check` for chat and planning turns.
