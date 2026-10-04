@@ -156,6 +156,38 @@ namespace Armada.Core.Settings
             }
         }
 
+        /// <summary>
+        /// Number of automatic pre-migration SQLite backups to keep under the data directory's backups folder.
+        /// When startup finds pending migrations it copies the database (and its -wal/-shm files) before migrating
+        /// and then deletes the oldest pre-migration backups beyond this count. Default 5, minimum 1, maximum 100;
+        /// out-of-range values are clamped. Ignored for server providers, which are backed up with their own tools.
+        /// </summary>
+        public int MigrationBackupRetentionCount
+        {
+            get => _MigrationBackupRetentionCount;
+            set => _MigrationBackupRetentionCount = value < 1 ? 1 : (value > 100 ? 100 : value);
+        }
+
+        /// <summary>
+        /// Server providers (PostgreSQL, MySQL, SQL Server) only: when true, startup refuses to apply pending
+        /// migrations until the operator confirms a backup was taken, either by setting
+        /// <see cref="ConfirmedBackupForSchemaVersion"/> to the target schema version or by setting the
+        /// ARMADA_CONFIRM_BACKUP_FOR_SCHEMA_VERSION environment variable to it. When false (the default), startup
+        /// logs a prominent warning with the provider's dump command and migrates.
+        /// </summary>
+        public bool RequireBackupConfirmationForMigrations { get; set; } = false;
+
+        /// <summary>
+        /// Server providers only: the schema version the operator confirmed a backup for. Startup proceeds with
+        /// pending migrations when this is at least the target schema version, so a confirmation for one upgrade
+        /// never approves a later one. Default 0 (nothing confirmed); negative values are clamped to 0.
+        /// </summary>
+        public int ConfirmedBackupForSchemaVersion
+        {
+            get => _ConfirmedBackupForSchemaVersion;
+            set => _ConfirmedBackupForSchemaVersion = value < 0 ? 0 : value;
+        }
+
         #endregion
 
         #region Private-Members
@@ -171,6 +203,8 @@ namespace Armada.Core.Settings
         private int _MaxPoolSize = 25;
         private int _ConnectionLifetimeSeconds = 300;
         private int _ConnectionIdleTimeoutSeconds = 60;
+        private int _MigrationBackupRetentionCount = 5;
+        private int _ConfirmedBackupForSchemaVersion = 0;
         private bool _FilenameConfigured = false;
 
         #endregion

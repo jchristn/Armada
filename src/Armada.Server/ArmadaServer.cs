@@ -156,6 +156,10 @@ namespace Armada.Server
 
             // Initialize database
             _Database = DatabaseDriverFactory.Create(_Settings.Database, _Logging);
+
+            // Before migrating an existing database: copy it (SQLite) or warn with the dump command and, when
+            // configured, refuse until a backup is confirmed (server providers). Throws MigrationBackupRequiredException.
+            await new MigrationBackupService(_Settings, _Logging).PrepareAsync(_Database).ConfigureAwait(false);
             await _Database.InitializeAsync().ConfigureAwait(false);
             _Logging.Debug(_Header + "database initialized");
 
