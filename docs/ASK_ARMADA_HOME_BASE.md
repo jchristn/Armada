@@ -2,7 +2,7 @@
 
 > **Type:** implementation plan (work-tracking). Annotate task status and the progress log as you go.
 >
-> **Status:** In progress (Phase 4 dashboard done on feature/ask-ui)
+> **Status:** Backend (Phases 0-3) and dashboard (Phase 4) merged on `feature/ask-home-base`; integration verification (P5.2) in progress
 > **Last updated:** 2026-10-04
 
 Status values: `[ ]` not started, `[~]` in progress, `[x]` done, `[!]` blocked.
@@ -192,7 +192,7 @@ default.
 
 ### Phase 0 -- WebSocket security
 
-- [ ] **P0.1** Reproduce in a test: an unauthenticated client can open `/ws` and run a mutating command;
+- [x] **P0.1** Reproduce in a test: an unauthenticated client can open `/ws` and run a mutating command;
   another tenant's client receives `mission.changed` and `ask.*` events. Then fix: authenticated upgrade,
   identity on the session, command authorization, tenant/user-scoped delivery, dashboard socket sends its
   token. _Acceptance:_ the reproduction tests now fail closed; existing WebSocket and dashboard behavior
@@ -200,26 +200,26 @@ default.
 
 ### Phase 1 -- Threads (backend)
 
-- [ ] **P1.1** Models, enums, ID prefixes, migration v75 (all four providers, MySQL wiring), DB interfaces
+- [x] **P1.1** Models, enums, ID prefixes, migration v75 (all four providers, MySQL wiring), DB interfaces
   and implementations, database suites.
-- [ ] **P1.2** `AskThreadService`: CRUD, owner scoping, message persistence and paging, unread tracking,
+- [x] **P1.2** `AskThreadService`: CRUD, owner scoping, message persistence and paging, unread tracking,
   auto titles, summarize.
-- [ ] **P1.3** Thread-aware `CaptainChatService` turn: server-side history, background turn with cancel,
+- [x] **P1.3** Thread-aware `CaptainChatService` turn: server-side history, background turn with cancel,
   persisted assistant message and tool calls, owner-scoped streaming.
-- [ ] **P1.4** REST routes above; `/api/v1/ask` and `/api/v1/captains/{id}/chat` keep working.
+- [x] **P1.4** REST routes above; `/api/v1/ask` and `/api/v1/captains/{id}/chat` keep working.
 
 ### Phase 2 -- Actions and approvals
 
-- [ ] **P2.1** Thread-scoped MCP token; `AskToolPolicy` read-only allowlist; MCP interception creating
+- [x] **P2.1** Thread-scoped MCP token; `AskToolPolicy` read-only allowlist; MCP interception creating
   proposals; auto-approve path.
-- [ ] **P2.2** Approve / reject / expire; in-process execution through the MCP tool handler; follow-up turn.
-- [ ] **P2.3** Quick actions catalog and `/actions` endpoint; work-linking table by tool.
+- [x] **P2.2** Approve / reject / expire; in-process execution through the MCP tool handler; follow-up turn.
+- [x] **P2.3** Quick actions catalog and `/actions` endpoint; work-linking table by tool.
 
 ### Phase 3 -- Live monitoring
 
-- [ ] **P3.1** `AskWorkTracker` with change-driven updates plus sweep; snapshot builders for voyage,
+- [x] **P3.1** `AskWorkTracker` with change-driven updates plus sweep; snapshot builders for voyage,
   mission, fleet action run, job, import batch; hash-based change detection; `ask.work` events.
-- [ ] **P3.2** Milestone detection and `WorkUpdate` messages; captain narration with deterministic fallback;
+- [x] **P3.2** Milestone detection and `WorkUpdate` messages; captain narration with deterministic fallback;
   unread counts.
 
 ### Phase 4 -- Dashboard
@@ -232,7 +232,7 @@ default.
 
 ### Phase 5 -- Docs and verification
 
-- [ ] **P5.1** REST_API.md, MCP_API.md (thread-scoped behavior and the approval result text),
+- [~] **P5.1** REST_API.md, MCP_API.md (thread-scoped behavior and the approval result text),
   WEBSOCKET_API.md, Postman ("Ask Threads" folder), CHANGELOG, README Ask Armada section.
 - [ ] **P5.2** Real end-to-end on macOS with a throwaway data directory and a real Claude Code captain:
   start a thread, ask a question, ask it to dispatch a small voyage against a temp repo, approve the confirm
@@ -256,6 +256,12 @@ default.
 |------|--------|---------|--------|
 | 2026-10-04 | (design) | -- | Plan drafted from the user's request and confirmed decisions. |
 | 2026-10-04 | dashboard agent | P4.1-P4.4 | Dashboard built against typed mocks on `feature/ask-ui` (backend not merged yet): two-pane `/ask` + `/ask/:threadId`, thread management, message kinds, confirm and live work cards, work strip, composer with quick actions, token-authenticated socket with backoff and refetch on reconnect. Field-shape choices recorded under "UI assumptions" below. |
+| 2026-10-04 | backend agent | P0.1 | Reproduction suite `E2E.WebSocketSecurity` written first: 7 of 11 cases failed against the open `/ws` (unauthenticated upgrade, invalid token, unauthenticated `create_fleet`, tenant admin command, cross-tenant `voyage.changed`, admin without opt-in, non-admin opt-in). Fixed: authenticated upgrade in PreRouting, identity per socket, tenant/user-scoped delivery, admin-only commands, proxy relay forwards the token. All 11 pass. |
+| 2026-10-04 | backend agent | P1.1-P1.4 | Models, enums, prefixes, `Ask` settings, five DB interfaces with SQLite/PostgreSQL/SQL Server/MySQL implementations, migration v75 (parity verified on all four providers). `AskThreadService`, thread-aware `CaptainChatService.RunTurnAsync`, `AskTurnCoordinator`, REST routes. |
+| 2026-10-04 | backend agent | P2.1-P2.3 | Thread-scoped session token (`askThreadId` claim on the MCP request), `AskToolPolicy`, `AskActionService` gate wrapping every MCP tool, approve/reject/expire with compare-and-set, in-process execution through the registered handler, follow-up turn, quick actions, work-linking table. |
+| 2026-10-04 | backend agent | P3.1-P3.2 | `AskWorkSnapshotBuilder`, `AskWorkTracker` (hub change events + sweep), `AskMilestoneDetector`, narration with idle check and deterministic fallback, unread counts. |
+| 2026-10-04 | backend agent | P5.2 (backend part) | Real run on macOS against a throwaway server (ports 47890/47891, `ARMADA_DATA_DIR` in a scratch directory) with a real Claude Code captain: unauthenticated `/ws` got `401`; the captain called `mcp__armada__dispatch` over its thread-scoped token and got "Proposed as aap_..." (no voyage existed before approval); approve executed the real handler (voyage created in the user's tenant), a second approve got `409`; `ask.work` snapshots and `WorkUpdate` messages followed the voyage (started, work produced, finished, the last one narrated by the captain); a second tenant's socket received only its `status.snapshot` and its REST read of the thread was `404`. Fixed during the run: percent-encoded session tokens on `?token=`, and voyages Armada marks Complete while a mission is still landing are now followed until every mission settles. |
+| 2026-10-04 | backend agent | P5.1 | REST_API.md, MCP_API.md, WEBSOCKET_API.md, Postman "Ask Threads" folder, CHANGELOG. README Ask section left for the dashboard merge. |
 
 ## UI assumptions (dashboard, 2026-10-04)
 
@@ -302,3 +308,48 @@ camelized by the client; unknown statuses and kinds render as plain text.
 - **Read state**: the open thread is marked read (`POST .../read`) when it loads, when the tab becomes visible, and
   when an `ask.thread` for it reports `UnreadCount > 0`.
 - `GET /ask/threads/{id}` returning 404 shows a "conversation not found" state.
+
+## Backend implementation notes (2026-10-04)
+
+These refine the contract above; the dashboard's "UI assumptions" (on `feature/ask-ui`) are satisfied as noted.
+
+- **WebSocket authentication.** `/ws` accepts the REST headers, `?token=<token>` (session token, bearer credential
+  token, or API key), or a `Sec-WebSocket-Protocol` entry `armada-token.<base64url(token)>`. Watson 7.2 does not echo a
+  subprotocol in its `101` response and browsers reject that, so **browsers must use `?token=`** (the dashboard does).
+- **WebSocket commands are global-admin only** (deviation from "writes TenantAdmin, reads tenant-scoped"): the command
+  handler reads and writes by id across tenants, so tenant-scoping it would mean re-implementing every command; tenant
+  users use the tenant-scoped REST API. The dashboard does not use commands.
+- **Delivery.** Entity events go to the entity's tenant (tenant resolved from the entity; unresolved events go to global
+  admins only); admins opt in to all tenants with `AllTenants: true` on subscribe. `ask.*` events go only to the owner;
+  the all-tenants opt-in does not apply to them.
+- **Additive fields** (not in the original table, requested by the UI): `AskThread.ActiveWorkCount` and
+  `AskThread.ActiveTurnId` (computed), `AskActionProposal.ExpiresUtc` (computed while pending),
+  `AskTrackedWork.Snapshot` (embedded in thread detail and in messages), `AskQuickAction.Name` and `ArgumentsSchema`.
+  `ask.work` is `{ threadId, trackedWorkId, snapshot, trackedWork }`; `ask.turn` adds `error` on failure.
+- **AskWorkSnapshot** is flat: `TrackedWorkId, ThreadId, EntityType, EntityId, Title, Status, State, Found, TotalCount,
+  CompletedCount, FailedCount, ActiveCount, Progress, Counts, Missions[], Targets[], ErrorText, StartedUtc, CompletedUtc,
+  CapturedUtc`. Mission rows: `Id, Title, Status, VoyageId, VesselId, Persona, PipelineStage, CaptainId, CaptainName,
+  BranchName, CheckRunId, CheckRunStatus, MergeEntryId, MergeQueueStatus` (alias `MergeStatus`)`, PrUrl, LandingOutcome,
+  FailureReason, StartedUtc, CompletedUtc`. Target rows: `Id, VesselId, VesselName, Status, Reason, VoyageId, MissionId,
+  ExitCode`.
+- **PUT** distinguishes an absent `CaptainId` (keep) from `"CaptainId": null` (clear). Creating with only
+  `{ CaptainId }` is supported; the first message names the thread. The optional "captain proposes a better title" step
+  is not implemented (the truncated first message is the title).
+- **Quick actions** use the real MCP argument names: `/dispatch` -> `dispatch { title, vesselId, missions: [{ title,
+  description }], description?, pipelineId? }`; `/fleet-action` -> `run_fleet_action { actionId, vesselIds,
+  concurrency? }`; `/status` -> `status {}`; `/health` -> `evaluate_vessel_health {}` (optional `vesselIds`, `fleetId`,
+  `force`); `/import` -> `discover_vessels { roots?, directories?, maxDepth?, runInBackground? }`.
+- **Thread-scoped MCP** works for ApiEndpoint captains (environment) and Claude Code (per-launch strict MCP config with an
+  `X-Token` header, deleted when the process exits). Codex, Gemini, Cursor, Mux, and OpenCode captains keep their host
+  MCP configuration in thread turns (isolating them would hide their own logins), so their tool calls are not gated.
+- **Work linking** keeps `create_voyage` and `retry_mission` in the table although no MCP tools have those names today.
+- **Narration** runs only when the thread's captain is `Idle`, no turn runs in the thread, and no other Ask turn uses the
+  captain; it never changes the captain's state, uses a gated thread token, and falls back to the deterministic sentence
+  on timeout or failure. Milestones are detected against an in-memory previous snapshot; after a restart only terminal
+  changes are reported, so nothing is repeated.
+- **Settling.** A mission row counts as done when Complete or WorkProduced with nothing landing (no merge-queue entry
+  queued, testing, or passed); a voyage stays Active (even if Armada already marked it Complete) until every mission has
+  settled, so landing outcomes still reach the thread. Milestones add "Mission X produced its work on branch Y".
+- **Unread**: every captain or Armada message (reply, proposal card, action result, work update, summary, error)
+  increments `UnreadCount`; user messages do not. `POST .../read` resets it.
+- **Retention**: none beyond delete.

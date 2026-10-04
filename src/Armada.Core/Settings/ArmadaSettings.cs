@@ -682,6 +682,16 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
+        /// Ask Armada thread settings (history window, proposal expiry, work tracker interval, milestone narration, turn
+        /// timeout). Never null; setting null restores the defaults.
+        /// </summary>
+        public AskSettings Ask
+        {
+            get => _Ask;
+            set => _Ask = value ?? new AskSettings();
+        }
+
+        /// <summary>
         /// Fleet action settings (concurrency cap, default timeout, output cap, run retention).
         /// Never null; setting null restores the defaults.
         /// </summary>
@@ -755,6 +765,7 @@ namespace Armada.Core.Settings
         private HarborServerSettings _Harbor = new HarborServerSettings();
         private VesselImportSettings _Import = new VesselImportSettings();
         private FleetActionSettings _FleetActions = new FleetActionSettings();
+        private AskSettings _Ask = new AskSettings();
         private RepositoryHealthSettings _RepositoryHealth = new RepositoryHealthSettings();
         private DatabaseSettings _Database = new DatabaseSettings();
         private bool _DatabasePathConfigured = false;

@@ -63,6 +63,14 @@ namespace Armada.Runtimes
             set => _GracefulStopTimeoutMs = value < 0 ? 0 : value;
         }
 
+        /// <summary>
+        /// Optional session token for the scoped Armada MCP connection of an isolated launch (for example a thread-scoped
+        /// Ask Armada token). When set and the launch is isolated, the scoped MCP configuration carries the token as an
+        /// X-Token header and is written to a per-launch directory that is deleted when the process exits, so concurrent
+        /// launches of the same captain never share or leak a token. Default null (no token, captain-scoped directory).
+        /// </summary>
+        public string? McpSessionToken { get; set; } = null;
+
         #endregion
 
         #region Private-Members
@@ -127,10 +135,17 @@ namespace Armada.Runtimes
             // Plan captain launch isolation (opt-in). An empty plan leaves the launch unchanged, so when
             // isolation is disabled the behavior below is identical to a non-isolated launch.
             Armada.Core.Services.CaptainLaunchIsolationPlan isolationPlan = new Armada.Core.Services.CaptainLaunchIsolationPlan();
+            string? perLaunchConfigDirectory = null;
             if (isolateLaunch && mcpPort > 0)
             {
                 string scopedConfigDirectory = Path.Combine(Path.GetTempPath(), "armada", "isolation", (captain?.Id ?? Guid.NewGuid().ToString("N")));
-                isolationPlan = Armada.Core.Services.CaptainLaunchIsolationPlanner.Plan(RuntimeType, mcpPort, scopedConfigDirectory);
+                if (!String.IsNullOrEmpty(McpSessionToken))
+                {
+                    scopedConfigDirectory = Path.Combine(Path.GetTempPath(), "armada", "isolation", "launch-" + Guid.NewGuid().ToString("N"));
+                    perLaunchConfigDirectory = scopedConfigDirectory;
+                }
+
+                isolationPlan = Armada.Core.Services.CaptainLaunchIsolationPlanner.Plan(RuntimeType, mcpPort, scopedConfigDirectory, McpSessionToken);
                 if (!isolationPlan.IsEmpty)
                 {
                     foreach (Armada.Core.Services.IsolationConfigFile file in isolationPlan.FilesToWrite)
@@ -267,6 +282,13 @@ namespace Armada.Runtimes
                 // to race with the exit handler and trigger spurious recovery.
                 try { OnProcessExited?.Invoke(processId, code); }
                 catch (Exception ex) { _Logging.Warn(_Header + "error in OnProcessExited handler for process " + processId + ": " + ex.ToString()); }
+
+                // A per-launch scoped config holds a session token; remove it as soon as the process is gone.
+                if (perLaunchConfigDirectory != null)
+                {
+                    try { if (Directory.Exists(perLaunchConfigDirectory)) Directory.Delete(perLaunchConfigDirectory, true); }
+                    catch { }
+                }
 
                 // Dispose the Process object to release the working directory handle.
                 // On Windows, undisposed Process objects hold handles on the WorkingDirectory

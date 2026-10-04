@@ -492,8 +492,8 @@ namespace Armada.Server
 
             if (_WebSocketHub != null)
             {
-                _WebSocketHub.BroadcastCaptainChange(captain.Id, captain.State.ToString(), captain.Name);
-                _WebSocketHub.BroadcastMissionChange(mission.Id, mission.Status.ToString(), mission.Title);
+                _WebSocketHub.BroadcastCaptainChange(captain);
+                _WebSocketHub.BroadcastMissionChange(mission, mission.Status.ToString());
             }
 
             return processId;

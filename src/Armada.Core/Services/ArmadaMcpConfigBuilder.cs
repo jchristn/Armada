@@ -34,15 +34,34 @@ namespace Armada.Core.Services
         /// <returns>An indented JSON document string.</returns>
         public static string BuildKeyedMcpServersJson(int mcpPort)
         {
+            return BuildKeyedMcpServersJson(mcpPort, null);
+        }
+
+        /// <summary>
+        /// Build the keyed "mcpServers" document used by Claude Code, Gemini, and Cursor, optionally carrying a session
+        /// token as an <c>X-Token</c> header so every tool call reaches the Armada MCP server as that caller (for example
+        /// a thread-scoped Ask Armada token).
+        /// </summary>
+        /// <param name="mcpPort">The Admiral MCP port.</param>
+        /// <param name="sessionToken">Session token sent as X-Token on every request, or null for none.</param>
+        /// <returns>An indented JSON document string.</returns>
+        public static string BuildKeyedMcpServersJson(int mcpPort, string? sessionToken)
+        {
+            JsonObject server = new JsonObject
+            {
+                ["type"] = "http",
+                ["url"] = GetMcpUrl(mcpPort),
+            };
+            if (!String.IsNullOrEmpty(sessionToken))
+            {
+                server["headers"] = new JsonObject { ["X-Token"] = sessionToken };
+            }
+
             JsonObject root = new JsonObject
             {
                 ["mcpServers"] = new JsonObject
                 {
-                    ["armada"] = new JsonObject
-                    {
-                        ["type"] = "http",
-                        ["url"] = GetMcpUrl(mcpPort),
-                    },
+                    ["armada"] = server,
                 },
             };
             return root.ToJsonString(_IndentedOptions);
@@ -78,8 +97,25 @@ namespace Armada.Core.Services
         /// <returns>A TOML document string.</returns>
         public static string BuildCodexConfigToml(int mcpPort)
         {
-            return "[mcp_servers.armada]" + Environment.NewLine
+            return BuildCodexConfigToml(mcpPort, null);
+        }
+
+        /// <summary>
+        /// Build the Codex TOML fragment, optionally carrying a session token as an <c>X-Token</c> HTTP header.
+        /// </summary>
+        /// <param name="mcpPort">The Admiral MCP port.</param>
+        /// <param name="sessionToken">Session token sent as X-Token on every request, or null for none.</param>
+        /// <returns>A TOML document string.</returns>
+        public static string BuildCodexConfigToml(int mcpPort, string? sessionToken)
+        {
+            string toml = "[mcp_servers.armada]" + Environment.NewLine
                 + "url = \"" + GetMcpUrl(mcpPort) + "\"" + Environment.NewLine;
+            if (!String.IsNullOrEmpty(sessionToken))
+            {
+                toml += "http_headers = { \"X-Token\" = \"" + sessionToken.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\" }" + Environment.NewLine;
+            }
+
+            return toml;
         }
 
         #endregion

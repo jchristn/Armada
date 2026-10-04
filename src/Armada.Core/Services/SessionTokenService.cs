@@ -71,6 +71,32 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
+        public AuthenticateResult CreateThreadScopedToken(string tenantId, string userId, string askThreadId, TimeSpan lifetime)
+        {
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (string.IsNullOrEmpty(userId)) throw new ArgumentNullException(nameof(userId));
+            if (string.IsNullOrEmpty(askThreadId)) throw new ArgumentNullException(nameof(askThreadId));
+            if (lifetime < TimeSpan.FromMinutes(1)) lifetime = TimeSpan.FromMinutes(1);
+            if (lifetime > TimeSpan.FromHours(24)) lifetime = TimeSpan.FromHours(24);
+
+            DateTime expiresUtc = DateTime.UtcNow.Add(lifetime);
+            SessionPayload payload = new SessionPayload
+            {
+                TenantId = tenantId,
+                UserId = userId,
+                ExpiresUtc = expiresUtc,
+                AskThreadId = askThreadId
+            };
+
+            return new AuthenticateResult
+            {
+                Success = true,
+                Token = Encrypt(JsonSerializer.Serialize(payload)),
+                ExpiresUtc = expiresUtc
+            };
+        }
+
+        /// <inheritdoc />
         public AuthContext? ValidateToken(string encryptedToken)
         {
             if (string.IsNullOrEmpty(encryptedToken)) return null;
@@ -92,7 +118,8 @@ namespace Armada.Core.Services
                     IsTenantAdmin = false,
                     AuthMethod = "Session",
                     CredentialId = null,
-                    PrincipalDisplay = payload.UserId
+                    PrincipalDisplay = payload.UserId,
+                    AskThreadId = string.IsNullOrEmpty(payload.AskThreadId) ? null : payload.AskThreadId
                 };
             }
             catch
@@ -166,6 +193,7 @@ namespace Armada.Core.Services
             public string? TenantId { get; set; }
             public string? UserId { get; set; }
             public DateTime ExpiresUtc { get; set; }
+            public string? AskThreadId { get; set; }
         }
 
         #endregion

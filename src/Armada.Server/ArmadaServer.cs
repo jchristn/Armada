@@ -103,6 +103,12 @@ namespace Armada.Server
         private IMissionService _MissionService = null!;
         private CaptainToolService _CaptainTools = null!;
 
+        private Armada.Core.Services.Ask.AskThreadService _AskThreads = null!;
+        private Armada.Server.Ask.AskActionService _AskActions = null!;
+        private Armada.Server.Ask.AskTurnCoordinator _AskTurns = null!;
+        private Armada.Server.Ask.AskWorkTracker _AskTracker = null!;
+        private CaptainChatService _CaptainChat = null!;
+
         private AgentLifecycleHandler _AgentLifecycle = null!;
         private MissionLandingHandler _MissionLanding = null!;
 
@@ -361,12 +367,23 @@ namespace Armada.Server
                 };
             });
 
-            // Set timestamp on request start
+            // Set timestamp on request start, and authenticate /ws upgrades before the handshake: Watson completes the
+            // WebSocket handshake before invoking the route handler, so an unauthenticated upgrade must be refused here
+            // with 401 (the Harbor link path is separate and keeps its own authentication).
             _App.Routes.PreRouting = async (HttpContextBase ctx) =>
             {
                 ctx.Timestamp.Start = DateTime.UtcNow;
                 ctx.Response.ContentType = "application/json";
-                await Task.CompletedTask.ConfigureAwait(false);
+                if (IsDashboardWebSocketUpgrade(ctx) && _WebSocketHub != null)
+                {
+                    AuthContext wsAuth = await _WebSocketHub.AuthorizeUpgradeAsync(ctx).ConfigureAwait(false);
+                    if (!wsAuth.IsAuthenticated)
+                    {
+                        ctx.Response.StatusCode = 401;
+                        ctx.Response.ContentType = "application/json";
+                        await ctx.Response.Send("{\"error\":\"Authentication required\",\"message\":\"Pass a token as ?token= or in Sec-WebSocket-Protocol, or the REST credential headers\"}").ConfigureAwait(false);
+                    }
+                }
             };
 
             // Log every API call and apply CORS on every response
@@ -395,7 +412,10 @@ namespace Armada.Server
             };
 
             // Initialize WebSocket hub (before routes so it's available for injection)
-            _WebSocketHub = new ArmadaWebSocketHub(_Logging, _Admiral, _Database, _MergeQueue, _Settings, _Git, () => { OnStopping?.Invoke(); _TokenSource.Cancel(); });
+            _WebSocketHub = new ArmadaWebSocketHub(
+                _Logging, _Admiral, _Database, _MergeQueue, _Settings, _Git,
+                () => { OnStopping?.Invoke(); _TokenSource.Cancel(); },
+                (authHeader, tokenHeader, apiKeyHeader) => _AuthenticationService.AuthenticateAsync(authHeader, tokenHeader, apiKeyHeader));
             _AgentLifecycle.SetWebSocketHub(_WebSocketHub);
             _MissionLanding.SetWebSocketHub(_WebSocketHub);
             missionService.OnReviewRequested = _WebSocketHub.BroadcastApprovalNeeded;
@@ -428,6 +448,21 @@ namespace Armada.Server
 
             _RemoteTunnel.OnHandleRequest = HandleRemoteTunnelRequestAsync;
 
+            // Ask Armada threads: thread store, approval gate / action executor, turn coordinator, and work tracker.
+            // Thread events go only to the owner's sockets.
+            _CaptainChat = new CaptainChatService(_Database, _RuntimeFactory, _WebSocketHub, _PromptTemplateService, _SessionTokenService, _Settings.McpPort, _Logging);
+            _AskThreads = new Armada.Core.Services.Ask.AskThreadService(_Database, _Settings, _Logging);
+            _AskActions = new Armada.Server.Ask.AskActionService(_Database, _AskThreads, _Settings, _Logging);
+            _AskTurns = new Armada.Server.Ask.AskTurnCoordinator(_Database, _AskThreads, _CaptainChat, _SessionTokenService, _PromptTemplateService, _Settings, _Logging);
+            _AskTracker = new Armada.Server.Ask.AskWorkTracker(_Database, _AskThreads, _Settings, _Logging);
+            _AskThreads.OnUserEvent = (tenantId, userId, eventType, payload) => _WebSocketHub.SendToUser(tenantId, userId, eventType, payload);
+            _AskThreads.ActiveTurnResolver = _AskTurns.ActiveTurnId;
+            _AskActions.OnWorkLinked = _AskTracker.OnWorkLinkedAsync;
+            _AskActions.OnProposalApproved = _AskTurns.StartFollowUpAsync;
+            _AskTracker.Narrate = _AskTurns.NarrateAsync;
+            _AskTracker.ExpireProposals = _AskActions.ExpireDueAsync;
+            _WebSocketHub.EntityChanged += _AskTracker.OnEntityChanged;
+
             RegisterRoutes();
             InitializeDashboard();
 
@@ -455,6 +490,9 @@ namespace Armada.Server
 
             Task mcpTask = Task.Run(() => _McpServer.StartAsync(_TokenSource.Token));
             _Logging.Info(_Header + "MCP server started on port " + _Settings.McpPort);
+
+            _AskTracker.Start(_TokenSource.Token);
+            _Logging.Debug(_Header + "Ask Armada work tracker started");
 
             _RemoteTunnel.Start(_TokenSource.Token);
             _Logging.Info(_Header + "remote tunnel manager started");
@@ -541,6 +579,7 @@ namespace Armada.Server
 
             _VesselHealthService?.Dispose();
             _TokenSource.Cancel();
+            _AskTracker?.Stop();
             _FleetActionRunner?.Stop();
             _RemoteTunnel?.StopAsync().GetAwaiter().GetResult();
             _RemoteDashboardRelay?.DisposeAsync().GetAwaiter().GetResult();
@@ -560,9 +599,20 @@ namespace Armada.Server
             string? tokenHeader = ctx.Request.Headers.Get("X-Token");
             string? apiKeyHeader = ctx.Request.Headers.Get("X-Api-Key");
             AuthContext result = await _AuthenticationService.AuthenticateAsync(authHeader, tokenHeader, apiKeyHeader).ConfigureAwait(false);
+
+            // Thread-scoped Ask Armada tokens are minted for a captain's MCP connection only; never accept them on REST.
+            if (!String.IsNullOrEmpty(result.AskThreadId)) result = new AuthContext();
             _RequestAuthContexts.Remove(ctx);
             _RequestAuthContexts.Add(ctx, result);
             return result;
+        }
+
+        private static bool IsDashboardWebSocketUpgrade(HttpContextBase ctx)
+        {
+            string path = ctx.Request.Url.RawWithoutQuery ?? String.Empty;
+            if (!String.Equals(path.TrimEnd('/'), "/ws", StringComparison.OrdinalIgnoreCase)) return false;
+            string? upgrade = ctx.Request.Headers.Get("Upgrade");
+            return !String.IsNullOrEmpty(upgrade) && upgrade.IndexOf("websocket", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private async Task<AuthenticationResult> AuthenticateMcpRequestAsync(System.Net.HttpListenerRequest request)
@@ -592,6 +642,10 @@ namespace Armada.Server
                             ["isTenantAdmin"] = ctx.IsTenantAdmin ? "true" : "false",
                             ["authMethod"] = ctx.AuthMethod ?? "Mcp"
                         };
+
+                        // A thread-scoped token marks every tool call of this request as an Ask Armada thread call, which
+                        // the tool gate turns into a proposal unless the tool is read-only or the thread auto-approves.
+                        if (!String.IsNullOrEmpty(ctx.AskThreadId)) result.Claims["askThreadId"] = ctx.AskThreadId!;
                     }
                 }
             }
@@ -702,7 +756,7 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Ask Armada assistant
-            new AskRoutes(new AskArmadaService(_Database, _Admiral, _Logging), new CaptainChatService(_Database, _RuntimeFactory, _WebSocketHub, _PromptTemplateService, _SessionTokenService, _Settings.McpPort, _Logging), _JsonOptions)
+            new AskRoutes(new AskArmadaService(_Database, _Admiral, _Logging), _CaptainChat, _JsonOptions, _AskThreads, _AskTurns, _AskActions)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Needs-you inbox
@@ -1135,6 +1189,10 @@ namespace Armada.Server
         /// </summary>
         private void RegisterAdaptedTool(string name, string description, object inputSchema, Func<System.Text.Json.JsonElement?, Task<object>> handler)
         {
+            // Every tool goes through the Ask Armada gate: calls made with a thread-scoped token become proposals unless
+            // read-only or auto-approved; all other calls run unchanged. The original handler is kept for in-process
+            // execution of approved proposals and quick actions.
+            handler = _AskActions.WrapTool(name, handler);
             _McpServer.RegisterTool(name, description, inputSchema, (RpcParameters? parameters) =>
             {
                 System.Text.Json.JsonElement? args = null;
@@ -1223,10 +1281,11 @@ namespace Armada.Server
                 evt.VoyageId = voyageId;
                 await _Database.Events.CreateAsync(evt).ConfigureAwait(false);
 
-                // Broadcast to WebSocket clients
+                // Broadcast to the WebSocket clients of the entity's tenant
                 if (_WebSocketHub != null)
                 {
-                    _WebSocketHub.BroadcastEvent(eventType, message, new
+                    string? tenantId = await ResolveEventTenantAsync(entityType, entityId, captainId, missionId, vesselId, voyageId).ConfigureAwait(false);
+                    _WebSocketHub.BroadcastToTenant(tenantId, eventType, message, new
                     {
                         entityType = entityType,
                         entityId = entityId,
@@ -1252,6 +1311,76 @@ namespace Armada.Server
             {
                 _Logging.Warn(_Header + "error emitting event: " + ex.ToString());
             }
+        }
+
+        private async Task<string?> ResolveEventTenantAsync(string? entityType, string? entityId, string? captainId, string? missionId, string? vesselId, string? voyageId)
+        {
+            try
+            {
+                if (!String.IsNullOrEmpty(missionId))
+                {
+                    Mission? mission = await _Database.Missions.ReadAsync(missionId).ConfigureAwait(false);
+                    if (!String.IsNullOrEmpty(mission?.TenantId)) return mission!.TenantId;
+                }
+
+                if (!String.IsNullOrEmpty(voyageId))
+                {
+                    Voyage? voyage = await _Database.Voyages.ReadAsync(voyageId).ConfigureAwait(false);
+                    if (!String.IsNullOrEmpty(voyage?.TenantId)) return voyage!.TenantId;
+                }
+
+                if (!String.IsNullOrEmpty(vesselId))
+                {
+                    Vessel? vessel = await _Database.Vessels.ReadAsync(vesselId).ConfigureAwait(false);
+                    if (!String.IsNullOrEmpty(vessel?.TenantId)) return vessel!.TenantId;
+                }
+
+                if (!String.IsNullOrEmpty(captainId))
+                {
+                    Captain? captain = await _Database.Captains.ReadAsync(captainId).ConfigureAwait(false);
+                    if (!String.IsNullOrEmpty(captain?.TenantId)) return captain!.TenantId;
+                }
+
+                if (!String.IsNullOrEmpty(entityId))
+                {
+                    string type = (entityType ?? String.Empty).ToLowerInvariant();
+                    if (type == "fleet")
+                    {
+                        Fleet? fleet = await _Database.Fleets.ReadAsync(entityId).ConfigureAwait(false);
+                        return fleet?.TenantId;
+                    }
+
+                    if (type == "dock")
+                    {
+                        Dock? dock = await _Database.Docks.ReadAsync(entityId).ConfigureAwait(false);
+                        return dock?.TenantId;
+                    }
+
+                    if (type == "signal")
+                    {
+                        Signal? signal = await _Database.Signals.ReadAsync(entityId).ConfigureAwait(false);
+                        return signal?.TenantId;
+                    }
+
+                    if (type == "merge-entry" || type == "merge_entry" || type == "mergeentry")
+                    {
+                        MergeEntry? entry = await _Database.MergeEntries.ReadAsync(entityId).ConfigureAwait(false);
+                        return entry?.TenantId;
+                    }
+
+                    if (type == "planning-session")
+                    {
+                        PlanningSession? session = await _Database.PlanningSessions.ReadAsync(entityId).ConfigureAwait(false);
+                        return session?.TenantId;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _Logging.Debug(_Header + "event tenant resolution failed: " + ex.Message);
+            }
+
+            return null;
         }
 
         private async Task HealthCheckLoopAsync(CancellationToken token)

@@ -117,7 +117,7 @@ namespace Armada.Server
                 captain.LastHeartbeatUtc = DateTime.UtcNow;
                 captain.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
-                _WebSocketHub?.BroadcastCaptainChange(captain.Id, captain.State.ToString(), captain.Name);
+                _WebSocketHub?.BroadcastCaptainChange(captain);
 
                 BroadcastSessionChanged(session);
                 await _EmitEventAsync(
@@ -151,7 +151,7 @@ namespace Armada.Server
                         failedCaptain.LastHeartbeatUtc = DateTime.UtcNow;
                         failedCaptain.LastUpdateUtc = DateTime.UtcNow;
                         await _Database.Captains.UpdateAsync(failedCaptain, token).ConfigureAwait(false);
-                        _WebSocketHub?.BroadcastCaptainChange(failedCaptain.Id, failedCaptain.State.ToString(), failedCaptain.Name);
+                        _WebSocketHub?.BroadcastCaptainChange(failedCaptain);
                     }
                 }
                 catch
@@ -327,7 +327,8 @@ namespace Armada.Server
                     _Logging.Warn(_Header + "objective refinement summary fallback for session " + session.Id + ": " + ex.ToString());
                 }
 
-                _WebSocketHub?.BroadcastEvent(
+                _WebSocketHub?.BroadcastToTenant(
+                    session.TenantId,
                     "objective-refinement-session.summary.created",
                     "Objective refinement summary created",
                     new
@@ -396,7 +397,8 @@ namespace Armada.Server
 
             Objective updated = await objectiveService.UpdateAsync(auth, objective.Id, update, token).ConfigureAwait(false);
 
-            _WebSocketHub?.BroadcastEvent(
+            _WebSocketHub?.BroadcastToTenant(
+                session.TenantId,
                 "objective-refinement-session.applied",
                 "Objective refinement summary applied",
                 new
@@ -438,7 +440,8 @@ namespace Armada.Server
             await _Database.ObjectiveRefinementSessions.DeleteAsync(session.Id, token).ConfigureAwait(false);
             _ActiveTurns.TryRemove(session.Id, out _);
 
-            _WebSocketHub?.BroadcastEvent(
+            _WebSocketHub?.BroadcastToTenant(
+                session.TenantId,
                 "objective-refinement-session.deleted",
                 "Objective refinement session deleted",
                 new { sessionId = session.Id, objectiveId = session.ObjectiveId });
@@ -525,7 +528,7 @@ namespace Armada.Server
                     captain.LastHeartbeatUtc = DateTime.UtcNow;
                     captain.LastUpdateUtc = DateTime.UtcNow;
                     await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
-                    _WebSocketHub?.BroadcastCaptainChange(captain.Id, captain.State.ToString(), captain.Name);
+                    _WebSocketHub?.BroadcastCaptainChange(captain);
 
                     if (session.Status == ObjectiveRefinementSessionStatusEnum.Responding)
                     {
@@ -704,7 +707,7 @@ namespace Armada.Server
                             captain.LastHeartbeatUtc = DateTime.UtcNow;
                             captain.LastUpdateUtc = DateTime.UtcNow;
                             await _Database.Captains.UpdateAsync(captain).ConfigureAwait(false);
-                            _WebSocketHub?.BroadcastCaptainChange(captain.Id, captain.State.ToString(), captain.Name);
+                            _WebSocketHub?.BroadcastCaptainChange(captain);
                         }
                     }
                 }
@@ -878,7 +881,7 @@ namespace Armada.Server
                 captain.LastHeartbeatUtc = DateTime.UtcNow;
                 captain.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
-                _WebSocketHub?.BroadcastCaptainChange(captain.Id, captain.State.ToString(), captain.Name);
+                _WebSocketHub?.BroadcastCaptainChange(captain);
 
                 int? exitCode = await exitSource.Task.ConfigureAwait(false);
 
@@ -935,7 +938,7 @@ namespace Armada.Server
                             refreshedCaptain.LastHeartbeatUtc = DateTime.UtcNow;
                             refreshedCaptain.LastUpdateUtc = DateTime.UtcNow;
                             await _Database.Captains.UpdateAsync(refreshedCaptain, CancellationToken.None).ConfigureAwait(false);
-                            _WebSocketHub?.BroadcastCaptainChange(refreshedCaptain.Id, refreshedCaptain.State.ToString(), refreshedCaptain.Name);
+                            _WebSocketHub?.BroadcastCaptainChange(refreshedCaptain);
                         }
                     }
                     catch (Exception ex)
@@ -1054,7 +1057,7 @@ namespace Armada.Server
                     captain.LastHeartbeatUtc = DateTime.UtcNow;
                     captain.LastUpdateUtc = DateTime.UtcNow;
                     await _Database.Captains.UpdateAsync(captain).ConfigureAwait(false);
-                    _WebSocketHub?.BroadcastCaptainChange(captain.Id, captain.State.ToString(), captain.Name);
+                    _WebSocketHub?.BroadcastCaptainChange(captain);
                 }
 
                 session = await RequireSessionAsync(session.Id, CancellationToken.None).ConfigureAwait(false);
@@ -1096,7 +1099,8 @@ namespace Armada.Server
 
         private void BroadcastSessionChanged(ObjectiveRefinementSession session)
         {
-            _WebSocketHub?.BroadcastEvent(
+            _WebSocketHub?.BroadcastToTenant(
+                session.TenantId,
                 "objective-refinement-session.changed",
                 "Objective refinement session updated",
                 new { session });
@@ -1104,7 +1108,8 @@ namespace Armada.Server
 
         private void BroadcastMessageCreated(ObjectiveRefinementMessage message)
         {
-            _WebSocketHub?.BroadcastEvent(
+            _WebSocketHub?.BroadcastToTenant(
+                message.TenantId,
                 "objective-refinement-session.message.created",
                 "Objective refinement message created",
                 new
@@ -1117,7 +1122,8 @@ namespace Armada.Server
 
         private void BroadcastMessageUpdated(ObjectiveRefinementMessage message)
         {
-            _WebSocketHub?.BroadcastEvent(
+            _WebSocketHub?.BroadcastToTenant(
+                message.TenantId,
                 "objective-refinement-session.message.updated",
                 "Objective refinement message updated",
                 new
