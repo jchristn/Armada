@@ -106,7 +106,19 @@ namespace Armada.Server.WebSocket
         public List<string> TokenCandidates()
         {
             List<string> candidates = new List<string>();
-            if (!String.IsNullOrWhiteSpace(QueryToken)) candidates.Add(NormalizeQueryToken(QueryToken));
+            if (!String.IsNullOrWhiteSpace(QueryToken))
+            {
+                // Some transports hand the raw (still percent-encoded) query value through; try the decoded form first.
+                string normalized = NormalizeQueryToken(QueryToken);
+                if (normalized.Contains('%'))
+                {
+                    string decoded = NormalizeQueryToken(Uri.UnescapeDataString(normalized));
+                    if (!candidates.Contains(decoded)) candidates.Add(decoded);
+                }
+
+                if (!candidates.Contains(normalized)) candidates.Add(normalized);
+            }
+
             foreach (string token in _ProtocolTokens)
             {
                 if (!String.IsNullOrWhiteSpace(token) && !candidates.Contains(token)) candidates.Add(token);

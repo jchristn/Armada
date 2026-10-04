@@ -91,6 +91,18 @@ namespace Test.Shared.Suites.E2E
                 }
             }));
 
+            cases.Add(CaseAsync("session_token_in_query_accepted", "A dashboard session token (base64, percent-encoded) in the query string authenticates the upgrade", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
+                E2ETenantUser user = await E2ETenantUser.CreateAsync(fx.AuthClient, "session").ConfigureAwait(false);
+                string sessionToken = new Armada.Core.Services.SessionTokenService(fx.SessionTokenEncryptionKey).CreateToken(user.TenantId, user.UserId).Token!;
+                bool connected = await TryConnectAsync(fx.RestPort, sessionToken, null, null).ConfigureAwait(false);
+                AssertTrue(connected, "a percent-encoded session token should authenticate the upgrade");
+
+                string threadToken = new Armada.Core.Services.SessionTokenService(fx.SessionTokenEncryptionKey).CreateThreadScopedToken(user.TenantId, user.UserId, "ath_x", TimeSpan.FromMinutes(5)).Token!;
+                AssertFalse(await TryConnectAsync(fx.RestPort, threadToken, null, null).ConfigureAwait(false), "a thread-scoped token must be refused");
+            }));
+
             cases.Add(CaseAsync("subprotocol_token_accepted", "A token carried in Sec-WebSocket-Protocol authenticates the upgrade", TestTags.Positive, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
