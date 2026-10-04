@@ -102,8 +102,8 @@ namespace Test.Shared.Suites.Services
 
                 Memory created = await service.CreateAsync(userA, new Memory { Content = "A's note" }).ConfigureAwait(false);
 
-                // B is not permitted to delete A's user-specific memory.
-                await AssertThrowsAsync<UnauthorizedAccessException>(() => service.DeleteAsync(userB, created.Id));
+                // B cannot see A's user-specific memory, so deleting it reports not found (404), not forbidden.
+                await AssertThrowsAsync<KeyNotFoundException>(() => service.DeleteAsync(userB, created.Id));
             }));
 
             return new TestSuiteDescriptor(

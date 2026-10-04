@@ -17,6 +17,9 @@ namespace Test.Automated
     /// --db-host, --db-port, --db-user, --db-pass, and --db-name. These map onto the ARMADA_TEST_DB_*
     /// environment variables the shared harness reads, so the same suite runs unchanged against a real
     /// server. SQLite (the default) needs no connection arguments.
+    ///
+    /// <c>--generate-api-surface &lt;dir&gt;</c> runs no tests: it boots a throwaway in-process Admiral and rewrites
+    /// api-surface-1.0.json and API_SURFACE_1.0.md in the directory (scripts/common/generate-api-surface.sh).
     /// </summary>
     public static class Program
     {
@@ -29,6 +32,7 @@ namespace Test.Automated
         public static async Task<int> Main(string[] args)
         {
             string? resultsPath = null;
+            string? surfaceDirectory = null;
 
             for (int i = 0; i < args.Length; i++)
             {
@@ -58,12 +62,25 @@ namespace Test.Automated
                     case "--db-pass":
                         if (next != null) Environment.SetEnvironmentVariable("ARMADA_TEST_DB_PASS", next);
                         break;
+                    case "--generate-api-surface":
+                        if (next != null) surfaceDirectory = next;
+                        break;
                     case "--db-name":
                         if (next != null) Environment.SetEnvironmentVariable("ARMADA_TEST_DB_NAME", next);
                         break;
                     default:
                         break;
                 }
+            }
+
+            if (surfaceDirectory != null)
+            {
+                Test.Shared.Infrastructure.ApiSurface.ApiSurfaceDocument surface = await Test.Shared.Infrastructure.ApiSurface.ApiSurfaceFiles.GenerateAsync(surfaceDirectory).ConfigureAwait(false);
+                Console.WriteLine("API surface written to " + System.IO.Path.GetFullPath(surfaceDirectory) + ": "
+                    + surface.Rest.Count + " REST routes, " + surface.Mcp.Count + " MCP tools, "
+                    + surface.WebSocket.Commands.Count + " WebSocket commands, " + surface.WebSocket.Events.Count + " WebSocket events, "
+                    + surface.Cli.Count + " CLI commands, " + surface.Settings.Count + " settings keys");
+                return 0;
             }
 
             return await ConsoleRunner.RunAsync(ArmadaTestSuites.All, resultsPath: resultsPath).ConfigureAwait(false);

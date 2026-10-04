@@ -121,7 +121,8 @@ namespace Test.Shared.Suites.Services
 
                 Harbor created = await service.CreateAsync(owner, new Harbor { Name = "Owned" }).ConfigureAwait(false);
                 Harbor edit = new Harbor { Id = created.Id, Name = "Hijacked" };
-                await AssertThrowsAsync<UnauthorizedAccessException>(() => service.UpdateAsync(other, edit));
+                // Another tenant's harbor is reported as not found (404), not forbidden.
+                await AssertThrowsAsync<KeyNotFoundException>(() => service.UpdateAsync(other, edit));
             }));
 
             cases.Add(CaseAsync("read_null_id_throws", "ReadAsync NullId Throws", TestTags.Negative, async () =>

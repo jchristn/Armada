@@ -186,6 +186,12 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
 
 ## Overview
 
+**Contract.** Tool names, argument names and types, and which arguments are required are frozen for 1.0 and listed in
+[API_SURFACE_1.0.md](API_SURFACE_1.0.md) (rules: [COMPATIBILITY.md](COMPATIBILITY.md)). Arguments are camelCase (matched
+case-insensitively); tool results carry the same entity shapes as the REST API, with PascalCase property names. New
+tools, new optional arguments, and new result fields may be added in minor releases. Tools whose description starts with `[Experimental]` (the Harbor tools `get_harbor`, `create_harbor`,
+`update_harbor`, `delete_harbor`, `set_harbor_enabled`) are excluded from the promise.
+
 Armada exposes a full MCP server that allows AI agents and MCP-compatible clients to interact with the Admiral orchestrator. MCP covers Armada's core orchestration and management surfaces directly from tool-calling clients:
 
 - Query system status, stop the server
@@ -3238,6 +3244,10 @@ Returns `{ "Error": "entryIds is required and must not be empty" }` if no IDs ar
 ---
 
 ### get_harbor
+
+> **Experimental.** The Harbor tools below (`get_harbor`, `create_harbor`, `update_harbor`, `delete_harbor`,
+> `set_harbor_enabled`) belong to Harbor split mode, which is experimental for 1.0 and excluded from the compatibility
+> promise. Their descriptions start with `[Experimental]`.
 
 Inspect one registered Harbor (host runner) by ID, including its advertised capabilities and connection status.
 

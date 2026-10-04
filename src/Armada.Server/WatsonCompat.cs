@@ -54,7 +54,7 @@ namespace Armada.Server
             OpenApiSchemaMetadata schema = new OpenApiSchemaMetadata
             {
                 Type = "object",
-                Description = typeof(T).Name
+                Description = FriendlyName(typeof(T))
             };
             return OpenApiResponseMetadata.Json(description, schema);
         }
@@ -71,9 +71,28 @@ namespace Armada.Server
             OpenApiSchemaMetadata schema = new OpenApiSchemaMetadata
             {
                 Type = "object",
-                Description = typeof(T).Name
+                Description = FriendlyName(typeof(T))
             };
             return OpenApiRequestBodyMetadata.Json(schema, description, required);
+        }
+
+        /// <summary>
+        /// Readable type name for OpenAPI and the API surface file: generic arguments are spelled out
+        /// (EnumerationResult&lt;Fleet&gt; rather than EnumerationResult`1).
+        /// </summary>
+        /// <param name="type">Type.</param>
+        /// <returns>Readable name.</returns>
+        public static string FriendlyName(System.Type type)
+        {
+            if (type == null) throw new System.ArgumentNullException(nameof(type));
+            if (type.IsArray) return FriendlyName(type.GetElementType()!) + "[]";
+            if (!type.IsGenericType) return type.Name;
+            string name = type.Name;
+            int tick = name.IndexOf('`');
+            if (tick > 0) name = name.Substring(0, tick);
+            List<string> args = new List<string>();
+            foreach (System.Type argument in type.GetGenericArguments()) args.Add(FriendlyName(argument));
+            return name + "<" + string.Join(",", args) + ">";
         }
     }
 }

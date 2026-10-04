@@ -150,6 +150,19 @@ Each test suite creates its own data, asserts only on that data, and cleans up a
 - Suites can run in any order without affecting each other
 - Use `--no-cleanup` to preserve test data after a run for debugging
 
+## API Contract Test
+
+`E2E.ApiContract` compares the live public surface (REST, MCP, WebSocket, CLI, settings) to the frozen baseline in
+`docs/api-surface-1.0.json` and fails on removals and incompatible changes, printing a diff. After an intended addition,
+regenerate the baseline and its Markdown view and commit them with the change:
+
+```bash
+dotnet run --project src/Test.Automated --framework net10.0 -- --suites E2E.ApiContract
+scripts/common/generate-api-surface.sh
+```
+
+See [COMPATIBILITY.md](COMPATIBILITY.md).
+
 ## Adding Tests
 
 1. Find or create the appropriate suite in `Suites/`

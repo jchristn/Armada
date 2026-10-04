@@ -6,6 +6,9 @@
 > **Status:** Phase 1 + Phase 2 implemented (compiles; Harbor cutover path needs live verification)
 > **Owner:** _unassigned_
 > **Target deployment:** native single-box Windows (self-contained Admiral + on-box Harbor)
+> **API status:** experimental for 1.0. `POST /api/v1/server/rebuild`, `GET /api/v1/server/rebuild/status`,
+> `POST /api/v1/server/rollback`, and the `selfVesselId`, `rebuildSlotRetentionCount`, and `rebuildSupervisorHarborId`
+> settings are excluded from the compatibility promise ([COMPATIBILITY.md](COMPATIBILITY.md)).
 > **Last updated:** 2026-09-11
 
 ### Implementation notes / deviations from the original plan

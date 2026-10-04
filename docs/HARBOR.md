@@ -26,7 +26,7 @@ Today Armada runs in Local mode by default, and Local mode is fully functional. 
 processes share one machine; there is no Harbor and no link, and nothing about your setup changes. This is
 the right mode for a single developer running Armada on the same box they code on.
 
-Split mode is the emerging shape. The Admiral runs detached -- in Docker or on another host -- and one or
+Split mode is **experimental** in 1.0 (see [Status](#status)). The Admiral runs detached -- in Docker or on another host -- and one or
 more Harbors run on the machines where the code and tool logins live. The Admiral routes each unit of host
 work to a Harbor over the link, the Harbor executes it locally, and results stream back. Split mode is what
 lets a single containerized Admiral drive agents across several developer machines at once.
@@ -118,5 +118,8 @@ The management surface and the host-runner app exist today: the `Harbor` entity 
 REST and MCP management APIs, the multi-Harbor router with dock affinity, the wire-protocol contract, and
 the `Armada.Harbor` app. The live split-mode link transport -- the server-side WebSocket endpoint that
 accepts Harbor links, credential authentication on the upgrade, and remote captain-process delegation -- is
-still being rolled out. Until it lands, Local mode remains the supported way to run Armada, and the Harbor
-management APIs let you register and shape the topology ahead of the transport going live.
+**experimental**. Local mode is the supported way to run Armada. Split mode works, but its link transport, the
+Harbor management REST routes and MCP tools, the `harbor.*`, `deploymentMode`, and `requireHarborForLaunch` settings,
+and the link protocol below are excluded from the 1.0 compatibility promise and may change in a minor release (see
+[COMPATIBILITY.md](COMPATIBILITY.md)). Experimental routes and tools are marked `[Experimental]` in OpenAPI and in their
+MCP descriptions.

@@ -48,6 +48,15 @@ namespace Armada.Server
             get { lock (_RegisteredMcpToolsLock) { return new List<string>(_RegisteredMcpTools); } }
         }
 
+        /// <summary>
+        /// MCP tools registered on the HTTP MCP server with their (marked) descriptions and serialized input schemas, in
+        /// registration order (populated by <see cref="StartAsync"/>). Used by the API surface generator and contract test.
+        /// </summary>
+        public IReadOnlyList<CaptainToolSummary> RegisteredMcpToolDescriptors
+        {
+            get { lock (_RegisteredMcpToolsLock) { return new List<CaptainToolSummary>(_RegisteredMcpToolDescriptors); } }
+        }
+
         #endregion
 
         #region Private-Members
@@ -129,6 +138,7 @@ namespace Armada.Server
         private DateTime _StartUtc = DateTime.UtcNow;
         private readonly ConditionalWeakTable<HttpContextBase, AuthContext> _RequestAuthContexts = new ConditionalWeakTable<HttpContextBase, AuthContext>();
         private readonly List<string> _RegisteredMcpTools = new List<string>();
+        private readonly List<CaptainToolSummary> _RegisteredMcpToolDescriptors = new List<CaptainToolSummary>();
         private readonly object _RegisteredMcpToolsLock = new object();
 
         private static readonly JsonSerializerOptions _JsonOptions = new JsonSerializerOptions
@@ -384,6 +394,7 @@ namespace Armada.Server
                 openApi.Tags.Add(new OpenApiTag { Name = "Tenants", Description = "Multi-tenant management" });
                 openApi.Tags.Add(new OpenApiTag { Name = "Users", Description = "User management" });
                 openApi.Tags.Add(new OpenApiTag { Name = "Credentials", Description = "Credential (API token) management" });
+                openApi.Tags.Add(new OpenApiTag { Name = Armada.Core.ApiSurface.ExperimentalSurface.Tag, Description = "Experimental routes: excluded from the 1.0 compatibility promise (see docs/COMPATIBILITY.md) and may change or be removed in a minor release" });
 
                 // API key security scheme
                 openApi.SecuritySchemes["ApiKey"] = new OpenApiSecurityScheme
@@ -412,7 +423,7 @@ namespace Armada.Server
                     {
                         ctx.Response.StatusCode = 401;
                         ctx.Response.ContentType = "application/json";
-                        await ctx.Response.Send("{\"error\":\"Authentication required\",\"message\":\"Pass a token as ?token= or in Sec-WebSocket-Protocol, or the REST credential headers\"}").ConfigureAwait(false);
+                        await ctx.Response.Send(_App.Serializer.SerializeJson(new ApiErrorResponse { Error = ApiResultEnum.NotAuthorized, Message = "Authentication required: pass a token as ?token= or in Sec-WebSocket-Protocol, or the REST credential headers" }, false)).ConfigureAwait(false);
                     }
                     return;
                 }
@@ -501,6 +512,7 @@ namespace Armada.Server
             _WebSocketHub.EntityChanged += _AskTracker.OnEntityChanged;
 
             RegisterRoutes();
+            MarkExperimentalRoutes();
             InitializeDashboard();
 
             // Register WebSocket route on the main REST server
@@ -649,9 +661,53 @@ namespace Armada.Server
             return routes;
         }
 
+        /// <summary>
+        /// Every REST route registered on the Admiral's web server with its OpenAPI metadata (summary, tags, request and
+        /// response type names). Used by the API surface generator (docs/API_SURFACE_1.0.md) and the API contract test.
+        /// </summary>
+        /// <returns>Route descriptors in registration order.</returns>
+        public List<RestRouteDescriptor> GetRestRouteDescriptors()
+        {
+            List<RestRouteDescriptor> routes = new List<RestRouteDescriptor>();
+            if (_App == null) return routes;
+            foreach (WatsonWebserver.Core.Routing.RoutingGroup group in new WatsonWebserver.Core.Routing.RoutingGroup[] { _App.Routes.PreAuthentication, _App.Routes.PostAuthentication })
+            {
+                foreach (WatsonWebserver.Core.Routing.StaticRoute route in group.Static.GetAll())
+                    routes.Add(RestRouteDescriptor.From(route.Method.ToString().ToUpperInvariant(), route.Path.Length > 1 ? route.Path.TrimEnd('/') : route.Path, route.OpenApiMetadata));
+                foreach (WatsonWebserver.Core.Routing.ParameterRoute route in group.Parameter.GetAll())
+                    routes.Add(RestRouteDescriptor.From(route.Method.ToString().ToUpperInvariant(), route.Path, route.OpenApiMetadata));
+            }
+
+            return routes;
+        }
+
         #endregion
 
         #region Private-Methods
+
+        /// <summary>
+        /// Mark every route listed in <see cref="Armada.Core.ApiSurface.ExperimentalSurface"/> in the OpenAPI document: the
+        /// summary gets the experimental prefix and the route gets the Experimental tag.
+        /// </summary>
+        private void MarkExperimentalRoutes()
+        {
+            foreach (WatsonWebserver.Core.Routing.RoutingGroup group in new WatsonWebserver.Core.Routing.RoutingGroup[] { _App.Routes.PreAuthentication, _App.Routes.PostAuthentication })
+            {
+                foreach (WatsonWebserver.Core.Routing.StaticRoute route in group.Static.GetAll())
+                    MarkExperimentalRoute(route.Method.ToString(), route.Path.Length > 1 ? route.Path.TrimEnd('/') : route.Path, route.OpenApiMetadata);
+                foreach (WatsonWebserver.Core.Routing.ParameterRoute route in group.Parameter.GetAll())
+                    MarkExperimentalRoute(route.Method.ToString(), route.Path, route.OpenApiMetadata);
+            }
+        }
+
+        private static void MarkExperimentalRoute(string method, string template, OpenApiRouteMetadata? metadata)
+        {
+            if (metadata == null) return;
+            if (!Armada.Core.ApiSurface.ExperimentalSurface.IsExperimentalRoute(method, template)) return;
+            metadata.Summary = Armada.Core.ApiSurface.ExperimentalSurface.Mark(metadata.Summary);
+            if (metadata.Tags == null) metadata.Tags = new List<string>();
+            if (!metadata.Tags.Contains(Armada.Core.ApiSurface.ExperimentalSurface.Tag)) metadata.Tags.Add(Armada.Core.ApiSurface.ExperimentalSurface.Tag);
+        }
 
         /// <summary>
         /// Resolve the route template Watson will dispatch this request to (static routes first, then parameter routes,
@@ -703,7 +759,7 @@ namespace Armada.Server
                 ctx.Response.ContentType = "application/json";
                 ApiErrorResponse denied = new ApiErrorResponse
                 {
-                    Error = ApiResultEnum.BadRequest,
+                    Error = auth.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized,
                     Message = auth.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required"
                 };
                 await ctx.Response.Send(_App.Serializer.SerializeJson(denied, false)).ConfigureAwait(false);
@@ -716,7 +772,7 @@ namespace Armada.Server
                 ctx.Response.ContentType = "application/json";
                 ApiErrorResponse blocked = new ApiErrorResponse
                 {
-                    Error = ApiResultEnum.BadRequest,
+                    Error = ApiResultEnum.Forbidden,
                     Message = "Password change required: change the default password with PUT /api/v1/account/password before using the API with this session"
                 };
                 await ctx.Response.Send(_App.Serializer.SerializeJson(blocked, false)).ConfigureAwait(false);
@@ -1374,7 +1430,7 @@ namespace Armada.Server
             // 404 for everything else
             ctx.Response.StatusCode = 404;
             ctx.Response.ContentType = "application/json";
-            await ctx.Response.Send("{\"error\":\"Not found\"}").ConfigureAwait(false);
+            await ctx.Response.Send(_App.Serializer.SerializeJson(new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }, false)).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -1388,7 +1444,17 @@ namespace Armada.Server
             // execution of approved proposals and quick actions.
             handler = AuthorizeMcpTool(name, handler);
             handler = _AskActions.WrapTool(name, handler);
-            lock (_RegisteredMcpToolsLock) { _RegisteredMcpTools.Add(name); }
+            lock (_RegisteredMcpToolsLock)
+            {
+                _RegisteredMcpTools.Add(name);
+                _RegisteredMcpToolDescriptors.Add(new CaptainToolSummary
+                {
+                    Name = name,
+                    Description = description,
+                    InputSchemaJson = System.Text.Json.JsonSerializer.Serialize(inputSchema),
+                    RegistrationSource = "Armada MCP"
+                });
+            }
             _McpServer.RegisterTool(name, description, inputSchema, (RpcParameters? parameters) =>
             {
                 System.Text.Json.JsonElement? args = null;

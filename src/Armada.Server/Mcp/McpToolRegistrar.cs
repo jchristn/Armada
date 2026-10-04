@@ -1,5 +1,3 @@
-// TODO: MCP is currently unauthenticated and uses the default tenant context for all operations.
-// MCP authentication and per-tenant scoping is planned for a future phase.
 namespace Armada.Server.Mcp
 {
     using System;
@@ -97,6 +95,8 @@ namespace Armada.Server.Mcp
             VesselHealthService? vesselHealthService = null,
             IFleetCategorizationService? fleetCategorizationService = null)
         {
+            if (register == null) throw new ArgumentNullException(nameof(register));
+            register = MarkExperimental(register);
             McpStatusTools.Register(register, admiral, onStop);
             if (logging != null) McpInboxTools.Register(register, database, logging);
             McpEnumerateTools.Register(register, database, mergeQueue);
@@ -165,7 +165,7 @@ namespace Armada.Server.Mcp
 
             void RegisterCatalogGroup(string registrationSource, Action<RegisterToolDelegate> registerGroup)
             {
-                registerGroup(
+                registerGroup(MarkExperimental(
                     (name, description, inputSchema, handler) =>
                     {
                         tools.Add(new CaptainToolSummary
@@ -175,7 +175,7 @@ namespace Armada.Server.Mcp
                             InputSchemaJson = inputSchema == null ? null : JsonSerializer.Serialize(inputSchema, _JsonOptions),
                             RegistrationSource = registrationSource
                         });
-                    });
+                    }));
             }
 
             RegisterCatalogGroup("Armada MCP / Status", register => McpStatusTools.Register(register, admiral, onStop));
@@ -213,6 +213,24 @@ namespace Armada.Server.Mcp
             return tools
                 .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
+        }
+
+        /// <summary>
+        /// Wrap a registration delegate so every tool listed in <see cref="Armada.Core.ApiSurface.ExperimentalSurface"/>
+        /// is registered with its description prefixed by the experimental marker.
+        /// </summary>
+        /// <param name="register">Inner registration delegate.</param>
+        /// <returns>Wrapping delegate.</returns>
+        public static RegisterToolDelegate MarkExperimental(RegisterToolDelegate register)
+        {
+            if (register == null) throw new ArgumentNullException(nameof(register));
+            return (name, description, inputSchema, handler) =>
+            {
+                string effective = Armada.Core.ApiSurface.ExperimentalSurface.IsExperimentalTool(name)
+                    ? Armada.Core.ApiSurface.ExperimentalSurface.Mark(description)
+                    : description;
+                register(name, effective, inputSchema, handler);
+            };
         }
     }
 }

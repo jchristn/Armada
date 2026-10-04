@@ -113,6 +113,11 @@ namespace Armada.Server.WebSocket
         /// <returns>The result object to serialize and send back to the client.</returns>
         public async Task<object> HandleCommandAsync(string action, WebSocketCommand command, string rawBody)
         {
+            // Only the declared surface is dispatched; an action handled below but missing from WebSocketSurface is a bug
+            // that the API contract test catches.
+            if (!WebSocketSurface.IsCommandAction(action))
+                return new { type = "command.error", action = action, error = "Unknown action: " + action };
+
             switch (action)
             {
                 // ── Status & Control ──────────────────────────────────────

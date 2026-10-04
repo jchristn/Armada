@@ -135,7 +135,7 @@ namespace Armada.Server.Routes
                 catch (UnauthorizedAccessException ex)
                 {
                     req.Http.Response.StatusCode = 403;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
+                    return new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = ex.Message };
                 }
                 catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
                 {
@@ -172,7 +172,7 @@ namespace Armada.Server.Routes
                 catch (UnauthorizedAccessException ex)
                 {
                     req.Http.Response.StatusCode = 403;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
+                    return new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = ex.Message };
                 }
             },
             api => api
@@ -229,7 +229,7 @@ namespace Armada.Server.Routes
                 if (!_Connections.IsConnected(harbor.Id))
                 {
                     req.Http.Response.StatusCode = 409;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Harbor is not connected; no link to probe over." };
+                    return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = "Harbor is not connected; no link to probe over." };
                 }
 
                 if (_Database != null)
@@ -288,7 +288,7 @@ namespace Armada.Server.Routes
             catch (UnauthorizedAccessException ex)
             {
                 req.Http.Response.StatusCode = 403;
-                return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
+                return new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = ex.Message };
             }
         }
 
@@ -296,7 +296,7 @@ namespace Armada.Server.Routes
         {
             return new ApiErrorResponse
             {
-                Error = ApiResultEnum.BadRequest,
+                Error = req.Http.Response.StatusCode == 401 ? ApiResultEnum.NotAuthorized : ApiResultEnum.Forbidden,
                 Message = req.Http.Response.StatusCode == 401
                     ? "Authentication required"
                     : "You do not have permission to perform this action"

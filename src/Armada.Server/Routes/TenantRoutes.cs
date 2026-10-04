@@ -50,7 +50,7 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 EnumerationQuery query = new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
@@ -66,11 +66,11 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 string body = req.Http.Request.DataAsString;
                 TenantMetadata? tenant = JsonSerializer.Deserialize<TenantMetadata>(body, _jsonOptions);
-                if (tenant == null) { req.Http.Response.StatusCode = 400; return (object)new { Error = "Invalid request body" }; }
+                if (tenant == null) { req.Http.Response.StatusCode = 400; return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid request body" }; }
                 tenant.IsProtected = false;
                 tenant = await _database.Tenants.CreateAsync(tenant).ConfigureAwait(false);
                 await SeedDefaultTenantAdminAsync(tenant).ConfigureAwait(false);
@@ -85,12 +85,12 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 string id = req.Parameters["id"];
-                if (!ctx.IsAdmin && ctx.TenantId != id) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
+                if (!ctx.IsAdmin && ctx.TenantId != id) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
                 TenantMetadata? tenant = await _database.Tenants.ReadAsync(id).ConfigureAwait(false);
-                if (tenant == null) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
+                if (tenant == null) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
                 return (object)tenant;
             },
             api => api.WithTag("Tenants").WithSummary("Get tenant by ID"));
@@ -101,13 +101,13 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 string body = req.Http.Request.DataAsString;
                 TenantMetadata? tenant = JsonSerializer.Deserialize<TenantMetadata>(body, _jsonOptions);
-                if (tenant == null) { req.Http.Response.StatusCode = 400; return (object)new { Error = "Invalid request body" }; }
+                if (tenant == null) { req.Http.Response.StatusCode = 400; return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid request body" }; }
                 TenantMetadata? existing = await _database.Tenants.ReadAsync(req.Parameters["id"]).ConfigureAwait(false);
-                if (existing == null) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
+                if (existing == null) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
                 tenant.Id = req.Parameters["id"];
                 tenant.CreatedUtc = existing.CreatedUtc;
                 tenant.IsProtected = existing.IsProtected;
@@ -122,12 +122,12 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 string id = req.Parameters["id"];
                 TenantMetadata? tenant = await _database.Tenants.ReadAsync(id).ConfigureAwait(false);
-                if (tenant == null) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
-                if (tenant.IsProtected) { req.Http.Response.StatusCode = 403; return (object)new { Error = "Protected resources cannot be deleted directly" }; }
+                if (tenant == null) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
+                if (tenant.IsProtected) { req.Http.Response.StatusCode = 403; return (object)new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = "Protected resources cannot be deleted directly" }; }
                 await DeleteTenantCascadeAsync(id).ConfigureAwait(false);
                 return (object)new { Success = true };
             },
@@ -140,7 +140,7 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 EnumerationQuery query = new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
@@ -169,20 +169,20 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 string body = req.Http.Request.DataAsString;
                 UserUpsertRequest? userRequest = JsonSerializer.Deserialize<UserUpsertRequest>(body, _jsonOptions);
                 if (userRequest == null || string.IsNullOrWhiteSpace(userRequest.Email))
                 {
                     req.Http.Response.StatusCode = 400;
-                    return (object)new { Error = "Invalid request body" };
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid request body" };
                 }
                 string? passwordHash = ResolvePasswordHash(userRequest, null, true);
                 if (passwordHash == null)
                 {
                     req.Http.Response.StatusCode = 400;
-                    return (object)new { Error = "Password is required" };
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Password is required" };
                 }
                 UserMaster user = new UserMaster
                 {
@@ -204,7 +204,7 @@ namespace Armada.Server.Routes
                 if (!ctx.IsAdmin && !ctx.IsTenantAdmin)
                 {
                     req.Http.Response.StatusCode = 403;
-                    return (object)new { Error = "Forbidden" };
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = "Forbidden" };
                 }
                 user = await _database.Users.CreateAsync(user).ConfigureAwait(false);
                 Credential credential = new Credential(user.TenantId, user.Id)
@@ -224,15 +224,15 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 string id = req.Parameters["id"];
                 bool canReadAnyInTenant = ctx.IsAdmin || ctx.IsTenantAdmin;
-                if (!canReadAnyInTenant && ctx.UserId != id) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
+                if (!canReadAnyInTenant && ctx.UserId != id) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
                 UserMaster? user = ctx.IsAdmin
                     ? await _database.Users.ReadByIdAsync(id).ConfigureAwait(false)
                     : await _database.Users.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false);
-                if (user == null) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
+                if (user == null) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
                 return (object)UserMaster.Redact(user);
             },
             api => api.WithTag("Users").WithSummary("Get user by ID"));
@@ -243,22 +243,22 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 string body = req.Http.Request.DataAsString;
                 UserUpsertRequest? userRequest = JsonSerializer.Deserialize<UserUpsertRequest>(body, _jsonOptions);
                 if (userRequest == null || string.IsNullOrWhiteSpace(userRequest.Email))
                 {
                     req.Http.Response.StatusCode = 400;
-                    return (object)new { Error = "Invalid request body" };
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid request body" };
                 }
                 UserMaster? existing = await _database.Users.ReadByIdAsync(req.Parameters["id"]).ConfigureAwait(false);
-                if (existing == null) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
-                if (!ctx.IsAdmin && existing.TenantId != ctx.TenantId) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
-                if (!ctx.IsAdmin && !ctx.IsTenantAdmin && existing.Id != ctx.UserId) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
+                if (existing == null) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
+                if (!ctx.IsAdmin && existing.TenantId != ctx.TenantId) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
+                if (!ctx.IsAdmin && !ctx.IsTenantAdmin && existing.Id != ctx.UserId) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
                 // A tenant admin may not change a global admin's account (password, email, activation): that would let
                 // a tenant admin take over a global admin that shares its tenant.
-                if (!ctx.IsAdmin && existing.IsAdmin && existing.Id != ctx.UserId) { req.Http.Response.StatusCode = 403; return (object)new { Error = "Only a global admin may modify a global admin account" }; }
+                if (!ctx.IsAdmin && existing.IsAdmin && existing.Id != ctx.UserId) { req.Http.Response.StatusCode = 403; return (object)new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = "Only a global admin may modify a global admin account" }; }
                 UserMaster user = new UserMaster
                 {
                     Id = req.Parameters["id"],
@@ -294,14 +294,17 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 string id = req.Parameters["id"];
                 UserMaster? user = await _database.Users.ReadByIdAsync(id).ConfigureAwait(false);
-                if (user == null) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
-                if (!ctx.IsAdmin && (!ctx.IsTenantAdmin || user.TenantId != ctx.TenantId)) { req.Http.Response.StatusCode = 403; return (object)new { Error = "Forbidden" }; }
-                if (!ctx.IsAdmin && user.IsAdmin) { req.Http.Response.StatusCode = 403; return (object)new { Error = "Only a global admin may delete a global admin account" }; }
-                if (user.IsProtected) { req.Http.Response.StatusCode = 403; return (object)new { Error = "Protected resources cannot be deleted directly" }; }
+                if (user == null) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
+                // Another tenant's user is reported as not found (no cross-tenant existence leak); a same-tenant caller
+                // without tenant admin is forbidden.
+                if (!ctx.IsAdmin && user.TenantId != ctx.TenantId) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
+                if (!ctx.IsAdmin && !ctx.IsTenantAdmin) { req.Http.Response.StatusCode = 403; return (object)new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = "Forbidden" }; }
+                if (!ctx.IsAdmin && user.IsAdmin) { req.Http.Response.StatusCode = 403; return (object)new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = "Only a global admin may delete a global admin account" }; }
+                if (user.IsProtected) { req.Http.Response.StatusCode = 403; return (object)new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = "Protected resources cannot be deleted directly" }; }
                 await DeleteUserCascadeAsync(user.TenantId, id).ConfigureAwait(false);
                 return (object)new { Success = true };
             },
@@ -314,7 +317,7 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 EnumerationQuery query = new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
@@ -337,11 +340,11 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 string body = req.Http.Request.DataAsString;
                 Credential? requested = JsonSerializer.Deserialize<Credential>(body, _jsonOptions);
-                if (requested == null) { req.Http.Response.StatusCode = 400; return (object)new { Error = "Invalid request body" }; }
+                if (requested == null) { req.Http.Response.StatusCode = 400; return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid request body" }; }
 
                 // The server always generates the id and the bearer token; client-supplied values are ignored so a
                 // caller cannot choose a guessable or colliding token.
@@ -357,8 +360,8 @@ namespace Armada.Server.Routes
                 if (!ctx.IsAdmin && ctx.IsTenantAdmin)
                 {
                     UserMaster? owner = await _database.Users.ReadAsync(ctx.TenantId!, cred.UserId).ConfigureAwait(false);
-                    if (owner == null) { req.Http.Response.StatusCode = 400; return (object)new { Error = "User not found in tenant" }; }
-                    if (owner.IsAdmin && owner.Id != ctx.UserId) { req.Http.Response.StatusCode = 403; return (object)new { Error = "Only a global admin may create a credential for a global admin account" }; }
+                    if (owner == null) { req.Http.Response.StatusCode = 400; return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "User not found in tenant" }; }
+                    if (owner.IsAdmin && owner.Id != ctx.UserId) { req.Http.Response.StatusCode = 403; return (object)new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = "Only a global admin may create a credential for a global admin account" }; }
                 }
                 cred = await _database.Credentials.CreateAsync(cred).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 201;
@@ -372,11 +375,11 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 string id = req.Parameters["id"];
                 Credential? cred = ctx.IsAdmin ? await _database.Credentials.ReadByIdAsync(id).ConfigureAwait(false) : await _database.Credentials.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false);
-                if (cred == null || (!ctx.IsAdmin && !ctx.IsTenantAdmin && cred.UserId != ctx.UserId)) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
+                if (cred == null || (!ctx.IsAdmin && !ctx.IsTenantAdmin && cred.UserId != ctx.UserId)) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
                 return (object)Credential.Redact(cred);
             },
             api => api.WithTag("Credentials").WithSummary("Get credential by ID"));
@@ -387,19 +390,19 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 string body = req.Http.Request.DataAsString;
                 Credential? cred = JsonSerializer.Deserialize<Credential>(body, _jsonOptions);
-                if (cred == null) { req.Http.Response.StatusCode = 400; return (object)new { Error = "Invalid request body" }; }
+                if (cred == null) { req.Http.Response.StatusCode = 400; return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid request body" }; }
                 Credential? existing = await _database.Credentials.ReadByIdAsync(req.Parameters["id"]).ConfigureAwait(false);
-                if (existing == null) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
-                if (!ctx.IsAdmin && existing.TenantId != ctx.TenantId) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
-                if (!ctx.IsAdmin && !ctx.IsTenantAdmin && existing.UserId != ctx.UserId) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
+                if (existing == null) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
+                if (!ctx.IsAdmin && existing.TenantId != ctx.TenantId) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
+                if (!ctx.IsAdmin && !ctx.IsTenantAdmin && existing.UserId != ctx.UserId) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
                 if (!ctx.IsAdmin && existing.UserId != ctx.UserId)
                 {
                     UserMaster? owner = await _database.Users.ReadByIdAsync(existing.UserId).ConfigureAwait(false);
-                    if (owner != null && owner.IsAdmin) { req.Http.Response.StatusCode = 403; return (object)new { Error = "Only a global admin may modify a global admin's credential" }; }
+                    if (owner != null && owner.IsAdmin) { req.Http.Response.StatusCode = 403; return (object)new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = "Only a global admin may modify a global admin's credential" }; }
                 }
                 cred.Id = req.Parameters["id"];
                 cred.TenantId = existing.TenantId;
@@ -419,12 +422,12 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 string id = req.Parameters["id"];
                 Credential? cred = ctx.IsAdmin ? await _database.Credentials.ReadByIdAsync(id).ConfigureAwait(false) : await _database.Credentials.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false);
-                if (cred == null || (!ctx.IsAdmin && !ctx.IsTenantAdmin && cred.UserId != ctx.UserId)) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
-                if (cred.IsProtected) { req.Http.Response.StatusCode = 403; return (object)new { Error = "Protected resources cannot be deleted directly" }; }
+                if (cred == null || (!ctx.IsAdmin && !ctx.IsTenantAdmin && cred.UserId != ctx.UserId)) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
+                if (cred.IsProtected) { req.Http.Response.StatusCode = 403; return (object)new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = "Protected resources cannot be deleted directly" }; }
                 await _database.Credentials.DeleteAsync(cred.TenantId, id).ConfigureAwait(false);
                 return (object)new { Success = true };
             },

@@ -178,7 +178,7 @@ namespace Armada.Core.Services
             if (memory == null) throw new ArgumentNullException(nameof(memory));
 
             Memory? existing = await _Database.Memories.ReadAsync(memory.Id, token).ConfigureAwait(false);
-            if (existing == null) throw new KeyNotFoundException("Memory not found: " + memory.Id);
+            if (existing == null || !ScopedVisibility.CanView(auth, existing.Scope, existing.TenantId, existing.UserId)) throw new KeyNotFoundException("Memory not found: " + memory.Id);
             if (!ScopedVisibility.CanEdit(auth, existing.Scope, existing.TenantId, existing.UserId)) throw new UnauthorizedAccessException("Not permitted to modify memory " + memory.Id);
 
             // Preserve ownership; only an admin may change scope.
@@ -215,7 +215,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
 
             Memory? existing = await _Database.Memories.ReadAsync(id, token).ConfigureAwait(false);
-            if (existing == null) throw new KeyNotFoundException("Memory not found: " + id);
+            if (existing == null || !ScopedVisibility.CanView(auth, existing.Scope, existing.TenantId, existing.UserId)) throw new KeyNotFoundException("Memory not found: " + id);
             if (!ScopedVisibility.CanEdit(auth, existing.Scope, existing.TenantId, existing.UserId)) throw new UnauthorizedAccessException("Not permitted to delete memory " + id);
 
             _Logging.Info(_Header + "deleting memory " + id);

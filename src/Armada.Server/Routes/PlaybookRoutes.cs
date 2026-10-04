@@ -49,7 +49,7 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return new ApiErrorResponse
                     {
-                        Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest,
+                        Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized,
                         Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required"
                     };
                 }
@@ -80,7 +80,7 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return new ApiErrorResponse
                     {
-                        Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest,
+                        Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized,
                         Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required"
                     };
                 }
@@ -111,7 +111,7 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return new ApiErrorResponse
                     {
-                        Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest,
+                        Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized,
                         Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required"
                     };
                 }
@@ -153,7 +153,7 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return new ApiErrorResponse
                     {
-                        Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest,
+                        Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized,
                         Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required"
                     };
                 }
@@ -187,7 +187,7 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return new ApiErrorResponse
                     {
-                        Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest,
+                        Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized,
                         Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required"
                     };
                 }
@@ -205,7 +205,7 @@ namespace Armada.Server.Routes
                 if (!ScopedVisibility.CanEdit(ctx, existing.Scope, existing.TenantId, existing.UserId))
                 {
                     req.Http.Response.StatusCode = 403;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "You may only modify your own playbooks; a tenant-wide playbook requires a tenant admin." };
+                    return new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = "You may only modify your own playbooks; a tenant-wide playbook requires a tenant admin." };
                 }
 
                 Playbook incoming = JsonSerializer.Deserialize<Playbook>(req.Http.Request.DataAsString, _jsonOptions)
@@ -250,7 +250,7 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return new ApiErrorResponse
                     {
-                        Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest,
+                        Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized,
                         Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required"
                     };
                 }
@@ -267,7 +267,7 @@ namespace Armada.Server.Routes
                 if (!ScopedVisibility.CanEdit(ctx, existing.Scope, existing.TenantId, existing.UserId))
                 {
                     req.Http.Response.StatusCode = 403;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "You may only delete your own playbooks; a tenant-wide playbook requires a tenant admin." };
+                    return new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = "You may only delete your own playbooks; a tenant-wide playbook requires a tenant admin." };
                 }
 
                 await _database.Playbooks.DeleteAsync(id).ConfigureAwait(false);

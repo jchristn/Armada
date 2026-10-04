@@ -389,7 +389,7 @@ namespace Armada.Server.Routes
             req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
             return new ApiErrorResponse
             {
-                Error = ApiResultEnum.BadRequest,
+                Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized,
                 Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required"
             };
         }
@@ -402,8 +402,11 @@ namespace Armada.Server.Routes
 
         private static ApiResultEnum ToResult(int status)
         {
+            if (status == 401) return ApiResultEnum.NotAuthorized;
+            if (status == 403) return ApiResultEnum.Forbidden;
             if (status == 404) return ApiResultEnum.NotFound;
             if (status == 409) return ApiResultEnum.Conflict;
+            if (status >= 500) return ApiResultEnum.InternalError;
             return ApiResultEnum.BadRequest;
         }
 
