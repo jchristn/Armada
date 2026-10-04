@@ -15,3 +15,7 @@ artifacts/
 
 # Dashboard dependencies are installed per machine (npm ci); never commit them.
 node_modules/
+
+# Python bytecode caches from repository scripts
+__pycache__/
+*.pyc
