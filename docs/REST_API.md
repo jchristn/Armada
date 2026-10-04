@@ -1646,7 +1646,7 @@ Every vessel created by an import gets `RepoUrl` set to the repository's `origin
 
 **Batch statuses:** `Discovering` (background discovery is running), `Discovered`, `Importing`, `Completed`, `CompletedWithFailures`, `Failed` (discovery or the import as a whole failed, or a background job was cancelled; `ErrorMessage` says why).
 
-**Background work.** Discovery runs inside the request unless `RunInBackground` is `true`; larger imports always run as a job. Each background step is a [job](#jobs) with its own `Kind`: `VesselDiscovery`, `VesselImport`, and `FleetCategorization`. Cancel any of them with `POST /api/v1/jobs/{id}/cancel`. If the Admiral restarts while discovery or categorization is running, the batch is marked `Failed` (categorization `Failed`) at startup with an explanatory message.
+**Background work.** Discovery runs inside the request unless `RunInBackground` is `true`; larger imports always run as a job. Each background step is a [job](#jobs) with its own `Kind`: `VesselDiscovery`, `VesselImport`, and `FleetCategorization`. Cancel any of them with `POST /api/v1/jobs/{id}/cancel`. If the Admiral restarts while discovery, a background import, or categorization is running, the batch is marked `Failed` (categorization `Failed`) at startup with an explanatory message, and its job is failed. Vessels an interrupted import already created are kept; importing the batch again finishes the rest.
 
 **Fleet categorization.** An import can ask a captain to recommend fleets for the imported repositories (`Categorization.Enabled`). After the vessels are created, the Admiral:
 
@@ -4116,7 +4116,16 @@ Jobs are background tasks tracked for status polling.
 
 List background jobs, newest first, scoped to the caller.
 
-**Response:** `200 OK`
+Without query parameters the response holds every job in scope, which grows with history. Pass any of the parameters below to get one page instead; the dashboard header polls `?status=Queued,Running` this way.
+
+| Parameter | Description |
+|-----------|-------------|
+| `status` | Comma-separated statuses: `Queued`, `Running`, `Succeeded`, `Failed`, `Cancelled` (case-insensitive) |
+| `kind` | One job kind, for example `Report` |
+| `pageNumber` | One-based page (default 1) |
+| `pageSize` | 1 to 1000 (default 100) |
+
+**Response (no parameters):** `200 OK`
 
 ```json
 {
@@ -4125,6 +4134,8 @@ List background jobs, newest first, scoped to the caller.
   "TotalRecords": 0
 }
 ```
+
+**Response (paged):** `200 OK` with an enumeration result (`Success`, `PageNumber`, `PageSize`, `TotalPages`, `TotalRecords`, `Objects`). An unknown `status` or `kind` returns `400 Bad Request`.
 
 #### GET /api/v1/jobs/{id}
 
