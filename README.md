@@ -360,6 +360,16 @@ If the new build does not come up, **Roll Back** reverts to the previous slot (r
 
 See [docs/SERVER_REBUILD.md](docs/SERVER_REBUILD.md) for the design, safety rails, and REST endpoints (`POST /api/v1/server/rebuild`, `GET /api/v1/server/rebuild/status`, `POST /api/v1/server/rollback`).
 
+### Onboarding Many Repositories, Fleet Actions, and Vessel Health
+
+If you keep dozens of repositories under one directory, you don't have to add them one at a time. **Import repositories** on the Vessels page (or `armada vessel import --root ~/Code --dry-run`) scans directories on the Admiral host, shows you every git repository it found with a status (new, already onboarded, worktree, and so on), and creates vessels only for the ones you keep. Imported vessels point at your existing checkout as their `WorkingDirectory` and never set `LocalPath`, so removing a vessel never touches your clone. Scanning is limited to `Import.AllowedRoots`.
+
+Once the vessels exist, **Vessel Health** (the Health tab on the Vessels page, or `armada health`) grades each one: commits ahead of or behind the default branch, uncommitted changes, stale and leftover `armada/*` branches, outdated and vulnerable NuGet and npm packages, test setup and the latest check run, CI configuration, readiness, and recent mission failures. Evaluations run on a schedule (`RepositoryHealth.IntervalMinutes`, default every 6 hours) or on demand. A dependency check that cannot run shows as Unknown rather than healthy.
+
+**Fleet Actions** apply one action across many vessels. A Command action runs a shell command in each vessel's working directory and records exit code and output; a Mission action dispatches one voyage per vessel, paced so a large run does not starve other work. Select the failing rows on the Health tab, choose **Run action**, and pick "Update outdated dependencies": each vessel gets a voyage whose prompt lists its own outdated packages, and the next evaluation shows the result.
+
+See [docs/FLEET_ACTIONS.md](docs/FLEET_ACTIONS.md), [docs/VESSEL_HEALTH.md](docs/VESSEL_HEALTH.md), and the Vessel Import section of [docs/REST_API.md](docs/REST_API.md).
+
 ## Pipelines
 
 Pipelines are the workflow layer in Armada. They let you run work through explicit stages instead of treating every task as a single agent session.
@@ -678,9 +688,11 @@ armada playbook list|add|show|remove
 All commands accept names or IDs:
 
 ```
-armada vessel list|add|remove
+armada vessel list|add|remove|import
 armada captain list|add|stop|stop-all
 armada fleet list|add|remove
+armada action list|run|status|cancel
+armada health [--status Fail] [--fleet <id>] [--evaluate]
 ```
 
 ### Infrastructure

@@ -220,6 +220,42 @@
       "value": "",
       "type": "string",
       "description": "Project profile ID (ppf_ prefix) for project profile requests."
+    },
+    {
+      "key": "importRoot",
+      "value": "",
+      "type": "string",
+      "description": "Absolute directory on the Admiral host to scan for repositories (must be inside Import.AllowedRoots)."
+    },
+    {
+      "key": "importRootBase64",
+      "value": "",
+      "type": "string",
+      "description": "base64url encoding of importRoot, for the browse endpoint."
+    },
+    {
+      "key": "batchId",
+      "value": "",
+      "type": "string",
+      "description": "Vessel import batch ID (vib_ prefix)."
+    },
+    {
+      "key": "actionId",
+      "value": "",
+      "type": "string",
+      "description": "Fleet action ID (fac_ prefix)."
+    },
+    {
+      "key": "runId",
+      "value": "",
+      "type": "string",
+      "description": "Fleet action run ID (far_ prefix)."
+    },
+    {
+      "key": "targetId",
+      "value": "",
+      "type": "string",
+      "description": "Fleet action run target ID (fat_ prefix)."
     }
   ],
   "item": [
@@ -908,6 +944,34 @@
               "body": "{\n  \"AdmiralPort\": 7890,\n  \"McpPort\": 7891,\n  \"MaxCaptains\": 0,\n  \"HeartbeatIntervalSeconds\": 30,\n  \"StallThresholdMinutes\": 10,\n  \"IdleCaptainTimeoutSeconds\": 0,\n  \"AutoCreatePr\": false,\n  \"DataDirectory\": \"C:\\\\Users\\\\joelc\\\\.armada\",\n  \"DatabasePath\": \"C:\\\\Users\\\\joelc\\\\.armada\\\\armada.db\",\n  \"LogDirectory\": \"C:\\\\Users\\\\joelc\\\\.armada\\\\logs\",\n  \"DocksDirectory\": \"C:\\\\Users\\\\joelc\\\\.armada\\\\docks\",\n  \"ReposDirectory\": \"C:\\\\Users\\\\joelc\\\\.armada\\\\repos\",\n  \"RemoteControl\": {\n    \"Enabled\": true,\n    \"TunnelUrl\": \"wss://proxy.example.com/tunnel\",\n    \"InstanceId\": null,\n    \"EnrollmentToken\": \"bootstrap-token\",\n    \"ConnectTimeoutSeconds\": 15,\n    \"HeartbeatIntervalSeconds\": 30,\n    \"ReconnectBaseDelaySeconds\": 5,\n    \"ReconnectMaxDelaySeconds\": 60,\n    \"AllowInvalidCertificates\": false\n  }\n}"
             }
           ]
+        },
+        {
+          "name": "Update Import, Fleet Action, and Health Settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Import\": {\n    \"AllowedRoots\": [\n      \"{{importRoot}}\"\n    ],\n    \"MaxDepth\": 6,\n    \"InlineBatchLimit\": 25\n  },\n  \"FleetActions\": {\n    \"MaxConcurrency\": 8,\n    \"DefaultTimeoutSeconds\": 300,\n    \"MaxOutputBytes\": 65536,\n    \"RunRetentionDays\": 30\n  },\n  \"RepositoryHealth\": {\n    \"IntervalMinutes\": 360,\n    \"MaxConcurrency\": 4,\n    \"FetchBeforeEvaluate\": true,\n    \"DependencyMaxAgeHours\": 24,\n    \"DependencyCommandTimeoutSeconds\": 120,\n    \"StaleBranchDays\": 90,\n    \"MissionWindowDays\": 7\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings"
+              ]
+            },
+            "description": "Updates the Import, FleetActions and RepositoryHealth settings objects. Each object, when supplied, replaces the whole object; omitted fields take their defaults and out-of-range values are clamped. All three are applied live. AdminOnly."
+          }
         },
         {
           "name": "Stop Server",
@@ -2344,6 +2408,778 @@
               ]
             },
             "description": "Generates project context for the vessel using a captain, optionally guided by notes."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Vessel Import",
+      "description": "Bulk onboarding of local git repositories as vessels. Discovery scans directories on the Admiral host (limited to Import.AllowedRoots) and saves an import batch; the import call then creates vessels for the paths you keep. Imported vessels set WorkingDirectory and never LocalPath, so removing a vessel never deletes the checkout. Browse, discover and import require TenantAdmin. See docs/REST_API.md (Vessel Import).",
+      "item": [
+        {
+          "name": "Browse Allowed Roots",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessels/import/browse",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessels",
+                "import",
+                "browse"
+              ]
+            },
+            "description": "Lists the allowed import roots (or the user profile directory when Import.AllowedRoots is empty). TenantAdmin."
+          }
+        },
+        {
+          "name": "Browse Directory",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessels/import/browse?path={{importRootBase64}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessels",
+                "import",
+                "browse"
+              ],
+              "query": [
+                {
+                  "key": "path",
+                  "value": "{{importRootBase64}}"
+                }
+              ]
+            },
+            "description": "Lists subdirectories of a directory. The path query value is base64url-encoded UTF-8 (a plain percent-encoded absolute path is also accepted). Entries flag git repositories and worktrees. TenantAdmin."
+          }
+        },
+        {
+          "name": "Discover Repositories",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessels/import/discover",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessels",
+                "import",
+                "discover"
+              ]
+            },
+            "description": "Scans the given roots (breadth-first to MaxDepth) and explicit directories for git repositories and returns reviewable candidates with a status each (New, AlreadyOnboarded, Worktree, ArmadaManaged, NotFound, NotGit, AccessDenied). Nothing is created. Captures batchId. TenantAdmin.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Roots\": [\n    \"{{importRoot}}\"\n  ],\n  \"Directories\": [],\n  \"MaxDepth\": 6\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "    const body = pm.response.json();",
+                  "    if (body && body.BatchId) pm.collectionVariables.set('batchId', body.BatchId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Import Selected",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessels/import",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessels",
+                "import"
+              ]
+            },
+            "description": "Creates vessels for the selected candidate paths of a batch. Returns 200 with per-item outcomes, or 202 with a JobId when the selection exceeds Import.InlineBatchLimit. Re-importing is idempotent (SkippedExisting). TenantAdmin.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"BatchId\": \"{{batchId}}\",\n  \"Paths\": [\n    \"{{importRoot}}/example-repo\"\n  ],\n  \"FleetId\": \"{{fleetId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Enumerate Import Batches",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessels/import/batches/enumerate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessels",
+                "import",
+                "batches",
+                "enumerate"
+              ]
+            },
+            "description": "Paged, tenant-scoped import history.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Import Batch",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessels/import/batches/{{batchId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessels",
+                "import",
+                "batches",
+                "{{batchId}}"
+              ]
+            },
+            "description": "Batch with all items and outcomes. Another tenant's batch returns 404."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Fleet Actions",
+      "description": "Reusable actions applied across many vessels as persisted, cancellable, concurrency-limited runs. Command actions run a shell command in each vessel's working directory and capture exit code and output; Mission actions dispatch one voyage per vessel. Templates support {{vessel.name}}, {{vessel.id}}, {{vessel.defaultBranch}}, {{vessel.workingDirectory}}, {{vessel.buildCommand}} and {{health.summary}} (note: in Postman these placeholders are sent literally because no collection variables of those names exist). Reads are Authenticated; writes and runs are TenantAdmin. See docs/FLEET_ACTIONS.md.",
+      "item": [
+        {
+          "name": "Enumerate Fleet Actions",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/fleet-actions/enumerate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "fleet-actions",
+                "enumerate"
+              ]
+            },
+            "description": "Paged action definitions, including the seeded built-ins.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25,\n  \"IncludeInactive\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Command Action",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/fleet-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "fleet-actions"
+              ]
+            },
+            "description": "Creates a Command action. Unknown template variables are rejected with 400 naming the variable. Captures actionId.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Name\": \"Git status\",\n  \"Kind\": \"Command\",\n  \"CommandText\": \"git status -sb\",\n  \"TimeoutSeconds\": 60,\n  \"DefaultConcurrency\": 4,\n  \"RequiresCleanWorkingTree\": false\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "    const body = pm.response.json();",
+                  "    if (body && body.Id) pm.collectionVariables.set('actionId', body.Id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Mission Action",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/fleet-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "fleet-actions"
+              ]
+            },
+            "description": "Creates a Mission action whose prompt is rendered per vessel and dispatched as one voyage per vessel.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Name\": \"Fix dependencies\",\n  \"Kind\": \"Mission\",\n  \"PromptTemplate\": \"Update the outdated dependencies in {{vessel.name}}.\\n{{health.summary}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Fleet Action",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/fleet-actions/{{actionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "fleet-actions",
+                "{{actionId}}"
+              ]
+            },
+            "description": "Reads one action."
+          }
+        },
+        {
+          "name": "Update Fleet Action",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/fleet-actions/{{actionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "fleet-actions",
+                "{{actionId}}"
+              ]
+            },
+            "description": "Partial update; empty string clears Description, PipelineId and Persona.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"DefaultConcurrency\": 2\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Fleet Action",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/fleet-actions/{{actionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "fleet-actions",
+                "{{actionId}}"
+              ]
+            },
+            "description": "Deletes an action. Built-ins are soft-deleted and never re-seeded."
+          }
+        },
+        {
+          "name": "Run Fleet Action",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/fleet-actions/{{actionId}}/run",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "fleet-actions",
+                "{{actionId}}",
+                "run"
+              ]
+            },
+            "description": "Starts a run over the given vessels. Returns 202 with RunId. A vessel from another tenant rejects the whole request. Captures runId.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"VesselIds\": [\n    \"{{vesselId}}\"\n  ],\n  \"Concurrency\": 2\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "    const body = pm.response.json();",
+                  "    if (body && body.RunId) pm.collectionVariables.set('runId', body.RunId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Run Ad Hoc Action",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/fleet-actions/run",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "fleet-actions",
+                "run"
+              ]
+            },
+            "description": "Starts a run from an inline definition without saving it.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"VesselIds\": [\n    \"{{vesselId}}\"\n  ],\n  \"Definition\": {\n    \"Name\": \"Echo\",\n    \"Kind\": \"Command\",\n    \"CommandText\": \"echo hello\",\n    \"RequiresCleanWorkingTree\": false\n  }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "    const body = pm.response.json();",
+                  "    if (body && body.RunId) pm.collectionVariables.set('runId', body.RunId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Enumerate Fleet Action Runs",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/fleet-action-runs/enumerate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "fleet-action-runs",
+                "enumerate"
+              ]
+            },
+            "description": "Paged runs; Status filters by run status (Pending, Running, Completed, CompletedWithFailures, Cancelled, Failed).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Fleet Action Run",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/fleet-action-runs/{{runId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "fleet-action-runs",
+                "{{runId}}"
+              ]
+            },
+            "description": "Run with target summaries (no output)."
+          }
+        },
+        {
+          "name": "Enumerate Run Targets",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/fleet-action-runs/{{runId}}/targets/enumerate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "fleet-action-runs",
+                "{{runId}}",
+                "targets",
+                "enumerate"
+              ]
+            },
+            "description": "Paged targets, optionally filtered by target status. Captures the first targetId.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "    const body = pm.response.json();",
+                  "    if (body && body.Objects && body.Objects.length && body.Objects[0].Id) pm.collectionVariables.set('targetId', body.Objects && body.Objects.length && body.Objects[0].Id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Run Target",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/fleet-action-runs/{{runId}}/targets/{{targetId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "fleet-action-runs",
+                "{{runId}}",
+                "targets",
+                "{{targetId}}"
+              ]
+            },
+            "description": "Target detail including OutputText and ErrorText (the only endpoint that returns output)."
+          }
+        },
+        {
+          "name": "Cancel Fleet Action Run",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/fleet-action-runs/{{runId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "fleet-action-runs",
+                "{{runId}}",
+                "cancel"
+              ]
+            },
+            "description": "Cancels pending targets, kills running local commands, and cancels unlanded voyages. 409 if the run already finished."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Vessel Health",
+      "description": "Grades every vessel against git divergence, working tree, branches, commit recency, NuGet/npm outdated and vulnerable dependencies, test infrastructure, CI, Armada readiness and mission outcomes. Status columns are effective values after manual overrides. A failed tool run is Unknown, never Pass. Reads are Authenticated; evaluate and overrides are TenantAdmin. See docs/VESSEL_HEALTH.md.",
+      "item": [
+        {
+          "name": "Enumerate Vessel Health",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessel-health/enumerate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessel-health",
+                "enumerate"
+              ]
+            },
+            "description": "Server-side filtered, sorted, paged health rows for every vessel in the tenant (never-evaluated vessels included as Unknown).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25,\n  \"SortBy\": \"OverallStatus\",\n  \"SortDescending\": true,\n  \"OverallStatus\": [\n    \"Fail\"\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Vessel Health Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessel-health/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessel-health",
+                "summary"
+              ]
+            },
+            "description": "Override-aware KPI counts."
+          }
+        },
+        {
+          "name": "Get Vessel Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessels/{{vesselId}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessels",
+                "{{vesselId}}",
+                "health"
+              ]
+            },
+            "description": "Health row, raw findings, dependency rows and overrides for one vessel."
+          }
+        },
+        {
+          "name": "Evaluate Vessel Health",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessel-health/evaluate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessel-health",
+                "evaluate"
+              ]
+            },
+            "description": "Starts an evaluation job (202). Returns 409 with the running job id when an evaluation is already running for the tenant. Captures jobId.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"VesselIds\": [\n    \"{{vesselId}}\"\n  ],\n  \"Force\": true\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "    const body = pm.response.json();",
+                  "    if (body && body.JobId) pm.collectionVariables.set('jobId', body.JobId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Poll Evaluation Job",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "jobs",
+                "{{jobId}}"
+              ]
+            },
+            "description": "Polls the evaluation job; ResultJson holds requested/evaluated/failed counts when finished."
+          }
+        },
+        {
+          "name": "Set Health Override",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessels/{{vesselId}}/health/overrides/Dependencies",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessels",
+                "{{vesselId}}",
+                "health",
+                "overrides",
+                "Dependencies"
+              ]
+            },
+            "description": "Sets a manual status and note for one criterion; effective statuses are recomputed immediately.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Status\": \"Pass\",\n  \"Note\": \"Pinned on purpose\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Remove Health Override",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessels/{{vesselId}}/health/overrides/Dependencies",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessels",
+                "{{vesselId}}",
+                "health",
+                "overrides",
+                "Dependencies"
+              ]
+            },
+            "description": "Removes the override and recomputes effective statuses."
           }
         }
       ]
