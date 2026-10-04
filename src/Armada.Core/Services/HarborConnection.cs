@@ -88,6 +88,16 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Whether this connection sends through the given link delegate, i.e. belongs to that socket.
+        /// </summary>
+        /// <param name="send">Send delegate the transport registered at handshake.</param>
+        /// <returns>True when it is the same link.</returns>
+        public bool IsSameLink(HarborSendDelegate? send)
+        {
+            return send != null && ReferenceEquals(_Send, send);
+        }
+
+        /// <summary>
         /// Replace the set of live job ids with the authoritative list reported in a heartbeat.
         /// </summary>
         /// <param name="jobIds">Live job identifiers.</param>

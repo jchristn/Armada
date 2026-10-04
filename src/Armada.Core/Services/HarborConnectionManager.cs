@@ -35,6 +35,7 @@ namespace Armada.Core.Services
         private readonly ConcurrentDictionary<string, HarborConnection> _Connections = new ConcurrentDictionary<string, HarborConnection>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, TaskCompletionSource<HarborGitResult>> _PendingGit = new ConcurrentDictionary<string, TaskCompletionSource<HarborGitResult>>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, TaskCompletionSource<HarborDeferredLaunchAck>> _PendingDeferredLaunch = new ConcurrentDictionary<string, TaskCompletionSource<HarborDeferredLaunchAck>>(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<string, string> _PendingOwners = new ConcurrentDictionary<string, string>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, IHarborJobListener> _JobListeners = new ConcurrentDictionary<string, IHarborJobListener>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<int, HarborJobHandle> _JobsByProcessId = new ConcurrentDictionary<int, HarborJobHandle>();
 
@@ -188,7 +189,8 @@ namespace Armada.Core.Services
         /// <param name="timeoutMs">Timeout in milliseconds; values below 1 mean wait indefinitely.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The git result, or null on timeout.</returns>
-        /// <exception cref="InvalidOperationException">Thrown when the Harbor is not connected.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the Harbor is not connected, or its link closes before it
+        /// replies (the request fails at once instead of waiting out the timeout).</exception>
         public async Task<HarborGitResult?> SendGitAsync(string harborId, HarborGitRequest request, int timeoutMs, CancellationToken token = default)
         {
             if (String.IsNullOrWhiteSpace(harborId)) throw new ArgumentNullException(nameof(harborId));
@@ -199,6 +201,7 @@ namespace Armada.Core.Services
 
             TaskCompletionSource<HarborGitResult> completion = new TaskCompletionSource<HarborGitResult>(TaskCreationOptions.RunContinuationsAsynchronously);
             _PendingGit[request.RequestId] = completion;
+            _PendingOwners[request.RequestId] = harborId;
 
             try
             {
@@ -217,6 +220,7 @@ namespace Armada.Core.Services
             finally
             {
                 _PendingGit.TryRemove(request.RequestId, out TaskCompletionSource<HarborGitResult>? _);
+                _PendingOwners.TryRemove(request.RequestId, out string? _);
             }
         }
 
@@ -242,6 +246,7 @@ namespace Armada.Core.Services
 
             TaskCompletionSource<HarborDeferredLaunchAck> completion = new TaskCompletionSource<HarborDeferredLaunchAck>(TaskCreationOptions.RunContinuationsAsynchronously);
             _PendingDeferredLaunch[request.RequestId] = completion;
+            _PendingOwners[request.RequestId] = harborId;
 
             try
             {
@@ -260,6 +265,7 @@ namespace Armada.Core.Services
             finally
             {
                 _PendingDeferredLaunch.TryRemove(request.RequestId, out TaskCompletionSource<HarborDeferredLaunchAck>? _);
+                _PendingOwners.TryRemove(request.RequestId, out string? _);
             }
         }
 
@@ -457,11 +463,42 @@ namespace Armada.Core.Services
         /// </summary>
         /// <param name="harborId">Harbor identifier.</param>
         /// <param name="token">Cancellation token.</param>
-        public async Task OnDisconnectedAsync(string harborId, CancellationToken token = default)
+        public Task OnDisconnectedAsync(string harborId, CancellationToken token = default)
+        {
+            return OnDisconnectedAsync(harborId, null, token);
+        }
+
+        /// <summary>
+        /// Record that one link of a Harbor has closed. When <paramref name="link"/> is given and the Harbor has since
+        /// reconnected on a different link, the close is stale and the live connection is left alone. Otherwise the
+        /// connection is removed, the Harbor is marked disconnected, and requests still waiting for its reply (git
+        /// commands, deferred-launch acknowledgements) fail immediately instead of waiting out their timeouts. Running
+        /// jobs remain on the host.
+        /// </summary>
+        /// <param name="harborId">Harbor identifier.</param>
+        /// <param name="link">Send delegate of the link that closed, or null to close whatever link is registered.</param>
+        /// <param name="token">Cancellation token.</param>
+        public async Task OnDisconnectedAsync(string harborId, HarborSendDelegate? link, CancellationToken token = default)
         {
             if (String.IsNullOrWhiteSpace(harborId)) throw new ArgumentNullException(nameof(harborId));
-            _Connections.TryRemove(harborId, out HarborConnection? _);
-            _Logging.Info(_Header + "harbor " + harborId + " link closed");
+
+            if (_Connections.TryGetValue(harborId, out HarborConnection? current) && link != null && !current!.IsSameLink(link))
+            {
+                _Logging.Info(_Header + "harbor " + harborId + " superseded link closed; the newer link stays connected");
+                return;
+            }
+
+            if (current != null && link != null)
+            {
+                _Connections.TryRemove(new KeyValuePair<string, HarborConnection>(harborId, current));
+            }
+            else
+            {
+                _Connections.TryRemove(harborId, out HarborConnection? _);
+            }
+
+            int failed = FailPendingRequests(harborId);
+            _Logging.Info(_Header + "harbor " + harborId + " link closed" + (failed > 0 ? "; failed " + failed + " pending request(s)" : ""));
             await _Harbors.MarkConnectionAsync(harborId, HarborConnectionStatusEnum.Disconnected, false, token).ConfigureAwait(false);
         }
 
@@ -499,6 +536,23 @@ namespace Armada.Core.Services
             if (!String.IsNullOrWhiteSpace(harborId) && _Connections.TryGetValue(harborId, out HarborConnection? connection))
                 return connection!.InFlightJobs;
             return 0;
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private int FailPendingRequests(string harborId)
+        {
+            int failed = 0;
+            foreach (KeyValuePair<string, string> owner in _PendingOwners)
+            {
+                if (!String.Equals(owner.Value, harborId, StringComparison.Ordinal)) continue;
+                InvalidOperationException reason = new InvalidOperationException("Harbor " + harborId + " disconnected before replying to request " + owner.Key + ".");
+                if (_PendingGit.TryGetValue(owner.Key, out TaskCompletionSource<HarborGitResult>? git) && git.TrySetException(reason)) failed++;
+                if (_PendingDeferredLaunch.TryGetValue(owner.Key, out TaskCompletionSource<HarborDeferredLaunchAck>? deferred) && deferred.TrySetException(reason)) failed++;
+            }
+            return failed;
         }
 
         #endregion

@@ -13,7 +13,8 @@ namespace Test.Shared.Suites.Services
 
     /// <summary>
     /// Descriptors for <see cref="SlotManager"/>: chronological slot-name composition, atomic pointer
-    /// read/write, newest-first enumeration, and retention-based pruning that never removes the active slot.
+    /// read/write, newest-first enumeration, retention-based pruning that never removes the active slot, and the
+    /// rollback contract (the slot a rebuild replaced survives pruning so RollbackAsync can relaunch it).
     /// These underpin the Admiral self-rebuild A/B slot layout (docs/SERVER_REBUILD.md).
     /// </summary>
     public sealed class SlotManagerSuite : IArmadaTestSuite
@@ -48,6 +49,101 @@ namespace Test.Shared.Suites.Services
                     await manager.WriteCurrentAsync("2026-09-11_120000_abc123def456").ConfigureAwait(false);
                     AssertEqual("2026-09-11_120000_abc123def456", await manager.ReadCurrentAsync().ConfigureAwait(false));
                     AssertTrue(File.Exists(manager.CurrentPointerPath), "Expected the pointer file to exist.");
+                }
+                finally { TryDeleteDir(binRoot); }
+            }));
+
+            cases.Add(Case("rollback_target_survives_prune_at_retention_one", "Rebuild prune keeps the rollback target at retention 1", TestTags.Reliability, async () =>
+            {
+                string binRoot = NewTempDir();
+                try
+                {
+                    SlotManager manager = new SlotManager(binRoot, executableName: "Armada.Server", retentionCount: 1);
+                    string older = "2026-09-01_100000_aaaaaaaaaaaa";
+                    string previous = "2026-09-02_100000_bbbbbbbbbbbb";
+                    string rebuilt = "2026-09-03_100000_cccccccccccc";
+                    foreach (string slot in new string[] { older, previous, rebuilt })
+                    {
+                        Directory.CreateDirectory(manager.GetSlotDirectory(slot));
+                        File.WriteAllText(manager.GetSlotExecutablePath(slot), "exe");
+                    }
+
+                    // Cutover: the rebuild flips the pointer to the new slot, then prunes, protecting the slot it replaced.
+                    await manager.WriteCurrentAsync(rebuilt).ConfigureAwait(false);
+                    int removed = await manager.PruneAsync(new List<string> { previous }).ConfigureAwait(false);
+                    AssertEqual(1, removed, "only the slot older than the rollback target goes");
+                    AssertTrue(File.Exists(manager.GetSlotExecutablePath(previous)), "rollback target must survive");
+                    AssertTrue(Directory.Exists(manager.GetSlotDirectory(rebuilt)), "active slot must survive");
+                    AssertFalse(Directory.Exists(manager.GetSlotDirectory(older)), "older slot pruned");
+
+                    // Rollback: the pointer flips back and the previous executable is still there to launch.
+                    await manager.WriteCurrentAsync(previous).ConfigureAwait(false);
+                    AssertEqual(previous, await manager.ReadCurrentAsync().ConfigureAwait(false));
+                    AssertTrue(File.Exists(manager.GetSlotExecutablePath(previous)));
+
+                    // A later prune after rollback keeps the active (rolled-back) slot and the newest one.
+                    AssertEqual(0, await manager.PruneAsync().ConfigureAwait(false));
+                    AssertTrue(Directory.Exists(manager.GetSlotDirectory(previous)) && Directory.Exists(manager.GetSlotDirectory(rebuilt)));
+                }
+                finally { TryDeleteDir(binRoot); }
+            }));
+
+            cases.Add(Case("plain_prune_at_retention_one_drops_previous", "Without protection, retention 1 deletes the previous slot (why rebuild passes it)", TestTags.Negative, async () =>
+            {
+                string binRoot = NewTempDir();
+                try
+                {
+                    SlotManager manager = new SlotManager(binRoot, retentionCount: 1);
+                    string previous = "2026-09-02_100000_bbbbbbbbbbbb";
+                    string rebuilt = "2026-09-03_100000_cccccccccccc";
+                    Directory.CreateDirectory(manager.GetSlotDirectory(previous));
+                    Directory.CreateDirectory(manager.GetSlotDirectory(rebuilt));
+                    await manager.WriteCurrentAsync(rebuilt).ConfigureAwait(false);
+                    AssertEqual(1, await manager.PruneAsync().ConfigureAwait(false));
+                    AssertFalse(Directory.Exists(manager.GetSlotDirectory(previous)));
+                }
+                finally { TryDeleteDir(binRoot); }
+            }));
+
+            cases.Add(Case("concurrent_pointer_writes_never_tear", "Concurrent pointer writes leave a complete name and no temp files", TestTags.Reliability, async () =>
+            {
+                string binRoot = NewTempDir();
+                try
+                {
+                    SlotManager manager = new SlotManager(binRoot);
+                    List<string> names = new List<string>();
+                    List<Task> writes = new List<Task>();
+                    for (int i = 0; i < 24; i++)
+                    {
+                        string name = "2026-09-" + (10 + i).ToString("00") + "_100000_" + i.ToString("000000000000");
+                        names.Add(name);
+                        writes.Add(Task.Run(async () =>
+                        {
+                            for (int attempt = 0; attempt < 5; attempt++)
+                            {
+                                try
+                                {
+                                    await manager.WriteCurrentAsync(name).ConfigureAwait(false);
+                                    return;
+                                }
+                                catch (IOException)
+                                {
+                                    // Windows can refuse a replace while another writer holds the target; retry.
+                                    await Task.Delay(10).ConfigureAwait(false);
+                                }
+                                catch (UnauthorizedAccessException)
+                                {
+                                    await Task.Delay(10).ConfigureAwait(false);
+                                }
+                            }
+                        }));
+                    }
+                    await Task.WhenAll(writes).ConfigureAwait(false);
+
+                    string? current = await manager.ReadCurrentAsync().ConfigureAwait(false);
+                    AssertNotNull(current, "pointer present");
+                    AssertTrue(names.Contains(current!), "pointer holds one complete slot name, got: " + current);
+                    AssertEqual(0, Directory.GetFiles(binRoot, "current.tmp-*").Length, "no temp pointer files left behind");
                 }
                 finally { TryDeleteDir(binRoot); }
             }));

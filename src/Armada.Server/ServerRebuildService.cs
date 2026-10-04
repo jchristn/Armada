@@ -288,7 +288,11 @@ namespace Armada.Server
                     Append(status, "Replacement launched from " + slotExe + " (baton); stopping this instance for handover.");
                 }
 
-                await _Slots.PruneAsync(CancellationToken.None).ConfigureAwait(false);
+                // Keep the slot this rebuild replaced: it is the rollback target, and with a retention count of 1 the
+                // plain prune would delete it and make RollbackAsync fail with "previous slot executable not found".
+                List<string> keepSlots = new List<string>();
+                if (!String.IsNullOrWhiteSpace(status.PreviousSlot)) keepSlots.Add(status.PreviousSlot!);
+                await _Slots.PruneAsync(keepSlots, CancellationToken.None).ConfigureAwait(false);
 
                 lock (_Lock)
                 {
