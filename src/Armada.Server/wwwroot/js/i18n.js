@@ -4,14 +4,14 @@
     const ATTRIBUTE_NAMES = ['title', 'placeholder', 'aria-label', 'aria-description', 'alt'];
     const DEFAULT_LOCALES = [
         { code: 'en', label: 'English', nativeLabel: 'English', dir: 'ltr', aliases: ['en-US', 'en-GB', 'en-CA', 'en-AU'] },
-        { code: 'es', label: 'Spanish', nativeLabel: 'Espa\u00f1ol', dir: 'ltr', aliases: ['es-ES', 'es-MX', 'es-419'] },
-        { code: 'zh-Hans', label: 'Mandarin (Simplified)', nativeLabel: '\u7b80\u4f53\u4e2d\u6587', dir: 'ltr', aliases: ['zh', 'zh-CN', 'zh-SG', 'cmn-Hans'] },
-        { code: 'zh-Hant', label: 'Mandarin (Traditional)', nativeLabel: '\u7e41\u9ad4\u4e2d\u6587', dir: 'ltr', aliases: ['zh-TW', 'cmn-Hant'] },
-        { code: 'yue-Hant', label: 'Cantonese', nativeLabel: '\u7cb5\u8a9e', dir: 'ltr', aliases: ['zh-HK', 'zh-MO', 'yue', 'yue-HK'] },
-        { code: 'ja', label: 'Japanese', nativeLabel: '\u65e5\u672c\u8a9e', dir: 'ltr', aliases: ['ja-JP'] },
-        { code: 'de', label: 'German', nativeLabel: 'Deutsch', dir: 'ltr', aliases: ['de-DE'] },
-        { code: 'fr', label: 'French', nativeLabel: 'Fran\u00e7ais', dir: 'ltr', aliases: ['fr-FR', 'fr-CA'] },
-        { code: 'it', label: 'Italian', nativeLabel: 'Italiano', dir: 'ltr', aliases: ['it-IT'] }
+        { code: 'es', label: 'Spanish', nativeLabel: 'Espa\u00f1ol', dir: 'ltr', aliases: ['es-ES', 'es-MX', 'es-419'], beta: true, betaLabel: 'beta' },
+        { code: 'zh-Hans', label: 'Mandarin (Simplified)', nativeLabel: '\u7b80\u4f53\u4e2d\u6587', dir: 'ltr', aliases: ['zh', 'zh-CN', 'zh-SG', 'cmn-Hans'], beta: true, betaLabel: '\u6d4b\u8bd5\u7248' },
+        { code: 'zh-Hant', label: 'Mandarin (Traditional)', nativeLabel: '\u7e41\u9ad4\u4e2d\u6587', dir: 'ltr', aliases: ['zh-TW', 'cmn-Hant'], beta: true, betaLabel: '\u6e2c\u8a66\u7248' },
+        { code: 'yue-Hant', label: 'Cantonese', nativeLabel: '\u7cb5\u8a9e', dir: 'ltr', aliases: ['zh-HK', 'zh-MO', 'yue', 'yue-HK'], beta: true, betaLabel: '\u6e2c\u8a66\u7248' },
+        { code: 'ja', label: 'Japanese', nativeLabel: '\u65e5\u672c\u8a9e', dir: 'ltr', aliases: ['ja-JP'], beta: true, betaLabel: '\u30d9\u30fc\u30bf\u7248' },
+        { code: 'de', label: 'German', nativeLabel: 'Deutsch', dir: 'ltr', aliases: ['de-DE'], beta: true, betaLabel: 'Beta' },
+        { code: 'fr', label: 'French', nativeLabel: 'Fran\u00e7ais', dir: 'ltr', aliases: ['fr-FR', 'fr-CA'], beta: true, betaLabel: 'b\u00eata' },
+        { code: 'it', label: 'Italian', nativeLabel: 'Italiano', dir: 'ltr', aliases: ['it-IT'], beta: true, betaLabel: 'beta' }
     ];
 
     let catalog = null;

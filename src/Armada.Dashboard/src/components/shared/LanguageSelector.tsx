@@ -1,4 +1,5 @@
 import { useLocale } from '../../context/LocaleContext';
+import { localeOptionLabel } from '../../i18n/runtime';
 
 interface LanguageSelectorProps {
   className?: string;
@@ -31,7 +32,7 @@ export default function LanguageSelector({
       >
         {supportedLocales.map((item) => (
           <option key={item.code} value={item.code}>
-            {item.nativeLabel}
+            {localeOptionLabel(item)}
           </option>
         ))}
       </select>

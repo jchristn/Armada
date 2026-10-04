@@ -346,7 +346,7 @@ Dashboard at `http://localhost:7890/dashboard`. API access with `Authorization: 
 
 The dashboard supports language selection from the login screen and keeps the chosen locale for the authenticated session.
 
-> **Security:** Armada runs agents with auto-approve flags by default (Claude Code: `--dangerously-skip-permissions`, Codex: `--full-auto`, Gemini: `--approval-mode yolo`, Mux: `--yolo`, OpenCode: `--auto`). Agents can read, write, and execute in their worktrees without confirmation. Review the [configuration](#configuration) section before running in sensitive environments.
+> **Security:** Armada runs agents with auto-approve flags by default (Claude Code: `--dangerously-skip-permissions`, Codex: `--sandbox workspace-write`, Gemini: `--approval-mode yolo`, Mux: `--yolo`, OpenCode: `--auto`). Agents can read, write, and execute in their worktrees without confirmation. Review the [configuration](#configuration) section before running in sensitive environments.
 
 > **Important:** Change the default password in production environments.
 
@@ -457,6 +457,7 @@ This is useful for architecture rules, coding standards, migration checklists, r
 The dashboard supports live language selection and locale-aware formatting across both the React shell and the legacy embedded surfaces.
 
 - Supported locales: English, Spanish, Mandarin (Simplified), Mandarin (Traditional), Cantonese, Japanese, German, French, and Italian.
+- English is the reviewed locale. The other eight ship labeled "beta" in both language pickers (for example "Deutsch (Beta)", "Italiano (beta)") until a native speaker has reviewed them; text that has no translation falls back to English.
 - Language selection is available from login, setup, and the authenticated shell, and the active locale persists between sessions.
 - Shared UI elements such as notifications, pagination, dialogs, labels, date/time formatting, and numeric formatting honor the selected locale.
 - Route-level coverage includes list pages, detail pages, admin screens, setup flows, and server-management views so common actions do not fall back to English unexpectedly.

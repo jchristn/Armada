@@ -31,7 +31,7 @@
                 <span class="locale-select-label">Language</span>
                 <select class="locale-select" x-model="locale" @change="applyLocale()" aria-label="Language" title="Language">
                     <template x-for="option in supportedLocales" :key="option.code">
-                        <option :value="option.code" x-text="option.nativeLabel"></option>
+                        <option :value="option.code" x-text="option.beta ? option.nativeLabel + ' (' + (option.betaLabel || 'beta') + ')' : option.nativeLabel"></option>
                     </template>
                 </select>
             </label>
@@ -231,7 +231,7 @@
                 <label class="locale-select-wrap compact topbar-language-select" title="Language">
                     <select class="locale-select" x-model="locale" @change="applyLocale()" aria-label="Language" title="Language">
                         <template x-for="option in supportedLocales" :key="option.code">
-                            <option :value="option.code" x-text="option.nativeLabel"></option>
+                            <option :value="option.code" x-text="option.beta ? option.nativeLabel + ' (' + (option.betaLabel || 'beta') + ')' : option.nativeLabel"></option>
                         </template>
                     </select>
                 </label>
