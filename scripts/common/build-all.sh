@@ -9,4 +9,7 @@ echo "=== Building Armada server ==="
 echo "=== Building Armada dashboard ==="
 "${SCRIPT_DIR}/build-dashboard.sh" "$TAG" || exit 1
 
+echo "=== Building Armada proxy ==="
+"${SCRIPT_DIR}/build-proxy.sh" "$TAG" || exit 1
+
 echo "=== All Armada images built, pushed to Docker Hub, and pulled into the local registry ==="
