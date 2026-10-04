@@ -457,13 +457,15 @@ namespace Armada.Server
             int processId;
             try
             {
+                // A vessel-level auto-approve override wins over the captain's own setting for missions on that vessel.
+                Captain launchCaptain = CaptainRuntimeOptions.WithEffectiveAutoApprove(captain, vessel?.AutoApprove);
                 processId = await runtime.StartAsync(
                     dock.WorktreePath ?? throw new InvalidOperationException("Dock worktree path is null"),
                     prompt,
                     logFilePath: logFilePath,
                     finalMessageFilePath: finalMessageFilePath,
                     model: captain.Model,
-                    captain: captain,
+                    captain: launchCaptain,
                     isolateLaunch: _Settings.IsolateCaptainLaunch,
                     mcpPort: _Settings.McpPort).ConfigureAwait(false);
             }

@@ -40,6 +40,7 @@ interface VesselForm {
   landingMode: string;
   branchCleanupPolicy: string;
   allowConcurrentMissions: boolean;
+  autoApproveMode: string;
   defaultPipelineId: string;
   secretScanEnabled: boolean;
   protectedPathPatterns: string;
@@ -57,7 +58,7 @@ interface VesselForm {
 
 const emptyForm: VesselForm = {
   name: '', fleetId: '', repoUrl: '', defaultBranch: 'main', localPath: '', workingDirectory: '',
-  projectContext: '', styleGuide: '', enableModelContext: true, modelContext: '', gitHubTokenOverride: '', clearGitHubTokenOverride: false, landingMode: 'LocalMerge', branchCleanupPolicy: 'LocalAndRemote', allowConcurrentMissions: false, defaultPipelineId: '',
+  projectContext: '', styleGuide: '', enableModelContext: true, modelContext: '', gitHubTokenOverride: '', clearGitHubTokenOverride: false, landingMode: 'LocalMerge', branchCleanupPolicy: 'LocalAndRemote', allowConcurrentMissions: false, autoApproveMode: 'inherit', defaultPipelineId: '',
   secretScanEnabled: false, protectedPathPatterns: '', privateIdentifierDenylist: '',
   autoLandEnabled: false, autoLandMaxFiles: '', autoLandMaxLines: '', autoLandPathAllowGlobs: '', autoLandPathDenyGlobs: '',
   definitionOfDoneEnabled: false, definitionOfDoneBuildCommand: '', definitionOfDoneTestCommand: '', definitionOfDoneTimeoutSeconds: '',
@@ -206,6 +207,7 @@ export default function Vessels() {
       landingMode: v.landingMode ?? '',
       branchCleanupPolicy: v.branchCleanupPolicy ?? '',
       allowConcurrentMissions: v.allowConcurrentMissions,
+      autoApproveMode: v.autoApprove === true ? 'on' : v.autoApprove === false ? 'off' : 'inherit',
       enableModelContext: v.enableModelContext,
       modelContext: v.modelContext ?? '',
       gitHubTokenOverride: '',
@@ -250,6 +252,8 @@ export default function Vessels() {
       payload.definitionOfDoneTestCommand = form.definitionOfDoneTestCommand.trim();
       payload.definitionOfDoneTimeoutSeconds = form.definitionOfDoneTimeoutSeconds.trim() ? Math.max(30, parseInt(form.definitionOfDoneTimeoutSeconds, 10) || 1800) : 1800;
       delete payload.clearGitHubTokenOverride;
+      delete payload.autoApproveMode;
+      payload.autoApprove = form.autoApproveMode === 'on' ? true : form.autoApproveMode === 'off' ? false : null;
       if (editing)
       {
         if (form.clearGitHubTokenOverride)
@@ -431,6 +435,13 @@ export default function Vessels() {
                   <option value="LocalOnly">{t('Local Only')}</option>
                   <option value="LocalAndRemote">{t('Local and Remote')}</option>
                   <option value="None">{t('None')}</option>
+                </select>
+              </label>
+              <label title={t('Whether CLI captains run missions on this vessel with their auto-approve (permission bypass) flags. Overrides the captain setting when set.')}>{t('Agent Auto-Approve')}
+                <select value={form.autoApproveMode} onChange={e => setForm({ ...form, autoApproveMode: e.target.value })}>
+                  <option value="inherit">{t('Use captain setting')}</option>
+                  <option value="off">{t('Off for this vessel')}</option>
+                  <option value="on">{t('On for this vessel')}</option>
                 </select>
               </label>
               <label>{t('Default Pipeline')}

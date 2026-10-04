@@ -700,6 +700,11 @@ namespace Armada.Core.Database.Mysql
                     75,
                     "Add ask_threads, ask_messages, ask_message_tool_calls, ask_action_proposals, and ask_tracked_work tables for Ask Armada conversation threads",
                     TableQueries.MigrationV75Statements
+                ),
+                new SchemaMigration(
+                    76,
+                    "Add nullable auto_approve to vessels: a per-vessel override of the captain auto-approve setting for missions on the vessel",
+                    TableQueries.MigrationV76Statements
                 )
             };
         }
@@ -819,6 +824,8 @@ namespace Armada.Core.Database.Mysql
                 vessel.BranchCleanupPolicy = bcp;
             try { vessel.RequirePassingChecksToLand = Convert.ToInt64(reader["require_passing_checks_to_land"]) == 1; }
             catch { vessel.RequirePassingChecksToLand = false; }
+            try { object autoApproveValue = reader["auto_approve"]; vessel.AutoApprove = autoApproveValue == null || autoApproveValue == DBNull.Value ? (bool?)null : Convert.ToInt64(autoApproveValue) == 1; }
+            catch { vessel.AutoApprove = null; }
             try { vessel.AllowConcurrentMissions = Convert.ToInt64(reader["allow_concurrent_missions"]) == 1; }
             catch { vessel.AllowConcurrentMissions = false; }
             try

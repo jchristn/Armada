@@ -1530,6 +1530,11 @@ namespace Armada.Core.Database.SqlServer.Queries
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ask_tracked_work_tenant_thread') CREATE INDEX idx_ask_tracked_work_tenant_thread ON ask_tracked_work(tenant_id, thread_id);",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ask_tracked_work_state') CREATE INDEX idx_ask_tracked_work_state ON ask_tracked_work(state);",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ask_tracked_work_entity') CREATE INDEX idx_ask_tracked_work_entity ON ask_tracked_work(entity_type, entity_id);"
+                ),
+                new SchemaMigration(
+                    76,
+                    "Add nullable auto_approve to vessels: a per-vessel override of the captain auto-approve setting for missions on the vessel",
+                    @"IF COL_LENGTH('vessels', 'auto_approve') IS NULL ALTER TABLE vessels ADD auto_approve BIT NULL;"
                 )
 
             };

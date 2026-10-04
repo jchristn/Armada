@@ -179,6 +179,13 @@ namespace Armada.Core.Models
         public bool AllowConcurrentMissions { get; set; } = false;
 
         /// <summary>
+        /// Per-vessel override of the captain auto-approve setting for missions on this vessel. Null (the default)
+        /// leaves the captain's own setting in effect; true or false wins over the captain setting, so a vessel can
+        /// require CLI captains to run without their auto-approve or permission-bypass flags (or allow them).
+        /// </summary>
+        public bool? AutoApprove { get; set; } = null;
+
+        /// <summary>
         /// Whether successful landing requires at least one passing structured check
         /// for the current branch or mission context.
         /// </summary>

@@ -490,6 +490,7 @@ export default function VesselDetail() {
         <div className="detail-field"><span className="detail-label">{t('Require PR For Protected Branches')}</span><span>{vessel.requirePullRequestForProtectedBranches ? t('Yes') : t('No')}</span></div>
         <div className="detail-field"><span className="detail-label">{t('Require Merge Queue For Release Branches')}</span><span>{vessel.requireMergeQueueForReleaseBranches ? t('Yes') : t('No')}</span></div>
         <div className="detail-field"><span className="detail-label">{t('Allow Concurrent Missions')}</span><span>{vessel.allowConcurrentMissions ? t('Yes') : t('No')}</span></div>
+        <div className="detail-field"><span className="detail-label">{t('Agent Auto-Approve')}</span><span>{vessel.autoApprove === true ? t('On for this vessel') : vessel.autoApprove === false ? t('Off for this vessel') : t('Use captain setting')}</span></div>
         <div className="detail-field"><span className="detail-label">{t('Auto-Land Gate')}</span><span>{vessel.autoLandEnabled ? t('Enabled') : t('Disabled')}</span></div>
         {vessel.autoLandEnabled && (
           <>
