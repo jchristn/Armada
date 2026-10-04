@@ -21,26 +21,47 @@ function readStored(key: string): number {
   return DEFAULT_AUTO_REFRESH_SECONDS;
 }
 
+export interface AutoRefreshOptions {
+  /**
+   * Fixed interval in seconds that overrides the persisted user choice (used by live views such as a
+   * fleet action run, which polls every 5 s while active). The persisted choice is left untouched.
+   */
+  intervalSeconds?: number;
+  /** When true the timer is suspended (e.g. while a modal or drawer is open, or once a run finished). */
+  paused?: boolean;
+}
+
 /**
  * Per-table auto-refresh timer. Persists the chosen interval per `key` in localStorage (default 15s) and
  * calls `onRefresh` on that cadence. Selecting "None" (0) disables the timer. The latest `onRefresh` is
  * always used, so callers can pass a fresh closure each render without resetting the interval.
+ * `options.intervalSeconds` forces a fixed cadence and `options.paused` suspends the timer.
+ * `active` reports whether a timer is currently running.
  */
-export function useAutoRefresh(key: string, onRefresh: () => void) {
+export function useAutoRefresh(key: string, onRefresh: () => void, options?: AutoRefreshOptions) {
   const [seconds, setSeconds] = useState<number>(() => readStored(key));
   const callbackRef = useRef(onRefresh);
   callbackRef.current = onRefresh;
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageKey(key), String(seconds));
-    } catch {
-      // Non-fatal: the interval still runs for this session even if persistence fails.
-    }
-    if (!seconds || seconds <= 0) return undefined;
-    const id = window.setInterval(() => callbackRef.current(), seconds * 1000);
-    return () => window.clearInterval(id);
-  }, [seconds, key]);
+  const override = options?.intervalSeconds;
+  const paused = options?.paused === true;
+  const effective = override !== undefined ? override : seconds;
 
-  return { seconds, setSeconds };
+  useEffect(() => {
+    if (override === undefined) {
+      try {
+        localStorage.setItem(storageKey(key), String(seconds));
+      } catch {
+        // Non-fatal: the interval still runs for this session even if persistence fails.
+      }
+    }
+  }, [seconds, key, override]);
+
+  useEffect(() => {
+    if (paused || !effective || effective <= 0) return undefined;
+    const id = window.setInterval(() => callbackRef.current(), effective * 1000);
+    return () => window.clearInterval(id);
+  }, [effective, paused]);
+
+  return { seconds, setSeconds, active: !paused && effective > 0, intervalSeconds: effective };
 }

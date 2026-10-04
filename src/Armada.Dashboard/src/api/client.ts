@@ -122,9 +122,52 @@ import type {
   RunbookExecutionUpdateRequest,
   RunbookQuery,
   RunbookUpsertRequest,
+  VesselBrowseResult,
+  VesselDiscoveryRequest,
+  VesselImportDiscoverResponse,
+  VesselImportRequest,
+  VesselImportResponse,
+  VesselImportBatch,
+  VesselImportBatchDetail,
+  FleetAction,
+  FleetActionUpsertRequest,
+  FleetActionRunRequest,
+  FleetActionRunStartResult,
+  FleetActionRun,
+  FleetActionRunDetail,
+  FleetActionRunTarget,
+  FleetActionRunTargetSummary,
+  FleetActionRunStatus,
+  FleetActionTargetStatus,
 } from '../types/models';
 
 const BASE_URL = import.meta.env.VITE_ARMADA_SERVER_URL || '';
+
+/**
+ * Error thrown for non-2xx API responses. It is still an `Error` whose message is the server's message, so
+ * existing callers keep working; callers that need more read `status` and the camelized `data` payload
+ * (for example vessel import errors carry `{ code, path }`).
+ */
+export class ApiError extends Error {
+  status: number;
+  data: unknown;
+
+  constructor(message: string, status: number, data: unknown) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.data = data;
+  }
+}
+
+/** Read the machine-readable `code` from an API error's data payload, or null. */
+export function apiErrorCode(err: unknown): string | null {
+  if (err instanceof ApiError && err.data && typeof err.data === 'object') {
+    const code = (err.data as { code?: unknown }).code;
+    return typeof code === 'string' ? code : null;
+  }
+  return null;
+}
 
 let authToken: string | null = null;
 let onUnauthorized: (() => void) | null = null;
@@ -214,13 +257,15 @@ async function request<T>(method: string, path: string, body?: unknown, opts?: R
     if (!res.ok) {
       const text = await res.text();
       let msg = `${res.status}: ${text}`;
+      let data: unknown = null;
       try {
         const e = JSON.parse(text);
         msg = e.Message || e.message || e.Error || e.error || msg;
+        data = camelizeKeys(e.Data ?? e.data ?? null);
       } catch {
         // use raw text
       }
-      throw new Error(msg);
+      throw new ApiError(msg, res.status, data);
     }
 
     if (res.status === 204) return undefined as T;
@@ -1121,3 +1166,107 @@ export function getEntity(type: string, id: string): Promise<unknown> {
   if (!endpoint) throw new Error(`Unknown entity type: ${type}`);
   return get<unknown>(`/api/v1/${endpoint}/${id}`);
 }
+
+// ---------------------------------------------------------------------------
+// Vessel Import
+// ---------------------------------------------------------------------------
+
+/** Encode a path as base64url UTF-8, the format the browse endpoint expects. */
+export function encodeBrowsePath(path: string): string {
+  const bytes = new TextEncoder().encode(path);
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/** List browsable subdirectories of a directory on the Admiral host; omit `path` to list the allowed roots. */
+export const browseVesselImport = (path?: string | null) =>
+  get<VesselBrowseResult>(`/api/v1/vessels/import/browse${path ? `?path=${encodeBrowsePath(path)}` : ''}`);
+
+/** Scan directories and roots for git repositories and persist an import batch (creates no vessels). */
+export const discoverVesselImport = (data: VesselDiscoveryRequest) =>
+  post<VesselImportDiscoverResponse>('/api/v1/vessels/import/discover', data, { timeout: 5 * 60 * 1000 });
+
+/** Create vessels for the selected candidates of a discovered batch (200 inline, 202 background). */
+export const importVessels = (data: VesselImportRequest) =>
+  post<VesselImportResponse>('/api/v1/vessels/import', data, { timeout: 5 * 60 * 1000 });
+
+/** Paged import history for the caller's tenant, newest first by default. */
+export const enumerateVesselImportBatches = (query?: { pageNumber?: number; pageSize?: number; status?: string; order?: string }) =>
+  post<EnumerationResult<VesselImportBatch>>('/api/v1/vessels/import/batches/enumerate', {
+    PageNumber: query?.pageNumber ?? 1,
+    PageSize: query?.pageSize ?? 25,
+    ...(query?.status ? { Status: query.status } : {}),
+    ...(query?.order ? { Order: query.order } : {}),
+  });
+
+/** A batch with all of its items, ordered by path. */
+export const getVesselImportBatch = (id: string) =>
+  get<VesselImportBatchDetail>(`/api/v1/vessels/import/batches/${encodeURIComponent(id)}`);
+
+// ---------------------------------------------------------------------------
+// Fleet Actions
+// ---------------------------------------------------------------------------
+
+export interface FleetActionEnumerateQuery {
+  pageNumber?: number;
+  pageSize?: number;
+  includeInactive?: boolean;
+  order?: 'CreatedAscending' | 'CreatedDescending';
+}
+
+export const enumerateFleetActions = (query?: FleetActionEnumerateQuery) =>
+  post<EnumerationResult<FleetAction>>('/api/v1/fleet-actions/enumerate', {
+    PageNumber: query?.pageNumber ?? 1,
+    PageSize: query?.pageSize ?? 25,
+    IncludeInactive: query?.includeInactive ?? false,
+    ...(query?.order ? { Order: query.order } : {}),
+  });
+
+export const getFleetAction = (id: string) => get<FleetAction>(`/api/v1/fleet-actions/${encodeURIComponent(id)}`);
+export const createFleetAction = (data: FleetActionUpsertRequest) => post<FleetAction>('/api/v1/fleet-actions', data);
+export const updateFleetAction = (id: string, data: FleetActionUpsertRequest) =>
+  put<FleetAction>(`/api/v1/fleet-actions/${encodeURIComponent(id)}`, data);
+export const deleteFleetAction = (id: string) => del<void>(`/api/v1/fleet-actions/${encodeURIComponent(id)}`);
+
+/** Start a run of a saved action over the given vessels. */
+export const runFleetAction = (id: string, data: FleetActionRunRequest) =>
+  post<FleetActionRunStartResult>(`/api/v1/fleet-actions/${encodeURIComponent(id)}/run`, data);
+
+/** Start an ad hoc run with an inline `Definition`; the run's action id is null. */
+export const runAdHocFleetAction = (data: FleetActionRunRequest) =>
+  post<FleetActionRunStartResult>('/api/v1/fleet-actions/run', data);
+
+export interface FleetActionRunEnumerateQuery {
+  pageNumber?: number;
+  pageSize?: number;
+  status?: FleetActionRunStatus | '';
+  order?: 'CreatedAscending' | 'CreatedDescending';
+}
+
+export const enumerateFleetActionRuns = (query?: FleetActionRunEnumerateQuery) =>
+  post<EnumerationResult<FleetActionRun>>('/api/v1/fleet-action-runs/enumerate', {
+    PageNumber: query?.pageNumber ?? 1,
+    PageSize: query?.pageSize ?? 25,
+    ...(query?.status ? { Status: query.status } : {}),
+    ...(query?.order ? { Order: query.order } : {}),
+  });
+
+/** Run plus summaries of every target (no output text). */
+export const getFleetActionRun = (id: string) => get<FleetActionRunDetail>(`/api/v1/fleet-action-runs/${encodeURIComponent(id)}`);
+
+export const enumerateFleetActionRunTargets = (
+  runId: string,
+  query?: { pageNumber?: number; pageSize?: number; status?: FleetActionTargetStatus | '' },
+) =>
+  post<EnumerationResult<FleetActionRunTargetSummary>>(`/api/v1/fleet-action-runs/${encodeURIComponent(runId)}/targets/enumerate`, {
+    PageNumber: query?.pageNumber ?? 1,
+    PageSize: query?.pageSize ?? 25,
+    ...(query?.status ? { Status: query.status } : {}),
+  });
+
+/** One target including rendered text and captured output; the only endpoint that returns output. */
+export const getFleetActionRunTarget = (runId: string, targetId: string) =>
+  get<FleetActionRunTarget>(`/api/v1/fleet-action-runs/${encodeURIComponent(runId)}/targets/${encodeURIComponent(targetId)}`);
+
+export const cancelFleetActionRun = (id: string) => post<FleetActionRun>(`/api/v1/fleet-action-runs/${encodeURIComponent(id)}/cancel`);

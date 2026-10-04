@@ -21,14 +21,14 @@ describe('navConfig', () => {
   it('exposes exactly the consolidated destinations', () => {
     const present = [
       '/', '/ask', '/inbox', '/planning', '/dispatch', '/missions',
-      '/delivery', '/vessels', '/captains', '/configuration', '/activity',
+      '/delivery', '/fleet-actions', '/vessels', '/captains', '/configuration', '/activity',
       '/jobs', '/api-explorer', '/server',
     ];
     for (const target of present) {
       expect(allTargets).toContain(target);
     }
-    // 14 top-level destinations (Jobs added under Activity); admin lives as tabs under Settings.
-    expect(commands).toHaveLength(14);
+    // 15 top-level destinations (Jobs under Activity, Fleet Actions under Delivery); admin lives as tabs under Settings.
+    expect(commands).toHaveLength(15);
   });
 
   it('no longer surfaces the folded-away pages as nav items', () => {
@@ -44,6 +44,17 @@ describe('navConfig', () => {
     for (const target of removed) {
       expect(allTargets).not.toContain(target);
     }
+  });
+
+  it('places Fleet Actions in the DELIVERY section with a matcher for run detail routes', () => {
+    const delivery = navSections.find((s) => s.key === 'delivery');
+    expect(delivery).toBeDefined();
+    expect(delivery!.items.map((i) => i.to)).toContain('/fleet-actions');
+    expect(delivery!.matchers).toContain('/fleet-actions');
+    const item = delivery!.items.find((i) => i.to === '/fleet-actions');
+    expect(item!.icon).toBeTruthy();
+    // Run detail pages (/fleet-actions/runs/:id) must highlight the same section.
+    expect(delivery!.matchers.some((m) => '/fleet-actions/runs/far_123'.startsWith(m))).toBe(true);
   });
 
   it('keeps section keys aligned with the collapse-default map', () => {

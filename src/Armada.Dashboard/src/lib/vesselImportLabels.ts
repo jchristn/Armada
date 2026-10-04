@@ -1,0 +1,93 @@
+import type { BadgeIcon, BadgeTone } from '../components/shared/CodeStatusBadge';
+import type { VesselImportBatchStatus, VesselImportCandidateStatus, VesselImportOutcome } from '../types/models';
+import type { StatusMeta, Translate } from './fleetActionLabels';
+
+export const CANDIDATE_STATUSES: VesselImportCandidateStatus[] = ['New', 'AlreadyOnboarded', 'Worktree', 'ArmadaManaged', 'NotFound', 'NotGit', 'AccessDenied'];
+export const BATCH_STATUSES: VesselImportBatchStatus[] = ['Discovered', 'Importing', 'Completed', 'CompletedWithFailures', 'Failed'];
+export const OUTCOMES: VesselImportOutcome[] = ['Pending', 'Created', 'SkippedExisting', 'SkippedNotSelected', 'Failed'];
+
+/** Candidate statuses that the import endpoint will create a vessel for when selected. */
+export const IMPORTABLE_STATUSES: VesselImportCandidateStatus[] = ['New', 'Worktree'];
+
+export const CANDIDATE_STATUS_META: Record<VesselImportCandidateStatus, StatusMeta> = {
+  New: { label: 'New', description: 'A git repository that is not a vessel yet. Selected by default.', tone: 'success', icon: 'dot' },
+  AlreadyOnboarded: { label: 'Already a vessel', description: 'A vessel with this working directory or remote already exists.', tone: 'info', icon: 'link' },
+  Worktree: { label: 'Worktree', description: 'The .git entry is a file, so this is a worktree or submodule. Not selected by default.', tone: 'warning', icon: 'alert' },
+  ArmadaManaged: { label: 'Managed by Armada', description: 'Armada repos, docks, or data directory. Never imported.', tone: 'skipped', icon: 'lock' },
+  NotFound: { label: 'Not found', description: 'The path does not exist on the Admiral host.', tone: 'failed', icon: 'x' },
+  NotGit: { label: 'Not a repository', description: 'The directory exists but contains no git repository within the search depth.', tone: 'skipped', icon: 'skip' },
+  AccessDenied: { label: 'Access denied', description: 'The directory could not be read by the Admiral.', tone: 'failed', icon: 'lock' },
+};
+
+export const OUTCOME_META: Record<VesselImportOutcome, StatusMeta> = {
+  Pending: { label: 'Pending', description: 'Not processed yet.', tone: 'pending', icon: 'clock' },
+  Created: { label: 'Created', description: 'A vessel was created.', tone: 'success', icon: 'check' },
+  SkippedExisting: { label: 'Skipped (exists)', description: 'A matching vessel already exists, so nothing was created.', tone: 'info', icon: 'link' },
+  SkippedNotSelected: { label: 'Not selected', description: 'The candidate was not selected for import.', tone: 'skipped', icon: 'skip' },
+  Failed: { label: 'Failed', description: 'The vessel could not be created; see the reason.', tone: 'failed', icon: 'x' },
+};
+
+export const BATCH_STATUS_META: Record<VesselImportBatchStatus, StatusMeta> = {
+  Discovered: { label: 'Discovered', description: 'Candidates were found; nothing has been imported yet.', tone: 'pending', icon: 'clock' },
+  Importing: { label: 'Importing', description: 'Vessels are being created in the background.', tone: 'running', icon: 'spinner' },
+  Completed: { label: 'Completed', description: 'The import finished without failures.', tone: 'success', icon: 'check' },
+  CompletedWithFailures: { label: 'Completed with failures', description: 'The import finished and at least one item failed.', tone: 'warning', icon: 'alert' },
+  Failed: { label: 'Failed', description: 'The import as a whole failed or the background job was cancelled.', tone: 'failed', icon: 'x' },
+};
+
+/** Item outcome reason codes mapped to English source labels. */
+export const OUTCOME_REASON_LABELS: Record<string, string> = {
+  VesselAlreadyExists: 'A matching vessel already exists',
+  NotSelected: 'Not selected for import',
+  NotImportable: 'This candidate cannot be imported',
+  PathMissing: 'The directory no longer exists',
+  CreateFailed: 'Vessel creation failed',
+  Cancelled: 'The import was cancelled first',
+};
+
+/** Discovery hint codes mapped to English source explanations. */
+export const HINT_LABELS: Record<string, string> = {
+  PathNotVisibleToAdmiral: 'None of the requested paths exist on the Admiral host. If the Admiral runs in a container it cannot see your host directories: mount them into the container, or run discovery through a Harbor on that machine.',
+  CandidateLimitReached: 'Discovery stopped at the candidate limit, so the list is truncated. Narrow the roots or lower the max depth and discover again to see the rest.',
+};
+
+/** Error codes from import endpoints (`data.code`) mapped to English source explanations. */
+export const IMPORT_ERROR_LABELS: Record<string, string> = {
+  InvalidRequest: 'The request was not valid. Check the paths and try again.',
+  HarborNotSupported: 'Discovery through a Harbor is not supported yet.',
+  PathNotAllowed: 'This path is outside the allowed import roots. An administrator can add roots under Settings > Import.',
+  DirectoryNotFound: 'That directory does not exist on the Admiral host.',
+  BatchNotFound: 'This import batch no longer exists. Run discovery again.',
+  BatchBusy: 'This batch is already being imported. Wait for it to finish or open it from the import history.',
+};
+
+function badge(t: Translate, meta: StatusMeta | undefined, fallback: string) {
+  const m = meta ?? { label: fallback, description: '', tone: 'info' as BadgeTone, icon: 'dot' as BadgeIcon };
+  return { label: t(m.label), title: m.description ? t(m.description) : undefined, tone: m.tone, icon: m.icon };
+}
+
+export function candidateStatusBadge(t: Translate, status: VesselImportCandidateStatus) {
+  return badge(t, CANDIDATE_STATUS_META[status], status);
+}
+
+export function outcomeBadge(t: Translate, outcome: VesselImportOutcome) {
+  return badge(t, OUTCOME_META[outcome], outcome);
+}
+
+export function batchStatusBadge(t: Translate, status: VesselImportBatchStatus) {
+  return badge(t, BATCH_STATUS_META[status], status);
+}
+
+export function outcomeReasonLabel(t: Translate, code: string | null | undefined): string {
+  if (!code) return '';
+  return OUTCOME_REASON_LABELS[code] ? t(OUTCOME_REASON_LABELS[code]) : code;
+}
+
+export function hintLabel(t: Translate, code: string, fallback: string): string {
+  return HINT_LABELS[code] ? t(HINT_LABELS[code]) : fallback;
+}
+
+export function importErrorLabel(t: Translate, code: string | null, fallback: string): string {
+  if (code && IMPORT_ERROR_LABELS[code]) return t(IMPORT_ERROR_LABELS[code]);
+  return fallback;
+}

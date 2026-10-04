@@ -18,7 +18,8 @@ import {
   type RebuildStatus,
   type BranchInfo,
 } from '../api/client';
-import type { Vessel } from '../types/models';
+import type { FleetActionSettingsData, Vessel, VesselImportSettingsData } from '../types/models';
+import ImportFleetActionSettings from '../components/settings/ImportFleetActionSettings';
 import LogViewer from '../components/shared/LogViewer';
 import RefreshButton from '../components/shared/RefreshButton';
 import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
@@ -99,6 +100,8 @@ interface ServerSettings {
   selfVesselId?: string | null;
   rebuildSlotRetentionCount?: number;
   remoteControl: RemoteControlSettings;
+  import?: VesselImportSettingsData;
+  fleetActions?: FleetActionSettingsData;
 }
 
 type McpClientKey = 'claude' | 'codex' | 'gemini' | 'cursor';
@@ -1049,6 +1052,16 @@ export default function Server() {
             </button>
           </fieldset>
         </div>
+      )}
+
+      {settings && (
+        <ImportFleetActionSettings
+          importSettings={settings.import}
+          fleetActionSettings={settings.fleetActions}
+          locked={remoteSettingsLocked}
+          onSaved={(updated) => setSettings(mergeServerSettings(updated as unknown as ServerSettings))}
+          notify={showToast}
+        />
       )}
 
       {settings && (

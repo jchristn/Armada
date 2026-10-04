@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { listVessels, listFleets, listPipelines, createVessel, updateVessel, deleteVessel, getVesselGitStatus, getVesselBranches } from '../api/client';
 import BranchesModal from '../components/vessels/BranchesModal';
 import type { Fleet, Vessel, Pipeline } from '../types/models';
@@ -20,6 +20,9 @@ import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { buildVesselDuplicatePayload } from '../lib/duplicates';
 import { useResourceTable } from '../lib/useResourceTable';
+import { useAuth } from '../context/AuthContext';
+import ImportWizard from '../components/vessels/import/ImportWizard';
+import RunActionModal from '../components/fleetActions/RunActionModal';
 
 interface VesselForm {
   name: string;
@@ -62,8 +65,22 @@ const emptyForm: VesselForm = {
 
 export default function Vessels() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useLocale();
   const { pushToast } = useNotifications();
+  const { isTenantAdmin } = useAuth();
+
+  // Import wizard: opened from the header button, or by the /vessels/import deep link.
+  const importRoute = location.pathname.replace(/\/+$/, '').endsWith('/vessels/import');
+  const [importOpen, setImportOpen] = useState(importRoute);
+  useEffect(() => { if (importRoute) setImportOpen(true); }, [importRoute]);
+  function closeImport() {
+    setImportOpen(false);
+    if (importRoute) navigate('/vessels', { replace: true });
+  }
+
+  // Bulk "Run action..." on the selected vessels.
+  const [runActionIds, setRunActionIds] = useState<string[] | null>(null);
 
   // Landing-mode metadata: a short self-describing label and a full explanation of what each mode does to
   // completed mission work. Shared by the edit modal, the filter, and the table so wording stays consistent.
@@ -329,9 +346,9 @@ export default function Vessels() {
             <UserScopeFilter value={userScope} onChange={setUserScope} />
             <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
             <RefreshButton onRefresh={load} title="Refresh vessel data" />
-            {table.selected.length > 0 && (
-              <button className="btn btn-sm btn-danger" onClick={handleBulkDelete}>
-                {t('Delete Selected')} ({table.selected.length})
+            {isTenantAdmin && (
+              <button className="btn btn-sm" onClick={() => setImportOpen(true)} title={t('Discover and onboard many local repositories at once')}>
+                {t('Import repositories')}
               </button>
             )}
             <button className="btn btn-primary btn-sm" onClick={openCreate}>+ {t('Vessel')}</button>
@@ -539,8 +556,43 @@ export default function Vessels() {
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 
+      <ImportWizard open={importOpen} onClose={closeImport} onImported={() => void load()} />
+      {runActionIds && (
+        <RunActionModal
+          open
+          vesselIds={runActionIds}
+          onClose={() => setRunActionIds(null)}
+          onStarted={(result) => { table.clearSelection(); navigate(`/fleet-actions/runs/${result.runId}`); }}
+        />
+      )}
+
       {loading && vessels.length === 0 && <p className="text-dim">{t('Loading...')}</p>}
-      {!loading && vessels.length === 0 && <p className="text-dim">{t('No vessels configured.')}</p>}
+      {!loading && vessels.length === 0 && (
+        <div className="empty-state card" role="status">
+          <h4 className="empty-state-title">{t('No vessels configured.')}</h4>
+          <div className="empty-state-body text-dim">{t('Add a single repository with + Vessel, or import many existing local repositories at once.')}</div>
+          {isTenantAdmin && (
+            <div className="empty-state-actions">
+              <button className="btn btn-primary btn-sm" onClick={() => setImportOpen(true)}>{t('Import repositories')}</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {table.selected.length > 0 && (
+        <div className="bulk-bar" role="region" aria-label={t('Bulk actions')}>
+          <span className="bulk-bar-count">{t('{count, plural, one {# vessel selected} other {# vessels selected}}', { count: table.selected.length })}</span>
+          {isTenantAdmin && (
+            <button className="btn btn-sm btn-primary" onClick={() => setRunActionIds([...table.selected])} title={t('Run a fleet action on the selected vessels')}>
+              {t('Run action...')}
+            </button>
+          )}
+          <button className="btn btn-sm btn-danger" onClick={handleBulkDelete}>
+            {t('Delete Selected')} ({table.selected.length})
+          </button>
+          <button className="btn btn-sm" onClick={() => table.clearSelection()}>{t('Clear selection')}</button>
+        </div>
+      )}
 
       {vessels.length > 0 && (
         <>
