@@ -19,6 +19,8 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    // Tests read backend enum and detail-code sources (?raw) to assert the dashboard maps every value.
+    fs: { allow: ['.', '../Armada.Core', '../Armada.Server/wwwroot/i18n'] },
     proxy: {
       '/api': {
         target: process.env.VITE_ARMADA_SERVER_URL || 'http://localhost:5000',

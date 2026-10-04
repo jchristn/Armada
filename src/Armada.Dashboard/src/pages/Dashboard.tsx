@@ -27,6 +27,7 @@ import CopyButton, { copyToClipboard } from '../components/shared/CopyButton';
 import JsonViewer from '../components/shared/JsonViewer';
 import FilterBar from '../components/shared/FilterBar';
 import MissionHistoryChart from '../components/MissionHistoryChart';
+import HealthKpiCards from '../components/vessels/health/HealthKpiCards';
 import { useLocale } from '../context/LocaleContext';
 
 interface VoyageProgress {
@@ -460,6 +461,8 @@ export default function Dashboard() {
           </button>
         </div>
       )}
+      {/* Vessel health KPI tiles (deep-link into /vessels/health) */}
+      <HealthKpiCards />
 
       {/* Mission History Chart */}
       <MissionHistoryChart vessels={vessels} fleets={fleets} onRefresh={loadAll} />

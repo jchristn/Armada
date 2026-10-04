@@ -955,6 +955,231 @@ export interface Job {
   lastUpdateUtc: string;
 }
 
+// ==================== Vessel Health (begin) ====================
+
+/** Status of one vessel health criterion or of the vessel overall. */
+export type VesselHealthStatus = 'Pass' | 'Warn' | 'Fail' | 'NotApplicable' | 'Unknown';
+
+/** Stable criterion codes; `Overall` is valid only for overrides. */
+export type VesselHealthCriterion =
+  | 'GitDivergence'
+  | 'WorkingTree'
+  | 'Branches'
+  | 'CommitRecency'
+  | 'Dependencies'
+  | 'Vulnerabilities'
+  | 'TestInfrastructure'
+  | 'ContinuousIntegration'
+  | 'ArmadaReadiness'
+  | 'MissionOutcomes'
+  | 'Overall';
+
+export type VulnerabilitySeverity = 'None' | 'Low' | 'Moderate' | 'High' | 'Critical';
+export type DependencyDrift = 'None' | 'Patch' | 'Minor' | 'Major';
+export type VesselDivergenceFilter = 'Ahead' | 'Behind' | 'Diverged' | 'Even';
+
+export type VesselHealthSortField =
+  | 'VesselName'
+  | 'FleetName'
+  | 'OverallStatus'
+  | 'Divergence'
+  | 'AheadOfDefault'
+  | 'BehindDefault'
+  | 'IsDirty'
+  | 'BranchCount'
+  | 'StaleBranchCount'
+  | 'OutdatedCount'
+  | 'OutdatedMajorCount'
+  | 'VulnerableCount'
+  | 'DependencyStatus'
+  | 'TestInfraStatus'
+  | 'CiStatus'
+  | 'LastCommitUtc'
+  | 'EvaluatedUtc';
+
+/**
+ * One health row (effective statuses, overrides applied). A never-evaluated vessel has no `id`,
+ * Unknown statuses, and no measurements. Null properties are omitted by the server.
+ */
+export interface VesselHealth {
+  id?: string;
+  tenantId?: string | null;
+  vesselId: string;
+  overallStatus: VesselHealthStatus;
+  evaluatedUtc?: string | null;
+  evaluationDurationMs?: number | null;
+  errorCode?: string | null;
+  evaluatedPath?: string | null;
+  currentBranch?: string | null;
+  isDirty?: boolean | null;
+  untrackedCount?: number | null;
+  aheadOfDefault?: number | null;
+  behindDefault?: number | null;
+  aheadOfUpstream?: number | null;
+  behindUpstream?: number | null;
+  lastCommitUtc?: string | null;
+  branchCount?: number | null;
+  staleBranchCount?: number | null;
+  armadaBranchCount?: number | null;
+  primaryLanguage?: string | null;
+  projectCount?: number | null;
+  outdatedCount?: number | null;
+  outdatedMajorCount?: number | null;
+  vulnerableCount?: number | null;
+  maxVulnerabilitySeverity?: VulnerabilitySeverity;
+  dependencyStatus: VesselHealthStatus;
+  vulnerabilityStatus: VesselHealthStatus;
+  testInfraStatus: VesselHealthStatus;
+  ciStatus: VesselHealthStatus;
+  divergenceStatus: VesselHealthStatus;
+  workingTreeStatus: VesselHealthStatus;
+  branchStatus: VesselHealthStatus;
+  readinessStatus: VesselHealthStatus;
+  missionOutcomeStatus: VesselHealthStatus;
+  lastCheckRunStatus?: string | null;
+  hasCiConfig?: boolean | null;
+  hasLicense?: boolean | null;
+  hasReadme?: boolean | null;
+  readinessErrorCount?: number | null;
+  recentMissionFailureCount?: number | null;
+  manifestHash?: string | null;
+  dependenciesEvaluatedUtc?: string | null;
+  createdUtc?: string;
+  lastUpdateUtc?: string;
+  vesselName?: string | null;
+  fleetId?: string | null;
+  fleetName?: string | null;
+}
+
+/** Raw evaluated finding for one criterion. */
+export interface VesselHealthFinding {
+  id?: string;
+  tenantId?: string | null;
+  vesselId: string;
+  criterion: VesselHealthCriterion;
+  status: VesselHealthStatus;
+  detailCode?: string | null;
+  valueA?: number | null;
+  valueB?: number | null;
+  evaluatedUtc?: string;
+  createdUtc?: string;
+  lastUpdateUtc?: string;
+}
+
+/** One outdated and/or vulnerable package. */
+export interface VesselDependency {
+  id?: string;
+  tenantId?: string | null;
+  vesselId: string;
+  ecosystem: string;
+  projectPath?: string | null;
+  packageName: string;
+  currentVersion?: string | null;
+  latestVersion?: string | null;
+  drift?: DependencyDrift;
+  isVulnerable?: boolean;
+  severity?: VulnerabilitySeverity;
+  advisoryUrl?: string | null;
+  createdUtc?: string;
+  lastUpdateUtc?: string;
+}
+
+/** Manual status for one criterion (or Overall). */
+export interface VesselHealthOverride {
+  id?: string;
+  tenantId?: string | null;
+  vesselId: string;
+  userId?: string | null;
+  criterion: VesselHealthCriterion;
+  status: VesselHealthStatus;
+  note?: string | null;
+  createdUtc?: string;
+  lastUpdateUtc?: string;
+}
+
+/** GET /api/v1/vessels/{id}/health response. */
+export interface VesselHealthDetail {
+  health: VesselHealth;
+  findings: VesselHealthFinding[];
+  dependencies: VesselDependency[];
+  overrides: VesselHealthOverride[];
+}
+
+/** GET /api/v1/vessel-health/summary response. */
+export interface VesselHealthSummary {
+  totalVessels: number;
+  pass: number;
+  warn: number;
+  fail: number;
+  unknown: number;
+  notApplicable: number;
+  notEvaluated: number;
+  outdatedMajorVessels: number;
+  highOrCriticalVulnerabilityVessels: number;
+}
+
+/** POST /api/v1/vessel-health/enumerate body (sent with PascalCase keys, every field optional). */
+export interface VesselHealthEnumerateRequest {
+  PageNumber?: number;
+  PageSize?: number;
+  SortBy?: VesselHealthSortField;
+  SortDescending?: boolean;
+  NameContains?: string;
+  FleetId?: string;
+  PrimaryLanguage?: string;
+  CurrentBranchContains?: string;
+  OverallStatus?: VesselHealthStatus[];
+  DependencyStatus?: VesselHealthStatus[];
+  TestInfraStatus?: VesselHealthStatus[];
+  IsDirty?: boolean;
+  HasCiConfig?: boolean;
+  Divergence?: VesselDivergenceFilter;
+  MinBranchCount?: number;
+  MaxBranchCount?: number;
+  LastCommitAfterUtc?: string;
+  LastCommitBeforeUtc?: string;
+  IncludeInactive?: boolean;
+}
+
+/** POST /api/v1/vessel-health/evaluate body. */
+export interface VesselHealthEvaluateRequest {
+  VesselIds?: string[];
+  FleetId?: string;
+  Force?: boolean;
+}
+
+/** 202 (started) or 409 (already running) response of the evaluate route. */
+export interface VesselHealthEvaluationStart {
+  jobId: string;
+  alreadyRunning: boolean;
+  vesselCount: number;
+}
+
+/** RepositoryHealth.Thresholds in server settings. */
+export interface RepositoryHealthThresholds {
+  behindWarn: number;
+  behindFail: number;
+  staleBranchWarn: number;
+  staleBranchFail: number;
+  missionFailureWarn: number;
+  missionFailureFail: number;
+}
+
+/** RepositoryHealth section of server settings. */
+export interface RepositoryHealthSettings {
+  intervalMinutes: number;
+  maxConcurrency: number;
+  fetchBeforeEvaluate: boolean;
+  dependencyMaxAgeHours: number;
+  dependencyCommandTimeoutSeconds: number;
+  staleBranchDays: number;
+  missionWindowDays: number;
+  scoredCriteria: VesselHealthCriterion[];
+  thresholds: RepositoryHealthThresholds;
+}
+
+// ==================== Vessel Health (end) ====================
+
 export interface CaptainChatRequest {
   message: string;
   history: CaptainChatMessage[];
