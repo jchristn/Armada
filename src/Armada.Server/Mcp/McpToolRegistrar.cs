@@ -9,6 +9,7 @@ namespace Armada.Server.Mcp
     using Armada.Core.Database;
     using Armada.Core.Models;
     using Armada.Core.Services;
+    using Armada.Core.Services.Health;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
     using Armada.Server.Mcp.Tools;
@@ -64,6 +65,7 @@ namespace Armada.Server.Mcp
         /// <param name="vesselService">Optional shared vessel creation service used by add_vessel.</param>
         /// <param name="vesselImportService">Optional vessel import service for discover_vessels and import_vessels.</param>
         /// <param name="fleetActionService">Optional fleet action service for fleet action tools.</param>
+        /// <param name="vesselHealthService">Optional vessel health service for health inspection, evaluation, and override tools.</param>
         public static void RegisterAll(
             RegisterToolDelegate register,
             DatabaseDriver database,
@@ -90,7 +92,8 @@ namespace Armada.Server.Mcp
             HarborService? harborService = null,
             IVesselService? vesselService = null,
             IVesselImportService? vesselImportService = null,
-            FleetActionService? fleetActionService = null)
+            FleetActionService? fleetActionService = null,
+            VesselHealthService? vesselHealthService = null)
         {
             McpStatusTools.Register(register, admiral, onStop);
             if (logging != null) McpInboxTools.Register(register, database, logging);
@@ -121,6 +124,7 @@ namespace Armada.Server.Mcp
             if (modelEndpointService != null) McpModelEndpointTools.Register(register, modelEndpointService);
             if (harborService != null) McpHarborTools.Register(register, harborService);
             if (fleetActionService != null) McpFleetActionTools.Register(register, fleetActionService);
+            if (vesselHealthService != null) McpVesselHealthTools.Register(register, vesselHealthService);
         }
 
         /// <summary>
@@ -151,7 +155,8 @@ namespace Armada.Server.Mcp
             HarborService? harborService = null,
             IVesselService? vesselService = null,
             IVesselImportService? vesselImportService = null,
-            FleetActionService? fleetActionService = null)
+            FleetActionService? fleetActionService = null,
+            VesselHealthService? vesselHealthService = null)
         {
             List<CaptainToolSummary> tools = new List<CaptainToolSummary>();
 
@@ -200,6 +205,7 @@ namespace Armada.Server.Mcp
             if (modelEndpointService != null) RegisterCatalogGroup("Armada MCP / Model Endpoints", register => McpModelEndpointTools.Register(register, modelEndpointService));
             if (harborService != null) RegisterCatalogGroup("Armada MCP / Harbors", register => McpHarborTools.Register(register, harborService));
             RegisterCatalogGroup("Armada MCP / Fleet Actions", register => McpFleetActionTools.Register(register, fleetActionService));
+            if (vesselHealthService != null) RegisterCatalogGroup("Armada MCP / Vessel Health", register => McpVesselHealthTools.Register(register, vesselHealthService));
 
             return tools
                 .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase)

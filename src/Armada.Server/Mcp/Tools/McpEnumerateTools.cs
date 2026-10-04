@@ -37,13 +37,13 @@ namespace Armada.Server.Mcp.Tools
         {
             register(
                 "enumerate",
-                "Find and browse entities with paginated, filtered, sorted access to: objectives, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, vessel_import_batch, fleet_action, fleet_action_run, and fleet_action_run_target. Returns paginated results with total counts. Filter by vesselId, fleetId, captainId, voyageId, status, date range, and more.",
+                "Find and browse entities with paginated, filtered, sorted access to: objectives, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, and vessel_health. Returns paginated results with total counts. Filter by vesselId, fleetId, captainId, voyageId, status, date range, and more.",
                 new
                 {
                     type = "object",
                     properties = new
                     {
-                        entityType = new { type = "string", description = "Entity type to enumerate: objectives, jobs, model_endpoints, harbors, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target (requires runId)" },
+                        entityType = new { type = "string", description = "Entity type to enumerate: objectives, jobs, model_endpoints, harbors, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target (requires runId), vessel_health (status filters overall status, fleetId and search narrow by fleet and vessel name)" },
                         pageNumber = new { type = "integer", description = "Page number (1-based, default 1)" },
                         pageSize = new { type = "integer", description = "Results per page (default 10, max 1000)" },
                         order = new { type = "string", description = "Sort order: CreatedAscending, CreatedDescending (default)" },
@@ -138,6 +138,20 @@ namespace Armada.Server.Mcp.Tools
                                 .Take(hbrPageSize)
                                 .ToList();
                             return (object)new { Success = true, PageNumber = hbrPageNumber, PageSize = hbrPageSize, TotalRecords = allHarbors.Count, Objects = hbrPage };
+                        case "vessel_health":
+                        case "vessel-health":
+                        case "health":
+                            VesselHealthEnumerateRequest healthRequest = new VesselHealthEnumerateRequest();
+                            healthRequest.PageNumber = query.PageNumber;
+                            healthRequest.PageSize = query.PageSize;
+                            healthRequest.FleetId = query.FleetId;
+                            healthRequest.NameContains = String.IsNullOrWhiteSpace(request.Search) ? null : request.Search;
+                            if (!String.IsNullOrWhiteSpace(query.Status)
+                                && !Char.IsDigit(query.Status.Trim()[0])
+                                && Enum.TryParse(query.Status.Trim(), true, out VesselHealthStatusEnum healthStatus)
+                                && Enum.IsDefined(typeof(VesselHealthStatusEnum), healthStatus))
+                                healthRequest.OverallStatus = new List<VesselHealthStatusEnum> { healthStatus };
+                            return (object)await database.VesselHealth.EnumerateAsync(callerCtx.TenantId ?? Constants.DefaultTenantId, healthRequest).ConfigureAwait(false);
                         case "fleets":
                         case "fleet":
                             EnumerationResult<Fleet> fleets = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(callerCtx, query, q => database.Fleets.EnumerateAsync(q), (t, q) => database.Fleets.EnumerateAsync(t, q), (t, u, q) => database.Fleets.EnumerateAsync(t, u, q)).ConfigureAwait(false);
@@ -543,7 +557,7 @@ namespace Armada.Server.Mcp.Tools
                                 TotalMs = targets.TotalMs
                             };
                         default:
-                            return (object)new { Error = "Unknown entity type: " + entityType + ". Valid types: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, jobs, model_endpoints, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target" };
+                            return (object)new { Error = "Unknown entity type: " + entityType + ". Valid types: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, jobs, model_endpoints, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, vessel_health" };
                     }
                 });
         }

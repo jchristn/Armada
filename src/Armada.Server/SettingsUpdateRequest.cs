@@ -105,5 +105,11 @@ namespace Armada.Server
         /// defaults and out-of-range values are clamped. Applied live.
         /// </summary>
         public FleetActionSettings? FleetActions { get; set; }
+
+        /// <summary>
+        /// Optional vessel health settings update. When supplied, replaces the full repositoryHealth settings object
+        /// (values are clamped by the settings setters).
+        /// </summary>
+        public RepositoryHealthSettings? RepositoryHealth { get; set; }
     }
 }

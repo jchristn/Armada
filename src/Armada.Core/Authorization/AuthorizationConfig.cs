@@ -99,6 +99,10 @@ namespace Armada.Core.Authorization
             if (path.StartsWith("/api/v1/merge-queue") && method != "GET") return PermissionLevel.TenantAdmin;
             if (path.StartsWith("/api/v1/request-history") && method != "GET") return PermissionLevel.TenantAdmin;
 
+            // Vessel health: starting an evaluation is TenantAdmin; enumerate (POST) and summary stay Authenticated.
+            // Overrides live under /api/v1/vessels/{id}/health/overrides and are covered by the vessels rule above.
+            if (path == "/api/v1/vessel-health/evaluate" && method == "POST") return PermissionLevel.TenantAdmin;
+
             // Everything else requires authentication
             return PermissionLevel.Authenticated;
         }

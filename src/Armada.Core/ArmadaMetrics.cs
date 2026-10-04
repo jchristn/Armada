@@ -70,5 +70,13 @@ namespace Armada.Core
         /// </summary>
         public static readonly Histogram<double> FleetActionTargetDuration =
             _Meter.CreateHistogram<double>("armada.fleet_action.target_duration", "s", "Fleet action target duration");
+
+        /// <summary>Vessel health evaluations, one per vessel, labeled by outcome (Succeeded, Failed, Cancelled).</summary>
+        public static readonly Counter<long> HealthEvaluations =
+            _Meter.CreateCounter<long>("armada.health.evaluations", null, "Vessel health evaluations");
+
+        /// <summary>Duration in seconds of each vessel health criterion evaluation, labeled by criterion.</summary>
+        public static readonly Histogram<double> HealthCriterionDuration =
+            _Meter.CreateHistogram<double>("armada.health.criterion_duration_seconds", null, "Vessel health criterion duration in seconds");
     }
 }

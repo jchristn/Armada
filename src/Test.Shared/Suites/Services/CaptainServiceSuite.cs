@@ -374,6 +374,13 @@ namespace Test.Shared.Suites.Services
             public Task<IReadOnlyList<string>> GetRecentCommitsForPathsAsync(string worktreePath, IReadOnlyList<string> paths, int maxPerPath, CancellationToken token = default) { throw new NotImplementedException(); }
             public Task<IReadOnlyList<string>> FindExistingSubjectTermsAsync(string worktreePath, IReadOnlyList<string> terms, CancellationToken token = default) { throw new NotImplementedException(); }
             public Task<IReadOnlyList<Armada.Core.Models.BranchInfo>> ListBranchesAsync(string repoPath, string defaultBranch = "main", CancellationToken token = default) => Task.FromResult<IReadOnlyList<Armada.Core.Models.BranchInfo>>(new List<Armada.Core.Models.BranchInfo>());
+            public Task FetchRemotesAsync(string repoPath, CancellationToken token = default) => Task.CompletedTask;
+            public Task<Armada.Core.Models.GitDivergenceCounts?> GetDivergenceAsync(string repoPath, string baseRef, string headRef, CancellationToken token = default) => Task.FromResult<Armada.Core.Models.GitDivergenceCounts?>(null);
+            public Task<Armada.Core.Models.GitWorkingTreeStatus> GetWorkingTreeStatusAsync(string repoPath, CancellationToken token = default) => Task.FromResult(new Armada.Core.Models.GitWorkingTreeStatus());
+            public Task<string?> GetCurrentBranchAsync(string repoPath, CancellationToken token = default) => Task.FromResult<string?>(null);
+            public Task<DateTime?> GetLastCommitUtcAsync(string repoPath, CancellationToken token = default) => Task.FromResult<DateTime?>(null);
+            public Task<IReadOnlyList<string>> ListTrackedFilesAsync(string repoPath, CancellationToken token = default) => Task.FromResult<IReadOnlyList<string>>(new List<string>());
+            public Task<bool> IsBareRepositoryAsync(string path, CancellationToken token = default) => Task.FromResult(false);
             public Task PushLocalBranchAsync(string repoPath, string branchName, string remoteName = "origin", CancellationToken token = default) => Task.CompletedTask;
             public Task MergeBranchesAsync(string repoPath, string sourceBranch, string targetBranch, bool push, CancellationToken token = default) => Task.CompletedTask;
         }

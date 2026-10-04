@@ -810,9 +810,185 @@ namespace Armada.Core.Services
             }
         }
 
+        /// <summary>
+        /// Fetch every configured remote with pruning without changing any repository configuration.
+        /// </summary>
+        /// <param name="repoPath">Repository path (working tree or bare repository).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <exception cref="ArgumentNullException">Thrown when repoPath is null or empty.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the fetch fails.</exception>
+        /// <exception cref="TimeoutException">Thrown when the fetch does not finish in time.</exception>
+        public async Task FetchRemotesAsync(string repoPath, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
+            _Logging.Debug(_Header + "fetching remotes: " + repoPath);
+            await RunGitAsync(repoPath, token, "fetch", "--all", "--prune", "--quiet").ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Count commits between two refs (git rev-list --left-right --count baseRef...headRef).
+        /// </summary>
+        /// <param name="repoPath">Repository path (working tree or bare repository).</param>
+        /// <param name="baseRef">Base ref.</param>
+        /// <param name="headRef">Head ref.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The counts, or null when either ref does not resolve.</returns>
+        public async Task<GitDivergenceCounts?> GetDivergenceAsync(string repoPath, string baseRef, string headRef, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
+            if (String.IsNullOrEmpty(baseRef)) throw new ArgumentNullException(nameof(baseRef));
+            if (String.IsNullOrEmpty(headRef)) throw new ArgumentNullException(nameof(headRef));
+
+            if (!await RefResolvesAsync(repoPath, baseRef, token).ConfigureAwait(false)) return null;
+            if (!await RefResolvesAsync(repoPath, headRef, token).ConfigureAwait(false)) return null;
+
+            string counts;
+            try
+            {
+                counts = await RunGitAsync(repoPath, token, "rev-list", "--left-right", "--count", baseRef + "..." + headRef).ConfigureAwait(false);
+            }
+            catch (InvalidOperationException)
+            {
+                return null;
+            }
+
+            string[] parts = counts.Trim().Split(new char[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length != 2) return null;
+            if (!Int32.TryParse(parts[0], out int behind)) return null;
+            if (!Int32.TryParse(parts[1], out int ahead)) return null;
+            return new GitDivergenceCounts(ahead, behind);
+        }
+
+        /// <summary>
+        /// Summarize the working tree (git status --porcelain).
+        /// </summary>
+        /// <param name="repoPath">Working tree path.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The working tree status.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when repoPath is null or empty.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when git status fails.</exception>
+        public async Task<GitWorkingTreeStatus> GetWorkingTreeStatusAsync(string repoPath, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
+
+            string output = await RunGitAsync(repoPath, token, "status", "--porcelain=v1", "--untracked-files=all").ConfigureAwait(false);
+            GitWorkingTreeStatus status = new GitWorkingTreeStatus();
+            int modified = 0;
+            int untracked = 0;
+            foreach (string line in output.Replace("\r\n", "\n").Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (line.Length < 2) continue;
+                if (line.StartsWith("??", StringComparison.Ordinal)) untracked++;
+                else if (line.StartsWith("!!", StringComparison.Ordinal)) continue;
+                else modified++;
+            }
+
+            status.ModifiedCount = modified;
+            status.UntrackedCount = untracked;
+            return status;
+        }
+
+        /// <summary>
+        /// Get the checked-out branch name.
+        /// </summary>
+        /// <param name="repoPath">Repository path.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The branch name, or null when HEAD is detached or cannot be read.</returns>
+        public async Task<string?> GetCurrentBranchAsync(string repoPath, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
+            try
+            {
+                string output = await RunGitAsync(repoPath, token, "symbolic-ref", "--short", "-q", "HEAD").ConfigureAwait(false);
+                string trimmed = output.Trim();
+                return String.IsNullOrEmpty(trimmed) ? null : trimmed;
+            }
+            catch (InvalidOperationException)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Get the committer timestamp of the HEAD commit in UTC.
+        /// </summary>
+        /// <param name="repoPath">Repository path.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The timestamp, or null when the repository has no commits.</returns>
+        public async Task<DateTime?> GetLastCommitUtcAsync(string repoPath, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
+            if (!await RefResolvesAsync(repoPath, "HEAD", token).ConfigureAwait(false)) return null;
+
+            try
+            {
+                string output = await RunGitAsync(repoPath, token, "log", "-1", "--format=%cI", "HEAD").ConfigureAwait(false);
+                if (DateTimeOffset.TryParse(output.Trim(), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out DateTimeOffset parsed))
+                    return parsed.UtcDateTime;
+                return null;
+            }
+            catch (InvalidOperationException)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// List repository-relative paths of every file tracked at HEAD.
+        /// </summary>
+        /// <param name="repoPath">Repository path.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Tracked file paths with forward slashes; empty when the repository has no commits.</returns>
+        public async Task<IReadOnlyList<string>> ListTrackedFilesAsync(string repoPath, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
+            if (!await RefResolvesAsync(repoPath, "HEAD", token).ConfigureAwait(false)) return new List<string>();
+
+            string output = await RunGitAsync(repoPath, token, "-c", "core.quotepath=off", "ls-tree", "-r", "--name-only", "HEAD").ConfigureAwait(false);
+            return output.Replace("\r\n", "\n")
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.Trim())
+                .Where(line => line.Length > 0)
+                .ToList();
+        }
+
+        /// <summary>
+        /// Check whether a path is a bare git repository.
+        /// </summary>
+        /// <param name="path">Path to check.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True for a bare repository; false otherwise.</returns>
+        public async Task<bool> IsBareRepositoryAsync(string path, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(path)) return false;
+            if (!Directory.Exists(path)) return false;
+            try
+            {
+                string output = await RunGitAsync(path, token, "rev-parse", "--is-bare-repository").ConfigureAwait(false);
+                return String.Equals(output.Trim(), "true", StringComparison.OrdinalIgnoreCase);
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+        }
+
         #endregion
 
         #region Private-Methods
+
+        private async Task<bool> RefResolvesAsync(string repoPath, string gitRef, CancellationToken token)
+        {
+            try
+            {
+                await RunGitAsync(repoPath, token, "rev-parse", "--verify", "--quiet", gitRef + "^{commit}").ConfigureAwait(false);
+                return true;
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+        }
 
         private async Task<string> RunGitAsync(string? workingDirectory, params string[] args)
         {

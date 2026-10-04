@@ -163,5 +163,29 @@ namespace Test.Shared.Infrastructure
             OperationCalls.Add("merge-branches:" + sourceBranch + "->" + targetBranch);
             return Task.CompletedTask;
         }
+
+        public Task FetchRemotesAsync(string repoPath, CancellationToken token = default)
+        {
+            OperationCalls.Add("fetch-remotes:" + repoPath);
+            return Task.CompletedTask;
+        }
+
+        public Task<GitDivergenceCounts?> GetDivergenceAsync(string repoPath, string baseRef, string headRef, CancellationToken token = default)
+            => Task.FromResult<GitDivergenceCounts?>(new GitDivergenceCounts(0, 0));
+
+        public Task<GitWorkingTreeStatus> GetWorkingTreeStatusAsync(string repoPath, CancellationToken token = default)
+            => Task.FromResult(new GitWorkingTreeStatus());
+
+        public Task<string?> GetCurrentBranchAsync(string repoPath, CancellationToken token = default)
+            => Task.FromResult<string?>("main");
+
+        public Task<DateTime?> GetLastCommitUtcAsync(string repoPath, CancellationToken token = default)
+            => Task.FromResult<DateTime?>(DateTime.UtcNow);
+
+        public Task<IReadOnlyList<string>> ListTrackedFilesAsync(string repoPath, CancellationToken token = default)
+            => Task.FromResult<IReadOnlyList<string>>(new List<string>());
+
+        public Task<bool> IsBareRepositoryAsync(string path, CancellationToken token = default)
+            => Task.FromResult(false);
     }
 }
