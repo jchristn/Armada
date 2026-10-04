@@ -173,8 +173,8 @@ namespace Armada.Server
         /// <summary>
         /// Run one headless turn. When <paramref name="scopedMcp"/> is true and a session token is supplied, the captain's
         /// Armada MCP connection is bound to that token: ApiEndpoint captains through ARMADA_MCP_URL/ARMADA_MCP_TOKEN, and
-        /// Claude Code through a per-launch strict MCP config with an X-Token header (other CLI runtimes keep their host
-        /// configuration).
+        /// every CLI runtime through the per-launch override built by CaptainThreadMcpPlanner (an X-Token header that
+        /// keeps the CLI's own login and configuration directory in place).
         /// </summary>
         private async Task<CaptainChatTurnResult> RunCoreAsync(CaptainChatTurnOptions options, bool scopedMcp, CancellationToken token)
         {
@@ -505,8 +505,9 @@ namespace Armada.Server
                 runtime.OnProcessExited += (pid, code) => exitSource.TrySetResult(code);
 
                 // Bind the captain's Armada MCP connection to the supplied session token. ApiEndpoint captains read the
-                // endpoint and token from the environment; Claude Code gets a per-launch strict MCP config carrying the token
-                // as an X-Token header (only on scoped turns, so the direct chat endpoint's behavior is unchanged).
+                // endpoint and token from the environment. Every CLI runtime (Claude Code, Codex, Gemini, Cursor, Mux,
+                // OpenCode) gets a per-launch override from CaptainThreadMcpPlanner that leaves the CLI's own login in
+                // place (only on scoped turns, so the direct chat endpoint's behavior is unchanged).
                 Dictionary<string, string>? environment = null;
                 bool isolateLaunch = false;
                 if (!String.IsNullOrEmpty(options.McpSessionToken) && _McpPort > 0)
@@ -522,9 +523,11 @@ namespace Armada.Server
                             ["ARMADA_MCP_TOKEN"] = options.McpSessionToken!
                         };
                     }
-                    else if (scopedMcp && runtime is ClaudeCodeRuntime scopedClaude)
+                    else if (scopedMcp
+                        && runtime is BaseAgentRuntime scopedRuntime
+                        && Armada.Core.Services.CaptainThreadMcpPlanner.SupportsApprovalGating(captain.Runtime))
                     {
-                        scopedClaude.McpSessionToken = options.McpSessionToken;
+                        scopedRuntime.McpSessionToken = options.McpSessionToken;
                         isolateLaunch = true;
                     }
                 }

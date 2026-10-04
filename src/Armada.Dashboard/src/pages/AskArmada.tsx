@@ -484,10 +484,13 @@ export default function AskArmada() {
 
   // ---------------------------------------------------------------- render
 
-  // The server connects ApiEndpoint and Claude Code captains to Armada's MCP tools for every thread turn
-  // (a thread-scoped token), so their own host MCP configuration does not matter here.
-  const serverProvidesMcp = tools?.runtime === 'ApiEndpoint' || tools?.runtime === 'ClaudeCode';
+  // The server connects every supported runtime's captain to Armada's MCP tools for each thread turn with a
+  // thread-scoped token (askApprovalGated), so its own host MCP configuration does not matter here and its
+  // mutating Armada tool calls become approval cards. Older servers do not send the flag; fall back to the
+  // two runtimes they gated.
+  const serverProvidesMcp = tools?.askApprovalGated ?? (tools?.runtime === 'ApiEndpoint' || tools?.runtime === 'ClaudeCode');
   const mcpMissing = !!activeCaptainId && tools != null && tools.armadaToolCount <= 0 && !serverProvidesMcp;
+  const ungated = !!activeCaptainId && tools != null && !serverProvidesMcp && !mcpMissing;
   const noCaptain = !activeCaptainId;
 
   const emptyState = thread ? (
@@ -564,6 +567,12 @@ export default function AskArmada() {
           busy={conv.turnActive}
         />
 
+        {ungated && (
+          <div className="ask-ungated-note" role="note" data-testid="ask-ungated-note">
+            <strong>{t('Actions from this captain run without approval cards.')}</strong>
+            <span>{t('This runtime uses its own Armada connection, so anything it does through Armada tools happens immediately.')}</span>
+          </div>
+        )}
         {thread?.autoApprove && (
           <div className="ask-auto-banner" role="note">
             {t('Auto-approve is on: actions the captain proposes run immediately. Every action is still recorded below.')}

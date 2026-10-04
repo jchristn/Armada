@@ -317,6 +317,25 @@ describe('AskArmada integration fixes', () => {
     expect(await screen.findByText(/not connected to Armada over MCP/)).toBeInTheDocument();
   });
 
+  it('treats a Codex captain as gated when the server reports askApprovalGated', async () => {
+    vi.mocked(api.listCaptains).mockResolvedValue(page([{ id: 'cpt_1', name: 'Ada', runtime: 'Codex', model: 'gpt' } as never]));
+    vi.mocked(api.getCaptainTools).mockResolvedValue({ runtime: 'Codex', armadaToolCount: 0, askApprovalGated: true } as never);
+    renderAt('/ask/ath_1');
+    await screen.findByText('Checkout tests');
+    await waitFor(() => expect(api.getCaptainTools).toHaveBeenCalled());
+    expect(screen.queryByText(/not connected to Armada over MCP/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('ask-ungated-note')).not.toBeInTheDocument();
+  });
+
+  it('shows a persistent note when the captain\'s actions are not gated', async () => {
+    vi.mocked(api.listCaptains).mockResolvedValue(page([{ id: 'cpt_1', name: 'Ada', runtime: 'Custom', model: null } as never]));
+    vi.mocked(api.getCaptainTools).mockResolvedValue({ runtime: 'Custom', armadaToolCount: 12, askApprovalGated: false } as never);
+    renderAt('/ask/ath_1');
+    const note = await screen.findByTestId('ask-ungated-note');
+    expect(note).toHaveAttribute('role', 'note');
+    expect(note).toHaveTextContent('Actions from this captain run without approval cards.');
+  });
+
   it('does not render the empty reply reserved while the captain is still writing', async () => {
     vi.mocked(enumerateAskMessages).mockResolvedValue({ messages: [...messages, { id: 'amg_reserved', threadId: 'ath_1', sequence: 999, role: 'Assistant', kind: 'Text', contentText: '' } as never], hasMore: false });
     renderAt('/ask/ath_1');

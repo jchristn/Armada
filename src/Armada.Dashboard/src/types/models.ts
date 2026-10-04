@@ -220,6 +220,8 @@ export interface CaptainToolAccessResult {
   armadaToolCount: number;
   configuredServerCount: number;
   reachableServerCount: number;
+  /** True when Ask thread turns of this captain hold mutating Armada tool calls as approval cards. */
+  askApprovalGated?: boolean;
   servers: CaptainToolServerSummary[];
   tools: CaptainToolSummary[];
 }

@@ -8526,7 +8526,7 @@ tr.row-muted td { opacity: 0.72; }
     background: color-mix(in srgb, var(--orange) 16%, var(--bg-card));
 }
 .ask-auto-approve-warn { color: var(--orange); }
-.ask-auto-banner, .ask-mcp-note {
+.ask-auto-banner, .ask-mcp-note, .ask-ungated-note {
     display: flex;
     flex-wrap: wrap;
     gap: 0.35rem 0.75rem;
@@ -8544,6 +8544,10 @@ tr.row-muted td { opacity: 0.72; }
 .ask-mcp-note {
     border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
     background: color-mix(in srgb, var(--accent) 7%, var(--bg-card));
+}
+.ask-ungated-note {
+    border: 1px solid color-mix(in srgb, var(--orange) 50%, var(--border));
+    background: color-mix(in srgb, var(--orange) 10%, var(--bg-card));
 }
 
 /* Work strip */

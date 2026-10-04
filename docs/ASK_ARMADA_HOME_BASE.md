@@ -340,9 +340,10 @@ These refine the contract above; the dashboard's "UI assumptions" (on `feature/a
   description }], description?, pipelineId? }`; `/fleet-action` -> `run_fleet_action { actionId, vesselIds,
   concurrency? }`; `/status` -> `status {}`; `/health` -> `evaluate_vessel_health {}` (optional `vesselIds`, `fleetId`,
   `force`); `/import` -> `discover_vessels { roots?, directories?, maxDepth?, runInBackground? }`.
-- **Thread-scoped MCP** works for ApiEndpoint captains (environment) and Claude Code (per-launch strict MCP config with an
-  `X-Token` header, deleted when the process exits). Codex, Gemini, Cursor, Mux, and OpenCode captains keep their host
-  MCP configuration in thread turns (isolating them would hide their own logins), so their tool calls are not gated.
+- **Thread-scoped MCP** works for every runtime: ApiEndpoint captains through the environment, and Claude Code, Codex,
+  Gemini, Cursor, Mux, and OpenCode through per-turn overrides that leave each CLI's login in place
+  (`CaptainThreadMcpPlanner`; the per-runtime mechanism is in `docs/CAPTAINS.md`). Only a `Custom` runtime is ungated,
+  and the conversation then shows a persistent "Actions from this captain run without approval cards." note.
 - **Work linking** keeps `create_voyage` and `retry_mission` in the table although no MCP tools have those names today.
 - **Narration** runs only when the thread's captain is `Idle`, no turn runs in the thread, and no other Ask turn uses the
   captain; it never changes the captain's state, uses a gated thread token, and falls back to the deterministic sentence

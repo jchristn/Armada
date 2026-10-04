@@ -66,6 +66,13 @@ namespace Armada.Core.Models
         public int ConfiguredServerCount { get; set; } = 0;
 
         /// <summary>
+        /// True when Ask Armada thread turns run by this captain connect to Armada's MCP server with a thread-scoped token,
+        /// so mutating Armada tool calls are held as approval cards. False means the captain's Armada actions in an Ask
+        /// thread run without approval cards.
+        /// </summary>
+        public bool AskApprovalGated { get; set; } = false;
+
+        /// <summary>
         /// Number of configured sources that Armada successfully reached.
         /// </summary>
         public int ReachableServerCount { get; set; } = 0;

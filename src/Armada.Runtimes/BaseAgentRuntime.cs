@@ -145,20 +145,38 @@ namespace Armada.Runtimes
                     perLaunchConfigDirectory = scopedConfigDirectory;
                 }
 
-                isolationPlan = Armada.Core.Services.CaptainLaunchIsolationPlanner.Plan(RuntimeType, mcpPort, scopedConfigDirectory, McpSessionToken);
+                if (!String.IsNullOrEmpty(McpSessionToken))
+                {
+                    // Thread-scoped (Ask) launch: bind the Armada MCP connection to the session token through each CLI's
+                    // per-invocation override, never by redirecting HOME / CODEX_HOME / the config directory, so the
+                    // CLI's own login stays visible. The working directory here is the turn's throwaway directory.
+                    Armada.Core.Services.CaptainThreadMcpPlanRequest planRequest = new Armada.Core.Services.CaptainThreadMcpPlanRequest
+                    {
+                        Runtime = RuntimeType,
+                        McpPort = mcpPort,
+                        ScopedConfigDirectory = scopedConfigDirectory,
+                        WorkingDirectory = workingDirectory,
+                        SessionToken = McpSessionToken!
+                    };
+                    PopulateHostMcpConfiguration(planRequest);
+                    isolationPlan = Armada.Core.Services.CaptainThreadMcpPlanner.Plan(planRequest);
+                }
+                else
+                {
+                    isolationPlan = Armada.Core.Services.CaptainLaunchIsolationPlanner.Plan(RuntimeType, mcpPort, scopedConfigDirectory, McpSessionToken);
+                }
+
                 if (!isolationPlan.IsEmpty)
                 {
                     foreach (Armada.Core.Services.IsolationConfigFile file in isolationPlan.FilesToWrite)
                     {
-                        string absolutePath = Path.Combine(scopedConfigDirectory, file.RelativePath);
+                        string baseDirectory = file.RelativeToWorkingDirectory ? workingDirectory : scopedConfigDirectory;
+                        string absolutePath = Path.Combine(baseDirectory, file.RelativePath);
                         Directory.CreateDirectory(Path.GetDirectoryName(absolutePath)!);
                         File.WriteAllText(absolutePath, file.Contents);
                     }
-                    foreach (string extraArg in isolationPlan.ExtraArguments)
-                    {
-                        args.Add(extraArg);
-                    }
-                    _Logging.Debug(_Header + "isolated launch for " + RuntimeType + " using scoped config " + scopedConfigDirectory);
+                    AppendLaunchArguments(args, isolationPlan.ExtraArguments);
+                    _Logging.Debug(_Header + (String.IsNullOrEmpty(McpSessionToken) ? "isolated" : "thread-scoped MCP") + " launch for " + RuntimeType + " using scoped config " + scopedConfigDirectory);
                 }
             }
 
@@ -428,6 +446,48 @@ namespace Armada.Runtimes
         /// <param name="captain">The captain being launched, if any (for per-captain env such as reasoning effort).</param>
         protected virtual void ApplyEnvironment(ProcessStartInfo startInfo, Captain? captain)
         {
+        }
+
+        /// <summary>
+        /// Append launch-plan arguments (isolation or thread-scoped MCP) to the runtime's arguments. The default appends
+        /// them at the end, which suits every runtime that reads its prompt from stdin; a runtime whose last argument is
+        /// a positional prompt overrides this to insert them earlier.
+        /// </summary>
+        /// <param name="args">The runtime's arguments, modified in place.</param>
+        /// <param name="extraArguments">The plan's extra arguments.</param>
+        protected virtual void AppendLaunchArguments(List<string> args, List<string> extraArguments)
+        {
+            foreach (string extraArg in extraArguments)
+            {
+                args.Add(extraArg);
+            }
+        }
+
+        /// <summary>
+        /// Read (never write) the parts of the host user's own client configuration that a thread-scoped MCP plan needs,
+        /// such as existing Armada server entries to disable. The default reads nothing.
+        /// </summary>
+        /// <param name="request">The plan request to populate.</param>
+        protected virtual void PopulateHostMcpConfiguration(Armada.Core.Services.CaptainThreadMcpPlanRequest request)
+        {
+        }
+
+        /// <summary>
+        /// Read a host configuration file for planning, returning null when it is missing or unreadable.
+        /// </summary>
+        /// <param name="path">Absolute path to the file.</param>
+        /// <returns>The file text, or null.</returns>
+        protected static string? TryReadHostFile(string? path)
+        {
+            if (String.IsNullOrWhiteSpace(path)) return null;
+            try
+            {
+                return File.Exists(path) ? File.ReadAllText(path) : null;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
         }
 
         /// <summary>
