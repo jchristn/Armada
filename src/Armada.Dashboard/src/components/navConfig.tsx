@@ -51,21 +51,21 @@ export const navSections: NavSection[] = [
   {
     key: 'operations',
     label: 'OPERATIONS',
-    matchers: ['/inbox', '/dispatch', '/planning', '/backlog', '/objectives', '/voyages', '/missions', '/merge-queue'],
+    matchers: ['/inbox', '/dispatch', '/fleet-actions', '/planning', '/backlog', '/objectives', '/voyages', '/missions', '/merge-queue'],
     items: [
       { to: '/inbox', label: 'Needs You', tooltip: 'Reviews, failures, and stalls awaiting your attention', icon: icons.needsYou },
       { to: '/planning', label: 'Planning', tooltip: 'Plan with a captain, preserve the transcript, and dispatch directly from the session', icon: icons.planning },
       { to: '/dispatch', label: 'Dispatch', tooltip: 'Send work to vessels; capture and refine backlog on the Backlog tab', icon: icons.dispatch },
+      { to: '/fleet-actions', label: 'Fleet Actions', tooltip: 'Run a command or mission across many vessels and watch each run', icon: icons.fleetActions },
       { to: '/missions', label: 'Missions', tooltip: 'Work units, plus Voyages and the full Merge Queue as tabs', icon: icons.missions },
     ],
   },
   {
     key: 'delivery',
     label: 'DELIVERY',
-    matchers: ['/delivery', '/checks', '/environments', '/deployments', '/releases', '/incidents', '/runbooks', '/fleet-actions'],
+    matchers: ['/delivery', '/checks', '/environments', '/deployments', '/releases', '/incidents', '/runbooks'],
     items: [
       { to: '/delivery', label: 'Delivery', tooltip: 'Deployments, Environments, Releases, Incidents, Checks, and Runbooks as tabs', icon: icons.delivery },
-      { to: '/fleet-actions', label: 'Fleet Actions', tooltip: 'Run a command or mission across many vessels and watch each run', icon: icons.fleetActions },
     ],
   },
   {

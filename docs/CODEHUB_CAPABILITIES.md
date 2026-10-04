@@ -507,7 +507,7 @@ inventory DASHBOARD_STYLE_AND_USABILITY requires:
 |---|---|---|---|---|---|
 | `/vessels/health` (new tab in `VesselsHub`) | BUILD | Find vessels that need attention and act on them | `vessel-health/enumerate`, `summary`, `evaluate` | Row: View details, Branches, Override, Re-evaluate, Open vessel. Bulk: Run action..., Re-evaluate | "No vessels yet. Import repositories" CTA, which opens the import wizard |
 | Import wizard (modal from Vessels tab and Health tab; route `/vessels/import` for deep links) | BUILD | Onboard many repositories at once | `import/browse`, `import/discover`, `import` | Source step (paste list or browse roots) -> Review (checkbox table of candidates with status badges, fleet picker) -> Results | Discover returned nothing: explain depth, excludes, and the containerized-Admiral case |
-| `/fleet-actions` with `/fleet-actions/runs/:id` | DELIVERY | Define reusable actions; watch runs | `fleet-actions/*`, `fleet-action-runs/*` | Actions table: Run, Edit, Duplicate, View JSON, Delete. Runs table: View, Cancel, Re-run failed targets. Run detail: target table plus an output drawer | "No actions yet" with the seeded built-ins explained |
+| `/fleet-actions` with `/fleet-actions/runs/:id` | OPERATIONS (after Dispatch) | Define reusable actions; watch runs | `fleet-actions/*`, `fleet-action-runs/*` | Actions table: Run, Edit, Duplicate, View JSON, Delete. Runs table: View, Cancel, Re-run failed targets. Run detail: target table plus an output drawer | "No actions yet" with the seeded built-ins explained |
 
 **Health table columns** (all sortable on the server; ID cells never wrap):
 

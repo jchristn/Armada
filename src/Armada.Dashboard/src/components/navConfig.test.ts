@@ -46,15 +46,19 @@ describe('navConfig', () => {
     }
   });
 
-  it('places Fleet Actions in the DELIVERY section with a matcher for run detail routes', () => {
-    const delivery = navSections.find((s) => s.key === 'delivery');
-    expect(delivery).toBeDefined();
-    expect(delivery!.items.map((i) => i.to)).toContain('/fleet-actions');
-    expect(delivery!.matchers).toContain('/fleet-actions');
-    const item = delivery!.items.find((i) => i.to === '/fleet-actions');
+  it('places Fleet Actions in the OPERATIONS section right after Dispatch, with a matcher for run detail routes', () => {
+    const operations = navSections.find((s) => s.key === 'operations');
+    expect(operations).toBeDefined();
+    const targets = operations!.items.map((i) => i.to);
+    expect(targets.indexOf('/fleet-actions')).toBe(targets.indexOf('/dispatch') + 1);
+    expect(operations!.matchers).toContain('/fleet-actions');
+    const item = operations!.items.find((i) => i.to === '/fleet-actions');
     expect(item!.icon).toBeTruthy();
     // Run detail pages (/fleet-actions/runs/:id) must highlight the same section.
-    expect(delivery!.matchers.some((m) => '/fleet-actions/runs/far_123'.startsWith(m))).toBe(true);
+    expect(operations!.matchers.some((m) => '/fleet-actions/runs/far_123'.startsWith(m))).toBe(true);
+    // And no other section claims it.
+    const others = navSections.filter((s) => s.key !== 'operations');
+    expect(others.some((s) => s.items.some((i) => i.to === '/fleet-actions') || s.matchers.includes('/fleet-actions'))).toBe(false);
   });
 
   it('keeps section keys aligned with the collapse-default map', () => {
