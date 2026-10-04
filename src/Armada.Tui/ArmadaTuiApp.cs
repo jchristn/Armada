@@ -105,6 +105,7 @@ namespace Armada.Tui
             string locale = loc.SetLocale(prefs.Current.Locale ?? CultureInfo.CurrentUICulture.Name);
             session.Client.Options.AcceptLanguage = locale;
 
+            Armada.Tui.Screens.DeliveryConfigScreens.Register(Screens);
             Shell = new ShellView(Context, Screens);
             GlobalCommands.Register(Context, Shell);
             Wire();
