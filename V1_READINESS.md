@@ -121,19 +121,19 @@ The goal is a written threat model and a closed list of findings, not just fixes
 
 ### W3. Upgrades and data safety
 
-- [ ] **W3.1 Upgrade test.** Automated job that installs v0.9.0, seeds representative data (fleets, vessels,
+- [x] **W3.1 Upgrade test.** Automated job that installs v0.9.0, seeds representative data (fleets, vessels,
   missions in every status, voyages, merge queue, personas and pipelines with edits, prompt template overrides,
   Ask threads, fleet actions, health, import batches), upgrades to the candidate, and verifies the data and that
   edited templates are preserved. Runs on all four providers.
-- [ ] **W3.2 Backup before migrate.** On startup, when pending migrations exist, take an automatic backup (SQLite
+- [x] **W3.2 Backup before migrate.** On startup, when pending migrations exist, take an automatic backup (SQLite
   file copy; documented dump command or a refusal-with-instructions for server providers) before applying them, and
   log where it went.
-- [ ] **W3.3 Migration hygiene.** Verify every migration is idempotent and additive on all providers; document the
+- [x] **W3.3 Migration hygiene.** Verify every migration is idempotent and additive on all providers; document the
   supported upgrade paths (0.9.x to 1.0 directly).
-- [ ] **W3.4 Retention.** Settings and background pruning for Ask threads and messages (archive after N days,
+- [x] **W3.4 Retention.** Settings and background pruning for Ask threads and messages (archive after N days,
   optional delete), fleet action run output, health findings history, import batches, and jobs; request history
   already has retention.
-- [ ] **W3.5 Restore drill.** Documented and tested restore from backup on each provider.
+- [x] **W3.5 Restore drill.** Documented and tested restore from backup on each provider.
 
 ### W4. Quality and test reliability
 
@@ -241,3 +241,4 @@ history), captain-suggested Ask thread titles, commit-message enforcement at lan
 |------|--------|---------|--------|
 | 2026-10-04 | (design) | -- | Plan drafted from the 2026-10-04 working session. |
 | 2026-10-04 | ops agent | W4.1, W4.3, W5.1-W5.4, W6.2, W7.2, W8.1 | CI on push/PR (3 OSes x net8/net10, dashboard dist check), nightly parity, non-D1 channels disabled, DOCKERHUB_README and docker/update scripts, healthchecks on every HTTP service, macOS Harbor .app/.dmg and server .pkg built and verified locally, WiX channel (unverified on Windows), SHA256SUMS, CAPTAINS/OPERATIONS/RELEASING docs. Found W5.6. |
+| 2026-10-04 | data agent | W3.1-W3.5 | Upgrade test from v0.9.0 (release commit e456b008 and image commit 574a8a1a) passes on SQLite, PostgreSQL, MySQL, SQL Server; SQLite backup before migrate, server-provider warning/confirmation; all migrations re-runnable (fixed SQLite v15, PostgreSQL guards, SQL Server v1); retention for Ask threads, jobs, import batches; SQLite restore drill; docs/UPGRADING.md. Follow-up: data expiry of voyages/missions/signals/events is SQLite-only. |

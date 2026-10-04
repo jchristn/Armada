@@ -6,6 +6,15 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### v1.0 readiness: upgrades and data safety
+- Startup backs up a SQLite database before applying migrations (`{DataDirectory}/backups/pre-migration-*`, newest 5 kept); server providers log the dump command and can be configured to refuse to migrate until a backup is confirmed (`Database.RequireBackupConfirmationForMigrations`).
+- New Data Retention settings: Ask threads archive after 90 idle days (deletion optional), finished jobs delete after 30 days, finished import batches after 90 days; editable on the Server settings page.
+- Backup and restore now use the configured data directory and settings file, and restore uses SQLite's online backup API instead of overwriting the open database; built-in backup/restore return 400 on server providers.
+- Every migration is now safe to re-run on all four providers (fixed: SQLite v15 table rebuild, PostgreSQL column and foreign-key additions, SQL Server initial schema).
+- Upgrading no longer appends the memory-recall section to persona templates operators edited.
+- On PostgreSQL, MySQL, and SQL Server, data expiry no longer breaks the hourly cleanup, so request-history and fleet-action pruning run again on those providers.
+- New `docs/UPGRADING.md` and an upgrade test (`scripts/common/run-upgrade-test.sh`) that upgrades a seeded v0.9.0 database on all four providers.
+
 ### v1.0 readiness: CI, packaging, operations
 - CI: new `ci.yml` runs the full test suite on Windows, macOS, and Linux (net8.0 and net10.0) on every push and PR, with a warning-free build, the dashboard build and tests, and a check that the committed dashboard `dist/` is current; new nightly provider-parity workflow (SQLite, PostgreSQL, MySQL, SQL Server).
 - Packaging: Harbor ships on macOS as `Armada Harbor.app` (with icon) in a `.dmg`; the server ships as a `.pkg` with a LaunchAgent and uninstall script; new WiX `.msi` channel for the server; Developer ID signing and notarization when Apple credentials are present, ad-hoc signing otherwise; every release includes `SHA256SUMS` (new `Armada.Publisher checksums --dir`). Homebrew, Scoop, Chocolatey, winget, and AppImage channels are disabled until implemented. Fixed: the publisher could not find published binaries with dotted names on macOS/Linux, and Windows signing passed the certificate password in the wrong place.
