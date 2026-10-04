@@ -63,6 +63,13 @@ namespace Armada.Core.Authorization
             if (path.EndsWith("/tenants") && method == "POST") return PermissionLevel.AdminOnly;
             if (_TenantIdPattern.IsMatch(path) && (method == "PUT" || method == "DELETE")) return PermissionLevel.AdminOnly;
 
+            // Fleet actions: enumerations are reads (Authenticated); every other write is TenantAdmin, the level
+            // voyage dispatch uses. Command-kind actions are additionally checked in the service, because the kind
+            // lives in the body (or the stored action) and is invisible to this path-based matrix.
+            if (path.StartsWith("/api/v1/fleet-action") && method == "POST" && path.EndsWith("/enumerate")) return PermissionLevel.Authenticated;
+            if (path.StartsWith("/api/v1/fleet-actions") && method != "GET") return PermissionLevel.TenantAdmin;
+            if (path.StartsWith("/api/v1/fleet-action-runs") && method != "GET") return PermissionLevel.TenantAdmin;
+
             // TenantAdmin endpoints
             if (path.EndsWith("/users") && method == "POST") return PermissionLevel.TenantAdmin;
             if (path.StartsWith("/api/v1/fleets") && method != "GET") return PermissionLevel.TenantAdmin;

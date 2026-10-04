@@ -512,6 +512,8 @@ namespace Armada.Server.Routes
 
                 if (body.Import != null)
                     _settings.Import = body.Import;
+                if (body.FleetActions != null)
+                    _settings.FleetActions = body.FleetActions;
 
                 bool remoteControlChanged = body.RemoteControl != null;
                 if (remoteControlChanged)
@@ -629,7 +631,8 @@ namespace Armada.Server.Routes
                 SelfVesselId = _settings.SelfVesselId,
                 RebuildSlotRetentionCount = _settings.RebuildSlotRetentionCount,
                 RemoteControl = _settings.RemoteControl,
-                Import = _settings.Import
+                Import = _settings.Import,
+                FleetActions = _settings.FleetActions
             };
         }
 

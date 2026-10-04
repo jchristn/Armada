@@ -40,6 +40,7 @@ Machine-readable OpenAPI is available at `/openapi.json`, and the interactive Sw
   - [Merge Queue](#merge-queue)
   - [Harbors](#harbors)
   - [Jobs](#jobs)
+  - [Fleet Actions](#fleet-actions)
   - [Inbox](#inbox)
   - [Skills](#skills)
   - [Project Profiles](#project-profiles)
@@ -217,6 +218,9 @@ personas, pipelines, workflow profiles, project profiles, runbooks):
 | `/api/v1/signals` | ALL | Authenticated | Tenant-scoped |
 | `/api/v1/events` | ALL | Authenticated | Tenant-scoped |
 | `/api/v1/merge-queue` | ALL | Authenticated | Tenant-scoped |
+| `/api/v1/fleet-actions/enumerate`, `/api/v1/fleet-action-runs/enumerate`, `/api/v1/fleet-action-runs/{id}/targets/enumerate` | POST | Authenticated | Tenant-scoped |
+| `/api/v1/fleet-actions`, `/api/v1/fleet-action-runs` | GET | Authenticated | Tenant-scoped |
+| `/api/v1/fleet-actions`, `/api/v1/fleet-action-runs` | POST/PUT/DELETE | TenantAdmin | Tenant-scoped; Command-kind actions are also checked in the handler |
 | `/api/v1/harbors` | GET/POST | Authenticated | Tenant-scoped. List returns a plain array. |
 | `/api/v1/harbors/{id}` | GET/PUT/DELETE | Authenticated | Read, update (`name`, `maxConcurrentJobs`, `enabled`), or delete one Harbor in scope |
 | `/api/v1/harbors/{id}/enable` | POST | Authenticated | Enable one Harbor |
@@ -935,6 +939,12 @@ Returns current server settings including ports, agent configuration, system pat
     "MaxDepth": 6,
     "ExcludedDirectoryNames": ["bin", "obj", "node_modules", "dist", ".git", ".vs", "packages", "TestResults", ".armada", "target", "venv", ".venv", "__pycache__"],
     "InlineBatchLimit": 25
+  },
+  "FleetActions": {
+    "MaxConcurrency": 8,
+    "DefaultTimeoutSeconds": 300,
+    "MaxOutputBytes": 65536,
+    "RunRetentionDays": 30
   }
 }
 ```
@@ -943,7 +953,7 @@ Returns current server settings including ports, agent configuration, system pat
 
 #### PUT /api/v1/settings
 
-Accepts partial updates to editable server settings. When `RemoteControl` is supplied, it replaces the full `RemoteControl` settings object. When `Import` is supplied, it replaces the full `Import` (vessel import) settings object; see [Vessel Import](#vessel-import) for the fields and their ranges.
+Accepts partial updates to editable server settings. When `RemoteControl` is supplied, it replaces the full `RemoteControl` settings object. When `Import` is supplied, it replaces the full `Import` (vessel import) settings object; see [Vessel Import](#vessel-import) for the fields and their ranges. When `FleetActions` is supplied, it replaces the full `FleetActions` object (omitted fields take their defaults; values are clamped: `MaxConcurrency` 1-32, `DefaultTimeoutSeconds` 5-7200, `MaxOutputBytes` 1024-1048576, `RunRetentionDays` 1-3650) and applies immediately.
 
 Self-rebuild fields (see [SERVER_REBUILD.md](SERVER_REBUILD.md)):
 
@@ -3543,6 +3553,203 @@ Cancel a background job.
 
 - Response: `200 OK` - `Job` (the cancelled job)
 - Errors: `404 Not Found`; `409 Conflict` when the job cannot be cancelled in its current state
+
+---
+
+### Fleet Actions
+
+Fleet actions apply one action across many vessels and record a per-vessel result. A **Command** action runs a shell command in each vessel's working directory and captures exit code and output. A **Mission** action dispatches one voyage per vessel through the normal dispatch path. Every invocation is a persisted, cancellable **run** with one **target** per vessel. See [FLEET_ACTIONS.md](FLEET_ACTIONS.md) for the operator guide.
+
+**Permissions.** Enumerations and `GET` reads are `Authenticated`. Every other write under `/api/v1/fleet-actions` and `/api/v1/fleet-action-runs` is `TenantAdmin`, the same level as voyage dispatch. The service additionally requires tenant admin for anything that creates, edits, deletes, runs, or cancels a **Command** action, because that check depends on the body. All reads and writes are scoped to the caller's tenant; another tenant's ID returns `404`. Denials (`403`) are logged with the request ID.
+
+**Template variables.** `CommandText` and `PromptTemplate` may use `{{vessel.name}}`, `{{vessel.id}}`, `{{vessel.defaultBranch}}`, `{{vessel.workingDirectory}}`, `{{vessel.buildCommand}}` (the vessel's `DefinitionOfDoneBuildCommand`) and `{{health.summary}}`. Names are case-insensitive and may have spaces inside the braces. Any other `{{name}}` is rejected with `400` and the message names it. Values are substituted verbatim in a single pass and never re-expanded.
+
+**Error mapping.** `400` invalid input or unknown template variable; `403` permission; `404` action, run, target, or any target vessel not found in the caller's tenant; `409` cancelling a run that already finished.
+
+#### POST /api/v1/fleet-actions/enumerate
+
+Paged action definitions, newest first. Built-in actions are seeded into the caller's tenant on first use.
+
+**Request Body** (`FleetActionEnumerateRequest`, all optional): the standard enumeration fields plus `IncludeInactive`.
+
+```json
+{ "PageNumber": 1, "PageSize": 25, "IncludeInactive": false }
+```
+
+- Response: `200 OK` - `EnumerationResult<FleetAction>`
+
+#### POST /api/v1/fleet-actions
+
+Create an action. Command kind requires tenant admin.
+
+**Request Body** (`FleetActionUpsertRequest`):
+
+```json
+{
+  "Name": "Fast-forward default branch",
+  "Description": "git pull --ff-only everywhere",
+  "Kind": "Command",
+  "CommandText": "git pull --ff-only",
+  "PromptTemplate": null,
+  "PipelineId": null,
+  "Persona": null,
+  "TimeoutSeconds": 300,
+  "DefaultConcurrency": 4,
+  "RequiresCleanWorkingTree": true
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `Name` | string | Required, 1-200 characters |
+| `Kind` | `Command` \| `Mission` | Default `Command` |
+| `CommandText` | string | Required for Command |
+| `PromptTemplate` | string | Required for Mission |
+| `PipelineId` | string | Mission only; optional |
+| `Persona` | string | Mission only; stored, not yet applied at dispatch |
+| `TimeoutSeconds` | int | Default `FleetActions.DefaultTimeoutSeconds`; clamped 5-7200 |
+| `DefaultConcurrency` | int | Default 4; clamped 1-32 |
+| `RequiresCleanWorkingTree` | bool | Default `true` for Command, `false` for Mission |
+
+- Response: `201 Created` - `FleetAction`
+- Errors: `400`, `403`
+
+#### GET /api/v1/fleet-actions/{id}
+
+- Response: `200 OK` - `FleetAction`
+- Errors: `404`
+
+#### PUT /api/v1/fleet-actions/{id}
+
+Partial update: only supplied (non-null) fields change. An empty string clears `Description`, `PipelineId` and `Persona`. Built-in actions can be edited.
+
+- Request Body: `FleetActionUpsertRequest`
+- Response: `200 OK` - `FleetAction`
+- Errors: `400`, `403`, `404`
+
+#### DELETE /api/v1/fleet-actions/{id}
+
+Deletes an action. Built-ins are soft-deleted (`Active = false`) and are never re-seeded; other actions are removed. Past runs keep their snapshot.
+
+- Response: `204 No Content`
+- Errors: `403`, `404`
+
+#### POST /api/v1/fleet-actions/{id}/run
+
+Start a run of a saved action. Every vessel is re-read with the tenant-scoped read before anything is written; a single unknown or cross-tenant vessel rejects the whole request with `404` and no run is created.
+
+**Request Body** (`FleetActionRunRequest`):
+
+```json
+{
+  "VesselIds": ["vsl_abc", "vsl_def"],
+  "Concurrency": 2,
+  "Overrides": { "TimeoutSeconds": 600, "RequiresCleanWorkingTree": false, "PipelineId": null }
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `VesselIds` | string[] | Required; 1-500 after de-duplication |
+| `Concurrency` | int | Optional; defaults to the action's `DefaultConcurrency`; clamped 1-32 |
+| `Overrides.TimeoutSeconds` | int | Optional; clamped 5-7200 |
+| `Overrides.RequiresCleanWorkingTree` | bool | Optional; Command only |
+| `Overrides.PipelineId` | string | Optional; Mission only; empty string clears |
+
+**Response:** `202 Accepted` - `FleetActionRunStartResult` (never contains output)
+
+```json
+{
+  "RunId": "far_...",
+  "ActionId": "fac_...",
+  "Kind": "Command",
+  "Status": "Pending",
+  "TargetCount": 2,
+  "Concurrency": 2
+}
+```
+
+- Errors: `400`, `403`, `404`
+
+#### POST /api/v1/fleet-actions/run
+
+Ad hoc run with an inline definition; the run's `ActionId` is null. Same body as above plus `Definition` (a `FleetActionUpsertRequest`, validated exactly as on create). `Overrides` are ignored for ad hoc runs; put the values in `Definition`.
+
+```json
+{
+  "VesselIds": ["vsl_abc"],
+  "Concurrency": 1,
+  "Definition": { "Name": "Status", "Kind": "Command", "CommandText": "git status -sb", "RequiresCleanWorkingTree": false }
+}
+```
+
+- Response: `202 Accepted` - `FleetActionRunStartResult`
+
+#### POST /api/v1/fleet-action-runs/enumerate
+
+Paged runs, newest first. `Status` filters by run status (`Pending`, `Running`, `Completed`, `CompletedWithFailures`, `Cancelled`, `Failed`); an unknown value is `400`.
+
+```json
+{ "PageNumber": 1, "PageSize": 25, "Status": "Running" }
+```
+
+- Response: `200 OK` - `EnumerationResult<FleetActionRun>`
+
+#### GET /api/v1/fleet-action-runs/{id}
+
+Run plus summaries of every target, ordered by creation. No output text.
+
+```json
+{
+  "Run": { "Id": "far_...", "ActionName": "Build", "Kind": "Command", "Status": "Running", "TargetCount": 3, "SucceededCount": 1, "FailedCount": 0, "SkippedCount": 1, "CancelledCount": 0, "...": "..." },
+  "Targets": [
+    {
+      "Id": "fat_...", "RunId": "far_...", "VesselId": "vsl_...", "VesselName": "api",
+      "Status": "Succeeded", "SkipReason": null, "FailureReason": null, "ExitCode": 0,
+      "OutputTruncated": false, "OutputLength": 1834, "ErrorLength": 0, "RenderedLength": 18,
+      "VoyageId": null, "StartedUtc": "2026-10-03T20:00:00Z", "CompletedUtc": "2026-10-03T20:00:04Z",
+      "DurationMs": 4021, "CreatedUtc": "...", "LastUpdateUtc": "..."
+    }
+  ]
+}
+```
+
+- Errors: `404`
+
+#### POST /api/v1/fleet-action-runs/{id}/targets/enumerate
+
+Paged target summaries (same shape as `Targets` above).
+
+**Request Body** (`FleetActionTargetEnumerateRequest`): `PageNumber` (from 1), `PageSize` (default 25, clamped 1-500), `Status` (optional target status).
+
+- Response: `200 OK` - `EnumerationResult<FleetActionRunTargetSummary>`
+- Errors: `404`
+
+#### GET /api/v1/fleet-action-runs/{id}/targets/{targetId}
+
+One target including `RenderedText`, `OutputText` and `ErrorText`. This is the only endpoint that returns captured output.
+
+- Response: `200 OK` - `FleetActionRunTarget`
+- Errors: `404`
+
+#### POST /api/v1/fleet-action-runs/{id}/cancel
+
+Cancel a run. Pending targets become `Cancelled`; running Command targets are killed and become `Cancelled`; running Mission targets have their voyage cancelled (pending and assigned missions are cancelled, missions already in progress finish) unless the voyage already finished. Cancelling an already cancelled run returns it unchanged. No body.
+
+- Response: `200 OK` - `FleetActionRun`
+- Errors: `403`, `404`, `409` (run already finished)
+
+#### Fleet action models
+
+`FleetAction`: `Id` (`fac_`), `TenantId`, `UserId`, `Name`, `Description`, `Kind`, `CommandText`, `PromptTemplate`, `PipelineId`, `Persona`, `TimeoutSeconds`, `DefaultConcurrency`, `RequiresCleanWorkingTree`, `IsBuiltIn`, `BuiltInKey`, `Active`, `CreatedUtc`, `LastUpdateUtc`.
+
+`FleetActionRun`: `Id` (`far_`), `TenantId`, `UserId`, `ActionId` (null for ad hoc), snapshot fields `ActionName`, `Kind`, `CommandText`, `PromptTemplate`, `PipelineId`, `Persona`, `TimeoutSeconds`, `RequiresCleanWorkingTree`, plus `Concurrency`, `Status`, `TargetCount`, `SucceededCount`, `FailedCount` (Failed + TimedOut), `SkippedCount`, `CancelledCount`, `StartedUtc`, `CompletedUtc`, `CreatedUtc`, `LastUpdateUtc`.
+
+`FleetActionRunTarget`: `Id` (`fat_`), `TenantId`, `RunId`, `VesselId`, `VesselName`, `Status`, `SkipReason`, `FailureReason`, `RenderedText`, `ExitCode`, `OutputText`, `ErrorText`, `OutputTruncated`, `VoyageId`, `StartedUtc`, `CompletedUtc`, `DurationMs`, `CreatedUtc`, `LastUpdateUtc`. Output is truncated to the last `FleetActions.MaxOutputBytes` bytes of each stream.
+
+Run status: `Pending`, `Running`, `Completed` (no failures), `CompletedWithFailures` (at least one Failed or TimedOut target), `Cancelled`, `Failed` (the runner itself failed). Target status: `Pending`, `Skipped`, `Running`, `Succeeded`, `Failed`, `Cancelled`, `TimedOut`.
+
+Skip reasons: `DirtyTree`, `NoWorkingDirectory`, `NoBuildCommand`, `DispatchRejected` (validator message in `ErrorText`), `VesselNotFound`, `HarborUnavailable`, `NotAuthorized` (reserved). Failure reasons: `Interrupted`, `NonZeroExit`, `Timeout`, `GitStatusFailed`, `TemplateError`, `ExecutionError`, `DispatchFailed`, `DispatchUnavailable`, `VoyageFailed`, `VoyageMissing`.
 
 ---
 
@@ -7072,6 +7279,18 @@ This table is a quick route index, not the canonical exhaustive contract. Use `/
 | 122 | GET | `/api/v1/project-profiles/{id}` | Get project profile | Yes |
 | 123 | PUT | `/api/v1/project-profiles/{id}` | Update project profile | Yes |
 | 124 | DELETE | `/api/v1/project-profiles/{id}` | Delete project profile | Yes |
+| 125 | POST | `/api/v1/fleet-actions/enumerate` | Enumerate fleet actions | Yes |
+| 126 | POST | `/api/v1/fleet-actions` | Create fleet action | Tenant admin |
+| 127 | GET | `/api/v1/fleet-actions/{id}` | Get fleet action | Yes |
+| 128 | PUT | `/api/v1/fleet-actions/{id}` | Update fleet action | Tenant admin |
+| 129 | DELETE | `/api/v1/fleet-actions/{id}` | Delete fleet action | Tenant admin |
+| 130 | POST | `/api/v1/fleet-actions/{id}/run` | Run fleet action | Tenant admin |
+| 131 | POST | `/api/v1/fleet-actions/run` | Ad hoc fleet action run | Tenant admin |
+| 132 | POST | `/api/v1/fleet-action-runs/enumerate` | Enumerate runs | Yes |
+| 133 | GET | `/api/v1/fleet-action-runs/{id}` | Get run with target summaries | Yes |
+| 134 | POST | `/api/v1/fleet-action-runs/{id}/targets/enumerate` | Enumerate run targets | Yes |
+| 135 | GET | `/api/v1/fleet-action-runs/{id}/targets/{targetId}` | Get target with output | Yes |
+| 136 | POST | `/api/v1/fleet-action-runs/{id}/cancel` | Cancel run | Tenant admin |
 
 \* Gated by `AllowSelfRegistration` setting.
 \*\* Non-admin users are scoped to their own records only.

@@ -37,13 +37,13 @@ namespace Armada.Server.Mcp.Tools
         {
             register(
                 "enumerate",
-                "Find and browse entities with paginated, filtered, sorted access to: objectives, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, and vessel_import_batch. Returns paginated results with total counts. Filter by vesselId, fleetId, captainId, voyageId, status, date range, and more.",
+                "Find and browse entities with paginated, filtered, sorted access to: objectives, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, vessel_import_batch, fleet_action, fleet_action_run, and fleet_action_run_target. Returns paginated results with total counts. Filter by vesselId, fleetId, captainId, voyageId, status, date range, and more.",
                 new
                 {
                     type = "object",
                     properties = new
                     {
-                        entityType = new { type = "string", description = "Entity type to enumerate: objectives, jobs, model_endpoints, harbors, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, vessel_import_batch" },
+                        entityType = new { type = "string", description = "Entity type to enumerate: objectives, jobs, model_endpoints, harbors, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target (requires runId)" },
                         pageNumber = new { type = "integer", description = "Page number (1-based, default 1)" },
                         pageSize = new { type = "integer", description = "Results per page (default 10, max 1000)" },
                         order = new { type = "string", description = "Sort order: CreatedAscending, CreatedDescending (default)" },
@@ -64,7 +64,10 @@ namespace Armada.Server.Mcp.Tools
                         includeContext = new { type = "boolean", description = "Include ProjectContext and StyleGuide on vessels (default false; returns length hints when false)" },
                         includeTestOutput = new { type = "boolean", description = "Include TestOutput on merge queue entries (default false; returns testOutputLength hint when false)" },
                         includePayload = new { type = "boolean", description = "Include full Payload on events (default false; returns payloadLength hint when false)" },
-                        includeMessage = new { type = "boolean", description = "Include full Message on signals (default false; returns messageLength hint when false)" }
+                        includeMessage = new { type = "boolean", description = "Include full Message on signals (default false; returns messageLength hint when false)" },
+                        runId = new { type = "string", description = "Fleet action run ID (far_ prefix); required for fleet_action_run_target" },
+                        includeOutput = new { type = "boolean", description = "Include RenderedText, OutputText and ErrorText on fleet_action_run_target (default false; returns outputLength, errorLength and renderedLength hints when false)" },
+                        includeInactive = new { type = "boolean", description = "Include soft-deleted built-in actions for fleet_action (default false)" }
                     },
                     required = new[] { "entityType" }
                 },
@@ -490,8 +493,57 @@ namespace Armada.Server.Mcp.Tools
                                 String.IsNullOrEmpty(callerCtx.TenantId) ? Armada.Core.Constants.DefaultTenantId : callerCtx.TenantId,
                                 query).ConfigureAwait(false);
                             return (object)importBatches;
+                        case "fleet_action":
+                        case "fleet_actions":
+                        case "fleet-action":
+                        case "fleet-actions":
+                            EnumerationResult<FleetAction> fleetActions = await database.FleetActions.EnumerateAsync(
+                                callerCtx.TenantId ?? Constants.DefaultTenantId, query, request.IncludeInactive == true).ConfigureAwait(false);
+                            return (object)fleetActions;
+                        case "fleet_action_run":
+                        case "fleet_action_runs":
+                        case "fleet-action-run":
+                        case "fleet-action-runs":
+                            if (!String.IsNullOrWhiteSpace(query.Status))
+                            {
+                                if (!Enum.TryParse(query.Status, true, out FleetActionRunStatusEnum runStatus))
+                                    return (object)new { Error = "Unknown fleet action run status: " + query.Status };
+                                query.Status = runStatus.ToString();
+                            }
+                            EnumerationResult<FleetActionRun> fleetActionRuns = await database.FleetActionRuns.EnumerateAsync(
+                                callerCtx.TenantId ?? Constants.DefaultTenantId, query).ConfigureAwait(false);
+                            return (object)fleetActionRuns;
+                        case "fleet_action_run_target":
+                        case "fleet_action_run_targets":
+                        case "fleet-action-run-target":
+                        case "fleet-action-run-targets":
+                            if (String.IsNullOrWhiteSpace(request.RunId))
+                                return (object)new { Error = "runId is required for entityType fleet_action_run_target" };
+                            string targetTenantId = callerCtx.TenantId ?? Constants.DefaultTenantId;
+                            FleetActionRun? targetRun = await database.FleetActionRuns.ReadAsync(targetTenantId, request.RunId!).ConfigureAwait(false);
+                            if (targetRun == null) return (object)new { Error = "Fleet action run not found: " + request.RunId };
+                            FleetActionTargetStatusEnum? targetStatus = null;
+                            if (!String.IsNullOrWhiteSpace(query.Status))
+                            {
+                                if (!Enum.TryParse(query.Status, true, out FleetActionTargetStatusEnum parsedTargetStatus))
+                                    return (object)new { Error = "Unknown fleet action target status: " + query.Status };
+                                targetStatus = parsedTargetStatus;
+                            }
+                            EnumerationResult<FleetActionRunTarget> targets = await database.FleetActionRunTargets.EnumerateByRunAsync(
+                                targetTenantId, targetRun.Id, targetStatus, query.PageNumber, query.PageSize).ConfigureAwait(false);
+                            if (request.IncludeOutput == true) return (object)targets;
+                            return (object)new EnumerationResult<FleetActionRunTargetSummary>
+                            {
+                                Success = targets.Success,
+                                PageNumber = targets.PageNumber,
+                                PageSize = targets.PageSize,
+                                TotalPages = targets.TotalPages,
+                                TotalRecords = targets.TotalRecords,
+                                Objects = targets.Objects.Select(FleetActionRunTargetSummary.FromTarget).ToList(),
+                                TotalMs = targets.TotalMs
+                            };
                         default:
-                            return (object)new { Error = "Unknown entity type: " + entityType + ". Valid types: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, jobs, model_endpoints, vessel_import_batch" };
+                            return (object)new { Error = "Unknown entity type: " + entityType + ". Valid types: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, jobs, model_endpoints, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target" };
                     }
                 });
         }

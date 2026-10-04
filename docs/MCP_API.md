@@ -101,6 +101,13 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [create_playbook](#create_playbook)
     - [update_playbook](#update_playbook)
     - [delete_playbook](#delete_playbook)
+  - **Fleet Actions**
+    - [create_fleet_action](#create_fleet_action)
+    - [update_fleet_action](#update_fleet_action)
+    - [delete_fleet_action](#delete_fleet_action)
+    - [run_fleet_action](#run_fleet_action)
+    - [fleet_action_run_status](#fleet_action_run_status)
+    - [cancel_fleet_action_run](#cancel_fleet_action_run)
   - **Merge Queue**
     - [get_merge_entry](#get_merge_entry)
     - [enqueue_merge](#enqueue_merge)
@@ -560,7 +567,7 @@ No parameters required.
 
 ### enumerate
 
-Paginated enumeration of any entity type with filtering and sorting. This is the MCP equivalent of the `POST /api/v1/{entity}/enumerate` REST endpoints. Returns paginated results with total counts, page metadata, and query timing. Supports: objectives (aliases `backlog`, `backlog_item`, `backlog_items`), fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, memories, prompt_templates, pipelines, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, jobs, model_endpoints, vessel_import_batch.
+Paginated enumeration of any entity type with filtering and sorting. This is the MCP equivalent of the `POST /api/v1/{entity}/enumerate` REST endpoints. Returns paginated results with total counts, page metadata, and query timing. Supports: objectives (aliases `backlog`, `backlog_item`, `backlog_items`), fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, memories, prompt_templates, pipelines, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, jobs, model_endpoints, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target.
 
 **Input Schema:**
 
@@ -568,7 +575,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 {
   "type": "object",
   "properties": {
-    "entityType": { "type": "string", "description": "Entity type to enumerate (objectives [aliases backlog, backlog_item, backlog_items], fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, memories, prompt_templates, pipelines, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, jobs, model_endpoints, vessel_import_batch)" },
+    "entityType": { "type": "string", "description": "Entity type to enumerate (objectives [aliases backlog, backlog_item, backlog_items], fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, memories, prompt_templates, pipelines, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, jobs, model_endpoints, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target)" },
     "pageNumber": { "type": "integer", "description": "Page number (1-based, default 1)" },
     "pageSize": { "type": "integer", "description": "Results per page (default 10, max 1000)" },
     "order": { "type": "string", "description": "Sort order: CreatedAscending, CreatedDescending" },
@@ -589,7 +596,10 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
     "includeContext": { "type": "boolean", "description": "Include ProjectContext and StyleGuide on vessels (default false). Returns length hints when false." },
     "includeTestOutput": { "type": "boolean", "description": "Include TestOutput on merge queue entries (default false). Returns testOutputLength hint when false." },
     "includePayload": { "type": "boolean", "description": "Include full Payload on events (default false). Returns payloadLength hint when false." },
-    "includeMessage": { "type": "boolean", "description": "Include full Message on signals (default false). Returns messageLength hint when false." }
+    "includeMessage": { "type": "boolean", "description": "Include full Message on signals (default false). Returns messageLength hint when false." },
+    "runId": { "type": "string", "description": "Fleet action run ID (far_ prefix); required for fleet_action_run_target" },
+    "includeOutput": { "type": "boolean", "description": "Include RenderedText, OutputText and ErrorText on fleet_action_run_target (default false). Returns outputLength, errorLength and renderedLength hints when false." },
+    "includeInactive": { "type": "boolean", "description": "Include soft-deleted built-in actions for fleet_action (default false)" }
   },
   "required": ["entityType"]
 }
@@ -625,6 +635,9 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 | `jobs` | (paginated browse only) |
 | `model_endpoints` | `createdAfter`, `createdBefore` (current MCP enumeration is primarily paginated browse) |
 | `vessel_import_batch` (aliases `vessel_import_batches`, `vessel-import-batch`, `import_batches`) | `status` (Discovered/Importing/Completed/CompletedWithFailures/Failed), `createdAfter`, `createdBefore`, `order`. Scoped to the caller's tenant. Items are not included; read a batch with items through `GET /api/v1/vessels/import/batches/{id}`. |
+| `fleet_action` | `includeInactive`, `createdAfter`, `createdBefore` |
+| `fleet_action_run` | `status` (Pending/Running/Completed/CompletedWithFailures/Cancelled/Failed), `createdAfter`, `createdBefore` |
+| `fleet_action_run_target` | `runId` (required), `status` (Pending/Skipped/Running/Succeeded/Failed/Cancelled/TimedOut) |
 
 | Include flag | Applies to | Default | Description |
 |---|---|---|---|
@@ -633,6 +646,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 | `includeTestOutput` | merge_queue | `false` | Include TestOutput. Returns `testOutputLength` hint when false. |
 | `includePayload` | events | `false` | Include full Payload. Returns `payloadLength` hint when false. |
 | `includeMessage` | signals | `false` | Include full Message. Returns `messageLength` hint when false. |
+| `includeOutput` | fleet_action_run_target | `false` | Include RenderedText, OutputText and ErrorText. Returns `outputLength`, `errorLength` and `renderedLength` hints when false. |
 
 **Example -- page 2 of in-progress missions, 25 per page:**
 
@@ -660,6 +674,81 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 ```
 
 > **Note:** When enumerating `missions`, the `DiffSnapshot` field is excluded from results to keep payloads compact. Use `get_mission_diff` to retrieve the full diff for a specific mission.
+
+---
+
+## Fleet Actions
+
+Fleet action tools apply one action across many vessels. A **Command** action runs `commandText` in each vessel's working directory (tenant admin only); a **Mission** action dispatches one voyage per vessel from `promptTemplate`. All tools act in the caller's tenant. Errors come back as `{ "Error": "...", "StatusCode": 400|403|404|409 }` rather than as thrown tool errors. These tools never return captured output; use `enumerate` with `entityType` `fleet_action_run_target`, a `runId`, and `includeOutput: true` when you need it. See [FLEET_ACTIONS.md](FLEET_ACTIONS.md) for behavior and the REST equivalents in [REST_API.md](REST_API.md#fleet-actions).
+
+Templates may use `{{vessel.name}}`, `{{vessel.id}}`, `{{vessel.defaultBranch}}`, `{{vessel.workingDirectory}}`, `{{vessel.buildCommand}}` and `{{health.summary}}`. Any other `{{name}}` is rejected and the error names it.
+
+### create_fleet_action
+
+Create a reusable action.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Display name (1-200 characters) |
+| `description` | string | No | Description |
+| `kind` | string | No | `Command` (default) or `Mission` |
+| `commandText` | string | Command | Shell command template |
+| `promptTemplate` | string | Mission | Prompt template |
+| `pipelineId` | string | No | Pipeline for Mission dispatch |
+| `persona` | string | No | Persona name (stored; not yet applied at dispatch) |
+| `timeoutSeconds` | int | No | Per-target timeout, 5-7200 (default from settings) |
+| `defaultConcurrency` | int | No | 1-32, default 4 |
+| `requiresCleanWorkingTree` | bool | No | Skip dirty working trees; default true for Command |
+
+**Response:** the created [FleetAction](REST_API.md#fleet-action-models).
+
+### update_fleet_action
+
+Partial update; only supplied fields change. Same parameters as `create_fleet_action` plus required `actionId` (`fac_`). An empty string clears `description`, `pipelineId` and `persona`.
+
+**Response:** the updated FleetAction.
+
+### delete_fleet_action
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `actionId` | string | Yes | Fleet action ID (`fac_`) |
+
+Built-in actions are soft-deleted and never re-seeded. **Response:** `{ "Deleted": true, "ActionId": "fac_..." }`.
+
+### run_fleet_action
+
+Start a run. Pass `actionId` for a saved action, or the inline definition fields for an ad hoc run.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `vesselIds` | string[] | Yes | Target vessel IDs in the caller's tenant (1-500). One unknown or cross-tenant vessel rejects the whole request (404). |
+| `actionId` | string | No | Saved action ID (`fac_`). Omit for ad hoc. |
+| `concurrency` | int | No | 1-32; defaults to the action's `defaultConcurrency` |
+| `name`, `kind`, `commandText`, `promptTemplate` | string | Ad hoc | Inline definition |
+| `pipelineId`, `timeoutSeconds`, `requiresCleanWorkingTree` | | No | Overrides for a saved action, or part of the ad hoc definition |
+
+**Response:**
+
+```json
+{ "RunId": "far_...", "ActionId": "fac_...", "Kind": "Mission", "Status": "Pending", "TargetCount": 5, "Concurrency": 2 }
+```
+
+### fleet_action_run_status
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `runId` | string | Yes | Run ID (`far_`) |
+
+**Response:** `{ "Run": FleetActionRun, "Targets": [FleetActionRunTargetSummary, ...] }`. Target summaries carry `Status`, `SkipReason`, `FailureReason`, `ExitCode`, `VoyageId`, `DurationMs`, and `OutputLength` / `ErrorLength` / `RenderedLength` hints instead of text.
+
+### cancel_fleet_action_run
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `runId` | string | Yes | Run ID (`far_`) |
+
+Pending targets are cancelled, running commands are killed, and unlanded voyages of a Mission run are cancelled. **Response:** the updated FleetActionRun. Returns an error with `StatusCode` 409 when the run already finished.
 
 ---
 

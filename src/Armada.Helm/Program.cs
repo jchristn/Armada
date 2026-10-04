@@ -287,6 +287,19 @@ namespace Armada.Helm
                         .WithDescription("Retry failed missions in a voyage");
                 });
 
+                config.AddBranch("action", action =>
+                {
+                    action.SetDescription("Run fleet actions (a command or AI prompt across many vessels)");
+                    action.AddCommand<ActionListCommand>("list")
+                        .WithDescription("List fleet actions (or runs with --runs)");
+                    action.AddCommand<ActionRunCommand>("run")
+                        .WithDescription("Run a fleet action over vessels (--vessel, --fleet)");
+                    action.AddCommand<ActionStatusCommand>("status")
+                        .WithDescription("Show a fleet action run and its targets");
+                    action.AddCommand<ActionCancelCommand>("cancel")
+                        .WithDescription("Cancel a fleet action run");
+                });
+
                 config.AddBranch("playbook", playbook =>
                 {
                     playbook.SetDescription("Manage reusable markdown playbooks");

@@ -55,5 +55,20 @@ namespace Armada.Core
         /// <summary>Merge-queue entries processed to a terminal state.</summary>
         public static readonly Counter<long> MergeEntriesProcessed =
             _Meter.CreateCounter<long>("armada.mergequeue.processed", null, "Merge-queue entries processed");
+
+        /// <summary>
+        /// Fleet action run targets that reached a terminal state, exported as
+        /// armada_fleet_action_targets_total. Tags: kind (Command or Mission) and outcome (the terminal target
+        /// status: Succeeded, Failed, TimedOut, Skipped, Cancelled). No vessel, run, or command values are tagged.
+        /// </summary>
+        public static readonly Counter<long> FleetActionTargets =
+            _Meter.CreateCounter<long>("armada.fleet_action.targets", null, "Fleet action targets finished");
+
+        /// <summary>
+        /// Wall-clock duration of fleet action targets that executed, exported as
+        /// armada_fleet_action_target_duration_seconds. Tag: kind (Command or Mission).
+        /// </summary>
+        public static readonly Histogram<double> FleetActionTargetDuration =
+            _Meter.CreateHistogram<double>("armada.fleet_action.target_duration", "s", "Fleet action target duration");
     }
 }

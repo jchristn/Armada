@@ -92,6 +92,8 @@ namespace Armada.Server
         private HarborLinkEndpoint _HarborLinkEndpoint = null!;
         private IVesselService _VesselService = null!;
         private IVesselImportService _VesselImportService = null!;
+        private FleetActionRunner _FleetActionRunner = null!;
+        private FleetActionService _FleetActionService = null!;
 
         private ISessionTokenService _SessionTokenService = null!;
         private IAuthenticationService _AuthenticationService = null!;
@@ -212,6 +214,32 @@ namespace Armada.Server
             await _EnvironmentService.SeedDefaultsAsync().ConfigureAwait(false);
             _Logging.Debug(_Header + "deployment environment seeding completed");
 
+            // Fleet actions: runner (owned here, started below) and service; seed built-ins into every tenant.
+            FleetActionSeedService fleetActionSeeder = new FleetActionSeedService(_Database, _Logging);
+            _FleetActionRunner = new FleetActionRunner(_Database, _Settings, _Logging, new AdmiralFleetActionMissionDispatcher(_Database, _Admiral), new LocalHostCommandExecutor(), _HarborConnectionManager);
+            _FleetActionService = new FleetActionService(_Database, _Settings, _FleetActionRunner, fleetActionSeeder, _Logging);
+            try
+            {
+                await fleetActionSeeder.SeedAllTenantsAsync().ConfigureAwait(false);
+                _Logging.Debug(_Header + "fleet action seeding completed");
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "fleet action seeding error: " + ex.ToString());
+            }
+
+            // Start the runner before any route can create a run: restart recovery (Running command targets ->
+            // Interrupted) must not race a run started through the API.
+            try
+            {
+                await _FleetActionRunner.StartAsync(_TokenSource.Token).ConfigureAwait(false);
+                _Logging.Debug(_Header + "fleet action runner started");
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "fleet action runner start error: " + ex.ToString());
+            }
+
             // Initialize authentication services
             _SessionTokenService = new SessionTokenService(_Settings.SessionTokenEncryptionKey);
             if (string.IsNullOrEmpty(_Settings.SessionTokenEncryptionKey))
@@ -305,6 +333,7 @@ namespace Armada.Server
                 openApi.Tags.Add(new OpenApiTag { Name = "Events", Description = "System event log" });
                 openApi.Tags.Add(new OpenApiTag { Name = "Runtimes", Description = "Runtime-specific integration helpers and discovery" });
                 openApi.Tags.Add(new OpenApiTag { Name = "MergeQueue", Description = "Bors-style merge queue with batch testing" });
+                openApi.Tags.Add(new OpenApiTag { Name = "FleetActions", Description = "Fleet actions: shell commands or AI prompts applied across many vessels, with persisted runs" });
                 openApi.Tags.Add(new OpenApiTag { Name = "Authentication", Description = "Authentication and identity" });
                 openApi.Tags.Add(new OpenApiTag { Name = "Tenants", Description = "Multi-tenant management" });
                 openApi.Tags.Add(new OpenApiTag { Name = "Users", Description = "User management" });
@@ -489,6 +518,7 @@ namespace Armada.Server
             }
 
             _TokenSource.Cancel();
+            _FleetActionRunner?.Stop();
             _RemoteTunnel?.StopAsync().GetAwaiter().GetResult();
             _RemoteDashboardRelay?.DisposeAsync().GetAwaiter().GetResult();
             _McpServer?.Stop();
@@ -748,6 +778,10 @@ namespace Armada.Server
 
             // Background jobs
             new Routes.JobRoutes(_Database, _JobService)
+                .Register(_App, authenticate, _AuthorizationService);
+
+            // Fleet actions and runs
+            new FleetActionRoutes(_FleetActionService, _JsonOptions, _Logging)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Prompt templates
@@ -1118,7 +1152,8 @@ namespace Armada.Server
                 _ModelEndpointService,
                 _HarborService,
                 _VesselService,
-                _VesselImportService);
+                _VesselImportService,
+                _FleetActionService);
         }
 
         /// <summary>
@@ -1236,6 +1271,10 @@ namespace Armada.Server
                     try { await _MissionRecovery.MaintainAsync(token).ConfigureAwait(false); }
                     catch (Exception recoveryEx) { _Logging.Warn(_Header + "mission recovery error: " + recoveryEx.Message); }
 
+                    // Fleet actions: follow Mission-run voyages and dispatch paced pending targets.
+                    try { await _FleetActionRunner.SyncMissionRunsAsync(token).ConfigureAwait(false); }
+                    catch (Exception fleetActionEx) when (!(fleetActionEx is OperationCanceledException)) { _Logging.Warn(_Header + "fleet action sync error: " + fleetActionEx.Message); }
+
                     // Run log rotation every 10 health check cycles
                     _HealthCheckCycles++;
                     if (_HealthCheckCycles % 10 == 0)
@@ -1256,6 +1295,10 @@ namespace Armada.Server
                     {
                         await _DataExpiry.PurgeExpiredDataAsync(token).ConfigureAwait(false);
                         await PurgeExpiredRequestHistoryAsync(token).ConfigureAwait(false);
+
+                        // Fleet actions: prune finished runs older than FleetActions.RunRetentionDays.
+                        try { await _FleetActionRunner.PruneExpiredRunsAsync(token).ConfigureAwait(false); }
+                        catch (Exception pruneEx) when (!(pruneEx is OperationCanceledException)) { _Logging.Warn(_Header + "fleet action run pruning error: " + pruneEx.Message); }
                     }
                 }
                 catch (OperationCanceledException)
