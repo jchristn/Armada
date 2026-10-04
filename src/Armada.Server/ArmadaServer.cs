@@ -510,7 +510,10 @@ namespace Armada.Server
             _Logging.Info(_Header + "REST API started on port " + _Settings.AdmiralPort);
 
             // Initialize MCP server
-            _McpServer = new McpHttpServer(_Settings.Rest.Hostname, _Settings.McpPort);
+            // HttpListener cannot bind the literal 0.0.0.0 (the MCP listener silently never started in containers
+            // configured that way); "*" is the HttpListener spelling of "all interfaces".
+            string mcpHostname = String.Equals(_Settings.Rest.Hostname, "0.0.0.0", StringComparison.Ordinal) ? "*" : _Settings.Rest.Hostname;
+            _McpServer = new McpHttpServer(mcpHostname, _Settings.McpPort);
             _McpServer.ServerName = ArmadaConstants.ProductName;
             _McpServer.ServerVersion = ArmadaConstants.ProductVersion;
             // Voltaic 2.1.4+ reports a throwing handler as a generic isError result; surface Armada's
