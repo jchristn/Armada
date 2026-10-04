@@ -3,7 +3,7 @@
 > **Type:** implementation plan (work-tracking). Annotate task status and the
 > progress log as you go; keep this doc in sync with what actually shipped.
 >
-> **Status:** Not started
+> **Status:** Phases A-C implemented on `feature/codehub-capabilities`; visual QA and simulated user testing not yet run; Phase D (optional) not started
 > **Owner:** _unassigned_
 > **Requirements baseline:** `~/Code/Agents/requirements` (see the compliance checklist near the end)
 > **Last updated:** 2026-10-03
@@ -575,13 +575,13 @@ because Phase C has nothing to grade until vessels exist in bulk.
 
 ### Phase A -- Vessel Import
 
-- [~] **A1 -- Settings.** Add `VesselImportSettings` (`Import`) to `ArmadaSettings`
+- [x] **A1 -- Settings.** Add `VesselImportSettings` (`Import`) to `ArmadaSettings`
   with the fields above.
   _Acceptance:_ out-of-range values clamp; env overrides apply; the Settings page
   shows and saves them.
   _Note (2026-10-03):_ `VesselImportSettings` class and `ArmadaSettings.Import` added with clamping; Settings page/API exposure and env overrides not done (no existing env-override mechanism).
 
-- [ ] **A2 -- Discovery engine.** `VesselDiscoveryService` in
+- [x] **A2 -- Discovery engine.** `VesselDiscoveryService` in
   `src/Armada.Core/Services/` (interface in `Interfaces/`), with
   `DiscoverAsync(VesselDiscoveryRequest, CancellationToken)` and its supporting
   models and enums (`VesselImportCandidate`, `VesselImportCandidateStatusEnum`). It
@@ -598,7 +598,7 @@ because Phase C has nothing to grade until vessels exist in bulk.
   - a nonexistent path (NotFound);
   - a root with 1,000 empty directories, finishing under 5 s.
 
-- [ ] **A3 -- `VesselService.CreateAsync`.** Extract validation and creation out of
+- [x] **A3 -- `VesselService.CreateAsync`.** Extract validation and creation out of
   `VesselRoutes` POST and `McpVesselTools.add_vessel` into a shared service; both
   callers delegate to it. Behavior is unchanged; `LocalPath` is never set for a
   local-path `RepoUrl`.
@@ -612,7 +612,7 @@ because Phase C has nothing to grade until vessels exist in bulk.
   _Acceptance:_ `VesselImportDatabaseSuite` passes on every provider in the matrix.
   _Note (2026-10-03):_ shipped as `IVesselImportBatchMethods` + `IVesselImportItemMethods`, migration v71; suite green on all four providers.
 
-- [ ] **A5 -- Import execution.** `VesselImportService.ImportAsync`: inline at or
+- [x] **A5 -- Import execution.** `VesselImportService.ImportAsync`: inline at or
   below `InlineBatchLimit`, otherwise a `Job`. Per-item outcomes are `Created`,
   `SkippedExisting`, `SkippedNameConflict` (only when the auto-suffix is disabled)
   and `Failed`, each with a stable reason code. Creating the same path twice must be
@@ -620,33 +620,34 @@ because Phase C has nothing to grade until vessels exist in bulk.
   _Acceptance:_ importing the same batch twice creates no duplicates; a 200-path
   import runs as a job and the batch reflects the final counts.
 
-- [ ] **A6 -- REST routes.** Add `VesselImportRoutes` and the permission entries in
+- [x] **A6 -- REST routes.** Add `VesselImportRoutes` and the permission entries in
   `AuthorizationConfig` (TenantAdmin for browse, discover and import; Authenticated
   for history reads).
   _Acceptance:_ route suite covers 400 (empty input), 403 (non-admin), 404 (a batch
   from another tenant), and the 200 and 202 paths.
 
-- [ ] **A7 -- MCP and enumerate.** Add `discover_vessels`, `import_vessels`, and the
+- [x] **A7 -- MCP and enumerate.** Add `discover_vessels`, `import_vessels`, and the
   `vessel_import_batch` enumerate type.
   _Acceptance:_ MCP suite round-trips both tools.
 
-- [ ] **A8 -- Helm.** Add `armada vessel import` with dry-run and confirm.
+- [x] **A8 -- Helm.** Add `armada vessel import` with dry-run and confirm.
   _Acceptance:_ manual run against `~/Code` lists candidates; `--yes` imports.
 
-- [ ] **A9 -- Dashboard wizard.** Three steps: Source, Review, Results. Source has a
+- [~] **A9 -- Dashboard wizard.** Three steps: Source, Review, Results. Source has a
   paste list (with a live line count) and a server-side browse tree with checkboxes.
   Review has a candidate table with a status filter, select-all-new, and a fleet
   picker. All strings go through i18n.
   _Acceptance:_ visual QA at 1280 / 768 / 390, in light and dark, for every step,
   including an empty discovery and a 500-candidate review.
+  _Notes:_ Built and unit-tested; the Playwright visual QA pass (1280/768/390, light/dark) has not been run.
 
-- [ ] **A10 -- Docs.** Update `docs/REST_API.md`, `docs/MCP_API.md`, the Postman
+- [x] **A10 -- Docs.** Update `docs/REST_API.md`, `docs/MCP_API.md`, the Postman
   collection (an "Import" folder), README "Onboarding many repositories", and a
   CHANGELOG entry under Unreleased.
 
 ### Phase B -- Fleet Actions
 
-- [~] **B1 -- Settings.** Add `FleetActionSettings`.
+- [x] **B1 -- Settings.** Add `FleetActionSettings`.
   _Note (2026-10-03):_ class and `ArmadaSettings.FleetActions` added; Settings page/API exposure pending.
 
 - [x] **B2 -- Models and persistence.** `FleetAction` (`fac_`), `FleetActionRun`
@@ -659,50 +660,51 @@ because Phase C has nothing to grade until vessels exist in bulk.
   updates on SQLite under the write lock.
   _Note (2026-10-03):_ migration v72; SQLite writes serialized through the driver write lock; suite green on all four providers.
 
-- [ ] **B3 -- Template renderer.** `FleetActionTemplateRenderer` resolves the fixed
+- [x] **B3 -- Template renderer.** `FleetActionTemplateRenderer` resolves the fixed
   variable set. An unknown variable fails validation with a 400 that names it.
   _Acceptance:_ unit suite; a variable value containing `{{` is not re-expanded.
 
-- [ ] **B4 -- Command runner.** `FleetActionRunner` handles concurrency, timeout,
+- [x] **B4 -- Command runner.** `FleetActionRunner` handles concurrency, timeout,
   cancellation, the dirty-tree pre-check, Harbor routing via `PreferredHarborId`,
   output truncation, and restart recovery (`Running` -> `Failed/Interrupted`).
   _Acceptance:_ suite covers success, non-zero exit, timeout, cancel mid-run (pending
   targets become Cancelled and the in-flight process is killed), a dirty tree
   skipped, and output truncation flagged.
 
-- [ ] **B5 -- Mission fan-out.** Dispatch with pacing, store `VoyageId`, add an
+- [x] **B5 -- Mission fan-out.** Dispatch with pacing, store `VoyageId`, add an
   every-cycle sync step in `HealthCheckLoopAsync`, and cancel through the existing
   voyage cancel path. A `ValidateDispatchAsync` failure becomes `Skipped` with
   `DispatchRejected` and the validator's message.
   _Acceptance:_ E2E suite with stub captains: 5 vessels at concurrency 2 never have
   more than 2 active voyages, and statuses follow the voyages to completion.
 
-- [ ] **B6 -- Seeded built-ins.** First-boot seeding of the five actions above,
+- [x] **B6 -- Seeded built-ins.** First-boot seeding of the five actions above,
   tenant-scoped, editable, and not re-seeded after deletion.
 
-- [ ] **B7 -- REST routes and authz.** Add `FleetActionRoutes` and the
+- [x] **B7 -- REST routes and authz.** Add `FleetActionRoutes` and the
   `AuthorizationConfig` entries. The Command-kind check happens in the handler
   (TenantAdmin), because `PermissionLevel` is path-based and can't see the body.
   _Acceptance:_ a non-admin creating or running a Command action gets 403; a
   cross-tenant vessel in `vesselIds` rejects the whole run.
 
-- [ ] **B8 -- MCP, enumerate, Helm.** Add the tools listed above, the enumerate
+- [x] **B8 -- MCP, enumerate, Helm.** Add the tools listed above, the enumerate
   types with `includeOutput`, and `armada action`.
 
-- [ ] **B9 -- Dashboard.** Add the `/fleet-actions` page (actions and runs tabs), the
+- [~] **B9 -- Dashboard.** Add the `/fleet-actions` page (actions and runs tabs), the
   run-detail page with the output drawer, and a **Run action...** bulk action on the
   Vessels table. The run modal covers: pick or define an action, preview the
   rendered command for the first selected vessel, set concurrency, and confirm. The
   confirmation for a Command run states the vessel count and that the command runs
   in each working directory.
   _Acceptance:_ visual QA as in A9; a 50-target run stays responsive.
+  _Notes:_ Built and unit-tested; visual QA not run. Actions/Runs tables have no column chooser and sort only by Created (the server supports no other order).
 
-- [ ] **B10 -- Docs.** Update REST_API.md, MCP_API.md, Postman ("Fleet Actions"
+- [x] **B10 -- Docs.** Update REST_API.md, MCP_API.md, Postman ("Fleet Actions"
   folder), a new `docs/FLEET_ACTIONS.md` guide, and the CHANGELOG.
 
 ### Phase C -- Vessel Health
 
-- [~] **C1 -- Settings.** Add `RepositoryHealthSettings`, including thresholds.
+- [x] **C1 -- Settings.** Add `RepositoryHealthSettings`, including thresholds.
   _Note (2026-10-03):_ `RepositoryHealthSettings` + `RepositoryHealthThresholds` added; Settings page/API exposure pending.
 
 - [x] **C2 -- Models and persistence.** Add the four tables above (`vhl_`, `vhf_`,
@@ -713,20 +715,20 @@ because Phase C has nothing to grade until vessels exist in bulk.
   whitelisted column.
   _Note (2026-10-03):_ migration v73; status columns hold effective (override-aware) values; vessel delete cascades via FK ON DELETE CASCADE; suite green on all four providers.
 
-- [ ] **C3 -- Criterion framework.** `IVesselHealthCriterion`,
+- [x] **C3 -- Criterion framework.** `IVesselHealthCriterion`,
   `VesselHealthEvaluator` (runs the applicable criteria, applies the rollup and
   overrides, writes atomically per vessel), and the `ManifestHash` freshness logic.
   _Acceptance:_ the rollup suite pins down the Unknown and NotApplicable semantics,
   plus override precedence.
 
-- [ ] **C4 -- Git criteria.** `GitDivergence`, `WorkingTree`, `Branches` and
+- [x] **C4 -- Git criteria.** `GitDivergence`, `WorkingTree`, `Branches` and
   `CommitRecency`. All of them reuse `IGitService` where it has a method and add
   methods there rather than shelling out ad hoc.
   _Acceptance:_ suite built on `TestGitRepoHelper` with a local bare "origin": ahead,
   behind and diverged counts are correct after fetch; dirty versus untracked;
   stale-branch age; leftover `armada/*` branches counted.
 
-- [ ] **C5 -- Dependency criteria.** `Dependencies` and `Vulnerabilities` for NuGet
+- [x] **C5 -- Dependency criteria.** `Dependencies` and `Vulnerabilities` for NuGet
   and npm. Port CodeHub's `dotnet list` JSON parsing and `DriftCalculator`,
   rewritten to Armada style (no `var`, typed DTOs and no `JsonElement` access, one
   class per file). Search solutions while honoring the exclude list. A missing tool,
@@ -734,30 +736,31 @@ because Phase C has nothing to grade until vessels exist in bulk.
   _Acceptance:_ fixture JSON files for both tools; an explicit test that a failed
   `dotnet list` is never `Pass`.
 
-- [ ] **C6 -- Repository-shape criteria.** `TestInfrastructure` (ecosystem detectors
+- [x] **C6 -- Repository-shape criteria.** `TestInfrastructure` (ecosystem detectors
   plus the latest `CheckRun`), `ContinuousIntegration`, license and readme.
   _Acceptance:_ fixture repositories for .NET, Node, Python, Go and Rust.
 
-- [ ] **C7 -- Armada criteria.** `ArmadaReadiness` (wraps `VesselReadinessService`)
+- [x] **C7 -- Armada criteria.** `ArmadaReadiness` (wraps `VesselReadinessService`)
   and `MissionOutcomes`.
 
-- [ ] **C8 -- Scheduling.** Add the `HealthCheckLoopAsync` step and a `Job` per
+- [x] **C8 -- Scheduling.** Add the `HealthCheckLoopAsync` step and a `Job` per
   evaluation, with one evaluation per tenant at a time (409 otherwise) and per-vessel
   failures isolated.
   _Acceptance:_ with `IntervalMinutes = 1` in a test fixture, an evaluation is
   enqueued once and not again while it runs.
 
-- [ ] **C9 -- REST, MCP, Helm.** Add `VesselHealthRoutes`, the enumerate DTO, tools,
+- [x] **C9 -- REST, MCP, Helm.** Add `VesselHealthRoutes`, the enumerate DTO, tools,
   the `vessel_health` enumerate type, and `armada health`.
 
-- [ ] **C10 -- Dashboard.** Health tab, detail modal (sections: Summary, Findings,
+- [~] **C10 -- Dashboard.** Health tab, detail modal (sections: Summary, Findings,
   Dependencies, Branches, Overrides, Raw JSON), Home KPIs and CTAs, and a bulk
   **Run action...** that pre-selects the Mission kind and offers the built-in
   templates that reference `{{health.summary}}`.
   _Acceptance:_ visual QA; Home tiles deep-link into filtered views; a filter set
   survives reload through the URL.
+  _Notes:_ Built and unit-tested; visual QA not run. Overridden values are marked only in the detail modal, not in the list.
 
-- [ ] **C11 -- Telemetry.** On the existing `ArmadaMetrics` meter, add:
+- [x] **C11 -- Telemetry.** On the existing `ArmadaMetrics` meter, add:
   - `armada_health_evaluations_total{outcome}`
   - `armada_health_criterion_duration_seconds{criterion}`
   - `armada_fleet_action_targets_total{kind,outcome}`
@@ -768,7 +771,7 @@ because Phase C has nothing to grade until vessels exist in bulk.
   paths or commands go in metric labels; they belong only on span attributes. Add a
   Grafana panel group under `assets/grafana/`.
 
-- [ ] **C12 -- Docs.** Update REST_API.md, MCP_API.md, Postman ("Vessel Health"),
+- [x] **C12 -- Docs.** Update REST_API.md, MCP_API.md, Postman ("Vessel Health"),
   a new `docs/VESSEL_HEALTH.md` (criteria, thresholds, and what each status means),
   README, and the CHANGELOG.
 
@@ -795,7 +798,7 @@ because Phase C has nothing to grade until vessels exist in bulk.
 
 These items apply to every phase. Tick them off per phase in the progress log.
 
-- [ ] **CODE_STYLE.md.** Every new C# file follows these rules:
+- [x] **CODE_STYLE.md.** Every new C# file follows these rules:
   - usings inside the namespace, System first, then alphabetical;
   - XML docs on public members only, with defaults, min and max documented;
   - `_PascalCase` private fields; no `var`; no tuples;
@@ -806,46 +809,46 @@ These items apply to every phase. Tick them off per phase in the progress log.
   - guard clauses; no `Console.WriteLine` in library code; no em-dashes anywhere.
 
   Verified by a clean 0-warning `dotnet build src/Armada.sln`.
-- [ ] **BACKEND_ARCHITECTURE "Structured Persistence".** Every sort and filter field
+- [x] **BACKEND_ARCHITECTURE "Structured Persistence".** Every sort and filter field
   is a typed, indexed column. Lists are child tables. The only unmanaged text is the
   explicitly named `OutputText` and `ErrorText`, and the reason is documented in the
   model's XML doc.
-- [ ] **Provider matrix.** Each migration is present in all four providers, including
+- [x] **Provider matrix.** Each migration is present in all four providers, including
   the manual MySQL wiring. Database suites pass against Sqlite, Postgresql, Mysql and
   SqlServer (`scripts/common/run-db-parity-tests.sh`). The SQLite write lock covers
   concurrent import and target writes.
-- [ ] **Tenancy.** Every row carries `TenantId`. Every read and enumerate is scoped by
+- [x] **Tenancy.** Every row carries `TenantId`. Every read and enumerate is scoped by
   the caller's tenant, which comes from the auth context, never the request body.
   Another tenant's ID returns 404. Deleting a vessel cascades.
-- [ ] **IDs.** `vib_`, `vii_`, `fac_`, `far_`, `fat_`, `vhl_`, `vhf_`, `vdp_` and
+- [x] **IDs.** `vib_`, `vii_`, `fac_`, `far_`, `fat_`, `vhl_`, `vhf_`, `vdp_` and
   `vho_` are added to `Constants.cs`, with no collisions with existing prefixes
   (checked against `Constants.cs` on 2026-10-03).
-- [ ] **AUTHENTICATION.** Armada authorizes by path through `PermissionLevel` in
+- [x] **AUTHENTICATION.** Armada authorizes by path through `PermissionLevel` in
   `AuthorizationConfig`, not with AUTHENTICATION.md's `(ResourceType, Operation)`
   model. These features follow Armada's existing model; that is a recorded
   nonconformance and is not fixed here. Filesystem browse and discover, and
   Command-kind actions, are TenantAdmin because they read the host filesystem or
   execute code on it. Authorization denials on these routes are logged with the
   request ID.
-- [ ] **REPOSITORY_REQUIREMENTS #13 and #14.** `docs/REST_API.md` and the Postman
+- [x] **REPOSITORY_REQUIREMENTS #13 and #14.** `docs/REST_API.md` and the Postman
   collection (folders per feature, variables for the base URL and key) document every
   new route. `docs/MCP_API.md` documents every new tool and enumerate type. Both are
   updated in the same change as the code.
-- [ ] **BACKEND_TEST_ARCHITECTURE.** New suites live in `Test.Shared/Suites/**` and
+- [x] **BACKEND_TEST_ARCHITECTURE.** New suites live in `Test.Shared/Suites/**` and
   run under `Test.Automated`, `Test.Xunit` and `Test.Nunit` on net8.0 and net10.0.
   Tests bind to `127.0.0.1`, write nothing to the console, and set up and clean up
   their own data.
-- [ ] **DASHBOARD_STYLE_AND_USABILITY.** The route inventory is in this doc.
+- [~] **DASHBOARD_STYLE_AND_USABILITY.** The route inventory is in this doc.
   Filtering, sorting and paging run on the server, and filter state lives in the URL.
   The pagination bar sits above the table with page sizes 10/25/50/100. Each row has
   an actions menu and each table a bulk bar with a clear-selection control. Dialogs
   are custom, with no browser dialogs. Empty, loading and error states have a retry
   that keeps the filters. Status uses icon plus text. Playwright visual QA runs at
   1280, 768 and 390 px in light and dark.
-- [ ] **I18N.** Every new string, `aria-*` attribute and tooltip goes through the
+- [x] **I18N.** Every new string, `aria-*` attribute and tooltip goes through the
   dashboard i18n runtime. Counts use plurals; ahead, behind and relative times use the
   locale formatters. The server returns stable codes, and the client localizes them.
-- [ ] **TELEMETRY_REQUIREMENTS.** Metrics and spans as in C11. Labels stay
+- [x] **TELEMETRY_REQUIREMENTS.** Metrics and spans as in C11. Labels stay
   low-cardinality, and a telemetry failure never fails a request.
 - [ ] **SIMULATED_USER_TESTING.** After each phase is declared complete, run a session
   in an isolated `armada-usertest` stack. Probes include:
@@ -857,9 +860,9 @@ These items apply to every phase. Tick them off per phase in the progress log.
   - a cross-tenant ID probe.
 
   Write the report to `user-testing/<yyyy-mm-dd>-<label>.md`. Fixes require approval.
-- [ ] **VERSIONING.** No version numbers change as part of this work. CHANGELOG
+- [x] **VERSIONING.** No version numbers change as part of this work. CHANGELOG
   entries go under Unreleased.
-- [ ] **WRITING_DOCUMENTS.** The new guides (`FLEET_ACTIONS.md`, `VESSEL_HEALTH.md`)
+- [x] **WRITING_DOCUMENTS.** The new guides (`FLEET_ACTIONS.md`, `VESSEL_HEALTH.md`)
   and README sections are written as prose, and contain no em-dashes.
 
 ## Decisions
@@ -893,3 +896,7 @@ Append a dated row whenever you advance a task. Keep newest at the bottom.
 |------|--------|---------|--------|
 | 2026-10-03 | (design) | -- | Initial plan drafted from a review of CodeHub (`~/Code/Codehub`) and Armada's current vessel, job, dispatch, git and dashboard surfaces. |
 | 2026-10-03 | Claude | A1, A4, B1, B2, C1, C2 | Settings classes, models/enums, ID prefixes, interfaces, four provider implementations, migrations v71-v73, and Database suites (VesselImport, FleetAction, VesselHealth). |
+| 2026-10-04 | Claude | A2-A3, A5-A8, A10 | Vessel Import backend: discovery, shared VesselService, import service, REST, MCP, Helm, docs. |
+| 2026-10-04 | Claude | B3-B8, B10 | Fleet Actions backend: renderer, runner, mission fan-out, seeding, REST, MCP, Helm, FLEET_ACTIONS.md. |
+| 2026-10-04 | Claude | C3-C9, C11, C12 | Vessel Health backend: criteria, evaluator, scheduling, overrides, REST, MCP, Helm, telemetry, VESSEL_HEALTH.md, Grafana "Armada Fleet Operations" dashboard. Full Test.Automated 2792/2792 on net10.0. |
+| 2026-10-04 | Claude | A9, B9, C10 | Dashboard: import wizard, Fleet Actions pages and RunActionModal, Health tab and detail modal, Home KPIs, Settings sections; 143/143 vitest. Visual QA and simulated user testing still to do. |
