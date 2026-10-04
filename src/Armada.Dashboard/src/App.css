@@ -7283,6 +7283,26 @@ thead tr.column-filter-row td input.col-filter::placeholder {
 .app-layout.wizard-spotlight-active .sidebar {
     position: relative;
     z-index: 2100;
+    /* The sidebar is raised above the wizard overlay only so its highlighted items show through.
+       It must not take clicks, because it overlaps the wizard's own buttons. */
+    pointer-events: none;
+}
+
+/* While the wizard spotlights sidebar items, start the overlay after the sidebar so the raised sidebar
+   never covers the left edge of the wizard (fields, labels, and buttons). Widths match Layout.tsx. */
+.app-layout.wizard-spotlight-active ~ .wizard-overlay {
+    left: 220px;
+}
+
+.app-layout.wizard-spotlight-active:has(.sidebar-collapsed) ~ .wizard-overlay {
+    left: 56px;
+}
+
+@media (max-width: 768px) {
+    .app-layout.wizard-spotlight-active ~ .wizard-overlay,
+    .app-layout.wizard-spotlight-active:has(.sidebar-collapsed) ~ .wizard-overlay {
+        left: 0;
+    }
 }
 
 @media (max-width: 900px) {

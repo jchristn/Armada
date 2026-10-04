@@ -114,9 +114,9 @@ const tooltips = {
   vesselSelect: 'Choose the existing git repository Armada should dispatch the setup mission to.',
   vesselName: 'Display name for this repository inside Armada.',
   defaultBranch: 'Default branch Armada should branch from when creating mission worktrees.',
-  repoUrl: 'Git clone URL for the repository Armada will manage.',
+  repoUrl: 'Git clone URL or local repository path for the repository Armada will manage.',
   workingDirectory: 'Optional path to your local checkout, used for local landing and git status checks.',
-  landingMode: 'Controls how completed mission work is landed. None is safest for the setup mission.',
+  landingMode: 'Controls how completed mission work is landed. None keeps the work on a branch for you to review; Local Merge merges it into the working directory and pushes it to that checkout\'s origin remote.',
   enableModelContext: 'Allow captains to save useful repository knowledge back onto the vessel for future missions.',
   allowConcurrentMissions: 'Allow more than one mission to run on this vessel at the same time.',
   projectContext: 'Optional architecture, build, test, and dependency notes injected into captain prompts.',
@@ -131,6 +131,16 @@ const tooltips = {
   missionTitle: 'Short title for the direct setup mission created by dispatch.',
   missionDescription: 'Full task instructions sent to the captain for this setup dispatch.',
   priority: 'Scheduling priority for the mission. Lower values are higher priority in Armada.',
+};
+
+const SETTLED_MISSION_STATUSES = new Set(['Complete', 'Failed', 'Cancelled', 'WorkProduced', 'LandingFailed', 'PullRequestOpen']);
+
+const landingModeHints: Record<string, string> = {
+  '': 'Uses the Admiral-wide landing settings.',
+  None: 'Finished work stays on a branch for you to review. Choose Local Merge to land it automatically.',
+  LocalMerge: 'Finished work is merged into the working directory and pushed to its origin remote, so the checkout needs one.',
+  PullRequest: 'Finished work is pushed and opened as a pull request (needs the GitHub CLI).',
+  MergeQueue: 'Finished work is queued; processing the merge queue tests and merges it.',
 };
 
 function upsertById<T extends { id: string }>(items: T[], item: T): T[] {
@@ -217,7 +227,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
   }));
   const [captainForm, setCaptainForm] = useState<CaptainForm>(() => ({
     name: t('Setup Captain'),
-    runtime: 'Codex',
+    runtime: 'ClaudeCode',
     model: '',
     tier: 'Standard',
     systemInstructions: t('For setup missions, prefer read-only repository inspection unless the mission explicitly asks for code changes.'),
@@ -406,6 +416,24 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
     return () => { mounted = false; };
   }, [activeFleetId, activeVesselId, current]);
 
+  // On the handoff step, follow the dispatched mission until it settles so the operator sees it land
+  // without pressing Refresh.
+  const dispatchedMissionId = dispatchedMission?.id || '';
+  const dispatchedMissionStatus = String(dispatchedMission?.status || '');
+  useEffect(() => {
+    if (current !== steps.length - 1 || !dispatchedMissionId) return;
+    if (SETTLED_MISSION_STATUSES.has(dispatchedMissionStatus)) return;
+    const timer = window.setInterval(async () => {
+      try {
+        const mission = await getMission(dispatchedMissionId);
+        setDispatchedMission(mission);
+      } catch {
+        // transient; the next tick or the Refresh button retries
+      }
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [current, dispatchedMissionId, dispatchedMissionStatus]);
+
   const handleFleetSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setResult(null);
@@ -467,6 +495,10 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
     }
     if (!vesselForm.repoUrl.trim()) {
       setResult({ kind: 'error', message: t('Repository URL is required.') });
+      return;
+    }
+    if (vesselForm.landingMode === 'LocalMerge' && !vesselForm.workingDirectory.trim()) {
+      setResult({ kind: 'error', message: t('Local Merge needs a working directory to merge into.') });
       return;
     }
 
@@ -780,7 +812,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
               value={vesselForm.repoUrl}
               onChange={(event) => setVesselForm({ ...vesselForm, repoUrl: event.target.value })}
               required
-              placeholder={t('https://github.com/org/repo.git')}
+              placeholder={t('https://github.com/org/repo.git or /path/to/repo')}
             />
           </div>
           <div className="wizard-form-grid">
@@ -806,6 +838,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
                 <option value="PullRequest">{t('Pull Request')}</option>
                 <option value="MergeQueue">{t('Merge Queue')}</option>
               </select>
+              <small className="text-dim">{t(landingModeHints[vesselForm.landingMode] || landingModeHints[''])}</small>
             </div>
           </div>
           <div className="wizard-form-grid">
@@ -1109,6 +1142,15 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
         <button type="button" className="btn" onClick={refreshMission} disabled={busy || !dispatchedMission}>
           {busy ? t('Refreshing...') : t('Refresh Mission Status')}
         </button>
+        {dispatchedMission && (
+          <button
+            type="button"
+            className="btn"
+            onClick={() => finishAndNavigate(`/missions/${dispatchedMission.id}`)}
+          >
+            {t('Open Mission')}
+          </button>
+        )}
         {activeVessel && (
           <button
             type="button"
