@@ -12,3 +12,6 @@ artifacts/
 *.db-wal
 *.log
 *.nupkg
+
+# Dashboard dependencies are installed per machine (npm ci); never commit them.
+node_modules/

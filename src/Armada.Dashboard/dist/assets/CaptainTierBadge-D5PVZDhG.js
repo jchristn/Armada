@@ -1,0 +1,1 @@
+import{n as e,r as t}from"./LocaleContext-DRK5F2Xw.js";var n=t();function r({tier:t,className:r}){let{t:i}=e();if(!t)return null;let a=t.toLowerCase();return(0,n.jsx)(`span`,{className:`captain-tier-badge captain-tier-${a}${r?` ${r}`:``}`,title:i(`Capability tier: {{tier}}`,{tier:i(t)}),children:i(t)})}export{r as t};

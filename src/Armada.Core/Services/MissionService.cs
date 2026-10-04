@@ -1549,6 +1549,18 @@ namespace Armada.Core.Services
                 _Logging.Warn(_Header + "could not update git exclude for " + instructionsFileName + ": " + ex.ToString());
             }
 
+            try
+            {
+                if (ResolveGitInfoExcludePath(worktreePath) != null)
+                {
+                    await HideTrackedInstructionsFileAsync(worktreePath, instructionsFileName, token).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException))
+            {
+                _Logging.Warn(_Header + "could not hide tracked " + instructionsFileName + " from git: " + ex.Message);
+            }
+
             _Logging.Debug(_Header + "generated mission instructions at " + instructionsPath);
         }
 
@@ -4041,7 +4053,75 @@ namespace Armada.Core.Services
                 gitDir = Path.GetFullPath(Path.Combine(worktreePath, gitDir));
             }
 
+            // A linked worktree's private git directory names the shared repository directory in
+            // "commondir". git only reads info/exclude from the shared directory, so an entry written
+            // into the per-worktree directory would be silently ignored.
+            string commonDirPointer = Path.Combine(gitDir, "commondir");
+            if (File.Exists(commonDirPointer))
+            {
+                string commonDir = File.ReadAllText(commonDirPointer).Trim();
+                if (!String.IsNullOrEmpty(commonDir))
+                {
+                    if (!Path.IsPathRooted(commonDir))
+                    {
+                        commonDir = Path.GetFullPath(Path.Combine(gitDir, commonDir));
+                    }
+
+                    return Path.Combine(commonDir, "info", "exclude");
+                }
+            }
+
             return Path.Combine(gitDir, "info", "exclude");
+        }
+
+        private async Task HideTrackedInstructionsFileAsync(string worktreePath, string instructionsFileName, CancellationToken token)
+        {
+            // git ignores exclude rules for files it already tracks. When the repository commits its own
+            // instruction file (for example CLAUDE.md), mark it skip-worktree in this dock so the generated
+            // mission instructions can never be staged or committed by the captain.
+            int tracked = await RunGitExitCodeAsync(worktreePath, token, "ls-files", "--error-unmatch", "--", instructionsFileName).ConfigureAwait(false);
+            if (tracked != 0) return;
+
+            int marked = await RunGitExitCodeAsync(worktreePath, token, "update-index", "--skip-worktree", "--", instructionsFileName).ConfigureAwait(false);
+            if (marked != 0)
+            {
+                _Logging.Warn(_Header + "could not mark " + instructionsFileName + " skip-worktree in " + worktreePath + " (git exit code " + marked + ")");
+            }
+        }
+
+        private static async Task<int> RunGitExitCodeAsync(string workingDirectory, CancellationToken token, params string[] args)
+        {
+            System.Diagnostics.ProcessStartInfo startInfo = new System.Diagnostics.ProcessStartInfo("git");
+            startInfo.WorkingDirectory = workingDirectory;
+            startInfo.RedirectStandardOutput = true;
+            startInfo.RedirectStandardError = true;
+            startInfo.UseShellExecute = false;
+            startInfo.CreateNoWindow = true;
+            foreach (string arg in args) startInfo.ArgumentList.Add(arg);
+
+            using (System.Diagnostics.Process process = new System.Diagnostics.Process())
+            {
+                process.StartInfo = startInfo;
+                process.Start();
+                Task<string> stdout = process.StandardOutput.ReadToEndAsync(token);
+                Task<string> stderr = process.StandardError.ReadToEndAsync(token);
+                using (CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(token))
+                {
+                    timeout.CancelAfter(TimeSpan.FromSeconds(30));
+                    try
+                    {
+                        await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        try { process.Kill(true); } catch (InvalidOperationException) { }
+                        throw;
+                    }
+                }
+
+                await Task.WhenAll(stdout, stderr).ConfigureAwait(false);
+                return process.ExitCode;
+            }
         }
 
         #endregion

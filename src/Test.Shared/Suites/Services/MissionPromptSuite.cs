@@ -945,6 +945,48 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("generate_claude_md_async_never_dirties_git_in_linked_worktree", "GenerateClaudeMdAsync leaves git status clean in a linked worktree, whether CLAUDE.md is tracked or not", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    MissionService service = CreateMissionService(logging, testDb.Driver, settings, new StubGitService());
+
+                    foreach (bool trackClaudeMd in new bool[] { true, false })
+                    {
+                        string repo = TestGitRepoHelper.CreateWorkingRepoCopy();
+                        if (trackClaudeMd)
+                        {
+                            await File.WriteAllTextAsync(Path.Combine(repo, "CLAUDE.md"), "# Project Instructions\n\nUse explicit types.\n");
+                            VesselHealthGitHelper.RunGit(repo, null, "add", "CLAUDE.md");
+                            VesselHealthGitHelper.RunGit(repo, null, "commit", "-q", "-m", "Add CLAUDE.md");
+                        }
+
+                        string dock = Path.Combine(Path.GetDirectoryName(repo)!, Path.GetFileName(repo) + "_dock");
+                        VesselHealthGitHelper.RunGit(repo, null, "worktree", "add", "-q", "-b", "armada/test/msn_prompt", dock);
+
+                        Vessel vessel = new Vessel("PromptVessel", "https://github.com/test/repo");
+                        Mission mission = new Mission();
+                        mission.Title = "Leak check";
+                        mission.Description = "Generated instructions must never be committable.";
+
+                        await service.GenerateClaudeMdAsync(dock, mission, vessel);
+
+                        string content = await File.ReadAllTextAsync(Path.Combine(dock, "CLAUDE.md"));
+                        AssertContains("# Mission Instructions", content);
+                        if (trackClaudeMd) AssertContains("Use explicit types.", content);
+
+                        string status = VesselHealthGitHelper.RunGit(dock, null, "status", "--porcelain").Trim();
+                        AssertEqual("", status, "git status in the dock (tracked CLAUDE.md: " + trackClaudeMd + ")");
+
+                        VesselHealthGitHelper.RunGit(dock, null, "add", "-A");
+                        string staged = VesselHealthGitHelper.RunGit(dock, null, "diff", "--cached", "--name-only").Trim();
+                        AssertEqual("", staged, "files staged by git add -A (tracked CLAUDE.md: " + trackClaudeMd + ")");
+                    }
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Mission Prompt (ProjectContext/StyleGuide/ModelContext)",
