@@ -51,6 +51,9 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [update_vessel_context](#update_vessel_context)
     - [delete_vessel](#delete_vessel)
     - [delete_vessels](#delete_vessels)
+  - **Vessel Import**
+    - [discover_vessels](#discover_vessels)
+    - [import_vessels](#import_vessels)
   - **Voyages**
     - [dispatch](#dispatch)
     - [voyage_status](#voyage_status)
@@ -557,7 +560,7 @@ No parameters required.
 
 ### enumerate
 
-Paginated enumeration of any entity type with filtering and sorting. This is the MCP equivalent of the `POST /api/v1/{entity}/enumerate` REST endpoints. Returns paginated results with total counts, page metadata, and query timing. Supports: objectives (aliases `backlog`, `backlog_item`, `backlog_items`), fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, memories, prompt_templates, pipelines, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, jobs, model_endpoints.
+Paginated enumeration of any entity type with filtering and sorting. This is the MCP equivalent of the `POST /api/v1/{entity}/enumerate` REST endpoints. Returns paginated results with total counts, page metadata, and query timing. Supports: objectives (aliases `backlog`, `backlog_item`, `backlog_items`), fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, memories, prompt_templates, pipelines, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, jobs, model_endpoints, vessel_import_batch.
 
 **Input Schema:**
 
@@ -565,7 +568,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 {
   "type": "object",
   "properties": {
-    "entityType": { "type": "string", "description": "Entity type to enumerate (objectives [aliases backlog, backlog_item, backlog_items], fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, memories, prompt_templates, pipelines, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, jobs, model_endpoints)" },
+    "entityType": { "type": "string", "description": "Entity type to enumerate (objectives [aliases backlog, backlog_item, backlog_items], fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, memories, prompt_templates, pipelines, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, jobs, model_endpoints, vessel_import_batch)" },
     "pageNumber": { "type": "integer", "description": "Page number (1-based, default 1)" },
     "pageSize": { "type": "integer", "description": "Results per page (default 10, max 1000)" },
     "order": { "type": "string", "description": "Sort order: CreatedAscending, CreatedDescending" },
@@ -621,6 +624,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 | `memories` | `search` (plus paginated browse) |
 | `jobs` | (paginated browse only) |
 | `model_endpoints` | `createdAfter`, `createdBefore` (current MCP enumeration is primarily paginated browse) |
+| `vessel_import_batch` (aliases `vessel_import_batches`, `vessel-import-batch`, `import_batches`) | `status` (Discovered/Importing/Completed/CompletedWithFailures/Failed), `createdAfter`, `createdBefore`, `order`. Scoped to the caller's tenant. Items are not included; read a batch with items through `GET /api/v1/vessels/import/batches/{id}`. |
 
 | Include flag | Applies to | Default | Description |
 |---|---|---|---|
@@ -1111,7 +1115,117 @@ Register a new vessel (git repository) in a fleet.
 }
 ```
 
-**Response:** The newly created [Vessel](#vessel) object.
+**Response:** The newly created [Vessel](#vessel) object. `repoUrl` is required; when it is missing the tool returns `{ "Error": "repoUrl is required when creating a vessel" }`. `LocalPath` is never set by this tool.
+
+---
+
+### discover_vessels
+
+Discover git repositories on the Admiral host to onboard as vessels. Scans the given directories and roots breadth-first (skipping excluded and dot-prefixed folders and symbolic links, never descending into a repository), classifies each candidate, and saves the result as an import batch with status `Discovered`. Creates no vessels; call [import_vessels](#import_vessels) with the returned `BatchId`.
+
+Requires a tenant admin caller. Every path must lie inside `Import.AllowedRoots` (or the user profile directory when none are configured). The rules, candidate statuses, and response shape match `POST /api/v1/vessels/import/discover` in [REST_API.md](REST_API.md#vessel-import).
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "directories": { "type": "array", "items": { "type": "string" }, "description": "Absolute directories. A git repository becomes one candidate; any other directory is scanned like a root." },
+    "roots": { "type": "array", "items": { "type": "string" }, "description": "Absolute roots to scan for git repositories." },
+    "maxDepth": { "type": "integer", "description": "Maximum scan depth below each root (1-16, default Import.MaxDepth)" }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `directories` | string[] | One of the two | Absolute directories (`~` is expanded) |
+| `roots` | string[] | One of the two | Absolute roots to scan |
+| `maxDepth` | integer | No | Levels below each root to search, 1-16 |
+
+**Example Input:**
+
+```json
+{ "roots": ["/Users/alex/Code"], "maxDepth": 3 }
+```
+
+**Response:** `VesselImportDiscoverResponse`: `BatchId`, `Batch` (a [VesselImportBatch](#vesselimportbatch)), `Candidates` (array of [VesselImportItem](#vesselimportitem)), `Truncated` (true when the 5,000-candidate cap was reached), and `Hints` (`{Code, Message}`; codes `PathNotVisibleToAdmiral`, `CandidateLimitReached`).
+
+On failure returns `{ "Error": "...", "Code": "..." }` with `Code` one of `InvalidRequest` (no paths, too many paths, or a relative path), `PathNotAllowed`, or `HarborNotSupported`, or `{ "Error": "discover_vessels requires a tenant admin" }`.
+
+---
+
+### import_vessels
+
+Import candidates from a [discover_vessels](#discover_vessels) batch as vessels. Each vessel gets `RepoUrl` = the origin URL (or the local path when there is no origin), `WorkingDirectory` = the discovered path, `DefaultBranch` = the inferred default branch, and no `LocalPath`, so deleting the vessel never removes the checkout. Paths that already have a vessel are recorded as `SkippedExisting`, so repeating an import is safe. Unselected candidates are recorded as `SkippedNotSelected`.
+
+Selections at or below `Import.InlineBatchLimit` (default 25) run inline and return every item; larger selections run as a background job and return immediately with `RunsInBackground: true` and a `JobId`. Poll the batch with `enumerate` (`entityType: "vessel_import_batch"`) or `GET /api/v1/vessels/import/batches/{id}`.
+
+Requires a tenant admin caller.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "batchId": { "type": "string", "description": "Batch ID (vib_ prefix) from discover_vessels" },
+    "paths": { "type": "array", "items": { "type": "string" }, "description": "Candidate paths to import, exactly as returned by discover_vessels" },
+    "allNew": { "type": "boolean", "description": "Import every candidate with status New (paths is then ignored)" },
+    "fleetId": { "type": "string", "description": "Fleet ID (flt_ prefix) to assign the vessels to" },
+    "defaultPipelineId": { "type": "string", "description": "Default pipeline ID (ppl_ prefix) for the vessels" },
+    "landingMode": { "type": "string", "description": "Landing mode for the vessels: LocalMerge, PullRequest, MergeQueue, or None" }
+  },
+  "required": ["batchId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `batchId` | string | Yes | Batch ID (`vib_` prefix) |
+| `paths` | string[] | Unless `allNew` | Candidate paths to import |
+| `allNew` | boolean | No | Import every candidate with status `New` |
+| `fleetId` | string | No | Fleet to assign the vessels to (must exist in the tenant) |
+| `defaultPipelineId` | string | No | Default pipeline for the vessels |
+| `landingMode` | string | No | `LocalMerge`, `PullRequest`, `MergeQueue`, or `None` |
+
+**Example Input:**
+
+```json
+{ "batchId": "vib_mut1abcd_Rp7EygrpeVo", "allNew": true, "fleetId": "flt_abc123" }
+```
+
+**Response:** `VesselImportResponse`: `BatchId`, `JobId` (null when inline), `RunsInBackground`, `Batch` (with `Status`, `CreatedCount`, `SkippedCount`, `FailedCount`), and `Items` (every [VesselImportItem](#vesselimportitem) with its `Outcome`, `OutcomeReason`, and `VesselId`; empty for a background import).
+
+On failure returns `{ "Error": "...", "Code": "..." }` with `Code` one of `InvalidRequest` (no paths, a path not in the batch, an unknown fleet or landing mode, or `allNew` with no New candidates), `BatchNotFound`, or `BatchBusy` (the batch is already being imported).
+
+#### VesselImportBatch
+
+| Field | Type | Description |
+|---|---|---|
+| `Id` | string | `vib_` prefix |
+| `TenantId`, `UserId` | string | Owner |
+| `Status` | string | `Discovered`, `Importing`, `Completed`, `CompletedWithFailures`, `Failed` |
+| `HarborId`, `FleetId`, `JobId` | string | Discovery host (null = Admiral), assigned fleet, background job |
+| `RequestedPathCount`, `CandidateCount`, `CreatedCount`, `SkippedCount`, `FailedCount` | int | Counts from discovery and the latest import |
+| `CreatedUtc`, `LastUpdateUtc`, `CompletedUtc` | datetime | Timestamps |
+
+#### VesselImportItem
+
+| Field | Type | Description |
+|---|---|---|
+| `Id` | string | `vii_` prefix |
+| `BatchId` | string | Owning batch |
+| `Path` | string | Normalized absolute path with on-disk casing |
+| `ProposedName` | string | Folder name made unique within the tenant (`-2`, `-3`, ...) |
+| `RemoteUrl`, `DefaultBranch` | string | Origin URL (null when none) and inferred default branch |
+| `CandidateStatus` | string | `New`, `AlreadyOnboarded`, `Worktree`, `ArmadaManaged`, `NotFound`, `NotGit`, `AccessDenied` |
+| `ExistingVesselId` | string | Matching existing vessel, or null |
+| `Outcome` | string | `Pending`, `Created`, `SkippedExisting`, `SkippedNotSelected`, `Failed` |
+| `OutcomeReason` | string | `VesselAlreadyExists`, `NotSelected`, `NotImportable`, `PathMissing`, `CreateFailed`, `Cancelled`, or null |
+| `OutcomeMessage` | string | Diagnostic text, or null |
+| `VesselId` | string | Vessel created for this item, or null |
 
 ---
 

@@ -66,6 +66,10 @@ namespace Armada.Core.Authorization
             // TenantAdmin endpoints
             if (path.EndsWith("/users") && method == "POST") return PermissionLevel.TenantAdmin;
             if (path.StartsWith("/api/v1/fleets") && method != "GET") return PermissionLevel.TenantAdmin;
+            // Vessel import: history reads are open to any authenticated tenant member; browse, discover, and import
+            // read the host filesystem, so every method (including GET browse) requires TenantAdmin.
+            if (path.StartsWith("/api/v1/vessels/import/batches")) return PermissionLevel.Authenticated;
+            if (path.StartsWith("/api/v1/vessels/import")) return PermissionLevel.TenantAdmin;
             if (path.StartsWith("/api/v1/vessels") && method != "GET") return PermissionLevel.TenantAdmin;
             if (path.StartsWith("/api/v1/captains") && method != "GET") return PermissionLevel.TenantAdmin;
             if (path.StartsWith("/api/v1/voyages") && method != "GET") return PermissionLevel.TenantAdmin;

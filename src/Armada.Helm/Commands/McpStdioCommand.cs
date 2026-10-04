@@ -103,6 +103,9 @@ namespace Armada.Helm.Commands
             RunbookService runbookService = new RunbookService(database, logging);
             ModelEndpointService modelEndpointService = new ModelEndpointService(database, logging);
             HarborService harborService = new HarborService(database, logging);
+            IVesselService vesselService = new VesselService(database);
+            IVesselImportService vesselImportService = new VesselImportService(
+                database, armadaSettings, new VesselDiscoveryService(database, armadaSettings), vesselService, new JobService(database, logging), logging);
             // Adapt Armada's JsonElement-based tool handlers to Voltaic's RpcParameters API.
             void RegisterAdapted(string name, string description, object inputSchema, Func<JsonElement?, Task<object>> handler)
             {
@@ -137,7 +140,9 @@ namespace Armada.Helm.Commands
                 agentLifecycle: agentLifecycle,
                 templateService: promptTemplateService,
                 modelEndpointService: modelEndpointService,
-                harborService: harborService);
+                harborService: harborService,
+                vesselService: vesselService,
+                vesselImportService: vesselImportService);
 
             // Run until stdin closes or process is killed
             using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

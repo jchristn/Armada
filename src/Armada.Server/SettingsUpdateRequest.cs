@@ -92,5 +92,11 @@ namespace Armada.Server
         /// When supplied, replaces the full remoteControl settings object.
         /// </summary>
         public RemoteControlSettings? RemoteControl { get; set; }
+
+        /// <summary>
+        /// Optional vessel import settings update (allowedRoots, maxDepth, excludedDirectoryNames, inlineBatchLimit).
+        /// When supplied, replaces the full import settings object; values are clamped by VesselImportSettings.
+        /// </summary>
+        public VesselImportSettings? Import { get; set; }
     }
 }

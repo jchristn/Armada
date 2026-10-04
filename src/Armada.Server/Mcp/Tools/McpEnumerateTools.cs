@@ -37,19 +37,19 @@ namespace Armada.Server.Mcp.Tools
         {
             register(
                 "enumerate",
-                "Find and browse entities with paginated, filtered, sorted access to: objectives, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, and runbook_executions. Returns paginated results with total counts. Filter by vesselId, fleetId, captainId, voyageId, status, date range, and more.",
+                "Find and browse entities with paginated, filtered, sorted access to: objectives, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, and vessel_import_batch. Returns paginated results with total counts. Filter by vesselId, fleetId, captainId, voyageId, status, date range, and more.",
                 new
                 {
                     type = "object",
                     properties = new
                     {
-                        entityType = new { type = "string", description = "Entity type to enumerate: objectives, jobs, model_endpoints, harbors, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions" },
+                        entityType = new { type = "string", description = "Entity type to enumerate: objectives, jobs, model_endpoints, harbors, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, vessel_import_batch" },
                         pageNumber = new { type = "integer", description = "Page number (1-based, default 1)" },
                         pageSize = new { type = "integer", description = "Results per page (default 10, max 1000)" },
                         order = new { type = "string", description = "Sort order: CreatedAscending, CreatedDescending (default)" },
                         createdAfter = new { type = "string", description = "ISO 8601 timestamp — only return entities created after this time" },
                         createdBefore = new { type = "string", description = "ISO 8601 timestamp — only return entities created before this time" },
-                        status = new { type = "string", description = "Filter by status (entity-specific: Pending/InProgress/Complete/Failed/Cancelled for missions, Active/Complete/Cancelled for voyages, Idle/Working/Stalled for captains, Queued/Testing/Passed/Failed/Landed/Cancelled for merge queue)" },
+                        status = new { type = "string", description = "Filter by status (entity-specific: Pending/InProgress/Complete/Failed/Cancelled for missions, Active/Complete/Cancelled for voyages, Idle/Working/Stalled for captains, Queued/Testing/Passed/Failed/Landed/Cancelled for merge queue, Discovered/Importing/Completed/CompletedWithFailures/Failed for vessel_import_batch)" },
                         search = new { type = "string", description = "Optional free-text search where supported (currently releases)" },
                         fleetId = new { type = "string", description = "Filter by fleet ID (vessels)" },
                         vesselId = new { type = "string", description = "Filter by vessel ID (missions, docks)" },
@@ -482,8 +482,16 @@ namespace Armada.Server.Mcp.Tools
                                 PageSize = query.PageSize
                             }).ConfigureAwait(false);
                             return (object)checkRuns;
+                        case "vessel_import_batch":
+                        case "vessel_import_batches":
+                        case "vessel-import-batch":
+                        case "import_batches":
+                            EnumerationResult<VesselImportBatch> importBatches = await database.VesselImportBatches.EnumerateAsync(
+                                String.IsNullOrEmpty(callerCtx.TenantId) ? Armada.Core.Constants.DefaultTenantId : callerCtx.TenantId,
+                                query).ConfigureAwait(false);
+                            return (object)importBatches;
                         default:
-                            return (object)new { Error = "Unknown entity type: " + entityType + ". Valid types: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, jobs, model_endpoints" };
+                            return (object)new { Error = "Unknown entity type: " + entityType + ". Valid types: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, jobs, model_endpoints, vessel_import_batch" };
                     }
                 });
         }

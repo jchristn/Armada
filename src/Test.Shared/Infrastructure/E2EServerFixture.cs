@@ -222,6 +222,10 @@ namespace Test.Shared.Infrastructure
             // falls back to 127.0.0.1 -- which massively inflates E2E time and pushes cases toward the
             // per-case timeout. Pinning to 127.0.0.1 on both ends keeps every connection pure IPv4.
             settings.Rest.Hostname = "127.0.0.1";
+            // Vessel import tests create repositories under the system temp directory, which is outside the user
+            // profile on macOS, so allow it explicitly; a low inline limit lets them exercise the background-job path.
+            settings.Import.AllowedRoots = new List<string> { Path.GetTempPath() };
+            settings.Import.InlineBatchLimit = 3;
             settings.InitializeDirectories();
 
             // Pre-seed the server's database from the shared migrated-and-seeded template so the server's

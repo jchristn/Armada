@@ -29,6 +29,7 @@ namespace Armada.Server.Routes
         private readonly VesselContextService? _contextService;
         private readonly IGitService? _git;
         private readonly ArmadaSettings? _settings;
+        private readonly IVesselService _VesselService;
 
         /// <summary>
         /// Instantiate.
@@ -42,6 +43,7 @@ namespace Armada.Server.Routes
         /// <param name="contextService">Optional service that builds/refines a vessel's Model Context.</param>
         /// <param name="git">Optional git service for branch management operations.</param>
         /// <param name="settings">Optional application settings for repository path resolution.</param>
+        /// <param name="vesselService">Optional shared vessel creation service. Defaults to a new <see cref="VesselService"/>.</param>
         public VesselRoutes(
             DatabaseDriver database,
             VesselReadinessService readiness,
@@ -51,7 +53,8 @@ namespace Armada.Server.Routes
             IDockService? dockService = null,
             VesselContextService? contextService = null,
             IGitService? git = null,
-            ArmadaSettings? settings = null)
+            ArmadaSettings? settings = null,
+            IVesselService? vesselService = null)
         {
             _database = database;
             _readiness = readiness ?? throw new ArgumentNullException(nameof(readiness));
@@ -62,6 +65,7 @@ namespace Armada.Server.Routes
             _contextService = contextService;
             _git = git;
             _settings = settings;
+            _VesselService = vesselService ?? new VesselService(database);
         }
 
         /// <summary>
@@ -157,10 +161,9 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 400;
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "repoUrl is required when creating a vessel" };
                 }
-                vessel.NormalizeGitHubTokenOverride();
                 vessel.TenantId = ctx.TenantId;
                 vessel.UserId = ctx.UserId;
-                vessel = await _database.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+                vessel = await _VesselService.CreateAsync(vessel, false).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 201;
                 return vessel;
             },
