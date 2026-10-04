@@ -334,6 +334,43 @@ namespace Armada.Core.Services.Ask
         }
 
         /// <summary>
+        /// Finish a message that was reserved earlier with <see cref="AppendMessageAsync"/> (for example the
+        /// captain's reply, reserved when the turn starts so that confirm cards and work updates posted while the
+        /// captain is still writing appear after it). Updates the content and kind, stores the tool calls, and
+        /// emits <c>ask.message</c> with the final message.
+        /// </summary>
+        /// <param name="thread">Thread that owns the message.</param>
+        /// <param name="message">The reserved message with its final content.</param>
+        /// <param name="toolCalls">Tool calls made while producing it, or null.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The updated message.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when thread or message is null.</exception>
+        public async Task<AskMessage> CompleteMessageAsync(AskThread thread, AskMessage message, List<AskMessageToolCall>? toolCalls = null, CancellationToken token = default)
+        {
+            if (thread == null) throw new ArgumentNullException(nameof(thread));
+            if (message == null) throw new ArgumentNullException(nameof(message));
+            message = await _Database.AskMessages.UpdateAsync(message, token).ConfigureAwait(false);
+
+            if (toolCalls != null && toolCalls.Count > 0)
+            {
+                foreach (AskMessageToolCall call in toolCalls)
+                {
+                    call.TenantId = thread.TenantId;
+                    call.UserId = thread.UserId;
+                    call.ThreadId = thread.Id;
+                    call.MessageId = message.Id;
+                }
+
+                await _Database.AskMessageToolCalls.CreateManyAsync(toolCalls, token).ConfigureAwait(false);
+            }
+
+            await PopulateAsync(thread, new List<AskMessage> { message }, token).ConfigureAwait(false);
+            Emit(thread, "ask.message", new { threadId = thread.Id, message });
+            await EmitThreadAsync(thread.Id, token).ConfigureAwait(false);
+            return message;
+        }
+
+        /// <summary>
         /// Name a thread after its first user message when it still has the default title.
         /// </summary>
         /// <param name="thread">Thread.</param>

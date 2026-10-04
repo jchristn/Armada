@@ -301,6 +301,32 @@ describe('AskArmada conversation', () => {
   });
 });
 
+describe('AskArmada integration fixes', () => {
+  it('does not warn about MCP for a Claude Code captain (the server connects it per turn)', async () => {
+    vi.mocked(api.getCaptainTools).mockResolvedValue({ runtime: 'ClaudeCode', armadaToolCount: 0 } as never);
+    renderAt('/ask/ath_1');
+    await screen.findByText('Checkout tests');
+    await waitFor(() => expect(api.getCaptainTools).toHaveBeenCalled());
+    expect(screen.queryByText(/not connected to Armada over MCP/)).not.toBeInTheDocument();
+  });
+
+  it('still warns for a runtime the server does not connect (e.g. Codex without Armada MCP)', async () => {
+    vi.mocked(api.listCaptains).mockResolvedValue(page([{ id: 'cpt_1', name: 'Ada', runtime: 'Codex', model: 'gpt' } as never]));
+    vi.mocked(api.getCaptainTools).mockResolvedValue({ runtime: 'Codex', armadaToolCount: 0 } as never);
+    renderAt('/ask/ath_1');
+    expect(await screen.findByText(/not connected to Armada over MCP/)).toBeInTheDocument();
+  });
+
+  it('does not render the empty reply reserved while the captain is still writing', async () => {
+    vi.mocked(enumerateAskMessages).mockResolvedValue({ messages: [...messages, { id: 'amg_reserved', threadId: 'ath_1', sequence: 999, role: 'Assistant', kind: 'Text', contentText: '' } as never], hasMore: false });
+    renderAt('/ask/ath_1');
+    await screen.findByText('Checkout tests');
+    await waitFor(() => expect(enumerateAskMessages).toHaveBeenCalled());
+    await waitFor(() => expect(document.querySelectorAll('[data-sequence]').length).toBeGreaterThan(0));
+    expect(document.querySelector('[data-sequence="999"]')).toBeNull();
+  });
+});
+
 describe('AskArmada quick actions', () => {
   it('opens the menu on /, and /dispatch submits the MCP dispatch arguments', async () => {
     vi.mocked(runAskQuickAction).mockResolvedValue({ id: 'aap_q', threadId: 'ath_1', toolName: 'dispatch', source: 'QuickAction', status: 'Executed' });

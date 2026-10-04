@@ -2,7 +2,7 @@
 
 > **Type:** implementation plan (work-tracking). Annotate task status and the progress log as you go.
 >
-> **Status:** Backend (Phases 0-3) and dashboard (Phase 4) merged on `feature/ask-home-base`; integration verification (P5.2) in progress
+> **Status:** Implemented and verified end to end (Phases 0-5); merged to `main`
 > **Last updated:** 2026-10-04
 
 Status values: `[ ]` not started, `[~]` in progress, `[x]` done, `[!]` blocked.
@@ -234,7 +234,7 @@ default.
 
 - [~] **P5.1** REST_API.md, MCP_API.md (thread-scoped behavior and the approval result text),
   WEBSOCKET_API.md, Postman ("Ask Threads" folder), CHANGELOG, README Ask Armada section.
-- [ ] **P5.2** Real end-to-end on macOS with a throwaway data directory and a real Claude Code captain:
+- [x] **P5.2** Real end-to-end on macOS with a throwaway data directory and a real Claude Code captain:
   start a thread, ask a question, ask it to dispatch a small voyage against a temp repo, approve the confirm
   card, watch the work card and milestone messages update through landing, open a second thread for a
   separate activity, rename, summarize, delete. Screenshots at 1512 px light and dark.
@@ -262,6 +262,7 @@ default.
 | 2026-10-04 | backend agent | P3.1-P3.2 | `AskWorkSnapshotBuilder`, `AskWorkTracker` (hub change events + sweep), `AskMilestoneDetector`, narration with idle check and deterministic fallback, unread counts. |
 | 2026-10-04 | backend agent | P5.2 (backend part) | Real run on macOS against a throwaway server (ports 47890/47891, `ARMADA_DATA_DIR` in a scratch directory) with a real Claude Code captain: unauthenticated `/ws` got `401`; the captain called `mcp__armada__dispatch` over its thread-scoped token and got "Proposed as aap_..." (no voyage existed before approval); approve executed the real handler (voyage created in the user's tenant), a second approve got `409`; `ask.work` snapshots and `WorkUpdate` messages followed the voyage (started, work produced, finished, the last one narrated by the captain); a second tenant's socket received only its `status.snapshot` and its REST read of the thread was `404`. Fixed during the run: percent-encoded session tokens on `?token=`, and voyages Armada marks Complete while a mission is still landing are now followed until every mission settles. |
 | 2026-10-04 | backend agent | P5.1 | REST_API.md, MCP_API.md, WEBSOCKET_API.md, Postman "Ask Threads" folder, CHANGELOG. README Ask section left for the dashboard merge. |
+| 2026-10-04 | orchestrator | P5.2 | Integration run through the real dashboard (Playwright, Chromium, 1512 px) against a throwaway server (ports 57890/57891) with a real Claude Code captain and a temp repo with a bare origin, vessel `LocalMerge` with auto-land on. Three conversations: (1) captain proposed `dispatch`, confirm card in about 6 s, approved, mission ran, landing failed because the first temp repo had no `origin` (test setup; the thread reported it correctly, including a captain-written explanation); (2) same flow in a new conversation through "Mission landed" and "voyage complete", commit verified on origin; (3) after fixes, order verified and rename, summarize, and delete exercised. Fixed during integration: the "not connected to Armada over MCP" banner was shown for Claude Code captains even though the server connects them per turn; the captain's reply was persisted when the turn ended, so a confirm card approved while the captain was still writing (and the resulting updates) sorted above the reply; the reply's position is now reserved when the turn starts. Full suite 2889/2889, dashboard 218/218. |
 
 ## UI assumptions (dashboard, 2026-10-04)
 

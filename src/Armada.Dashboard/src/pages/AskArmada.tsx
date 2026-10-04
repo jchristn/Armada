@@ -484,8 +484,10 @@ export default function AskArmada() {
 
   // ---------------------------------------------------------------- render
 
-  const isApiEndpoint = tools?.runtime === 'ApiEndpoint';
-  const mcpMissing = !!activeCaptainId && tools != null && tools.armadaToolCount <= 0 && !isApiEndpoint;
+  // The server connects ApiEndpoint and Claude Code captains to Armada's MCP tools for every thread turn
+  // (a thread-scoped token), so their own host MCP configuration does not matter here.
+  const serverProvidesMcp = tools?.runtime === 'ApiEndpoint' || tools?.runtime === 'ClaudeCode';
+  const mcpMissing = !!activeCaptainId && tools != null && tools.armadaToolCount <= 0 && !serverProvidesMcp;
   const noCaptain = !activeCaptainId;
 
   const emptyState = thread ? (

@@ -317,10 +317,21 @@ namespace Armada.Server.Ask
             string? messageId = null;
             string? error = null;
             bool reserved = false;
+            AskMessage? placeholder = null;
             try
             {
                 Emit(thread, "ask.turn", new { threadId = thread.Id, turnId = handle.TurnId, state = "started", messageId = (string?)null });
-                await _Threads.EmitThreadAsync(thread.Id).ConfigureAwait(false);
+
+                // Reserve the reply's place in the thread now. Confirm cards, approvals, and work updates can be
+                // posted while the captain is still writing; reserving the sequence keeps them after the reply
+                // that introduced them instead of above it.
+                AskMessage reservation = new AskMessage();
+                reservation.Role = AskMessageRoleEnum.Assistant;
+                reservation.Kind = AskMessageKindEnum.Text;
+                reservation.CaptainId = handle.CaptainId;
+                reservation.ContentText = String.Empty;
+                placeholder = await _Threads.AppendMessageAsync(thread, reservation, true).ConfigureAwait(false);
+                messageId = placeholder.Id;
 
                 Captain? captain = await _Database.Captains.ReadAsync(handle.CaptainId!).ConfigureAwait(false);
                 if (captain == null) throw new InvalidOperationException("The conversation's captain no longer exists.");
@@ -329,6 +340,7 @@ namespace Armada.Server.Ask
 
                 AskThread current = await _Threads.ReadThreadInternalAsync(thread.Id).ConfigureAwait(false) ?? thread;
                 List<AskMessage> history = await _Threads.ReadRecentMessagesAsync(current, _Settings.Ask.HistoryTurns).ConfigureAwait(false);
+                if (placeholder != null) history.RemoveAll(m => String.Equals(m.Id, placeholder.Id, StringComparison.Ordinal));
                 string? systemPrompt = await ResolveSystemPromptAsync().ConfigureAwait(false);
 
                 CaptainChatTurnOptions options = new CaptainChatTurnOptions();
@@ -364,12 +376,24 @@ namespace Armada.Server.Ask
                     error = reply.ContentText;
                 }
 
-                reply = await _Threads.AppendMessageAsync(thread, reply, true, result.ToolCalls).ConfigureAwait(false);
+                reply = await FinishReplyAsync(thread, placeholder, reply, result.ToolCalls).ConfigureAwait(false);
                 messageId = reply.Id;
             }
             catch (OperationCanceledException)
             {
                 state = "cancelled";
+                try
+                {
+                    if (placeholder != null)
+                    {
+                        AskMessage stopped = new AskMessage();
+                        stopped.Role = AskMessageRoleEnum.System;
+                        stopped.Kind = AskMessageKindEnum.Error;
+                        stopped.ContentText = "Stopped before the captain finished replying.";
+                        await FinishReplyAsync(thread, placeholder, stopped, null).ConfigureAwait(false);
+                    }
+                }
+                catch { }
             }
             catch (Exception ex)
             {
@@ -382,7 +406,9 @@ namespace Armada.Server.Ask
                     failure.Role = AskMessageRoleEnum.System;
                     failure.Kind = AskMessageKindEnum.Error;
                     failure.ContentText = ex.Message;
-                    failure = await _Threads.AppendMessageAsync(thread, failure, true).ConfigureAwait(false);
+                    failure = placeholder != null
+                        ? await FinishReplyAsync(thread, placeholder, failure, null).ConfigureAwait(false)
+                        : await _Threads.AppendMessageAsync(thread, failure, true).ConfigureAwait(false);
                     messageId = failure.Id;
                 }
                 catch { }
@@ -395,6 +421,20 @@ namespace Armada.Server.Ask
                 try { await _Threads.EmitThreadAsync(thread.Id).ConfigureAwait(false); }
                 catch { }
             }
+        }
+
+        private async Task<AskMessage> FinishReplyAsync(AskThread thread, AskMessage? placeholder, AskMessage reply, List<AskMessageToolCall>? toolCalls)
+        {
+            if (placeholder == null)
+                return await _Threads.AppendMessageAsync(thread, reply, true, toolCalls).ConfigureAwait(false);
+
+            placeholder.Role = reply.Role;
+            placeholder.Kind = reply.Kind;
+            placeholder.ContentText = reply.ContentText;
+            placeholder.ThinkingText = reply.ThinkingText;
+            placeholder.CaptainId = reply.CaptainId ?? placeholder.CaptainId;
+            placeholder.DurationMs = reply.DurationMs;
+            return await _Threads.CompleteMessageAsync(thread, placeholder, toolCalls).ConfigureAwait(false);
         }
 
         private async Task RunSummaryAsync(AskThread thread, AskTurnHandle handle)

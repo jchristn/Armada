@@ -72,6 +72,40 @@ namespace Test.Shared.Suites.Services
                 AssertContains(thread.Id, System.Text.Json.JsonSerializer.Serialize(h.EventsFor("usr_turn", "ask.tool")[0].Payload), "ask.tool carries threadId");
             }));
 
+            cases.Add(CaseAsync("reply_sorts_before_messages_posted_mid_turn", "A confirm card or work update posted while the captain is still writing sorts after the captain's reply", async () =>
+            {
+                using AskTestHarness h = await AskTestHarness.CreateAsync().ConfigureAwait(false);
+                AuthContext owner = AskTestHarness.User("usr_order");
+                Captain captain = await NewCaptainAsync(h, "usr_order").ConfigureAwait(false);
+                AskThread thread = await h.Threads.CreateThreadAsync(owner, new AskThreadCreateRequest { CaptainId = captain.Id }).ConfigureAwait(false);
+                h.Runner.Reply = "I proposed the dispatch; approve it below.";
+                h.Runner.Gate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+                AskTurnStart start = await h.Turns.SendMessageAsync(owner, thread.Id, new AskMessageSendRequest { Content = "Dispatch it." }).ConfigureAwait(false);
+                AssertEqual(202, start.StatusCode);
+                for (int i = 0; i < 100 && h.Runner.Calls.Count == 0; i++) await Task.Delay(20).ConfigureAwait(false);
+                AssertEqual(1, h.Runner.Calls.Count, "turn is running");
+
+                AskThread internalThread = (await h.Threads.ReadThreadInternalAsync(thread.Id).ConfigureAwait(false))!;
+                AskMessage midTurn = new AskMessage();
+                midTurn.Role = AskMessageRoleEnum.System;
+                midTurn.Kind = AskMessageKindEnum.WorkUpdate;
+                midTurn.ContentText = "Voyage started.";
+                await h.Threads.AppendMessageAsync(internalThread, midTurn, true).ConfigureAwait(false);
+
+                AskMessagePage during = (await h.Threads.EnumerateMessagesAsync(owner, thread.Id, null).ConfigureAwait(false))!;
+                h.Runner.Gate.TrySetResult(true);
+                await WaitForTurnEndAsync(h, thread.Id).ConfigureAwait(false);
+
+                AskMessagePage page = (await h.Threads.EnumerateMessagesAsync(owner, thread.Id, null).ConfigureAwait(false))!;
+                List<AskMessage> ordered = page.Messages.OrderBy(m => m.Sequence).ToList();
+                AssertEqual(3, ordered.Count, "user, reply, update (no extra placeholder)");
+                AssertEqual(AskMessageRoleEnum.User, ordered[0].Role);
+                AssertEqual("I proposed the dispatch; approve it below.", ordered[1].ContentText, "reply filled in at its reserved position");
+                AssertEqual(AskMessageKindEnum.WorkUpdate, ordered[2].Kind, "mid-turn update sorts after the reply");
+                AssertEqual(3, during.Messages.Count, "reservation existed while the captain was writing");
+            }));
+
             cases.Add(CaseAsync("one_turn_per_thread", "A second message while a turn runs is refused with 409; cancel stops the turn", async () =>
             {
                 using AskTestHarness h = await AskTestHarness.CreateAsync().ConfigureAwait(false);
@@ -88,7 +122,7 @@ namespace Test.Shared.Suites.Services
                 AskTurnStart second = await h.Turns.SendMessageAsync(owner, thread.Id, new AskMessageSendRequest { Content = "two" }).ConfigureAwait(false);
                 AssertEqual(409, second.StatusCode, "conflict");
                 AssertEqual(409, (await h.Turns.SummarizeAsync(owner, thread.Id).ConfigureAwait(false)).StatusCode, "summary also conflicts");
-                AssertEqual(1, (await h.Threads.EnumerateMessagesAsync(owner, thread.Id, null).ConfigureAwait(false))!.Messages.Count, "refused message not stored");
+                AssertEqual(1, (await h.Threads.EnumerateMessagesAsync(owner, thread.Id, null).ConfigureAwait(false))!.Messages.Count(m => m.Role == AskMessageRoleEnum.User), "refused message not stored (only the first user message exists)");
 
                 AssertEqual(404, await h.Turns.CancelAsync(AskTestHarness.User("usr_else"), thread.Id).ConfigureAwait(false), "another user cannot cancel");
                 AssertEqual(200, await h.Turns.CancelAsync(owner, thread.Id).ConfigureAwait(false), "owner cancels");
