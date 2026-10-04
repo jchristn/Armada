@@ -103,6 +103,12 @@ namespace Armada.Server
         private IMissionService _MissionService = null!;
         private CaptainToolService _CaptainTools = null!;
 
+        private Armada.Core.Services.Ask.AskThreadService _AskThreads = null!;
+        private Armada.Server.Ask.AskActionService _AskActions = null!;
+        private Armada.Server.Ask.AskTurnCoordinator _AskTurns = null!;
+        private Armada.Server.Ask.AskWorkTracker _AskTracker = null!;
+        private CaptainChatService _CaptainChat = null!;
+
         private AgentLifecycleHandler _AgentLifecycle = null!;
         private MissionLandingHandler _MissionLanding = null!;
 
@@ -442,6 +448,21 @@ namespace Armada.Server
 
             _RemoteTunnel.OnHandleRequest = HandleRemoteTunnelRequestAsync;
 
+            // Ask Armada threads: thread store, approval gate / action executor, turn coordinator, and work tracker.
+            // Thread events go only to the owner's sockets.
+            _CaptainChat = new CaptainChatService(_Database, _RuntimeFactory, _WebSocketHub, _PromptTemplateService, _SessionTokenService, _Settings.McpPort, _Logging);
+            _AskThreads = new Armada.Core.Services.Ask.AskThreadService(_Database, _Settings, _Logging);
+            _AskActions = new Armada.Server.Ask.AskActionService(_Database, _AskThreads, _Settings, _Logging);
+            _AskTurns = new Armada.Server.Ask.AskTurnCoordinator(_Database, _AskThreads, _CaptainChat, _SessionTokenService, _PromptTemplateService, _Settings, _Logging);
+            _AskTracker = new Armada.Server.Ask.AskWorkTracker(_Database, _AskThreads, _Settings, _Logging);
+            _AskThreads.OnUserEvent = (tenantId, userId, eventType, payload) => _WebSocketHub.SendToUser(tenantId, userId, eventType, payload);
+            _AskThreads.ActiveTurnResolver = _AskTurns.ActiveTurnId;
+            _AskActions.OnWorkLinked = _AskTracker.OnWorkLinkedAsync;
+            _AskActions.OnProposalApproved = _AskTurns.StartFollowUpAsync;
+            _AskTracker.Narrate = _AskTurns.NarrateAsync;
+            _AskTracker.ExpireProposals = _AskActions.ExpireDueAsync;
+            _WebSocketHub.EntityChanged += _AskTracker.OnEntityChanged;
+
             RegisterRoutes();
             InitializeDashboard();
 
@@ -469,6 +490,9 @@ namespace Armada.Server
 
             Task mcpTask = Task.Run(() => _McpServer.StartAsync(_TokenSource.Token));
             _Logging.Info(_Header + "MCP server started on port " + _Settings.McpPort);
+
+            _AskTracker.Start(_TokenSource.Token);
+            _Logging.Debug(_Header + "Ask Armada work tracker started");
 
             _RemoteTunnel.Start(_TokenSource.Token);
             _Logging.Info(_Header + "remote tunnel manager started");
@@ -555,6 +579,7 @@ namespace Armada.Server
 
             _VesselHealthService?.Dispose();
             _TokenSource.Cancel();
+            _AskTracker?.Stop();
             _FleetActionRunner?.Stop();
             _RemoteTunnel?.StopAsync().GetAwaiter().GetResult();
             _RemoteDashboardRelay?.DisposeAsync().GetAwaiter().GetResult();
@@ -574,6 +599,9 @@ namespace Armada.Server
             string? tokenHeader = ctx.Request.Headers.Get("X-Token");
             string? apiKeyHeader = ctx.Request.Headers.Get("X-Api-Key");
             AuthContext result = await _AuthenticationService.AuthenticateAsync(authHeader, tokenHeader, apiKeyHeader).ConfigureAwait(false);
+
+            // Thread-scoped Ask Armada tokens are minted for a captain's MCP connection only; never accept them on REST.
+            if (!String.IsNullOrEmpty(result.AskThreadId)) result = new AuthContext();
             _RequestAuthContexts.Remove(ctx);
             _RequestAuthContexts.Add(ctx, result);
             return result;
@@ -614,6 +642,10 @@ namespace Armada.Server
                             ["isTenantAdmin"] = ctx.IsTenantAdmin ? "true" : "false",
                             ["authMethod"] = ctx.AuthMethod ?? "Mcp"
                         };
+
+                        // A thread-scoped token marks every tool call of this request as an Ask Armada thread call, which
+                        // the tool gate turns into a proposal unless the tool is read-only or the thread auto-approves.
+                        if (!String.IsNullOrEmpty(ctx.AskThreadId)) result.Claims["askThreadId"] = ctx.AskThreadId!;
                     }
                 }
             }
@@ -724,7 +756,7 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Ask Armada assistant
-            new AskRoutes(new AskArmadaService(_Database, _Admiral, _Logging), new CaptainChatService(_Database, _RuntimeFactory, _WebSocketHub, _PromptTemplateService, _SessionTokenService, _Settings.McpPort, _Logging), _JsonOptions)
+            new AskRoutes(new AskArmadaService(_Database, _Admiral, _Logging), _CaptainChat, _JsonOptions, _AskThreads, _AskTurns, _AskActions)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Needs-you inbox
@@ -1157,6 +1189,10 @@ namespace Armada.Server
         /// </summary>
         private void RegisterAdaptedTool(string name, string description, object inputSchema, Func<System.Text.Json.JsonElement?, Task<object>> handler)
         {
+            // Every tool goes through the Ask Armada gate: calls made with a thread-scoped token become proposals unless
+            // read-only or auto-approved; all other calls run unchanged. The original handler is kept for in-process
+            // execution of approved proposals and quick actions.
+            handler = _AskActions.WrapTool(name, handler);
             _McpServer.RegisterTool(name, description, inputSchema, (RpcParameters? parameters) =>
             {
                 System.Text.Json.JsonElement? args = null;

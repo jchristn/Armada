@@ -5,8 +5,8 @@ namespace Armada.Core.Models
     using Armada.Core.Enums;
 
     /// <summary>
-    /// The live data of a work card: the tracked entity's status, progress, and per-mission (or per-target) detail.
-    /// Built by the Ask work tracker; its hash detects changes.
+    /// The live data of a work card, one flat object: the tracked entity's status, counts, and per-mission (or per-target)
+    /// rows. Built by the Ask work tracker; its hash (computed without CapturedUtc) detects changes.
     /// </summary>
     public class AskWorkSnapshot
     {
@@ -71,22 +71,22 @@ namespace Armada.Core.Models
         /// <summary>
         /// Number of missions, targets, or items.
         /// </summary>
-        public int Total { get; set; } = 0;
+        public int TotalCount { get; set; } = 0;
 
         /// <summary>
         /// Number finished successfully.
         /// </summary>
-        public int Completed { get; set; } = 0;
+        public int CompletedCount { get; set; } = 0;
 
         /// <summary>
-        /// Number failed.
+        /// Number failed or cancelled.
         /// </summary>
-        public int Failed { get; set; } = 0;
+        public int FailedCount { get; set; } = 0;
 
         /// <summary>
         /// Number still running or waiting.
         /// </summary>
-        public int Active { get; set; } = 0;
+        public int ActiveCount { get; set; } = 0;
 
         /// <summary>
         /// Progress percentage 0-100.
@@ -100,14 +100,14 @@ namespace Armada.Core.Models
         /// <summary>
         /// Counts keyed by status string.
         /// </summary>
-        public Dictionary<string, int> CountsByStatus
+        public Dictionary<string, int> Counts
         {
-            get => _CountsByStatus;
-            set => _CountsByStatus = value ?? new Dictionary<string, int>();
+            get => _Counts;
+            set => _Counts = value ?? new Dictionary<string, int>();
         }
 
         /// <summary>
-        /// Per-mission rows (voyages, missions, and fleet action targets that produced voyages).
+        /// Per-mission rows (voyages, missions, and the voyages of fleet action Mission targets).
         /// </summary>
         public List<AskWorkMissionSnapshot> Missions
         {
@@ -127,7 +127,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Failure reason or error text, or null.
         /// </summary>
-        public string? Error { get; set; } = null;
+        public string? ErrorText { get; set; } = null;
 
         /// <summary>
         /// UTC start time, or null.
@@ -139,6 +139,11 @@ namespace Armada.Core.Models
         /// </summary>
         public DateTime? CompletedUtc { get; set; } = null;
 
+        /// <summary>
+        /// UTC time the snapshot was built (excluded from the change hash).
+        /// </summary>
+        public DateTime? CapturedUtc { get; set; } = null;
+
         #endregion
 
         #region Private-Members
@@ -148,7 +153,7 @@ namespace Armada.Core.Models
         private string _EntityId = String.Empty;
         private string _Title = String.Empty;
         private int _Progress = 0;
-        private Dictionary<string, int> _CountsByStatus = new Dictionary<string, int>();
+        private Dictionary<string, int> _Counts = new Dictionary<string, int>();
         private List<AskWorkMissionSnapshot> _Missions = new List<AskWorkMissionSnapshot>();
         private List<AskWorkTargetSnapshot> _Targets = new List<AskWorkTargetSnapshot>();
 

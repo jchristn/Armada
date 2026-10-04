@@ -117,6 +117,11 @@ namespace Armada.Core.Models
         /// </summary>
         public DateTime LastUpdateUtc { get; set; } = DateTime.UtcNow;
 
+        /// <summary>
+        /// When a Pending proposal expires (CreatedUtc + Ask.ProposalExpiryMinutes); null once decided (computed on read; not persisted).
+        /// </summary>
+        public DateTime? ExpiresUtc { get; set; } = null;
+
         #endregion
 
         #region Private-Members

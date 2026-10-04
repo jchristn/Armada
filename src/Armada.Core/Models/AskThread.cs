@@ -101,9 +101,9 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
-        /// Whether a captain turn is currently running in this thread (computed on read; not persisted).
+        /// Identifier of the captain turn currently running in this thread, or null (computed on read; not persisted).
         /// </summary>
-        public bool TurnRunning { get; set; } = false;
+        public string? ActiveTurnId { get; set; } = null;
 
         /// <summary>
         /// UTC creation time.

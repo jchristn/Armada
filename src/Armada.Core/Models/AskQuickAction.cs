@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using System.Text.Json.Nodes;
 
     /// <summary>
     /// A built-in quick action offered by the Ask Armada composer, with its argument schema.
@@ -9,6 +10,15 @@ namespace Armada.Core.Models
     public class AskQuickAction
     {
         #region Public-Members
+
+        /// <summary>
+        /// Stable name, for example dispatch (the command without the slash).
+        /// </summary>
+        public string Name
+        {
+            get => _Name;
+            set => _Name = value ?? String.Empty;
+        }
 
         /// <summary>
         /// Slash command, for example /dispatch.
@@ -65,10 +75,16 @@ namespace Armada.Core.Models
             set => _Arguments = value ?? new List<AskQuickActionArgument>();
         }
 
+        /// <summary>
+        /// JSON schema of the tool arguments (type object, properties, required), or null.
+        /// </summary>
+        public JsonObject? ArgumentsSchema { get; set; } = null;
+
         #endregion
 
         #region Private-Members
 
+        private string _Name = String.Empty;
         private string _Command = String.Empty;
         private string _Title = String.Empty;
         private string _Description = String.Empty;

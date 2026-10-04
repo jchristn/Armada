@@ -62,9 +62,19 @@ namespace Armada.Core.Models
         public string? CaptainName { get; set; } = null;
 
         /// <summary>
+        /// Pipeline stage (the mission's persona), or null.
+        /// </summary>
+        public string? PipelineStage { get; set; } = null;
+
+        /// <summary>
         /// Working branch, or null.
         /// </summary>
         public string? BranchName { get; set; } = null;
+
+        /// <summary>
+        /// Latest check run for the mission (chk_ prefix), or null.
+        /// </summary>
+        public string? CheckRunId { get; set; } = null;
 
         /// <summary>
         /// Status of the latest check run for the mission, or null.
@@ -72,7 +82,17 @@ namespace Armada.Core.Models
         public string? CheckRunStatus { get; set; } = null;
 
         /// <summary>
+        /// Merge-queue entry of the mission, or null.
+        /// </summary>
+        public string? MergeEntryId { get; set; } = null;
+
+        /// <summary>
         /// Status of the mission's merge-queue entry, or null.
+        /// </summary>
+        public string? MergeQueueStatus { get; set; } = null;
+
+        /// <summary>
+        /// Alias of MergeQueueStatus, or null.
         /// </summary>
         public string? MergeStatus { get; set; } = null;
 

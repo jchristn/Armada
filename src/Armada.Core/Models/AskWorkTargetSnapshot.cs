@@ -56,6 +56,11 @@ namespace Armada.Core.Models
         public string? VoyageId { get; set; } = null;
 
         /// <summary>
+        /// First mission of the target's voyage, or null.
+        /// </summary>
+        public string? MissionId { get; set; } = null;
+
+        /// <summary>
         /// Command exit code, or null.
         /// </summary>
         public int? ExitCode { get; set; } = null;

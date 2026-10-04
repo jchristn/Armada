@@ -431,7 +431,7 @@ namespace Armada.Server.WebSocket
 
         private static bool IsUsable(AuthContext? auth)
         {
-            return auth != null && auth.IsAuthenticated && !String.IsNullOrEmpty(auth.UserId);
+            return auth != null && auth.IsAuthenticated && !String.IsNullOrEmpty(auth.UserId) && String.IsNullOrEmpty(auth.AskThreadId);
         }
 
         private static WebSocketCredentials ExtractCredentials(HttpContextBase ctx)
