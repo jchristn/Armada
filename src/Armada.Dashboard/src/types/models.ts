@@ -2835,6 +2835,14 @@ export interface FleetActionSettingsData {
   runRetentionDays: number;
 }
 
+/** Server `Retention` settings group: days to keep each kind of data; 0 means never (0-3650). */
+export interface RetentionSettingsData {
+  askThreadArchiveAfterDays: number;
+  askThreadDeleteAfterDays: number;
+  jobRetentionDays: number;
+  importBatchRetentionDays: number;
+}
+
 // ---------------------------------------------------------------------------
 // Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md). The server sends PascalCase; the API client camelizes.
 // Every field the plan does not pin down is optional so the UI tolerates a slightly different server shape.
