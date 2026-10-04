@@ -650,6 +650,16 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
+        /// Login rate limiting and lockout: failed password logins per account and failed authentications per client
+        /// address (429 with Retry-After while locked out).
+        /// </summary>
+        public LoginRateLimitSettings LoginRateLimit
+        {
+            get => _LoginRateLimit;
+            set => _LoginRateLimit = value ?? new LoginRateLimitSettings();
+        }
+
+        /// <summary>
         /// Message template settings for commit messages and PR descriptions.
         /// </summary>
         public MessageTemplateSettings MessageTemplates { get; set; } = new MessageTemplateSettings();
@@ -805,6 +815,7 @@ namespace Armada.Core.Settings
         private int _IdleCaptainTimeoutSeconds = Constants.DefaultIdleCaptainTimeoutSeconds;
         private RemoteControlSettings _RemoteControl = new RemoteControlSettings();
         private McpSettings _Mcp = new McpSettings();
+        private LoginRateLimitSettings _LoginRateLimit = new LoginRateLimitSettings();
         private TelemetrySettings _Telemetry = new TelemetrySettings();
         private HarborServerSettings _Harbor = new HarborServerSettings();
         private VesselImportSettings _Import = new VesselImportSettings();

@@ -39,6 +39,10 @@ The full model, the surface inventory, and the list of open and fixed findings a
   The first dashboard sign-in with the default password requires changing it, which also disables the `default`
   bearer token. Headless installs set `ARMADA_INITIAL_ADMIN_PASSWORD` before the first start. Self-registration is off
   by default.
+- **Passwords and guessing.** Passwords are stored as salted PBKDF2-HMAC-SHA256 (600,000 iterations); hashes from
+  earlier releases are upgraded at startup or on the next login. Repeated failed logins lock the account, and repeated
+  failed credentials lock the client address, with exponential backoff (429 with `Retry-After`; `loginRateLimit`
+  settings, see [REST_API.md](docs/REST_API.md#login-rate-limiting)).
 - **Agents run with your permissions.** Captains are CLI agents launched with auto-approve flags by default. Read
   [Running agents safely](docs/SECURITY_REVIEW.md#running-agents-safely) and turn `autoApprove` off for captains that do
   not need unattended shell access.

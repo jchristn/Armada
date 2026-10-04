@@ -98,6 +98,11 @@ namespace Test.Shared.Infrastructure
             settings.ReposDirectory = Path.Combine(dataDirectory, "repos");
             settings.ApiKey = "test-key-" + Guid.NewGuid().ToString("N");
             settings.HeartbeatIntervalSeconds = 300;
+            // Shared fixtures serve many suites from one loopback address, several of which test bad passwords and
+            // invalid tokens on purpose: lift the login rate limits so one suite cannot lock out the next. The limiter
+            // itself is covered by E2E.LoginSecurity on a dedicated server.
+            settings.LoginRateLimit.MaxFailuresPerAccount = 1000;
+            settings.LoginRateLimit.MaxFailuresPerAddress = 100000;
             settings.Rest.Hostname = "127.0.0.1";
             configure?.Invoke(settings);
 

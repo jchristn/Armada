@@ -50,7 +50,10 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
-        /// SHA256 hash of the user's password (hex, lowercase).
+        /// Stored password hash. On input (API requests, new objects) this may be the lowercase hex SHA-256 of the
+        /// password; the database layer stores it salted and stretched (<see cref="Armada.Core.Services.PasswordHasher"/>,
+        /// format <c>pbkdf2-sha256$iterations$salt$hash</c>). Legacy rows may still hold an unsalted SHA-256 hex value
+        /// until the next successful login or Admiral start upgrades them. Never returned by the API (redacted).
         /// </summary>
         public string PasswordSha256
         {
@@ -152,16 +155,14 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
-        /// Verify a plaintext password against this user's stored hash.
+        /// Verify a plaintext password against this user's stored hash (salted PBKDF2 or legacy SHA-256), in constant time.
         /// </summary>
         /// <param name="plainText">Plaintext password to verify.</param>
         /// <returns>True if the password matches.</returns>
         public bool VerifyPassword(string plainText)
         {
             if (string.IsNullOrEmpty(plainText)) return false;
-            byte[] computed = Encoding.ASCII.GetBytes(ComputePasswordHash(plainText));
-            byte[] stored = Encoding.ASCII.GetBytes((PasswordSha256 ?? String.Empty).ToLowerInvariant());
-            return CryptographicOperations.FixedTimeEquals(computed, stored);
+            return Armada.Core.Services.PasswordHasher.Verify(plainText, PasswordSha256);
         }
 
         /// <summary>
@@ -172,7 +173,7 @@ namespace Armada.Core.Models
         public bool UsesDefaultPassword()
         {
             if (!String.Equals(Email, Constants.DefaultUserEmail, StringComparison.OrdinalIgnoreCase)) return false;
-            return VerifyPassword(Constants.DefaultUserPassword);
+            return Armada.Core.Services.PasswordHasher.MatchesDefaultPassword(PasswordSha256);
         }
 
         /// <summary>

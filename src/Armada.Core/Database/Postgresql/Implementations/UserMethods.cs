@@ -50,6 +50,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
         public async Task<UserMaster> CreateAsync(UserMaster user, CancellationToken token = default)
         {
             if (user == null) throw new ArgumentNullException(nameof(user));
+            user.PasswordSha256 = Armada.Core.Services.PasswordHasher.ToStorageFormat(user.PasswordSha256);
             user.LastUpdateUtc = DateTime.UtcNow;
 
             using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
@@ -185,6 +186,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
         public async Task<UserMaster> UpdateAsync(UserMaster user, CancellationToken token = default)
         {
             if (user == null) throw new ArgumentNullException(nameof(user));
+            user.PasswordSha256 = Armada.Core.Services.PasswordHasher.ToStorageFormat(user.PasswordSha256);
             user.LastUpdateUtc = DateTime.UtcNow;
 
             using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))

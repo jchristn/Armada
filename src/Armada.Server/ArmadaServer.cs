@@ -119,6 +119,7 @@ namespace Armada.Server
 
         private ISessionTokenService _SessionTokenService = null!;
         private IAuthenticationService _AuthenticationService = null!;
+        private LoginRateLimiter _LoginRateLimiter = null!;
         private IAuthorizationService _AuthorizationService = null!;
         private IMissionService _MissionService = null!;
         private CaptainToolService _CaptainTools = null!;
@@ -193,6 +194,9 @@ namespace Armada.Server
             // Safe defaults: apply an initial admin password from the environment (headless installs), retire the
             // seeded "default" bearer token once the default password is gone, and refuse to listen on a non-loopback
             // hostname while default credentials are still in use unless explicitly allowed.
+            // Upgrade password hashes written by earlier releases (unsalted SHA-256) to salted PBKDF2.
+            await new PasswordHashUpgradeService(_Database, _Logging).UpgradeLegacyHashesAsync().ConfigureAwait(false);
+
             await EnforceDefaultCredentialPolicyAsync().ConfigureAwait(false);
 
             // Initialize services
@@ -303,6 +307,7 @@ namespace Armada.Server
                 _Logging.Info(_Header + "auto-generated session token encryption key");
             }
             _AuthenticationService = new AuthenticationService(_Database, _SessionTokenService, _Settings, _Logging);
+            _LoginRateLimiter = new LoginRateLimiter(_Settings.LoginRateLimit);
             _AuthorizationService = new AuthorizationService();
 
             // Seed synthetic admin identity if API key is configured
@@ -752,6 +757,21 @@ namespace Armada.Server
 
             if (requirement.Level == PermissionLevel.NoAuthRequired) return;
 
+            // A client address locked out after repeated failed authentications cannot present a guessable credential
+            // (bearer token, API key) until the lockout ends.
+            if (AuthRoutes.PresentsGuessableCredential(ctx))
+            {
+                TimeSpan? retryAfter = _LoginRateLimiter.CheckAddress(AuthRoutes.ClientAddress(ctx));
+                if (retryAfter != null)
+                {
+                    ApiErrorResponse limited = AuthRoutes.TooManyAttempts(ctx, retryAfter.Value);
+                    ApplyCorsHeaders(ctx);
+                    ctx.Response.ContentType = "application/json";
+                    await ctx.Response.Send(_App.Serializer.SerializeJson(limited, false)).ConfigureAwait(false);
+                    return;
+                }
+            }
+
             AuthContext auth = await AuthenticateRequestAsync(ctx).ConfigureAwait(false);
             if (!_AuthorizationService.IsAuthorized(auth, requirement))
             {
@@ -798,6 +818,8 @@ namespace Armada.Server
             string? tokenHeader = ctx.Request.Headers.Get("X-Token");
             string? apiKeyHeader = ctx.Request.Headers.Get("X-Api-Key");
             AuthContext result = await _AuthenticationService.AuthenticateAsync(authHeader, tokenHeader, apiKeyHeader).ConfigureAwait(false);
+            if (!result.IsAuthenticated && (!String.IsNullOrEmpty(authHeader) || !String.IsNullOrEmpty(apiKeyHeader)))
+                _LoginRateLimiter?.RecordAddressFailure(AuthRoutes.ClientAddress(ctx));
 
             // Thread-scoped Ask Armada tokens are minted for a captain's MCP connection only; never accept them on REST.
             if (!String.IsNullOrEmpty(result.AskThreadId)) result = new AuthContext();
@@ -828,6 +850,25 @@ namespace Armada.Server
 
             if (presented)
             {
+                string? address = request.RemoteEndPoint?.Address?.ToString();
+                bool guessable = !String.IsNullOrEmpty(authHeader) || !String.IsNullOrEmpty(apiKeyHeader);
+                if (guessable)
+                {
+                    TimeSpan? retryAfter = _LoginRateLimiter?.CheckAddress(address);
+                    if (retryAfter != null)
+                    {
+                        string seconds = LoginRateLimiter.ToRetryAfterSeconds(retryAfter.Value);
+                        AuthenticationResult limited = new AuthenticationResult
+                        {
+                            IsAuthenticated = false,
+                            StatusCode = 429,
+                            ErrorMessage = "Too many failed attempts; try again in " + seconds + " seconds"
+                        };
+                        limited.Headers["Retry-After"] = seconds;
+                        return limited;
+                    }
+                }
+
                 AuthContext? ctx = null;
                 try
                 {
@@ -839,7 +880,10 @@ namespace Armada.Server
                 }
 
                 if (ctx == null || !ctx.IsAuthenticated || String.IsNullOrEmpty(ctx.UserId))
+                {
+                    if (guessable) _LoginRateLimiter?.RecordAddressFailure(address);
                     return AuthenticationResult.BearerChallenge(null, "invalid_token", "Invalid or expired credential", "Invalid or expired credential.");
+                }
 
                 AuthenticationResult result = new AuthenticationResult { IsAuthenticated = true, Principal = ctx.UserId };
                 result.Claims = new Dictionary<string, string>
@@ -963,7 +1007,7 @@ namespace Armada.Server
             Func<WatsonWebserver.Core.HttpContextBase, Task<AuthContext>> authenticate = AuthenticateRequestAsync;
 
             // Authentication & identity
-            new AuthRoutes(_SessionTokenService, _AuthenticationService, _Database, _Settings, _JsonOptions, new DefaultCredentialService(_Database, _Logging))
+            new AuthRoutes(_SessionTokenService, _AuthenticationService, _Database, _Settings, _JsonOptions, new DefaultCredentialService(_Database, _Logging), _LoginRateLimiter)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Tenants, users, credentials
@@ -1191,6 +1235,8 @@ namespace Armada.Server
                 ctx.Response.Headers.Add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
             if (!ctx.Response.Headers.AllKeys.Contains("Access-Control-Allow-Headers"))
                 ctx.Response.Headers.Add("Access-Control-Allow-Headers", "Content-Type, X-Api-Key, X-Token, Authorization");
+            if (!ctx.Response.Headers.AllKeys.Contains("Access-Control-Expose-Headers"))
+                ctx.Response.Headers.Add("Access-Control-Expose-Headers", "Retry-After");
         }
 
         private async Task CaptureRequestHistoryAsync(HttpContextBase ctx)
