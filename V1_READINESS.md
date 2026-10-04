@@ -137,12 +137,13 @@ The goal is a written threat model and a closed list of findings, not just fixes
 
 ### W4. Quality and test reliability
 
-- [ ] **W4.1 CI on every push and PR.** Workflow that runs `Test.Automated` on Windows, macOS, and Linux (net8.0 and
+- [x] **W4.1 CI on every push and PR.** Workflow that runs `Test.Automated` on Windows, macOS, and Linux (net8.0 and
   net10.0), the dashboard `npm ci && npm run build && npm run test:run`, and fails on new compiler warnings.
+  _Notes:_ ci.yml validated with actionlint; not yet run on Actions.
 - [ ] **W4.2 Fix flakiness.** Root-cause the end-to-end server startup timeouts (readiness waits on both REST and
   MCP listeners; ports; machine load) and the SQL Server timeouts (native amd64 runner instead of emulation). Target:
   20 consecutive green full runs.
-- [ ] **W4.3 Provider parity in CI.** Nightly `run-db-parity-tests.sh` against all four providers.
+- [x] **W4.3 Provider parity in CI.** Nightly `run-db-parity-tests.sh` against all four providers.
 - [ ] **W4.4 Coverage of risky paths.** Landing (local merge, PR, merge queue), recovery of stalled captains, Harbor
   link loss and reconnect, self-rebuild rollback, cancel paths for voyages, fleet action runs, health evaluation, and
   imports.
@@ -152,25 +153,32 @@ The goal is a written threat model and a closed list of findings, not just fixes
 
 ### W5. Packaging and distribution
 
-- [ ] **W5.1 Decide the supported install paths for 1.0.** Recommended minimum: Docker (Admiral + dashboard + proxy),
+- [x] **W5.1 Decide the supported install paths for 1.0.** Recommended minimum: Docker (Admiral + dashboard + proxy),
   NuGet/global tool for the CLI, Windows installers (Inno for Harbor, WiX for the server), macOS signed and notarized
   `.app` for Harbor and `.pkg` for the server, Linux Deb/Rpm. Anything else (Homebrew, Scoop, Chocolatey, Winget,
   AppImage) ships only if implemented; otherwise disable those channels in `publisher.json` and remove them from the
   README.
-- [ ] **W5.2 Implement the missing chosen channels** in `Armada.Publisher`, with code signing (Windows Authenticode,
+- [~] **W5.2 Implement the missing chosen channels** in `Armada.Publisher`, with code signing (Windows Authenticode,
   Apple Developer ID plus notarization) and checksums published with each release.
-- [ ] **W5.3 Harbor as a real macOS app.** `.app` bundle with `Info.plist`, `.icns` generated from
+  _Notes:_ Dmg, Pkg, and WiX channels implemented with signing/notarization gated on secrets and SHA256SUMS per release; still needs certificates and a Windows run of WiX.
+- [~] **W5.3 Harbor as a real macOS app.** `.app` bundle with `Info.plist`, `.icns` generated from
   `Assets/logo-macos.png`, login-item support; keep the runtime Dock-icon fallback for `dotnet run`.
-- [ ] **W5.4 Repository requirements.** Add `DOCKERHUB_README.md` and `docker/update.bat` (and `.sh`) per the
+  _Notes:_ .app with Info.plist and generated .icns built and verified on macOS; login-item support not done.
+- [x] **W5.4 Repository requirements.** Add `DOCKERHUB_README.md` and `docker/update.bat` (and `.sh`) per the
   repository requirements; confirm every service has a Docker healthcheck with `interval: 5s`, `retries: 2`.
 - [ ] **W5.5 Install verification.** For each supported path, a clean-machine install test (VM or CI runner) that
   reaches a logged-in dashboard and dispatches one mission.
+- [ ] **W5.6 Service and startup registration flags.** The installers pass `--install-service`,
+  `--uninstall-service`, `--run-service` (server) and `--install-startup` / `--uninstall-startup` (Harbor) from
+  `publisher.json`, but neither program implements them, so the Inno and WiX installers launch the program instead of
+  registering it and the systemd unit passes an ignored argument. Implement the flags (Windows service, systemd unit,
+  launchd agent; Harbor login item) or remove them before 1.0.
 
 ### W6. Product completeness and usability
 
 - [ ] **W6.1 Simulated user testing.** Run a full session per `SIMULATED_USER_TESTING.md` against each release
   candidate in an isolated `armada-usertest` stack; triage S1/S2 findings before release.
-- [ ] **W6.2 Captain support matrix.** `docs/CAPTAINS.md`: supported versions of Claude Code, Codex, Gemini, Cursor,
+- [x] **W6.2 Captain support matrix.** `docs/CAPTAINS.md`: supported versions of Claude Code, Codex, Gemini, Cursor,
   Mux, OpenCode, and API endpoints, and which features each supports (missions, planning, Ask threads, Ask approval
   gating -- today only Claude Code and ApiEndpoint are gated -- streaming, thinking, tool display).
 - [ ] **W6.3 Ask approval gating for every runtime.** Extend thread-scoped MCP to the remaining CLI runtimes without
@@ -188,14 +196,14 @@ The goal is a written threat model and a closed list of findings, not just fixes
 
 - [ ] **W7.1 Docs audit.** README, GETTING_STARTED, REST_API, MCP_API, WEBSOCKET_API, and the per-runtime orchestrator
   guides checked against the frozen surface; remove em-dashes repo-wide per the writing requirements.
-- [ ] **W7.2 Operations guide.** `docs/OPERATIONS.md`: deployment topologies, ports, TLS, backups, upgrades,
+- [x] **W7.2 Operations guide.** `docs/OPERATIONS.md`: deployment topologies, ports, TLS, backups, upgrades,
   retention, telemetry, troubleshooting.
 - [ ] **W7.3 Security guide.** `SECURITY.md` with how to report vulnerabilities and the security model summary from
   W1.
 
 ### W8. Release process
 
-- [ ] **W8.1 Release checklist** in `docs/RELEASING.md` (tests, parity, upgrade test, user testing, packaging, signing,
+- [x] **W8.1 Release checklist** in `docs/RELEASING.md` (tests, parity, upgrade test, user testing, packaging, signing,
   CHANGELOG, tag).
 - [ ] **W8.2 Beta.** v0.10.0 (alpha label dropped only on explicit approval) containing W1, W2.2-W2.3, W3.1-W3.2, W4.1.
 - [ ] **W8.3 Release candidates.** v1.0.0-rc.N; each RC gets a simulated user testing session and at least a week of
@@ -232,3 +240,4 @@ history), captain-suggested Ask thread titles, commit-message enforcement at lan
 | Date | Author | Task(s) | Change |
 |------|--------|---------|--------|
 | 2026-10-04 | (design) | -- | Plan drafted from the 2026-10-04 working session. |
+| 2026-10-04 | ops agent | W4.1, W4.3, W5.1-W5.4, W6.2, W7.2, W8.1 | CI on push/PR (3 OSes x net8/net10, dashboard dist check), nightly parity, non-D1 channels disabled, DOCKERHUB_README and docker/update scripts, healthchecks on every HTTP service, macOS Harbor .app/.dmg and server .pkg built and verified locally, WiX channel (unverified on Windows), SHA256SUMS, CAPTAINS/OPERATIONS/RELEASING docs. Found W5.6. |
