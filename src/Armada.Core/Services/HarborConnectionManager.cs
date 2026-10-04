@@ -83,21 +83,36 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(handshake.HarborId)) throw new ArgumentException("Handshake is missing a harbor id.");
             if (String.IsNullOrWhiteSpace(handshake.Name)) throw new ArgumentException("Handshake is missing a harbor name.");
 
+            // Register (or re-link) first: a Harbor id registered to another identity is refused before the live
+            // connection is replaced, so another credential cannot take over the link.
+            try
+            {
+                await _Harbors.UpsertFromHandshakeAsync(
+                    handshake.HarborId,
+                    tenantId,
+                    userId,
+                    handshake.Name,
+                    handshake.ProtocolVersion,
+                    handshake.OsPlatform,
+                    handshake.Architecture,
+                    handshake.MaxConcurrentJobs,
+                    handshake.Capabilities,
+                    token).ConfigureAwait(false);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _Logging.Warn(_Header + "refused harbor " + handshake.HarborId + ": " + ex.Message);
+                return new HarborHandshakeAck
+                {
+                    CorrelationId = handshake.CorrelationId,
+                    Accepted = false,
+                    Reason = "Harbor id is registered to a different identity."
+                };
+            }
+
             HarborConnection connection = new HarborConnection(handshake.HarborId, tenantId, userId, send);
             connection.SetLiveJobs(null);
             _Connections[handshake.HarborId] = connection;
-
-            await _Harbors.UpsertFromHandshakeAsync(
-                handshake.HarborId,
-                tenantId,
-                userId,
-                handshake.Name,
-                handshake.ProtocolVersion,
-                handshake.OsPlatform,
-                handshake.Architecture,
-                handshake.MaxConcurrentJobs,
-                handshake.Capabilities,
-                token).ConfigureAwait(false);
 
             _Logging.Info(_Header + "harbor " + handshake.HarborId + " linked (" + handshake.Name + ")");
             return new HarborHandshakeAck

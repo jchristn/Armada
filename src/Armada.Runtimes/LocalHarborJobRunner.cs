@@ -103,11 +103,21 @@ namespace Armada.Runtimes
 
             _Logging.Info("[LocalHarborJobRunner] launching " + runtimeType + " for job " + jobId + " in " + request.WorkingDirectory);
 
+            // Apply the auto-approve decision the Admiral resolved (captain setting plus vessel override). The Harbor has
+            // no database, so the decision travels in the launch request; null (an older Admiral) keeps the default.
+            Armada.Core.Models.Captain? launchCaptain = null;
+            if (request.AutoApprove.HasValue)
+            {
+                launchCaptain = new Armada.Core.Models.Captain("harbor-job-" + jobId);
+                launchCaptain.RuntimeOptionsJson = CaptainRuntimeOptions.WithAutoApprove(null, request.AutoApprove.Value);
+            }
+
             await runtime.StartAsync(
                 request.WorkingDirectory,
                 request.Prompt ?? string.Empty,
                 request.Environment,
                 model: request.Model,
+                captain: launchCaptain,
                 token: token).ConfigureAwait(false);
         }
 

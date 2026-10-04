@@ -60,6 +60,12 @@ namespace Armada.Core.Harbor
         /// </summary>
         public HarborInferenceEndpoint? InferenceEndpoint { get; set; } = null;
 
+        /// <summary>
+        /// Whether the CLI runtime runs with its auto-approve or permission-bypass flag, resolved on the Admiral from
+        /// the captain setting and any vessel override. Null (an older Admiral) keeps the runtime default (on).
+        /// </summary>
+        public bool? AutoApprove { get; set; } = null;
+
         #endregion
     }
 }
