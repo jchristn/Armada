@@ -135,11 +135,15 @@ services:
       - "7893:7893"
     environment:
       - ARMADA_PROXY_SETTINGS_FILE=/config/proxysettings.json
+      - ARMADA_PROXY_PASSWORD=${ARMADA_PROXY_PASSWORD:?Set ARMADA_PROXY_PASSWORD ...}
     volumes:
       - ./proxysettings.json:/config/proxysettings.json:ro
       - ./data:/app/data
       - ./logs:/app/data/logs
 ```
+
+`ARMADA_PROXY_PASSWORD` is required: it is the shared proxy login and tunnel password, and the proxy refuses to start
+with the built-in default. Set the same value as `remoteControl.password` on each Armada instance that tunnels in.
 
 ### Volumes
 
@@ -216,6 +220,7 @@ For the proxy stack:
 
 ```bash
 cd docker/proxy
+export ARMADA_PROXY_PASSWORD='replace-with-a-strong-shared-secret'
 docker compose down
 docker compose up -d
 docker compose logs -f armada-proxy

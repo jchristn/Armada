@@ -32,6 +32,7 @@ namespace Armada.Proxy
         private readonly InstanceRegistry _Registry;
         private readonly ProxyAuthService _Auth;
         private readonly ProxyRoutePolicyService _RoutePolicy;
+        private readonly ProxyLoginRateLimiter _LoginLimiter;
         private readonly string _WwwrootDirectory;
         private readonly string _DashboardDirectory;
         private readonly DateTime _StartUtc = DateTime.UtcNow;
@@ -54,6 +55,7 @@ namespace Armada.Proxy
             _Registry = new InstanceRegistry(_Settings);
             _Auth = new ProxyAuthService(_Settings);
             _RoutePolicy = new ProxyRoutePolicyService();
+            _LoginLimiter = new ProxyLoginRateLimiter(_Settings);
             _WwwrootDirectory = Path.Combine(AppContext.BaseDirectory, "wwwroot");
             _DashboardDirectory = Path.Combine(AppContext.BaseDirectory, "dashboard");
             _Registry.EventReceived += HandleInstanceEvent;
@@ -62,11 +64,25 @@ namespace Armada.Proxy
         /// <summary>
         /// Start the proxy host.
         /// </summary>
+        /// <exception cref="InvalidOperationException">Thrown when the shared password is the built-in default and
+        /// <see cref="ProxySettings.AllowDefaultPassword"/> is not set.</exception>
         public Task StartAsync(CancellationToken token = default)
         {
             if (_Started)
             {
                 return Task.CompletedTask;
+            }
+
+            string? securityError = _Settings.GetStartupSecurityError();
+            if (securityError != null)
+            {
+                _Logging.Alert(_Header + securityError);
+                throw new InvalidOperationException(securityError);
+            }
+
+            if (_Settings.IsDefaultPassword)
+            {
+                _Logging.Warn(_Header + "running with the built-in default password because AllowDefaultPassword is set; anyone who can reach this proxy can sign in");
             }
 
             WebserverSettings webserverSettings = new WebserverSettings(_Settings.Hostname, _Settings.Port, false);
@@ -202,17 +218,29 @@ namespace Armada.Proxy
 
             MapJsonPost(server, "/proxy-api/v1/auth/login", (req) =>
             {
+                string clientKey = ResolveRequesterIp(req.Http);
+                if (_LoginLimiter.IsLockedOut(clientKey, out int lockedRetryAfter))
+                {
+                    return BuildTooManyAttempts(req, lockedRetryAfter);
+                }
+
                 JsonElement payload = ReadJsonBody(req);
                 string? nonce = GetOptionalProperty(payload, "nonce");
                 string? proofSha256 = GetOptionalProperty(payload, "proofSha256");
 
                 if (!_Auth.TryLogin(nonce, proofSha256, out ProxyAuthService.ProxyBrowserSession? session, out string? error))
                 {
+                    if (_LoginLimiter.RecordFailure(clientKey, out int lockoutSeconds))
+                    {
+                        _Logging.Warn(_Header + "browser login locked out for " + clientKey + " for " + lockoutSeconds + "s after repeated failures");
+                    }
+
                     req.Http.Response.StatusCode = 401;
                     return new { error = error ?? "Proxy authentication failed." };
                 }
 
-                req.Http.Response.Headers.Add("Set-Cookie", BuildSessionCookie(session!.Token, session.ExpiresUtc));
+                _LoginLimiter.RecordSuccess(clientKey);
+                req.Http.Response.Headers.Add("Set-Cookie", BuildSessionCookie(session!.Token, session.ExpiresUtc, IsSecureRequest(req.Http)));
                 _Logging.Debug(_Header + "browser login accepted");
                 return new
                 {
@@ -226,7 +254,7 @@ namespace Armada.Proxy
             {
                 string? sessionToken = GetProxySessionToken(req.Http.Request.Headers);
                 _Auth.Logout(sessionToken);
-                req.Http.Response.Headers.Add("Set-Cookie", BuildClearedSessionCookie());
+                req.Http.Response.Headers.Add("Set-Cookie", BuildClearedSessionCookie(IsSecureRequest(req.Http)));
                 return new { success = true };
             });
 
@@ -234,6 +262,12 @@ namespace Armada.Proxy
 
             MapJsonGet(server, "/proxy-api/v1/instances", (req) =>
             {
+                if (!TryGetBrowserSession(req.Http, out ProxyAuthService.ProxyBrowserSession? _))
+                {
+                    req.Http.Response.StatusCode = 401;
+                    return new { error = "Proxy authentication required. Sign in again." };
+                }
+
                 List<RemoteInstanceSummary> instances = _Registry.ListSummaries();
                 return new
                 {
@@ -614,9 +648,34 @@ namespace Armada.Proxy
                     return;
                 }
 
+                string tunnelClientKey = ResolveRequesterIp(ctx);
+                if (_LoginLimiter.IsLockedOut(tunnelClientKey, out int tunnelRetryAfter))
+                {
+                    string lockoutMessage = "Too many failed tunnel handshakes. Try again in " + tunnelRetryAfter + " seconds.";
+                    _Logging.Warn(_Header + "handshake refused from " + remoteAddress + ": client locked out for " + tunnelRetryAfter + "s");
+                    await SendEnvelopeAsync(
+                        session,
+                        RemoteTunnelProtocol.CreateResponse(
+                            firstEnvelope.CorrelationId,
+                            new RemoteTunnelRequestResult
+                            {
+                                StatusCode = 429,
+                                ErrorCode = "too_many_attempts",
+                                Message = lockoutMessage
+                            }),
+                        ctx.Token).ConfigureAwait(false);
+                    await session.CloseAsync(WebSocketCloseStatus.PolicyViolation, "Too many failed handshakes", ctx.Token).ConfigureAwait(false);
+                    return;
+                }
+
                 RemoteTunnelHandshakePayload? handshake = firstEnvelope.Payload?.Deserialize<RemoteTunnelHandshakePayload>(RemoteTunnelProtocol.JsonOptions);
                 if (!_Registry.TryValidateHandshake(handshake, out string? handshakeError))
                 {
+                    if (_LoginLimiter.RecordFailure(tunnelClientKey, out int tunnelLockoutSeconds))
+                    {
+                        _Logging.Warn(_Header + "tunnel handshakes locked out for " + tunnelClientKey + " for " + tunnelLockoutSeconds + "s after repeated failures");
+                    }
+
                     _Logging.Warn(_Header + "handshake rejected from " + remoteAddress + ": " + (handshakeError ?? "unknown reason"));
                     await SendEnvelopeAsync(
                         session,
@@ -634,6 +693,7 @@ namespace Armada.Proxy
                 }
 
                 RemoteInstanceSession proxySession = new RemoteInstanceSession((envelope, token) => SendEnvelopeAsync(session, envelope, token));
+                _LoginLimiter.RecordSuccess(tunnelClientKey);
                 instanceId = handshake!.InstanceId!.Trim();
                 _Registry.RegisterHandshake(handshake, remoteAddress, proxySession);
                 _Logging.Info(_Header + "handshake accepted for " + instanceId + " from " + remoteAddress);
@@ -1137,15 +1197,31 @@ namespace Armada.Proxy
             return instanceId + " does not support live dashboard websocket relay yet. Update Armada on that deployment and reconnect it.";
         }
 
-        private static string BuildSessionCookie(string token, DateTime expiresUtc)
+        private static string BuildSessionCookie(string token, DateTime expiresUtc, bool secure)
         {
             int maxAgeSeconds = (int)Math.Max(1, Math.Ceiling((expiresUtc - DateTime.UtcNow).TotalSeconds));
-            return Constants.ProxySessionCookieName + "=" + token + "; Path=/; HttpOnly; SameSite=Lax; Max-Age=" + maxAgeSeconds;
+            return Constants.ProxySessionCookieName + "=" + token + "; Path=/; HttpOnly; SameSite=Lax; Max-Age=" + maxAgeSeconds + (secure ? "; Secure" : "");
         }
 
-        private static string BuildClearedSessionCookie()
+        private static string BuildClearedSessionCookie(bool secure)
         {
-            return Constants.ProxySessionCookieName + "=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0";
+            return Constants.ProxySessionCookieName + "=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0" + (secure ? "; Secure" : "");
+        }
+
+        private bool IsSecureRequest(HttpContextBase ctx)
+        {
+            if (_Settings.SecureCookie) return true;
+            if (!_Settings.TrustForwardedHeaders) return false;
+            string? forwardedProto = ctx.Request.Headers.Get("X-Forwarded-Proto");
+            if (String.IsNullOrWhiteSpace(forwardedProto)) return false;
+            return String.Equals(forwardedProto.Split(',')[0].Trim(), "https", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static object BuildTooManyAttempts(ApiRequest req, int retryAfterSeconds)
+        {
+            req.Http.Response.StatusCode = 429;
+            req.Http.Response.Headers.Add("Retry-After", retryAfterSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            return new { error = "Too many failed sign-in attempts. Try again in " + retryAfterSeconds + " seconds." };
         }
 
         private bool TryGetBrowserSession(HttpContextBase ctx, out ProxyAuthService.ProxyBrowserSession? session)
@@ -1302,6 +1378,11 @@ namespace Armada.Proxy
 
         private string ResolveRequesterIp(HttpContextBase ctx)
         {
+            if (!_Settings.TrustForwardedHeaders)
+            {
+                return NormalizeForwardedValue(ctx.Request.Source?.IpAddress?.ToString()) ?? "unknown";
+            }
+
             return NormalizeForwardedValue(
                 ExtractForwardedIp(ctx.Request.Headers.Get("X-Forwarded-For")) ??
                 ExtractForwardedHeaderIp(ctx.Request.Headers.Get("Forwarded")) ??

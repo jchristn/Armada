@@ -7,6 +7,7 @@ services:
       - "7893:7893"
     environment:
       - ARMADA_PROXY_SETTINGS_FILE=/config/proxysettings.json
+      - ARMADA_PROXY_PASSWORD=${ARMADA_PROXY_PASSWORD:?Set ARMADA_PROXY_PASSWORD (the shared proxy and tunnel password; use the same value as RemoteControl.Password on each Armada instance) before starting}
     volumes:
       - ./proxysettings.json:/config/proxysettings.json:ro
       - ./data:/app/data
