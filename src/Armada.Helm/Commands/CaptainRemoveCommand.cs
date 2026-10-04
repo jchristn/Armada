@@ -17,7 +17,7 @@ namespace Armada.Helm.Commands
     public class CaptainRemoveCommand : BaseCommand<CaptainRemoveSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, CaptainRemoveSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, CaptainRemoveSettings settings, CancellationToken cancellationToken)
         {
             string captainId = settings.Id;
             if (!captainId.StartsWith("cpt_"))

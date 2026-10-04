@@ -32,7 +32,7 @@ namespace Armada.Helm.Commands
         /// <summary>
         /// Executes the backlog reorder command.
         /// </summary>
-        protected override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
         {
             if (!settings.Rank.HasValue)
             {

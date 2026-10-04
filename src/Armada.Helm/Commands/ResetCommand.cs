@@ -14,7 +14,7 @@ namespace Armada.Helm.Commands
     public class ResetCommand : BaseCommand<ResetSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, ResetSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, ResetSettings settings, CancellationToken cancellationToken)
         {
             ArmadaSettings armadaSettings = GetSettings();
 

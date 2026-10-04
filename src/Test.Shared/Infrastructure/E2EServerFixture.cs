@@ -18,7 +18,7 @@ namespace Test.Shared.Infrastructure
     /// Lazily boots a single in-process <see cref="ArmadaServer"/> backed by a temp SQLite
     /// database and exposes shared HTTP clients for end-to-end suites. The server starts once
     /// on first access (thread-safe) and is reused across every e2e suite, matching the legacy
-    /// automated harness. Readiness is confirmed by polling the health endpoint rather than a
+    /// automated harness. Readiness is confirmed by polling the REST and MCP health endpoints rather than a
     /// fixed sleep, so slow machines do not flake. The server and temp directory are torn down
     /// on process exit.
     /// </summary>
@@ -263,8 +263,15 @@ namespace Test.Shared.Infrastructure
             {
                 try
                 {
+                    // The MCP listener is started on a background task, so the REST health check alone does
+                    // not prove it is accepting connections; also probe the MCP server's unauthenticated
+                    // health check (GET /) before declaring the fixture ready.
                     HttpResponseMessage response = await AuthClient.GetAsync("/api/v1/status/health").ConfigureAwait(false);
-                    if (response.StatusCode == HttpStatusCode.OK) return;
+                    if (response.StatusCode == HttpStatusCode.OK)
+                    {
+                        HttpResponseMessage mcpResponse = await McpClient.GetAsync("/").ConfigureAwait(false);
+                        if (mcpResponse.StatusCode == HttpStatusCode.OK) return;
+                    }
                 }
                 catch (Exception ex)
                 {

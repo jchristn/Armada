@@ -26,7 +26,7 @@ namespace Armada.Helm.Commands
     public class McpStdioCommand : AsyncCommand<McpStdioSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, McpStdioSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, McpStdioSettings settings, CancellationToken cancellationToken)
         {
             // Load settings using Armada's configured serializer/options so camelCase settings.json is honored.
             ArmadaSettings armadaSettings = await ArmadaSettings.LoadAsync().ConfigureAwait(false);
@@ -69,6 +69,9 @@ namespace Armada.Helm.Commands
             McpServer mcpServer = new McpServer();
             mcpServer.ServerName = Constants.ProductName;
             mcpServer.ServerVersion = Constants.ProductVersion;
+            // Voltaic 2.1.4+ reports a throwing handler as a generic isError result; surface Armada's
+            // exception messages (e.g. "captain not found") so agents can react to them, as before.
+            mcpServer.IncludeToolExceptionMessages = true;
 
             // Register all Armada tools
             IGitService gitService = git;

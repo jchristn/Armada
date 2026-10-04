@@ -15,7 +15,7 @@ namespace Armada.Helm.Commands
     public class FleetListCommand : BaseCommand<FleetListSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, FleetListSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, FleetListSettings settings, CancellationToken cancellationToken)
         {
             string path = AppendPagination("/api/v1/fleets", settings);
             EnumerationResult<Fleet>? result = await GetAsync<EnumerationResult<Fleet>>(path).ConfigureAwait(false);

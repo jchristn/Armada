@@ -98,7 +98,7 @@ namespace Armada.Runtimes
             _Endpoint = endpoint ?? throw new ArgumentNullException(nameof(endpoint));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _MaxIterations = Math.Clamp(maxIterations, 1, 1000);
-            _ClientFactory = clientFactory ?? ((ep, log) => ModelEndpointClientFactory.Create(ep, log));
+            _ClientFactory = clientFactory ?? ((ep, log) => ModelEndpointClientFactory.CreateCompletion(ep, log));
         }
 
         /// <summary>
@@ -118,7 +118,7 @@ namespace Armada.Runtimes
             _EndpointResolver = endpointResolver ?? throw new ArgumentNullException(nameof(endpointResolver));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _MaxIterations = Math.Clamp(maxIterations, 1, 1000);
-            _ClientFactory = clientFactory ?? ((ep, log) => ModelEndpointClientFactory.Create(ep, log));
+            _ClientFactory = clientFactory ?? ((ep, log) => ModelEndpointClientFactory.CreateCompletion(ep, log));
         }
 
         #endregion
@@ -277,7 +277,11 @@ namespace Armada.Runtimes
                     ToolChatRequest request = new ToolChatRequest();
                     request.Messages = messages;
                     request.Tools = tools;
-                    if (!String.IsNullOrWhiteSpace(model)) request.Model = model;
+                    if (!String.IsNullOrWhiteSpace(model))
+                    {
+                        request.Options = new CompletionOptions();
+                        request.Options.Model = model;
+                    }
 
                     ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
 

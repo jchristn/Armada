@@ -402,6 +402,9 @@ namespace Armada.Server
             _McpServer = new McpHttpServer(_Settings.Rest.Hostname, _Settings.McpPort);
             _McpServer.ServerName = ArmadaConstants.ProductName;
             _McpServer.ServerVersion = ArmadaConstants.ProductVersion;
+            // Voltaic 2.1.4+ reports a throwing handler as a generic isError result; surface Armada's
+            // exception messages (e.g. "captain not found") so agents can react to them, as before.
+            _McpServer.IncludeToolExceptionMessages = true;
             _McpServer.AuthenticationHandler = AuthenticateMcpRequestAsync;
             RegisterMcpTools();
 

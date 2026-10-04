@@ -15,7 +15,7 @@ namespace Armada.Helm.Commands
     public class LogCommand : BaseCommand<LogSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, LogSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, LogSettings settings, CancellationToken cancellationToken)
         {
             string? logFile = await ResolveLogFileAsync(settings.Id).ConfigureAwait(false);
 

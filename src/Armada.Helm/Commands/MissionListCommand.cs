@@ -17,7 +17,7 @@ namespace Armada.Helm.Commands
     public class MissionListCommand : BaseCommand<MissionListSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, MissionListSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, MissionListSettings settings, CancellationToken cancellationToken)
         {
             List<string> queryParams = new List<string>();
             if (!string.IsNullOrEmpty(settings.Status)) queryParams.Add("status=" + settings.Status);

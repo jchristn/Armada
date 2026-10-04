@@ -15,7 +15,7 @@ namespace Armada.Helm.Commands
     public class FleetRemoveCommand : BaseCommand<FleetRemoveSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, FleetRemoveSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, FleetRemoveSettings settings, CancellationToken cancellationToken)
         {
             string fleetId = settings.Id;
             if (!fleetId.StartsWith("flt_"))

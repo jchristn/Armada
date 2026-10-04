@@ -16,7 +16,7 @@ namespace Armada.Helm.Commands
     public class ConfigShowCommand : BaseCommand<ConfigShowSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, ConfigShowSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, ConfigShowSettings settings, CancellationToken cancellationToken)
         {
             ArmadaSettings armadaSettings = await ArmadaSettings.LoadAsync().ConfigureAwait(false);
 

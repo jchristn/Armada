@@ -199,6 +199,7 @@ namespace Test.Shared.Suites.Runtimes
         private sealed class ScriptedClient : CompletionClientBase
         {
             private readonly Queue<ToolChatResponse> _Script;
+            private readonly CompletionOptions _Defaults = new CompletionOptions { Model = "scripted-model" };
 
             public ScriptedClient(Queue<ToolChatResponse> script, LoggingModule logging)
                 : base("http://localhost:1", null, logging)
@@ -206,42 +207,42 @@ namespace Test.Shared.Suites.Runtimes
                 _Script = script;
             }
 
-            public override Task<ToolChatResponse> ToolChatAsync(ToolChatRequest request, CancellationToken token = default)
+            public override CompletionOptions Defaults => _Defaults;
+
+            protected override Task<ToolChatResponse> ToolChatCoreAsync(ToolChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
             {
                 if (_Script.Count == 0) return Task.FromResult(new ToolChatResponse { Success = true, Text = "", ToolCalls = new List<ToolCall>() });
                 return Task.FromResult(_Script.Dequeue());
             }
 
-            public override Task<ChatResponse> ChatAsync(string prompt, ChatCompletionOptions? options = null, CancellationToken token = default) => throw new NotImplementedException();
-            public override Task<ChatStreamingResponse> ChatStreamingAsync(string prompt, ChatCompletionOptions? options = null, CancellationToken token = default) => throw new NotImplementedException();
-            public override Task<ToolChatStreamingResponse> ToolChatStreamingAsync(ToolChatRequest request, CancellationToken token = default) => throw new NotImplementedException();
-            public override Task<EmbeddingResponse> EmbedAsync(string input, EmbeddingOptions? options = null, CancellationToken token = default) => throw new NotImplementedException();
-            public override Task<EmbeddingResponse> EmbedAsync(List<string> inputs, EmbeddingOptions? options = null, CancellationToken token = default) => throw new NotImplementedException();
-            public override Task<GenerationResponse> GenerateAsync(string prompt, GenerationOptions? options = null, CancellationToken token = default) => throw new NotImplementedException();
-            public override Task<GenerationStreamingResponse> GenerateStreamingAsync(string prompt, GenerationOptions? options = null, CancellationToken token = default) => throw new NotImplementedException();
-            public override IAsyncEnumerable<ModelInformation> ListModelsAsync(CancellationToken token = default) => throw new NotImplementedException();
-            public override Task<ModelInformation?> GetModelInformationAsync(string model, CancellationToken token = default) => throw new NotImplementedException();
+            public override Task<bool> ValidateConnectivityAsync(CancellationToken token = default) => Task.FromResult(true);
+            protected override Task<ChatResponse> ChatCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
+            protected override Task<ChatStreamingResponse> ChatStreamingCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
+            protected override Task<ToolChatStreamingResponse> ToolChatStreamingCoreAsync(ToolChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
+            protected override Task<GenerationResponse> GenerateCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
+            protected override Task<GenerationStreamingResponse> GenerateStreamingCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
         }
 
         private sealed class BlockingClient : CompletionClientBase
         {
+            private readonly CompletionOptions _Defaults = new CompletionOptions { Model = "blocking-model" };
+
             public BlockingClient(LoggingModule logging) : base("http://localhost:1", null, logging) { }
 
-            public override async Task<ToolChatResponse> ToolChatAsync(ToolChatRequest request, CancellationToken token = default)
+            public override CompletionOptions Defaults => _Defaults;
+
+            protected override async Task<ToolChatResponse> ToolChatCoreAsync(ToolChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
             {
                 await Task.Delay(Timeout.Infinite, token).ConfigureAwait(false);
                 return new ToolChatResponse { Success = true, ToolCalls = new List<ToolCall>() };
             }
 
-            public override Task<ChatResponse> ChatAsync(string prompt, ChatCompletionOptions? options = null, CancellationToken token = default) => throw new NotImplementedException();
-            public override Task<ChatStreamingResponse> ChatStreamingAsync(string prompt, ChatCompletionOptions? options = null, CancellationToken token = default) => throw new NotImplementedException();
-            public override Task<ToolChatStreamingResponse> ToolChatStreamingAsync(ToolChatRequest request, CancellationToken token = default) => throw new NotImplementedException();
-            public override Task<EmbeddingResponse> EmbedAsync(string input, EmbeddingOptions? options = null, CancellationToken token = default) => throw new NotImplementedException();
-            public override Task<EmbeddingResponse> EmbedAsync(List<string> inputs, EmbeddingOptions? options = null, CancellationToken token = default) => throw new NotImplementedException();
-            public override Task<GenerationResponse> GenerateAsync(string prompt, GenerationOptions? options = null, CancellationToken token = default) => throw new NotImplementedException();
-            public override Task<GenerationStreamingResponse> GenerateStreamingAsync(string prompt, GenerationOptions? options = null, CancellationToken token = default) => throw new NotImplementedException();
-            public override IAsyncEnumerable<ModelInformation> ListModelsAsync(CancellationToken token = default) => throw new NotImplementedException();
-            public override Task<ModelInformation?> GetModelInformationAsync(string model, CancellationToken token = default) => throw new NotImplementedException();
+            public override Task<bool> ValidateConnectivityAsync(CancellationToken token = default) => Task.FromResult(true);
+            protected override Task<ChatResponse> ChatCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
+            protected override Task<ChatStreamingResponse> ChatStreamingCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
+            protected override Task<ToolChatStreamingResponse> ToolChatStreamingCoreAsync(ToolChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
+            protected override Task<GenerationResponse> GenerateCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
+            protected override Task<GenerationStreamingResponse> GenerateStreamingCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) => throw new NotImplementedException();
         }
 
         #endregion

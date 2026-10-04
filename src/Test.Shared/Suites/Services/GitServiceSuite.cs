@@ -310,6 +310,9 @@ namespace Test.Shared.Suites.Services
                     await File.WriteAllTextAsync(
                         Path.Combine(hooksDir, "post-checkout"),
                         "#!/bin/sh\nprintf '\\n<!-- dirty -->\\n' >> test/Dirty.csproj\n").ConfigureAwait(false);
+                    // git only runs executable hooks on Linux/macOS.
+                    if (!OperatingSystem.IsWindows())
+                        File.SetUnixFileMode(Path.Combine(hooksDir, "post-checkout"), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
                     await RunGitAsync(bareDir, "config", "core.hooksPath", hooksDir).ConfigureAwait(false);
 
                     InvalidOperationException? ex = null;

@@ -292,15 +292,19 @@ scripts\windows\build-all.bat v0.9.0
 
 The Windows `build-all.bat` covers server, dashboard, and proxy; the shell `build-all.sh` covers server and dashboard (the proxy image is published from Windows only). Omit the tag argument to build and push `:latest` only.
 
-### Repository-root release scripts (Windows)
+### Repository-root release scripts
 
-The repository root also carries `build-all.bat`, `build-admiral.bat`, and `build-proxy.bat`. Each requires an image tag and builds both that tag and `latest` on the `cloud-jchristn77-jchristn77` cloud builder for `linux/amd64` and `linux/arm64/v8`, pushes to Docker Hub, then pulls both tags back to refresh the local copy:
+The repository root also carries `build-all`, `build-admiral`, and `build-proxy` scripts, as `.bat` for Windows and `.sh` for Linux/macOS. Each requires an image tag and builds both that tag and `latest` on the `cloud-jchristn77-jchristn77` cloud builder for `linux/amd64` and `linux/arm64/v8`, pushes to Docker Hub, then pulls both tags back to refresh the local copy:
 
 ```bat
 build-all.bat v0.9.0
 ```
 
-`build-all.bat` calls `build-admiral.bat` (`jchristn77/armada-server`) and then `build-proxy.bat` (`jchristn77/armada-proxy`), stopping at the first failure.
+```bash
+./build-all.sh v0.9.0
+```
+
+`build-all` calls `build-admiral` (`jchristn77/armada-server`) and then `build-proxy` (`jchristn77/armada-proxy`), stopping at the first failure.
 
 ### Building locally (no push)
 

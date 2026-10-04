@@ -370,6 +370,10 @@ namespace Armada.Runtimes
         /// </summary>
         public virtual Task<bool> IsRunningAsync(int processId, CancellationToken token = default)
         {
+            // Non-positive ids are never a real child process. On macOS/Linux, GetProcessById(-1) can
+            // succeed because kill(-1, 0) addresses every process the caller may signal.
+            if (processId <= 0) return Task.FromResult(false);
+
             try
             {
                 Process process = Process.GetProcessById(processId);

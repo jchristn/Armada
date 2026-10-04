@@ -17,7 +17,7 @@ namespace Armada.Helm.Commands
     public class WatchCommand : BaseCommand<WatchSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, WatchSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, WatchSettings settings, CancellationToken cancellationToken)
         {
             int intervalMs = (settings.Interval ?? 5) * 1000;
             ArmadaSettings armadaSettings = GetSettings();

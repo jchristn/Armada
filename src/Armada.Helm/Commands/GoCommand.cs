@@ -19,7 +19,7 @@ namespace Armada.Helm.Commands
     public class GoCommand : BaseCommand<GoSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, GoSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, GoSettings settings, CancellationToken cancellationToken)
         {
             // Step 1: Resolve vessel
             string? vesselId = await ResolveVesselIdAsync(settings).ConfigureAwait(false);

@@ -356,9 +356,9 @@ namespace Armada.Core.Services
 
             try
             {
-                using (CompletionClientBase client = ModelEndpointClientFactory.Create(endpoint, _Logging))
+                if (endpoint.Kind == ModelEndpointKindEnum.Embedding)
                 {
-                    if (endpoint.Kind == ModelEndpointKindEnum.Embedding)
+                    using (EmbeddingClientBase client = ModelEndpointClientFactory.CreateEmbedding(endpoint, _Logging))
                     {
                         EmbeddingResponse resp = await client.EmbedAsync("Armada model endpoint connectivity check.", null, token).ConfigureAwait(false);
                         sw.Stop();
@@ -369,9 +369,12 @@ namespace Armada.Core.Services
                         if (resp.Success && resp.Embeddings != null && resp.Embeddings.Count > 0 && resp.Embeddings[0].Embedding != null)
                             result.EmbeddingDimensions = resp.Embeddings[0].Embedding.Length;
                     }
-                    else
+                }
+                else
+                {
+                    using (CompletionClientBase client = ModelEndpointClientFactory.CreateCompletion(endpoint, _Logging))
                     {
-                        ChatCompletionOptions options = new ChatCompletionOptions();
+                        CompletionOptions options = new CompletionOptions();
                         options.MaxTokens = 16;
                         ChatResponse resp = await client.ChatAsync("Reply with the single word: pong", options, token).ConfigureAwait(false);
                         sw.Stop();
@@ -404,7 +407,7 @@ namespace Armada.Core.Services
 
             try
             {
-                using (CompletionClientBase client = ModelEndpointClientFactory.Create(endpoint, _Logging))
+                using (ClientBase client = ModelEndpointClientFactory.Create(endpoint, _Logging))
                 {
                     bool reachable = await client.ValidateConnectivityAsync(token).ConfigureAwait(false);
                     sw.Stop();

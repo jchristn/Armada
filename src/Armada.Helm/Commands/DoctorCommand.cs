@@ -17,7 +17,7 @@ namespace Armada.Helm.Commands
     public class DoctorCommand : BaseCommand<DoctorSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, DoctorSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, DoctorSettings settings, CancellationToken cancellationToken)
         {
             AnsiConsole.MarkupLine("[bold dodgerblue1]Armada Doctor[/]");
             AnsiConsole.MarkupLine("[dim]Checking system health...[/]");

@@ -17,7 +17,7 @@ namespace Armada.Helm.Commands
     public class CaptainStopCommand : BaseCommand<CaptainStopSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, CaptainStopSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, CaptainStopSettings settings, CancellationToken cancellationToken)
         {
             // Resolve by name or ID
             string captainId = settings.Id;

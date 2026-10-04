@@ -16,7 +16,7 @@ namespace Armada.Helm.Commands
     public class VoyageShowCommand : BaseCommand<VoyageShowSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, VoyageShowSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, VoyageShowSettings settings, CancellationToken cancellationToken)
         {
             Voyage? voyage = null;
 

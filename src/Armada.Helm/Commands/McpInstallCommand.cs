@@ -12,7 +12,7 @@ namespace Armada.Helm.Commands
     public class McpInstallCommand : BaseCommand<McpInstallSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, McpInstallSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, McpInstallSettings settings, CancellationToken cancellationToken)
         {
             ArmadaSettings armadaSettings = await ArmadaSettings.LoadAsync().ConfigureAwait(false);
             string mcpUrl = McpConfigHelper.GetMcpUrl(armadaSettings.McpPort);

@@ -16,7 +16,7 @@ namespace Armada.Helm.Commands
     public class VoyageListCommand : BaseCommand<VoyageListSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, VoyageListSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, VoyageListSettings settings, CancellationToken cancellationToken)
         {
             string path = "/api/v1/voyages";
             if (!string.IsNullOrEmpty(settings.Status))

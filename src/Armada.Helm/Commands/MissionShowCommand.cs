@@ -17,7 +17,7 @@ namespace Armada.Helm.Commands
     public class MissionShowCommand : BaseCommand<MissionShowSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, MissionShowSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, MissionShowSettings settings, CancellationToken cancellationToken)
         {
             Mission? mission = null;
 

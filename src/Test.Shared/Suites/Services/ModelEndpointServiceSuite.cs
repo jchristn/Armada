@@ -386,7 +386,7 @@ namespace Test.Shared.Suites.Services
                 };
                 endpoint.ApiKey = "azure-key";
 
-                using (CompletionClientBase client = ModelEndpointClientFactory.Create(endpoint, CreateLogging()))
+                using (CompletionClientBase client = ModelEndpointClientFactory.CreateCompletion(endpoint, CreateLogging()))
                 {
                     AssertEqual("gpt-4o-deployment", client.Model);
                 }
@@ -425,6 +425,99 @@ namespace Test.Shared.Suites.Services
                 await AssertThrowsAsync<InvalidOperationException>(() =>
                 {
                     ModelEndpointClientFactory.Create(endpoint, CreateLogging());
+                    return Task.CompletedTask;
+                }).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("factory_create_dispatches_on_kind", "ModelEndpointClientFactory.Create returns an embedding client for Embedding endpoints and a completion client for Inference endpoints", TestTags.Positive, () =>
+            {
+                ModelEndpoint embedding = new ModelEndpoint
+                {
+                    Name = "OpenAI embeddings",
+                    Kind = ModelEndpointKindEnum.Embedding,
+                    Provider = ModelProviderEnum.OpenAI,
+                    BaseUrl = "https://api.openai.com",
+                    Model = "text-embedding-3-small",
+                    TimeoutMs = 45000
+                };
+                embedding.ApiKey = "sk-test";
+
+                using (ClientBase client = ModelEndpointClientFactory.Create(embedding, CreateLogging()))
+                {
+                    AssertTrue(client is OpenAiEmbeddingClient, "Expected an OpenAI embedding client for an Embedding endpoint.");
+                    AssertEqual(45000, client.TimeoutMs);
+                    AssertEqual("text-embedding-3-small", ((EmbeddingClientBase)client).Model);
+                }
+
+                ModelEndpoint inference = new ModelEndpoint
+                {
+                    Name = "Ollama chat",
+                    Kind = ModelEndpointKindEnum.Inference,
+                    Provider = ModelProviderEnum.Ollama,
+                    BaseUrl = "http://localhost:11434",
+                    Model = "llama3"
+                };
+
+                using (ClientBase client = ModelEndpointClientFactory.Create(inference, CreateLogging()))
+                {
+                    AssertTrue(client is OllamaCompletionClient, "Expected an Ollama completion client for an Inference endpoint.");
+                    AssertEqual("llama3", ((CompletionClientBase)client).Model);
+                }
+                return Task.CompletedTask;
+            }));
+
+            cases.Add(CaseAsync("factory_builds_voyage_embedding_client", "ModelEndpointClientFactory builds a Voyage AI embedding client", TestTags.Positive, () =>
+            {
+                ModelEndpoint endpoint = new ModelEndpoint
+                {
+                    Name = "Voyage",
+                    Kind = ModelEndpointKindEnum.Embedding,
+                    Provider = ModelProviderEnum.VoyageAI,
+                    BaseUrl = "https://api.voyageai.com",
+                    Model = "voyage-3"
+                };
+                endpoint.ApiKey = "voyage-key";
+
+                using (EmbeddingClientBase client = ModelEndpointClientFactory.CreateEmbedding(endpoint, CreateLogging()))
+                {
+                    AssertTrue(client is VoyageAiEmbeddingClient, "Expected a Voyage AI embedding client.");
+                    AssertEqual("voyage-3", client.Model);
+                }
+                return Task.CompletedTask;
+            }));
+
+            cases.Add(CaseAsync("factory_rejects_anthropic_embedding_client", "ModelEndpointClientFactory.CreateEmbedding rejects Anthropic, which has no embeddings API", TestTags.Negative, async () =>
+            {
+                ModelEndpoint endpoint = new ModelEndpoint
+                {
+                    Name = "Anthropic",
+                    Kind = ModelEndpointKindEnum.Inference,
+                    Provider = ModelProviderEnum.Anthropic,
+                    BaseUrl = "https://api.anthropic.com"
+                };
+                endpoint.ApiKey = "sk-ant";
+
+                await AssertThrowsAsync<InvalidOperationException>(() =>
+                {
+                    ModelEndpointClientFactory.CreateEmbedding(endpoint, CreateLogging());
+                    return Task.CompletedTask;
+                }).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("factory_rejects_voyage_completion_client", "ModelEndpointClientFactory.CreateCompletion rejects Voyage AI, which has no inference API", TestTags.Negative, async () =>
+            {
+                ModelEndpoint endpoint = new ModelEndpoint
+                {
+                    Name = "Voyage",
+                    Kind = ModelEndpointKindEnum.Embedding,
+                    Provider = ModelProviderEnum.VoyageAI,
+                    BaseUrl = "https://api.voyageai.com"
+                };
+                endpoint.ApiKey = "voyage-key";
+
+                await AssertThrowsAsync<InvalidOperationException>(() =>
+                {
+                    ModelEndpointClientFactory.CreateCompletion(endpoint, CreateLogging());
                     return Task.CompletedTask;
                 }).ConfigureAwait(false);
             }));

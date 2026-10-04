@@ -774,9 +774,9 @@ namespace Armada.Core.Services
             DateTime startedUtc = DateTime.UtcNow;
 
             string url;
-            if (Uri.TryCreate(definition.Path, UriKind.Absolute, out Uri? absolute))
+            if (TryParseHttpUrl(definition.Path, out Uri? absolute))
             {
-                url = absolute.ToString();
+                url = absolute!.ToString();
             }
             else if (!String.IsNullOrWhiteSpace(baseUrl))
             {
@@ -1241,11 +1241,26 @@ namespace Armada.Core.Services
 
         private static string BuildAbsoluteUrl(string baseUrl, string healthEndpoint)
         {
-            if (Uri.TryCreate(healthEndpoint, UriKind.Absolute, out Uri? absolute))
-                return absolute.ToString();
+            if (TryParseHttpUrl(healthEndpoint, out Uri? absolute))
+                return absolute!.ToString();
             if (!baseUrl.EndsWith("/", StringComparison.Ordinal))
                 baseUrl += "/";
             return new Uri(new Uri(baseUrl), healthEndpoint.TrimStart('/')).ToString();
+        }
+
+        /// <summary>
+        /// Parse an absolute http(s) URL. A rooted path such as <c>/api/health</c> is not treated as absolute:
+        /// on Linux and macOS <see cref="Uri.TryCreate(string, UriKind, out Uri)"/> accepts it as a
+        /// <c>file:///</c> URI, which would bypass the environment's base URL.
+        /// </summary>
+        private static bool TryParseHttpUrl(string? value, out Uri? uri)
+        {
+            uri = null;
+            if (String.IsNullOrWhiteSpace(value)) return false;
+            if (!Uri.TryCreate(value, UriKind.Absolute, out Uri? parsed)) return false;
+            if (parsed.Scheme != Uri.UriSchemeHttp && parsed.Scheme != Uri.UriSchemeHttps) return false;
+            uri = parsed;
+            return true;
         }
 
         private static string BuildTitle(Vessel vessel, DeploymentEnvironment environment, Release? release)

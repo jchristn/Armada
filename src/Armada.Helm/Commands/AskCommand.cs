@@ -13,7 +13,7 @@ namespace Armada.Helm.Commands
     public class AskCommand : BaseCommand<AskSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, AskSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, AskSettings settings, CancellationToken cancellationToken)
         {
             AskResponse? response = await PostAsync<AskResponse>("/api/v1/ask", new { message = settings.Message }).ConfigureAwait(false);
 

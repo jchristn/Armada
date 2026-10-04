@@ -16,7 +16,7 @@ namespace Armada.Helm.Commands
     public class VoyageRetryCommand : BaseCommand<VoyageRetrySettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, VoyageRetrySettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, VoyageRetrySettings settings, CancellationToken cancellationToken)
         {
             // Resolve voyage
             Voyage? voyage = null;

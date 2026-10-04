@@ -15,7 +15,7 @@ namespace Armada.Helm.Commands
     public class VesselRemoveCommand : BaseCommand<VesselRemoveSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, VesselRemoveSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, VesselRemoveSettings settings, CancellationToken cancellationToken)
         {
             string vesselId = settings.Id;
             if (!vesselId.StartsWith("vsl_"))

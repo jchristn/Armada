@@ -17,7 +17,7 @@ namespace Armada.Helm.Commands
     public class StatusCommand : BaseCommand<StatusSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, StatusSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, StatusSettings settings, CancellationToken cancellationToken)
         {
             ArmadaStatus? status = await GetAsync<ArmadaStatus>("/api/v1/status").ConfigureAwait(false);
 

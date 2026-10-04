@@ -12,7 +12,7 @@ namespace Armada.Helm.Commands
     public class PlaybookAddCommand : BaseCommand<PlaybookAddSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, PlaybookAddSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, PlaybookAddSettings settings, CancellationToken cancellationToken)
         {
             string content = settings.Content ?? "# Playbook\n\nDescribe the rules the model should follow.\n";
             if (!string.IsNullOrEmpty(settings.FromFile))

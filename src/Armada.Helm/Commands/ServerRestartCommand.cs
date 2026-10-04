@@ -15,7 +15,7 @@ namespace Armada.Helm.Commands
     public class ServerRestartCommand : ServerStartCommand
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, ServerStartSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, ServerStartSettings settings, CancellationToken cancellationToken)
         {
             await StopRunningServerAsync(cancellationToken).ConfigureAwait(false);
             return await base.ExecuteAsync(context, settings, cancellationToken).ConfigureAwait(false);

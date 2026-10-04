@@ -243,7 +243,9 @@ namespace Test.Shared.Suites.E2E
                 HttpClient mcpClient = fx.McpClient;
                 string sessionId = await InitMcpSessionAsync(mcpClient);
 
-                // parameterValues declares additionalProperties { type: string }, which Voltaic 2.x now enforces.
+                // parameterValues declares additionalProperties { type: string }, which Voltaic 2.x enforces.
+                // Since Voltaic 2.1.2 a schema violation is a tool result with isError: true (so the model can
+                // correct it) rather than a -32602 protocol error, and the handler does not run.
                 JsonElement response = await SendRawMcpRequestAsync(mcpClient, sessionId, "tools/call", new
                 {
                     name = "start_runbook_execution",
@@ -253,8 +255,10 @@ namespace Test.Shared.Suites.E2E
                         parameterValues = new { count = 5 }
                     }
                 }).ConfigureAwait(false);
-                Assert(response.TryGetProperty("error", out JsonElement error), "Non-string parameter value should be rejected");
-                AssertEqual(-32602, error.GetProperty("code").GetInt32());
+                AssertFalse(response.TryGetProperty("error", out _), "Schema violations should be tool results, not protocol errors");
+                JsonElement result = response.GetProperty("result");
+                Assert(result.TryGetProperty("isError", out JsonElement isError) && isError.GetBoolean(), "Non-string parameter value should be rejected");
+                AssertContains("parameterValues", GetToolResultText(result));
             }));
 
             cases.Add(CaseAsync("runbook_parameter_values_accepts_string_value", "RunbookParameterValues_AcceptsStringValue", TestTags.Positive, async () =>
@@ -875,7 +879,11 @@ namespace Test.Shared.Suites.E2E
                     name = "stop_captain",
                     arguments = new { captainId = "cpt_nonexistent" }
                 }).ConfigureAwait(false);
-                Assert(response.TryGetProperty("error", out _), "Should return error for non-existent captain");
+                // A throwing handler is reported as a tool execution error (isError: true) carrying the
+                // exception message, not as a JSON-RPC protocol error.
+                JsonElement result = response.GetProperty("result");
+                Assert(result.TryGetProperty("isError", out JsonElement isError) && isError.GetBoolean(), "Should return error for non-existent captain");
+                AssertContains("cpt_nonexistent", GetToolResultText(result));
             }));
 
             cases.Add(CaseAsync("armada_stop_all_with_no_captains_returns_all_stopped", "ArmadaStopAll_WithNoCaptains_ReturnsAllStopped", TestTags.Positive, async () =>
@@ -2579,24 +2587,44 @@ namespace Test.Shared.Suites.E2E
         /// <returns>The initialized session id.</returns>
         private static async Task<string> InitMcpSessionAsync(HttpClient mcpClient)
         {
-            string sessionId = Guid.NewGuid().ToString();
-            await SendMcpRequestAsync(mcpClient, sessionId, "initialize", new
+            // Sessions are server-assigned: send initialize without a session, capture the Mcp-Session-Id the
+            // server returns, then acknowledge with notifications/initialized before any other request.
+            object request = new
             {
-                protocolVersion = "2024-11-05",
-                capabilities = new { },
-                clientInfo = new { name = "test-client", version = "1.0" }
-            }).ConfigureAwait(false);
+                jsonrpc = "2.0",
+                id = 1,
+                method = "initialize",
+                @params = new
+                {
+                    protocolVersion = "2024-11-05",
+                    capabilities = new { },
+                    clientInfo = new { name = "test-client", version = "1.0" }
+                }
+            };
+
+            HttpRequestMessage httpRequest = new HttpRequestMessage(HttpMethod.Post, "/rpc");
+            httpRequest.Content = JsonHelper.ToJsonContent(request);
+
+            HttpResponseMessage response = await mcpClient.SendAsync(httpRequest).ConfigureAwait(false);
+            string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            Assert(response.IsSuccessStatusCode, "MCP initialize to /rpc failed with " + response.StatusCode + ": " + responseBody);
+
+            string sessionId = String.Empty;
+            if (response.Headers.TryGetValues("Mcp-Session-Id", out IEnumerable<string>? values))
+            {
+                foreach (string value in values) { sessionId = value; break; }
+            }
+            Assert(!String.IsNullOrEmpty(sessionId), "MCP initialize did not return an Mcp-Session-Id header");
+
+            HttpRequestMessage notification = new HttpRequestMessage(HttpMethod.Post, "/rpc");
+            notification.Content = JsonHelper.ToJsonContent(new { jsonrpc = "2.0", method = "notifications/initialized", @params = new { } });
+            notification.Headers.Add("Mcp-Session-Id", sessionId);
+            HttpResponseMessage notificationResponse = await mcpClient.SendAsync(notification).ConfigureAwait(false);
+            notificationResponse.Dispose();
+
             return sessionId;
         }
 
-        /// <summary>
-        /// Send an MCP JSON-RPC request and return the <c>result</c> payload, throwing on error.
-        /// </summary>
-        /// <param name="mcpClient">HTTP client targeting the MCP port.</param>
-        /// <param name="sessionId">MCP session id.</param>
-        /// <param name="method">JSON-RPC method name.</param>
-        /// <param name="parameters">Request parameters.</param>
-        /// <returns>The result element of the response.</returns>
         private static async Task<JsonElement> SendMcpRequestAsync(HttpClient mcpClient, string sessionId, string method, object parameters)
         {
             object request = new
@@ -2611,7 +2639,7 @@ namespace Test.Shared.Suites.E2E
 
             HttpRequestMessage httpRequest = new HttpRequestMessage(HttpMethod.Post, "/rpc");
             httpRequest.Content = content;
-            httpRequest.Headers.Add("X-Session-Id", sessionId);
+            httpRequest.Headers.Add("Mcp-Session-Id", sessionId);
 
             HttpResponseMessage response = await mcpClient.SendAsync(httpRequest).ConfigureAwait(false);
             string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
@@ -2668,7 +2696,7 @@ namespace Test.Shared.Suites.E2E
 
             HttpRequestMessage httpRequest = new HttpRequestMessage(HttpMethod.Post, "/rpc");
             httpRequest.Content = content;
-            httpRequest.Headers.Add("X-Session-Id", sessionId);
+            httpRequest.Headers.Add("Mcp-Session-Id", sessionId);
 
             HttpResponseMessage response = await mcpClient.SendAsync(httpRequest).ConfigureAwait(false);
             string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);

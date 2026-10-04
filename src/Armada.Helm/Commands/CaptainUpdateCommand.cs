@@ -12,7 +12,7 @@ namespace Armada.Helm.Commands
     public class CaptainUpdateCommand : BaseCommand<CaptainUpdateSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, CaptainUpdateSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, CaptainUpdateSettings settings, CancellationToken cancellationToken)
         {
             EnumerationResult<Captain>? captainResult = await GetAsync<EnumerationResult<Captain>>("/api/v1/captains").ConfigureAwait(false);
             List<Captain> captains = captainResult?.Objects ?? new List<Captain>();

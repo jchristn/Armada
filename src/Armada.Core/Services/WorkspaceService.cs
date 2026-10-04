@@ -517,7 +517,7 @@ namespace Armada.Core.Services
                 }
 
                 if (String.IsNullOrWhiteSpace(topLevel)
-                    || !String.Equals(Path.GetFullPath(rootPath).TrimEnd('/', '\\'), Path.GetFullPath(topLevel).TrimEnd('/', '\\'), StringComparison.OrdinalIgnoreCase))
+                    || !PathCanonicalizer.AreEquivalent(rootPath, topLevel))
                 {
                     result.Error = "Not a git repository rooted at this path.";
                     return result;

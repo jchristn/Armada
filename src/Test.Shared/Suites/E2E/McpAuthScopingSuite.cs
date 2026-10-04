@@ -65,11 +65,26 @@ namespace Test.Shared.Suites.E2E
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
 
-                // A POST to the advertised /mcp path without the streamable-HTTP Accept header is rejected
-                // with 406 (not 404): proof the endpoint is served and is the MCP streamable transport that
-                // captains' generated config targets. A 404 here would mean the advertised path is dead.
+                // An initialize POST to the advertised /mcp path whose Accept header excludes the streamable-HTTP
+                // media types is rejected with 406 (not 404): proof the endpoint is served and is the MCP streamable transport
+                // that captains' generated config targets. A 404 here would mean the advertised path is dead.
+                // initialize is used because it is the only request accepted without an Mcp-Session-Id, so the
+                // Accept check (rather than the missing-session 400) is what rejects it. A missing Accept header
+                // counts as */*, so the probe sends an explicit non-matching type.
                 HttpRequestMessage probe = new HttpRequestMessage(HttpMethod.Post, AdvertisedMcpPath);
-                probe.Content = JsonHelper.ToJsonContent(new { jsonrpc = "2.0", id = 1, method = "tools/list", @params = new { } });
+                probe.Content = JsonHelper.ToJsonContent(new
+                {
+                    jsonrpc = "2.0",
+                    id = 1,
+                    method = "initialize",
+                    @params = new
+                    {
+                        protocolVersion = "2024-11-05",
+                        capabilities = new { },
+                        clientInfo = new { name = "accept-probe", version = "1.0" }
+                    }
+                });
+                probe.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/plain"));
 
                 HttpResponseMessage response = await fx.McpClient.SendAsync(probe).ConfigureAwait(false);
                 string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);

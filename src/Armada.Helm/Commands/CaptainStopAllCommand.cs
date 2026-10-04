@@ -17,7 +17,7 @@ namespace Armada.Helm.Commands
     public class CaptainStopAllCommand : BaseCommand<CaptainStopAllSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, CaptainStopAllSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, CaptainStopAllSettings settings, CancellationToken cancellationToken)
         {
             if (!AnsiConsole.Confirm("[bold red]RECALL ALL CAPTAINS?[/] This will stop all active agents.", defaultValue: false))
             {

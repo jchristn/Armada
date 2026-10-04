@@ -16,7 +16,7 @@ namespace Armada.Helm.Commands
     public class ConfigInitCommand : BaseCommand<ConfigInitSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, ConfigInitSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, ConfigInitSettings settings, CancellationToken cancellationToken)
         {
             Program.WriteBanner();
             AnsiConsole.WriteLine();

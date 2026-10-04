@@ -15,7 +15,7 @@ namespace Armada.Helm.Commands
     public class VesselListCommand : BaseCommand<VesselListSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, VesselListSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, VesselListSettings settings, CancellationToken cancellationToken)
         {
             string path = "/api/v1/vessels";
             if (!string.IsNullOrEmpty(settings.Fleet))

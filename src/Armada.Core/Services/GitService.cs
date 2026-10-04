@@ -788,14 +788,15 @@ namespace Armada.Core.Services
             try
             {
                 string result = await RunGitAsync(repoPath, "worktree", "list", "--porcelain").ConfigureAwait(false);
-                string normalizedTarget = Path.GetFullPath(worktreePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                // git reports symlink-resolved paths (e.g. /private/var on macOS), so compare canonical forms.
+                string normalizedTarget = PathCanonicalizer.Canonicalize(worktreePath);
 
                 foreach (string line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
                 {
                     if (line.StartsWith("worktree "))
                     {
                         string registeredPath = line.Substring("worktree ".Length).Trim();
-                        string normalizedRegistered = Path.GetFullPath(registeredPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                        string normalizedRegistered = PathCanonicalizer.Canonicalize(registeredPath);
                         if (String.Equals(normalizedRegistered, normalizedTarget, StringComparison.OrdinalIgnoreCase))
                             return true;
                     }

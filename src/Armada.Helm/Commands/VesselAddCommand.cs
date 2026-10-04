@@ -15,7 +15,7 @@ namespace Armada.Helm.Commands
     public class VesselAddCommand : BaseCommand<VesselAddSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, VesselAddSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, VesselAddSettings settings, CancellationToken cancellationToken)
         {
             // Resolve fleet by name if provided
             string? fleetId = settings.Fleet;

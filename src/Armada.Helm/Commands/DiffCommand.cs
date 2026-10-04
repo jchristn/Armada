@@ -13,7 +13,7 @@ namespace Armada.Helm.Commands
     public class DiffCommand : BaseCommand<DiffSettings>
     {
         /// <inheritdoc />
-        protected override async Task<int> ExecuteAsync(CommandContext context, DiffSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, DiffSettings settings, CancellationToken cancellationToken)
         {
             string missionId = await ResolveMissionIdAsync(settings.Id).ConfigureAwait(false);
 

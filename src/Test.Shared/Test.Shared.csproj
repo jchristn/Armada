@@ -7,9 +7,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Touchstone.Core" Version="0.1.12" />
+    <PackageReference Include="Touchstone.Core" Version="0.2.0" />
     <!-- ADO providers for creating/dropping per-test databases when running the suite against a server. -->
-    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.0" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.1" />
     <PackageReference Include="MySqlConnector" Version="2.6.2" />
     <PackageReference Include="Npgsql" Version="10.0.3" />
   </ItemGroup>
