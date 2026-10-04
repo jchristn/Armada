@@ -137,6 +137,20 @@ namespace Test.Shared.Infrastructure
             foreach (Match m in Regex.Matches(imp, "fleetDraft\\??\\.([a-zA-Z]+)")) fields.Add("settings.fleetActions." + m.Groups[1].Value);
             string rh = File.ReadAllText(Path.Combine(Src(), "components", "vessels", "health", "RepositoryHealthSettingsSection.tsx"));
             foreach (Match m in Regex.Matches(rh, "settings\\??\\.([a-zA-Z]+)")) fields.Add("settings.repositoryHealth." + m.Groups[1].Value);
+            foreach (Match m in Regex.Matches(rh, "\\{ key: '([a-zA-Z]+)', label: msg\\("))
+            {
+                string key = m.Groups[1].Value;
+                bool threshold = key.EndsWith("Warn", StringComparison.Ordinal) || key.EndsWith("Fail", StringComparison.Ordinal);
+                fields.Add((threshold ? "settings.repositoryHealth.thresholds." : "settings.repositoryHealth.") + key);
+            }
+
+            string ret = File.ReadAllText(Path.Combine(Src(), "components", "settings", "RetentionSettings.tsx"));
+            Match retention = Regex.Match(ret, "const FIELDS: RetentionField\\[\\] = \\[([^\\]]*)\\]");
+            if (retention.Success)
+            {
+                foreach (Match f in Regex.Matches(retention.Groups[1].Value, "'([a-zA-Z]+)'")) fields.Add("settings.retention." + f.Groups[1].Value);
+            }
+
             return fields.OrderBy(s => s, StringComparer.Ordinal).ToList();
         }
     }

@@ -4049,7 +4049,47 @@
     },
     {
       "kind": "setting",
+      "key": "settings.repositoryHealth.dependencyCommandTimeoutSeconds",
+      "status": "planned",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.repositoryHealth.dependencyMaxAgeHours",
+      "status": "planned",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
       "key": "settings.repositoryHealth.fetchBeforeEvaluate",
+      "status": "planned",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.repositoryHealth.intervalMinutes",
+      "status": "planned",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.repositoryHealth.maxConcurrency",
+      "status": "planned",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.repositoryHealth.missionWindowDays",
       "status": "planned",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
@@ -4065,7 +4105,95 @@
     },
     {
       "kind": "setting",
+      "key": "settings.repositoryHealth.staleBranchDays",
+      "status": "planned",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.repositoryHealth.thresholds.behindFail",
+      "status": "planned",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.repositoryHealth.thresholds.behindWarn",
+      "status": "planned",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.repositoryHealth.thresholds.missionFailureFail",
+      "status": "planned",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.repositoryHealth.thresholds.missionFailureWarn",
+      "status": "planned",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.repositoryHealth.thresholds.staleBranchFail",
+      "status": "planned",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.repositoryHealth.thresholds.staleBranchWarn",
+      "status": "planned",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
       "key": "settings.retention",
+      "status": "planned",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.retention.askThreadArchiveAfterDays",
+      "status": "planned",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.retention.askThreadDeleteAfterDays",
+      "status": "planned",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.retention.importBatchRetentionDays",
+      "status": "planned",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.retention.jobRetentionDays",
       "status": "planned",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
