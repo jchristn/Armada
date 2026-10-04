@@ -151,6 +151,15 @@ import type {
   VesselHealthEvaluationStart,
   VesselHealthStatus,
   VesselHealthSummary,
+  AskThread,
+  AskThreadDetail,
+  AskThreadEnumerateQuery,
+  AskThreadUpdateRequest,
+  AskMessagePage,
+  AskSendMessageResult,
+  AskActionProposal,
+  AskWorkSnapshot,
+  AskQuickAction,
 } from '../types/models';
 
 const BASE_URL = import.meta.env.VITE_ARMADA_SERVER_URL || '';
@@ -199,7 +208,7 @@ function keyToCamel(key: string): string {
 
 /** Recursively convert all object keys from PascalCase to camelCase. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function camelizeKeys(obj: any): any {
+export function camelizeKeys(obj: any): any {
   if (Array.isArray(obj)) return obj.map(camelizeKeys);
   if (obj !== null && typeof obj === 'object' && !(obj instanceof Date)) {
     return Object.fromEntries(
@@ -980,6 +989,82 @@ export const chatWithCaptain = (captainId: string, body: CaptainChatRequest, opt
   // keep it above the server-side chat timeout so the backend's clean message wins on timeout.
   // An optional signal lets the Stop button abort the request (the server then cancels the runtime).
   post<CaptainChatResponse>('/api/v1/captains/' + captainId + '/chat', body, { timeout: 330000, signal: opts?.signal });
+
+// ==================== Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md) ====================
+// Every Ask endpoint the dashboard uses lives here so integration fixes stay one-line changes. Request bodies
+// are PascalCase for the C# server; responses are camelized by `request`.
+
+const ASK = '/api/v1/ask';
+const askThreadPath = (id: string) => `${ASK}/threads/${encodeURIComponent(id)}`;
+
+/** Threads ordered pinned first, then most recent message; `search` is matched server-side. */
+export const enumerateAskThreads = (query?: AskThreadEnumerateQuery) =>
+  post<EnumerationResult<AskThread>>(`${ASK}/threads/enumerate`, {
+    PageNumber: query?.pageNumber ?? 1,
+    PageSize: query?.pageSize ?? 50,
+    ...(query?.search ? { Search: query.search } : {}),
+    IncludeArchived: query?.includeArchived ?? false,
+  });
+
+export const createAskThread = (data?: { title?: string; captainId?: string | null; autoApprove?: boolean }) =>
+  post<AskThread>(`${ASK}/threads`, {
+    ...(data?.title ? { Title: data.title } : {}),
+    ...(data?.captainId ? { CaptainId: data.captainId } : {}),
+    ...(data?.autoApprove !== undefined ? { AutoApprove: data.autoApprove } : {}),
+  });
+
+export const getAskThread = (id: string) => get<AskThreadDetail>(askThreadPath(id));
+
+export const updateAskThread = (id: string, data: AskThreadUpdateRequest) => {
+  const body: Record<string, unknown> = {};
+  if (data.title !== undefined) body.Title = data.title;
+  if (data.captainId !== undefined) body.CaptainId = data.captainId;
+  if (data.autoApprove !== undefined) body.AutoApprove = data.autoApprove;
+  if (data.pinned !== undefined) body.Pinned = data.pinned;
+  if (data.archived !== undefined) body.Archived = data.archived;
+  return put<AskThread>(askThreadPath(id), body);
+};
+
+export const deleteAskThread = (id: string) => del<void>(askThreadPath(id));
+
+/** One page of messages, newest page when `beforeSequence` is omitted. */
+export const enumerateAskMessages = (id: string, query?: { beforeSequence?: number | null; pageSize?: number }) =>
+  post<AskMessagePage>(`${askThreadPath(id)}/messages/enumerate`, {
+    ...(query?.beforeSequence != null ? { BeforeSequence: query.beforeSequence } : {}),
+    PageSize: query?.pageSize ?? 30,
+  });
+
+/** Persist a user message and start a captain turn in the background (202). */
+export const sendAskMessage = (id: string, content: string, showThinking?: boolean) =>
+  post<AskSendMessageResult>(`${askThreadPath(id)}/messages`, { Content: content, ShowThinking: !!showThinking });
+
+export const cancelAskTurn = (id: string) => post<void>(`${askThreadPath(id)}/cancel`, {});
+export const summarizeAskThread = (id: string) => post<void>(`${askThreadPath(id)}/summarize`, {});
+export const markAskThreadRead = (id: string) => post<void>(`${askThreadPath(id)}/read`, {});
+
+/** Run a quick action; the submitted form is the confirmation, so the result is already executed. */
+export const runAskQuickAction = (id: string, toolName: string, args: Record<string, unknown>) =>
+  post<AskActionProposal>(`${askThreadPath(id)}/actions`, { ToolName: toolName, Arguments: args }, { timeout: 120000 });
+
+export const approveAskProposal = (id: string, proposalId: string) =>
+  post<AskActionProposal>(`${askThreadPath(id)}/proposals/${encodeURIComponent(proposalId)}/approve`, {}, { timeout: 120000 });
+
+export const rejectAskProposal = (id: string, proposalId: string) =>
+  post<AskActionProposal>(`${askThreadPath(id)}/proposals/${encodeURIComponent(proposalId)}/reject`, {});
+
+export const getAskWorkSnapshot = (id: string, workId: string) =>
+  get<AskWorkSnapshot>(`${askThreadPath(id)}/work/${encodeURIComponent(workId)}`);
+
+/** The quick-action catalog; tolerates a bare array or an `{ QuickActions | Actions | Objects }` wrapper. */
+export const getAskQuickActions = async (): Promise<AskQuickAction[]> => {
+  const result = await get<unknown>(`${ASK}/quick-actions`);
+  if (Array.isArray(result)) return result as AskQuickAction[];
+  if (result && typeof result === 'object') {
+    const wrapped = result as { quickActions?: AskQuickAction[]; actions?: AskQuickAction[]; objects?: AskQuickAction[] };
+    return wrapped.quickActions ?? wrapped.actions ?? wrapped.objects ?? [];
+  }
+  return [];
+};
 
 // Needs-you inbox
 export const getInbox = () => get<InboxItem[]>('/api/v1/inbox');

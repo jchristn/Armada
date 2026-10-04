@@ -1,22 +1,77 @@
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { chatWithCaptain, getCaptainTools, listCaptains } from '../api/client';
-import type { Captain, CaptainChatMessage, CaptainToolAccessResult, WebSocketMessage } from '../types/models';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import {
+  ApiError,
+  approveAskProposal,
+  cancelAskTurn,
+  createAskThread,
+  deleteAskThread,
+  enumerateAskMessages,
+  enumerateAskThreads,
+  getAskQuickActions,
+  getAskThread,
+  getAskWorkSnapshot,
+  getCaptainTools,
+  listCaptains,
+  markAskThreadRead,
+  rejectAskProposal,
+  runAskQuickAction,
+  sendAskMessage,
+  summarizeAskThread,
+  updateAskThread,
+} from '../api/client';
+import type {
+  AskActionProposal,
+  AskMessage,
+  AskQuickAction,
+  AskThread,
+  AskThreadUpdateRequest,
+  AskTrackedWork,
+  Captain,
+  CaptainToolAccessResult,
+  WebSocketMessage,
+} from '../types/models';
 import { useLocale } from '../context/LocaleContext';
 import { useWebSocket } from '../context/WebSocketContext';
+import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationContext';
 import ErrorModal from '../components/shared/ErrorModal';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
-import CaptainChatPanel, { type ChatTurn } from '../components/shared/CaptainChatPanel';
-import { applyToolEvent } from '../components/shared/ChatToolChips';
+import { ErrorState, LoadingState } from '../components/shared/StateBlocks';
+import ImportWizard from '../components/vessels/import/ImportWizard';
+import AskThreadList from '../components/ask/AskThreadList';
+import AskConversationHeader from '../components/ask/AskConversationHeader';
+import AskWorkStrip from '../components/ask/AskWorkStrip';
+import AskMessageList, { type AskMessageListHandle } from '../components/ask/AskMessageList';
+import AskComposer, { type AskComposerHandle } from '../components/ask/AskComposer';
 import { randomThinkingMessage } from '../components/askThinkingMessages';
 import { randomGreeting } from '../components/askGreetings';
+import { parseAskEvent } from '../lib/askEvents';
+import { conversationReducer, initialConversation } from '../lib/askConversation';
+import { applyActivityEvent, applyThreadUpdate, sortThreads, type ThreadActivityMap, type ThreadListFilter } from '../lib/askThreads';
+import { DEFAULT_QUICK_ACTIONS, mergeQuickActions } from '../lib/askQuickActions';
+import { isWorkActive, workRoute } from '../lib/askWork';
+import { useFocusTrap } from '../lib/useFocusTrap';
 
-// Ask Armada is available with any captain.
-function isChattable(_captain: Captain): boolean {
-  return true;
+const CAPTAIN_STORAGE_KEY = 'armada_ask_captain';
+const THINKING_STORAGE_KEY = 'armada_ask_show_thinking';
+const THREAD_PAGE_SIZE = 50;
+const MESSAGE_PAGE_SIZE = 30;
+const SNAPSHOT_FETCH_LIMIT = 20;
+
+function readStored(key: string): string {
+  try { return localStorage.getItem(key) ?? ''; } catch { return ''; }
 }
 
-// Per-runtime setup instructions doc on GitHub for connecting a captain to Armada over MCP.
+function writeStored(key: string, value: string) {
+  try { localStorage.setItem(key, value); } catch { /* storage unavailable */ }
+}
+
+function errorText(err: unknown, fallback: string): string {
+  return err instanceof Error && err.message ? err.message : fallback;
+}
+
+// Per-runtime setup instructions on GitHub for connecting a captain to Armada over MCP.
 function instructionsDocUrl(runtime: string | null | undefined): string {
   const files: Record<string, string> = {
     ClaudeCode: 'INSTRUCTIONS_FOR_CLAUDE_CODE.md',
@@ -30,269 +85,558 @@ function instructionsDocUrl(runtime: string | null | undefined): string {
   return 'https://github.com/jchristn/Armada/blob/main/docs/' + file;
 }
 
+/**
+ * Ask Armada home base: a list of saved conversations and the open conversation. Conversations stream captain
+ * replies, show confirm cards for state-changing actions, and follow the work they start with live cards and
+ * milestone messages, all driven by owner-scoped `ask.*` WebSocket events.
+ */
 export default function AskArmada() {
-  const { t } = useLocale();
+  const params = useParams();
+  const routeThreadId = params.threadId ?? null;
   const navigate = useNavigate();
-  const { subscribe } = useWebSocket();
+  const { t } = useLocale();
+  const { subscribe, reconnectCount } = useWebSocket();
+  const { user } = useAuth();
+  const { pushToast } = useNotifications();
+
+  // Captains and quick actions.
   const [captains, setCaptains] = useState<Captain[]>([]);
-  const [captainId, setCaptainId] = useState('');
-  const [turns, setTurns] = useState<ChatTurn[]>([]);
-  const [input, setInput] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const [draftCaptainId, setDraftCaptainId] = useState(() => readStored(CAPTAIN_STORAGE_KEY));
+  const [quickActions, setQuickActions] = useState<AskQuickAction[]>(DEFAULT_QUICK_ACTIONS);
   const [tools, setTools] = useState<CaptainToolAccessResult | null>(null);
-  const [toolsLoading, setToolsLoading] = useState(false);
-  const [streamingEnabled, setStreamingEnabled] = useState(true);
-  const [showThinking, setShowThinking] = useState(false);
-  // A single random greeting chosen once per page load, shown large on the blank chat screen.
-  const [greeting] = useState(() => randomGreeting());
-  const [thinking, setThinking] = useState('');
-  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
   const toolsCache = useRef<Record<string, CaptainToolAccessResult>>({});
 
-  // Rotate the "waiting" message every 4 seconds while a turn is in flight.
-  useEffect(() => {
-    if (!busy) return;
-    setThinking((prev) => randomThinkingMessage(prev));
-    const id = window.setInterval(() => setThinking((prev) => randomThinkingMessage(prev)), 4000);
-    return () => window.clearInterval(id);
-  }, [busy]);
+  // Thread list.
+  const [threads, setThreads] = useState<AskThread[]>([]);
+  const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [query, setQuery] = useState('');
+  const [includeArchived, setIncludeArchived] = useState(false);
+  const [listPage, setListPage] = useState(1);
+  const [listHasMore, setListHasMore] = useState(false);
+  const [activity, setActivity] = useState<ThreadActivityMap>({});
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const filterRef = useRef<ThreadListFilter>({ search: '', includeArchived: false });
+  filterRef.current = { search: query, includeArchived };
+
+  // Open conversation.
+  const [conv, dispatch] = useReducer(conversationReducer, routeThreadId, initialConversation);
+  const convRef = useRef(conv);
+  convRef.current = conv;
+  const [convLoading, setConvLoading] = useState(false);
+  const [convError, setConvError] = useState<string | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [busyProposalId, setBusyProposalId] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [showThinking, setShowThinking] = useState(() => readStored(THINKING_STORAGE_KEY) === 'true');
+  const [waitingText, setWaitingText] = useState('');
+  const [highlightedWorkId, setHighlightedWorkId] = useState<string | null>(null);
+
+  // Dialogs and announcements.
+  const [error, setError] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<AskThread | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [announcement, setAnnouncement] = useState('');
+  const [greeting] = useState(() => randomGreeting());
+  const messageListRef = useRef<AskMessageListHandle>(null);
+  const composerRef = useRef<AskComposerHandle>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
+  // On narrow screens the list is a modal drawer: keep focus inside it and close it with Escape.
+  useFocusTrap(drawerRef, drawerOpen, () => setDrawerOpen(false));
+
+  const thread = conv.thread;
+  const activeCaptainId = thread ? (thread.captainId ?? '') : draftCaptainId;
+  const activeCaptain = captains.find((c) => c.id === activeCaptainId) ?? null;
+  const captainNames = useMemo(() => Object.fromEntries(captains.map((c) => [c.id, c.name])), [captains]);
+
+  // ---------------------------------------------------------------- loading
 
   useEffect(() => {
     listCaptains({ pageSize: 200 })
       .then((result) => {
-        const chattable = result.objects.filter(isChattable);
-        setCaptains(chattable);
-        if (chattable.length > 0) setCaptainId((current) => current || chattable[0].id);
+        const list = result.objects || [];
+        setCaptains(list);
+        setDraftCaptainId((current) => (current && list.some((c) => c.id === current) ? current : list[0]?.id ?? ''));
       })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : t('Failed to load captains.')));
-  }, [t]);
+      .catch(() => setCaptains([]));
+    getAskQuickActions()
+      .then((catalog) => setQuickActions(mergeQuickActions(catalog)))
+      .catch(() => setQuickActions(DEFAULT_QUICK_ACTIONS));
+  }, []);
 
-  // Detect whether the selected captain is connected to Armada over MCP so we can warn when it is not.
+  // Whether the conversation's captain can reach Armada over MCP (it cannot propose actions otherwise).
   useEffect(() => {
-    if (!captainId) { setTools(null); setToolsLoading(false); return; }
-    // Serve a previously-fetched result instantly; the probe is slow (it live-checks each configured
-    // MCP server), so only pay for it once per captain per session.
-    const cached = toolsCache.current[captainId];
-    if (cached) { setTools(cached); setToolsLoading(false); return; }
+    if (!activeCaptainId) { setTools(null); return undefined; }
+    const cached = toolsCache.current[activeCaptainId];
+    if (cached) { setTools(cached); return undefined; }
     let active = true;
     setTools(null);
-    setToolsLoading(true);
-    getCaptainTools(captainId)
-      .then((result) => { toolsCache.current[captainId] = result; if (active) setTools(result); })
-      .catch(() => { if (active) setTools(null); })
-      .finally(() => { if (active) setToolsLoading(false); });
+    getCaptainTools(activeCaptainId)
+      .then((result) => { toolsCache.current[activeCaptainId] = result; if (active) setTools(result); })
+      .catch(() => { if (active) setTools(null); });
     return () => { active = false; };
-  }, [captainId]);
+  }, [activeCaptainId]);
 
-  const selectedCaptain = captains.find((c) => c.id === captainId) || null;
-  // API-endpoint captains run Armada's built-in coding tools in-process and never act as an MCP
-  // client, so the "connect over MCP" warning does not apply to them -- show an accurate note instead.
-  const isApiEndpoint = tools != null && tools.runtime === 'ApiEndpoint';
-  const armadaMcpMissing = tools != null && tools.armadaToolCount <= 0 && !isApiEndpoint;
+  useEffect(() => {
+    const handle = window.setTimeout(() => setQuery(search.trim()), 300);
+    return () => window.clearTimeout(handle);
+  }, [search]);
 
-  // Replace the in-flight streaming assistant turn (the last one) via the updater.
-  function updateStreamingTurn(mutate: (turn: ChatTurn) => ChatTurn) {
-    setTurns((current) => {
-      const copy = [...current];
-      for (let i = copy.length - 1; i >= 0; i -= 1) {
-        if (copy[i].role === 'assistant' && copy[i].streaming) { copy[i] = mutate(copy[i]); break; }
-      }
-      return copy;
-    });
-  }
-
-  async function send(message: string) {
-    const text = message.trim();
-    if (!text || busy || !captainId) return;
-    setInput('');
-
-    const streaming = streamingEnabled;
-    // A turnId opts the request into live streaming; omit it for a plain request/response turn.
-    const turnId = streaming
-      ? ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2))
-      : undefined;
-    const history: CaptainChatMessage[] = turns
-      .filter((turn) => turn.role !== 'system')
-      .map((turn) => ({ role: turn.role as 'user' | 'assistant', content: turn.text }));
-    setTurns((current) => streaming
-      ? [...current, { role: 'user', text }, { role: 'assistant', text: '', streaming: true }]
-      : [...current, { role: 'user', text }]);
-    setBusy(true);
-
-    let unsubscribe: () => void = () => undefined;
-    if (streaming) {
-      unsubscribe = subscribe((msg: WebSocketMessage) => {
-        if (msg.type === 'ask.chunk') {
-          const data = msg.data as { turnId?: string; delta?: string } | undefined;
-          if (!data || data.turnId !== turnId || !data.delta) return;
-          updateStreamingTurn((turn) => ({ ...turn, text: turn.text + data.delta }));
-        } else if (msg.type === 'ask.tool') {
-          const d = msg.data as ({ turnId?: string } & Parameters<typeof applyToolEvent>[1]) | undefined;
-          if (!d || d.turnId !== turnId || !d.id) return;
-          updateStreamingTurn((turn) => ({ ...turn, tools: applyToolEvent(turn.tools, d) }));
-        } else if (msg.type === 'ask.thinking') {
-          const data = msg.data as { turnId?: string; delta?: string } | undefined;
-          if (!data || data.turnId !== turnId || !data.delta) return;
-          updateStreamingTurn((turn) => ({ ...turn, thinking: (turn.thinking ?? '') + data.delta }));
-        }
-      });
-    }
-
-    // The controller lets the Stop button abort the request; the server then cancels the captain runtime.
-    const controller = new AbortController();
-    abortRef.current = controller;
-
+  const loadThreads = useCallback(async (page: number) => {
+    setListLoading(true);
+    setListError(null);
     try {
-      const response = await chatWithCaptain(captainId, { message: text, history, turnId, showThinking }, { signal: controller.signal });
-      if (!response.success) {
-        setError(response.error || t('The captain could not respond.'));
-        setTurns((current) => current.filter((turn) => !(turn.role === 'assistant' && turn.streaming)).slice(0, -1));
-      } else if (streaming) {
-        // Reconcile the streamed text with the authoritative final reply + metrics, keeping any tool activity
-        // and preferring the authoritative thinking when the server returned it.
-        updateStreamingTurn((turn) => ({ ...turn, streaming: false, text: response.reply, metrics: response.metrics, model: response.model, thinking: response.thinking ?? turn.thinking }));
-      } else {
-        setTurns((current) => [...current, { role: 'assistant', text: response.reply, metrics: response.metrics, model: response.model, thinking: response.thinking ?? undefined }]);
-      }
+      const result = await enumerateAskThreads({ pageNumber: page, pageSize: THREAD_PAGE_SIZE, search: filterRef.current.search, includeArchived: filterRef.current.includeArchived });
+      const openId = convRef.current.threadId;
+      const incoming = (result.objects || []).map((th) => (th.id === openId ? { ...th, unreadCount: 0 } : th));
+      setThreads((prev) => (page === 1 ? incoming : sortThreads([...prev.filter((p) => !incoming.some((i) => i.id === p.id)), ...incoming])));
+      setListPage(page);
+      setListHasMore(page < (result.totalPages || 1));
     } catch (err: unknown) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        // Stop pressed: keep whatever streamed so far and just clear the in-flight flag.
-        if (streaming) updateStreamingTurn((turn) => ({ ...turn, streaming: false }));
-      } else {
-        setError(err instanceof Error ? err.message : t('Chat failed.'));
-        setTurns((current) => current.filter((turn) => !(turn.role === 'assistant' && turn.streaming)).slice(0, -1));
-      }
+      setListError(errorText(err, t('Failed to load conversations.')));
     } finally {
-      abortRef.current = null;
-      unsubscribe();
-      setBusy(false);
+      setListLoading(false);
+    }
+  }, [t]);
+
+  useEffect(() => { void loadThreads(1); }, [query, includeArchived, reconnectCount, loadThreads]);
+
+  const markRead = useCallback((id: string) => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+    setThreads((prev) => prev.map((th) => (th.id === id && th.unreadCount ? { ...th, unreadCount: 0 } : th)));
+    markAskThreadRead(id).catch(() => { /* best effort; the badge resyncs on the next ask.thread */ });
+  }, []);
+
+  const fetchSnapshots = useCallback((id: string, work: AskTrackedWork[]) => {
+    const missing = work.filter((w) => !convRef.current.snapshots[w.id] && !w.snapshot);
+    missing.sort((a, b) => Number(isWorkActive(b)) - Number(isWorkActive(a)));
+    for (const item of missing.slice(0, SNAPSHOT_FETCH_LIMIT)) {
+      getAskWorkSnapshot(id, item.id)
+        .then((snapshot) => { if (snapshot && convRef.current.threadId === id) dispatch({ type: 'snapshot', trackedWorkId: item.id, snapshot }); })
+        .catch(() => { /* the card shows its loading state until an ask.work event arrives */ });
+    }
+  }, []);
+
+  const loadConversation = useCallback(async (id: string, silent = false) => {
+    if (!silent) setConvLoading(true);
+    setConvError(null);
+    try {
+      const [detail, page] = await Promise.all([
+        getAskThread(id),
+        enumerateAskMessages(id, { pageSize: MESSAGE_PAGE_SIZE }),
+      ]);
+      if (convRef.current.threadId !== id) return;
+      dispatch({ type: 'loaded', threadId: id, detail, messages: page?.messages ?? [], hasMore: !!page?.hasMore });
+      if (detail?.thread) setThreads((prev) => applyThreadUpdate(prev, detail.thread, filterRef.current, id));
+      markRead(id);
+      fetchSnapshots(id, detail?.trackedWork ?? []);
+    } catch (err: unknown) {
+      if (convRef.current.threadId !== id) return;
+      if (err instanceof ApiError && err.status === 404) setConvError(t('This conversation was not found. It may have been deleted.'));
+      else setConvError(errorText(err, t('Failed to load the conversation.')));
+    } finally {
+      if (convRef.current.threadId === id) setConvLoading(false);
+    }
+  }, [fetchSnapshots, markRead, t]);
+
+  const refreshLatest = useCallback(async (id: string) => {
+    try {
+      const page = await enumerateAskMessages(id, { pageSize: MESSAGE_PAGE_SIZE });
+      dispatch({ type: 'latest', threadId: id, messages: page?.messages ?? [] });
+    } catch { /* the socket will deliver the messages; this is only reconciliation */ }
+  }, []);
+
+  const refreshDetail = useCallback(async (id: string) => {
+    try {
+      const detail = await getAskThread(id);
+      dispatch({ type: 'detail', threadId: id, detail });
+      fetchSnapshots(id, detail?.trackedWork ?? []);
+    } catch { /* reconciliation only */ }
+  }, [fetchSnapshots]);
+
+  // Route changes open a different conversation (or the new-conversation screen).
+  useEffect(() => {
+    setDrawerOpen(false);
+    if (convRef.current.threadId !== routeThreadId) dispatch({ type: 'reset', threadId: routeThreadId });
+    setConvError(null);
+    setStopping(false);
+    if (routeThreadId) void loadConversation(routeThreadId);
+    else setConvLoading(false);
+  }, [routeThreadId, loadConversation]);
+
+  // After a reconnect, refetch the open conversation so nothing missed while offline is lost.
+  useEffect(() => {
+    if (reconnectCount === 0) return;
+    const id = convRef.current.threadId;
+    if (id) void loadConversation(id, true);
+  }, [reconnectCount, loadConversation]);
+
+  // Mark the open conversation read when the tab becomes visible again.
+  useEffect(() => {
+    const onVisible = () => {
+      const id = convRef.current.threadId;
+      if (id && document.visibilityState === 'visible') markRead(id);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [markRead]);
+
+  // Rotate the waiting message while a captain turn has not produced text yet.
+  useEffect(() => {
+    if (!conv.turnActive) { setStopping(false); return undefined; }
+    setWaitingText((prev) => randomThinkingMessage(prev));
+    const id = window.setInterval(() => setWaitingText((prev) => randomThinkingMessage(prev)), 4000);
+    return () => window.clearInterval(id);
+  }, [conv.turnActive]);
+
+  // ---------------------------------------------------------------- socket events
+
+  useEffect(() => {
+    return subscribe((msg: WebSocketMessage) => {
+      const event = parseAskEvent(msg);
+      if (!event) return;
+      setActivity((prev) => applyActivityEvent(prev, event));
+      const openId = convRef.current.threadId;
+
+      if (event.type === 'ask.thread') {
+        setThreads((prev) => applyThreadUpdate(prev, event.thread, filterRef.current, openId));
+        if (event.threadId === openId && (event.thread.unreadCount ?? 0) > 0) markRead(event.threadId);
+      }
+      if (event.threadId !== openId) return;
+
+      const before = convRef.current;
+      dispatch({ type: 'event', event });
+
+      if (event.type === 'ask.turn' && event.state !== 'started') {
+        void refreshLatest(event.threadId);
+      } else if (event.type === 'ask.message' && event.message.role !== 'User') {
+        const kind = String(event.message.kind);
+        const snippet = (event.message.contentText ?? '').replace(/\s+/g, ' ').slice(0, 160);
+        if (kind === 'WorkUpdate') setAnnouncement(t('Work update: {{text}}', { text: snippet }));
+        else if (kind === 'Error') setAnnouncement(t('Error: {{text}}', { text: snippet }));
+        else if (kind !== 'ActionProposal') setAnnouncement(t('New message: {{text}}', { text: snippet }));
+      } else if (event.type === 'ask.proposal' && String(event.proposal.status).toLowerCase() === 'pending') {
+        setAnnouncement(t('An action needs your approval: {{summary}}', { summary: event.proposal.summaryText || event.proposal.toolName }));
+      } else if (event.type === 'ask.work' && event.snapshot) {
+        const prior = before.trackedWork.find((w) => w.id === event.trackedWorkId);
+        if (!prior || prior.status !== event.snapshot.status) {
+          setAnnouncement(t('{{title}} is now {{status}}', { title: prior?.title || event.snapshot.title || event.snapshot.entityId, status: t(event.snapshot.status) }));
+        }
+        if (!prior) void refreshDetail(event.threadId);
+      }
+    });
+  }, [subscribe, markRead, refreshLatest, refreshDetail, t]);
+
+  // ---------------------------------------------------------------- actions
+
+  const ensureThread = useCallback(async (): Promise<string> => {
+    const current = convRef.current.threadId;
+    if (current) return current;
+    const created = await createAskThread({ captainId: draftCaptainId || null });
+    dispatch({ type: 'reset', threadId: created.id });
+    dispatch({ type: 'thread', thread: created });
+    convRef.current = { ...initialConversation(created.id), thread: created };
+    setThreads((prev) => applyThreadUpdate(prev, created, filterRef.current, created.id));
+    navigate(`/ask/${encodeURIComponent(created.id)}`);
+    return created.id;
+  }, [draftCaptainId, navigate]);
+
+  async function send(text: string) {
+    let id: string;
+    try {
+      id = await ensureThread();
+    } catch (err: unknown) {
+      setError(errorText(err, t('Failed to start a conversation.')));
+      return;
+    }
+    const localId = `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const maxSeq = convRef.current.messages.reduce((max, m) => Math.max(max, m.sequence), 0);
+    const optimistic: AskMessage = {
+      id: localId, threadId: id, sequence: maxSeq + 1, role: 'User', kind: 'Text', contentText: text, createdUtc: new Date().toISOString(),
+    };
+    dispatch({ type: 'optimisticUser', message: optimistic });
+    messageListRef.current?.scrollToBottom();
+    try {
+      const result = await sendAskMessage(id, text, showThinking);
+      dispatch({ type: 'confirmUser', localId, messageId: result?.messageId ?? null, turnId: result?.turnId ?? null });
+    } catch (err: unknown) {
+      dispatch({ type: 'dropOptimistic', localId });
+      setError(errorText(err, t('The message could not be sent.')));
     }
   }
 
-  // Abort the in-flight turn. The dropped request cancels the captain runtime server-side.
   function stop() {
-    abortRef.current?.abort();
+    const id = convRef.current.threadId;
+    if (!id) return;
+    setStopping(true);
+    cancelAskTurn(id)
+      .then(() => {
+        // The server confirms with ask.turn; if that never arrives, settle the UI after a grace period.
+        window.setTimeout(() => {
+          if (convRef.current.threadId === id && convRef.current.turnActive) {
+            dispatch({ type: 'turnEnded' });
+            void refreshLatest(id);
+          }
+        }, 8000);
+      })
+      .catch((err: unknown) => { setStopping(false); setError(errorText(err, t('Could not stop the captain.'))); });
   }
 
-  // Reset the conversation to an empty state. History is client-side only, so clearing the turns is
-  // sufficient; also drop any transient thinking/error so the next question starts clean.
-  function clearConversation() {
-    setTurns([]);
-    setThinking('');
-    setError('');
+  async function runQuickAction(action: AskQuickAction, args: Record<string, unknown>): Promise<boolean> {
+    if (!action.toolName) return false;
+    setActionBusy(true);
+    try {
+      const id = await ensureThread();
+      const proposal = await runAskQuickAction(id, action.toolName, args);
+      if (proposal?.id) dispatch({ type: 'proposal', proposal });
+      await Promise.all([refreshLatest(id), refreshDetail(id)]);
+      messageListRef.current?.scrollToBottom();
+      if (proposal && String(proposal.status).toLowerCase() === 'failed') {
+        pushToast('error', t('{{command}} failed: {{reason}}', { command: action.command || action.name, reason: proposal.errorText || t('unknown error') }));
+      }
+      return true;
+    } catch (err: unknown) {
+      setError(errorText(err, t('The quick action failed.')));
+      return false;
+    } finally {
+      setActionBusy(false);
+    }
   }
+
+  async function decide(proposal: AskActionProposal, approve: boolean) {
+    const id = convRef.current.threadId;
+    if (!id) return;
+    setBusyProposalId(proposal.id);
+    try {
+      const updated = approve ? await approveAskProposal(id, proposal.id) : await rejectAskProposal(id, proposal.id);
+      if (updated?.id) dispatch({ type: 'proposal', proposal: updated });
+      void refreshLatest(id);
+      void refreshDetail(id);
+    } catch (err: unknown) {
+      setError(errorText(err, approve ? t('The action could not be approved.') : t('The action could not be rejected.')));
+    } finally {
+      setBusyProposalId(null);
+    }
+  }
+
+  async function updateThread(target: AskThread, patch: AskThreadUpdateRequest): Promise<AskThread | null> {
+    try {
+      const updated = await updateAskThread(target.id, patch);
+      const merged = { ...target, ...patch, ...updated } as AskThread;
+      setThreads((prev) => applyThreadUpdate(prev, merged, filterRef.current, convRef.current.threadId));
+      if (merged.id === convRef.current.threadId) dispatch({ type: 'thread', thread: merged });
+      return merged;
+    } catch (err: unknown) {
+      setError(errorText(err, t('The conversation could not be updated.')));
+      return null;
+    }
+  }
+
+  async function summarize(target: AskThread) {
+    try {
+      await summarizeAskThread(target.id);
+      pushToast('info', t('Summarizing "{{title}}". The summary will appear in the conversation.', { title: target.title || t('New conversation') }));
+    } catch (err: unknown) {
+      setError(errorText(err, t('The conversation could not be summarized.')));
+    }
+  }
+
+  async function confirmDelete() {
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    if (!target) return;
+    try {
+      await deleteAskThread(target.id);
+      setThreads((prev) => prev.filter((th) => th.id !== target.id));
+      pushToast('success', t('Conversation deleted.'));
+      if (target.id === convRef.current.threadId) navigate('/ask');
+    } catch (err: unknown) {
+      setError(errorText(err, t('The conversation could not be deleted.')));
+    }
+  }
+
+  function selectWork(work: AskTrackedWork) {
+    if (messageListRef.current?.scrollToWork(work.id)) {
+      setHighlightedWorkId(work.id);
+      window.setTimeout(() => setHighlightedWorkId((current) => (current === work.id ? null : current)), 2000);
+      return;
+    }
+    navigate(workRoute(work.entityType, work.entityId));
+  }
+
+  async function loadOlder() {
+    const id = convRef.current.threadId;
+    if (!id || loadingOlder) return;
+    const oldest = convRef.current.messages.find((m) => !m.id.startsWith('local-'));
+    if (!oldest) return;
+    setLoadingOlder(true);
+    try {
+      const page = await enumerateAskMessages(id, { beforeSequence: oldest.sequence, pageSize: MESSAGE_PAGE_SIZE });
+      dispatch({ type: 'older', threadId: id, messages: page?.messages ?? [], hasMore: !!page?.hasMore });
+    } catch (err: unknown) {
+      setError(errorText(err, t('Failed to load earlier messages.')));
+    } finally {
+      setLoadingOlder(false);
+    }
+  }
+
+  // ---------------------------------------------------------------- render
+
+  const isApiEndpoint = tools?.runtime === 'ApiEndpoint';
+  const mcpMissing = !!activeCaptainId && tools != null && tools.armadaToolCount <= 0 && !isApiEndpoint;
+  const noCaptain = !activeCaptainId;
+
+  const emptyState = thread ? (
+    <p className="text-dim">{t('Send the first message to begin.')}</p>
+  ) : (
+    <div className="ask-empty">
+      <p className="ask-empty-greeting">{greeting}</p>
+      <p className="ask-empty-sub">
+        {activeCaptain
+          ? t('Ask {{name}} anything about your fleet, or start work with a quick action.', { name: activeCaptain.name })
+          : t('Choose a captain to chat, or start work with a quick action.')}
+      </p>
+      <div className="ask-empty-actions">
+        {quickActions.map((action) => (
+          <button key={action.name} type="button" className="btn btn-sm" onClick={() => composerRef.current?.choose(action)} title={action.description ? t(action.description) : undefined}>
+            <code>{action.command || `/${action.name}`}</code>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
-    <div className="ask-page">
-      <div className="view-header">
-        <div>
-          <h2>{t('Ask Armada')}</h2>
-          <p className="text-dim view-subtitle">{t('Chat directly with a captain.')}</p>
-        </div>
-        <div className="ask-header-controls">
-          <label className="ask-stream-toggle" title={t('Stream the reply token-by-token as it is produced')}>
-            <input type="checkbox" checked={streamingEnabled} onChange={(e) => setStreamingEnabled(e.target.checked)} disabled={busy} />
-            {t('Stream responses')}
-          </label>
-          <label className="ask-stream-toggle" title={t('Surface the model reasoning above the answer. Mux streams it natively; other runtimes are asked to include it.')}>
-            <input type="checkbox" checked={showThinking} onChange={(e) => setShowThinking(e.target.checked)} disabled={busy} />
-            {t('Show thinking')}
-          </label>
-          <label className="text-dim" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', fontSize: '0.8rem' }}>
-            {t('Captain')}
-            <select value={captainId} onChange={(e) => setCaptainId(e.target.value)} disabled={busy}>
-              {captains.length === 0 && <option value="">{t('No captains available')}</option>}
-              {captains.map((c) => (
-                <option key={c.id} value={c.id}>{c.name} ({c.model || c.runtime})</option>
-              ))}
-            </select>
-          </label>
-        </div>
+    <div className={`ask-home${drawerOpen ? ' is-drawer-open' : ''}`}>
+      <div className="ask-home-list" id="ask-thread-drawer" ref={drawerRef} role={drawerOpen ? 'dialog' : undefined} aria-modal={drawerOpen || undefined} aria-label={drawerOpen ? t('Conversations') : undefined}>
+        <AskThreadList
+          threads={threads}
+          selectedId={routeThreadId}
+          activity={activity}
+          loading={listLoading}
+          error={listError}
+          search={search}
+          onSearchChange={setSearch}
+          includeArchived={includeArchived}
+          onIncludeArchivedChange={setIncludeArchived}
+          hasMore={listHasMore}
+          onLoadMore={() => void loadThreads(listPage + 1)}
+          onRetry={() => void loadThreads(1)}
+          onSelect={(th) => { setDrawerOpen(false); navigate(`/ask/${encodeURIComponent(th.id)}`); }}
+          onNew={() => { setDrawerOpen(false); navigate('/ask'); window.setTimeout(() => composerRef.current?.focus(), 0); }}
+          onRename={(th, title) => void updateThread(th, { title })}
+          onTogglePin={(th) => void updateThread(th, { pinned: !th.pinned })}
+          onSummarize={(th) => void summarize(th)}
+          onToggleArchive={(th) => void updateThread(th, { archived: !th.archived })}
+          onDelete={(th) => setDeleteTarget(th)}
+          onClose={drawerOpen ? () => setDrawerOpen(false) : undefined}
+        />
       </div>
+      {drawerOpen && <div className="ask-drawer-backdrop" onClick={() => setDrawerOpen(false)} aria-hidden="true" />}
+
+      <section className="ask-home-conv" aria-label={thread?.title || t('New conversation')}>
+        <AskConversationHeader
+          thread={thread}
+          captains={captains}
+          draftCaptainId={draftCaptainId}
+          onDraftCaptainChange={(id) => { setDraftCaptainId(id); writeStored(CAPTAIN_STORAGE_KEY, id); }}
+          onRename={(title) => { if (thread) void updateThread(thread, { title }); }}
+          onCaptainChange={(captainId) => {
+            if (!thread) return;
+            if (captainId) writeStored(CAPTAIN_STORAGE_KEY, captainId);
+            void updateThread(thread, { captainId });
+          }}
+          onAutoApproveChange={(value) => {
+            if (!thread) return;
+            void updateThread(thread, { autoApprove: value }).then((updated) => {
+              if (updated && value) pushToast('warning', t('Auto-approve is on. Actions the captain proposes in this conversation now run without asking.'));
+            });
+          }}
+          onSummarize={() => { if (thread) void summarize(thread); }}
+          onTogglePin={() => { if (thread) void updateThread(thread, { pinned: !thread.pinned }); }}
+          onToggleArchive={() => { if (thread) void updateThread(thread, { archived: !thread.archived }); }}
+          onDelete={() => { if (thread) setDeleteTarget(thread); }}
+          onOpenList={() => setDrawerOpen(true)}
+          busy={conv.turnActive}
+        />
+
+        {thread?.autoApprove && (
+          <div className="ask-auto-banner" role="note">
+            {t('Auto-approve is on: actions the captain proposes run immediately. Every action is still recorded below.')}
+          </div>
+        )}
+        {mcpMissing && (
+          <div className="ask-mcp-note" role="note">
+            <span>{t('This captain is not connected to Armada over MCP, so it can answer but cannot propose actions. Quick actions still work.')}</span>
+            <a href={instructionsDocUrl(activeCaptain?.runtime)} target="_blank" rel="noopener noreferrer">{t('How to connect')}</a>
+          </div>
+        )}
+
+        <AskWorkStrip work={conv.trackedWork} onSelect={selectWork} />
+
+        {convError ? (
+          <div className="ask-conv-error">
+            <ErrorState message={convError} onRetry={routeThreadId ? () => void loadConversation(routeThreadId) : undefined} />
+            <button type="button" className="btn btn-sm" onClick={() => navigate('/ask')}>{t('Start a new conversation')}</button>
+          </div>
+        ) : convLoading && conv.messages.length === 0 ? (
+          <div className="ask-transcript ask-transcript-loading"><LoadingState label={t('Loading conversation...')} /></div>
+        ) : (
+          <AskMessageList
+            ref={messageListRef}
+            messages={conv.messages}
+            proposals={conv.proposals}
+            trackedWork={conv.trackedWork}
+            snapshots={conv.snapshots}
+            hasMore={conv.hasMore}
+            loadingOlder={loadingOlder}
+            onLoadOlder={() => void loadOlder()}
+            streaming={conv.streaming}
+            turnActive={conv.turnActive}
+            waitingText={waitingText}
+            captainName={activeCaptain?.name ?? null}
+            captainNames={captainNames}
+            busyProposalId={busyProposalId}
+            onApprove={(p) => void decide(p, true)}
+            onReject={(p) => void decide(p, false)}
+            highlightedWorkId={highlightedWorkId}
+            emptyState={emptyState}
+            turnError={conv.turnError}
+          />
+        )}
+
+        <AskComposer
+          ref={composerRef}
+          quickActions={quickActions}
+          turnActive={conv.turnActive}
+          stopping={stopping}
+          onStop={stop}
+          onSend={(text) => void send(text)}
+          onQuickAction={runQuickAction}
+          actionBusy={actionBusy}
+          onOpenImport={() => setImportOpen(true)}
+          noCaptain={noCaptain}
+          showThinking={showThinking}
+          onShowThinkingChange={(value) => { setShowThinking(value); writeStored(THINKING_STORAGE_KEY, value ? 'true' : 'false'); }}
+        />
+      </section>
+
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</div>
 
       <ErrorModal error={error} onClose={() => setError('')} />
-
-      {captains.length === 0 ? (
-        <div className="card" style={{ padding: '1.5rem', textAlign: 'center' }}>
-          <p className="text-dim">{t('No captains are configured yet. Create a captain to Ask Armada.')}</p>
-        </div>
-      ) : (
-        <div className="ask-body">
-          {toolsLoading && (
-            <div className="text-dim" style={{ fontSize: '0.78rem', marginBottom: '0.6rem' }}>
-              {t('Checking whether this captain is connected to Armada over MCP...')}
-            </div>
-          )}
-          {isApiEndpoint && (
-            <div className="text-dim" style={{ fontSize: '0.78rem', marginBottom: '0.6rem' }}>
-              {t('This is an API-endpoint captain. It runs Armada’s built-in coding tools (read, edit, search, run) in-process, and in this chat it can also use Armada’s orchestration tools (fleet, missions, voyages, and more), scoped to you.')}
-            </div>
-          )}
-          {armadaMcpMissing && (
-            <div className="mcp-warning-banner">
-              <span className="mcp-warning-icon" aria-hidden="true">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                  <path d="M12 9v4" />
-                  <path d="M12 17h.01" />
-                </svg>
-              </span>
-              <div className="mcp-warning-body">
-                <strong>{t('This captain is not connected to Armada over MCP.')}</strong>
-                <span className="text-dim">
-                  {t('It cannot call Armada tools (fleet, missions, voyages, and more). Add the Armada MCP server to this captain’s runtime config to connect it.')}
-                </span>
-              </div>
-              <div className="mcp-warning-actions">
-                <button className="btn btn-sm" onClick={() => navigate('/captains/' + captainId)}>{t('View captain')}</button>
-                <a className="btn btn-sm" href={instructionsDocUrl(selectedCaptain?.runtime)} target="_blank" rel="noopener noreferrer">{t('How to connect')}</a>
-              </div>
-            </div>
-          )}
-
-          <CaptainChatPanel
-            t={t}
-            turns={turns}
-            notice={selectedCaptain?.runtime === 'Codex' ? t('Codex responses cannot be streamed and will arrive upon completion.') : undefined}
-            assistantName={selectedCaptain?.name}
-            toolRuntimeLabel={selectedCaptain?.runtime || tools?.runtime || undefined}
-            emptyState={(
-              <div className="ask-empty">
-                <p className="ask-empty-greeting">{greeting}</p>
-                <p className="ask-empty-sub">{selectedCaptain ? t('Chatting with {{name}}', { name: selectedCaptain.name }) : t('Select a captain to begin.')}</p>
-              </div>
-            )}
-            input={input}
-            onInputChange={setInput}
-            onSend={() => send(input)}
-            onStop={stop}
-            busy={busy}
-            canSend={!busy && !!captainId && input.trim().length > 0}
-            canStop={busy}
-            thinking={thinking}
-            inputPlaceholder={t('Message the captain...')}
-            inputDisabled={!captainId}
-            onClear={() => setConfirmClearOpen(true)}
-            clearDisabled={busy || turns.length === 0}
-          />
-        </div>
-      )}
-
       <ConfirmDialog
-        open={confirmClearOpen}
-        title={t('Clear Conversation')}
-        message={t('Clear this conversation? The messages shown here will be removed.')}
-        confirmLabel={t('Clear')}
+        open={!!deleteTarget}
+        title={t('Delete conversation')}
+        message={t('Delete "{{title}}"? Its messages and action history are removed. Work it started keeps running and stays visible on the normal pages.', { title: deleteTarget?.title || t('New conversation') })}
+        confirmLabel={t('Delete')}
         cancelLabel={t('Cancel')}
         danger
-        onConfirm={() => {
-          setConfirmClearOpen(false);
-          clearConversation();
-        }}
-        onCancel={() => setConfirmClearOpen(false)}
+        onConfirm={() => void confirmDelete()}
+        onCancel={() => setDeleteTarget(null)}
       />
+      <ImportWizard open={importOpen} onClose={() => setImportOpen(false)} tenantId={user?.user?.tenantId ?? null} />
     </div>
   );
 }
