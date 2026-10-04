@@ -211,13 +211,21 @@ The optional Phase D items in `docs/CODEHUB_CAPABILITIES.md` (GitHub signals, mo
 history), captain-suggested Ask thread titles, commit-message enforcement at landing, and the terminal client in
 `TUI_APP_PLAN.md` are post-1.0 unless a decision below pulls them in.
 
-## Decisions needed
+## Decisions (resolved 2026-10-04: the maintainer approved the plan and its recommendations)
 
-- **D1.** Which install paths are supported at 1.0 (W5.1).
-- **D2.** MCP authentication default for non-loopback bindings (W1.3).
-- **D3.** Fate of the keyword `POST /api/v1/ask` responder and the Harbor split-mode transport (W2.2).
-- **D4.** Whether non-reviewed locales ship as "beta" or are held back (W6.6).
-- **D5.** Whether the TUI client is part of 1.0.
+- **D1. Install paths at 1.0:** Docker (Admiral, dashboard, proxy); NuGet global tool for the CLI; Windows (Inno for
+  Harbor, WiX for the server); macOS (signed and notarized `.app` in a `.dmg` for Harbor, `.pkg` for the server); Linux
+  Deb/Rpm. Homebrew, Scoop, Chocolatey, Winget, and AppImage ship only if implemented; otherwise they are disabled in
+  `publisher.json` and removed from the README.
+- **D2. MCP authentication:** authenticated by default; unauthenticated calls are allowed only when the MCP listener is
+  bound to loopback and `Mcp.AllowUnauthenticatedLoopback` is true (the default).
+- **D3. Not-ready surfaces:** remove the keyword `POST /api/v1/ask` responder (the dashboard does not call it; Ask
+  threads replace it); remove `create_voyage` / `retry_mission` from Ask work linking; mark the Harbor split-mode
+  transport experimental.
+- **D4. Locales:** the eight non-English locales ship labeled "beta" in the language pickers until reviewed by native
+  speakers.
+- **D5. TUI:** built in parallel per `TUI_APP_PLAN.md`; whether it is part of the 1.0 compatibility promise is decided at
+  the first release candidate.
 
 ## Progress Log
 

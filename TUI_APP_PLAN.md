@@ -677,17 +677,17 @@ before Milestone B; U5, U6 before Milestone E).
 - **VERSIONING.md:** the TUI ships with Helm's version; agents do not change versions without explicit approval.
 - **WRITING_DOCUMENTS.md:** `docs/TUI.md` written as prose, no em-dashes.
 
-## Decisions
+## Decisions (resolved 2026-10-04: the maintainer approved the plan and its recommendations)
 
-- **D1. Packaging.** Recommended: `Armada.Tui` is a library hosted by Helm as `armada tui`, so one install provides the
+- **D1. Packaging.** Resolved: `Armada.Tui` is a library hosted by Helm as `armada tui`, so one install provides the
   CLI and the TUI. Alternative: a separate `armada-tui` binary and packages.
-- **D2. Client library scope.** Recommended: `Armada.Client` is generated from OpenAPI and hand-finished, and Helm moves
+- **D2. Client library scope.** Resolved: `Armada.Client` is generated from OpenAPI and hand-finished, and Helm moves
   to it over time. Alternative: a TUI-private client.
-- **D3. TUIKit upstream.** Recommended: upstream the general widgets and fixes (workstream U) and keep Armada-specific
+- **D3. TUIKit upstream.** Resolved: upstream the general widgets and fixes (workstream U) and keep Armada-specific
   widgets in `Armada.Tui`. Alternative: keep everything in Armada.
-- **D4. Credentials at rest.** Recommended: OS keychain (macOS Keychain, Windows Credential Manager, libsecret) with a
+- **D4. Credentials at rest.** Resolved: OS keychain (macOS Keychain, Windows Credential Manager, libsecret) with a
   `0600` file fallback.
-- **D5. Release timing.** Post-1.0 per `V1_READINESS.md`, unless pulled into 1.0.
+- **D5. Release timing.** Resolved: built in parallel with the v1.0 work; whether it is covered by the 1.0 compatibility promise is decided at the first release candidate.
 
 ## Progress Log
 
