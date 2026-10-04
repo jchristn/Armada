@@ -440,13 +440,84 @@ export function interpolate(template: string, params?: Record<string, string | n
   }, template);
 }
 
+const ICU_PLURAL_START = /\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*plural\s*,/g;
+
+/**
+ * Parse the branches of an ICU plural body starting at `start` (just after "plural,"). Returns the branch
+ * map and the index just past the closing brace, or null when the message is malformed.
+ */
+function parsePluralBranches(text: string, start: number): { branches: Record<string, string>; end: number } | null {
+  const branches: Record<string, string> = {};
+  let i = start;
+  while (i < text.length) {
+    while (i < text.length && /\s/.test(text[i])) i++;
+    if (text[i] === '}') return { branches, end: i + 1 };
+    const selectorMatch = /^(=\d+|[A-Za-z]+)\s*\{/.exec(text.slice(i));
+    if (!selectorMatch) return null;
+    const selector = selectorMatch[1];
+    i += selectorMatch[0].length;
+    let depth = 1;
+    const bodyStart = i;
+    while (i < text.length && depth > 0) {
+      if (text[i] === '{') depth++;
+      else if (text[i] === '}') depth--;
+      if (depth > 0) i++;
+    }
+    if (depth !== 0) return null;
+    branches[selector] = text.slice(bodyStart, i);
+    i++;
+  }
+  return null;
+}
+
+/**
+ * Format ICU-style plural messages, e.g. `{count, plural, one {# repository} other {# repositories}}`, using
+ * `Intl.PluralRules` for the active locale so languages with other plural categories (few, many) work when
+ * the catalog supplies those branches. `#` becomes the locale-formatted number; `=N` exact matches win.
+ * Text outside plural blocks is returned unchanged, so `{{name}}` placeholders still interpolate afterwards.
+ */
+export function formatIcuPlurals(
+  locale: string,
+  text: string,
+  params?: Record<string, string | number | null | undefined>,
+): string {
+  if (!text.includes('plural')) return text;
+  let result = '';
+  let cursor = 0;
+  const re = new RegExp(ICU_PLURAL_START.source, 'g');
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text)) !== null) {
+    const parsed = parsePluralBranches(text, match.index + match[0].length);
+    if (!parsed) break;
+    const raw = params?.[match[1]];
+    const count = typeof raw === 'number' ? raw : Number(raw ?? 0);
+    let category = 'other';
+    try {
+      category = new Intl.PluralRules(locale).select(count);
+    } catch {
+      category = count === 1 ? 'one' : 'other';
+    }
+    const branch = parsed.branches[`=${count}`] ?? parsed.branches[category] ?? parsed.branches.other ?? '';
+    let formatted = String(count);
+    try {
+      formatted = new Intl.NumberFormat(locale).format(count);
+    } catch {
+      // keep the plain number
+    }
+    result += text.slice(cursor, match.index) + formatIcuPlurals(locale, branch, params).split('#').join(formatted);
+    cursor = parsed.end;
+    re.lastIndex = parsed.end;
+  }
+  return result + text.slice(cursor);
+}
+
 export function translateTemplate(
   locale: string,
   text: string,
   catalog: I18nCatalog | null | undefined,
   params?: Record<string, string | number | null | undefined>,
 ): string {
-  return interpolate(translateText(locale, text, catalog), params);
+  return interpolate(formatIcuPlurals(locale, translateText(locale, text, catalog), params), params);
 }
 
 export function normalizeLocale(locale: string | null | undefined, catalog: I18nCatalog | null | undefined): string {

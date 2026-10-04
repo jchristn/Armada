@@ -2276,3 +2276,266 @@ export interface Memory {
   createdUtc: string;
   lastUpdateUtc: string;
 }
+
+// ---------------------------------------------------------------------------
+// Vessel Import (bulk onboarding of existing local repositories)
+// ---------------------------------------------------------------------------
+
+export type VesselImportBatchStatus = 'Discovered' | 'Importing' | 'Completed' | 'CompletedWithFailures' | 'Failed';
+export type VesselImportCandidateStatus = 'New' | 'AlreadyOnboarded' | 'Worktree' | 'ArmadaManaged' | 'NotFound' | 'NotGit' | 'AccessDenied';
+export type VesselImportOutcome = 'Pending' | 'Created' | 'SkippedExisting' | 'SkippedNotSelected' | 'Failed';
+
+export interface VesselBrowseEntry {
+  name: string;
+  path: string;
+  isGitRepository: boolean;
+  isWorktree: boolean;
+  hasSubdirectories: boolean;
+}
+
+export interface VesselBrowseResult {
+  path: string | null;
+  parent: string | null;
+  entries: VesselBrowseEntry[];
+}
+
+export interface VesselImportBatch {
+  id: string;
+  tenantId: string | null;
+  userId: string | null;
+  status: VesselImportBatchStatus;
+  harborId: string | null;
+  fleetId: string | null;
+  jobId: string | null;
+  requestedPathCount: number;
+  candidateCount: number;
+  createdCount: number;
+  skippedCount: number;
+  failedCount: number;
+  createdUtc: string;
+  lastUpdateUtc: string;
+  completedUtc: string | null;
+}
+
+export interface VesselImportItem {
+  id: string;
+  tenantId: string | null;
+  batchId: string | null;
+  path: string;
+  proposedName: string;
+  remoteUrl: string | null;
+  defaultBranch: string | null;
+  candidateStatus: VesselImportCandidateStatus;
+  existingVesselId: string | null;
+  outcome: VesselImportOutcome;
+  outcomeReason: string | null;
+  outcomeMessage: string | null;
+  vesselId: string | null;
+  createdUtc: string;
+  lastUpdateUtc: string;
+}
+
+export interface VesselImportHint {
+  code: string;
+  message: string;
+}
+
+export interface VesselDiscoveryRequest {
+  Directories?: string[];
+  Roots?: string[];
+  MaxDepth?: number;
+}
+
+export interface VesselImportDiscoverResponse {
+  batchId: string;
+  batch: VesselImportBatch;
+  candidates: VesselImportItem[];
+  truncated: boolean;
+  hints: VesselImportHint[];
+}
+
+export interface VesselImportRequest {
+  BatchId: string;
+  Paths: string[];
+  FleetId?: string | null;
+  Defaults?: {
+    DefaultPipelineId?: string | null;
+    LandingMode?: string | null;
+  } | null;
+}
+
+export interface VesselImportResponse {
+  batchId: string;
+  jobId: string | null;
+  runsInBackground: boolean;
+  batch: VesselImportBatch;
+  items: VesselImportItem[];
+}
+
+export interface VesselImportBatchDetail {
+  batch: VesselImportBatch;
+  items: VesselImportItem[];
+}
+
+/** Machine-readable error detail carried in `data` of vessel import error responses. */
+export interface VesselImportErrorDetail {
+  code: string;
+  path: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Fleet Actions
+// ---------------------------------------------------------------------------
+
+export type FleetActionKind = 'Command' | 'Mission';
+export type FleetActionRunStatus = 'Pending' | 'Running' | 'Completed' | 'CompletedWithFailures' | 'Cancelled' | 'Failed';
+export type FleetActionTargetStatus = 'Pending' | 'Skipped' | 'Running' | 'Succeeded' | 'Failed' | 'Cancelled' | 'TimedOut';
+
+export interface FleetAction {
+  id: string;
+  tenantId: string | null;
+  userId: string | null;
+  name: string;
+  description: string | null;
+  kind: FleetActionKind;
+  commandText: string | null;
+  promptTemplate: string | null;
+  pipelineId: string | null;
+  persona: string | null;
+  timeoutSeconds: number;
+  defaultConcurrency: number;
+  requiresCleanWorkingTree: boolean;
+  isBuiltIn: boolean;
+  builtInKey: string | null;
+  active: boolean;
+  createdUtc: string;
+  lastUpdateUtc: string;
+}
+
+/** Create/update body. PascalCase keys because the server binds them as-is. */
+export interface FleetActionUpsertRequest {
+  Name?: string;
+  Description?: string | null;
+  Kind?: FleetActionKind;
+  CommandText?: string | null;
+  PromptTemplate?: string | null;
+  PipelineId?: string | null;
+  Persona?: string | null;
+  TimeoutSeconds?: number | null;
+  DefaultConcurrency?: number | null;
+  RequiresCleanWorkingTree?: boolean | null;
+}
+
+export interface FleetActionRunOverrides {
+  TimeoutSeconds?: number | null;
+  RequiresCleanWorkingTree?: boolean | null;
+  PipelineId?: string | null;
+}
+
+export interface FleetActionRunRequest {
+  VesselIds: string[];
+  Concurrency?: number | null;
+  Overrides?: FleetActionRunOverrides | null;
+  Definition?: FleetActionUpsertRequest | null;
+}
+
+export interface FleetActionRunStartResult {
+  runId: string;
+  actionId: string | null;
+  kind: FleetActionKind;
+  status: FleetActionRunStatus;
+  targetCount: number;
+  concurrency: number;
+}
+
+export interface FleetActionRun {
+  id: string;
+  tenantId: string | null;
+  userId: string | null;
+  actionId: string | null;
+  actionName: string;
+  kind: FleetActionKind;
+  commandText: string | null;
+  promptTemplate: string | null;
+  pipelineId: string | null;
+  persona: string | null;
+  timeoutSeconds: number;
+  requiresCleanWorkingTree: boolean;
+  concurrency: number;
+  status: FleetActionRunStatus;
+  targetCount: number;
+  succeededCount: number;
+  failedCount: number;
+  skippedCount: number;
+  cancelledCount: number;
+  startedUtc: string | null;
+  completedUtc: string | null;
+  createdUtc: string;
+  lastUpdateUtc: string;
+}
+
+export interface FleetActionRunTargetSummary {
+  id: string;
+  runId: string | null;
+  vesselId: string;
+  vesselName: string;
+  status: FleetActionTargetStatus;
+  skipReason: string | null;
+  failureReason: string | null;
+  exitCode: number | null;
+  outputTruncated: boolean;
+  outputLength: number;
+  errorLength: number;
+  renderedLength: number;
+  voyageId: string | null;
+  startedUtc: string | null;
+  completedUtc: string | null;
+  durationMs: number | null;
+  createdUtc: string;
+  lastUpdateUtc: string;
+}
+
+export interface FleetActionRunTarget {
+  id: string;
+  tenantId: string | null;
+  runId: string | null;
+  vesselId: string;
+  vesselName: string;
+  status: FleetActionTargetStatus;
+  skipReason: string | null;
+  failureReason: string | null;
+  renderedText: string | null;
+  exitCode: number | null;
+  outputText: string | null;
+  errorText: string | null;
+  outputTruncated: boolean;
+  voyageId: string | null;
+  startedUtc: string | null;
+  completedUtc: string | null;
+  durationMs: number | null;
+  createdUtc: string;
+  lastUpdateUtc: string;
+}
+
+export interface FleetActionRunDetail {
+  run: FleetActionRun;
+  targets: FleetActionRunTargetSummary[];
+}
+
+// ---------------------------------------------------------------------------
+// Settings groups added for import and fleet actions
+// ---------------------------------------------------------------------------
+
+export interface VesselImportSettingsData {
+  allowedRoots: string[];
+  maxDepth: number;
+  excludedDirectoryNames: string[];
+  inlineBatchLimit: number;
+}
+
+export interface FleetActionSettingsData {
+  maxConcurrency: number;
+  defaultTimeoutSeconds: number;
+  maxOutputBytes: number;
+  runRetentionDays: number;
+}

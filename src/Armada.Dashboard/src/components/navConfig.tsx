@@ -62,9 +62,10 @@ export const navSections: NavSection[] = [
   {
     key: 'delivery',
     label: 'DELIVERY',
-    matchers: ['/delivery', '/checks', '/environments', '/deployments', '/releases', '/incidents', '/runbooks'],
+    matchers: ['/delivery', '/checks', '/environments', '/deployments', '/releases', '/incidents', '/runbooks', '/fleet-actions'],
     items: [
       { to: '/delivery', label: 'Delivery', tooltip: 'Deployments, Environments, Releases, Incidents, Checks, and Runbooks as tabs', icon: icons.delivery },
+      { to: '/fleet-actions', label: 'Fleet Actions', tooltip: 'Run a command or mission across many vessels and watch each run', icon: icons.fleetActions },
     ],
   },
   {

@@ -9,7 +9,9 @@ import {
   listFleets,
   deleteMission,
   restartMission,
+  enumerateFleetActionRuns,
 } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import type { MissionSummary, Vessel, Captain, Signal, Fleet } from '../types/models';
 import { useWebSocket } from '../context/WebSocketContext';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
@@ -70,6 +72,8 @@ export default function Dashboard() {
     window.dispatchEvent(new CustomEvent('armada:open-setup-wizard'));
   }, []);
 
+  const { isTenantAdmin } = useAuth();
+  const [activeRuns, setActiveRuns] = useState<{ pending: number; running: number } | null>(null);
   const [status, setStatus] = useState<StatusData | null>(null);
   const [recentMissions, setRecentMissions] = useState<MissionSummary[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
@@ -127,13 +131,16 @@ export default function Dashboard() {
 
   const loadAll = useCallback(async () => {
     try {
-      const [statusRes, missionRes, vesselRes, captainRes, fleetRes] = await Promise.all([
+      const [statusRes, missionRes, vesselRes, captainRes, fleetRes, pendingRuns, runningRuns] = await Promise.all([
         getStatus().catch(() => null),
         listMissionSummaries({ pageSize: 10 }).catch(() => null),
         listVessels({ pageSize: 9999 }).catch(() => null),
         listCaptains({ pageSize: 9999 }).catch(() => null),
         listFleets({ pageSize: 9999 }).catch(() => null),
+        enumerateFleetActionRuns({ status: 'Pending', pageSize: 1 }).catch(() => null),
+        enumerateFleetActionRuns({ status: 'Running', pageSize: 1 }).catch(() => null),
       ]);
+      setActiveRuns(pendingRuns && runningRuns ? { pending: pendingRuns.totalRecords, running: runningRuns.totalRecords } : null);
       if (statusRes) setStatus(statusRes as unknown as StatusData);
       if (missionRes) {
         setRecentMissions(missionRes.objects || []);
@@ -410,7 +417,49 @@ export default function Dashboard() {
               ))}
           </div>
         </div>
+        <div
+          className="card clickable"
+          onClick={() => navigate(activeRuns && activeRuns.running === 0 && activeRuns.pending > 0 ? '/fleet-actions?tab=runs&status=Pending' : '/fleet-actions?tab=runs&status=Running')}
+          title={t('Click to view active fleet action runs')}
+        >
+          <div className="card-label">{t('Active fleet action runs')}</div>
+          <div className="card-value">{activeRuns ? (activeRuns.pending + activeRuns.running).toLocaleString() : '-'}</div>
+          {activeRuns && (
+            <div className="card-detail">
+              <button type="button" className="tag working card-tag-link" onClick={(e) => { e.stopPropagation(); navigate('/fleet-actions?tab=runs&status=Running'); }}>
+                {t('{{count}} running', { count: activeRuns.running.toLocaleString() })}
+              </button>
+              <button type="button" className="tag pending card-tag-link" onClick={(e) => { e.stopPropagation(); navigate('/fleet-actions?tab=runs&status=Pending'); }}>
+                {t('{{count}} pending', { count: activeRuns.pending.toLocaleString() })}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Bulk onboarding and fleet action shortcuts */}
+      {isTenantAdmin && (
+        <div className="cta-cards">
+          <button type="button" className="cta-card" onClick={() => navigate('/vessels/import')}>
+            <span className="cta-card-icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg>
+            </span>
+            <span className="cta-card-text">
+              <span className="cta-card-title">{t('Import repositories')}</span>
+              <span className="cta-card-sub text-dim">{t('Discover local git repositories and onboard them as vessels in bulk.')}</span>
+            </span>
+          </button>
+          <button type="button" className="cta-card" onClick={() => navigate('/fleet-actions?tab=actions&run=new')}>
+            <span className="cta-card-icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" /></svg>
+            </span>
+            <span className="cta-card-text">
+              <span className="cta-card-title">{t('Run fleet action')}</span>
+              <span className="cta-card-sub text-dim">{t('Run a command or a captain mission across many vessels at once.')}</span>
+            </span>
+          </button>
+        </div>
+      )}
 
       {/* Mission History Chart */}
       <MissionHistoryChart vessels={vessels} fleets={fleets} onRefresh={loadAll} />

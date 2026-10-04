@@ -81,6 +81,8 @@ const CaptainsHub = lazy(() => import('./pages/CaptainsHub'));
 const MissionsHub = lazy(() => import('./pages/MissionsHub'));
 const DispatchHub = lazy(() => import('./pages/DispatchHub'));
 const DeliveryHub = lazy(() => import('./pages/DeliveryHub'));
+const FleetActions = lazy(() => import('./pages/FleetActions'));
+const FleetActionRunDetail = lazy(() => import('./pages/FleetActionRunDetail'));
 
 function RouteFallback() {
   return <LoadingIndicator fullHeight label="Loading page..." />;
@@ -111,6 +113,7 @@ export default function App() {
                       <Route path="fleets/:id" element={<FleetDetail />} />
 
                       <Route path="vessels" element={<VesselsHub />} />
+                      <Route path="vessels/import" element={<VesselsHub />} />
                       <Route path="vessels/:id" element={<VesselDetail />} />
                       <Route path="vessels/:id/onboarding" element={<VesselOnboarding />} />
                       <Route path="workspace" element={<Navigate to="/vessels?tab=workspace" replace />} />
@@ -162,6 +165,8 @@ export default function App() {
                       <Route path="ask" element={<AskArmada />} />
                       <Route path="inbox" element={<Inbox />} />
                       <Route path="delivery" element={<DeliveryHub />} />
+                      <Route path="fleet-actions" element={<FleetActions />} />
+                      <Route path="fleet-actions/runs/:id" element={<FleetActionRunDetail />} />
                       <Route path="checks" element={<Navigate to="/delivery?tab=checks" replace />} />
                       <Route path="checks/:id" element={<CheckRunDetail />} />
                       <Route path="environments" element={<Navigate to="/delivery?tab=environments" replace />} />
