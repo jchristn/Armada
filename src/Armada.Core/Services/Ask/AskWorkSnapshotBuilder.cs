@@ -183,6 +183,17 @@ namespace Armada.Core.Services.Ask
             }
 
             ApplyMissionCounts(snapshot);
+
+            // Armada can mark a voyage Complete while a mission is still landing (pull request open, merge queue). Keep
+            // following the voyage until every mission has settled, so landing outcomes still reach the thread.
+            if (snapshot.State != AskTrackedWorkStateEnum.Active
+                && snapshot.State != AskTrackedWorkStateEnum.Cancelled
+                && snapshot.Missions.Any(m => SettledState(m) == AskTrackedWorkStateEnum.Active))
+            {
+                snapshot.State = AskTrackedWorkStateEnum.Active;
+                snapshot.CompletedUtc = null;
+            }
+
             snapshot.StartedUtc = snapshot.Missions.Where(m => m.StartedUtc.HasValue).Select(m => m.StartedUtc).Min();
             if (snapshot.State == AskTrackedWorkStateEnum.Failed && String.IsNullOrEmpty(snapshot.ErrorText))
                 snapshot.ErrorText = snapshot.Missions.Select(m => m.FailureReason).FirstOrDefault(r => !String.IsNullOrEmpty(r));
@@ -200,8 +211,8 @@ namespace Armada.Core.Services.Ask
             AskWorkMissionSnapshot row = await BuildMissionRowAsync(tenantId, mission, new Dictionary<string, string?>(StringComparer.Ordinal), token).ConfigureAwait(false);
             snapshot.Title = mission.Title;
             snapshot.Status = mission.Status.ToString();
-            snapshot.State = StateOf(mission.Status);
             snapshot.Missions.Add(row);
+            snapshot.State = SettledState(row);
             snapshot.StartedUtc = mission.StartedUtc;
             snapshot.CompletedUtc = mission.CompletedUtc;
             snapshot.ErrorText = mission.FailureReason;
@@ -410,6 +421,29 @@ namespace Armada.Core.Services.Ask
             return row;
         }
 
+        /// <summary>
+        /// Whether a mission row has settled: Complete succeeded; Failed, LandingFailed, and Cancelled failed; WorkProduced
+        /// counts as succeeded (work produced, nothing landing) unless its merge-queue entry is still queued, testing, or
+        /// passed-but-not-landed; everything else (including an open pull request) is still active.
+        /// </summary>
+        /// <param name="row">Mission row.</param>
+        /// <returns>The settled state, or Active.</returns>
+        public static AskTrackedWorkStateEnum SettledState(AskWorkMissionSnapshot row)
+        {
+            if (row == null) throw new ArgumentNullException(nameof(row));
+            MissionStatusEnum status;
+            if (!Enum.TryParse<MissionStatusEnum>(row.Status, out status)) return AskTrackedWorkStateEnum.Active;
+            if (status == MissionStatusEnum.WorkProduced)
+            {
+                bool landing = row.MergeQueueStatus == MergeStatusEnum.Queued.ToString()
+                    || row.MergeQueueStatus == MergeStatusEnum.Testing.ToString()
+                    || row.MergeQueueStatus == MergeStatusEnum.Passed.ToString();
+                return landing ? AskTrackedWorkStateEnum.Active : AskTrackedWorkStateEnum.Succeeded;
+            }
+
+            return StateOf(status);
+        }
+
         private static void ApplyMissionCounts(AskWorkSnapshot snapshot)
         {
             snapshot.TotalCount = snapshot.Missions.Count;
@@ -420,9 +454,7 @@ namespace Armada.Core.Services.Ask
             foreach (AskWorkMissionSnapshot row in snapshot.Missions)
             {
                 Count(counts, row.Status);
-                MissionStatusEnum status;
-                if (!Enum.TryParse<MissionStatusEnum>(row.Status, out status)) status = MissionStatusEnum.Pending;
-                AskTrackedWorkStateEnum state = StateOf(status);
+                AskTrackedWorkStateEnum state = SettledState(row);
                 if (state == AskTrackedWorkStateEnum.Succeeded) snapshot.CompletedCount++;
                 else if (state == AskTrackedWorkStateEnum.Active) snapshot.ActiveCount++;
                 else snapshot.FailedCount++;

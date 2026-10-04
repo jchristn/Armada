@@ -60,6 +60,8 @@ namespace Armada.Core.Services.Ask
                     else if (mission.Status == MissionStatusEnum.PullRequestOpen.ToString()
                         || (!String.IsNullOrEmpty(mission.PrUrl) && String.IsNullOrEmpty(was?.PrUrl) && mission.Status != MissionStatusEnum.Complete.ToString()))
                         milestones.Add(new AskMilestone("PullRequestOpened", name + " opened a pull request" + (String.IsNullOrEmpty(mission.PrUrl) ? "." : ": " + mission.PrUrl), false));
+                    else if (mission.Status == MissionStatusEnum.WorkProduced.ToString())
+                        milestones.Add(new AskMilestone("MissionWorkProduced", name + " produced its work" + (String.IsNullOrEmpty(mission.BranchName) ? "." : " on branch " + mission.BranchName + "."), false));
                     else if (mission.Status == MissionStatusEnum.Complete.ToString())
                         milestones.Add(new AskMilestone("MissionLanded", name + (String.Equals(mission.LandingOutcome, "PullRequestMerged", StringComparison.Ordinal) ? " landed (pull request merged)." : " landed."), false));
                 }

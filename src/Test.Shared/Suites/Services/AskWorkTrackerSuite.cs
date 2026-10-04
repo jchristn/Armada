@@ -201,6 +201,55 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(captain.Id, update.CaptainId);
             }));
 
+            cases.Add(CaseAsync("voyage_follows_landing", "A voyage marked Complete is followed until its missions settle; produced work counts as done", async () =>
+            {
+                using AskTestHarness h = await AskTestHarness.CreateAsync().ConfigureAwait(false);
+                h.Settings.Ask.NarrateMilestones = false;
+                DatabaseDriver db = h.Db.Driver;
+                AuthContext owner = AskTestHarness.User("usr_land");
+                AskThread thread = await h.Threads.CreateThreadAsync(owner, null).ConfigureAwait(false);
+                Voyage voyage = await db.Voyages.CreateAsync(new Voyage("Landing") { TenantId = Constants.DefaultTenantId, Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
+                Mission mission = await db.Missions.CreateAsync(new Mission("Change") { TenantId = Constants.DefaultTenantId, VoyageId = voyage.Id, Status = MissionStatusEnum.InProgress }).ConfigureAwait(false);
+                AskTrackedWork work = await h.Threads.TrackWorkAsync(thread, new AskWorkLink(AskTrackedEntityTypeEnum.Voyage, voyage.Id, false)).ConfigureAwait(false);
+                await h.Tracker.OnWorkLinkedAsync(work).ConfigureAwait(false);
+
+                // The mission produced work and is queued for landing; the voyage is already Complete.
+                mission.Status = MissionStatusEnum.WorkProduced;
+                mission.BranchName = "armada/change";
+                await db.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                MergeEntry entry = new MergeEntry { TenantId = Constants.DefaultTenantId, MissionId = mission.Id, BranchName = "armada/change", TargetBranch = "main", Status = MergeStatusEnum.Queued };
+                entry = await db.MergeEntries.CreateAsync(entry).ConfigureAwait(false);
+                voyage.Status = VoyageStatusEnum.Complete;
+                await db.Voyages.UpdateAsync(voyage).ConfigureAwait(false);
+                await h.Tracker.RefreshAsync(work).ConfigureAwait(false);
+                AskTrackedWork? row = await db.AskTrackedWork.ReadAsync(Constants.DefaultTenantId, work.Id).ConfigureAwait(false);
+                AssertEqual(AskTrackedWorkStateEnum.Active, row!.State, "still landing, still followed");
+
+                // Landed: the mission completes and the merge entry lands; now the voyage is done.
+                entry.Status = MergeStatusEnum.Landed;
+                await db.MergeEntries.UpdateAsync(entry).ConfigureAwait(false);
+                mission.Status = MissionStatusEnum.Complete;
+                await db.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                await h.Tracker.RefreshAsync(work).ConfigureAwait(false);
+                await h.Tracker.WaitForMilestonesAsync(thread.Id).ConfigureAwait(false);
+                row = await db.AskTrackedWork.ReadAsync(Constants.DefaultTenantId, work.Id).ConfigureAwait(false);
+                AssertEqual(AskTrackedWorkStateEnum.Succeeded, row!.State, "settled");
+
+                AskMessagePage page = (await h.Threads.EnumerateMessagesAsync(owner, thread.Id, null).ConfigureAwait(false))!;
+                List<string> updates = page.Messages.Where(m => m.Kind == AskMessageKindEnum.WorkUpdate).Select(m => m.ContentText).ToList();
+                AssertTrue(updates.Any(u => u.Contains("produced its work on branch armada/change")), "work produced: " + String.Join(" | ", updates));
+                AssertTrue(updates.Any(u => u == "Mission \"Change\" landed."), "landed");
+                AssertContains("finished (1 of 1 missions done)", updates.Last());
+
+                // Produced work with nothing landing counts as done right away.
+                Voyage plain = await db.Voyages.CreateAsync(new Voyage("No landing") { TenantId = Constants.DefaultTenantId, Status = VoyageStatusEnum.Complete }).ConfigureAwait(false);
+                await db.Missions.CreateAsync(new Mission("Only") { TenantId = Constants.DefaultTenantId, VoyageId = plain.Id, Status = MissionStatusEnum.WorkProduced }).ConfigureAwait(false);
+                AskTrackedWork plainWork = await h.Threads.TrackWorkAsync(thread, new AskWorkLink(AskTrackedEntityTypeEnum.Voyage, plain.Id, false)).ConfigureAwait(false);
+                AskWorkSnapshot snap = await h.Threads.Snapshots.BuildAsync(plainWork).ConfigureAwait(false);
+                AssertEqual(AskTrackedWorkStateEnum.Succeeded, snap.State, "nothing landing");
+                AssertEqual(1, snap.CompletedCount, "produced work counts as done");
+            }));
+
             cases.Add(CaseAsync("milestone_detector_rules", "Milestone detection covers PR opened, landing failed, cancelled, and missing entities", () =>
             {
                 AskWorkSnapshot before = Snapshot(AskTrackedWorkStateEnum.Active, M("msn_1", "InProgress", null));
