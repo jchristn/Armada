@@ -58,6 +58,14 @@ namespace Armada.Core.Database.Interfaces
         Task<List<Job>> EnumerateAsync(string tenantId, string userId, CancellationToken token = default);
 
         /// <summary>
+        /// Enumerate one page of jobs matching a query, newest first, with the total count.
+        /// </summary>
+        /// <param name="query">Filter and page.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page and total.</returns>
+        Task<EnumerationResult<Job>> EnumeratePageAsync(JobQuery query, CancellationToken token = default);
+
+        /// <summary>
         /// Whether any job exists.
         /// </summary>
         Task<bool> ExistsAnyAsync(CancellationToken token = default);

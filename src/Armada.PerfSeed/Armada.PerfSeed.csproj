@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <Description>Seeds a throwaway Armada data directory with a large, realistic dataset for the performance baseline (scripts/common/perf-baseline.sh).</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Armada.Core\Armada.Core.csproj" />
+  </ItemGroup>
+
+</Project>

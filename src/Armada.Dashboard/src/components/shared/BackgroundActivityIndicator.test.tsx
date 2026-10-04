@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import BackgroundActivityIndicator, { ACTIVITY_FAST_POLL_MS, ACTIVITY_IDLE_POLL_MS } from './BackgroundActivityIndicator';
+import BackgroundActivityIndicator, { ACTIVITY_FAST_POLL_MS, ACTIVITY_IDLE_POLL_MS, ACTIVITY_PAGE_SIZE } from './BackgroundActivityIndicator';
 import { getJob, listJobs } from '../../api/client';
 import { translateTemplate } from '../../i18n/runtime';
 import type { Job } from '../../types/models';
@@ -43,6 +43,8 @@ describe('BackgroundActivityIndicator', () => {
     vi.mocked(listJobs).mockResolvedValue(page([job('job_old', 'Generic', 'Old', 'Succeeded')]));
     renderIndicator();
     await waitFor(() => expect(listJobs).toHaveBeenCalledTimes(1));
+    // The poll asks the server for active jobs only instead of downloading the whole job history.
+    expect(listJobs).toHaveBeenCalledWith({ status: ['Queued', 'Running'], pageSize: ACTIVITY_PAGE_SIZE });
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
     await act(async () => { await vi.advanceTimersByTimeAsync(ACTIVITY_FAST_POLL_MS); });
     expect(listJobs).toHaveBeenCalledTimes(1);

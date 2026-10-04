@@ -10,6 +10,8 @@ import { jobFriendlyName, jobRoute } from '../../lib/vesselImportLabels';
 export const ACTIVITY_FAST_POLL_MS = 5000;
 /** Poll interval while nothing is running, in milliseconds. */
 export const ACTIVITY_IDLE_POLL_MS = 30000;
+/** Most active jobs fetched per poll; more than this running at once is not expected. */
+export const ACTIVITY_PAGE_SIZE = 100;
 /** Window event other components dispatch right after they start background work, to refresh immediately. */
 export const BACKGROUND_ACTIVITY_EVENT = 'armada:background-activity';
 
@@ -71,7 +73,8 @@ export default function BackgroundActivityIndicator() {
     }
     let active: Job[] = [];
     try {
-      const result = await listJobs();
+      // Ask the server for active jobs only: the full job history grows without bound and this runs every 5-30 s.
+      const result = await listJobs({ status: ['Queued', 'Running'], pageSize: ACTIVITY_PAGE_SIZE });
       active = (result.objects || []).filter(isActive);
       if (!mounted.current) return;
       const before = previous.current;

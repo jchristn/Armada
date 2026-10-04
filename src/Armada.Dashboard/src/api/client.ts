@@ -782,7 +782,18 @@ export const recallCaptain = (id: string) => post<void>(`/api/v1/captains/${id}/
 export const stopAllCaptains = () => post<void>('/api/v1/captains/stop-all');
 
 // Background jobs
-export const listJobs = () => get<EnumerationResult<Job>>('/api/v1/jobs');
+/**
+ * Background jobs, newest first. With no arguments the server returns every job in scope (the Jobs page). Pass a
+ * status list, kind, or page size to get one filtered page instead; the header indicator polls only active jobs.
+ */
+export const listJobs = (params?: { status?: Job['status'][]; kind?: Job['kind']; pageNumber?: number; pageSize?: number }) => {
+  const parts: string[] = [];
+  if (params?.status && params.status.length > 0) parts.push(`status=${encodeURIComponent(params.status.join(','))}`);
+  if (params?.kind) parts.push(`kind=${encodeURIComponent(params.kind)}`);
+  if (params?.pageNumber) parts.push(`pageNumber=${params.pageNumber}`);
+  if (params?.pageSize) parts.push(`pageSize=${params.pageSize}`);
+  return get<EnumerationResult<Job>>(`/api/v1/jobs${parts.length ? '?' + parts.join('&') : ''}`);
+};
 export const getJob = (id: string) => get<Job>(`/api/v1/jobs/${id}`);
 export const cancelJob = (id: string) => post<Job>(`/api/v1/jobs/${id}/cancel`);
 

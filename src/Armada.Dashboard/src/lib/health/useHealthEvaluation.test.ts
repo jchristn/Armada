@@ -95,6 +95,7 @@ describe('useHealthEvaluation', () => {
     vi.mocked(getJob).mockResolvedValue(job('Running', 10, 'job_sched'));
     const { result } = renderHook(() => useHealthEvaluation({ pollMs: 1000 }));
     await act(async () => { await result.current.discover(); });
+    expect(listJobs).toHaveBeenCalledWith({ kind: 'Report', pageSize: 25 });
     expect(result.current.running).toBe(true);
     await waitFor(() => expect(getJob).toHaveBeenCalledWith('job_sched'));
   });

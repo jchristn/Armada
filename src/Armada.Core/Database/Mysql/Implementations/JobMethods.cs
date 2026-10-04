@@ -178,6 +178,33 @@ namespace Armada.Core.Database.Mysql.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<EnumerationResult<Job>> EnumeratePageAsync(JobQuery query, CancellationToken token = default)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            string where = query.BuildWhereClause(out List<KeyValuePair<string, object>> parameters);
+
+            long total;
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (MySqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT COUNT(*) FROM jobs" + where + ";";
+                    foreach (KeyValuePair<string, object> parameter in parameters) cmd.Parameters.AddWithValue(parameter.Key, parameter.Value);
+                    total = Convert.ToInt64(await cmd.ExecuteScalarAsync(token).ConfigureAwait(false) ?? 0L);
+                }
+            }
+
+            List<Job> page = await EnumerateInternalAsync("SELECT * FROM jobs" + where + " ORDER BY created_utc DESC LIMIT @page_size OFFSET @offset;", cmd =>
+            {
+                foreach (KeyValuePair<string, object> parameter in parameters) cmd.Parameters.AddWithValue(parameter.Key, parameter.Value);
+                cmd.Parameters.AddWithValue("@page_size", query.PageSize);
+                cmd.Parameters.AddWithValue("@offset", query.Offset);
+            }, token).ConfigureAwait(false);
+            return query.ToResult(page, total);
+        }
+
+        /// <inheritdoc />
         public async Task<bool> ExistsAnyAsync(CancellationToken token = default)
         {
             using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
