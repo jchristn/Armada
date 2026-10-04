@@ -35,6 +35,16 @@ namespace Armada.Core.Services
             set => _ProgressInterval = Math.Clamp(value, 1, 1000);
         }
 
+        /// <summary>
+        /// How often a background discovery checks its job for cancellation and records a heartbeat, in
+        /// milliseconds. Default 1000, minimum 50, maximum 60000.
+        /// </summary>
+        public int DiscoveryPollIntervalMs
+        {
+            get => _DiscoveryPollIntervalMs;
+            set => _DiscoveryPollIntervalMs = Math.Clamp(value, 50, 60000);
+        }
+
         #endregion
 
         #region Private-Members
@@ -46,9 +56,11 @@ namespace Armada.Core.Services
         private readonly IVesselService _Vessels;
         private readonly JobService _Jobs;
         private readonly LoggingModule _Logging;
+        private readonly IFleetCategorizationService? _Categorization;
         private readonly HashSet<string> _ActiveBatches = new HashSet<string>(StringComparer.Ordinal);
         private readonly object _ActiveLock = new object();
         private int _ProgressInterval = 10;
+        private int _DiscoveryPollIntervalMs = 1000;
         private static readonly JsonSerializerOptions _ResultJsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
         #endregion
@@ -64,15 +76,18 @@ namespace Armada.Core.Services
         /// <param name="vessels">Shared vessel creation service.</param>
         /// <param name="jobs">Job service for background imports.</param>
         /// <param name="logging">Logging module.</param>
-        /// <exception cref="ArgumentNullException">Thrown when any argument is null.</exception>
+        /// <param name="categorization">Fleet categorization service, or null to reject categorization requests.</param>
+        /// <exception cref="ArgumentNullException">Thrown when any argument other than categorization is null.</exception>
         public VesselImportService(
             DatabaseDriver database,
             ArmadaSettings settings,
             IVesselDiscoveryService discovery,
             IVesselService vessels,
             JobService jobs,
-            LoggingModule logging)
+            LoggingModule logging,
+            IFleetCategorizationService? categorization = null)
         {
+            _Categorization = categorization;
             _Database = database ?? throw new ArgumentNullException(nameof(database));
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _Discovery = discovery ?? throw new ArgumentNullException(nameof(discovery));
@@ -91,34 +106,40 @@ namespace Armada.Core.Services
             if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (request == null) throw new ArgumentNullException(nameof(request));
 
-            VesselDiscoveryResult discovered = await _Discovery.DiscoverAsync(tenantId, request, token).ConfigureAwait(false);
-
-            VesselImportBatch batch = new VesselImportBatch();
-            batch.TenantId = tenantId;
-            batch.UserId = userId;
-            batch.Status = VesselImportBatchStatusEnum.Discovered;
-            batch.HarborId = request.HarborId;
-            batch.RequestedPathCount = request.Directories.Count(p => !String.IsNullOrWhiteSpace(p)) + request.Roots.Count(p => !String.IsNullOrWhiteSpace(p));
-            batch.CandidateCount = discovered.Candidates.Count;
-            batch = await _Database.VesselImportBatches.CreateAsync(batch, token).ConfigureAwait(false);
-
-            List<VesselImportItem> items = new List<VesselImportItem>();
-            foreach (VesselImportCandidate candidate in discovered.Candidates)
+            if (request.RunInBackground)
             {
-                VesselImportItem item = new VesselImportItem();
-                item.TenantId = tenantId;
-                item.BatchId = batch.Id;
-                item.Path = candidate.Path;
-                item.ProposedName = candidate.ProposedName;
-                item.RemoteUrl = candidate.RemoteUrl;
-                item.DefaultBranch = candidate.DefaultBranch;
-                item.CandidateStatus = candidate.Status;
-                item.ExistingVesselId = candidate.ExistingVesselId;
-                item.Outcome = VesselImportOutcomeEnum.Pending;
-                items.Add(item);
+                _Discovery.ValidateRequest(request);
+
+                VesselImportBatch pending = NewBatch(tenantId, userId, request);
+                pending.Status = VesselImportBatchStatusEnum.Discovering;
+                pending = await _Database.VesselImportBatches.CreateAsync(pending, token).ConfigureAwait(false);
+
+                Job job = await _Jobs.EnqueueAsync(
+                    "Vessel discovery " + pending.Id + " (" + pending.RequestedPathCount + " paths)",
+                    JobKindEnum.VesselDiscovery, tenantId, userId, token).ConfigureAwait(false);
+                pending.DiscoveryJobId = job.Id;
+                pending = await _Database.VesselImportBatches.UpdateAsync(pending, token).ConfigureAwait(false);
+
+                VesselImportBatch backgroundBatch = pending;
+                _ = Task.Run(() => RunDiscoveryJobAsync(job, backgroundBatch, request));
+
+                VesselImportDiscoverResponse accepted = new VesselImportDiscoverResponse();
+                accepted.BatchId = pending.Id;
+                accepted.Batch = pending;
+                accepted.JobId = job.Id;
+                accepted.RunsInBackground = true;
+                return accepted;
             }
 
-            if (items.Count > 0) items = await _Database.VesselImportItems.CreateManyAsync(items, token).ConfigureAwait(false);
+            VesselDiscoveryResult discovered = await _Discovery.DiscoverAsync(tenantId, request, token).ConfigureAwait(false);
+
+            VesselImportBatch batch = NewBatch(tenantId, userId, request);
+            batch.Status = VesselImportBatchStatusEnum.Discovered;
+            batch.CandidateCount = discovered.Candidates.Count;
+            batch.Truncated = discovered.Truncated;
+            batch = await _Database.VesselImportBatches.CreateAsync(batch, token).ConfigureAwait(false);
+
+            List<VesselImportItem> items = await PersistCandidatesAsync(batch, discovered, token).ConfigureAwait(false);
             _Logging.Info(_Header + "discovered " + items.Count + " candidates for batch " + batch.Id + (discovered.Truncated ? " (truncated)" : ""));
 
             VesselImportDiscoverResponse response = new VesselImportDiscoverResponse();
@@ -146,6 +167,18 @@ namespace Armada.Core.Services
             {
                 Fleet? fleet = await _Database.Fleets.ReadAsync(tenantId, request.FleetId, token).ConfigureAwait(false);
                 if (fleet == null) throw new ArgumentException("Fleet not found: " + request.FleetId, nameof(request));
+            }
+
+            if (batch.Status == VesselImportBatchStatusEnum.Discovering)
+                throw new InvalidOperationException("Import batch " + batch.Id + " is still discovering; import after discovery finishes.");
+            if (batch.CategorizationStatus == VesselImportCategorizationStatusEnum.Pending || batch.CategorizationStatus == VesselImportCategorizationStatusEnum.Running)
+                throw new InvalidOperationException("Import batch " + batch.Id + " has a fleet categorization in progress.");
+
+            bool categorize = request.Categorization != null && request.Categorization.Enabled;
+            if (categorize)
+            {
+                if (_Categorization == null) throw new ArgumentException("Fleet categorization is not available on this Admiral.", nameof(request));
+                await _Categorization.ValidateRequestAsync(tenantId, request.Categorization, token).ConfigureAwait(false);
             }
 
             List<VesselImportItem> items = await _Database.VesselImportItems.EnumerateByBatchAsync(tenantId, batch.Id, token).ConfigureAwait(false);
@@ -177,6 +210,13 @@ namespace Armada.Core.Services
                 batch.Status = VesselImportBatchStatusEnum.Importing;
                 batch.FleetId = String.IsNullOrWhiteSpace(request.FleetId) ? null : request.FleetId;
                 batch.CompletedUtc = null;
+                batch.ErrorMessage = null;
+                if (categorize) batch = await _Categorization!.ScheduleAsync(batch, request.Categorization!, token).ConfigureAwait(false);
+                else if (batch.CategorizationStatus != VesselImportCategorizationStatusEnum.None)
+                {
+                    batch.CategorizationStatus = VesselImportCategorizationStatusEnum.None;
+                    batch.CategorizationError = null;
+                }
 
                 VesselImportResponse response = new VesselImportResponse();
                 response.BatchId = batch.Id;
@@ -195,13 +235,15 @@ namespace Armada.Core.Services
                         throw;
                     }
 
+                    if (categorize) batch = await StartCategorizationAsync(batch, userId).ConfigureAwait(false);
+
                     response.RunsInBackground = false;
                     response.Batch = batch;
                     response.Items = items;
                     return response;
                 }
 
-                Job job = await _Jobs.EnqueueAsync("Vessel import " + batch.Id + " (" + selected.Count + " vessels)", JobKindEnum.Generic, tenantId, userId, token).ConfigureAwait(false);
+                Job job = await _Jobs.EnqueueAsync("Vessel import " + batch.Id + " (" + selected.Count + " vessels)", JobKindEnum.VesselImport, tenantId, userId, token).ConfigureAwait(false);
                 batch.JobId = job.Id;
                 batch = await _Database.VesselImportBatches.UpdateAsync(batch, token).ConfigureAwait(false);
 
@@ -236,6 +278,8 @@ namespace Armada.Core.Services
             VesselImportBatchDetail detail = new VesselImportBatchDetail();
             detail.Batch = batch;
             detail.Items = await _Database.VesselImportItems.EnumerateByBatchAsync(tenantId, batchId, token).ConfigureAwait(false);
+            detail.Hints = BuildHints(batch, detail.Items);
+            detail.FleetRecommendations = await _Database.VesselImportFleetRecommendations.EnumerateByBatchAsync(tenantId, batchId, token).ConfigureAwait(false);
             return detail;
         }
 
@@ -247,6 +291,50 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
+        public async Task RecoverAsync(CancellationToken token = default)
+        {
+            List<VesselImportBatch> batches = await _Database.VesselImportBatches.EnumerateInProgressAsync(token).ConfigureAwait(false);
+            foreach (VesselImportBatch batch in batches)
+            {
+                if (batch.Status != VesselImportBatchStatusEnum.Discovering) continue;
+                _Logging.Warn(_Header + "failing discovery of batch " + batch.Id + " orphaned by an Admiral restart");
+                batch.Status = VesselImportBatchStatusEnum.Failed;
+                batch.ErrorMessage = "The Admiral restarted while discovery was running. Discover again.";
+                batch.CompletedUtc = DateTime.UtcNow;
+                await _Database.VesselImportBatches.UpdateAsync(batch, token).ConfigureAwait(false);
+                if (!String.IsNullOrEmpty(batch.DiscoveryJobId)) await FailJobAsync(batch.DiscoveryJobId!, "Admiral restarted while the job was running").ConfigureAwait(false);
+            }
+
+            if (_Categorization != null) await _Categorization.RecoverAsync(token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Rebuild the advisory discovery hints for a persisted batch: CandidateLimitReached when discovery was
+        /// truncated, and PathNotVisibleToAdmiral when every candidate is NotFound.
+        /// </summary>
+        /// <param name="batch">Batch.</param>
+        /// <param name="items">Batch items.</param>
+        /// <returns>Hints. Never null.</returns>
+        public static List<VesselImportHint> BuildHints(VesselImportBatch batch, List<VesselImportItem> items)
+        {
+            List<VesselImportHint> hints = new List<VesselImportHint>();
+            if (batch == null || items == null) return hints;
+            if (batch.Truncated)
+            {
+                hints.Add(new VesselImportHint(VesselImportCodes.CandidateLimitReached,
+                    "Discovery stopped at the candidate limit. Narrow the roots or lower the depth to see the rest."));
+            }
+
+            if (items.Count > 0 && items.All(i => i.CandidateStatus == VesselImportCandidateStatusEnum.NotFound))
+            {
+                hints.Add(new VesselImportHint(VesselImportCodes.PathNotVisibleToAdmiral,
+                    "None of the requested paths exist on the Admiral host. If the Admiral runs in a container, mount the directories into it or run discovery through a Harbor."));
+            }
+
+            return hints;
+        }
+
+        /// <inheritdoc />
         public Task<VesselBrowseResult> BrowseAsync(string? path, CancellationToken token = default)
         {
             return _Discovery.BrowseAsync(path, token);
@@ -255,6 +343,183 @@ namespace Armada.Core.Services
         #endregion
 
         #region Private-Methods
+
+        private static VesselImportBatch NewBatch(string tenantId, string? userId, VesselDiscoveryRequest request)
+        {
+            VesselImportBatch batch = new VesselImportBatch();
+            batch.TenantId = tenantId;
+            batch.UserId = userId;
+            batch.HarborId = request.HarborId;
+            batch.RequestedPathCount = request.Directories.Count(p => !String.IsNullOrWhiteSpace(p)) + request.Roots.Count(p => !String.IsNullOrWhiteSpace(p));
+            return batch;
+        }
+
+        private async Task<List<VesselImportItem>> PersistCandidatesAsync(VesselImportBatch batch, VesselDiscoveryResult discovered, CancellationToken token)
+        {
+            string tenantId = batch.TenantId!;
+            List<VesselImportItem> items = new List<VesselImportItem>();
+            foreach (VesselImportCandidate candidate in discovered.Candidates)
+            {
+                VesselImportItem item = new VesselImportItem();
+                item.TenantId = tenantId;
+                item.BatchId = batch.Id;
+                item.Path = candidate.Path;
+                item.ProposedName = candidate.ProposedName;
+                item.RemoteUrl = candidate.RemoteUrl;
+                item.DefaultBranch = candidate.DefaultBranch;
+                item.CandidateStatus = candidate.Status;
+                item.ExistingVesselId = candidate.ExistingVesselId;
+                item.Outcome = VesselImportOutcomeEnum.Pending;
+                items.Add(item);
+            }
+
+            if (items.Count > 0) items = await _Database.VesselImportItems.CreateManyAsync(items, token).ConfigureAwait(false);
+            return items;
+        }
+
+        private async Task<VesselImportBatch> StartCategorizationAsync(VesselImportBatch batch, string? userId)
+        {
+            try
+            {
+                return await _Categorization!.StartAsync(batch.TenantId!, batch.Id, userId).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "could not start fleet categorization for batch " + batch.Id + ": " + ex.Message);
+                VesselImportBatch? latest = await _Database.VesselImportBatches.ReadAsync(batch.TenantId!, batch.Id).ConfigureAwait(false);
+                VesselImportBatch target = latest ?? batch;
+                target.CategorizationStatus = VesselImportCategorizationStatusEnum.Failed;
+                target.CategorizationError = ex.Message;
+                target.CategorizationCompletedUtc = DateTime.UtcNow;
+                return await _Database.VesselImportBatches.UpdateAsync(target).ConfigureAwait(false);
+            }
+        }
+
+        private async Task RunDiscoveryJobAsync(Job job, VesselImportBatch batch, VesselDiscoveryRequest request)
+        {
+            using (CancellationTokenSource cts = new CancellationTokenSource())
+            {
+                Task? monitor = null;
+                try
+                {
+                    job.Status = JobStatusEnum.Running;
+                    job.StartedUtc = DateTime.UtcNow;
+                    job.LastUpdateUtc = DateTime.UtcNow;
+                    job.Progress = 10;
+                    job = await _Database.Jobs.UpdateAsync(job).ConfigureAwait(false);
+                    monitor = MonitorDiscoveryJobAsync(job.Id, cts);
+
+                    VesselDiscoveryResult discovered = await _Discovery.DiscoverAsync(batch.TenantId!, request, cts.Token).ConfigureAwait(false);
+                    cts.Token.ThrowIfCancellationRequested();
+
+                    List<VesselImportItem> items = await PersistCandidatesAsync(batch, discovered, CancellationToken.None).ConfigureAwait(false);
+                    batch.Status = VesselImportBatchStatusEnum.Discovered;
+                    batch.CandidateCount = items.Count;
+                    batch.Truncated = discovered.Truncated;
+                    batch.ErrorMessage = null;
+                    await _Database.VesselImportBatches.UpdateAsync(batch).ConfigureAwait(false);
+
+                    Job? latest = await _Database.Jobs.ReadAsync(job.Id).ConfigureAwait(false);
+                    if (latest != null && latest.Status == JobStatusEnum.Running)
+                    {
+                        latest.Status = JobStatusEnum.Succeeded;
+                        latest.Progress = 100;
+                        latest.ResultJson = JsonSerializer.Serialize(new VesselDiscoveryJobSummary
+                        {
+                            BatchId = batch.Id,
+                            CandidateCount = items.Count,
+                            Truncated = discovered.Truncated
+                        }, _ResultJsonOptions);
+                        latest.CompletedUtc = DateTime.UtcNow;
+                        latest.LastUpdateUtc = DateTime.UtcNow;
+                        await _Database.Jobs.UpdateAsync(latest).ConfigureAwait(false);
+                    }
+
+                    _Logging.Info(_Header + "background discovery found " + items.Count + " candidates for batch " + batch.Id);
+                }
+                catch (Exception ex)
+                {
+                    bool cancelled = cts.IsCancellationRequested && ex is OperationCanceledException;
+                    string message = cancelled ? "Discovery was cancelled." : ex.Message;
+                    _Logging.Warn(_Header + "background discovery of batch " + batch.Id + " failed: " + message);
+                    try
+                    {
+                        batch.Status = VesselImportBatchStatusEnum.Failed;
+                        batch.ErrorMessage = message;
+                        batch.CompletedUtc = DateTime.UtcNow;
+                        await _Database.VesselImportBatches.UpdateAsync(batch).ConfigureAwait(false);
+                    }
+                    catch (Exception updateEx)
+                    {
+                        _Logging.Warn(_Header + "could not mark batch " + batch.Id + " failed: " + updateEx.Message);
+                    }
+
+                    await FailJobAsync(job.Id, message).ConfigureAwait(false);
+                }
+                finally
+                {
+                    cts.Cancel();
+                    if (monitor != null)
+                    {
+                        try { await monitor.ConfigureAwait(false); }
+                        catch (Exception) { }
+                    }
+                }
+            }
+        }
+
+        private async Task MonitorDiscoveryJobAsync(string jobId, CancellationTokenSource cts)
+        {
+            while (!cts.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(_DiscoveryPollIntervalMs, cts.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+
+                try
+                {
+                    Job? latest = await _Database.Jobs.ReadAsync(jobId).ConfigureAwait(false);
+                    if (latest == null || latest.Status == JobStatusEnum.Cancelled)
+                    {
+                        cts.Cancel();
+                        return;
+                    }
+
+                    if (latest.Status == JobStatusEnum.Running)
+                    {
+                        latest.LastUpdateUtc = DateTime.UtcNow;
+                        await _Database.Jobs.UpdateAsync(latest).ConfigureAwait(false);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _Logging.Warn(_Header + "heartbeat for discovery job " + jobId + " failed: " + ex.Message);
+                }
+            }
+        }
+
+        private async Task FailJobAsync(string jobId, string message)
+        {
+            try
+            {
+                Job? latest = await _Database.Jobs.ReadAsync(jobId).ConfigureAwait(false);
+                if (latest == null || (latest.Status != JobStatusEnum.Running && latest.Status != JobStatusEnum.Queued)) return;
+                latest.Status = JobStatusEnum.Failed;
+                latest.ErrorReason = message;
+                latest.CompletedUtc = DateTime.UtcNow;
+                latest.LastUpdateUtc = DateTime.UtcNow;
+                await _Database.Jobs.UpdateAsync(latest).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "could not mark job " + jobId + " failed: " + ex.Message);
+            }
+        }
 
         private void ReleaseBatch(string batchId)
         {
@@ -291,6 +556,19 @@ namespace Armada.Core.Services
                     latest.LastUpdateUtc = DateTime.UtcNow;
                     await _Database.Jobs.UpdateAsync(latest).ConfigureAwait(false);
                 }
+
+                if (completed && request.Categorization != null && request.Categorization.Enabled)
+                {
+                    ReleaseBatch(batch.Id);
+                    await StartCategorizationAsync(batch, userId).ConfigureAwait(false);
+                }
+                else if (!completed && batch.CategorizationStatus == VesselImportCategorizationStatusEnum.Pending)
+                {
+                    batch.CategorizationStatus = VesselImportCategorizationStatusEnum.Failed;
+                    batch.CategorizationError = "The import was cancelled, so fleet categorization did not run.";
+                    batch.CategorizationCompletedUtc = DateTime.UtcNow;
+                    await _Database.VesselImportBatches.UpdateAsync(batch).ConfigureAwait(false);
+                }
             }
             catch (Exception ex)
             {
@@ -324,7 +602,15 @@ namespace Armada.Core.Services
             try
             {
                 batch.Status = VesselImportBatchStatusEnum.Failed;
+                batch.ErrorMessage = ex.Message;
                 batch.CompletedUtc = DateTime.UtcNow;
+                if (batch.CategorizationStatus == VesselImportCategorizationStatusEnum.Pending)
+                {
+                    batch.CategorizationStatus = VesselImportCategorizationStatusEnum.Failed;
+                    batch.CategorizationError = "The import failed, so fleet categorization did not run.";
+                    batch.CategorizationCompletedUtc = DateTime.UtcNow;
+                }
+
                 await _Database.VesselImportBatches.UpdateAsync(batch).ConfigureAwait(false);
             }
             catch (Exception updateEx)
@@ -419,6 +705,7 @@ namespace Armada.Core.Services
             CancellationToken token)
         {
             item.OutcomeMessage = null;
+            item.Selected = isSelected;
             bool isRepository = item.CandidateStatus == VesselImportCandidateStatusEnum.New
                 || item.CandidateStatus == VesselImportCandidateStatusEnum.AlreadyOnboarded
                 || item.CandidateStatus == VesselImportCandidateStatusEnum.Worktree;

@@ -130,6 +130,32 @@ namespace Armada.Core.Database.Interfaces
         Task<bool> TryClaimAsync(string tenantId, string captainId, string missionId, string dockId, CancellationToken token = default);
 
         /// <summary>
+        /// Atomically reserve an Idle captain for non-mission work (for example a fleet categorization job) by moving
+        /// it to the given busy state. Only succeeds when the captain is currently Idle in the tenant.
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="captainId">Captain identifier.</param>
+        /// <param name="state">Busy state to set; must not be Idle.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when the captain was reserved; false when it was not Idle or does not exist.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when tenantId or captainId is null or empty.</exception>
+        /// <exception cref="ArgumentException">Thrown when state is Idle.</exception>
+        Task<bool> TryReserveAsync(string tenantId, string captainId, CaptainStateEnum state, CancellationToken token = default);
+
+        /// <summary>
+        /// Atomically release a captain reserved with <see cref="TryReserveAsync"/>: sets it back to Idle and clears its
+        /// process identifier, but only while it is still in the given busy state (a stop or recall that already moved
+        /// it elsewhere is left alone).
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="captainId">Captain identifier.</param>
+        /// <param name="state">Busy state the reservation used.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when the captain was released.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when tenantId or captainId is null or empty.</exception>
+        Task<bool> TryReleaseAsync(string tenantId, string captainId, CaptainStateEnum state, CancellationToken token = default);
+
+        /// <summary>
         /// Read a captain by tenant, user, and identifier (user-scoped).
         /// </summary>
         Task<Captain?> ReadAsync(string tenantId, string userId, string id, CancellationToken token = default);

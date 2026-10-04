@@ -1365,6 +1365,52 @@ namespace Armada.Core.Database.SqlServer.Queries
                     );",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_vessel_health_overrides_tenant_vessel_criterion') CREATE UNIQUE INDEX idx_vessel_health_overrides_tenant_vessel_criterion ON vessel_health_overrides(tenant_id, vessel_id, criterion);",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_vessel_health_overrides_vessel') CREATE INDEX idx_vessel_health_overrides_vessel ON vessel_health_overrides(vessel_id);"
+                ),
+                new SchemaMigration(
+                    74,
+                    "Add background discovery and fleet categorization columns to vessel_import_batches, a selected flag to vessel_import_items, plus vessel_import_fleet_recommendations and vessel_import_fleet_recommendation_vessels tables",
+                    @"IF COL_LENGTH('vessel_import_items','selected') IS NULL ALTER TABLE vessel_import_items ADD selected BIT NOT NULL CONSTRAINT DF_vessel_import_items_selected DEFAULT 0;",
+                    @"IF COL_LENGTH('vessel_import_batches','discovery_job_id') IS NULL ALTER TABLE vessel_import_batches ADD discovery_job_id NVARCHAR(64) NULL;",
+                    @"IF COL_LENGTH('vessel_import_batches','truncated') IS NULL ALTER TABLE vessel_import_batches ADD truncated BIT NOT NULL CONSTRAINT DF_vessel_import_batches_truncated DEFAULT 0;",
+                    @"IF COL_LENGTH('vessel_import_batches','error_message') IS NULL ALTER TABLE vessel_import_batches ADD error_message NVARCHAR(MAX) NULL;",
+                    @"IF COL_LENGTH('vessel_import_batches','categorization_status') IS NULL ALTER TABLE vessel_import_batches ADD categorization_status NVARCHAR(32) NOT NULL CONSTRAINT DF_vessel_import_batches_categorization_status DEFAULT 'None';",
+                    @"IF COL_LENGTH('vessel_import_batches','categorization_captain_id') IS NULL ALTER TABLE vessel_import_batches ADD categorization_captain_id NVARCHAR(64) NULL;",
+                    @"IF COL_LENGTH('vessel_import_batches','categorization_job_id') IS NULL ALTER TABLE vessel_import_batches ADD categorization_job_id NVARCHAR(64) NULL;",
+                    @"IF COL_LENGTH('vessel_import_batches','categorization_prompt') IS NULL ALTER TABLE vessel_import_batches ADD categorization_prompt NVARCHAR(MAX) NULL;",
+                    @"IF COL_LENGTH('vessel_import_batches','categorization_apply_automatically') IS NULL ALTER TABLE vessel_import_batches ADD categorization_apply_automatically BIT NOT NULL CONSTRAINT DF_vessel_import_batches_categorization_apply_auto DEFAULT 0;",
+                    @"IF COL_LENGTH('vessel_import_batches','categorization_error') IS NULL ALTER TABLE vessel_import_batches ADD categorization_error NVARCHAR(MAX) NULL;",
+                    @"IF COL_LENGTH('vessel_import_batches','categorization_started_utc') IS NULL ALTER TABLE vessel_import_batches ADD categorization_started_utc DATETIME2 NULL;",
+                    @"IF COL_LENGTH('vessel_import_batches','categorization_completed_utc') IS NULL ALTER TABLE vessel_import_batches ADD categorization_completed_utc DATETIME2 NULL;",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_vessel_import_batches_tenant_categorization') CREATE INDEX idx_vessel_import_batches_tenant_categorization ON vessel_import_batches(tenant_id, categorization_status);",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'vessel_import_fleet_recommendations')
+                    CREATE TABLE vessel_import_fleet_recommendations (
+                        id NVARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id NVARCHAR(64) NOT NULL,
+                        batch_id NVARCHAR(64) NOT NULL,
+                        name NVARCHAR(256) NOT NULL,
+                        description NVARCHAR(MAX),
+                        rationale NVARCHAR(MAX),
+                        sort_order INT NOT NULL CONSTRAINT DF_vessel_import_fleet_recs_sort_order DEFAULT 0,
+                        applied_fleet_id NVARCHAR(64),
+                        created_utc DATETIME2 NOT NULL,
+                        last_update_utc DATETIME2 NOT NULL,
+                        CONSTRAINT FK_vessel_import_fleet_recs_batch_id FOREIGN KEY (batch_id) REFERENCES vessel_import_batches(id) ON DELETE CASCADE
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_vessel_import_fleet_recs_tenant_batch') CREATE INDEX idx_vessel_import_fleet_recs_tenant_batch ON vessel_import_fleet_recommendations(tenant_id, batch_id, sort_order);",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'vessel_import_fleet_recommendation_vessels')
+                    CREATE TABLE vessel_import_fleet_recommendation_vessels (
+                        recommendation_id NVARCHAR(64) NOT NULL,
+                        tenant_id NVARCHAR(64) NOT NULL,
+                        batch_id NVARCHAR(64) NOT NULL,
+                        vessel_id NVARCHAR(64) NOT NULL,
+                        sort_order INT NOT NULL CONSTRAINT DF_vessel_import_fleet_rec_vessels_sort_order DEFAULT 0,
+                        CONSTRAINT PK_vessel_import_fleet_rec_vessels PRIMARY KEY (recommendation_id, vessel_id),
+                        CONSTRAINT FK_vessel_import_fleet_rec_vessels_rec_id FOREIGN KEY (recommendation_id) REFERENCES vessel_import_fleet_recommendations(id) ON DELETE CASCADE
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_vessel_import_fleet_rec_vessels_tenant_batch') CREATE INDEX idx_vessel_import_fleet_rec_vessels_tenant_batch ON vessel_import_fleet_recommendation_vessels(tenant_id, batch_id);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_vessel_import_fleet_rec_vessels_vessel') CREATE INDEX idx_vessel_import_fleet_rec_vessels_vessel ON vessel_import_fleet_recommendation_vessels(vessel_id);"
                 )
             };
         }

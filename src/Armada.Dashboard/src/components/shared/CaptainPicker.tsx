@@ -11,6 +11,13 @@ interface CaptainPickerProps {
   id?: string;
   ariaLabel?: string;
   className?: string;
+  /** When true, append each captain's state (Idle, Working, ...) to its option. */
+  showState?: boolean;
+  /** Options for which this returns true are rendered disabled (for example captains that are not idle). */
+  isOptionDisabled?: (captain: Captain) => boolean;
+  /** Extra attributes for validation wiring. */
+  invalid?: boolean;
+  describedBy?: string;
 }
 
 /**
@@ -18,7 +25,7 @@ interface CaptainPickerProps {
  * pick by capability, and offers an explicit "auto" option that leaves the step on normal persona/tier
  * routing. All labels are localized; the picker is a plain select so it stays keyboard-accessible.
  */
-export default function CaptainPicker({ captains, value, onChange, autoLabel, disabled, id, ariaLabel, className }: CaptainPickerProps) {
+export default function CaptainPicker({ captains, value, onChange, autoLabel, disabled, id, ariaLabel, className, showState, isOptionDisabled, invalid, describedBy }: CaptainPickerProps) {
   const { t } = useLocale();
 
   return (
@@ -28,14 +35,17 @@ export default function CaptainPicker({ captains, value, onChange, autoLabel, di
       value={value ?? ''}
       disabled={disabled}
       aria-label={ariaLabel ?? t('Preferred captain')}
+      aria-invalid={invalid || undefined}
+      aria-describedby={describedBy}
       onChange={(event) => onChange(event.target.value ? event.target.value : null)}
     >
       <option value="">{autoLabel ?? t('Auto (default routing)')}</option>
       {captains.map((captain) => (
-        <option key={captain.id} value={captain.id}>
+        <option key={captain.id} value={captain.id} disabled={isOptionDisabled ? isOptionDisabled(captain) : undefined}>
           {captain.name}
           {captain.tier ? ` - ${t(captain.tier)}` : ''}
           {captain.runtime ? ` (${captain.runtime})` : ''}
+          {showState && captain.state ? ` - ${t(captain.state)}` : ''}
         </option>
       ))}
     </select>

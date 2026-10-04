@@ -180,6 +180,9 @@ personas, pipelines, workflow profiles, project profiles, runbooks):
 | `/api/v1/vessels/import` | POST | TenantAdmin | Creates vessels from a discovered batch |
 | `/api/v1/vessels/import/batches/enumerate` | POST | Authenticated | Tenant-scoped import history |
 | `/api/v1/vessels/import/batches/{id}` | GET | Authenticated | Tenant-scoped; another tenant's batch returns 404 |
+| `/api/v1/vessels/import/categorization/default-prompt` | GET | TenantAdmin | Default fleet categorization instructions |
+| `/api/v1/vessels/import/batches/{id}/categorize` | POST | TenantAdmin | Runs or retries captain fleet categorization for a batch |
+| `/api/v1/vessels/import/batches/{id}/fleet-recommendations/apply` | POST | TenantAdmin | Creates or reuses fleets and assigns the batch's vessels |
 | `/api/v1/vessel-health/enumerate` | POST | Authenticated | Tenant-scoped vessel health rows |
 | `/api/v1/vessel-health/summary` | GET | Authenticated | Tenant-scoped KPI counts |
 | `/api/v1/vessel-health/evaluate` | POST | TenantAdmin | Starts an evaluation job (409 when one is running) |
@@ -1616,6 +1619,7 @@ Every vessel created by an import gets `RepoUrl` set to the repository's `origin
 | `MaxDepth` | `6` | 1-16 | Directory levels below a scan root that discovery searches. |
 | `ExcludedDirectoryNames` | `bin`, `obj`, `node_modules`, `dist`, `.git`, `.vs`, `packages`, `TestResults`, `.armada`, `target`, `venv`, `.venv`, `__pycache__` | -- | Names never descended into. Names starting with `.` are always skipped. |
 | `InlineBatchLimit` | `25` | 1-500 | Largest selection imported inside the request; larger selections run as a background job. |
+| `CategorizationTimeoutMinutes` | `20` | 1-240 | Longest a captain may spend recommending fleets for an import before its process is stopped and the categorization fails. |
 
 **Discovery rules.**
 
@@ -1640,9 +1644,24 @@ Every vessel created by an import gets `RepoUrl` set to the repository's `origin
 | `SkippedNotSelected` | `NotSelected` | The candidate was not in `Paths` |
 | `Failed` | `NotImportable`, `PathMissing`, `CreateFailed` | The candidate's status cannot be imported, the directory disappeared, or vessel creation failed (`OutcomeMessage` has details) |
 
-**Batch statuses:** `Discovered`, `Importing`, `Completed`, `CompletedWithFailures`, `Failed` (the import as a whole failed, or a background job was cancelled).
+**Batch statuses:** `Discovering` (background discovery is running), `Discovered`, `Importing`, `Completed`, `CompletedWithFailures`, `Failed` (discovery or the import as a whole failed, or a background job was cancelled; `ErrorMessage` says why).
 
-**Error responses** carry a machine-readable `Data` object, `{"Code": "...", "Path": "..."}`, with one of these codes: `InvalidRequest` (400), `HarborNotSupported` (400), `PathNotAllowed` (403), `DirectoryNotFound` (404), `BatchNotFound` (404), `BatchBusy` (409).
+**Background work.** Discovery runs inside the request unless `RunInBackground` is `true`; larger imports always run as a job. Each background step is a [job](#jobs) with its own `Kind`: `VesselDiscovery`, `VesselImport`, and `FleetCategorization`. Cancel any of them with `POST /api/v1/jobs/{id}/cancel`. If the Admiral restarts while discovery or categorization is running, the batch is marked `Failed` (categorization `Failed`) at startup with an explanatory message.
+
+**Fleet categorization.** An import can ask a captain to recommend fleets for the imported repositories (`Categorization.Enabled`). After the vessels are created, the Admiral:
+
+1. Collects the batch's **selected** vessels: candidates that were `Created`, plus selected candidates that were `SkippedExisting` (their existing vessel).
+2. Reserves the captain atomically (`Idle` to `Analyzing`). A captain that is not `Idle` is not used; the categorization fails with a clear message and can be retried.
+3. Creates a scratch directory under `<DataDirectory>/fleet-categorization/<jobId>` (never a user repository) with a generated `REPOSITORIES.md`: for each vessel its ID, name, absolute path, remote URL, default branch, detected languages and top-level manifests (`*.sln`, `*.csproj`, `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, ...), and the first 60 lines of its README.
+4. Runs the captain once on the Admiral host in that directory with the operator's instructions (default: the editable `import.fleet_categorization` prompt template under Configuration > Prompts) followed by an Admiral-owned **output contract** that is always appended, so editing the instructions cannot break parsing. The captain may read the repositories at their paths but is told to treat them as read-only.
+5. Reads `fleet-recommendations.json` (`{ "fleets": [ { "name", "description", "rationale", "vesselIds": [] } ] }`), validates it, and stores the result as structured recommendations. Unknown vessel IDs and duplicate assignments are dropped with a warning (listed in the job's `ResultJson`), fleets with the same name are merged, and vessels the captain left out go into an `Uncategorized` bucket. A missing, empty, or malformed file, or one that assigns none of the vessels, fails the categorization. If the file is missing but the captain's reply contains the JSON object, the reply is used (with a warning).
+6. With `ApplyAutomatically`, applies the recommendations immediately; otherwise they wait for review and [apply](#post-apiv1vesselsimportbatchesidfleet-recommendationsapply).
+
+The run is limited by `Import.CategorizationTimeoutMinutes` and honors job cancellation; either stops the captain's process. The captain returns to `Idle` when the job ends. Captains on Harbors are not used for categorization; the captain runs on the Admiral host.
+
+**Categorization statuses (`CategorizationStatus` on the batch):** `None` (not requested), `Pending` (requested; waiting for the import or the job to start), `Running`, `Completed` (recommendations ready to review), `Failed` (see `CategorizationError`), `Applied`.
+
+**Error responses** carry a machine-readable `Data` object, `{"Code": "...", "Path": "..."}`, with one of these codes: `InvalidRequest` (400), `HarborNotSupported` (400), `PathNotAllowed` (403), `DirectoryNotFound` (404), `BatchNotFound` (404), `BatchBusy` (409; the batch is being imported or discovered, or its fleet categorization is running).
 
 ---
 
@@ -1705,6 +1724,7 @@ Scan directories and roots on the Admiral host for git repositories and persist 
 | `Roots` | string[] | one of the two | Absolute roots to scan breadth-first. |
 | `MaxDepth` | int | no | Levels below each root to search (1-16, clamped). Default `Import.MaxDepth`. |
 | `HarborId` | string | no | Reserved for Harbor-side discovery; not supported yet (returns 400 `HarborNotSupported`). |
+| `RunInBackground` | bool | no | Default `false`. When `true`, the request is validated (bad paths still return 400/403 immediately), the batch is created with status `Discovering`, and the scan runs as a `VesselDiscovery` job. The response is `202 Accepted` with `RunsInBackground: true`, `JobId`, the batch, and no candidates; poll `GET /api/v1/vessels/import/batches/{id}` until the status is `Discovered` (candidates are then in `Items`, hints in `Hints`) or `Failed` (`ErrorMessage`). |
 
 At most 1,000 paths per request.
 
@@ -1779,6 +1799,8 @@ At most 1,000 paths per request.
 }
 ```
 
+**Response (background):** `202 Accepted` - `VesselImportDiscoverResponse` with `"RunsInBackground": true`, `"JobId": "job_..."`, `"Batch": { "Status": "Discovering", "DiscoveryJobId": "job_...", ... }`, and an empty `Candidates` list.
+
 `Hints` is a list of `{"Code", "Message"}`. Codes: `PathNotVisibleToAdmiral` (every requested path is `NotFound`; typical for a containerized Admiral that cannot see the host directories, so mount them or use a Harbor) and `CandidateLimitReached`.
 
 **Errors:** `400` no paths, too many paths, relative path, or `HarborId` set; `401`; `403` not a tenant admin, or a path outside the allowed roots (`PathNotAllowed`).
@@ -1808,13 +1830,20 @@ Import is idempotent: a selected path that already has a vessel (by working dire
 | `FleetId` | string | no | Fleet (`flt_` prefix) to assign the vessels to; must exist in the tenant |
 | `Defaults.DefaultPipelineId` | string | no | Default pipeline (`ppl_` prefix) for the vessels |
 | `Defaults.LandingMode` | string | no | `LocalMerge`, `PullRequest`, `MergeQueue`, or `None` |
+| `Categorization.Enabled` | bool | no | Default `false`. When `true`, a `FleetCategorization` job starts after the vessels exist (see Fleet categorization above). |
+| `Categorization.CaptainId` | string | when enabled | Captain (`cpt_` prefix) that recommends fleets. Must exist in the caller's tenant (`400 InvalidRequest` otherwise); it must be `Idle` when the job starts. |
+| `Categorization.Prompt` | string | no | Instructions for the captain (max 32,768 characters). Omit or leave empty to use the `import.fleet_categorization` prompt template. The output contract is always appended. |
+| `Categorization.ApplyAutomatically` | bool | no | Default `false`. Apply the recommendations as soon as the captain finishes. |
+
+The request is rejected with `409 BatchBusy` while the batch is `Discovering` or its categorization is `Pending`/`Running`. Categorization is validated before any vessel is created.
 
 ```json
 {
   "BatchId": "vib_mut1abcd_Rp7EygrpeVo",
   "Paths": ["/Users/alex/Code/api"],
   "FleetId": "flt_abc123",
-  "Defaults": { "DefaultPipelineId": null, "LandingMode": "PullRequest" }
+  "Defaults": { "DefaultPipelineId": null, "LandingMode": "PullRequest" },
+  "Categorization": { "Enabled": true, "CaptainId": "cpt_mut1c000_Ab12Cd34Ef5", "Prompt": null, "ApplyAutomatically": false }
 }
 ```
 
@@ -1829,6 +1858,149 @@ Import is idempotent: a selected path that already has a vessel (by working dire
   "Items": [
     { "Id": "vii_mut1abce_xpuNadgd3wH", "Path": "/Users/alex/Code/api", "CandidateStatus": "New", "Outcome": "Created", "OutcomeReason": null, "VesselId": "vsl_mut1b000_Q2w3e4r5t6y", "...": "..." },
     { "Id": "vii_mut1abcf_ovNmui3k3aq", "Path": "/Users/alex/Code/api-feature", "CandidateStatus": "Worktree", "Outcome": "SkippedNotSelected", "OutcomeReason": "NotSelected", "...": "..." }
+  ]
+}
+```
+
+When categorization was requested, `Batch.CategorizationStatus` is `Pending` and `Batch.CategorizationJobId` is set once its job is enqueued (inline imports return with the job already queued).
+
+**Response (background):** `202 Accepted` - `VesselImportResponse` with `RunsInBackground: true`, `JobId`, the batch in status `Importing`, and no items. Poll the batch until it leaves `Importing` (and, when categorization was requested, until `CategorizationStatus` is `Completed`, `Failed`, or `Applied`).
+
+**Errors:** `400` missing `BatchId` or `Paths`, a path not in the batch, unknown fleet, or a categorization without a valid captain; `401`; `403`; `404` batch not found; `409` batch busy.
+
+---
+
+#### POST /api/v1/vessels/import/batches/enumerate
+
+Paged import history for the caller's tenant, newest first by default. Honors `PageNumber`, `PageSize`, `Order`, `CreatedAfter`, `CreatedBefore`, and `Status` (a batch status name).
+
+**Permission:** Authenticated
+
+**Response:** `200 OK` - `EnumerationResult<VesselImportBatch>`
+
+---
+
+#### GET /api/v1/vessels/import/batches/{id}
+
+An import batch with all of its items, discovery hints rebuilt from the batch, and the fleet recommendations of its latest categorization run.
+
+**Permission:** Authenticated
+
+**Response:** `200 OK` - `VesselImportBatchDetail`
+
+```json
+{
+  "Batch": {
+    "Id": "vib_mut1abcd_Rp7EygrpeVo",
+    "Status": "Completed",
+    "DiscoveryJobId": "job_mut1a000_Zx9Yw8Vu7Ts",
+    "Truncated": false,
+    "ErrorMessage": null,
+    "CategorizationStatus": "Completed",
+    "CategorizationCaptainId": "cpt_mut1c000_Ab12Cd34Ef5",
+    "CategorizationJobId": "job_mut1d000_Gh56Ij78Kl9",
+    "CategorizationPrompt": "Look at all of the repositories listed in REPOSITORIES.md ...",
+    "CategorizationApplyAutomatically": false,
+    "CategorizationError": null,
+    "CategorizationStartedUtc": "2026-10-04T04:01:02.000000Z",
+    "CategorizationCompletedUtc": "2026-10-04T04:03:40.000000Z",
+    "...": "..."
+  },
+  "Items": [ { "Path": "/Users/alex/Code/api", "Selected": true, "Outcome": "Created", "VesselId": "vsl_mut1b000_Q2w3e4r5t6y", "...": "..." } ],
+  "Hints": [],
+  "FleetRecommendations": [
+    {
+      "Id": "vfr_mut1e000_Mn01Op23Qr4",
+      "TenantId": "ten_system",
+      "BatchId": "vib_mut1abcd_Rp7EygrpeVo",
+      "Name": "Payments Platform",
+      "Description": "Services that move money.",
+      "Rationale": "Both repositories implement the card-payment flow and share a ledger.",
+      "SortOrder": 0,
+      "AppliedFleetId": null,
+      "VesselIds": ["vsl_mut1b000_Q2w3e4r5t6y", "vsl_mut1b001_Uv45Wx67Yz8"],
+      "CreatedUtc": "2026-10-04T04:03:40.000000Z",
+      "LastUpdateUtc": "2026-10-04T04:03:40.000000Z"
+    }
+  ]
+}
+```
+
+**Errors:** `401`; `404` batch not found in the caller's tenant.
+
+---
+
+#### GET /api/v1/vessels/import/categorization/default-prompt
+
+The default categorization instructions: the current text of the `import.fleet_categorization` prompt template (as edited under Configuration > Prompts), plus the run time limit. The dashboard pre-fills its prompt box from this.
+
+**Permission:** TenantAdmin
+
+**Response:** `200 OK` - `FleetCategorizationDefaultPrompt`
+
+```json
+{ "TemplateName": "import.fleet_categorization", "Prompt": "Look at all of the repositories listed in REPOSITORIES.md, ...", "TimeoutMinutes": 20 }
+```
+
+---
+
+#### POST /api/v1/vessels/import/batches/{id}/categorize
+
+Run, or retry, fleet categorization for a batch whose import finished (`Completed` or `CompletedWithFailures`). Fields omitted from the body reuse the batch's previous captain, prompt, and auto-apply choice, so an empty body retries the last run. Replaces earlier recommendations of the batch.
+
+**Permission:** TenantAdmin
+
+**Request Body:** optional `VesselImportCategorizationRequest` (`CaptainId`, `Prompt`, `ApplyAutomatically`; `Enabled` is implied).
+
+**Response:** `202 Accepted` - the `VesselImportBatch` with `CategorizationStatus: "Pending"` and the new `CategorizationJobId`.
+
+**Errors:** `400` no captain known, or the captain does not exist in the tenant; `401`; `403`; `404` batch not found; `409` the import has not finished or categorization is already running.
+
+```bash
+curl -X POST http://localhost:7890/api/v1/vessels/import/batches/vib_mut1abcd_Rp7EygrpeVo/categorize \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{}'
+```
+
+---
+
+#### POST /api/v1/vessels/import/batches/{id}/fleet-recommendations/apply
+
+Apply fleet recommendations, possibly edited by the operator. For each fleet with vessels, an existing tenant fleet with the same name (case-insensitive, trimmed) is reused; otherwise a fleet is created with the given description. Each listed vessel's `FleetId` is set to its fleet. The applied list replaces the batch's stored recommendations (with `AppliedFleetId` set), and the batch's `CategorizationStatus` becomes `Applied`. A fleet named `Uncategorized` is never created; its vessels keep their current fleet. Applying again later is allowed.
+
+**Permission:** TenantAdmin
+
+**Request Body:** `FleetRecommendationApplyRequest`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `Fleets[].Name` | string | yes, for fleets with vessels | Fleet name (max 256 characters) |
+| `Fleets[].Description` | string | no | Description for a newly created fleet (ignored when an existing fleet is reused) |
+| `Fleets[].VesselIds` | string[] | yes | Vessels to assign. Every vessel must belong to the batch (a selected candidate that was created or already existed) and may appear in only one fleet. Fleets with no vessels are skipped. |
+
+```json
+{
+  "Fleets": [
+    { "Name": "Payments Platform", "Description": "Services that move money.", "VesselIds": ["vsl_mut1b000_Q2w3e4r5t6y", "vsl_mut1b001_Uv45Wx67Yz8"] },
+    { "Name": "Developer Tooling", "Description": null, "VesselIds": ["vsl_mut1b002_Ab98Cd76Ef5"] }
+  ]
+}
+```
+
+**Response:** `200 OK` - `FleetRecommendationApplyResult`
+
+```json
+{
+  "BatchId": "vib_mut1abcd_Rp7EygrpeVo",
+  "Fleets": [ { "Id": "flt_abc123", "Name": "Payments Platform", "...": "..." }, { "Id": "flt_mut1f000_St12Uv34Wx5", "Name": "Developer Tooling", "...": "..." } ],
+  "CreatedFleetIds": ["flt_mut1f000_St12Uv34Wx5"],
+  "Assignments": [
+    { "VesselId": "vsl_mut1b000_Q2w3e4r5t6y", "VesselName": "api", "FleetId": "flt_abc123", "FleetName": "Payments Platform", "PreviousFleetId": null }
+  ],
+  "Batch": { "Id": "vib_mut1abcd_Rp7EygrpeVo", "CategorizationStatus": "Applied", "...": "..." }
+}
+```
+
+**Errors:** `400` a fleet without a name, a vessel listed twice, or a vessel that is not part of the batch; `401`; `403` not a tenant admin; `404` batch not found in the caller's tenant; `409` discovery, the import, or categorization is still running.
 
 ### Vessel Health
 
@@ -3837,6 +4009,8 @@ Run a one-off host command on a connected Harbor over its link and return the re
 ### Jobs
 
 Jobs are background tasks tracked for status polling.
+
+`Kind` is one of `Generic`, `Cleanup`, `Sync`, `Report` (vessel health evaluation), `VesselDiscovery` (background import discovery), `VesselImport` (background vessel import), and `FleetCategorization` (a captain recommending fleets for an import). Import-related job names include the batch ID (`vib_...`). Cancelling a `VesselDiscovery` or `FleetCategorization` job stops the scan or the captain's process within a few seconds.
 
 #### GET /api/v1/jobs
 

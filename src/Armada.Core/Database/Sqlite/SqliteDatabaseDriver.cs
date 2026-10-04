@@ -104,6 +104,7 @@ namespace Armada.Core.Database.Sqlite
             Memories = new MemoryMethods(this, _Settings, _Logging);
             VesselImportBatches = new VesselImportBatchMethods(this, _Settings, _Logging);
             VesselImportItems = new VesselImportItemMethods(this, _Settings, _Logging);
+            VesselImportFleetRecommendations = new VesselImportFleetRecommendationMethods(this, _Settings, _Logging);
             FleetActions = new FleetActionMethods(this, _Settings, _Logging);
             FleetActionRuns = new FleetActionRunMethods(this, _Settings, _Logging);
             FleetActionRunTargets = new FleetActionRunTargetMethods(this, _Settings, _Logging);
@@ -162,6 +163,7 @@ namespace Armada.Core.Database.Sqlite
             Memories = new MemoryMethods(this, _Settings, _Logging);
             VesselImportBatches = new VesselImportBatchMethods(this, _Settings, _Logging);
             VesselImportItems = new VesselImportItemMethods(this, _Settings, _Logging);
+            VesselImportFleetRecommendations = new VesselImportFleetRecommendationMethods(this, _Settings, _Logging);
             FleetActions = new FleetActionMethods(this, _Settings, _Logging);
             FleetActionRuns = new FleetActionRunMethods(this, _Settings, _Logging);
             FleetActionRunTargets = new FleetActionRunTargetMethods(this, _Settings, _Logging);

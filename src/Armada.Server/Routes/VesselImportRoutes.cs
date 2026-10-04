@@ -27,6 +27,7 @@ namespace Armada.Server.Routes
 
         private readonly string _Header = "[VesselImportRoutes] ";
         private readonly IVesselImportService _Import;
+        private readonly IFleetCategorizationService? _Categorization;
         private readonly LoggingModule _Logging;
         private static readonly JsonSerializerOptions _BodyJsonOptions = new JsonSerializerOptions
         {
@@ -43,11 +44,13 @@ namespace Armada.Server.Routes
         /// Instantiate.
         /// </summary>
         /// <param name="import">Vessel import service.</param>
+        /// <param name="categorization">Fleet categorization service, or null when categorization is unavailable.</param>
         /// <param name="logging">Logging module.</param>
-        /// <exception cref="ArgumentNullException">Thrown when any argument is null.</exception>
-        public VesselImportRoutes(IVesselImportService import, LoggingModule logging)
+        /// <exception cref="ArgumentNullException">Thrown when import or logging is null.</exception>
+        public VesselImportRoutes(IVesselImportService import, IFleetCategorizationService? categorization, LoggingModule logging)
         {
             _Import = import ?? throw new ArgumentNullException(nameof(import));
+            _Categorization = categorization;
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
         }
 
@@ -118,6 +121,7 @@ namespace Armada.Server.Routes
                 try
                 {
                     VesselImportDiscoverResponse result = await _Import.DiscoverAsync(ResolveTenant(ctx), ctx.UserId, body).ConfigureAwait(false);
+                    req.Http.Response.StatusCode = result.RunsInBackground ? 202 : 200;
                     return (object)result;
                 }
                 catch (VesselImportPathNotAllowedException ex)
@@ -136,9 +140,10 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Vessel Import")
                 .WithSummary("Discover vessel import candidates")
-                .WithDescription("Scans the given directories and roots on the Admiral host for git repositories and persists the result as an import batch in status Discovered. Creates no vessels. Requires TenantAdmin.")
+                .WithDescription("Scans the given directories and roots on the Admiral host for git repositories and persists the result as an import batch in status Discovered. Creates no vessels. With runInBackground=true the request is validated, the batch is created in status Discovering, and the scan runs as a VesselDiscovery job (202 with jobId); poll the batch until it is Discovered or Failed. Requires TenantAdmin.")
                 .WithRequestBody(OpenApiJson.BodyFor<VesselDiscoveryRequest>("Directories and roots to scan", true))
                 .WithResponse(200, OpenApiJson.For<VesselImportDiscoverResponse>("Batch and candidates"))
+                .WithResponse(202, OpenApiJson.For<VesselImportDiscoverResponse>("Background discovery accepted"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Not a tenant admin, or a path is outside the allowed roots"))
                 .WithSecurity("ApiKey"));
@@ -174,7 +179,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Vessel Import")
                 .WithSummary("Import discovered vessels")
-                .WithDescription("Creates vessels for the selected candidates of a discovered batch. Runs inline (200) when the selection is at or below Import.InlineBatchLimit, otherwise runs as a background job (202 with jobId). Re-importing a path that already has a vessel records SkippedExisting. Requires TenantAdmin.")
+                .WithDescription("Creates vessels for the selected candidates of a discovered batch. Runs inline (200) when the selection is at or below Import.InlineBatchLimit, otherwise runs as a background job (202 with jobId). Re-importing a path that already has a vessel records SkippedExisting. With categorization.enabled, a FleetCategorization job starts after the vessels exist: the captain recommends fleets for the selected vessels (created and already existing); the captain must exist in the tenant (400 otherwise). Requires TenantAdmin.")
                 .WithRequestBody(OpenApiJson.BodyFor<VesselImportRequest>("Batch, selected paths, and optional defaults", true))
                 .WithResponse(200, OpenApiJson.For<VesselImportResponse>("Inline import result"))
                 .WithResponse(202, OpenApiJson.For<VesselImportResponse>("Background import accepted"))
@@ -219,10 +224,114 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Vessel Import")
                 .WithSummary("Get an import batch")
-                .WithDescription("Returns an import batch with all of its items. A batch from another tenant returns 404.")
+                .WithDescription("Returns an import batch with all of its items, rebuilt discovery hints, and the fleet recommendations of its latest categorization run. A batch from another tenant returns 404.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Batch ID (vib_ prefix)"))
                 .WithResponse(200, OpenApiJson.For<VesselImportBatchDetail>("Batch with items"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
+            app.Get("/api/v1/vessels/import/categorization/default-prompt", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Authorize(req, ctx, authz);
+                if (denied != null) return denied;
+                if (_Categorization == null) return Error(req, 400, ApiResultEnum.BadRequest, "Fleet categorization is not available on this Admiral.", VesselImportCodes.InvalidRequest, null);
+
+                FleetCategorizationDefaultPrompt result = new FleetCategorizationDefaultPrompt();
+                result.TemplateName = PromptTemplateService.FleetCategorizationTemplateName;
+                result.Prompt = await _Categorization.GetDefaultPromptAsync().ConfigureAwait(false);
+                result.TimeoutMinutes = _Categorization.TimeoutMinutes;
+                return (object)result;
+            },
+            api => api
+                .WithTag("Vessel Import")
+                .WithSummary("Get the default fleet categorization prompt")
+                .WithDescription("Returns the import.fleet_categorization prompt template text (editable under Configuration > Prompts) that pre-fills the categorization instructions, plus the run time limit. Requires TenantAdmin.")
+                .WithResponse(200, OpenApiJson.For<FleetCategorizationDefaultPrompt>("Default prompt"))
+                .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Not a tenant admin"))
+                .WithSecurity("ApiKey"));
+
+            app.Post<VesselImportCategorizationRequest>("/api/v1/vessels/import/batches/{id}/categorize", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Authorize(req, ctx, authz);
+                if (denied != null) return denied;
+                if (_Categorization == null) return Error(req, 400, ApiResultEnum.BadRequest, "Fleet categorization is not available on this Admiral.", VesselImportCodes.InvalidRequest, null);
+
+                string id = req.Parameters["id"];
+                VesselImportCategorizationRequest? body = DeserializeBody<VesselImportCategorizationRequest>(req);
+                try
+                {
+                    VesselImportBatch batch = await _Categorization.CategorizeAsync(ResolveTenant(ctx), id, ctx.UserId, body).ConfigureAwait(false);
+                    req.Http.Response.StatusCode = 202;
+                    return (object)batch;
+                }
+                catch (KeyNotFoundException ex)
+                {
+                    return Error(req, 404, ApiResultEnum.NotFound, ex.Message, VesselImportCodes.BatchNotFound, null);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return Error(req, 409, ApiResultEnum.Conflict, ex.Message, VesselImportCodes.BatchBusy, null);
+                }
+                catch (ArgumentException ex)
+                {
+                    return Error(req, 400, ApiResultEnum.BadRequest, ex.Message, VesselImportCodes.InvalidRequest, null);
+                }
+            },
+            api => api
+                .WithTag("Vessel Import")
+                .WithSummary("Run or retry fleet categorization")
+                .WithDescription("Starts a FleetCategorization job for a batch whose import finished: a captain analyzes the batch's selected vessels and recommends fleets. Omitted fields (captainId, prompt, applyAutomatically) reuse the batch's previous run, so an empty body retries it. Returns 202 with the batch (categorizationStatus Pending, categorizationJobId set). Requires TenantAdmin.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Batch ID (vib_ prefix)"))
+                .WithRequestBody(OpenApiJson.BodyFor<VesselImportCategorizationRequest>("Optional captain, prompt, and auto-apply overrides", false))
+                .WithResponse(202, OpenApiJson.For<VesselImportBatch>("Categorization accepted"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Not a tenant admin"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Import not finished, or categorization already running"))
+                .WithSecurity("ApiKey"));
+
+            app.Post<FleetRecommendationApplyRequest>("/api/v1/vessels/import/batches/{id}/fleet-recommendations/apply", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Authorize(req, ctx, authz);
+                if (denied != null) return denied;
+                if (_Categorization == null) return Error(req, 400, ApiResultEnum.BadRequest, "Fleet categorization is not available on this Admiral.", VesselImportCodes.InvalidRequest, null);
+
+                string id = req.Parameters["id"];
+                FleetRecommendationApplyRequest? body = DeserializeBody<FleetRecommendationApplyRequest>(req);
+                if (body == null) return Error(req, 400, ApiResultEnum.BadRequest, "Request body is required.", VesselImportCodes.InvalidRequest, null);
+
+                try
+                {
+                    FleetRecommendationApplyResult result = await _Categorization.ApplyAsync(ResolveTenant(ctx), id, ctx.UserId, body).ConfigureAwait(false);
+                    return (object)result;
+                }
+                catch (KeyNotFoundException ex)
+                {
+                    return Error(req, 404, ApiResultEnum.NotFound, ex.Message, VesselImportCodes.BatchNotFound, null);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return Error(req, 409, ApiResultEnum.Conflict, ex.Message, VesselImportCodes.BatchBusy, null);
+                }
+                catch (ArgumentException ex)
+                {
+                    return Error(req, 400, ApiResultEnum.BadRequest, ex.Message, VesselImportCodes.InvalidRequest, null);
+                }
+            },
+            api => api
+                .WithTag("Vessel Import")
+                .WithSummary("Apply fleet recommendations")
+                .WithDescription("Applies a (possibly edited) list of fleets to a batch: each fleet is reused when the tenant already has a fleet with the same name (case-insensitive) or created otherwise, and each listed vessel is assigned to it. Vessels must belong to the batch and may appear in only one fleet; fleets without vessels are skipped; a fleet named Uncategorized is never created and its vessels keep their current fleet. Marks the batch's categorization Applied. Requires TenantAdmin.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Batch ID (vib_ prefix)"))
+                .WithRequestBody(OpenApiJson.BodyFor<FleetRecommendationApplyRequest>("Fleets and their vessels", true))
+                .WithResponse(200, OpenApiJson.For<FleetRecommendationApplyResult>("Fleets used and vessel assignments"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Not a tenant admin"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Discovery, import, or categorization still running"))
                 .WithSecurity("ApiKey"));
         }
 

@@ -46,6 +46,13 @@ namespace Armada.Core.Models
         /// </summary>
         public string? HarborId { get; set; } = null;
 
+        /// <summary>
+        /// True to run discovery as a background job: the request returns immediately (HTTP 202) with the batch in
+        /// status Discovering and a job identifier, and the batch moves to Discovered (or Failed) when the scan ends.
+        /// Default false, which scans inside the request.
+        /// </summary>
+        public bool RunInBackground { get; set; } = false;
+
         #endregion
 
         #region Private-Members

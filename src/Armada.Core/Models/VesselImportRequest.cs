@@ -39,6 +39,11 @@ namespace Armada.Core.Models
         /// </summary>
         public VesselImportDefaults? Defaults { get; set; } = null;
 
+        /// <summary>
+        /// Optional fleet categorization to run after the vessels are created, or null for none.
+        /// </summary>
+        public VesselImportCategorizationRequest? Categorization { get; set; } = null;
+
         #endregion
 
         #region Private-Members

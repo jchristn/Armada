@@ -23,7 +23,7 @@ import { buildPromptTemplateDuplicatePayload } from '../lib/duplicates';
 type SortDir = 'asc' | 'desc';
 type SortField = 'name' | 'description' | 'category' | 'isBuiltIn' | 'contentLength' | 'active' | 'lastUpdateUtc';
 
-const CATEGORY_OPTIONS = ['all', 'mission', 'persona', 'structure', 'commit', 'landing', 'agent'] as const;
+const CATEGORY_OPTIONS = ['all', 'mission', 'persona', 'structure', 'commit', 'landing', 'agent', 'import'] as const;
 
 export default function PromptTemplates() {
   const navigate = useNavigate();

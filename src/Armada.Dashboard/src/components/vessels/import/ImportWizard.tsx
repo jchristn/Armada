@@ -3,15 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import {
   apiErrorCode,
   discoverVesselImport,
+  getFleetCategorizationDefaultPrompt,
   getVesselImportBatch,
   importVessels,
+  listCaptains,
   listFleets,
   listPipelines,
 } from '../../../api/client';
 import type {
+  Captain,
   Fleet,
   Pipeline,
   VesselImportBatch,
+  VesselImportFleetRecommendation,
   VesselImportHint,
   VesselImportItem,
 } from '../../../types/models';
@@ -20,13 +24,16 @@ import { useNotifications } from '../../../context/NotificationContext';
 import DialogShell from '../../shared/DialogShell';
 import ConfirmDialog from '../../shared/ConfirmDialog';
 import { EmptyState, ErrorState, LoadingState } from '../../shared/StateBlocks';
+import { notifyBackgroundActivity } from '../../shared/BackgroundActivityIndicator';
 import BrowseTree from './BrowseTree';
 import ImportReviewStep, { type ImportDefaults } from './ImportReviewStep';
 import ImportResultsStep from './ImportResultsStep';
 import ImportHistory from './ImportHistory';
-import { importErrorLabel } from '../../../lib/vesselImportLabels';
+import ImportCategorizationOptions, { EMPTY_CATEGORIZATION, validateCategorization, type CategorizationOptions } from './ImportCategorizationOptions';
+import FleetRecommendationsPanel from './FleetRecommendationsPanel';
+import { importErrorLabel, isBatchBusy } from '../../../lib/vesselImportLabels';
 
-/** Poll interval for a background import, in milliseconds. */
+/** Poll interval for background discovery, import, and fleet categorization, in milliseconds. */
 export const IMPORT_POLL_MS = 2000;
 
 export interface ImportWizardProps {
@@ -36,9 +43,13 @@ export interface ImportWizardProps {
   onImported?: () => void;
   /** Open directly on the import history view. */
   initialView?: 'source' | 'history';
+  /** Open directly on this batch (for example from the header activity indicator). */
+  initialBatchId?: string | null;
+  /** Caller's tenant; captains from other tenants (visible to global admins) are not offered for categorization. */
+  tenantId?: string | null;
 }
 
-type Step = 'source' | 'review' | 'results' | 'history' | 'batch';
+type Step = 'source' | 'discovering' | 'review' | 'results' | 'history' | 'batch';
 type SourceTab = 'paste' | 'browse';
 
 /** Split pasted text into trimmed, non-empty, de-duplicated lines. */
@@ -56,10 +67,12 @@ export function parsePastedPaths(text: string): string[] {
 
 /**
  * Bulk import wizard: Source (paste paths or browse the Admiral host) -> Review (candidate table, selection,
- * fleet and defaults) -> Results (per-item outcomes; background imports are polled). Also exposes the import
- * history with batch detail, and resumes a discovered batch from history so a review survives a reload.
+ * fleet and defaults, optional captain-driven fleet recommendations) -> Results (per-item outcomes and fleet
+ * recommendations). Discovery, larger imports, and fleet categorization run in the background: the wizard says so,
+ * shows live progress while open, and can be closed at any time. Batches resume from the import history (or from the
+ * header activity indicator) on the right step.
  */
-export default function ImportWizard({ open, onClose, onImported, initialView = 'source' }: ImportWizardProps) {
+export default function ImportWizard({ open, onClose, onImported, initialView = 'source', initialBatchId = null, tenantId = null }: ImportWizardProps) {
   const { t } = useLocale();
   const { pushToast } = useNotifications();
   const navigate = useNavigate();
@@ -82,35 +95,40 @@ export default function ImportWizard({ open, onClose, onImported, initialView = 
   const [fleets, setFleets] = useState<Fleet[]>([]);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
 
+  const [captains, setCaptains] = useState<Captain[]>([]);
+  const [captainsLoading, setCaptainsLoading] = useState(false);
+  const [defaultPrompt, setDefaultPrompt] = useState('');
+  const [defaultPromptError, setDefaultPromptError] = useState('');
+  const [timeoutMinutes, setTimeoutMinutes] = useState<number | undefined>(undefined);
+  const [categorization, setCategorization] = useState<CategorizationOptions>(EMPTY_CATEGORIZATION);
+  const [showCategorizationErrors, setShowCategorizationErrors] = useState(false);
+
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState('');
   const [importErrorCode, setImportErrorCode] = useState<string | null>(null);
   const [resultItems, setResultItems] = useState<VesselImportItem[]>([]);
+  const [recommendations, setRecommendations] = useState<VesselImportFleetRecommendation[]>([]);
   const [jobId, setJobId] = useState<string | null>(null);
   const [polling, setPolling] = useState(false);
   const [pollError, setPollError] = useState('');
   const [selectedCount, setSelectedCount] = useState(0);
 
-  const [historyBatch, setHistoryBatch] = useState<{ batch: VesselImportBatch; items: VesselImportItem[] } | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState('');
   const [confirmClose, setConfirmClose] = useState(false);
 
   const pollTimer = useRef<number | null>(null);
+  const importErrorRef = useRef<HTMLDivElement | null>(null);
+  const lastStatus = useRef<string | null>(null);
+  // Callers often pass a fresh onImported arrow on every render; keep it in a ref so the poll loop and the
+  // open effect stay stable and never reset the wizard mid-flow.
+  const onImportedRef = useRef(onImported);
+  onImportedRef.current = onImported;
 
   const pasted = parsePastedPaths(pasteText);
   const sourcePaths = sourceTab === 'paste' ? pasted : browseSelected;
   const depthNumber = maxDepth.trim() === '' ? null : Number(maxDepth);
   const depthInvalid = depthNumber !== null && (!Number.isInteger(depthNumber) || depthNumber < 1 || depthNumber > 16);
-
-  useEffect(() => {
-    if (!open) return;
-    setStep(initialView === 'history' ? 'history' : 'source');
-    let cancelled = false;
-    listFleets({ pageSize: 9999 }).then((r) => { if (!cancelled) setFleets(r.objects || []); }).catch(() => undefined);
-    listPipelines({ pageSize: 9999 }).then((r) => { if (!cancelled) setPipelines(r.objects || []); }).catch(() => undefined);
-    return () => { cancelled = true; };
-  }, [open, initialView]);
 
   const stopPolling = useCallback(() => {
     if (pollTimer.current !== null) {
@@ -122,22 +140,6 @@ export default function ImportWizard({ open, onClose, onImported, initialView = 
 
   useEffect(() => () => stopPolling(), [stopPolling]);
   useEffect(() => { if (!open) stopPolling(); }, [open, stopPolling]);
-
-  function resetAll() {
-    stopPolling();
-    setStep('source');
-    setBatch(null);
-    setCandidates([]);
-    setTruncated(false);
-    setHints([]);
-    setSelected([]);
-    setResultItems([]);
-    setJobId(null);
-    setImportError('');
-    setImportErrorCode(null);
-    setDiscoverError('');
-    setPollError('');
-  }
 
   function loadReview(nextBatch: VesselImportBatch, items: VesselImportItem[], nextTruncated: boolean, nextHints: VesselImportHint[]) {
     setBatch(nextBatch);
@@ -151,6 +153,151 @@ export default function ImportWizard({ open, onClose, onImported, initialView = 
     setStep('review');
   }
 
+  /** Poll a batch while discovery, the import, or fleet categorization runs; stops when nothing is running. */
+  const poll = useCallback(async (batchId: string) => {
+    pollTimer.current = null;
+    try {
+      const detail = await getVesselImportBatch(batchId);
+      const previous = lastStatus.current;
+      lastStatus.current = detail.batch.status;
+      setPollError('');
+
+      if (detail.batch.status === 'Discovering') {
+        setBatch(detail.batch);
+        pollTimer.current = window.setTimeout(() => void poll(batchId), IMPORT_POLL_MS);
+        return;
+      }
+
+      if (previous === 'Discovering') {
+        stopPolling();
+        if (detail.batch.status === 'Discovered') {
+          loadReview(detail.batch, detail.items || [], !!detail.batch.truncated, detail.hints || []);
+        } else {
+          setDiscoverError(detail.batch.errorMessage || t('Discovery failed.'));
+          setStep('source');
+        }
+        return;
+      }
+
+      setBatch(detail.batch);
+      setResultItems(detail.items || []);
+      setRecommendations(detail.fleetRecommendations || []);
+
+      if (previous === 'Importing' && detail.batch.status !== 'Importing') {
+        if (detail.batch.createdCount > 0) onImportedRef.current?.();
+        pushToast(detail.batch.failedCount > 0 ? 'warning' : 'success', t('{count, plural, one {Import finished: # vessel created.} other {Import finished: # vessels created.}}', { count: detail.batch.createdCount }));
+      }
+
+      if (isBatchBusy(detail.batch)) {
+        setPolling(true);
+        pollTimer.current = window.setTimeout(() => void poll(batchId), IMPORT_POLL_MS);
+      } else {
+        stopPolling();
+      }
+    } catch (err: unknown) {
+      setPollError(err instanceof Error ? err.message : t('Failed to refresh import progress.'));
+      pollTimer.current = window.setTimeout(() => void poll(batchId), IMPORT_POLL_MS * 2);
+    }
+    // loadReview only sets state; leaving it out keeps the poll callback stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pushToast, stopPolling, t]);
+
+  const startPolling = useCallback((batchId: string, status: string) => {
+    if (pollTimer.current !== null) window.clearTimeout(pollTimer.current);
+    lastStatus.current = status;
+    setPolling(true);
+    pollTimer.current = window.setTimeout(() => void poll(batchId), IMPORT_POLL_MS);
+  }, [poll]);
+
+  const openBatch = useCallback(async (batchId: string) => {
+    stopPolling();
+    setHistoryLoading(true);
+    setHistoryError('');
+    setStep('batch');
+    try {
+      const detail = await getVesselImportBatch(batchId);
+      lastStatus.current = detail.batch.status;
+      if (detail.batch.status === 'Discovering') {
+        setBatch(detail.batch);
+        setStep('discovering');
+        startPolling(detail.batch.id, 'Discovering');
+      } else if (detail.batch.status === 'Discovered') {
+        loadReview(detail.batch, detail.items || [], !!detail.batch.truncated, detail.hints || []);
+      } else {
+        setBatch(detail.batch);
+        setResultItems(detail.items || []);
+        setRecommendations(detail.fleetRecommendations || []);
+        setJobId(detail.batch.jobId);
+        setSelectedCount(detail.items.filter((i) => i.selected || (i.outcome !== 'SkippedNotSelected' && i.outcome !== 'Pending')).length);
+        if (detail.batch.status === 'Importing') setStep('results');
+        if (isBatchBusy(detail.batch)) startPolling(detail.batch.id, detail.batch.status);
+      }
+    } catch (err: unknown) {
+      setHistoryError(importErrorLabel(t, apiErrorCode(err), err instanceof Error ? err.message : t('Failed to load the batch.')));
+    } finally {
+      setHistoryLoading(false);
+    }
+    // loadReview only sets state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startPolling, stopPolling, t]);
+
+  const openBatchRef = useRef(openBatch);
+  openBatchRef.current = openBatch;
+
+  // Runs only when the dialog opens or the requested view/batch changes, never on unrelated re-renders.
+  useEffect(() => {
+    if (!open) return;
+    if (initialBatchId) void openBatchRef.current(initialBatchId);
+    else setStep(initialView === 'history' ? 'history' : 'source');
+    let cancelled = false;
+    listFleets({ pageSize: 9999 }).then((r) => { if (!cancelled) setFleets(r.objects || []); }).catch(() => undefined);
+    listPipelines({ pageSize: 9999 }).then((r) => { if (!cancelled) setPipelines(r.objects || []); }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [open, initialView, initialBatchId]);
+
+  // Captains and the default prompt are only needed once the operator opts into fleet recommendations.
+  useEffect(() => {
+    if (!open || !categorization.enabled || captains.length > 0 || captainsLoading) return;
+    let cancelled = false;
+    setCaptainsLoading(true);
+    listCaptains({ pageSize: 9999 })
+      .then((r) => { if (!cancelled) setCaptains((r.objects || []).filter((c) => !tenantId || c.tenantId === tenantId)); })
+      .catch(() => undefined)
+      .finally(() => { if (!cancelled) setCaptainsLoading(false); });
+    if (!defaultPrompt) {
+      getFleetCategorizationDefaultPrompt()
+        .then((r) => {
+          if (cancelled) return;
+          setDefaultPrompt(r.prompt);
+          setTimeoutMinutes(r.timeoutMinutes);
+          setCategorization((c) => (c.prompt ? c : { ...c, prompt: r.prompt }));
+        })
+        .catch((err: unknown) => { if (!cancelled) setDefaultPromptError(err instanceof Error ? err.message : t('unknown error')); });
+    }
+    return () => { cancelled = true; };
+    // Load once per opt-in; captains/defaultPrompt guard against reloading.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, categorization.enabled]);
+
+  function resetAll() {
+    stopPolling();
+    lastStatus.current = null;
+    setStep('source');
+    setBatch(null);
+    setCandidates([]);
+    setTruncated(false);
+    setHints([]);
+    setSelected([]);
+    setResultItems([]);
+    setRecommendations([]);
+    setJobId(null);
+    setImportError('');
+    setImportErrorCode(null);
+    setDiscoverError('');
+    setPollError('');
+    setShowCategorizationErrors(false);
+  }
+
   async function discover() {
     if (sourcePaths.length === 0 || depthInvalid) return;
     setDiscovering(true);
@@ -159,8 +306,16 @@ export default function ImportWizard({ open, onClose, onImported, initialView = 
       const result = await discoverVesselImport({
         Directories: sourcePaths,
         ...(depthNumber !== null ? { MaxDepth: depthNumber } : {}),
+        RunInBackground: true,
       });
-      loadReview(result.batch, result.candidates || [], result.truncated, result.hints || []);
+      if (result.runsInBackground) {
+        setBatch(result.batch);
+        setStep('discovering');
+        notifyBackgroundActivity();
+        startPolling(result.batchId, 'Discovering');
+      } else {
+        loadReview(result.batch, result.candidates || [], result.truncated, result.hints || []);
+      }
     } catch (err: unknown) {
       const fallback = err instanceof Error ? err.message : t('Discovery failed.');
       setDiscoverError(importErrorLabel(t, apiErrorCode(err), fallback) + (apiErrorCode(err) && err instanceof Error ? ` (${err.message})` : ''));
@@ -169,27 +324,13 @@ export default function ImportWizard({ open, onClose, onImported, initialView = 
     }
   }
 
-  const poll = useCallback(async (batchId: string) => {
-    try {
-      const detail = await getVesselImportBatch(batchId);
-      setBatch(detail.batch);
-      setResultItems(detail.items || []);
-      setPollError('');
-      if (detail.batch.status === 'Importing') {
-        pollTimer.current = window.setTimeout(() => void poll(batchId), IMPORT_POLL_MS);
-      } else {
-        stopPolling();
-        if (detail.batch.createdCount > 0) onImported?.();
-        pushToast(detail.batch.failedCount > 0 ? 'warning' : 'success', t('{count, plural, one {Import finished: # vessel created.} other {Import finished: # vessels created.}}', { count: detail.batch.createdCount }));
-      }
-    } catch (err: unknown) {
-      setPollError(err instanceof Error ? err.message : t('Failed to refresh import progress.'));
-      pollTimer.current = window.setTimeout(() => void poll(batchId), IMPORT_POLL_MS * 2);
-    }
-  }, [onImported, pushToast, stopPolling, t]);
-
   async function runImport() {
     if (!batch || selected.length === 0) return;
+    const categorizationErrors = validateCategorization(categorization);
+    if (Object.keys(categorizationErrors).length > 0) {
+      setShowCategorizationErrors(true);
+      return;
+    }
     setImporting(true);
     setImportError('');
     setImportErrorCode(null);
@@ -201,18 +342,33 @@ export default function ImportWizard({ open, onClose, onImported, initialView = 
         Defaults: (defaults.pipelineId || defaults.landingMode)
           ? { DefaultPipelineId: defaults.pipelineId || null, LandingMode: defaults.landingMode || null }
           : null,
+        ...(categorization.enabled
+          ? {
+            Categorization: {
+              Enabled: true,
+              CaptainId: categorization.captainId,
+              Prompt: categorization.prompt === defaultPrompt ? null : categorization.prompt,
+              ApplyAutomatically: categorization.applyAutomatically,
+            },
+          }
+          : {}),
       });
       setSelectedCount(selected.length);
       setBatch(response.batch);
       setResultItems(response.items || []);
+      setRecommendations([]);
       setJobId(response.jobId);
       setStep('results');
       if (response.runsInBackground) {
-        setPolling(true);
-        pollTimer.current = window.setTimeout(() => void poll(response.batchId), IMPORT_POLL_MS);
+        notifyBackgroundActivity();
+        startPolling(response.batchId, 'Importing');
       } else {
         if (response.batch.createdCount > 0) onImported?.();
         pushToast(response.batch.failedCount > 0 ? 'warning' : 'success', t('{count, plural, one {Import finished: # vessel created.} other {Import finished: # vessels created.}}', { count: response.batch.createdCount }));
+        if (isBatchBusy(response.batch)) {
+          notifyBackgroundActivity();
+          startPolling(response.batchId, response.batch.status);
+        }
       }
     } catch (err: unknown) {
       const code = apiErrorCode(err);
@@ -224,33 +380,11 @@ export default function ImportWizard({ open, onClose, onImported, initialView = 
     }
   }
 
-  async function openHistoryBatch(b: VesselImportBatch) {
-    setHistoryLoading(true);
-    setHistoryError('');
-    setStep('batch');
-    try {
-      const detail = await getVesselImportBatch(b.id);
-      if (detail.batch.status === 'Discovered') {
-        loadReview(detail.batch, detail.items || [], false, []);
-        setHistoryBatch(null);
-      } else {
-        setHistoryBatch({ batch: detail.batch, items: detail.items || [] });
-        if (detail.batch.status === 'Importing') {
-          setBatch(detail.batch);
-          setResultItems(detail.items || []);
-          setJobId(detail.batch.jobId);
-          setSelectedCount(detail.items.filter((i) => i.outcome !== 'SkippedNotSelected').length);
-          setStep('results');
-          setPolling(true);
-          pollTimer.current = window.setTimeout(() => void poll(detail.batch.id), IMPORT_POLL_MS);
-        }
-      }
-    } catch (err: unknown) {
-      setHistoryError(importErrorLabel(t, apiErrorCode(err), err instanceof Error ? err.message : t('Failed to load the batch.')));
-    } finally {
-      setHistoryLoading(false);
+  useEffect(() => {
+    if (importError && importErrorRef.current && typeof importErrorRef.current.scrollIntoView === 'function') {
+      importErrorRef.current.scrollIntoView({ block: 'nearest' });
     }
-  }
+  }, [importError]);
 
   function requestClose() {
     if (step === 'review' && candidates.length > 0) {
@@ -260,8 +394,16 @@ export default function ImportWizard({ open, onClose, onImported, initialView = 
     onClose();
   }
 
-  const stepIndex = step === 'source' ? 0 : step === 'review' ? 1 : step === 'results' ? 2 : -1;
+  function refreshAfterChange() {
+    if (batch) {
+      notifyBackgroundActivity();
+      void poll(batch.id);
+    }
+  }
+
+  const stepIndex = step === 'source' || step === 'discovering' ? 0 : step === 'review' ? 1 : step === 'results' ? 2 : -1;
   const steps = [t('Source'), t('Review'), t('Results')];
+  const importPolling = polling && batch?.status === 'Importing';
 
   let footer: ReactNode = null;
   if (step === 'source') {
@@ -271,6 +413,13 @@ export default function ImportWizard({ open, onClose, onImported, initialView = 
         <button type="button" className="btn btn-primary" onClick={() => void discover()} disabled={discovering || sourcePaths.length === 0 || depthInvalid}>
           {discovering ? t('Discovering...') : t('Discover')}
         </button>
+      </>
+    );
+  } else if (step === 'discovering') {
+    footer = (
+      <>
+        <button type="button" className="btn" onClick={resetAll}>{t('Start over')}</button>
+        <button type="button" className="btn btn-primary" onClick={onClose}>{t('Close')}</button>
       </>
     );
   } else if (step === 'review') {
@@ -293,7 +442,7 @@ export default function ImportWizard({ open, onClose, onImported, initialView = 
   } else {
     footer = (
       <>
-        {step === 'batch' && <button type="button" className="btn" onClick={() => setStep('history')}>{t('Back to history')}</button>}
+        {step === 'batch' && <button type="button" className="btn" onClick={() => { stopPolling(); setStep('history'); }}>{t('Back to history')}</button>}
         <button type="button" className="btn" onClick={resetAll}>{t('New import')}</button>
         <button type="button" className="btn btn-primary" onClick={onClose}>{t('Close')}</button>
       </>
@@ -325,8 +474,8 @@ export default function ImportWizard({ open, onClose, onImported, initialView = 
           ) : (
             <h4 className="wizard-view-title">{t('Import history')}</h4>
           )}
-          {(step === 'source' || step === 'results') && (
-            <button type="button" className="btn btn-sm" onClick={() => setStep('history')}>{t('Import history')}</button>
+          {(step === 'source' || step === 'results' || step === 'discovering') && (
+            <button type="button" className="btn btn-sm" onClick={() => { stopPolling(); setStep('history'); }}>{t('Import history')}</button>
           )}
         </div>
 
@@ -393,10 +542,22 @@ export default function ImportWizard({ open, onClose, onImported, initialView = 
           </div>
         )}
 
+        {step === 'discovering' && (
+          <div className="alert alert-info import-background-note" role="status" aria-live="polite">
+            <span className="spinner-inline" aria-hidden="true" />
+            <div>
+              <p><strong>{t('Scanning for repositories in the background.')}</strong></p>
+              <p>{t('You can close this dialog; discovery keeps running and the header shows it while it runs. Reopen it from the import history to review the candidates.')}</p>
+              {batch && <p className="text-dim mono" data-i18n-skip="true">{batch.id}</p>}
+              {pollError && <p className="field-error">{pollError}</p>}
+            </div>
+          </div>
+        )}
+
         {step === 'review' && batch && (
           <>
             {importError && (
-              <div className="alert alert-error" role="alert">
+              <div className="alert alert-error" role="alert" ref={importErrorRef}>
                 <span>{importError}</span>{' '}
                 <button type="button" className="btn btn-sm" onClick={() => void runImport()}>{t('Retry')}</button>
                 {importErrorCode === 'BatchBusy' && <button type="button" className="btn btn-sm" onClick={() => setStep('history')}>{t('Open import history')}</button>}
@@ -410,34 +571,47 @@ export default function ImportWizard({ open, onClose, onImported, initialView = 
                 <p>{t('Try a higher max depth, a folder closer to the repositories, or check the excluded names under Settings > Import.')}</p>
               </EmptyState>
             ) : (
-              <ImportReviewStep
-                candidates={candidates}
-                truncated={truncated}
-                hints={hints}
-                selected={selected}
-                onSelectedChange={setSelected}
-                fleets={fleets}
-                pipelines={pipelines}
-                defaults={defaults}
-                onDefaultsChange={setDefaults}
-              />
+              <>
+                <ImportReviewStep
+                  candidates={candidates}
+                  truncated={truncated}
+                  hints={hints}
+                  selected={selected}
+                  onSelectedChange={setSelected}
+                  fleets={fleets}
+                  pipelines={pipelines}
+                  defaults={defaults}
+                  onDefaultsChange={setDefaults}
+                />
+                <ImportCategorizationOptions
+                  value={categorization}
+                  onChange={setCategorization}
+                  captains={captains}
+                  captainsLoading={captainsLoading}
+                  defaultPrompt={defaultPrompt}
+                  defaultPromptError={defaultPromptError}
+                  timeoutMinutes={timeoutMinutes}
+                  showErrors={showCategorizationErrors}
+                />
+              </>
             )}
           </>
         )}
 
-        {step === 'results' && batch && (
-          <ImportResultsStep batch={batch} items={resultItems} selectedCount={selectedCount} polling={polling} jobId={jobId} pollError={pollError} />
-        )}
-
-        {step === 'history' && <ImportHistory onOpen={(b) => void openHistoryBatch(b)} />}
-
-        {step === 'batch' && (
+        {(step === 'results' || step === 'batch') && (
           <>
-            {historyLoading && <LoadingState />}
-            {historyError && <ErrorState message={historyError} />}
-            {historyBatch && <ImportResultsStep batch={historyBatch.batch} items={historyBatch.items} />}
+            {step === 'batch' && historyLoading && <LoadingState />}
+            {step === 'batch' && historyError && <ErrorState message={historyError} />}
+            {batch && !(step === 'batch' && (historyLoading || historyError)) && (
+              <>
+                <ImportResultsStep batch={batch} items={resultItems} selectedCount={selectedCount} polling={importPolling} jobId={jobId} pollError={pollError} />
+                <FleetRecommendationsPanel batch={batch} items={resultItems} recommendations={recommendations} onChanged={refreshAfterChange} />
+              </>
+            )}
           </>
         )}
+
+        {step === 'history' && <ImportHistory onOpen={(b) => void openBatch(b.id)} />}
       </DialogShell>
       <ConfirmDialog
         open={confirmClose}

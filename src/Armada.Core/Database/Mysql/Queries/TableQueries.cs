@@ -1746,6 +1746,52 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration v74 statements: background discovery and fleet categorization columns on vessel_import_batches,
+        /// plus vessel_import_fleet_recommendations and vessel_import_fleet_recommendation_vessels tables.
+        /// </summary>
+        public static readonly string[] MigrationV74Statements = new string[]
+        {
+            "ALTER TABLE vessel_import_items ADD COLUMN selected TINYINT(1) NOT NULL DEFAULT 0;",
+            "ALTER TABLE vessel_import_batches ADD COLUMN discovery_job_id VARCHAR(64) NULL;",
+            "ALTER TABLE vessel_import_batches ADD COLUMN truncated TINYINT(1) NOT NULL DEFAULT 0;",
+            "ALTER TABLE vessel_import_batches ADD COLUMN error_message LONGTEXT NULL;",
+            "ALTER TABLE vessel_import_batches ADD COLUMN categorization_status VARCHAR(32) NOT NULL DEFAULT 'None';",
+            "ALTER TABLE vessel_import_batches ADD COLUMN categorization_captain_id VARCHAR(64) NULL;",
+            "ALTER TABLE vessel_import_batches ADD COLUMN categorization_job_id VARCHAR(64) NULL;",
+            "ALTER TABLE vessel_import_batches ADD COLUMN categorization_prompt LONGTEXT NULL;",
+            "ALTER TABLE vessel_import_batches ADD COLUMN categorization_apply_automatically TINYINT(1) NOT NULL DEFAULT 0;",
+            "ALTER TABLE vessel_import_batches ADD COLUMN categorization_error LONGTEXT NULL;",
+            "ALTER TABLE vessel_import_batches ADD COLUMN categorization_started_utc DATETIME(6) NULL;",
+            "ALTER TABLE vessel_import_batches ADD COLUMN categorization_completed_utc DATETIME(6) NULL;",
+            "CREATE INDEX idx_vessel_import_batches_tenant_categorization ON vessel_import_batches(tenant_id, categorization_status);",
+            @"CREATE TABLE IF NOT EXISTS vessel_import_fleet_recommendations (
+                id VARCHAR(64) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(64) NOT NULL,
+                batch_id VARCHAR(64) NOT NULL,
+                name VARCHAR(256) NOT NULL,
+                description LONGTEXT,
+                rationale LONGTEXT,
+                sort_order INT NOT NULL DEFAULT 0,
+                applied_fleet_id VARCHAR(64),
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL,
+                FOREIGN KEY (batch_id) REFERENCES vessel_import_batches(id) ON DELETE CASCADE
+            );",
+            "CREATE INDEX idx_vessel_import_fleet_recs_tenant_batch ON vessel_import_fleet_recommendations(tenant_id, batch_id, sort_order);",
+            @"CREATE TABLE IF NOT EXISTS vessel_import_fleet_recommendation_vessels (
+                recommendation_id VARCHAR(64) NOT NULL,
+                tenant_id VARCHAR(64) NOT NULL,
+                batch_id VARCHAR(64) NOT NULL,
+                vessel_id VARCHAR(64) NOT NULL,
+                sort_order INT NOT NULL DEFAULT 0,
+                PRIMARY KEY (recommendation_id, vessel_id),
+                FOREIGN KEY (recommendation_id) REFERENCES vessel_import_fleet_recommendations(id) ON DELETE CASCADE
+            );",
+            "CREATE INDEX idx_vessel_import_fleet_rec_vessels_tenant_batch ON vessel_import_fleet_recommendation_vessels(tenant_id, batch_id);",
+            "CREATE INDEX idx_vessel_import_fleet_rec_vessels_vessel ON vessel_import_fleet_recommendation_vessels(vessel_id);"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

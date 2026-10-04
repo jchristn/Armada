@@ -170,6 +170,11 @@ namespace Armada.Core
         public static readonly string VesselImportItemIdPrefix = "vii_";
 
         /// <summary>
+        /// Vessel import fleet recommendation ID prefix.
+        /// </summary>
+        public static readonly string VesselImportFleetRecommendationIdPrefix = "vfr_";
+
+        /// <summary>
         /// Fleet action definition ID prefix.
         /// </summary>
         public static readonly string FleetActionIdPrefix = "fac_";

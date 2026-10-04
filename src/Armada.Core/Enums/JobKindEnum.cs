@@ -32,6 +32,24 @@ namespace Armada.Core.Enums
         /// A report/aggregation job.
         /// </summary>
         [EnumMember(Value = "Report")]
-        Report
+        Report,
+
+        /// <summary>
+        /// A background scan for vessel import candidates (vessel import discovery).
+        /// </summary>
+        [EnumMember(Value = "VesselDiscovery")]
+        VesselDiscovery,
+
+        /// <summary>
+        /// A background vessel import of a discovered batch.
+        /// </summary>
+        [EnumMember(Value = "VesselImport")]
+        VesselImport,
+
+        /// <summary>
+        /// A captain analyzing imported repositories and recommending fleets for them.
+        /// </summary>
+        [EnumMember(Value = "FleetCategorization")]
+        FleetCategorization
     }
 }

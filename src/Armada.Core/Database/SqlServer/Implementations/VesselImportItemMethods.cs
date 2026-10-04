@@ -19,9 +19,9 @@ namespace Armada.Core.Database.SqlServer.Implementations
         #region Private-Members
 
         private static readonly string _Insert = @"INSERT INTO vessel_import_items
-            (id, tenant_id, batch_id, path, proposed_name, remote_url, default_branch, candidate_status, existing_vessel_id, outcome, outcome_reason, outcome_message, vessel_id, created_utc, last_update_utc)
+            (id, tenant_id, batch_id, path, proposed_name, remote_url, default_branch, candidate_status, existing_vessel_id, outcome, outcome_reason, outcome_message, vessel_id, selected, created_utc, last_update_utc)
             VALUES
-            (@id, @tenant_id, @batch_id, @path, @proposed_name, @remote_url, @default_branch, @candidate_status, @existing_vessel_id, @outcome, @outcome_reason, @outcome_message, @vessel_id, @created_utc, @last_update_utc);";
+            (@id, @tenant_id, @batch_id, @path, @proposed_name, @remote_url, @default_branch, @candidate_status, @existing_vessel_id, @outcome, @outcome_reason, @outcome_message, @vessel_id, @selected, @created_utc, @last_update_utc);";
 
         private readonly string _ConnectionString;
         private readonly SemaphoreSlim? _WriteLock;
@@ -125,7 +125,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     tenant_id = @tenant_id, batch_id = @batch_id, path = @path, proposed_name = @proposed_name,
                     remote_url = @remote_url, default_branch = @default_branch, candidate_status = @candidate_status,
                     existing_vessel_id = @existing_vessel_id, outcome = @outcome, outcome_reason = @outcome_reason,
-                    outcome_message = @outcome_message, vessel_id = @vessel_id, created_utc = @created_utc,
+                    outcome_message = @outcome_message, vessel_id = @vessel_id, selected = @selected, created_utc = @created_utc,
                     last_update_utc = @last_update_utc
                     WHERE id = @id;", cmd => Bind(cmd, item), token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
@@ -188,6 +188,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
             SqlServerCommandHelper.Add(cmd, "@outcome_reason", item.OutcomeReason);
             SqlServerCommandHelper.Add(cmd, "@outcome_message", item.OutcomeMessage);
             SqlServerCommandHelper.Add(cmd, "@vessel_id", item.VesselId);
+            SqlServerCommandHelper.Add(cmd, "@selected", item.Selected);
             SqlServerCommandHelper.AddDate(cmd, "@created_utc", item.CreatedUtc);
             SqlServerCommandHelper.AddDate(cmd, "@last_update_utc", item.LastUpdateUtc);
         }
@@ -208,6 +209,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
             item.OutcomeReason = SqlServerCommandHelper.ReadString(reader["outcome_reason"]);
             item.OutcomeMessage = SqlServerCommandHelper.ReadString(reader["outcome_message"]);
             item.VesselId = SqlServerCommandHelper.ReadString(reader["vessel_id"]);
+            item.Selected = SqlServerCommandHelper.ReadBool(reader["selected"], false);
             item.CreatedUtc = SqlServerCommandHelper.ReadDate(reader["created_utc"]);
             item.LastUpdateUtc = SqlServerCommandHelper.ReadDate(reader["last_update_utc"]);
             return item;

@@ -4,7 +4,8 @@ namespace Armada.Core.Models
     using System.Collections.Generic;
 
     /// <summary>
-    /// Response to a discover request: the persisted batch (status Discovered) and its candidate items.
+    /// Response to a discover request: the persisted batch (status Discovered) and its candidate items, or, for a
+    /// background discovery, the batch in status Discovering and the job identifier.
     /// </summary>
     public class VesselImportDiscoverResponse
     {
@@ -18,6 +19,16 @@ namespace Armada.Core.Models
             get => _BatchId;
             set => _BatchId = value ?? String.Empty;
         }
+
+        /// <summary>
+        /// Background discovery job identifier when discovery runs in the background, otherwise null.
+        /// </summary>
+        public string? JobId { get; set; } = null;
+
+        /// <summary>
+        /// True when discovery runs as a background job (HTTP 202) and candidates are not available yet.
+        /// </summary>
+        public bool RunsInBackground { get; set; } = false;
 
         /// <summary>
         /// The persisted batch, or null.

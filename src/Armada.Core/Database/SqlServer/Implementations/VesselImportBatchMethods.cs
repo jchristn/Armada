@@ -18,8 +18,8 @@ namespace Armada.Core.Database.SqlServer.Implementations
     {
         #region Private-Members
 
-        private static readonly string _Columns = "id, tenant_id, user_id, status, harbor_id, fleet_id, job_id, requested_path_count, candidate_count, created_count, skipped_count, failed_count, created_utc, last_update_utc, completed_utc";
-        private static readonly string _Values = "@id, @tenant_id, @user_id, @status, @harbor_id, @fleet_id, @job_id, @requested_path_count, @candidate_count, @created_count, @skipped_count, @failed_count, @created_utc, @last_update_utc, @completed_utc";
+        private static readonly string _Columns = "id, tenant_id, user_id, status, harbor_id, fleet_id, job_id, requested_path_count, candidate_count, created_count, skipped_count, failed_count, created_utc, last_update_utc, completed_utc, discovery_job_id, truncated, error_message, categorization_status, categorization_captain_id, categorization_job_id, categorization_prompt, categorization_apply_automatically, categorization_error, categorization_started_utc, categorization_completed_utc";
+        private static readonly string _Values = "@id, @tenant_id, @user_id, @status, @harbor_id, @fleet_id, @job_id, @requested_path_count, @candidate_count, @created_count, @skipped_count, @failed_count, @created_utc, @last_update_utc, @completed_utc, @discovery_job_id, @truncated, @error_message, @categorization_status, @categorization_captain_id, @categorization_job_id, @categorization_prompt, @categorization_apply_automatically, @categorization_error, @categorization_started_utc, @categorization_completed_utc";
 
         private readonly string _ConnectionString;
         private readonly SemaphoreSlim? _WriteLock;
@@ -101,7 +101,12 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     tenant_id = @tenant_id, user_id = @user_id, status = @status, harbor_id = @harbor_id, fleet_id = @fleet_id,
                     job_id = @job_id, requested_path_count = @requested_path_count, candidate_count = @candidate_count,
                     created_count = @created_count, skipped_count = @skipped_count, failed_count = @failed_count,
-                    created_utc = @created_utc, last_update_utc = @last_update_utc, completed_utc = @completed_utc
+                    created_utc = @created_utc, last_update_utc = @last_update_utc, completed_utc = @completed_utc,
+                    discovery_job_id = @discovery_job_id, truncated = @truncated, error_message = @error_message,
+                    categorization_status = @categorization_status, categorization_captain_id = @categorization_captain_id,
+                    categorization_job_id = @categorization_job_id, categorization_prompt = @categorization_prompt,
+                    categorization_apply_automatically = @categorization_apply_automatically, categorization_error = @categorization_error,
+                    categorization_started_utc = @categorization_started_utc, categorization_completed_utc = @categorization_completed_utc
                     WHERE id = @id;", cmd => Bind(cmd, batch), token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
 
@@ -114,6 +119,8 @@ namespace Armada.Core.Database.SqlServer.Implementations
             if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
             await SqlServerCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqlConnection conn, SqlTransaction tx) =>
             {
+                await SqlServerCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM vessel_import_fleet_recommendation_vessels WHERE batch_id = @id;", cmd => SqlServerCommandHelper.Add(cmd, "@id", id), token).ConfigureAwait(false);
+                await SqlServerCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM vessel_import_fleet_recommendations WHERE batch_id = @id;", cmd => SqlServerCommandHelper.Add(cmd, "@id", id), token).ConfigureAwait(false);
                 await SqlServerCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM vessel_import_items WHERE batch_id = @id;", cmd => SqlServerCommandHelper.Add(cmd, "@id", id), token).ConfigureAwait(false);
                 await SqlServerCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM vessel_import_batches WHERE id = @id;", cmd => SqlServerCommandHelper.Add(cmd, "@id", id), token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
@@ -131,6 +138,8 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     SqlServerCommandHelper.Add(cmd, "@tenant_id", tenantId);
                     SqlServerCommandHelper.Add(cmd, "@id", id);
                 };
+                await SqlServerCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM vessel_import_fleet_recommendation_vessels WHERE tenant_id = @tenant_id AND batch_id = @id;", bind, token).ConfigureAwait(false);
+                await SqlServerCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM vessel_import_fleet_recommendations WHERE tenant_id = @tenant_id AND batch_id = @id;", bind, token).ConfigureAwait(false);
                 await SqlServerCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM vessel_import_items WHERE tenant_id = @tenant_id AND batch_id = @id;", bind, token).ConfigureAwait(false);
                 await SqlServerCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM vessel_import_batches WHERE tenant_id = @tenant_id AND id = @id;", bind, token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
@@ -169,6 +178,14 @@ namespace Armada.Core.Database.SqlServer.Implementations
             }
         }
 
+        /// <inheritdoc />
+        public async Task<List<VesselImportBatch>> EnumerateInProgressAsync(CancellationToken token = default)
+        {
+            return await SqlServerCommandHelper.QueryAsync(_ConnectionString,
+                "SELECT * FROM vessel_import_batches WHERE status = 'Discovering' OR categorization_status IN ('Pending', 'Running') ORDER BY created_utc ASC;",
+                null, FromReader, token).ConfigureAwait(false);
+        }
+
         #endregion
 
         #region Private-Methods
@@ -195,6 +212,17 @@ namespace Armada.Core.Database.SqlServer.Implementations
             SqlServerCommandHelper.AddDate(cmd, "@created_utc", batch.CreatedUtc);
             SqlServerCommandHelper.AddDate(cmd, "@last_update_utc", batch.LastUpdateUtc);
             SqlServerCommandHelper.AddDate(cmd, "@completed_utc", batch.CompletedUtc);
+            SqlServerCommandHelper.Add(cmd, "@discovery_job_id", batch.DiscoveryJobId);
+            SqlServerCommandHelper.Add(cmd, "@truncated", batch.Truncated);
+            SqlServerCommandHelper.Add(cmd, "@error_message", batch.ErrorMessage);
+            SqlServerCommandHelper.Add(cmd, "@categorization_status", batch.CategorizationStatus.ToString());
+            SqlServerCommandHelper.Add(cmd, "@categorization_captain_id", batch.CategorizationCaptainId);
+            SqlServerCommandHelper.Add(cmd, "@categorization_job_id", batch.CategorizationJobId);
+            SqlServerCommandHelper.Add(cmd, "@categorization_prompt", batch.CategorizationPrompt);
+            SqlServerCommandHelper.Add(cmd, "@categorization_apply_automatically", batch.CategorizationApplyAutomatically);
+            SqlServerCommandHelper.Add(cmd, "@categorization_error", batch.CategorizationError);
+            SqlServerCommandHelper.AddDate(cmd, "@categorization_started_utc", batch.CategorizationStartedUtc);
+            SqlServerCommandHelper.AddDate(cmd, "@categorization_completed_utc", batch.CategorizationCompletedUtc);
         }
 
         private static VesselImportBatch FromReader(SqlDataReader reader)
@@ -215,6 +243,17 @@ namespace Armada.Core.Database.SqlServer.Implementations
             batch.CreatedUtc = SqlServerCommandHelper.ReadDate(reader["created_utc"]);
             batch.LastUpdateUtc = SqlServerCommandHelper.ReadDate(reader["last_update_utc"]);
             batch.CompletedUtc = SqlServerCommandHelper.ReadNullableDate(reader["completed_utc"]);
+            batch.DiscoveryJobId = SqlServerCommandHelper.ReadString(reader["discovery_job_id"]);
+            batch.Truncated = SqlServerCommandHelper.ReadBool(reader["truncated"], false);
+            batch.ErrorMessage = SqlServerCommandHelper.ReadString(reader["error_message"]);
+            batch.CategorizationStatus = SqlServerCommandHelper.ReadEnum(reader["categorization_status"], VesselImportCategorizationStatusEnum.None);
+            batch.CategorizationCaptainId = SqlServerCommandHelper.ReadString(reader["categorization_captain_id"]);
+            batch.CategorizationJobId = SqlServerCommandHelper.ReadString(reader["categorization_job_id"]);
+            batch.CategorizationPrompt = SqlServerCommandHelper.ReadString(reader["categorization_prompt"]);
+            batch.CategorizationApplyAutomatically = SqlServerCommandHelper.ReadBool(reader["categorization_apply_automatically"], false);
+            batch.CategorizationError = SqlServerCommandHelper.ReadString(reader["categorization_error"]);
+            batch.CategorizationStartedUtc = SqlServerCommandHelper.ReadNullableDate(reader["categorization_started_utc"]);
+            batch.CategorizationCompletedUtc = SqlServerCommandHelper.ReadNullableDate(reader["categorization_completed_utc"]);
             return batch;
         }
 
