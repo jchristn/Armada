@@ -62,6 +62,11 @@ namespace Test.Shared.Infrastructure
         public int McpPort { get; private set; }
 
         /// <summary>
+        /// Session token encryption key the server uses (auto-generated at start), so suites can mint tokens.
+        /// </summary>
+        public string SessionTokenEncryptionKey { get; private set; } = "";
+
+        /// <summary>
         /// Temp directory holding the server's database, logs, docks, and repos.
         /// </summary>
         public string TempDir { get; private set; } = "";
@@ -263,6 +268,7 @@ namespace Test.Shared.Infrastructure
 
             _Server = new ArmadaServer(logging, settings, quiet: true);
             await _Server.StartAsync().ConfigureAwait(false);
+            SessionTokenEncryptionKey = settings.SessionTokenEncryptionKey ?? "";
 
             BaseUrl = "http://127.0.0.1:" + RestPort;
 
