@@ -180,13 +180,15 @@ namespace Armada.Tui.Screens.Ask
         }
 
         /// <inheritdoc />
+        public override int DefaultRefreshSeconds()
+        {
+            return 0;
+        }
+
+        /// <inheritdoc />
         public override Action? RefreshAction()
         {
-            return () =>
-            {
-                Ask.LoadThreads(1);
-                if (Ask.Conversation.ThreadId != null) Ask.LoadConversation(Ask.Conversation.ThreadId, true);
-            };
+            return () => Ask.Refresh();
         }
 
         /// <inheritdoc />

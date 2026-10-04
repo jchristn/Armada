@@ -266,6 +266,7 @@ namespace Armada.Tui.Ask
 
         #region Private-Members
 
+        private const string ArmadaSocketEventsCaptain = "captain.changed";
         private readonly Dictionary<string, CaptainToolAccessResult> _ToolsCache = new Dictionary<string, CaptainToolAccessResult>(StringComparer.Ordinal);
         private string? _ToolsRequestedFor = null;
         private bool _Stopping = false;
@@ -295,6 +296,7 @@ namespace Armada.Tui.Ask
                 if (e != null) HandleEvent(e);
             });
             context.Events.Reconnected += (s, e) => HandleReconnect();
+            context.Events.SubscribeCoalesced(ArmadaSocketEventsCaptain, () => { if (_Started) LoadCaptains(); });
             context.Session.SignedIn += (s, e) => Start();
             context.Session.SignedOut += (s, e) => Clear();
         }
@@ -335,6 +337,18 @@ namespace Armada.Tui.Ask
             LoadCaptains();
             LoadQuickActions();
             LoadThreads(1);
+        }
+
+        /// <summary>
+        /// Reload the captains, quick actions, thread list, and the open conversation (F5).
+        /// </summary>
+        public void Refresh()
+        {
+            _Started = true;
+            LoadCaptains();
+            LoadQuickActions();
+            LoadThreads(1);
+            if (Conversation.ThreadId != null) LoadConversation(Conversation.ThreadId, true);
         }
 
         /// <summary>

@@ -87,7 +87,7 @@ namespace Test.Shared.Suites.Tui
                     TuiCase.Contains(host.Screen(), "Its messages and action history are removed", "dashboard delete text");
                     host.Press("y");
                     AssertTrue(host.PumpUntil(() => ask.Threads.Count == 1), "deleted");
-                    AssertTrue(host.WaitForText("Conversation deleted."), "toast");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Conversation deleted."))), "toast");
                     screen = (AskScreen)host.Tui.Shell.Screen!;
                     screen.Scope.Focus(screen.ThreadList);
                     host.Press("n");
@@ -648,7 +648,7 @@ namespace Test.Shared.Suites.Tui
                     AssertTrue(fx.Stub.Bodies.Any(b => b.Contains("\"CaptainId\":null")), "explicit null clears the captain");
                     host.Press("s");
                     AssertTrue(host.PumpUntil(() => fx.Stub.Count("POST /api/v1/ask/threads/ath_1/summarize") == 1), "summarize call");
-                    AssertTrue(host.WaitForText("Summarizing \"TUIKit fixes\""), "summarize toast");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Summarizing \"TUIKit fixes\""))), "summarize toast");
                     host.Press("e").Press("ctrl+u").Type("Renamed in header").Press("enter");
                     AssertTrue(host.PumpUntil(() => ask.Conversation.Thread!.Title == "Renamed in header"), "header rename");
                 }
@@ -678,6 +678,31 @@ namespace Test.Shared.Suites.Tui
                     host.Press("alt+a");
                     AssertEqual("/ask", host.Tui.Context.Router.Current!.FullPath, "opens Ask");
                     AssertTrue(host.PumpUntil(() => ((AskScreen)host.Tui.Shell.Screen!).Composer.Text == "On vessel Alpha (vsl_a): "), "context pre-filled with the vessel name");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "narrow_layout", "Below 100 columns the list is an overlay toggled with Ctrl+T; Ask does not auto-refresh", () =>
+            {
+                AskFixtures fx = new AskFixtures();
+                AskThread older = AskFixtures.Thread("ath_2", "Other");
+                older.LastMessageUtc = DateTime.UtcNow.AddHours(-2);
+                fx.AddThread(AskFixtures.Thread("ath_1", "TUIKit fixes")).AddThread(older);
+                using (TuiTestHost host = TuiCase.SignedIn(96, 30, "/ask/ath_1", fx.Stub))
+                {
+                    AskController ask = host.Tui.Ask;
+                    host.PumpUntil(() => ask.Threads.Count == 2 && ask.Conversation.Thread != null);
+                    AssertEqual(0, host.Tui.Context.Refresh.IntervalSeconds, "Ask is live, auto-refresh off by default");
+                    TuiCase.NotContains(host.Screen(), "CONVERSATIONS", "list folded away");
+                    host.Press("ctrl+t");
+                    AskScreen screen = (AskScreen)host.Tui.Shell.Screen!;
+                    AssertTrue(screen.ListOverlayOpen, "overlay open");
+                    TuiCase.Contains(host.Screen(), "CONVERSATIONS", "overlay shows the list");
+                    host.Press("down");
+                    string focusInfo = (host.Tui.Shell.FocusedLeaf()?.GetType().Name ?? "none") + " cursor=" + screen.ThreadList.Cursor;
+                    host.Press("enter");
+                    AssertEqual("/ask/ath_2", host.Tui.Context.Router.Current!.FullPath, "opened from the overlay (" + focusInfo + ")");
+                    host.Tui.Context.Navigate("/missions");
+                    AssertEqual(15, host.Tui.Context.Refresh.IntervalSeconds, "other screens keep the 15 s default");
                 }
             }));
 

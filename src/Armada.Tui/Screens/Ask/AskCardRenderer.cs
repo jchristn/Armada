@@ -41,11 +41,11 @@ namespace Armada.Tui.Screens.Ask
         {
             bool pending = proposal.Status == AskProposalStatusEnum.Pending;
             int inner = Math.Max(10, width - 4);
-            CellStyle statusStyle = StatusBadge.Style(proposal.Status.ToString(), theme);
+            CellStyle statusStyle = ProposalStyle(proposal.Status, theme);
             StyledText title = StyledText.From(compact ? loc.T("Action") : pending ? loc.T("Approval needed") : loc.T("Action"), pending ? theme.Warning.WithAttribute(CellAttributes.Bold, true) : theme.Accent)
                 .Append(StyledText.From("  " + proposal.ToolName + "  ", theme.Code))
                 .Append(StyledText.From(proposal.Source == AskProposalSourceEnum.QuickAction ? loc.T("Quick action") : loc.T("Proposed by the captain"), theme.Muted));
-            StyledText right = StyledText.From(StatusBadge.Label(loc.T(proposal.Status.ToString())), statusStyle);
+            StyledText right = StyledText.From(ProposalMarker(proposal.Status) + " " + loc.T(proposal.Status.ToString()), statusStyle);
             List<StyledText> body = new List<StyledText>();
             if (!String.IsNullOrWhiteSpace(proposal.SummaryText)) body.AddRange(Para(proposal.SummaryText, theme.Text, inner));
             string args = ApprovalActions.Pretty(proposal.ArgumentsText);
@@ -243,8 +243,14 @@ namespace Armada.Tui.Screens.Ask
         public static List<StyledText> Para(string text, CellStyle style, int width, string indent = "")
         {
             List<StyledText> lines = new List<StyledText>();
-            int w = Math.Max(1, width - TextCells.Width(indent));
-            foreach (string line in TextCells.Wrap(text ?? "", w)) lines.Add(StyledText.From(indent + line, style));
+            foreach (string source in (text ?? "").Replace("\r\n", "\n").Split('\n'))
+            {
+                string trimmed = source.TrimStart(' ');
+                string lead = indent + new string(' ', Math.Min(source.Length - trimmed.Length, Math.Max(0, width / 2)));
+                int w = Math.Max(1, width - TextCells.Width(lead));
+                foreach (string line in TextCells.Wrap(trimmed, w)) lines.Add(StyledText.From(lead + line, style));
+            }
+
             return lines;
         }
 
@@ -268,6 +274,30 @@ namespace Armada.Tui.Screens.Ask
         #endregion
 
         #region Private-Methods
+
+        private static CellStyle ProposalStyle(AskProposalStatusEnum status, ArmadaTheme theme)
+        {
+            switch (status)
+            {
+                case AskProposalStatusEnum.Executed: return theme.Success;
+                case AskProposalStatusEnum.Failed: return theme.Error;
+                case AskProposalStatusEnum.Approved: return theme.Info;
+                case AskProposalStatusEnum.Pending: return theme.Warning;
+                default: return theme.Muted;
+            }
+        }
+
+        private static string ProposalMarker(AskProposalStatusEnum status)
+        {
+            switch (status)
+            {
+                case AskProposalStatusEnum.Executed: return "+";
+                case AskProposalStatusEnum.Failed: return "x";
+                case AskProposalStatusEnum.Approved: return "~";
+                case AskProposalStatusEnum.Pending: return "!";
+                default: return "-";
+            }
+        }
 
         private static List<StyledText> MissionRow(AskWorkMissionSnapshot m, ArmadaTheme theme, LocalizationService loc, int width)
         {

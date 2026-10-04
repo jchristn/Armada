@@ -193,6 +193,12 @@ namespace Armada.Tui.Approvals
         }
 
         /// <inheritdoc />
+        public override int DefaultRefreshSeconds()
+        {
+            return 0;
+        }
+
+        /// <inheritdoc />
         public override Action? RefreshAction()
         {
             return () => _ = Task.Run(() => Context.Status.PollAllAsync());

@@ -468,7 +468,8 @@ namespace Armada.Tui.Screens
             Scope.RenderChild(surface, Server, new Rect(left + 14, y++, cardWidth - 14, 1));
             SurfaceText.Draw(surface, left + 14, y++, _Context.Session.Profile.Url, Theme.Muted, cardWidth - 14);
             y++;
-            Scope.RenderChild(surface, Modes, new Rect(left, y++, cardWidth, 1));
+            if (Step != LoginStepEnum.ChangePassword) Scope.RenderChild(surface, Modes, new Rect(left, y, cardWidth, 1));
+            y++;
             y++;
             string? message = Error ?? Notice;
             if (message != null)

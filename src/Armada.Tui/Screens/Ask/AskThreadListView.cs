@@ -353,6 +353,7 @@ namespace Armada.Tui.Screens.Ask
         {
             List<AskThread> threads = _Ask.Threads;
             int rows = threads.Count + (_Ask.ListHasMore ? 1 : 0);
+            if (_CursorThreadId == null) _CursorThreadId = _Ask.Conversation.ThreadId;
             if (_CursorThreadId != null)
             {
                 int idx = threads.FindIndex(t => t.Id == _CursorThreadId);

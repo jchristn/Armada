@@ -72,7 +72,7 @@ namespace Test.Shared.Suites.Tui
                     AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/missions/msn_r/review/approve") == 1), "approve endpoint");
                     string body = stub.Bodies.Last(b => b.Contains("Rename the helper"));
                     AssertTrue(body.Contains("\"Conditional\":true") || body.Contains("\"conditional\":true"), "conditional flag: " + body);
-                    AssertTrue(host.WaitForText("Conditionally approved"), "toast");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Conditionally approved"))), "toast");
                     AssertNull(host.Tui.Context.Approvals.Find(ApprovalKindEnum.MissionReview, "msn_r"), "left the queue");
 
                     Load(host);
@@ -88,7 +88,7 @@ namespace Test.Shared.Suites.Tui
                     int approvals = stub.Count("POST /api/v1/missions/msn_r/review/approve");
                     host.Press("a").Press("enter");
                     AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/missions/msn_r/review/approve") == approvals + 1), "plain approve");
-                    AssertTrue(host.WaitForText("Review approved for"), "approve toast");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Review approved for"))), "approve toast");
                 }
             }));
 
@@ -103,7 +103,7 @@ namespace Test.Shared.Suites.Tui
                     TuiCase.Contains(host.Screen(), "Approve and execute \"Staging\"?", "dashboard text");
                     host.Press("y");
                     AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/deployments/dpl_1/approve") == 1), "approve call");
-                    AssertTrue(host.WaitForText("Deployment \"Staging\" updated."), "toast");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Deployment \"Staging\" updated."))), "toast");
                     Load(host);
                     Select(host, ApprovalKindEnum.DeploymentApproval);
                     host.Press("d");
@@ -123,7 +123,7 @@ namespace Test.Shared.Suites.Tui
                     Select(host, ApprovalKindEnum.FailedLanding);
                     host.Press("l");
                     AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/missions/msn_l/retry-landing") == 1), "retry landing");
-                    AssertTrue(host.WaitForText("Landing succeeded for \"Ship it\""), "toast");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Landing succeeded for \"Ship it\""))), "toast");
                     Select(host, ApprovalKindEnum.StalledCaptain);
                     host.Press("s");
                     TuiCase.Contains(host.Screen(), "The captain process will be terminated.", "stop text");
