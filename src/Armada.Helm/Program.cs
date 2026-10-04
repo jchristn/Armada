@@ -69,11 +69,11 @@ namespace Armada.Helm
             HelpRow("go \"<task>\"", "Dispatch a task in natural language");
             HelpRow("status [--all]", "System status dashboard (--all for everything)");
             HelpRow("watch [--interval N]", "Live-updating status dashboard");
-            HelpRow("ask \"<question>\"", "Ask Armada about fleet state in plain language");
             HelpRow("inbox [--critical]", "Items awaiting your attention");
             HelpRow("log <captain> [--follow]", "Tail a captain's output log");
             HelpRow("diff <mission>", "Show a mission's code changes");
             HelpRow("doctor", "Check system health and report issues");
+            HelpRow("tui [--server URL] [--profile NAME]", "Open the terminal UI (the dashboard in a terminal)");
 
             HelpHeading("Missions (armada mission ...)");
             HelpRow("mission list", "List missions");
@@ -251,6 +251,12 @@ namespace Armada.Helm
                     .WithExample("health")
                     .WithExample("health", "--status", "Fail")
                     .WithExample("health", "--fleet", "flt_abc123", "--evaluate");
+
+                config.AddCommand<TuiCommand>("tui")
+                    .WithDescription("Open the Armada terminal UI")
+                    .WithExample("tui")
+                    .WithExample("tui", "--server", "http://127.0.0.1:7890")
+                    .WithExample("tui", "--profile", "work");
 
                 config.AddCommand<ResetCommand>("reset")
                     .WithDescription("Destructively reset all Armada data back to zero");

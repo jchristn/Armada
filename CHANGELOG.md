@@ -6,6 +6,11 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Terminal UI (foundation)
+- Added `Armada.Client`, a typed .NET client covering every dashboard API function, with typed errors (status, code, request id), paging helpers, and a WebSocket client with typed events and automatic reconnect.
+- Added `armada tui`, the Armada terminal UI hosted in Helm, with server profiles and tokens stored in the OS keychain (0600 file fallback): email/tenant/password and API key login, a responsive shell with every dashboard route, a command palette that runs commands and jumps to entity IDs, help overlay, menu bar, notification center with actionable toasts, Dark/Light/High contrast/Auto themes, and the dashboard's languages. Screens arrive in later milestones; see `docs/TUI.md` and `TUI_APP_PLAN.md`.
+- Added a TUI parity manifest (`src/Armada.Tui/parity.json`) and a test that fails when a dashboard route, tab, API function, WebSocket event, or Server setting has no entry.
+
 ### v1.0 readiness: security
 - **Breaking:** every REST route and MCP tool declares an explicit authorization requirement in a central registry, checked before the handler runs; undeclared routes and tools fail closed, and a test fails when one is missing. 19 enumerate routes now need only authentication; check-run writes and Harbor probes need a tenant admin.
 - **Breaking:** MCP is authenticated by default; unauthenticated calls are accepted only on a localhost-bound listener from localhost (`Mcp.AllowUnauthenticatedLoopback`, default true); `backup`, `restore`, and `stop_server` require an admin credential.

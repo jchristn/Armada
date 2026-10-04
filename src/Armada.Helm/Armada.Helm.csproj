@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Armada.Core\Armada.Core.csproj" />
     <ProjectReference Include="..\Armada.Server\Armada.Server.csproj" />
+    <ProjectReference Include="..\Armada.Tui\Armada.Tui.csproj" />
   </ItemGroup>
 
 </Project>
