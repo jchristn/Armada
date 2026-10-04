@@ -85,7 +85,7 @@ namespace Armada.Tui.Services
         /// </summary>
         public string? Token
         {
-            get { return Client.Options.Token; }
+            get { return Client.Options.Token ?? Client.Options.BearerToken ?? Client.Options.ApiKey; }
         }
 
         /// <summary>
@@ -228,20 +228,37 @@ namespace Armada.Tui.Services
         public async Task<SignInResult> SignInWithTokenAsync(string apiKey, bool store, CancellationToken token = default)
         {
             if (String.IsNullOrWhiteSpace(apiKey)) return SignInResult.Fail("API key authentication failed.");
-            Client.SetToken(apiKey.Trim());
-            try
+            string secret = apiKey.Trim();
+
+            // The dashboard sends whatever is pasted as X-Token (session tokens and credential bearer tokens). The
+            // Admiral's own API key is only accepted as X-Api-Key or a bearer token, so try each scheme in turn.
+            for (int scheme = 0; scheme < 3; scheme++)
             {
-                WhoAmIResult? me = await Client.WhoamiAsync(token).ConfigureAwait(false);
-                if (me == null || me.User == null)
+                ClearCredentials();
+                if (scheme == 0) Client.Options.Token = secret;
+                else if (scheme == 1) Client.Options.BearerToken = secret;
+                else Client.Options.ApiKey = secret;
+                WhoAmIResult? me;
+                try
                 {
-                    Client.SetToken(null);
+                    me = await Client.WhoamiAsync(token).ConfigureAwait(false);
+                }
+                catch (ArmadaApiException ex) when (ex.IsUnauthorized || ex.StatusCode == 403)
+                {
+                    continue;
+                }
+                catch (ArmadaApiException)
+                {
+                    ClearCredentials();
                     return SignInResult.Fail("API key authentication failed.");
                 }
+
+                if (me == null || me.User == null) continue;
 
                 try { Proxy = await Client.GetProxySessionContextAsync(token).ConfigureAwait(false); }
                 catch (ArmadaApiException) { Proxy = null; }
 
-                if (store) await _Credentials.SetAsync(CredentialKey(Profile), apiKey.Trim(), token).ConfigureAwait(false);
+                if (store) await _Credentials.SetAsync(CredentialKey(Profile), secret, token).ConfigureAwait(false);
                 if (Profile.AuthMethod != "password" || String.IsNullOrEmpty(Profile.LastUser)) Profile.LastUser = me.User.Email;
                 Profile.LastUsedUtc = DateTime.UtcNow;
                 _Prefs.Current.ActiveProfile = Profile.Name;
@@ -253,11 +270,9 @@ namespace Armada.Tui.Services
                 });
                 return SignInResult.Ok();
             }
-            catch (ArmadaApiException)
-            {
-                Client.SetToken(null);
-                return SignInResult.Fail("API key authentication failed.");
-            }
+
+            ClearCredentials();
+            return SignInResult.Fail("API key authentication failed.");
         }
 
         /// <summary>
@@ -276,7 +291,7 @@ namespace Armada.Tui.Services
         public async Task SignOutAsync(CancellationToken token = default)
         {
             await _Credentials.DeleteAsync(CredentialKey(Profile), token).ConfigureAwait(false);
-            Client.SetToken(null);
+            ClearCredentials();
             _Dispatcher.Post(() => EndSession(null));
         }
 
@@ -287,7 +302,7 @@ namespace Armada.Tui.Services
         public void Expire(string reason)
         {
             if (!IsSignedIn) return;
-            Client.SetToken(null);
+            ClearCredentials();
             EndSession(reason);
         }
 
@@ -300,6 +315,13 @@ namespace Armada.Tui.Services
             ArmadaClient client = _ClientFactory(url);
             client.Unauthorized += (s, e) => _Dispatcher.Post(() => Expire("Your session expired. Sign in again."));
             return client;
+        }
+
+        private void ClearCredentials()
+        {
+            Client.Options.Token = null;
+            Client.Options.BearerToken = null;
+            Client.Options.ApiKey = null;
         }
 
         private void EndSession(string? reason)
