@@ -34,19 +34,19 @@ namespace Test.Shared.Suites.Services
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
-            cases.Add(Case("dispatch_links_voyage", "dispatch and create_voyage link the created voyage", () =>
+            cases.Add(Case("dispatch_links_voyage", "dispatch links the created voyage", () =>
             {
                 AskWorkLink link = AskWorkLinker.Resolve("dispatch", "{}", "{\"id\":\"vyg_1\",\"title\":\"t\"}").Single();
                 AssertEqual(AskTrackedEntityTypeEnum.Voyage, link.EntityType);
                 AssertEqual("vyg_1", link.EntityId);
                 AssertFalse(link.RefreshOnly, "tracked");
-                AssertEqual("vyg_2", AskWorkLinker.Resolve("create_voyage", null, "{\"Id\":\"vyg_2\"}").Single().EntityId, "PascalCase result");
+                AssertEqual("vyg_2", AskWorkLinker.Resolve("dispatch", null, "{\"Id\":\"vyg_2\"}").Single().EntityId, "PascalCase result");
                 AssertEqual("vyg_3", AskWorkLinker.Resolve("mcp__armada__dispatch", null, "{\"id\":\"vyg_3\"}").Single().EntityId, "Claude-prefixed name");
             }));
 
-            cases.Add(Case("mission_tools_link_mission", "create_mission, retry_mission, and restart_mission link the mission", () =>
+            cases.Add(Case("mission_tools_link_mission", "create_mission and restart_mission link the mission", () =>
             {
-                foreach (string tool in new[] { "create_mission", "retry_mission", "restart_mission" })
+                foreach (string tool in new[] { "create_mission", "restart_mission" })
                 {
                     AskWorkLink link = AskWorkLinker.Resolve(tool, "{\"missionId\":\"msn_9\"}", "{\"id\":\"msn_9\",\"voyageId\":\"vyg_1\"}").Single();
                     AssertEqual(AskTrackedEntityTypeEnum.Mission, link.EntityType, tool);
@@ -88,7 +88,9 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0, AskWorkLinker.Resolve("update_vessel", "{}", "{\"id\":\"vsl_1\"}").Count, "unrelated tool");
                 AssertEqual(0, AskWorkLinker.Resolve("dispatch", "{}", "\"Proposed as aap_1\"").Count, "string result");
                 AssertEqual(0, AskWorkLinker.Resolve("dispatch", "{}", "not json").Count, "invalid json");
-                AssertEqual(12, AskWorkLinker.LinkedTools().Count, "mapping table size");
+                AssertEqual(10, AskWorkLinker.LinkedTools().Count, "mapping table size");
+                foreach (string tool in AskWorkLinker.LinkedTools())
+                    AssertTrue(Armada.Core.Authorization.McpToolAuthorizationRegistry.TryGet(tool, out Armada.Core.Authorization.AuthorizationRequirement? _), "linked tool " + tool + " is a real MCP tool");
             }));
 
             cases.Add(Case("quick_action_catalog", "Quick actions name real tools with their MCP argument names and a schema", () =>

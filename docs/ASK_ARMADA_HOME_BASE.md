@@ -102,8 +102,8 @@ untouched).
   tool names and argument shapes as MCP). They go through the identical proposal path: with auto-approve
   off the action is created already approved by the user who submitted the form (the form is the
   confirmation), so it executes immediately and is recorded with `source = QuickAction`.
-- **Work linking** is by tool, in one mapping table: `dispatch` / `create_voyage` -> Voyage id,
-  `create_mission` / `retry_mission` / `restart_mission` -> Mission id, `run_fleet_action` -> FleetActionRun
+- **Work linking** is by tool, in one mapping table: `dispatch` -> Voyage id,
+  `create_mission` / `restart_mission` -> Mission id, `run_fleet_action` -> FleetActionRun
   id, `evaluate_vessel_health` -> Job id, `import_vessels` / `discover_vessels` -> VesselImportBatch (and
   Job) id, `cancel_*` -> refreshes the existing tracked item.
 
@@ -343,7 +343,8 @@ These refine the contract above; the dashboard's "UI assumptions" (on `feature/a
 - **Thread-scoped MCP** works for ApiEndpoint captains (environment) and Claude Code (per-launch strict MCP config with an
   `X-Token` header, deleted when the process exits). Codex, Gemini, Cursor, Mux, and OpenCode captains keep their host
   MCP configuration in thread turns (isolating them would hide their own logins), so their tool calls are not gated.
-- **Work linking** keeps `create_voyage` and `retry_mission` in the table although no MCP tools have those names today.
+- **Work linking** lists only tools that exist; `create_voyage` and `retry_mission` were removed from the table in the
+  1.0 contract freeze (no MCP tools have those names).
 - **Narration** runs only when the thread's captain is `Idle`, no turn runs in the thread, and no other Ask turn uses the
   captain; it never changes the captain's state, uses a gated thread token, and falls back to the deterministic sentence
   on timeout or failure. Milestones are detected against an in-memory previous snapshot; after a restart only terminal

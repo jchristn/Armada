@@ -3416,8 +3416,7 @@ starts tracking the work the result created, and runs a short follow-up captain 
 created `Approved` (`Source: QuickAction`) and executes immediately. Tool names and argument shapes are exactly those of
 the MCP API, for example `{ "ToolName": "dispatch", "Arguments": { "title": "...", "vesselId": "vsl_...", "missions": [{ "title": "...", "description": "..." }] } }`.
 
-**Work linking.** `dispatch` and `create_voyage` track the Voyage; `create_mission`, `retry_mission`, and
-`restart_mission` the Mission; `run_fleet_action` the FleetActionRun; `evaluate_vessel_health` the Job;
+**Work linking.** `dispatch` tracks the Voyage; `create_mission` and `restart_mission` the Mission; `run_fleet_action` the FleetActionRun; `evaluate_vessel_health` the Job;
 `import_vessels` and `discover_vessels` the VesselImportBatch (and its Job when it runs in the background);
 `cancel_voyage`, `cancel_mission`, and `cancel_fleet_action_run` refresh the item if the thread tracks it.
 

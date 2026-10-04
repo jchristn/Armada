@@ -8,8 +8,8 @@ namespace Armada.Core.Services.Ask
 
     /// <summary>
     /// Work linking by tool, in one mapping table: which work an executed action created (and should be tracked by the
-    /// thread) or affected (and should be refreshed). dispatch and create_voyage link a Voyage; create_mission,
-    /// retry_mission, and restart_mission a Mission; run_fleet_action a FleetActionRun; evaluate_vessel_health a Job;
+    /// thread) or affected (and should be refreshed). dispatch links a Voyage; create_mission and restart_mission a
+    /// Mission; run_fleet_action a FleetActionRun; evaluate_vessel_health a Job;
     /// import_vessels and discover_vessels a VesselImportBatch plus its Job when one runs in the background; cancel_voyage,
     /// cancel_mission, and cancel_fleet_action_run refresh the existing tracked item. A result carrying an Error links
     /// nothing.
@@ -32,7 +32,7 @@ namespace Armada.Core.Services.Ask
         {
             return new List<string>
             {
-                "dispatch", "create_voyage", "create_mission", "retry_mission", "restart_mission", "run_fleet_action",
+                "dispatch", "create_mission", "restart_mission", "run_fleet_action",
                 "evaluate_vessel_health", "import_vessels", "discover_vessels", "cancel_voyage", "cancel_mission", "cancel_fleet_action_run"
             };
         }
@@ -57,12 +57,10 @@ namespace Armada.Core.Services.Ask
             switch (tool)
             {
                 case "dispatch":
-                case "create_voyage":
                     Add(links, AskTrackedEntityTypeEnum.Voyage, FirstWithPrefix(Constants.VoyageIdPrefix, result.Id, result.VoyageId), false);
                     break;
 
                 case "create_mission":
-                case "retry_mission":
                 case "restart_mission":
                     Add(links, AskTrackedEntityTypeEnum.Mission, FirstWithPrefix(Constants.MissionIdPrefix, result.Id, result.MissionId, args.MissionId), false);
                     break;

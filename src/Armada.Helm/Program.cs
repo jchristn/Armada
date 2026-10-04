@@ -69,11 +69,11 @@ namespace Armada.Helm
             HelpRow("go \"<task>\"", "Dispatch a task in natural language");
             HelpRow("status [--all]", "System status dashboard (--all for everything)");
             HelpRow("watch [--interval N]", "Live-updating status dashboard");
-            HelpRow("ask \"<question>\"", "Ask Armada about fleet state in plain language");
             HelpRow("inbox [--critical]", "Items awaiting your attention");
             HelpRow("log <captain> [--follow]", "Tail a captain's output log");
             HelpRow("diff <mission>", "Show a mission's code changes");
             HelpRow("doctor", "Check system health and report issues");
+            HelpRow("health [--evaluate]", "Show vessel health (dependencies, tests, branches)");
 
             HelpHeading("Missions (armada mission ...)");
             HelpRow("mission list", "List missions");
@@ -89,6 +89,12 @@ namespace Armada.Helm
             HelpRow("voyage create", "Launch a new voyage with missions");
             HelpRow("voyage cancel <id>", "Cancel a voyage and its pending missions");
             HelpRow("voyage retry <id>", "Retry failed missions in a voyage");
+
+            HelpHeading("Fleet actions (armada action ...)");
+            HelpRow("action list [--runs]", "List fleet actions (or their runs)");
+            HelpRow("action run", "Run a fleet action over vessels");
+            HelpRow("action status <run>", "Show a fleet action run and its targets");
+            HelpRow("action cancel <run>", "Cancel a fleet action run");
 
             HelpHeading("Backlog (armada backlog ...)");
             HelpRow("backlog list", "List backlog items");
@@ -151,6 +157,253 @@ namespace Armada.Helm
             AnsiConsole.WriteLine();
         }
 
+        /// <summary>
+        /// Register every Armada CLI command and branch. Shared by <see cref="Main"/> and
+        /// <see cref="DescribeCommandModelXml"/> so the API surface file describes exactly what ships.
+        /// </summary>
+        /// <param name="config">Spectre configurator.</param>
+        public static void ConfigureCommands(IConfigurator config)
+        {
+            if (config == null) throw new ArgumentNullException(nameof(config));
+
+            config.SetApplicationName("armada");
+            config.SetApplicationVersion(Constants.ProductVersion);
+
+            // --- Common commands (top-level, used most often) ---
+            config.AddCommand<GoCommand>("go")
+                .WithDescription("Quick dispatch -- natural language task assignment")
+                .WithExample("go", "\"Add input validation to signup\"")
+                .WithExample("go", "\"Fix login bug\"", "--repo", ".");
+
+            config.AddCommand<StatusCommand>("status")
+                .WithDescription("Show status dashboard (contextual to current repo)")
+                .WithExample("status")
+                .WithExample("status", "--all");
+
+            config.AddCommand<WatchCommand>("watch")
+                .WithDescription("Live-updating status dashboard")
+                .WithExample("watch")
+                .WithExample("watch", "--interval", "2");
+
+            config.AddCommand<LogCommand>("log")
+                .WithDescription("Tail a captain's output log")
+                .WithExample("log", "captain-1")
+                .WithExample("log", "captain-1", "--follow");
+
+            config.AddCommand<DiffCommand>("diff")
+                .WithDescription("Show diff of a mission's changes")
+                .WithExample("diff", "msn_abc123")
+                .WithExample("diff", "\"Add validation\"");
+
+            config.AddCommand<DoctorCommand>("doctor")
+                .WithDescription("Check system health and report issues");
+
+            config.AddCommand<InboxCommand>("inbox")
+                .WithDescription("Show items awaiting your attention")
+                .WithExample("inbox")
+                .WithExample("inbox", "--critical");
+
+            config.AddCommand<HealthCommand>("health")
+                .WithDescription("Show vessel health (outdated dependencies, tests, branches, divergence)")
+                .WithExample("health")
+                .WithExample("health", "--status", "Fail")
+                .WithExample("health", "--fleet", "flt_abc123", "--evaluate");
+
+            config.AddCommand<ResetCommand>("reset")
+                .WithDescription("Destructively reset all Armada data back to zero");
+
+            // --- Entity management ---
+            config.AddBranch("mission", mission =>
+            {
+                mission.SetDescription("Manage missions (tasks)");
+                mission.AddCommand<MissionListCommand>("list")
+                    .WithDescription("List missions");
+                mission.AddCommand<MissionCreateCommand>("create")
+                    .WithDescription("Create a new mission");
+                mission.AddCommand<MissionShowCommand>("show")
+                    .WithDescription("Show mission details (accepts name or ID)");
+                mission.AddCommand<MissionCancelCommand>("cancel")
+                    .WithDescription("Cancel a mission");
+                mission.AddCommand<MissionRestartCommand>("restart")
+                    .WithDescription("Restart a failed mission (with optional instruction edits)");
+                mission.AddCommand<MissionRetryCommand>("retry")
+                    .WithDescription("Retry a failed mission (creates a new copy)");
+            });
+
+            config.AddBranch("voyage", voyage =>
+            {
+                voyage.SetDescription("Manage voyages (batches of missions)");
+                voyage.AddCommand<VoyageListCommand>("list")
+                    .WithDescription("List all voyages");
+                voyage.AddCommand<VoyageCreateCommand>("create")
+                    .WithDescription("Launch a new voyage with missions");
+                voyage.AddCommand<VoyageShowCommand>("show")
+                    .WithDescription("Show voyage details (accepts name or ID)");
+                voyage.AddCommand<VoyageCancelCommand>("cancel")
+                    .WithDescription("Cancel a voyage");
+                voyage.AddCommand<VoyageRetryCommand>("retry")
+                    .WithDescription("Retry failed missions in a voyage");
+            });
+
+            config.AddBranch("action", action =>
+            {
+                action.SetDescription("Run fleet actions (a command or AI prompt across many vessels)");
+                action.AddCommand<ActionListCommand>("list")
+                    .WithDescription("List fleet actions (or runs with --runs)");
+                action.AddCommand<ActionRunCommand>("run")
+                    .WithDescription("Run a fleet action over vessels (--vessel, --fleet)");
+                action.AddCommand<ActionStatusCommand>("status")
+                    .WithDescription("Show a fleet action run and its targets");
+                action.AddCommand<ActionCancelCommand>("cancel")
+                    .WithDescription("Cancel a fleet action run");
+            });
+
+            config.AddBranch("playbook", playbook =>
+            {
+                playbook.SetDescription("Manage reusable markdown playbooks");
+                playbook.AddCommand<PlaybookListCommand>("list")
+                    .WithDescription("List all playbooks");
+                playbook.AddCommand<PlaybookAddCommand>("add")
+                    .WithDescription("Create a new playbook");
+                playbook.AddCommand<PlaybookShowCommand>("show")
+                    .WithDescription("Show playbook details (accepts ID or file name)");
+                playbook.AddCommand<PlaybookRemoveCommand>("remove")
+                    .WithDescription("Delete a playbook (accepts ID or file name)");
+            });
+
+            config.AddBranch("backlog", backlog =>
+            {
+                backlog.SetDescription("Manage backlog items");
+                backlog.AddCommand<BacklogListCommand>("list")
+                    .WithDescription("List backlog items")
+                    .WithExample("backlog", "list")
+                    .WithExample("backlog", "list", "--backlog-state", "ReadyForPlanning");
+                backlog.AddCommand<BacklogShowCommand>("show")
+                    .WithDescription("Show backlog item details (accepts ID or title)")
+                    .WithExample("backlog", "show", "obj_abc123");
+                backlog.AddCommand<BacklogCreateCommand>("create")
+                    .WithDescription("Create a backlog item")
+                    .WithExample("backlog", "create", "--title", "\"Improve release rollback\"")
+                    .WithExample("backlog", "create", "--title", "\"Import customer incidents\"", "--priority", "P1", "--backlog-state", "ReadyForPlanning");
+                backlog.AddCommand<BacklogUpdateCommand>("update")
+                    .WithDescription("Update a backlog item")
+                    .WithExample("backlog", "update", "obj_abc123", "--owner", "\"delivery-team\"", "--target-version", "\"0.8.1\"");
+                backlog.AddCommand<BacklogDeleteCommand>("delete")
+                    .WithDescription("Delete a backlog item")
+                    .WithExample("backlog", "delete", "obj_abc123");
+                backlog.AddCommand<BacklogReorderCommand>("reorder")
+                    .WithDescription("Update the rank of a backlog item")
+                    .WithExample("backlog", "reorder", "obj_abc123", "--rank", "10");
+            });
+
+            config.AddBranch("vessel", vessel =>
+            {
+                vessel.SetDescription("Manage vessels (repositories)");
+                vessel.AddCommand<VesselListCommand>("list")
+                    .WithDescription("List all vessels");
+                vessel.AddCommand<VesselAddCommand>("add")
+                    .WithDescription("Register a new vessel");
+                vessel.AddCommand<VesselImportCommand>("import")
+                    .WithDescription("Discover repositories and import them as vessels")
+                    .WithExample("vessel", "import", "~/Code/my-repo", "--root", "~/Code", "--dry-run");
+                vessel.AddCommand<VesselRemoveCommand>("remove")
+                    .WithDescription("Decommission a vessel (accepts name or ID)");
+            });
+
+            config.AddBranch("captain", captain =>
+            {
+                captain.SetDescription("Manage captains (agents)");
+                captain.AddCommand<CaptainListCommand>("list")
+                    .WithDescription("List all captains");
+                captain.AddCommand<CaptainAddCommand>("add")
+                    .WithDescription("Recruit a new captain");
+                captain.AddCommand<CaptainUpdateCommand>("update")
+                    .WithDescription("Update an existing captain");
+                captain.AddCommand<CaptainStopCommand>("stop")
+                    .WithDescription("Recall a captain (accepts name or ID)");
+                captain.AddCommand<CaptainRemoveCommand>("remove")
+                    .WithDescription("Remove a captain (accepts name or ID)");
+                captain.AddCommand<CaptainStopAllCommand>("stop-all")
+                    .WithDescription("Emergency recall all captains");
+            });
+
+            config.AddBranch("fleet", fleet =>
+            {
+                fleet.SetDescription("Manage fleets (groups of repos)");
+                fleet.AddCommand<FleetListCommand>("list")
+                    .WithDescription("List all fleets");
+                fleet.AddCommand<FleetAddCommand>("add")
+                    .WithDescription("Create a new fleet");
+                fleet.AddCommand<FleetRemoveCommand>("remove")
+                    .WithDescription("Remove a fleet (accepts name or ID)");
+            });
+
+            // --- Infrastructure ---
+            config.AddBranch("server", server =>
+            {
+                server.SetDescription("Manage Admiral server");
+                server.AddCommand<ServerStartCommand>("start")
+                    .WithDescription("Start the Admiral server");
+                server.AddCommand<ServerStatusCommand>("status")
+                    .WithDescription("Check Admiral server health");
+                server.AddCommand<ServerStopCommand>("stop")
+                    .WithDescription("Stop the Admiral server");
+                server.AddCommand<ServerRestartCommand>("restart")
+                    .WithDescription("Restart the Admiral server");
+            });
+
+            config.AddBranch("config", cfg =>
+            {
+                cfg.SetDescription("Manage configuration");
+                cfg.AddCommand<ConfigShowCommand>("show")
+                    .WithDescription("Display current settings");
+                cfg.AddCommand<ConfigSetCommand>("set")
+                    .WithDescription("Set a configuration value");
+                cfg.AddCommand<ConfigInitCommand>("init")
+                    .WithDescription("Interactive setup (optional -- config auto-initializes)");
+            });
+
+            config.AddBranch("mcp", mcp =>
+            {
+                mcp.SetDescription("MCP integration");
+                mcp.AddCommand<McpInstallCommand>("install")
+                    .WithDescription("Configure MCP integration for Claude Code, Codex, Gemini, Cursor, and Mux");
+                mcp.AddCommand<McpRemoveCommand>("remove")
+                    .WithDescription("Remove MCP integration for Claude Code, Codex, Gemini, Cursor, and Mux");
+                mcp.AddCommand<McpStdioCommand>("stdio")
+                    .WithDescription("Run MCP server over stdio (for Claude Code subprocess)");
+            });
+        }
+
+        /// <summary>
+        /// The CLI command model (every command, branch, argument, and option) as Spectre.Console.Cli XML, produced by the
+        /// built-in <c>cli xmldoc</c> command against <see cref="ConfigureCommands"/>. Used by the API surface generator and
+        /// the API contract test.
+        /// </summary>
+        /// <returns>Command model XML.</returns>
+        public static string DescribeCommandModelXml()
+        {
+            using (StringWriter writer = new StringWriter())
+            {
+                IAnsiConsole console = AnsiConsole.Create(new AnsiConsoleSettings
+                {
+                    Ansi = AnsiSupport.No,
+                    ColorSystem = ColorSystemSupport.NoColors,
+                    Out = new AnsiConsoleOutput(writer)
+                });
+                console.Profile.Width = 100000;
+
+                CommandApp app = new CommandApp(new TypeRegistrar());
+                app.Configure(config =>
+                {
+                    ConfigureCommands(config);
+                    config.ConfigureConsole(console);
+                });
+                app.Run(new string[] { "cli", "xmldoc" });
+                return writer.ToString();
+            }
+        }
+
         static int Main(string[] args)
         {
             // Normalize Windows-style help flags (/?  -?) to the standard --help everywhere,
@@ -207,216 +460,7 @@ namespace Armada.Helm
             TypeRegistrar registrar = new TypeRegistrar();
             CommandApp app = new CommandApp(registrar);
 
-            app.Configure(config =>
-            {
-                config.SetApplicationName("armada");
-                config.SetApplicationVersion(Constants.ProductVersion);
-
-                // --- Common commands (top-level, used most often) ---
-                config.AddCommand<GoCommand>("go")
-                    .WithDescription("Quick dispatch -- natural language task assignment")
-                    .WithExample("go", "\"Add input validation to signup\"")
-                    .WithExample("go", "\"Fix login bug\"", "--repo", ".");
-
-                config.AddCommand<StatusCommand>("status")
-                    .WithDescription("Show status dashboard (contextual to current repo)")
-                    .WithExample("status")
-                    .WithExample("status", "--all");
-
-                config.AddCommand<WatchCommand>("watch")
-                    .WithDescription("Live-updating status dashboard")
-                    .WithExample("watch")
-                    .WithExample("watch", "--interval", "2");
-
-                config.AddCommand<LogCommand>("log")
-                    .WithDescription("Tail a captain's output log")
-                    .WithExample("log", "captain-1")
-                    .WithExample("log", "captain-1", "--follow");
-
-                config.AddCommand<DiffCommand>("diff")
-                    .WithDescription("Show diff of a mission's changes")
-                    .WithExample("diff", "msn_abc123")
-                    .WithExample("diff", "\"Add validation\"");
-
-                config.AddCommand<DoctorCommand>("doctor")
-                    .WithDescription("Check system health and report issues");
-
-                config.AddCommand<InboxCommand>("inbox")
-                    .WithDescription("Show items awaiting your attention")
-                    .WithExample("inbox")
-                    .WithExample("inbox", "--critical");
-
-                config.AddCommand<HealthCommand>("health")
-                    .WithDescription("Show vessel health (outdated dependencies, tests, branches, divergence)")
-                    .WithExample("health")
-                    .WithExample("health", "--status", "Fail")
-                    .WithExample("health", "--fleet", "flt_abc123", "--evaluate");
-
-                config.AddCommand<ResetCommand>("reset")
-                    .WithDescription("Destructively reset all Armada data back to zero");
-
-                // --- Entity management ---
-                config.AddBranch("mission", mission =>
-                {
-                    mission.SetDescription("Manage missions (tasks)");
-                    mission.AddCommand<MissionListCommand>("list")
-                        .WithDescription("List missions");
-                    mission.AddCommand<MissionCreateCommand>("create")
-                        .WithDescription("Create a new mission");
-                    mission.AddCommand<MissionShowCommand>("show")
-                        .WithDescription("Show mission details (accepts name or ID)");
-                    mission.AddCommand<MissionCancelCommand>("cancel")
-                        .WithDescription("Cancel a mission");
-                    mission.AddCommand<MissionRestartCommand>("restart")
-                        .WithDescription("Restart a failed mission (with optional instruction edits)");
-                    mission.AddCommand<MissionRetryCommand>("retry")
-                        .WithDescription("Retry a failed mission (creates a new copy)");
-                });
-
-                config.AddBranch("voyage", voyage =>
-                {
-                    voyage.SetDescription("Manage voyages (batches of missions)");
-                    voyage.AddCommand<VoyageListCommand>("list")
-                        .WithDescription("List all voyages");
-                    voyage.AddCommand<VoyageCreateCommand>("create")
-                        .WithDescription("Launch a new voyage with missions");
-                    voyage.AddCommand<VoyageShowCommand>("show")
-                        .WithDescription("Show voyage details (accepts name or ID)");
-                    voyage.AddCommand<VoyageCancelCommand>("cancel")
-                        .WithDescription("Cancel a voyage");
-                    voyage.AddCommand<VoyageRetryCommand>("retry")
-                        .WithDescription("Retry failed missions in a voyage");
-                });
-
-                config.AddBranch("action", action =>
-                {
-                    action.SetDescription("Run fleet actions (a command or AI prompt across many vessels)");
-                    action.AddCommand<ActionListCommand>("list")
-                        .WithDescription("List fleet actions (or runs with --runs)");
-                    action.AddCommand<ActionRunCommand>("run")
-                        .WithDescription("Run a fleet action over vessels (--vessel, --fleet)");
-                    action.AddCommand<ActionStatusCommand>("status")
-                        .WithDescription("Show a fleet action run and its targets");
-                    action.AddCommand<ActionCancelCommand>("cancel")
-                        .WithDescription("Cancel a fleet action run");
-                });
-
-                config.AddBranch("playbook", playbook =>
-                {
-                    playbook.SetDescription("Manage reusable markdown playbooks");
-                    playbook.AddCommand<PlaybookListCommand>("list")
-                        .WithDescription("List all playbooks");
-                    playbook.AddCommand<PlaybookAddCommand>("add")
-                        .WithDescription("Create a new playbook");
-                    playbook.AddCommand<PlaybookShowCommand>("show")
-                        .WithDescription("Show playbook details (accepts ID or file name)");
-                    playbook.AddCommand<PlaybookRemoveCommand>("remove")
-                        .WithDescription("Delete a playbook (accepts ID or file name)");
-                });
-
-                config.AddBranch("backlog", backlog =>
-                {
-                    backlog.SetDescription("Manage backlog items");
-                    backlog.AddCommand<BacklogListCommand>("list")
-                        .WithDescription("List backlog items")
-                        .WithExample("backlog", "list")
-                        .WithExample("backlog", "list", "--backlog-state", "ReadyForPlanning");
-                    backlog.AddCommand<BacklogShowCommand>("show")
-                        .WithDescription("Show backlog item details (accepts ID or title)")
-                        .WithExample("backlog", "show", "obj_abc123");
-                    backlog.AddCommand<BacklogCreateCommand>("create")
-                        .WithDescription("Create a backlog item")
-                        .WithExample("backlog", "create", "--title", "\"Improve release rollback\"")
-                        .WithExample("backlog", "create", "--title", "\"Import customer incidents\"", "--priority", "P1", "--backlog-state", "ReadyForPlanning");
-                    backlog.AddCommand<BacklogUpdateCommand>("update")
-                        .WithDescription("Update a backlog item")
-                        .WithExample("backlog", "update", "obj_abc123", "--owner", "\"delivery-team\"", "--target-version", "\"0.8.1\"");
-                    backlog.AddCommand<BacklogDeleteCommand>("delete")
-                        .WithDescription("Delete a backlog item")
-                        .WithExample("backlog", "delete", "obj_abc123");
-                    backlog.AddCommand<BacklogReorderCommand>("reorder")
-                        .WithDescription("Update the rank of a backlog item")
-                        .WithExample("backlog", "reorder", "obj_abc123", "--rank", "10");
-                });
-
-                config.AddBranch("vessel", vessel =>
-                {
-                    vessel.SetDescription("Manage vessels (repositories)");
-                    vessel.AddCommand<VesselListCommand>("list")
-                        .WithDescription("List all vessels");
-                    vessel.AddCommand<VesselAddCommand>("add")
-                        .WithDescription("Register a new vessel");
-                    vessel.AddCommand<VesselImportCommand>("import")
-                        .WithDescription("Discover repositories and import them as vessels")
-                        .WithExample("vessel", "import", "~/Code/my-repo", "--root", "~/Code", "--dry-run");
-                    vessel.AddCommand<VesselRemoveCommand>("remove")
-                        .WithDescription("Decommission a vessel (accepts name or ID)");
-                });
-
-                config.AddBranch("captain", captain =>
-                {
-                    captain.SetDescription("Manage captains (agents)");
-                    captain.AddCommand<CaptainListCommand>("list")
-                        .WithDescription("List all captains");
-                    captain.AddCommand<CaptainAddCommand>("add")
-                        .WithDescription("Recruit a new captain");
-                    captain.AddCommand<CaptainUpdateCommand>("update")
-                        .WithDescription("Update an existing captain");
-                    captain.AddCommand<CaptainStopCommand>("stop")
-                        .WithDescription("Recall a captain (accepts name or ID)");
-                    captain.AddCommand<CaptainRemoveCommand>("remove")
-                        .WithDescription("Remove a captain (accepts name or ID)");
-                    captain.AddCommand<CaptainStopAllCommand>("stop-all")
-                        .WithDescription("Emergency recall all captains");
-                });
-
-                config.AddBranch("fleet", fleet =>
-                {
-                    fleet.SetDescription("Manage fleets (groups of repos)");
-                    fleet.AddCommand<FleetListCommand>("list")
-                        .WithDescription("List all fleets");
-                    fleet.AddCommand<FleetAddCommand>("add")
-                        .WithDescription("Create a new fleet");
-                    fleet.AddCommand<FleetRemoveCommand>("remove")
-                        .WithDescription("Remove a fleet (accepts name or ID)");
-                });
-
-                // --- Infrastructure ---
-                config.AddBranch("server", server =>
-                {
-                    server.SetDescription("Manage Admiral server");
-                    server.AddCommand<ServerStartCommand>("start")
-                        .WithDescription("Start the Admiral server");
-                    server.AddCommand<ServerStatusCommand>("status")
-                        .WithDescription("Check Admiral server health");
-                    server.AddCommand<ServerStopCommand>("stop")
-                        .WithDescription("Stop the Admiral server");
-                    server.AddCommand<ServerRestartCommand>("restart")
-                        .WithDescription("Restart the Admiral server");
-                });
-
-                config.AddBranch("config", cfg =>
-                {
-                    cfg.SetDescription("Manage configuration");
-                    cfg.AddCommand<ConfigShowCommand>("show")
-                        .WithDescription("Display current settings");
-                    cfg.AddCommand<ConfigSetCommand>("set")
-                        .WithDescription("Set a configuration value");
-                    cfg.AddCommand<ConfigInitCommand>("init")
-                        .WithDescription("Interactive setup (optional -- config auto-initializes)");
-                });
-
-                config.AddBranch("mcp", mcp =>
-                {
-                    mcp.SetDescription("MCP integration");
-                    mcp.AddCommand<McpInstallCommand>("install")
-                        .WithDescription("Configure MCP integration for Claude Code, Codex, Gemini, Cursor, and Mux");
-                    mcp.AddCommand<McpRemoveCommand>("remove")
-                        .WithDescription("Remove MCP integration for Claude Code, Codex, Gemini, Cursor, and Mux");
-                    mcp.AddCommand<McpStdioCommand>("stdio")
-                        .WithDescription("Run MCP server over stdio (for Claude Code subprocess)");
-                });
-            });
+            app.Configure(ConfigureCommands);
 
             return app.Run(args);
         }

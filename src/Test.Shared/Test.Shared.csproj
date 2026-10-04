@@ -19,6 +19,8 @@
     <ProjectReference Include="..\Armada.Runtimes\Armada.Runtimes.csproj" />
     <ProjectReference Include="..\Armada.Server\Armada.Server.csproj" />
     <ProjectReference Include="..\Armada.Proxy\Armada.Proxy.csproj" />
+    <!-- The API surface builder reads the CLI command model from Helm (docs/API_SURFACE_1.0.md, E2E.ApiContract). -->
+    <ProjectReference Include="..\Armada.Helm\Armada.Helm.csproj" />
   </ItemGroup>
 
 </Project>
