@@ -210,7 +210,7 @@ namespace Armada.Tui.Screens.Entities
             }
 
             if (PanelTabs.SelectedKey != key) PanelTabs.SelectKey(key);
-            Scope.Focus(panel.Content);
+            FocusPanel(panel.Content);
             return true;
         }
 
@@ -310,6 +310,17 @@ namespace Armada.Tui.Screens.Entities
             }
 
             if (Scope.HandleKey(key)) return true;
+            if (key.Code == KeyCode.Character && (key.Modifiers & KeyModifiers.Ctrl) != 0 && Char.ToLowerInvariant((char)key.Rune) == 's')
+            {
+                DetailPanel? active = _Panels.FirstOrDefault(p => p.Key == PanelTabs.SelectedKey);
+                FormView? form = active != null ? FindForm(active.Content) : null;
+                if (form != null)
+                {
+                    form.RequestSave();
+                    return true;
+                }
+            }
+
             return PanelTabs.HandleGlobalKey(key);
         }
 
@@ -467,7 +478,7 @@ namespace Armada.Tui.Screens.Entities
             if (_Panels.Count == 1)
             {
                 PanelTabs.SelectKey(key);
-                Scope.Focus(content);
+                FocusPanel(content);
             }
 
             return content;
@@ -514,6 +525,34 @@ namespace Armada.Tui.Screens.Entities
         #endregion
 
         #region Private-Methods
+
+        private void FocusPanel(IWidget content)
+        {
+            if (IsEditor(content) && Actions.LinesFor(200) > 0) Scope.Focus(Actions);
+            else Scope.Focus(content);
+        }
+
+        private static FormView? FindForm(IWidget widget)
+        {
+            if (widget is FormView form) return form;
+            if (widget is ContainerWidget container)
+            {
+                foreach (IWidget child in container.Scope.Children)
+                {
+                    FormView? found = FindForm(child);
+                    if (found != null) return found;
+                }
+            }
+
+            return null;
+        }
+
+        private static bool IsEditor(IWidget widget)
+        {
+            if (widget is FormView || widget is TextInput || widget is TextAreaField) return true;
+            if (widget is ContainerWidget container) return container.Scope.Children.Any(IsEditor);
+            return false;
+        }
 
         private static string KeyLabel(string gesture)
         {
