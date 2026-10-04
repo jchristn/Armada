@@ -159,6 +159,26 @@ namespace Test.Shared.Suites.E2E
                 AssertTrue(undeclared.Count == 0, "event types broadcast but not declared in WebSocketSurface (declare them, then regenerate the surface): " + String.Join(", ", undeclared));
             }));
 
+            cases.Add(CaseAsync("error_codes_match_status", "REST errors are ApiErrorResponse bodies whose Error code matches the status", TestTags.Negative, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
+
+                HttpResponseMessage unauth = await fx.UnauthClient.GetAsync("/api/v1/fleets").ConfigureAwait(false);
+                await AssertErrorAsync(unauth, 401, "NotAuthorized").ConfigureAwait(false);
+
+                HttpResponseMessage missing = await fx.AuthClient.GetAsync("/api/v1/zz-not-a-route/value").ConfigureAwait(false);
+                await AssertErrorAsync(missing, 404, "NotFound").ConfigureAwait(false);
+
+                using (StringContent empty = new StringContent("{}", Encoding.UTF8, "application/json"))
+                {
+                    HttpResponseMessage noIds = await fx.AuthClient.PostAsync("/api/v1/fleets/delete/multiple", empty).ConfigureAwait(false);
+                    await AssertErrorAsync(noIds, 400, "BadRequest").ConfigureAwait(false);
+                }
+
+                HttpResponseMessage noFleet = await fx.AuthClient.GetAsync("/api/v1/fleets/flt_does_not_exist").ConfigureAwait(false);
+                await AssertErrorAsync(noFleet, 404, "NotFound").ConfigureAwait(false);
+            }));
+
             cases.Add(Case("comparer_flags_removals", "Removing a route, tool, argument, event, CLI option, or setting is breaking", TestTags.Negative, () =>
             {
                 ApiSurfaceDocument baseline = ApiSurfaceFiles.LoadBaseline();
@@ -253,6 +273,18 @@ namespace Test.Shared.Suites.E2E
             ApiSurfaceDiff diff = ApiSurfaceComparer.Compare(baseline, live);
             AssertTrue(diff.Breaking.Any(b => b.StartsWith(expected, StringComparison.Ordinal)),
                 "expected a breaking change starting with '" + expected + "', got:\n" + ApiSurfaceComparer.Format(diff));
+        }
+
+        private static async Task AssertErrorAsync(HttpResponseMessage response, int status, string error)
+        {
+            string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            AssertEqual(status, (int)response.StatusCode, "status for " + response.RequestMessage?.RequestUri + ": " + body);
+            using (JsonDocument document = JsonDocument.Parse(body))
+            {
+                AssertEqual(error, document.RootElement.GetProperty("Error").GetString(), "Error code in " + body);
+                AssertEqual(status, document.RootElement.GetProperty("StatusCode").GetInt32(), "StatusCode in " + body);
+                AssertTrue(document.RootElement.TryGetProperty("Message", out JsonElement _), "Message in " + body);
+            }
         }
 
         private static async Task<string> SendCommandAsync(ClientWebSocket ws, string action)

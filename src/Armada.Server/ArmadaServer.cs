@@ -1451,7 +1451,7 @@ namespace Armada.Server
                 {
                     Name = name,
                     Description = description,
-                    InputSchemaJson = inputSchema == null ? null : System.Text.Json.JsonSerializer.Serialize(inputSchema),
+                    InputSchemaJson = System.Text.Json.JsonSerializer.Serialize(inputSchema),
                     RegistrationSource = "Armada MCP"
                 });
             }
