@@ -89,6 +89,7 @@ a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 input, select, textarea {
+  max-width: 100%;
   font-family: var(--font);
   font-size: 0.9rem;
   padding: 0.6rem 0.75rem;

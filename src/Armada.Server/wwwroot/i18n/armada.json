@@ -2375,7 +2375,9 @@
         "{{title}} is now {{status}}": "{{title}} ahora está {{status}}",
         "{{total}} finished": "{{total}} terminadas",
         "{{type}}: {{title}}": "{{type}}: {{title}}",
-        "Progress update": "Actualización de progreso"
+        "Progress update": "Actualización de progreso",
+        "Repository": "Repositorio",
+        "Default branch": "Rama predeterminada"
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -3667,7 +3669,9 @@
         "{{title}} is now {{status}}": "{{title}} 现为 {{status}}",
         "{{total}} finished": "已完成 {{total}} 个",
         "{{type}}: {{title}}": "{{type}}:{{title}}",
-        "Progress update": "进度更新"
+        "Progress update": "进度更新",
+        "Repository": "仓库",
+        "Default branch": "默认分支"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -4922,7 +4926,9 @@
         "{{title}} is now {{status}}": "{{title}} 現為 {{status}}",
         "{{total}} finished": "已完成 {{total}} 個",
         "{{type}}: {{title}}": "{{type}}：{{title}}",
-        "Progress update": "進度更新"
+        "Progress update": "進度更新",
+        "Repository": "儲存庫",
+        "Default branch": "預設分支"
       },
       "sections": {}
     },
@@ -6136,7 +6142,9 @@
         "{{title}} is now {{status}}": "{{title}} 而家係 {{status}}",
         "{{total}} finished": "已完成 {{total}} 個",
         "{{type}}: {{title}}": "{{type}}：{{title}}",
-        "Progress update": "進度更新"
+        "Progress update": "進度更新",
+        "Repository": "儲存庫",
+        "Default branch": "預設分支"
       },
       "sections": {}
     },
@@ -7368,7 +7376,9 @@
         "{{title}} is now {{status}}": "{{title}} は {{status}} になりました",
         "{{total}} finished": "{{total}} 件完了",
         "{{type}}: {{title}}": "{{type}}: {{title}}",
-        "Progress update": "進捗の更新"
+        "Progress update": "進捗の更新",
+        "Repository": "リポジトリ",
+        "Default branch": "デフォルトブランチ"
       },
       "sections": {}
     },
@@ -8589,7 +8599,9 @@
         "{{title}} is now {{status}}": "{{title}} ist jetzt {{status}}",
         "{{total}} finished": "{{total}} abgeschlossen",
         "{{type}}: {{title}}": "{{type}}: {{title}}",
-        "Progress update": "Fortschritt"
+        "Progress update": "Fortschritt",
+        "Repository": "Repository",
+        "Default branch": "Standard-Branch"
       },
       "sections": {}
     },
@@ -9810,7 +9822,9 @@
         "{{title}} is now {{status}}": "{{title}} est maintenant {{status}}",
         "{{total}} finished": "{{total}} terminés",
         "{{type}}: {{title}}": "{{type}} : {{title}}",
-        "Progress update": "Point d'avancement"
+        "Progress update": "Point d'avancement",
+        "Repository": "Dépôt",
+        "Default branch": "Branche par défaut"
       },
       "sections": {}
     },
@@ -11031,7 +11045,9 @@
         "{{title}} is now {{status}}": "{{title}} è ora {{status}}",
         "{{total}} finished": "{{total}} completati",
         "{{type}}: {{title}}": "{{type}}: {{title}}",
-        "Progress update": "Aggiornamento sui progressi"
+        "Progress update": "Aggiornamento sui progressi",
+        "Repository": "Repository",
+        "Default branch": "Branch predefinito"
       },
       "sections": {}
     }

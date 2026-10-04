@@ -310,7 +310,7 @@ export default function Signals() {
                       : t('Admiral')}
                   </td>
                   <td>{sig.read ? t('Yes') : t('No')}</td>
-                  <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sig.payload || '-'}</td>
+                  <td title={sig.payload || undefined}><span className="truncate-text">{sig.payload || '-'}</span></td>
                   <td className="text-muted" title={formatDateTime(sig.createdUtc)} style={{ whiteSpace: 'nowrap' }}>{formatRelativeTime(sig.createdUtc)}</td>
                   <td onClick={e => e.stopPropagation()}>
                     <ActionMenu id={`signal-${sig.id}`} items={[

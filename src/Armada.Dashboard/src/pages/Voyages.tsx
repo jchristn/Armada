@@ -220,8 +220,8 @@ export default function Voyages() {
                     <td className="col-checkbox" onClick={e => e.stopPropagation()}>
                       <input type="checkbox" checked={table.selected.includes(v.id)} onChange={() => table.toggleSelect(v.id)} title={t('Select this voyage')} />
                     </td>
-                    <td className="truncate-cell" title={v.title}>
-                      <strong className="truncate-text">{v.title}</strong>
+                    <td className="cell-title" title={v.title}>
+                      <strong className="line-clamp-2">{v.title}</strong>
                     </td>
                     <td className="mono text-dim table-id-cell">
                       <span className="id-display">

@@ -339,7 +339,7 @@ export default function Pipelines() {
               <tbody>
                 {table.paginated.map(p => (
                   <tr key={p.id} className="clickable" onClick={() => setViewRecord(p as unknown as Record<string, unknown>)}>
-                    <td><strong>{p.name}</strong></td>
+                    <td className="cell-ident"><strong>{p.name}</strong></td>
                     <td className="mono text-dim table-id-cell">
                       <span className="id-display">
                         <span className="id-value" title={p.id}>{p.id}</span>
@@ -347,7 +347,7 @@ export default function Pipelines() {
                       </span>
                     </td>
                     <td className="text-dim">{p.description || '-'}</td>
-                    <td>{formatStages(p.stages)}</td>
+                    <td className="cell-ident">{formatStages(p.stages)}</td>
                     <td><ScopeBadge scope={p.scope} /></td>
                     <td><BoolIcon value={!!p.isBuiltIn} falseVariant="dash" trueTitle={t('Built-in')} falseTitle={t('Not built-in')} /></td>
                     <td><BoolIcon value={p.active !== false} falseVariant="cross" trueTitle={t('Active')} falseTitle={t('Inactive')} /></td>

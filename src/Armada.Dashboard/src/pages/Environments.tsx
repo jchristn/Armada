@@ -408,15 +408,15 @@ export default function Environments() {
                     <div className="text-dim" style={{ marginTop: '0.2rem' }}>
                       {environment.isDefault ? t('Default target') : t('Non-default')} {environment.active ? '• ' + t('Active') : '• ' + t('Inactive')}
                     </div>
-                    <div className="mono text-dim" style={{ fontSize: '0.78rem' }}>{environment.id}</div>
+                    <div className="id-display mono text-dim" style={{ fontSize: '0.78rem' }}><span className="id-value" title={environment.id}>{environment.id}</span></div>
                     {environment.description && (
                       <div className="text-dim" style={{ marginTop: '0.2rem' }}>{environment.description}</div>
                     )}
                   </td>
                   <td className="text-dim">{environment.kind}</td>
                   <td className="text-dim">{environment.vesselId ? (vesselMap.get(environment.vesselId) || environment.vesselId) : '-'}</td>
-                  <td className="text-dim">{environment.baseUrl || '-'}</td>
-                  <td className="text-dim">{environment.healthEndpoint || '-'}</td>
+                  <td className="text-dim" title={environment.baseUrl || undefined}><span className="cell-clip"><span>{environment.baseUrl || '-'}</span></span></td>
+                  <td className="text-dim" title={environment.healthEndpoint || undefined}><span className="cell-clip"><span>{environment.healthEndpoint || '-'}</span></span></td>
                   <td className="text-dim">
                     {environment.requiresApproval ? t('Approval required') : t('Self-service')}
                   </td>

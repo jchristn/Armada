@@ -430,8 +430,8 @@ export default function Missions() {
                     <td className="col-checkbox" onClick={e => e.stopPropagation()}>
                       <input type="checkbox" checked={selected.includes(m.id)} onChange={() => toggleSelect(m.id)} title={t('Select this mission')} />
                     </td>
-                    <td className="truncate-cell" style={{ maxWidth: 240 }} title={m.title}>
-                      <strong className="truncate-text">
+                    <td className="cell-title" title={m.title}>
+                      <strong className="line-clamp-2">
                         {m.title}
                       </strong>
                     </td>
@@ -457,7 +457,7 @@ export default function Missions() {
                     </td>
                     <td onClick={e => e.stopPropagation()}>
                       {m.voyageId ? (
-                          <a href="#" onClick={e => { e.preventDefault(); navigate(`/voyages/${m.voyageId}`); }}>{m.voyageId}</a>
+                          <span className="cell-clip mono"><a href="#" title={m.voyageId} onClick={e => { e.preventDefault(); navigate(`/voyages/${m.voyageId}`); }}>{m.voyageId}</a></span>
                       ) : '-'}
                     </td>
                     <td className="mono text-dim table-url-cell" title={m.branchName || ''}>

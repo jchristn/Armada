@@ -615,9 +615,8 @@ export default function Vessels() {
                   <th className="sortable" onClick={() => table.handleSort('fleetId')} title={t('Fleet -- click to sort')}>
                     {t('Fleet')}{table.sortIcon('fleetId')}
                   </th>
-                  <th title={t('Remote git repository URL')}>{t('Repo URL')}</th>
-                  <th className="sortable" onClick={() => table.handleSort('defaultBranch')} title={t('Default branch -- click to sort')}>
-                    {t('Branch')}{table.sortIcon('defaultBranch')}
+                  <th className="sortable" onClick={() => table.handleSort('repoUrl')} title={t('Remote git repository URL')}>
+                    {t('Repository')}{table.sortIcon('repoUrl')}
                   </th>
                   <th title={t('How completed mission work is integrated (LocalMerge, PullRequest, MergeQueue, None)')}>{t('Landing Mode')}</th>
                   <th title={t('Commits ahead and behind the remote default branch')}>{t('Sync')}</th>
@@ -635,7 +634,6 @@ export default function Vessels() {
                     </select>
                   </td>
                   <td><input type="text" className="col-filter" value={table.colFilters.repoUrl ?? ''} onChange={e => table.setColFilter('repoUrl', e.target.value)} placeholder={t('Search...')} /></td>
-                  <td></td>
                   <td>
                     <select className="col-filter" title={t('Filter vessels by landing mode')} value={landingModeFilter} onChange={e => { setLandingModeFilter(e.target.value); table.setPageNumber(1); }}>
                       <option value="">{t('All Modes')}</option>
@@ -676,9 +674,7 @@ export default function Vessels() {
                           <CopyButton text={v.repoUrl} onClick={e => e.stopPropagation()} title="Copy URL" />
                         </span>
                       ) : '-'}
-                    </td>
-                    <td className="text-dim table-url-cell">
-                      <span className="id-display">
+                      <span className="id-display mono cell-subline" title={t('Default branch')}>
                         <span className="url-value" title={v.defaultBranch || 'main'}>{v.defaultBranch || 'main'}</span>
                         <CopyButton text={v.defaultBranch || 'main'} onClick={e => e.stopPropagation()} title="Copy branch" />
                       </span>
@@ -732,7 +728,7 @@ export default function Vessels() {
                   </tr>
                 ))}
                 {table.paginated.length === 0 && (
-                  <tr><td colSpan={10} className="text-dim">{t('No vessels match the current filters.')}</td></tr>
+                  <tr><td colSpan={9} className="text-dim">{t('No vessels match the current filters.')}</td></tr>
                 )}
               </tbody>
             </table>

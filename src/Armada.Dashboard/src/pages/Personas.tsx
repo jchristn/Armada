@@ -237,7 +237,7 @@ export default function Personas() {
               <tbody>
                 {table.paginated.map(p => (
                   <tr key={p.name} className="clickable" onClick={() => setViewRecord(p as unknown as Record<string, unknown>)}>
-                    <td><strong>{p.name}</strong></td>
+                    <td className="cell-ident"><strong>{p.name}</strong></td>
                     <td className="mono text-dim table-id-cell">
                       <span className="id-display">
                         <span className="id-value" title={p.id}>{p.id}</span>
@@ -245,7 +245,7 @@ export default function Personas() {
                       </span>
                     </td>
                     <td className="text-dim">{p.description ?? '-'}</td>
-                    <td className="mono text-dim">{p.promptTemplateName}</td>
+                    <td className="mono text-dim cell-ident">{p.promptTemplateName}</td>
                     <td><ScopeBadge scope={p.scope} /></td>
                     <td>{p.isBuiltIn ? <StatusBadge status="Built-in" /> : <span className="text-dim">-</span>}</td>
                     <td><StatusBadge status={p.active ? 'Active' : 'Inactive'} /></td>

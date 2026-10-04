@@ -381,7 +381,9 @@ body {
 }
 
 .captain-tool-viewer-table table {
-    min-width: 1040px;
+    /* Fixed layout with percentage columns: fits the modal on desktop and scrolls inside the
+       wrapper only on narrow screens. */
+    min-width: 720px;
     table-layout: fixed;
 }
 
@@ -404,7 +406,7 @@ body {
 }
 
 .captain-tool-viewer-server-table table {
-    min-width: 1240px;
+    min-width: 900px;
 }
 
 .captain-tool-viewer-server-table th,
@@ -752,6 +754,8 @@ h3 { font-size: 1.1rem; margin-bottom: 0.5rem; font-weight: 600; margin-top: 1re
     margin-bottom: 1rem;
     font-size: 0.85rem;
     color: var(--text-dim);
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 .breadcrumb a,
 .breadcrumbs a { color: var(--accent); text-decoration: none; }
@@ -775,6 +779,13 @@ h3 { font-size: 1.1rem; margin-bottom: 0.5rem; font-weight: 600; margin-top: 1re
     gap: 0.75rem;
     margin-bottom: 1rem;
 }
+
+/* Long record names in page titles (e.g. PascalCase persona or pipeline names) wrap instead of
+   pushing the header past the content area. */
+.view-header > *,
+.page-header > * { min-width: 0; max-width: 100%; }
+.view-header h1, .view-header h2,
+.page-header h1, .page-header h2 { overflow-wrap: anywhere; }
 .view-header h2,
 .page-header h2 { margin-bottom: 0; }
 .view-subtitle { margin: 0.25rem 0 0; font-size: 0.85rem; }
@@ -799,6 +810,7 @@ h3 { font-size: 1.1rem; margin-bottom: 0.5rem; font-weight: 600; margin-top: 1re
 /* Inline actions */
 .inline-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.3rem;
     align-items: center;
 }
@@ -855,7 +867,7 @@ h3 { font-size: 1.1rem; margin-bottom: 0.5rem; font-weight: 600; margin-top: 1re
 .mission-history-section { margin-bottom: 1.5rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.25rem; }
 .mission-history-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
 .mission-history-title { font-weight: 600; font-size: 0.85rem; white-space: nowrap; }
-.mission-history-controls { display: flex; gap: 0.5rem; align-items: center; flex-wrap: nowrap; }
+.mission-history-controls { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; min-width: 0; }
 .mission-history-controls select { font-size: 0.75rem; padding: 0.2rem 0.4rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); max-width: 160px; }
 .mission-history-time-tabs { display: flex; gap: 0; }
 .mission-history-time-tab { background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-dim); padding: 0.4rem 0.75rem; font-size: 0.8rem; font-family: var(--font); cursor: pointer; transition: all 0.15s; }
@@ -960,7 +972,10 @@ th {
     font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.03em;
-    white-space: nowrap;
+    /* Multi-word headers stay on one line while there is room and wrap only when the table would
+       otherwise be wider than its container. */
+    white-space: normal;
+    overflow-wrap: normal;
 }
 
 th.sortable { cursor: pointer; user-select: none; }
@@ -1041,6 +1056,110 @@ tr.clickable { cursor: pointer; }
     text-overflow: ellipsis;
     white-space: nowrap;
     vertical-align: bottom;
+}
+
+/*
+ * Table cell sizing. Tables use automatic layout inside a full-width .table-wrap, so a column's
+ * minimum width is the widest unbreakable thing in it. Single-line values (IDs, URLs, branches,
+ * paths) are laid out on a grid whose first track is minmax(<min>, max-content): the column may
+ * shrink to <min> (the value truncates with an ellipsis; its title and copy button keep the full
+ * value) and grows back to the full value whenever there is room. Free text wraps, breaking long
+ * unbroken tokens only when it must, so no table is wider than its container on desktop.
+ */
+td .id-display {
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-columns: minmax(var(--cell-min, 4.5rem), max-content);
+    grid-auto-columns: max-content;
+    justify-content: start;
+    align-items: center;
+}
+
+td .id-display > .id-value,
+td .id-display > .url-value,
+.cell-clip > * {
+    display: block;
+    min-width: 0;
+    max-width: var(--cell-max, 24rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+td .id-display > .id-value { --cell-max: none; }
+
+/* Single-line truncating cell content: <span class="cell-clip" title="full"><span>full</span></span> */
+.cell-clip {
+    display: grid;
+    grid-template-columns: minmax(var(--cell-min, 5rem), max-content);
+    max-width: 100%;
+}
+
+/*
+ * One-line text that truncates with an ellipsis but still lets its column shrink: a single-line
+ * clamp keeps the min-content width small (unlike white-space: nowrap) while the max-content width
+ * stays the full text, so the column gets its full width whenever the table has room.
+ */
+td.truncate-cell { white-space: normal; }
+
+td .truncate-text,
+.line-clamp-1 {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+    overflow: hidden;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    min-width: var(--cell-min, 6rem);
+}
+
+.line-clamp-2 {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+}
+
+.table-wrap td {
+    /* Words stay whole (a short word never splits across lines); an unbroken token longer than the
+       column wraps instead of overflowing. Cells that must shrink below their longest word opt in with
+       .cell-ident, .cell-clip, or the ID/URL patterns above. */
+    overflow-wrap: break-word;
+}
+
+/* Primary free-text column (mission / voyage titles): keeps a readable width, wraps to two lines,
+   then truncates; the cell title carries the full text. */
+td.cell-title { min-width: 14rem; }
+td.cell-title .line-clamp-2 { overflow-wrap: break-word; }
+
+/* Dense tables with many columns (e.g. Events): tighter horizontal cell padding. */
+table.table-dense th,
+table.table-dense td { padding-left: 0.45rem; padding-right: 0.45rem; }
+
+/* Entity names (links and bold names) break between words and at hyphens before they break inside a
+   word, so a squeezed column wraps "customer-onboarding-platform" by segment instead of by letter. */
+.table-wrap td > a,
+.table-wrap td > strong,
+.table-wrap td > a > strong {
+    overflow-wrap: break-word;
+}
+
+/* Identifier-like names (PascalCase personas and pipelines, dotted template names) may break anywhere. */
+.table-wrap td.cell-ident,
+.table-wrap td.cell-ident > * {
+    overflow-wrap: anywhere;
+}
+.table-wrap td.cell-ident { min-width: 8rem; }
+
+.table-wrap td .tag,
+.table-wrap td .btn,
+.table-wrap td button,
+.table-wrap td .status-badge,
+.table-wrap td time {
+    overflow-wrap: normal;
 }
 
 .copy-btn,
@@ -1937,7 +2056,7 @@ tr.clickable { cursor: pointer; }
 /* Detail grid */
 .detail-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 0.5rem 2rem;
     margin-bottom: 1rem;
 }
@@ -1952,7 +2071,11 @@ tr.clickable { cursor: pointer; }
     align-items: flex-start;
     padding: 0.5rem 0;
     border-bottom: 1px solid var(--border);
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
+
+.detail-field > * { max-width: 100%; }
 
 .detail-label {
     font-size: 0.75rem;
@@ -4062,6 +4185,12 @@ tr.clickable { cursor: pointer; }
     width: auto;
 }
 
+/* A select sized to a long option (e.g. a vessel name) must not push the row past the page. */
+.playbook-filter-row > select {
+    max-width: min(100%, 22rem);
+    text-overflow: ellipsis;
+}
+
 .playbook-empty-state {
     padding: 2rem 1.5rem;
     border: 1px dashed var(--border);
@@ -4754,6 +4883,9 @@ tr.clickable { cursor: pointer; }
     align-items: center;
     padding: 0.4rem 0;
 }
+@media (max-width: 640px) {
+    .captain-assignment-row { grid-template-columns: minmax(0, 1fr); }
+}
 .captain-assignment-row + .captain-assignment-row {
     border-top: 1px solid var(--border);
 }
@@ -4874,6 +5006,7 @@ tr.clickable { cursor: pointer; }
 }
 .filter-bar > * {
     flex: 0 0 auto;
+    max-width: 100%;
 }
 /* Override the global `input, select, textarea { width: 100% }` so filter-bar controls size to
    their content and share one row instead of each stacking full-width. */
@@ -5955,9 +6088,10 @@ a:hover { text-decoration: underline; }
 
 /* Responsive */
 @media (max-width: 768px) {
-    /* !important: Layout sets the desktop columns inline (for the collapse animation), which would otherwise keep
-       a 220px first column that the content falls into once the sidebar becomes a fixed overlay. */
-    .app-layout { grid-template-columns: 1fr !important; }
+    /* The sidebar is fixed (off-canvas) here, so the content takes the only column. !important overrides
+       the inline desktop grid columns Layout sets for the expanded/collapsed sidebar; without it the
+       content was squeezed into the 220px sidebar track. */
+    .app-layout { grid-template-columns: minmax(0, 1fr) !important; }
     .sidebar {
         position: fixed;
         left: -180px;
@@ -5976,7 +6110,7 @@ a:hover { text-decoration: underline; }
     .sidebar-open ~ .sidebar-overlay { display: block; }
     .cards { grid-template-columns: 1fr; }
     .detail-grid,
-    .server-detail-grid { grid-template-columns: 1fr; }
+    .server-detail-grid { grid-template-columns: minmax(0, 1fr); }
     .form-row { flex-direction: column; gap: 0; }
     .view-header { flex-direction: column; align-items: flex-start; }
     .pagination-bar { flex-direction: column; align-items: flex-start; gap: 0.5rem; }

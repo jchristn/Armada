@@ -113,7 +113,7 @@ export default function ImportResultsStep({ batch, items, selectedCount, polling
                         {outcomeReasonLabel(t, item.outcomeReason) || <span className="text-dim">-</span>}
                         {item.outcomeMessage && <div className="text-dim cell-subline" data-i18n-skip="true">{item.outcomeMessage}</div>}
                       </td>
-                      <td className="mono cell-truncate" title={item.path} data-i18n-skip="true">{item.path}</td>
+                      <td className="mono" title={item.path} data-i18n-skip="true"><span className="cell-clip"><span>{item.path}</span></span></td>
                       <td>
                         {vesselId ? <Link to={`/vessels/${vesselId}`} className="mono">{vesselId}</Link> : <span className="text-dim">-</span>}
                       </td>

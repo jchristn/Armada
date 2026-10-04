@@ -116,7 +116,7 @@ export default function VesselPickerModal({ open, onClose, onPicked, title }: Ve
                     <input type="checkbox" checked={selected.includes(v.id)} onChange={() => toggle(v.id)} aria-label={t('Select {{name}}', { name: v.name })} />
                   </td>
                   <td><strong>{v.name}</strong></td>
-                  <td className="mono text-dim cell-truncate" title={v.workingDirectory ?? ''}>{v.workingDirectory || '-'}</td>
+                  <td className="mono text-dim" title={v.workingDirectory ?? ''}><span className="cell-clip"><span>{v.workingDirectory || '-'}</span></span></td>
                 </tr>
               ))}
               {filtered.length === 0 && <tr><td colSpan={3} className="text-dim">{t('No vessels match the current filters.')}</td></tr>}

@@ -542,11 +542,11 @@ export default function Endpoints() {
                   <td>
                     <strong>{endpoint.name}</strong>
                     {!endpoint.enabled && <span className="text-dim"> ({t('disabled')})</span>}
-                    <div className="mono text-dim" style={{ fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }} onClick={(e) => e.stopPropagation()}>
-                      <span title={endpoint.id}>{endpoint.id}</span>
+                    <div className="id-display mono text-dim" style={{ fontSize: '0.78rem' }} onClick={(e) => e.stopPropagation()}>
+                      <span className="id-value" title={endpoint.id}>{endpoint.id}</span>
                       <CopyButton text={endpoint.id} title={t('Copy endpoint ID')} />
                     </div>
-                    <div className="mono text-dim" style={{ fontSize: '0.78rem' }}>{endpoint.baseUrl}</div>
+                    <div className="cell-clip mono text-dim" style={{ fontSize: '0.78rem' }} title={endpoint.baseUrl}><span>{endpoint.baseUrl}</span></div>
                   </td>
                   <td className="text-dim">{endpoint.kind}</td>
                   <td className="text-dim">{endpoint.provider}</td>

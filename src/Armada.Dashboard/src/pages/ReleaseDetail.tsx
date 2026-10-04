@@ -308,7 +308,7 @@ export default function ReleaseDetail() {
     return (
       <div style={{ display: 'grid', gap: '0.35rem' }}>
         {items.map((item) => (
-          <div key={`${kind}-${item}`}>
+          <div key={`${kind}-${item}`} style={{ overflowWrap: 'anywhere', minWidth: 0 }}>
             {kind === 'voyage' && <Link to={`/voyages/${item}`}>{voyageMap.get(item) || item}</Link>}
             {kind === 'mission' && <Link to={`/missions/${item}`}>{item}</Link>}
             {kind === 'check' && <Link to={`/checks/${item}`}>{checkRunMap.get(item) || item}</Link>}

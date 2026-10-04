@@ -161,9 +161,9 @@ export default function ImportReviewStep({
                       </div>
                     )}
                   </td>
-                  <td className="mono cell-truncate" title={c.path} data-i18n-skip="true">{c.path}</td>
-                  <td className="mono text-dim cell-truncate" title={c.remoteUrl ?? ''} data-i18n-skip="true">{c.remoteUrl || t('(no origin)')}</td>
-                  <td className="mono text-dim nowrap" data-i18n-skip="true">{c.defaultBranch || '-'}</td>
+                  <td className="mono" title={c.path} data-i18n-skip="true"><span className="cell-clip"><span>{c.path}</span></span></td>
+                  <td className="mono text-dim" title={c.remoteUrl ?? ''} data-i18n-skip="true"><span className="cell-clip"><span>{c.remoteUrl || t('(no origin)')}</span></span></td>
+                  <td className="mono text-dim" title={c.defaultBranch || ''} data-i18n-skip="true"><span className="cell-clip"><span>{c.defaultBranch || '-'}</span></span></td>
                 </tr>
               );
             })}

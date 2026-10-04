@@ -606,12 +606,12 @@ export default function Dashboard() {
                     className="clickable"
                     onClick={() => navigate(`/missions/${m.id}`)}
                   >
-                    <td className="truncate-cell" title={m.title}>
-                      <strong>{m.title}</strong>
+                    <td className="cell-title" title={m.title}>
+                      <strong className="line-clamp-2">{m.title}</strong>
                     </td>
                     <td className="mono text-dim">
                       <span className="id-display">
-                        <span>{m.id}</span>
+                        <span className="id-value" title={m.id}>{m.id}</span>
                         <CopyButton text={m.id} onClick={e => e.stopPropagation()} />
                       </span>
                     </td>
