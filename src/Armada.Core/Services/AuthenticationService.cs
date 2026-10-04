@@ -56,6 +56,36 @@ namespace Armada.Core.Services
             string? apiKeyHeader,
             CancellationToken token = default)
         {
+            // 0. An Ask thread-scoped session token always wins. It marks the request as a thread call that the
+            // approval gate turns into proposals, so another credential on the same request (for example the user's
+            // own bearer token sent by a CLI's global config) must not be able to bypass the gate. A thread token
+            // combined with a credential for a different identity is refused outright.
+            if (!string.IsNullOrEmpty(sessionTokenHeader))
+            {
+                AuthContext? threadCtx = await AuthenticateBySessionTokenAsync(sessionTokenHeader, token).ConfigureAwait(false);
+                if (threadCtx != null && !string.IsNullOrEmpty(threadCtx.AskThreadId))
+                {
+                    AuthContext? other = null;
+                    if (!string.IsNullOrEmpty(authorizationHeader) && authorizationHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string otherBearer = authorizationHeader.Substring(7).Trim();
+                        if (!string.IsNullOrEmpty(otherBearer)) other = await AuthenticateByBearerTokenAsync(otherBearer, token).ConfigureAwait(false);
+                        if (other == null) return new AuthContext();
+                    }
+
+                    if (other == null && !string.IsNullOrEmpty(apiKeyHeader)) return new AuthContext();
+
+                    if (other != null
+                        && (!string.Equals(other.TenantId, threadCtx.TenantId, StringComparison.Ordinal)
+                            || !string.Equals(other.UserId, threadCtx.UserId, StringComparison.Ordinal)))
+                    {
+                        return new AuthContext();
+                    }
+
+                    return threadCtx;
+                }
+            }
+
             // 1. Check Bearer token (canonical auth path)
             if (!string.IsNullOrEmpty(authorizationHeader) && authorizationHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
             {
