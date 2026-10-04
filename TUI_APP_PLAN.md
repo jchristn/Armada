@@ -1,0 +1,696 @@
+# Armada TUI: Terminal Client Plan
+
+> **Type:** implementation plan (work-tracking). Annotate task status and the progress log as you go; keep this
+> document in sync with what actually shipped.
+>
+> **Status:** Not started
+> **Built on:** TUIKit 1.2.1 (`TUIKit` on NuGet; source at `~/Code/Tuikit`)
+> **Parity baseline:** the web dashboard at `src/Armada.Dashboard` as of 2026-10-04 (52 page routes, 37 hub tabs,
+> about 45 modals and drawers, 317 server-calling API client functions, 29 WebSocket event types)
+> **Last updated:** 2026-10-04
+
+Status values: `[ ]` not started, `[~]` in progress, `[x]` done, `[!]` blocked.
+
+## Goal
+
+A terminal application that can do everything the web dashboard can do, so an operator who lives in a terminal (or
+works over SSH, or on a machine with no browser) never needs the browser. Ask Armada is the centerpiece: the TUI opens
+into it, and from it the operator can talk to a captain, approve the work it proposes, and watch that work run to
+completion in place, while the rest of Armada is one keystroke away through menus, a command palette, and a sidebar.
+
+"Parity" is concrete here: every dashboard screen, tab, table, filter, row action, bulk action, form field, modal,
+live update, and setting has a mapped terminal equivalent, and a test enforces that mapping so the TUI cannot silently
+fall behind when the dashboard grows (see "Parity enforcement").
+
+Where the terminal is a better fit than a browser, the TUI goes further: an approvals center with single-key decisions,
+a persistent notification inbox, terminal bell and OS notifications for things that need you, `$EDITOR` integration,
+and command-palette actions (not just navigation).
+
+## Design principles
+
+1. **Ask-first.** Launching `armada tui` lands in Ask Armada with the last conversation open. Everything else is reachable
+   without losing the conversation: other screens open in the main region while a compact Ask dock keeps streaming.
+2. **Keyboard-complete, mouse-friendly.** Every action has a key path (menu, palette, or binding). Mouse works where
+   TUIKit supports it (click to focus, click rows, wheel scroll, click menus), but nothing requires it.
+3. **One way to find things.** The same three entry points work everywhere: the menu bar (`F10`/`Alt`), the command
+   palette (`Ctrl+K`), and the row action menu (`.` or `Shift+F10` on the selected row). The help overlay (`?`) lists
+   the bindings for the current screen.
+4. **Live by default.** Screens subscribe to the WebSocket and update in place; auto-refresh polling is the fallback,
+   with the same intervals the dashboard offers (off, 15, 30, 60, 120, 180, 300 seconds).
+5. **Never lose the user's place.** Background updates never move the selection, scroll position, or focus; new items
+   are announced (status bar count, toast) rather than jumped to.
+6. **Safe actions.** Destructive actions use the same confirmations as the dashboard (including typed `delete` where the
+   dashboard requires it). Approvals always show the exact arguments.
+7. **Same server, same rules.** The TUI is a thin client over the existing REST API and WebSocket. It adds no server
+   endpoints of its own except where called out under "Server changes", and it enforces nothing the server does not;
+   it hides or disables what the server would refuse (from `whoami`: global admin, tenant admin, user).
+
+## What TUIKit gives us, and what it does not
+
+TUIKit 1.2.1 is a capable base: a docked region layout, a modal stack, `CommandRegistry` (palette, menu bar, slash
+aliases), `MenuBar`, `DataTable<T>`, `ListView`/`FuzzyList`/`Tree`/`CheckList`, `TextField`/`TextEditor` (undo, find,
+kill ring), `Form` with validators, `MessageModal`/`PromptModal`/`SelectModal`/`MultiSelectModal`/`FileSelectModal`,
+`NotificationCenter` toasts, `Pane` (scrollback, search, smart scroll lock, in-place line updates),
+`StreamingTranscript` (token streaming then Markdown), `MarkdownRenderer`, `SyntaxHighlighter`, `DiffView`, charts
+(`Sparkline`, `LineChart`, `BarChart`, `Histogram`, `HeatMap`), `ProgressBar`/`Gauge`/`Spinner`/`ActivityIndicator`,
+OSC 52 clipboard, OSC 8 links, `SuspendAsync` for shelling out to `$EDITOR`, themes (Dark, Light, HighContrast),
+headless testing (`HeadlessBackend`, `WidgetTester`, `Snapshot`), and telemetry (`TUIKit` meter and activity source).
+
+The survey found gaps that a dashboard-parity client hits immediately. Each one is assigned to a workstream below.
+
+| Gap | Impact on Armada TUI | Plan |
+|---|---|---|
+| No hierarchical focus; `TabView`, `SplitView`, `ScrollView` do not forward keys (TabView not mouse either) | Tabbed hubs and split detail views cannot receive input in nested widgets | Armada focus router (W1.4) now; upstream key forwarding in TUIKit (U1) |
+| Few widget change events (none on `ListView`, `DataTable`, `TextField`, `TextEditor`) | Selection-driven detail panes and form dirty tracking need polling or wrappers | Thin binding layer (W1.5); upstream events (U2) |
+| `DataTable<T>`: equal-width columns, ordinal string sort, no sort indicator, no multi-select, no paging, no filter, no per-cell style, no CJK-safe widths | Every Armada list needs sized columns, server sort with indicators, multi-select for bulk actions, colored status badges | `ArmadaGrid` widget (W1.6) built on TUIKit surfaces; upstream DataTable improvements (U3) |
+| No dropdown/combo, button, context menu, tooltip, date picker, badge, toolbar | Forms and row actions need them | Armada widgets (W1.7) composed from `SelectModal`/`FuzzyList`/`AutocompleteOverlay`; upstream versions (U4) |
+| Theme does not reach widgets; Markdown and toast colors hard-coded | Light/dark/high-contrast would only half apply | Theme applicator that pushes styles into every widget instance (W1.8); upstream theme-aware widgets (U5) |
+| Toasts: single line, 40 columns, no history, no actions, no dismiss | Notifications need an inbox and actionable toasts | Armada notification center with history and actions (W1.10); upstream (U6) |
+| No palette modal, no help overlay | Both are central to the UX | Armada palette modal and help overlay (W1.9) |
+| Streaming Markdown collapses newlines until finalized | Ask replies look flat while streaming | Incremental block renderer for the live turn (W2.3); upstream (U7) |
+| No resize event (size polled per frame) | Responsive layout needs a size check | Size watcher in `RenderOverlay` that swaps layouts at breakpoints (W1.3) |
+| Full recompose every frame; `Pane` rewraps all scrollback per frame | Long transcripts and logs cost CPU | Scrollback caps, lower `TargetFps` when idle, upstream wrap cache (U8) |
+| No `Unbind`/region removal | Dynamic screens | Stable region set with swappable root widgets (W1.2) |
+| Most widgets not thread-safe; no SynchronizationContext | WebSocket events arrive on background threads | Single event pump that marshals through `app.Post` (W1.11) |
+| No RTL, no screen-reader support | Accessibility parity with the dashboard is not achievable in a terminal | Documented limitation; high-contrast theme, ASCII icons, no color-only states (W8.4) |
+| Unicode width math in several widgets uses `string.Length` | CJK locales (zh-Hans, zh-Hant, yue-Hant, ja) misalign | Use `TextWidth` in Armada widgets; upstream fix (U9) |
+
+Because the maintainer owns TUIKit, the plan does both: build what Armada needs now inside `Armada.Tui` behind small
+interfaces, and upstream the general pieces to TUIKit (workstream U), then delete the Armada copies once a TUIKit
+release ships them.
+
+## Architecture
+
+### Projects
+
+| Project | Purpose |
+|---|---|
+| `src/Armada.Client` (new) | Typed .NET client for the Armada REST API and WebSocket: one method per server call the dashboard makes (317 functions in `api/client.ts`), typed request/response models (reusing `Armada.Core.Models` where they already exist), auth handling, error mapping (`ApiErrorResponse` with code and request id), paging helpers, and an `ArmadaSocket` with token auth, subscribe, reconnect with backoff and jitter, and typed event dispatch. Usable by the TUI, Helm, and tests. |
+| `src/Armada.Tui` (new) | The terminal application: shell, screens, widgets, services. References `TUIKit` and `Armada.Client`. Targets net8.0 and net10.0. |
+| `src/Armada.Helm` | Gains `armada tui [--server URL] [--profile NAME]`, which hosts `Armada.Tui` in-process so one install provides both (see Decision D1). |
+| `src/Test.Shared` | New `Tui.*` suites (headless rendering, keyboard flows, parity manifest) run by Test.Automated, Test.Xunit, Test.Nunit. |
+
+### Shell layout
+
+```
++------------------------------------------------------------------------------------------+
+| Armada  [Default Tenant] admin@armada  * Healthy  * Live   (3 running)   [!2]  [bell 5]  | header
+| File  Go  View  Actions  Ask  Help                                                         | menu bar
++---------------+--------------------------------------------------------------------------+
+| ASK ARMADA    |                                                                          |
+|  > Threads    |                       main region (current screen)                       |
+| OPERATIONS    |                                                                          |
+|  Needs You (2)|                                                                          |
+|  Planning     |                                                                          |
+|  Dispatch     |                                                                          |
+|  Fleet Actions|                                                                          |
+|  Missions     |                                                                          |
+| DELIVERY      |                                                                          |
+| BUILD         |                                                                          |
+| CONFIGURATION |                                                                          |
+| ACTIVITY      +--------------------------------------------------------------------------+
+| SYSTEM        | Ask dock (collapsible): last thread, streaming reply, pending approvals    |
++---------------+--------------------------------------------------------------------------+
+| ? Help  Ctrl+K Palette  . Actions  / Filter  F5 Refresh  Tab Next pane   [approvals: 1]  | status bar
++------------------------------------------------------------------------------------------+
+```
+
+- **Header:** product name; tenant and user; role badge (Global Admin / Tenant Admin); server health dot (polls
+  `getHealth` every 30 s, links to Diagnostics); WebSocket Live/Offline dot; background activity count (jobs running,
+  same polling as the dashboard: 5 s while running, 30 s idle); pending approvals count; notification bell with unread
+  count; proxy-mode strip (instance, state, version, Switch Deployment, Proxy Logout) when connected through
+  Armada.Proxy.
+- **Menu bar:** File (Switch server profile, Sign out, Quit), Go (every sidebar destination), View (theme, sidebar,
+  Ask dock, density, language, auto-refresh), Actions (context actions for the current screen), Ask (new conversation,
+  approvals, quick actions), Help (keys, about, docs links).
+- **Sidebar:** the dashboard nav sections and items with the same labels, collapsible sections, Needs You badge
+  (polls `getInbox` every 20 s and on any WebSocket message, at most every 4 s, colored by Critical/Warning, capped at
+  99+). Collapses to icons below 110 columns and hides below 90 (toggle with `Ctrl+B`).
+- **Main region:** the current screen. Hubs show their tabs as a tab strip (`[` / `]` or `Alt+1..9` to switch).
+- **Ask dock:** optional bottom panel (toggle `Ctrl+J`) that shows the active Ask thread's live tail and pending
+  approvals while another screen is open.
+- **Status bar:** context key hints, filter state, refresh state ("auto 15s" / "paused"), pending approvals count.
+- **Responsive breakpoints:** at least 80x24 to run (TUIKit's "terminal too small" screen below that); sidebar collapse
+  rules above; detail views stack vertically below 120 columns.
+
+### Core services (W1)
+
+| Service | Responsibility |
+|---|---|
+| `Router` | Named routes mirroring the dashboard paths (`/missions/:id`, `/vessels/health?overall=Fail`, ...), back/forward stack (`Alt+Left`/`Alt+Right`, `Backspace` on non-text focus), deep links from notifications and palette. |
+| `SessionService` | Login flows, token storage, `whoami`, role flags, 401 handling (back to login), server profiles. |
+| `EventPump` | Owns `ArmadaSocket`; decodes events; fans out to subscribers; marshals every UI mutation through `app.Post`; coalesces bursts (one refresh per screen per 250 ms). |
+| `RefreshService` | Per-screen auto-refresh interval (persisted per screen, default 15 s), pause while a modal or drawer is open, manual `F5`. |
+| `NotificationService` | Toasts (info, success, warning, error; 5 s auto-dismiss like the dashboard), persistent store of the latest 100 notifications (unread state, mark read, mark all read, clear), deep links, terminal bell and OS notification hooks (OSC 9 / OSC 777 / `notify-send`/`osascript` behind a setting). |
+| `ApprovalService` | One queue of everything waiting on the user: Ask proposals (`ask.proposal` Pending), mission reviews (Review status), deployments pending approval, stalled captains and failed landings from the inbox. Drives the header count, the Approvals center, and `a`/`r` single-key decisions. |
+| `ModalService` | Wrappers over TUIKit modals that return results on the loop (`ShowAsync` continuations are off-loop; the service posts back). |
+| `CommandService` | Registers every command once (id, title, category, chord, enablement predicate, slash alias) with `CommandRegistry`; builds the menu bar, palette, and help overlay from the same registry. |
+| `ClipboardService` | OSC 52 copy (IDs, tokens, JSON, curl snippets, raw diffs) with a fallback "copied text" modal when OSC 52 is not supported. |
+| `ExternalService` | Open URLs (`open`/`xdg-open`/`start`), shell out to `$EDITOR` via `SuspendAsync`, save and load files (exports, backups). |
+| `LocalizationService` | Fetches `/dashboard/i18n/armada.json`, applies the same `t()` keys and ICU plurals as the dashboard, formats dates and numbers per locale; persists the chosen locale. |
+| `ThemeService` | Dark, Light, HighContrast, Auto (from `COLORFGBG` / terminal background query); pushes styles into every widget (W1.8). |
+| `PreferencesService` | `~/.armada/tui.json`: server profiles, last route, last Ask thread, theme, locale, sidebar state, per-table columns, page sizes, sort, refresh intervals, Ask "show thinking", Ask draft captain. Credentials go to the OS keychain when available, else a `0600` file. |
+
+### Shared widgets (W1)
+
+| Widget | Built from | Used for |
+|---|---|---|
+| `ArmadaGrid<T>` | custom `IWidget` using TUIKit surfaces and `TextWidth` | every table: sized and proportional columns, server-side sort with indicators (`^`/`v`), multi-select with checkbox column and range select (`Space`, `Shift+Up/Down`, `Ctrl+A`), per-cell styled content (status badges, progress bars, copy affordance), column chooser with pinned columns, page controls ("Showing 1-25 of 248. Page 1 of 10."), page sizes 10/25/50/100/250, empty/loading/error states, row virtualization |
+| `FilterBar` | `TextField`, `SelectField`, `MultiSelectField`, `TriStateField`, `DateField` | the dashboard filter rows; `/` focuses it; filters persist per screen |
+| `SelectField` / `MultiSelectField` | `AutocompleteOverlay` + `FuzzyList` + `SelectModal` | dropdowns and pickers (vessel, captain, fleet, pipeline, persona, environment, workflow profile, release, deployment, check type, status enums) |
+| `ActionMenu` | `SelectModal`-style popup anchored at the row | row menus (`.` or `Shift+F10`), bulk action menus |
+| `Button` / `ButtonRow` | `Label` + focus + key handling | form and modal actions |
+| `FormView` | TUIKit `Form` plus sections, inline validation, dirty tracking, Save/Discard | every create/edit form |
+| `DetailView` | `DefinitionList` + sections + copyable fields | detail pages |
+| `JsonViewer` | `Pane` + `SyntaxHighlighter` (json) | View JSON everywhere (copy, save to file) |
+| `DiffViewer` | `DiffView` + file list | mission diffs, workspace diff |
+| `LogViewer` | `Pane` with follow toggle, search, copy, "readable" formatting | mission logs, captain logs, rebuild log, check output |
+| `MarkdownView` | `MarkdownRenderer` | descriptions, summaries, playbooks, assistant replies |
+| `ConfirmDialog` | `MessageModal` | all confirmations, including the typed-`delete` variant |
+| `ErrorDialog` | `MessageModal` | errors with code, message, request id, retry |
+| `ProgressCell` / `StatusBadge` | styled text | statuses with icon + text (never color alone) |
+| `ChartView` | `LineChart`, `BarChart`, `Sparkline`, `BrailleCanvas` | mission history, request activity, token usage, endpoint health history |
+| `Drawer` | right-docked region swap | target detail, request detail, quick views |
+| `Wizard` | step header + content + Back/Next/Skip | setup wizard, import wizard |
+
+## Ask Armada (W2)
+
+Ask Armada is the most important screen and is built first after the foundation. Everything in the dashboard's Ask
+Armada is reproduced, then extended with terminal-native approvals and a dock.
+
+### Layout
+
+```
++---------------------------+----------------------------------------------------------------+
+| CONVERSATIONS        [N]ew| TUIKit fixes          Captain: claude-1 (ClaudeCode)  [auto: off] |
+| / search                  | Work: Voyage "Fix table renderer" InProgress 1/3  | Fleet run 4/9  |
+| [ ] show archived         +----------------------------------------------------------------+
+| * TUIKit fixes      2  (o)| You: dispatch a voyage to TUIKit to fix column widths           |
+|   Greeting rollout        | claude-1: I've proposed the dispatch below.                     |
+|   Billing cleanup  [arch] |  [tool] mcp__armada__dispatch  proposed as aap_...              |
+|   ...                     | +- Approval needed -----------------------------------------+   |
+|                           | | dispatch  vessel=TUIKit  title="Fix table renderer" ...   |   |
+|                           | | [a] Approve   [r] Reject   [x] Arguments   expires 18:41  |   |
+|                           | +-----------------------------------------------------------+   |
+|                           | +- Voyage "Fix table renderer" ------------- InProgress ---+   |
+|                           | | [====-------] 1 of 3 finished, 0 failed                   |   |
+|                           | |  Complete    Fix column widths   claude-2  Landed         |   |
+|                           | |  InProgress  Fix sort indicator  claude-3  stage: Worker  |   |
+|                           | |  Pending     Add tests                                    |   |
+|                           | +-----------------------------------------------------------+   |
+|                           | Progress update: Mission "Fix column widths" landed.            |
+|                           +----------------------------------------------------------------+
+|                           | > message the captain, or / for quick actions         [Enter] |
++---------------------------+----------------------------------------------------------------+
+```
+
+### Thread list (`AskThreadListView`)
+
+- Server-side search with 300 ms debounce (`enumerateAskThreads` with `Search`), "Show archived" toggle, New
+  conversation (`n`), paging 50 per page with "Load more" (or automatic on scroll to the end), retry on error.
+- Sort: pinned first, then most recent message.
+- Row content: title, pinned marker, unread count badge, working indicator (active tracked work), "Replying..." while a
+  turn runs, archived marker.
+- Row menu (`.`): Rename (inline edit; `Esc` cancels), Pin/Unpin, Summarize, Archive/Unarchive, Delete (confirm text
+  matches the dashboard: messages and action history are removed; work it started keeps running).
+- Keys: `Up`/`Down`/`Home`/`End`, `Enter` opens, `n` new, `/` search, `p` pin, `e` rename, `Del` delete.
+- Unread: the open thread is marked read (`markAskThreadRead`) when opened, when the terminal regains focus
+  (`TerminalFocusChanged`), and on an `ask.thread` with unread > 0 for the open thread; never while the terminal is
+  unfocused.
+- Narrow terminals: the list becomes a toggled overlay (`Ctrl+T`).
+
+### Conversation header
+
+- Editable title (`e`), captain picker including "No captain (quick actions only)" (`c`; the pre-thread draft captain is
+  remembered like the dashboard's `armada_ask_captain`), Auto-approve toggle (`Ctrl+Y`) with a warning confirm and a
+  persistent banner while on, Summarize (`s`), More menu (Rename, Pin, Archive, Delete).
+- No-MCP note when the captain has no Armada MCP tools and its runtime is neither ApiEndpoint nor ClaudeCode, with the
+  per-runtime instructions link.
+- Work strip: tracked work with "active of total"; `w` cycles focus through items; `Enter` scrolls to the card or opens
+  the item's screen.
+
+### Transcript
+
+- `StreamingTranscript` over a `Pane`, plus keyed live blocks for cards (`Track`/`Update`) so confirm cards and work
+  cards update in place without re-rendering the transcript.
+- Message kinds rendered exactly as the dashboard defines them: `Text` (Markdown), `ActionProposal` (confirm card),
+  `ActionResult` (result plus the live work card), `WorkUpdate` (compact progress line with "show live card"),
+  `Summary`, `Error`; roles User, Assistant, System.
+- Assistant extras: tool-call chips (running / arguments / result, expandable with `Enter` on the chip), collapsible
+  thinking section, turn duration, metrics line (time to first token, tokens/sec, tokens, total).
+- Live turn: `ask.chunk` appends tokens; `ask.thinking` appends to the thinking block; `ask.tool` adds or updates
+  chips; `ask.turn started` shows the rotating "thinking" phrase (every 4 s, same phrases as the dashboard);
+  `ask.turn` completed/failed/cancelled finalizes and refetches the newest page. "The captain turn failed: reason" on
+  failure.
+- Older messages: "Load earlier messages" at the top (30 per page with `beforeSequence`), also triggered by scrolling
+  past the top.
+- Transcript navigation: `PgUp`/`PgDn`, `Ctrl+Home`/`Ctrl+End`, `Ctrl+F` search within the conversation, `End` returns
+  to live tail (smart scroll lock shows "N new below").
+- Copy: `y` copies the focused message as Markdown; `Y` copies the whole conversation.
+
+### Confirm cards and approvals
+
+- Card content: "Approval needed" or "Action: tool", source ("Proposed by the captain" or "Quick action"), one-line
+  summary, exact arguments (expand with `x`, copy with `y`), expiry time, status (Pending, Approved "Running now...",
+  Rejected, Expired, Executed with run time and result, Failed with error). A decided status is never overwritten by
+  a stale Pending copy.
+- Decisions: `a` approve, `r` reject on the focused card; from anywhere, `Ctrl+A` opens the Approvals center.
+- Every pending proposal also enters the `ApprovalService` queue, so approvals raised in a background thread show in the
+  header count, ring the terminal bell (setting), and raise an actionable toast ("Approval needed in TUIKit fixes:
+  dispatch. [a] approve [Enter] open").
+
+### Work cards
+
+- One live card per tracked entity (Voyage, Mission, FleetActionRun, Job, VesselImportBatch) from
+  `getAskWorkSnapshot` and `ask.work` events: status, progress bar ("done of total", failed count), counts by status,
+  per-mission rows (status, title, captain, persona or pipeline stage, check run status, merge queue status, landing
+  outcome, branch, PR link, failure reason), per-target rows for fleet action runs, updated time.
+- `Enter` on a row opens the mission/voyage/run screen; `o` opens the PR URL; `l` opens the mission log; `d` the diff.
+- Snapshot fetches are capped at 20 tracked items per thread (dashboard parity).
+
+### Composer
+
+- Multi-line `TextEditor`: `Enter` sends, `Shift+Enter` or `Ctrl+J` newline (via `SubmitKeyResolver`; IME and paste
+  respected), `Ctrl+E` opens `$EDITOR` for long prompts, up-arrow on an empty composer recalls the last message.
+- `/` opens the quick-action menu (`AutocompleteOverlay`): `/dispatch`, `/fleet-action`, `/status`, `/health`, `/import`
+  from `getAskQuickActions` merged with the built-in defaults. `Up`/`Down`, `Enter`/`Tab` choose, `Esc` dismisses.
+- Quick-action forms inline above the composer: Dispatch (vessel, optional pipeline, optional voyage title, missions
+  list with title and description, add/remove), Fleet action (action picker, vessel multi-select with filter and
+  select/clear visible), Status and Health (no form), Import (opens the Import wizard). Submitting calls
+  `runAskQuickAction`, creating the thread first if needed.
+- "Show thinking" toggle (`Ctrl+Shift+T` or menu), persisted like `armada_ask_show_thinking`.
+- Stop: `Ctrl+C` (TUIKit `CtrlCPolicy.InterruptFocusedPane`) or `Esc` twice while a turn runs: shows "Stopping...",
+  calls `cancelAskTurn`, force-ends locally after 8 s.
+- Optimistic user message with a local id, confirmed or dropped on response.
+- Footer "AI can make mistakes".
+- Empty state: random greeting (same list as the dashboard) and quick-action chips.
+
+### Ask dock and global Ask access
+
+- `Ctrl+J` toggles the Ask dock on any screen: shows the active thread's last messages, the live turn, and pending
+  approvals; typing focuses its one-line composer.
+- `Ctrl+Shift+A` (palette: "Ask about this") opens Ask with context from the current screen pre-filled (for example
+  "On vessel TUIKit (vsl_...):"), so the conversation-scope guidance on the server picks up the right focus.
+
+### Events handled
+
+`ask.chunk`, `ask.thinking`, `ask.tool`, `ask.turn`, `ask.message`, `ask.proposal`, `ask.work`, `ask.thread`; after a
+socket reconnect the thread list and the open conversation are refetched.
+
+### API calls
+
+`enumerateAskThreads`, `createAskThread`, `getAskThread`, `updateAskThread` (title, captainId, autoApprove, pinned,
+archived), `deleteAskThread`, `enumerateAskMessages`, `sendAskMessage`, `cancelAskTurn`, `summarizeAskThread`,
+`markAskThreadRead`, `runAskQuickAction`, `approveAskProposal`, `rejectAskProposal`, `getAskWorkSnapshot`,
+`getAskQuickActions`, `listCaptains`, `getCaptainTools`.
+
+## Menus, palette, notifications, approvals (W1, W3)
+
+### Command palette (`Ctrl+K`)
+
+Unlike the dashboard palette (navigation only), the TUI palette runs commands. Sources:
+
+1. Every route (same labels and sections as the sidebar), including hub tabs (for example "Missions: Merge Queue").
+2. Every command registered by the current screen (row actions on the selection, bulk actions, Refresh, New, Export).
+3. Global commands: New conversation, Approvals center, Notifications, Dispatch, Run fleet action, Import repositories,
+   Evaluate vessel health, Switch theme, Switch language, Switch server, Sign out, Help.
+4. Entity jump: typing an ID prefix (`msn_`, `vyg_`, `vsl_`, `cpt_`, `far_`, `ath_`, ...) jumps to that entity.
+
+Fuzzy matched with `FuzzyList`; shows the key binding next to each command; `Enter` runs, `Tab` fills the query.
+
+### Menu bar
+
+Built from the same `CommandService` registry. The Actions menu is contextual and always equals the current screen's
+row and bulk actions plus its screen-level actions, so every action has a menu path in addition to its key.
+
+### Notifications
+
+- Toasts for `mission.changed`, `voyage.changed`, `captain.changed`, `deployment.changed`, `objective.changed`,
+  `incident.changed` (same text and severity mapping as the dashboard), plus fleet-categorization completion and
+  operation results.
+- Notification center (`Ctrl+N` or the bell): latest 100 with severity, title, message, relative time, unread state;
+  `Enter` opens the related item and marks read; Mark all read; Clear. Persisted locally.
+- Actionable toasts: an Armada toast widget (W1.10) that can carry one action key ("[Enter] open", "[a] approve").
+- Attention escalation (settings): terminal bell on approvals and failures; OS notification via OSC 9/777 or the
+  platform notifier when the terminal is unfocused.
+
+### Approvals center (`Ctrl+A`)
+
+A single queue view, sorted by urgency, with single-key decisions:
+
+| Item | Source | Keys |
+|---|---|---|
+| Ask proposal | `ask.proposal` Pending, thread detail `PendingProposals` | `a` approve, `r` reject, `x` arguments, `Enter` open thread |
+| Mission review | missions in Review (`getInbox`, `mission.changed`) | `a` approve, `c` conditionally approve (feedback required), `m` more work required (feedback required), `d` deny, `Enter` open mission |
+| Deployment approval | deployments PendingApproval | `a` approve, `d` deny (both confirm), `Enter` open |
+| Failed landing | missions LandingFailed | `l` retry landing, `Enter` open |
+| Stalled captain | captain stalled | `s` stop, `R` recall, `t` restart, `Enter` open |
+
+Every decision uses the same API call and confirmation as the dashboard screen it comes from.
+
+## Screens and full parity map
+
+Conventions used in the tables: "list" screens have the standard toolbar (Refresh `F5`, auto-refresh interval, page
+controls, page sizes 10/25/50/100/250), `/` filter, `.` row menu, `Space` select, `Ctrl+A` select all on page,
+`Enter` open, `n` new (where creation exists), `Del` delete (confirm), `j` View JSON. Permission gating follows the
+dashboard (tenant admin for writes unless noted; global admin where noted; scoped items per `lib/scoping.ts`).
+API names are the dashboard `api/client.ts` functions; `Armada.Client` implements each with the same name.
+
+### Top level
+
+| Dashboard | TUI screen | Contents and actions | API |
+|---|---|---|---|
+| Home `/` | `HomeScreen` | Setup Wizard, Dispatch, New Voyage buttons; Ask band (Ask, Needs You, Dispatch, Diagnostics); alert banners (stalled captains, Failed, LandingFailed, pending with idle captains, pending with no captains); KPI cards (captains idle/working/stalled; active voyages + deferred for memory pressure; missions by status; active fleet action runs running/pending); tenant-admin CTA cards (Import repositories, Run fleet action); vessel health tiles; Mission History chart (range hour/day/week/month, fleet and vessel filters, series total/complete/failed/other); Voyage Progress grid (row: View JSON; Enter opens); Recent Missions grid (status/vessel/captain filters; row: View Detail, View JSON, Restart, Delete; View All); Recent Signals. Reloads on any socket message, polls every 30 s, plus auto-refresh. | getStatus, listMissionSummaries, listVessels, listCaptains, listFleets, listSignals, deleteMission, restartMission, enumerateFleetActionRuns, getVesselHealthSummary, getMissionHistory |
+| Ask Armada `/ask/:threadId?` | `AskScreen` | See "Ask Armada". | see above |
+
+### OPERATIONS
+
+| Dashboard | TUI screen | Contents and actions | API |
+|---|---|---|---|
+| Needs You `/inbox` | `InboxScreen` | KPIs (Total, Critical, Warning, Unread alerts); item list (kind, severity, title, detail; Enter opens target); Recent alerts from the notification store with Mark all read; also feeds the Approvals center. Sidebar badge polling as described in the shell. | getInbox |
+| Planning `/planning`, `/planning/:id` | `PlanningScreen` | Start form (title, captain, fleet filter, vessel, pipeline or inherit; supported runtimes note; long-start warning; pre-fill from Backlog, Incident, Setup Wizard, Workspace); Vessel Readiness panel; Recent Sessions grid (title, captain, vessel, pipeline, status, updated; End Session, Delete; Delete All); Transcript (stream toggle, show thinking; header with captain, runtime, vessel, branch, pipeline, playbooks, updated, message count; tool calls, thinking, metrics; Send, Stop, Clear, End Session; select an assistant reply to use for dispatch or open in Dispatch); Dispatch card (voyage title, mission description; Summarize Draft, Open In Dispatch, Dispatch). Live `planning-session.*` events and `captain.changed`; rotating thinking text. | listPlanningSessions, getPlanningSession, createPlanningSession, sendPlanningSessionMessage, stopPlanningTurn, stopPlanningSession, summarizePlanningSession, dispatchPlanningSession, deletePlanningSession, listCaptains, listFleets, listVessels, listPipelines, getVesselReadiness |
+| Dispatch tab `/dispatch` | `DispatchScreen` | Form: vessel (required), pipeline (or inherit; link to Pipelines), priority (default 100), voyage title, description (multiple tasks become multiple missions; `Ctrl+E` editor), playbooks with delivery mode (InlineFullContent, InstructionWithReference, AttachIntoWorktree), captain assignments per pipeline step (preferred captain, fallback tier Auto/Economy/Standard/Premium), readiness panel; pre-fill from Backlog, Planning, Incident, Workspace. Action: Dispatch. | listVessels, listPipelines, listCaptains, listPersonas, createVoyage, getVesselReadiness |
+| Backlog tab `/dispatch?tab=backlog` | `BacklogScreen` | Group pills (All, Inbox, Ready For Planning, Ready For Dispatch, Blocked); filters (search, kind, priority P0-P3, backlog state, effort XS-XL, status, fleet, vessel, owner, target version, user scope); sort (rank, priority, updated, due); grid (rank with move up/down `Alt+Up/Down`, item, shape, state, scope, due/updated); row menu (Open, Duplicate, View JSON, Move Up, Move Down, Delete); Import GitHub modal (vessel, Issue or Pull Request, number); New backlog item. | listBacklog, createBacklogItem, deleteBacklogItem, reorderBacklog, importObjectiveFromGitHub, listFleets, listVessels |
+| Backlog item `/backlog/:id` | `BacklogItemScreen` | Header actions (View JSON, History, Refresh GitHub, Start Planning, Open In Dispatch, Draft Release, Duplicate, Delete); full form (title, vessel, status, description, owner, tags key/value, refinement summary, acceptance criteria, non-goals, rollout constraints, evidence links, kind, category, priority, backlog state, effort, rank, target version, due, parent, suggested pipeline, blocked by, suggested playbooks); linked lists (fleets/vessels, planning sessions, voyages, missions, checks, releases, deployments, incidents); GitHub source panel; Refinement panel (session list; start form with captain, vessel context, fleet context, title, initial prompt; transcript with Stop, Delete, select message, Send; Summarize to a draft with Summary and Method, Apply To Backlog Item); Save, Back. Live `objective.changed`, `objective-refinement-session.*`, `captain.changed`. | getBacklogItem, createBacklogItem, updateBacklogItem, deleteBacklogItem, importObjectiveFromGitHub, listBacklog, listBacklogRefinementSessions, createBacklogRefinementSession, getObjectiveRefinementSession, sendObjectiveRefinementMessage, summarizeObjectiveRefinementSession, applyObjectiveRefinementSummary, stopObjectiveRefinementSession, deleteObjectiveRefinementSession, listCaptains, listFleets, listVessels, listPipelines |
+| Fleet Actions: Actions tab | `FleetActionsScreen` | Grid (name, kind, source built-in/custom, timeout, concurrency, created sortable, updated); row menu (Run, Edit, Duplicate, View JSON, Delete; built-in delete explains hide); form (name, description, kind Command/Mission, command text or prompt template + pipeline + persona, timeout 5-7200, concurrency 1-32, requires clean tree, template variable help with insert); Run flow: vessel picker (name/path filter, fleet filter, select all, max 500) then run modal (saved or ad hoc, ad hoc fields, skip dirty vessels, per-vessel preview, review and run) then navigate to the run. | enumerateFleetActions, createFleetAction, updateFleetAction, deleteFleetAction, runFleetAction, runAdHocFleetAction, getSettings, listPersonas, listPipelines, listVessels, listFleets, getVessel |
+| Fleet Actions: Runs tab | `FleetActionRunsScreen` | Status filter, grid (action, kind, status, progress, created sortable, started, completed, duration); row menu (View, Cancel with confirm while active, View JSON); auto-refresh paused while a modal is open. | enumerateFleetActionRuns, cancelFleetActionRun |
+| Run detail `/fleet-actions/runs/:id` | `FleetActionRunScreen` | Live until finished (paused while the target drawer is open); progress bar (succeeded/failed/skipped/cancelled); fields (concurrency, duration, created/started/completed, timeout, clean-tree check, command or prompt snapshot); actions (Refresh, View JSON, Re-run failed targets, Cancel run); targets grid (status filter; vessel, status, reason, exit code, duration, voyage, output with Truncated badge); target drawer (status, reason, exit code, timing, voyage, rendered command copy, stdout/stderr in LogViewer, open full output). | getFleetActionRun, enumerateFleetActionRunTargets, getFleetActionRunTarget, getFleetAction, cancelFleetActionRun |
+| Missions tab `/missions` | `MissionsScreen` | Filters (search, status, user scope); server paging; grid (select, title, ID, status, priority sortable, vessel, captain, voyage, branch); bulk Delete Selected (purge); New Mission modal (title, description, vessel, mode Implementation/Audit/Research, priority); row menu (View Detail, Edit, Restart, Retry Landing when WorkProduced/LandingFailed, View Diff, View Log, Transition Status, View JSON, Cancel, Purge). | listMissionSummaries, createMission, updateMission, deleteMission, purgeMission, restartMission, retryMissionLanding, transitionMission, getMissionDiff, getMissionLog, listVessels, listCaptains, listVoyages |
+| Mission detail `/missions/:id` | `MissionScreen` | Header (Retry Landing/Land, Resolve Review, Diff, Log, Instructions, Run Check); menu (Edit, Resolve Review, Mark Complete, View Diff, View Log, View Instructions, Run Check, Transition Status, View JSON, Restart, Purge, Delete); Review modal (feedback; Approve, Conditionally Approve, More Work Required, Deny; feedback required where the dashboard requires it); panels (Landing Preview, GitHub Pull Request with refresh and open, all fields listed in the dashboard, description Markdown with copy raw, linked checks, linked deployments, playbooks). | getMission, updateMission, deleteMission, purgeMission, getMissionDiff, getMissionGitHubPullRequest, getMissionLog, getMissionInstructions, getMissionLandingPreview, restartMission, retryMissionLanding, transitionMission, approveMissionReview, denyMissionReview, listCheckRuns, listVessels, listCaptains, listDeployments |
+| Voyages tab | `VoyagesScreen` | Grid (select, title, ID, status sortable, auto push, auto create PRs, landing mode); search, user scope; bulk Cancel Selected; row menu (View Detail, View Status modal, View JSON, Cancel, Purge). | listVoyages, cancelVoyage, purgeVoyage, getVoyageStatus |
+| Voyage detail `/voyages/:id` | `VoyageScreen` | Actions (Run Check, Draft Release, Retry Failed, View JSON, Cancel, Delete); fields (status, ID, description, auto-push, auto-create PRs, auto-merge PRs, landing mode, captain assignments with fallback tier, created/completed, progress, playbook snapshots); missions grid (mission, status, vessel, captain, branch; Diff, Log, Detail). | getVoyage, cancelVoyage, purgeVoyage, listMissions, getMissionDiff, getMissionLog, createMission, listVessels, listCaptains |
+| Create Voyage `/voyages/create` | `VoyageCreateScreen` | Title, description, vessel, pipeline, auto-push, auto-create PRs, auto-merge PRs, playbooks; missions list (add/remove; title, priority, description). | listVessels, listPipelines, createVoyage |
+| Merge Queue tab | `MergeQueueScreen` | Toolbar (Process All with confirm, Enqueue, Delete Selected); Enqueue form (branch, target, mission ID, vessel, test command, priority); filters (text, vessel, user scope); grid (ID, branch with copy, target, status, priority; sortable); row menu (View Detail, Process, Cancel, Mission Diff, Mission Log, View JSON, Delete). | listMergeQueue, enqueueMerge, deleteMergeEntry, processMergeEntry, processAllMergeQueue, cancelMergeEntry, listVessels, getMissionDiff, getMissionLog |
+| Merge entry `/merge-queue/:id` | `MergeEntryScreen` | Row-menu actions plus Landing Preview; fields (ID, status, branch, target, priority, vessel, mission, batch ID, test exit code, tenant, test command, timestamps, test output in LogViewer). | as above, getVesselLandingPreview |
+
+### DELIVERY (`/delivery` hub; all writes tenant admin; read-only hint for others)
+
+| Dashboard | TUI screen | Contents and actions | API |
+|---|---|---|---|
+| Deployments tab | `DeploymentsScreen` | KPIs (total, pending approval, running, succeeded, failed/verification failed); filters (search, status, verification, vessel); grid (deployment, status, verification, checks, updated); row menu (Open, Edit, View JSON, Delete); create/edit modal (vessel, workflow profile, environment or name, release, source ref, mission ID, voyage ID, title, summary, notes, execute immediately when approval not required). | listDeployments, createDeployment, updateDeployment, deleteDeployment, listEnvironments, listReleases, listVessels, listWorkflowProfiles |
+| Deployment detail | `DeploymentScreen` | Actions (Open Workspace, Run Check, Sync GitHub Actions, Runbook, Create Incident, Open Release, View JSON, Approve, Deny, Verify, Rollback with confirms, Delete); panels (overview incl. approved by, monitoring window, last monitored, regression alerts, last alert; verification monitoring summary; linked checks; runbook executions; request summary with total, success rate, average duration, buckets as a bar chart; identifiers). | getDeployment, createDeployment, updateDeployment, deleteDeployment, approveDeployment, denyDeployment, verifyDeployment, rollbackDeployment, syncGitHubActions, listRunbookExecutions, listEnvironments, listReleases, listVessels, listWorkflowProfiles |
+| Environments tab | `EnvironmentsScreen` | KPIs (total, default targets, require approval); filters (search, kind, vessel, active); grid (environment, health, policy, updated); row menu (Open, Edit, Duplicate, View JSON, Delete); form (vessel, name, kind, configuration source, base URL, health endpoint, description, access notes, deployment rules, requires approval, default for vessel, active). | listEnvironments, createEnvironment, updateEnvironment, deleteEnvironment, listVessels |
+| Environment detail | `EnvironmentScreen` | Actions (Deploy, Run Check, Create Incident, Runbook, Open Workspace, View JSON, Duplicate, Delete); extra fields (rollout monitoring window, monitoring interval, record regression alerts); verification definitions editor (method, path, expected status, must contain text, headers, request body, active; add/remove). | getEnvironment, createEnvironment, updateEnvironment, deleteEnvironment, listVessels |
+| Releases tab | `ReleasesScreen` | KPIs (total, shipped, candidates, failed/rolled back); filters (search, status, vessel); grid (release, status, workflow, linked work, published, updated); row menu (Open, Edit, View JSON, Delete); form (title, status, vessel, workflow profile, version, tag, summary, notes, voyage IDs, mission IDs, check run IDs). | listReleases, createRelease, updateRelease, deleteRelease, listVessels, listWorkflowProfiles |
+| Release detail | `ReleaseScreen` | Pre-fill from backlog items; actions (Deploy, Run Check, View JSON, Refresh Derived Fields, Delete); linked voyages, missions, checks, backlog items (View History); deployment evidence; artifacts (source, path, size, last write); GitHub pull requests (checks, reviews, reviewers, updated). | getRelease, createRelease, updateRelease, deleteRelease, refreshRelease, getReleaseGitHubPullRequests, listCheckRuns, listDeployments, listObjectives, listVessels, listVoyages, listWorkflowProfiles |
+| Incidents tab | `IncidentsScreen` | KPIs (total, open, monitoring, mitigated, closed/rolled back); filters (search, status, severity); grid (incident, status, severity, updated); row menu (Open, View JSON, Delete); create modal (title, status, severity, vessel, environment, deployment, release, summary, impact). | listIncidents, createIncident, deleteIncident, listDeployments, listEnvironments, listReleases, listVessels |
+| Incident detail | `IncidentScreen` | Actions (Plan Hotfix, Dispatch Hotfix, Runbook, Open Deployment, Open Environment, Rollback Deployment with confirm, View JSON, Delete); extra fields (environment name, mission/voyage IDs, detected/mitigated/closed, root cause, recovery notes, postmortem, failure kind, rescue attempts and missions); runbook executions. | getIncident, createIncident, updateIncident, deleteIncident, rollbackDeployment, listDeployments, listEnvironments, listReleases, listRunbookExecutions, listVessels |
+| Checks tab | `ChecksScreen` | KPIs (total, passed, failed, running); filters (vessel, status, source Armada/External, check type); grid (check, status, source, duration, created); row menu (Open, Draft Release, View JSON); Run Check modal (vessel, workflow profile, check type with all 19 types, environment, label, mission/voyage/deployment IDs, branch, commit, command override, resolved-profile preview, preflight readiness). | listCheckRuns, runCheck, listVessels, listWorkflowProfiles, previewWorkflowProfileForVessel, getVesselReadiness |
+| Check run detail | `CheckRunScreen` | Actions (Retry, Draft Release, View JSON, Delete); all fields; comparison with previous run (regression/improvement, deltas for duration, artifacts, passed/failed/skipped/total, coverage line/branch/function/statement); test results; coverage; artifacts; output (LogViewer). | getCheckRun, retryCheckRun, deleteCheckRun, listCheckRuns, getVessel, getWorkflowProfile |
+| Runbooks tab | `RunbooksScreen` | KPIs (total, executions, running); grid (runbook, binding, steps, visibility, updated); row menu (Open, Duplicate, View JSON, Delete); create modal (file name, title, description, workflow profile, environment, default check type, active, scope). | listRunbooks, createRunbook, deleteRunbook, listWorkflowProfiles, listEnvironments |
+| Runbook detail (`?executionId=`) | `RunbookScreen` | Edit (overview Markdown via editor, parameters name/label/default/required, steps title/instructions); Start Execution (title, workflow profile, environment, check type, notes, parameter values); Execution Progress (status, deployment, incident, step checkboxes, step notes; Save Progress, Mark Completed, Cancel Execution); Run Check, View JSON, Duplicate, Delete. | getRunbook, createRunbook, updateRunbook, deleteRunbook, startRunbookExecution, updateRunbookExecution, listRunbookExecutions, listEnvironments, listWorkflowProfiles |
+
+### BUILD
+
+| Dashboard | TUI screen | Contents and actions | API |
+|---|---|---|---|
+| Vessels tab | `VesselsScreen` | Header (Import repositories, New Vessel); filters (search, fleet, landing mode, user scope); grid (select, name, ID, fleet, repository URL with default branch, landing mode, sync ahead/behind, branches count; sortable); bulk (Run action, Delete Selected, Clear); row menu (Manage Branches, Manage Objectives, Manage Fleet, Open Workspace, View Detail, Edit, Duplicate, View JSON, Delete); full create/edit form (every field listed in the inventory: name, fleet, repo URL, default branch, local path, working directory, landing mode, branch cleanup, default pipeline, concurrent missions, model context, secret scan, protected paths, identifier denylist, auto-land max files/lines/allowed/denied, DoD build/test commands and timeout, project context, style guide, model context); Branches modal (branch, ahead/behind, last commit, Push, copy; merge source to target with push after merge); Build Context modal (captain, guidance; Build or Refine). | listVessels, listFleets, listPipelines, createVessel, updateVessel, deleteVessel, getVesselGitStatus, getVesselBranches, pushVesselBranch, mergeVesselBranch, buildVesselContext |
+| Import wizard `/vessels/import` | `ImportWizard` | Source (paste paths or browse the Admiral host tree with git/worktree markers, allow worktrees, max depth 1-16); Discovering (background, progress, closable); Review (status filter, text filter, select all new/clear, grid name/status/path/remote/branch, defaults fleet/pipeline/landing mode, categorization: captain (idle only), editable instructions with reset, apply automatically); Results (progress, outcome filter, grid name/outcome/reason/path/vessel); fleet recommendations (rename, move repos, add/remove fleets, apply with confirm, stop captain, retry, edit and re-apply); History (status filter; created, paths, candidates, skipped, failed; Continue/View); "Leave the import review?" guard. | browseVesselImport, discoverVesselImport, importVessels, getVesselImportBatch, enumerateVesselImportBatches, getFleetCategorizationDefaultPrompt, categorizeVesselImport, applyFleetRecommendations, cancelJob, listCaptains, listFleets, listPipelines |
+| Health tab `/vessels/health` | `VesselHealthScreen` | Summary chips (Fail, Warn, Pass, Unknown, NotApplicable, Not evaluated; select to filter), evaluation progress and last run, Evaluate all; filters (name, fleet, overall/dependency/test status multi, dirty, CI, divergence, branch count range, last commit range, Clear); column chooser with Show all (Vessel and Overall pinned); server sort on all 17 fields; bulk (Re-evaluate selected, Run action); row menu (Details, Override, Re-evaluate, Branches, View JSON); detail view with tabs Summary, Findings (10 criteria with status and detail sentence), Dependencies (ecosystem, project, package, version, drift, vulnerability, advisory), Overrides (add/edit/remove per criterion or Overall with note), Raw JSON; Re-evaluate, Open vessel. Filter state round-trips through the route query like the dashboard. | enumerateVesselHealth, getVesselHealthSummary, getVesselHealth, evaluateVesselHealth, setVesselHealthOverride, deleteVesselHealthOverride, getJob, listFleets, listVessels |
+| Vessel detail `/vessels/:id` | `VesselScreen` | Menu (Manage Objectives, Manage Fleet, Onboarding, Run Check, Open Workspace, Health, Edit, Duplicate, View JSON, Delete); extra fields (release/hotfix prefixes, protected branch patterns, require passing checks, require PR for protected, require merge queue for release); panels (Readiness, Landing Preview, Dock Boundary / Secret Scan, Auto-Land Gate, Definition-of-Done Gate, recent missions). | listVessels, listFleets, listMissionSummaries, listPipelines, createVessel, updateVessel, deleteVessel, getVesselReadiness, getVesselLandingPreview |
+| Vessel onboarding | `VesselOnboardingScreen` | Readiness checklist (completed, blocking issues, warnings, environments, next step, open issues); Open Workspace, Run Check, Back. | getVessel, getVesselReadiness |
+| Fleets tab, `/fleets/:id` | `FleetsScreen`, `FleetScreen` | Grid (select, name, ID, description, vessels, active, created; sortable); bulk delete; row menu (View Detail, Edit, Duplicate, View JSON, Delete); form (name, description, default pipeline); detail with vessels grid (vessel, repo URL copy, branch). | listFleets, listVessels, listPipelines, createFleet, updateFleet, deleteFleet |
+| Workspace `/workspace/:vesselId` | `WorkspaceScreen` | Status bar (branch, clean/dirty, active missions, ahead/behind); actions (Refresh, Save `Ctrl+S`, Run Check, Plan, Dispatch with selection pre-fill, Context, Switch vessel); file tree (`Tree`; New File, New Folder, Rename, Delete, Metadata); editor (`TextEditor` with `SyntaxHighlighter`, binary/too-large/read-only handling, tabs for open files, or `$EDITOR` via `SuspendAsync`); Vessel Context modal (project context, style guide, model context with Append Selection); terminal panel (run a command; exit code; timeout; Clear); Review Diff (DiffViewer). | getWorkspaceStatus, getWorkspaceTree, getWorkspaceFile, saveWorkspaceFile, createWorkspaceDirectory, renameWorkspaceEntry, deleteWorkspaceEntry, execWorkspaceCommand, getWorkspaceDiff, getVesselReadiness, listVessels, updateVessel |
+| Captains tab | `CaptainsScreen` | Toolbar (Delete Selected, Stop All with confirm, New Captain); grid (select, name, ID, runtime, state with quarantine badge, current mission, heartbeat, created); row menu (View Detail, Start Planning, Edit, Duplicate, View Tools, View JSON, View Notifications, Stop, Recall, Restart, Delete); form (name, runtime, model, inference endpoint for ApiEndpoint, reasoning effort, capability tier, system instructions, Mux fields: config directory, endpoint with discovery and refresh, base URL, adapter type, temperature, max tokens, system prompt path, approval policy); Tools modal (MCP servers, runtime sources, internal tools, MCP tools, reachability). | listCaptains, createCaptain, updateCaptain, deleteCaptain, stopCaptain, recallCaptain, stopAllCaptains, restartCaptain, getCaptainTools, listModelEndpoints, listMuxEndpoints |
+| Captain detail | `CaptainScreen` | Menu (Edit, Duplicate, View Tools, View Log, View JSON, Recall, Stop, Remove); Lift Quarantine; extra form fields (allowed personas JSON, preferred persona); fields (state, quarantine, current mission/dock, PID, recovery attempts, heartbeat, current mission); captain log (LogViewer with Readable toggle, follow); recent missions. | getCaptain, getCaptainTools, getCaptainLog, getMission, listMissionSummaries, unquarantineCaptain |
+| Docks tab, `/docks/:id` | `DocksScreen`, `DockScreen` | Grid (select, ID, vessel, captain, branch copy, worktree path, active, created); row menu (View Detail, View JSON, Delete with cleanup); detail extras (starting point, start commit, target/working branch, recent commits on relevant paths, subject terms already in tree). | listDocks, getDock, deleteDock, listCaptains, listVessels |
+
+### CONFIGURATION (`/configuration` hub; scoped editing per `lib/scoping.ts`)
+
+| Dashboard | TUI screen | Contents and actions | API |
+|---|---|---|---|
+| Workflow Profiles | `WorkflowProfilesScreen`, `WorkflowProfileScreen` | KPIs; filters (search, scope Global/Fleet/Vessel, status); grid (profile, visibility, capabilities, targets, status, updated); row menu (Open, Edit, Duplicate, View JSON, Delete); quick-create; detail: required inputs (provider list, environment scope, key/path, note), all command fields (lint through changelog), per-environment commands (deploy, rollback, smoke test, health check), Validate (errors and warnings), resolved-command preview. | listWorkflowProfiles, getWorkflowProfile, createWorkflowProfile, updateWorkflowProfile, deleteWorkflowProfile, validateWorkflowProfile, listFleets, listVessels |
+| Project Profiles | `ProjectProfilesScreen`, `ProjectProfileScreen` | KPIs; grid (profile, visibility, overrides, status, updated); form (name, description, scope, default pipeline, workflow profile, skills, default, active); detail: persona overrides (persona, prompt template, enabled, additional instructions), skills, Persona Prompt Diff preview (DiffViewer of base vs effective). | listProjectProfiles, getProjectProfile, createProjectProfile, updateProjectProfile, deleteProjectProfile, previewPersonaPrompt |
+| Skills | `SkillsScreen`, `SkillScreen` | KPIs; category filter; grid (skill, visibility, status, updated); form (name, category, description, content via editor, active, scope). | listSkills, getSkill, createSkill, updateSkill, deleteSkill |
+| Personas | `PersonasScreen`, `PersonaScreen` | Grid (name, ID, description, prompt template, visibility, built-in, active, created; sortable); row menu (View Detail, Edit, Duplicate, Edit Backing Prompt, View JSON, Delete); form (name, description, prompt template, scope); detail: default captain, backing prompt editor (description, content; Save Prompt, Reset to Default, Open Full Template); built-ins not deletable. | getPersona, listPersonas, createPersona, updatePersona, deletePersona, getPromptTemplate, updatePromptTemplate, resetPromptTemplate, listCaptains, listPromptTemplates |
+| Pipelines | `PipelinesScreen`, `PipelineScreen` | Grid (name, ID, description, stages, visibility, built-in, active, created); form (name, description, stages list: persona, optional, review gate, on deny retry/fail, reorder `Alt+Up/Down`, remove); detail flow table (order, persona, required, review, on deny, description); Run Pipeline modal (vessel, title, objective; Launch Voyage). | listPipelines, getPipeline, createPipeline, updatePipeline, deletePipeline, createVoyage |
+| Prompts | `PromptTemplatesScreen`, `PromptTemplateScreen` | Category pills; grid (name, description, category, built-in, content length, active, updated); row menu (Edit/Open, Duplicate, View JSON, Reset to Default for built-ins); create; detail (name, category, description, content with character count and unsaved marker; parameter palette inserting at the cursor grouped Mission/Vessel/Captain/Pipeline Context/System; Duplicate, Reset). | listPromptTemplates, createPromptTemplate, getPromptTemplate, updatePromptTemplate, resetPromptTemplate |
+| Playbooks | `PlaybooksScreen`, `PlaybookScreen` | KPIs; grid (file, visibility, status, content, updated); form (file name, description, Markdown content via editor, active, scope); detail statistics (characters, lines, headings) and Markdown preview. | listPlaybooks, getPlaybook, createPlaybook, updatePlaybook, deletePlaybook |
+| Endpoints | `EndpointsScreen` | Run Health Sweep; KPIs; filters (search, kind); grid (endpoint, visibility, health, last checked); row menu (Health, Edit, View JSON, Delete); form (name, kind, provider list, region, project, access key ID, base URL, deployment, model, API version, secret fields with "blank keeps stored", dimensionality, timeout, enabled, scope); Validate Now (result, latency, status, dimensions, sample, error); health detail (status, uptime, history span, consecutive OK/fail, last error, history histogram). | listModelEndpoints, createModelEndpoint, updateModelEndpoint, deleteModelEndpoint, validateModelEndpoint, healthCheckModelEndpoints |
+| Harbors | `HarborsScreen` | KPIs (total, connected, disconnected); filters (search, status); grid (harbor, status, enabled, capacity, platform, protocol, last seen); row menu (Details with capabilities, Edit, View JSON, Delete); Enable/Disable toggle; register/edit form (name, max concurrent jobs, enabled for routing). | listHarbors, createHarbor, updateHarbor, deleteHarbor, enableHarbor, disableHarbor |
+| Memory | `MemoryScreen` | Filters (type Episodic/Semantic/Procedural, search); grid (type, topic, summary, salience, vessel, visibility, updated); Delete, View JSON; paging. | listMemories, deleteMemory |
+
+### ACTIVITY
+
+| Dashboard | TUI screen | Contents and actions | API |
+|---|---|---|---|
+| All Activity | `ActivityScreen` | KPIs (visible, errors, warnings, source types); filters (text, backlog item, actor, vessel, source type, postmortem only; Apply); saved views (save with name, delete; stored in TUI preferences); export JSON, CSV, Markdown (to a file path); grid (when, title, source, status, actor, vessel); row menu (View, View JSON, Open Workspace, Delete for request entries). | enumerateHistoryTimeline, listObjectives, listVessels, deleteRequestHistoryEntry |
+| API Requests | `RequestHistoryScreen` | KPIs (total, success rate, failures, average duration); activity chart (hour/day/week/month); filters (method, status code, route, principal, credential, result, tenant, user, from, to; Reset); grid (select, when, method, route, principal, status, duration, payloads); row menu (View, Replay in API Explorer, Delete); bulk (Delete Selected, Delete Filtered admin, Delete Visible Range tenant admin); request detail drawer (entry ID, auth method, captured, params, headers, bodies with truncation flag; Replay, Delete); deep link `/requests/:id`. | listRequestHistory, getRequestHistorySummary, getRequestHistoryEntry, deleteRequestHistoryEntry, deleteRequestHistoryEntries, deleteRequestHistoryByFilter |
+| Events, `/events/:id` | `EventsScreen`, `EventScreen` | Grid (select, ID, event type, entity type, entity ID, captain, mission, vessel, voyage, message, created; sortable); row menu (View Detail, View JSON, Delete); bulk delete; detail adds payload and tenant. | listEvents, getEvent, deleteEventsBatch, listCaptains, listVessels |
+| Signals, `/signals/:id` | `SignalsScreen`, `SignalScreen` | Filters (type, captain, unread only); grid (ID, type, from, to, read, payload, time); row menu (View Detail, Mark Read, View JSON, Delete); bulk delete; Send Signal modal (type, payload, to captain or Admiral broadcast). | listSignals, getSignal, sendSignal, markSignalRead, deleteSignalsBatch, listCaptains |
+| Token Usage | `TokenUsageScreen` | Range (hour/day/week/month); metric by token type or by model; stacked bars or lines (`BarChart`/`LineChart`); copy chart as text (the dashboard copies an image; the TUI copies a text table and offers CSV export); estimated-records note. | getTokenUsage |
+| Jobs `/jobs` | `JobsScreen` | Grid (name with error reason, kind, status, progress, created, updated); Cancel while unfinished; auto-refresh. | listJobs, cancelJob |
+
+### SYSTEM
+
+| Dashboard | TUI screen | Contents and actions | API |
+|---|---|---|---|
+| API Explorer | `ApiExplorerScreen` | Loads `/openapi.json`; operation list filtered by category and text (`FuzzyList`); request builder (path params, query params, headers, body via `TextEditor` with JSON highlighting); request preview as curl, fetch, C# with copy; Send/Abort; response viewer (status, headers, highlighted body, copy, save); accepts replay from API Requests. | (OpenAPI document; generic HTTP through `Armada.Client`) |
+| Settings: Server tab | `ServerSettingsScreen` | Status cards (health, uptime, connection Live/HTTP, remote tunnel; info fields version, API URL, ports, tunnel state/instance/latency/heartbeat); Server Configuration (admiral port, MCP port, max captains); Rebuild Armada settings (self vessel, slot retention); Agent Settings (heartbeat interval, stall threshold, idle captain timeout, auto-create PRs); Planning Session settings (idle, abandonment, transcript retention); Vessel Import settings (allowed roots list, excluded folder names list, max depth, inline batch limit, categorization time limit; Save/Discard); Fleet Actions settings; Repository Health settings (global admin; fetch before evaluating, scored criteria checklist, interval, concurrency, dependency max age and timeout, stale branch age, mission failure window, thresholds with fail >= warn validation); Remote Control (enabled, tunnel URL, instance ID override, enrollment token and proxy shared password with reveal, timeouts, reconnect delays, allow invalid certificates; tunnel status); MCP Configuration snippets (copy HTTP and STDIO for Claude Code, Codex, Gemini, Cursor); System Paths (copyable); Database Backup (Backup Now saves the ZIP to a chosen path; Restore from a chosen ZIP with confirm); Server Actions (Setup Wizard, Health Check, Restart with confirm, Rebuild Armada with branch/ref picker, confirm, live build log polling every 1.5 s, Roll Back, Stop Server, Factory Reset, all confirmed). Proxy mode banner and local-only action blocking identical to the dashboard. | getHealth, getSettings, updateSettings, stopServer, restartServer, resetServer, rebuildServer, getRebuildStatus, rollbackServer, getVesselBranches, listVessels, downloadBackup, restoreBackup, getProxySessionContext |
+| Settings: Diagnostics | `DiagnosticsScreen` | Run Checks; summary (healthy/unhealthy/warnings, passed/failed); grid (check, status, message). | getDoctor |
+| Settings: Tenants (admin) | `TenantsScreen` | Grid (select, name, ID, active, created, updated); search; create/edit (name, active), delete, bulk delete, View JSON; writes disabled behind the proxy; non-admins see their own tenant. | listTenants, createTenant, updateTenant, deleteTenant |
+| Settings: Users (tenant admin) | `UsersScreen` | Grid (select, email, ID, name, global admin, tenant admin, active, created); search; tenant filter; form (email, first, last, password + confirm with blank-keeps on edit, tenant admin-only, global admin admin-only, tenant admin, active); bulk delete. | listUsers, createUser, updateUser, deleteUser, listTenants |
+| Settings: Credentials (tenant admin) | `CredentialsScreen` | Grid (select, name, ID, user, bearer token, active, created); filters (user, tenant); row menu (Edit, Copy Token, View JSON, Delete); form (user, tenant admin-only, name, active); bulk delete. | listCredentials, createCredential, updateCredential, deleteCredential, listUsers, listTenants |
+
+### Global flows
+
+| Dashboard | TUI | Notes |
+|---|---|---|
+| Login: email, tenant lookup, tenant picker, password | `LoginScreen` | Email then `lookupTenants`; zero (error), one (skip), many (picker with Back); password field with masking (reveal while `Ctrl+R` held toggles); `authenticate`; token stored per server profile. |
+| Login: API key tab | `LoginScreen` | Paste a key or bearer token; validated with `whoami`. |
+| Login extras | `LoginScreen` | Language picker, theme toggle, version, GitHub link, default-credentials hint. |
+| Session | `SessionService` | Token validated on start (`whoami`); any 401 returns to login; roles from `whoami`. Multiple server profiles (name, URL, last user), selectable at login and from File menu; `--server` and `--profile` flags; `ARMADA_URL` and `ARMADA_TOKEN` environment variables for scripted starts. |
+| Setup wizard | `SetupWizard` | Same auto-open rules (no fleets/vessels/captains, or missing pieces without the completed flag; the flag lives in TUI preferences); steps Objective, Fleet, Vessel, Captain, Dispatch, Handoff with the same fields and links; Skip Setup, Back; highlights the related sidebar items. |
+| Command palette | `CommandPalette` | Superset of the dashboard (runs commands, not just navigation). |
+| Keyboard shortcuts | `KeyMap` | Dashboard shortcuts preserved where they apply (`Ctrl+K`, `Ctrl+S`, `Esc`, arrows on tabs); full map in "Key map". |
+| Toasts | `NotificationService` | Same severities and 5 s auto-dismiss; plus history and actions. |
+| Theme | `ThemeService` | Light, Dark, HighContrast, Auto. |
+| i18n | `LocalizationService` | Same 9 locales and catalog; CJK width-safe rendering in Armada widgets. |
+| Background activity indicator | header | Same polling and popover (running jobs with friendly names, Queued/Running, start time, links; Open Jobs), plus the fleet-categorization completion toasts. |
+| Notification bell | header + `NotificationCenter` | Latest entries with severity, title, message, relative time; open marks read; Mark all read; Clear. |
+| Proxy mode strip | header | Instance ID, state, version; Switch Deployment; Proxy Logout. |
+
+### WebSocket events (parity checklist)
+
+| Event | TUI reaction |
+|---|---|
+| `mission.changed`, `voyage.changed`, `captain.changed`, `deployment.changed`, `objective.changed`, `incident.changed` | Notification + toast (dashboard text and severity); refresh affected open screens; Approvals center update for reviews, landings, approvals, stalls. |
+| `planning-session.changed`, `.message.created`, `.message.updated`, `.tool`, `.thinking`, `.summary.created`, `.dispatch.created`, `.deleted` | Planning screen. |
+| `objective-refinement-session.changed`, `.message.created`, `.message.updated`, `.summary.created`, `.applied`, `.deleted` | Backlog item refinement panel. |
+| `ask.chunk`, `ask.thinking`, `ask.tool`, `ask.turn`, `ask.message`, `ask.proposal`, `ask.work`, `ask.thread` | Ask Armada, Ask dock, Approvals center, thread list badges. |
+| any message | Home reloads; Needs You badge refetch (at most every 4 s). |
+| connection state | Header Live/Offline; Server settings Live vs HTTP. |
+| reconnect | Ask reloads threads and the open conversation; every open screen refetches. |
+
+### Dashboard API functions not used by the dashboard UI
+
+The dashboard client defines 38 functions no screen calls (for example `searchWorkspace`, `getWorkspaceChanges`,
+`createMemory`, `updateMemory`, `importCheckRun`, `deleteRunbookExecution`, `getRunbookExecution`,
+`resolveWorkflowProfile`, `validateProjectProfile`, `resolveProjectProfileForVessel`, `enumerate*` variants). They are
+implemented in `Armada.Client` for completeness; the TUI exposes the ones with clear user value as extensions beyond
+parity (workspace search `Ctrl+Shift+F`, memory create/edit, check-run import, runbook execution delete) and lists them
+in the parity manifest as `extension`.
+
+## Key map
+
+| Scope | Keys |
+|---|---|
+| Global | `Ctrl+K` palette; `F10` menu bar; `?` help; `Ctrl+A` approvals; `Ctrl+N` notifications; `Ctrl+J` Ask dock; `Ctrl+Shift+A` ask about this; `Ctrl+B` sidebar; `Alt+Left`/`Alt+Right` back/forward; `g` then letter go-to (`g a` Ask, `g h` Home, `g i` Needs You, `g m` Missions, `g v` Vessels, `g c` Captains, `g f` Fleet Actions, `g d` Delivery, `g s` Settings); `Ctrl+Q` quit (confirm when a turn or wizard is active); `F12` toggle mouse capture (terminal text selection) |
+| Lists | `Up`/`Down`/`PgUp`/`PgDn`/`Home`/`End`; `Enter` open; `.` or `Shift+F10` row menu; `Space` select; `Shift+Up/Down` extend; `Ctrl+A` select page; `Esc` clear selection; `/` filter; `s` cycle sort on the focused column, `S` reverse; `c` columns; `F5` refresh; `n` new; `Del` delete; `j` JSON; `y` copy ID; `[`/`]` previous/next tab; `<`/`>` previous/next page |
+| Forms | `Tab`/`Shift+Tab` fields; `Enter` on a select opens it; `Ctrl+S` save; `Esc` cancel (confirm if dirty); `Ctrl+E` edit long text in `$EDITOR` |
+| Ask | `Enter` send; `Shift+Enter`/`Ctrl+J` newline; `/` quick actions; `a`/`r` approve/reject focused card; `x` arguments; `Ctrl+C` stop turn; `n` new conversation; `e` rename; `s` summarize; `Ctrl+Y` auto-approve; `Ctrl+T` thread list |
+| Logs and transcripts | `f` follow; `Ctrl+F` search, `n`/`N` next/previous; `End` live tail; `y` copy |
+
+All bindings are registered in `CommandService`, shown in the help overlay, listed in the menu bar, and remappable via
+TUIKit's `KeyBindingSet` and `KeyBindingEditor` (Settings > Key bindings, stored in TUI preferences).
+
+## Server changes
+
+The TUI uses the existing API. Two small server-side improvements are in scope because the TUI benefits most:
+
+- `GET /api/v1/jobs` paging and a `status` filter (the header indicator polls it; the dashboard benefits too).
+- A run-only read for fleet action runs without the full target list (`GET /api/v1/fleet-action-runs/{id}?includeTargets=false`),
+  so live run views do not refetch every target every few seconds.
+
+No other server change is required. Any change is made in the server and dashboard together and recorded in
+REST_API.md.
+
+## Workstreams and tasks
+
+### W0. Client library
+
+- [ ] **W0.1** `Armada.Client` project: HTTP plumbing (base URL, bearer/token/API-key auth, 401 hook, JSON with the
+  server's PascalCase, error mapping to a typed `ArmadaApiException` with code, message, request id), typed models.
+- [ ] **W0.2** One method per dashboard API function (317), generated where possible from OpenAPI and hand-finished,
+  grouped by area (Missions, Voyages, Vessels, Ask, ...). Each async method takes a `CancellationToken`.
+- [ ] **W0.3** `ArmadaSocket`: `?token=` auth, subscribe, typed events for all 29 types, reconnect with exponential
+  backoff (1 s to 30 s, jitter), reconnect counter.
+- [ ] **W0.4** Contract tests: every client method exercised against `E2EServerFixture`; a test that compares the method
+  list with `api/client.ts` exports (parity of the client itself).
+
+### W1. Shell and foundation
+
+- [ ] **W1.1** `Armada.Tui` project, `armada tui` command in Helm, startup flags, preferences file, server profiles.
+- [ ] **W1.2** Shell layout (header, menu bar, sidebar, main, Ask dock, status bar) with stable regions and swappable
+  roots.
+- [ ] **W1.3** Responsive breakpoints from a size watcher; minimum size screen.
+- [ ] **W1.4** Focus router: hierarchical focus inside hubs, tabs, split and scroll views; consistent `Tab` order.
+- [ ] **W1.5** Binding layer: change events for selection, text, and validation over TUIKit widgets.
+- [ ] **W1.6** `ArmadaGrid<T>` with every feature listed under "Shared widgets"; virtualization; CJK-safe widths.
+- [ ] **W1.7** `SelectField`, `MultiSelectField`, `ActionMenu`, `Button`, `FormView`, `DetailView`, `Drawer`, `Wizard`,
+  `TriStateField`, `DateField`.
+- [ ] **W1.8** `ThemeService` with Light, Dark, HighContrast, Auto, pushing styles to every widget instance.
+- [ ] **W1.9** Command palette modal and help overlay generated from `CommandService`.
+- [ ] **W1.10** Notification center with history, actionable toasts, bell and OS notification hooks.
+- [ ] **W1.11** `EventPump` with `app.Post` marshaling and burst coalescing; `RefreshService`.
+- [ ] **W1.12** `Router` with deep links and back/forward; `ClipboardService`; `ExternalService`.
+- [ ] **W1.13** `LocalizationService` using the server catalog; ICU plurals; locale formatting.
+- [ ] **W1.14** Login (email/tenant/password and API key), session handling, roles, proxy-mode strip.
+- [ ] **W1.15** Shared viewers: JSON, diff, log, Markdown, charts; confirm and error dialogs.
+
+### W2. Ask Armada
+
+- [ ] **W2.1** Thread list with search, archive filter, paging, pin/unread/working/replying indicators, row menu, keys.
+- [ ] **W2.2** Conversation header, captain picker, auto-approve with warning and banner, summarize, no-MCP note, work strip.
+- [ ] **W2.3** Transcript with all message kinds, streaming (incremental block rendering while streaming), tool chips,
+  thinking, metrics, older-page loading, search, copy.
+- [ ] **W2.4** Confirm cards with approve/reject/arguments/expiry and status transitions; integration with
+  `ApprovalService`.
+- [ ] **W2.5** Live work cards for all tracked entity types with row drill-down.
+- [ ] **W2.6** Composer with slash quick actions and inline forms, `$EDITOR`, history recall, stop, optimistic send.
+- [ ] **W2.7** Ask dock and "Ask about this" context handoff.
+- [ ] **W2.8** All `ask.*` events and reconnect behavior.
+
+### W3. Operations
+
+- [ ] **W3.1** Home. **W3.2** Needs You. **W3.3** Approvals center. **W3.4** Planning. **W3.5** Dispatch.
+  **W3.6** Backlog and Backlog item with refinement. **W3.7** Fleet Actions (actions, runs, run detail, run flow).
+  **W3.8** Missions and Mission detail with review. **W3.9** Voyages, Voyage detail, Create voyage.
+  **W3.10** Merge Queue and entry detail. **W3.11** Jobs.
+
+### W4. Build
+
+- [ ] **W4.1** Vessels (grid, form, branches, build context). **W4.2** Import wizard (all steps, recommendations,
+  history). **W4.3** Vessel Health (grid, filters, columns, detail tabs, overrides, evaluation). **W4.4** Vessel detail
+  and onboarding. **W4.5** Fleets. **W4.6** Workspace (tree, editor, terminal, context, diff). **W4.7** Captains
+  (grid, form incl. Mux, tools, detail, log, quarantine). **W4.8** Docks.
+
+### W5. Delivery
+
+- [ ] **W5.1** Deployments and detail. **W5.2** Environments and detail. **W5.3** Releases and detail.
+  **W5.4** Incidents and detail. **W5.5** Checks and check run detail. **W5.6** Runbooks and detail with executions.
+
+### W6. Configuration
+
+- [ ] **W6.1** Workflow Profiles. **W6.2** Project Profiles with prompt diff. **W6.3** Skills. **W6.4** Personas.
+  **W6.5** Pipelines with Run Pipeline. **W6.6** Prompts with parameter palette. **W6.7** Playbooks.
+  **W6.8** Endpoints with validate and health. **W6.9** Harbors. **W6.10** Memory.
+
+### W7. Activity and System
+
+- [ ] **W7.1** All Activity with saved views and export. **W7.2** API Requests with chart, filters, bulk deletes,
+  replay. **W7.3** Events. **W7.4** Signals with send. **W7.5** Token Usage. **W7.6** API Explorer.
+  **W7.7** Settings Server tab (every section and action). **W7.8** Diagnostics. **W7.9** Tenants, Users,
+  Credentials. **W7.10** Setup wizard.
+
+### W8. Quality
+
+- [ ] **W8.1** Parity enforcement (below).
+- [ ] **W8.2** Headless test suites: one keyboard-flow test per screen (open, filter, select, row action, modal,
+  confirm) with `HeadlessBackend` and `WidgetTester`; Ask streaming and approval tests with a scripted event source.
+- [ ] **W8.3** End-to-end suite against `E2EServerFixture`: login, Ask dispatch with approval through landing (stub
+  captain), Fleet Action run, import, health evaluation, settings save.
+- [ ] **W8.4** Accessibility and display: HighContrast theme, ASCII icon mode, no color-only states, 80x24 minimum,
+  tmux/SSH validation, Windows Terminal, iTerm2, Terminal.app, GNOME Terminal, conhost (degraded).
+- [ ] **W8.5** Performance: 10,000-row grids stay responsive (virtualization, server paging), Ask transcripts of 5,000
+  lines, idle CPU under 2 percent (lower `TargetFps` when idle), memory caps for scrollback.
+- [ ] **W8.6** Telemetry: TUIKit meter and activity source plus `armada_tui_*` metrics (screen views, command use,
+  approval latency) behind the server's telemetry settings.
+- [ ] **W8.7** Simulated user testing session per `SIMULATED_USER_TESTING.md` using the TUI as the primary surface.
+
+### W9. Docs and distribution
+
+- [ ] **W9.1** `docs/TUI.md`: install, start, profiles, key map, screens, approvals, notifications, troubleshooting.
+- [ ] **W9.2** README section and screenshots (text captures from `Snapshot`).
+- [ ] **W9.3** Ships with Helm (`armada tui`) in every channel Helm ships in; CHANGELOG entry.
+
+### U. TUIKit upstream (in `~/Code/Tuikit`)
+
+Each item lands in TUIKit with its own tests, then Armada switches to it and deletes its local copy.
+
+- [ ] **U1** Key and mouse forwarding into `TabView`, `SplitView`, `ScrollView` children; hierarchical focus scopes.
+- [ ] **U2** Change events on `ListView`, `DataTable`, `TextField`, `TextEditor`, `Checkbox`, `RadioGroup`.
+- [ ] **U3** `DataTable` improvements: column sizing, typed sort with indicators and header click, multi-select, per-cell
+  styles, paging hooks, CJK-safe widths.
+- [ ] **U4** `Dropdown`/`ComboBox`, `Button`, `ContextMenu`, `Tooltip`, `Badge`.
+- [ ] **U5** Theme-aware widgets (read `app.Theme` roles), theme-driven Markdown and toast colors.
+- [ ] **U6** Notification center history, actions, dismiss, wider toasts.
+- [ ] **U7** Incremental Markdown rendering for `StreamingTranscript` while a block streams.
+- [ ] **U8** `Pane` wrap cache and render cost reduction; idle frame throttling.
+- [ ] **U9** `TextWidth`-based width math across all widgets.
+- [ ] **U10** Built-in command palette modal and key-help overlay.
+
+## Parity enforcement
+
+A parity manifest, `src/Armada.Tui/parity.json`, maps every dashboard surface to its TUI implementation:
+
+- every route in `src/Armada.Dashboard/src/App.tsx` (including redirects, which map to the same TUI route),
+- every hub tab,
+- every exported server-calling function in `src/Armada.Dashboard/src/api/client.ts`,
+- every WebSocket event type the dashboard handles,
+- every settings field on the Server page.
+
+Each entry has a status (`implemented`, `planned`, `not-applicable` with a reason, `extension`) and the TUI screen or
+command id. A `Tui.Parity` test suite parses the dashboard source and the manifest and fails when:
+
+- a dashboard route, tab, API function, event, or settings field has no manifest entry,
+- an entry marked `implemented` points to a screen or command that does not exist,
+- a release build has any entry still `planned`.
+
+This turns "parity" into a build check: when someone adds a page or API function to the dashboard, the TUI build tells
+them what is missing.
+
+## Delivery order
+
+1. **Milestone A: foundation and Ask.** W0, W1, W2, W3.3 (Approvals), W1.10 notifications. The TUI is useful from day
+   one as an Ask-first operator console with approvals and live work tracking.
+2. **Milestone B: operations.** W3 (all), Jobs, Needs You.
+3. **Milestone C: build.** W4.
+4. **Milestone D: delivery and configuration.** W5, W6.
+5. **Milestone E: activity, system, quality, docs.** W7, W8, W9, parity at 100 percent.
+
+The TUIKit upstream workstream (U) runs alongside, prioritized by which Armada workstream needs it next (U1, U3, U4
+before Milestone B; U5, U6 before Milestone E).
+
+## Requirements compliance
+
+- **CODE_STYLE.md:** usings inside namespaces, no `var`, no tuples, one class per file, XML docs on public members,
+  `_PascalCase` privates, `CancellationToken` and `ConfigureAwait(false)` in library code (`Armada.Client`), no
+  `Console.WriteLine` in library code, specific exceptions with `<exception>` tags, configurable values as members.
+- **BACKEND_TEST_ARCHITECTURE.md:** all TUI and client suites live in `Test.Shared` and run under Test.Automated,
+  Test.Xunit, and Test.Nunit on net8.0 and net10.0; tests use `127.0.0.1`.
+- **I18N.md:** every user-visible string goes through the shared catalog; no hard-coded strings in screens; ICU plurals;
+  locale formatting; CJK rendering checked in headless tests.
+- **DASHBOARD_STYLE_AND_USABILITY.md (adapted):** grouped navigation, server-side filter/sort/paging, row and bulk
+  actions, confirmations, empty/loading/error states, no color-only status.
+- **TELEMETRY_REQUIREMENTS.md:** low-cardinality metric labels; telemetry failures never break the UI.
+- **VERSIONING.md:** the TUI ships with Helm's version; agents do not change versions without explicit approval.
+- **WRITING_DOCUMENTS.md:** `docs/TUI.md` written as prose, no em-dashes.
+
+## Decisions
+
+- **D1. Packaging.** Recommended: `Armada.Tui` is a library hosted by Helm as `armada tui`, so one install provides the
+  CLI and the TUI. Alternative: a separate `armada-tui` binary and packages.
+- **D2. Client library scope.** Recommended: `Armada.Client` is generated from OpenAPI and hand-finished, and Helm moves
+  to it over time. Alternative: a TUI-private client.
+- **D3. TUIKit upstream.** Recommended: upstream the general widgets and fixes (workstream U) and keep Armada-specific
+  widgets in `Armada.Tui`. Alternative: keep everything in Armada.
+- **D4. Credentials at rest.** Recommended: OS keychain (macOS Keychain, Windows Credential Manager, libsecret) with a
+  `0600` file fallback.
+- **D5. Release timing.** Post-1.0 per `V1_READINESS.md`, unless pulled into 1.0.
+
+## Progress Log
+
+| Date | Author | Task(s) | Change |
+|------|--------|---------|--------|
+| 2026-10-04 | (design) | -- | Plan drafted from a full inventory of the dashboard (routes, tabs, modals, API functions, WebSocket events, settings) and a survey of TUIKit 1.2.1. |
