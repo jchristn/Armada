@@ -212,7 +212,7 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
-                    int probed = await endpoints.CheckHealthAllAsync().ConfigureAwait(false);
+                    int probed = await endpoints.CheckHealthAllAsync(McpToolHelpers.ResolveCallerContext()).ConfigureAwait(false);
                     return (object)new ModelEndpointHealthSweepResponse { DistinctBaseUrlsProbed = probed };
                 });
         }

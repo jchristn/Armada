@@ -94,6 +94,35 @@ namespace Armada.Server.Mcp.Tools
                         .EnumerateByTypeAsync(PapercutParser.EventType, scanLimit)
                         .ConfigureAwait(false);
 
+                    // Papercut reports belong to the reporting mission's tenant and user. A global admin sees every
+                    // report; everyone else only reports in their scope. Reports written before events carried a
+                    // tenant are attributed through their vessel.
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    if (!McpCallerScope.IsGlobal(caller))
+                    {
+                        Dictionary<string, bool> vesselVisible = new Dictionary<string, bool>(StringComparer.Ordinal);
+                        List<ArmadaEvent> visible = new List<ArmadaEvent>();
+                        foreach (ArmadaEvent evt in events)
+                        {
+                            if (!String.IsNullOrEmpty(evt.TenantId))
+                            {
+                                if (McpCallerScope.CanAccess(caller, evt.TenantId, evt.UserId)) visible.Add(evt);
+                                continue;
+                            }
+
+                            if (String.IsNullOrEmpty(evt.VesselId)) continue;
+                            if (!vesselVisible.TryGetValue(evt.VesselId!, out bool canSee))
+                            {
+                                canSee = await McpCallerScope.ReadVesselAsync(database, caller, evt.VesselId).ConfigureAwait(false) != null;
+                                vesselVisible[evt.VesselId!] = canSee;
+                            }
+
+                            if (canSee) visible.Add(evt);
+                        }
+
+                        events = visible;
+                    }
+
                     List<Papercut> papercuts = new List<Papercut>();
                     foreach (ArmadaEvent evt in events)
                     {

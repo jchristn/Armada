@@ -125,6 +125,14 @@ namespace Armada.Server.Mcp.Tools
                     if (request.Salience.HasValue) memory.Salience = request.Salience.Value;
                     memory.Tags = request.Tags ?? new List<string>();
                     memory.SourceKind = ParseSourceKind(request.SourceKind) ?? MemorySourceKindEnum.Manual;
+                    if (!String.IsNullOrEmpty(request.SourceVoyageId) && await McpCallerScope.ReadVoyageAsync(database, caller, request.SourceVoyageId).ConfigureAwait(false) == null)
+                        return (object)new { Error = "Voyage not found" };
+                    if (!String.IsNullOrEmpty(request.SourceMissionId) && await McpCallerScope.ReadMissionAsync(database, caller, request.SourceMissionId).ConfigureAwait(false) == null)
+                        return (object)new { Error = "Mission not found" };
+                    if (!String.IsNullOrEmpty(request.SourceVesselId) && await McpCallerScope.ReadVesselAsync(database, caller, request.SourceVesselId).ConfigureAwait(false) == null)
+                        return (object)new { Error = "Vessel not found" };
+                    if (!String.IsNullOrEmpty(request.VesselId) && await McpCallerScope.ReadVesselAsync(database, caller, request.VesselId).ConfigureAwait(false) == null)
+                        return (object)new { Error = "Vessel not found" };
                     memory.SourceVoyageId = request.SourceVoyageId;
                     memory.SourceMissionId = request.SourceMissionId;
                     memory.SourceVesselId = request.SourceVesselId;
@@ -174,6 +182,8 @@ namespace Armada.Server.Mcp.Tools
                     if (request.Content != null) existing.Content = request.Content;
                     if (request.Salience.HasValue) existing.Salience = request.Salience.Value;
                     if (request.Tags != null) existing.Tags = request.Tags;
+                    if (!String.IsNullOrEmpty(request.VesselId) && await McpCallerScope.ReadVesselAsync(database, caller, request.VesselId).ConfigureAwait(false) == null)
+                        return (object)new { Error = "Vessel not found" };
                     if (request.VesselId != null) existing.VesselId = request.VesselId;
                     if (request.SourceDetail != null) existing.SourceDetail = request.SourceDetail;
                     if (ParseScope(request.Scope) is ScopeEnum scope) existing.Scope = scope;

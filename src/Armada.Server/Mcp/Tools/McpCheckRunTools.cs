@@ -40,7 +40,8 @@ namespace Armada.Server.Mcp.Tools
                 {
                     CheckRunIdArgs request = JsonSerializer.Deserialize<CheckRunIdArgs>(args!.Value, _JsonOptions)
                         ?? throw new InvalidOperationException("Could not deserialize CheckRunIdArgs.");
-                    CheckRun? run = await database.CheckRuns.ReadAsync(request.CheckRunId).ConfigureAwait(false);
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    CheckRun? run = await McpCallerScope.ReadCheckRunAsync(database, caller, request.CheckRunId).ConfigureAwait(false);
                     if (run == null) return (object)new { Error = "Check run not found" };
                     return (object)run;
                 });

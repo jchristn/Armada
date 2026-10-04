@@ -105,7 +105,8 @@ namespace Armada.Server.Mcp.Tools
                     PipelineArgs request = JsonSerializer.Deserialize<PipelineArgs>(args!.Value, _JsonOptions)!;
                     string name = request.Name;
                     if (String.IsNullOrEmpty(name)) return (object)new { Error = "name is required" };
-                    Pipeline? pipeline = await database.Pipelines.ReadByNameAsync(name).ConfigureAwait(false);
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    Pipeline? pipeline = await McpCallerScope.ReadPipelineAsync(database, caller, name).ConfigureAwait(false);
                     if (pipeline == null) return (object)new { Error = "Pipeline not found: " + name };
                     return (object)pipeline;
                 });
@@ -145,8 +146,11 @@ namespace Armada.Server.Mcp.Tools
                     string name = request.Name;
                     if (String.IsNullOrEmpty(name)) return (object)new { Error = "name is required" };
 
-                    Pipeline? pipeline = await database.Pipelines.ReadByNameAsync(name).ConfigureAwait(false);
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    Pipeline? pipeline = await McpCallerScope.ReadPipelineAsync(database, caller, name).ConfigureAwait(false);
                     if (pipeline == null) return (object)new { Error = "Pipeline not found: " + name };
+                    if (!ScopedVisibility.CanEdit(caller, pipeline.Scope, pipeline.TenantId, pipeline.UserId))
+                        return (object)new { Error = "You may only modify your own pipelines; a tenant-wide pipeline requires a tenant admin." };
 
                     if (request.Description != null)
                         pipeline.Description = request.Description;
@@ -193,8 +197,11 @@ namespace Armada.Server.Mcp.Tools
                     string name = request.Name;
                     if (String.IsNullOrEmpty(name)) return (object)new { Error = "name is required" };
 
-                    Pipeline? pipeline = await database.Pipelines.ReadByNameAsync(name).ConfigureAwait(false);
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    Pipeline? pipeline = await McpCallerScope.ReadPipelineAsync(database, caller, name).ConfigureAwait(false);
                     if (pipeline == null) return (object)new { Error = "Pipeline not found: " + name };
+                    if (!ScopedVisibility.CanEdit(caller, pipeline.Scope, pipeline.TenantId, pipeline.UserId))
+                        return (object)new { Error = "You may only delete your own pipelines; a tenant-wide pipeline requires a tenant admin." };
                     if (pipeline.IsBuiltIn) return (object)new { Error = "Cannot delete built-in pipeline: " + name };
 
                     await database.Pipelines.DeleteAsync(pipeline.Id).ConfigureAwait(false);

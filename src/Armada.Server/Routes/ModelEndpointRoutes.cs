@@ -221,7 +221,7 @@ namespace Armada.Server.Routes
                 AuthContext? ctx = await AuthorizeAsync(req, authenticate, authz).ConfigureAwait(false);
                 if (ctx == null) return BuildAuthError(req);
 
-                int probed = await _Endpoints.CheckHealthAllAsync().ConfigureAwait(false);
+                int probed = await _Endpoints.CheckHealthAllAsync(ctx).ConfigureAwait(false);
                 return new ModelEndpointHealthSweepResponse { DistinctBaseUrlsProbed = probed };
             },
             api => api

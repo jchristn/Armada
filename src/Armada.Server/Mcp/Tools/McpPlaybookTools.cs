@@ -46,7 +46,8 @@ namespace Armada.Server.Mcp.Tools
                     string id = request.Id?.Trim() ?? String.Empty;
                     if (String.IsNullOrWhiteSpace(id)) return (object)new { Error = "id is required" };
 
-                    Playbook? playbook = await database.Playbooks.ReadAsync(id).ConfigureAwait(false);
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    Playbook? playbook = await McpCallerScope.ReadPlaybookAsync(database, caller, id).ConfigureAwait(false);
                     if (playbook == null) return (object)new { Error = "Playbook not found: " + id };
                     return (object)playbook;
                 });
@@ -115,8 +116,11 @@ namespace Armada.Server.Mcp.Tools
                     string id = request.Id?.Trim() ?? String.Empty;
                     if (String.IsNullOrWhiteSpace(id)) return (object)new { Error = "id is required" };
 
-                    Playbook? playbook = await database.Playbooks.ReadAsync(id).ConfigureAwait(false);
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    Playbook? playbook = await McpCallerScope.ReadPlaybookAsync(database, caller, id).ConfigureAwait(false);
                     if (playbook == null) return (object)new { Error = "Playbook not found: " + id };
+                    if (!ScopedVisibility.CanEdit(caller, playbook.Scope, playbook.TenantId, playbook.UserId))
+                        return (object)new { Error = "You may only modify your own playbooks; a tenant-wide playbook requires a tenant admin." };
                     playbook.TenantId ??= Constants.DefaultTenantId;
                     playbook.UserId ??= Constants.DefaultUserId;
 
@@ -156,8 +160,11 @@ namespace Armada.Server.Mcp.Tools
                     string id = request.Id?.Trim() ?? String.Empty;
                     if (String.IsNullOrWhiteSpace(id)) return (object)new { Error = "id is required" };
 
-                    Playbook? playbook = await database.Playbooks.ReadAsync(id).ConfigureAwait(false);
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    Playbook? playbook = await McpCallerScope.ReadPlaybookAsync(database, caller, id).ConfigureAwait(false);
                     if (playbook == null) return (object)new { Error = "Playbook not found: " + id };
+                    if (!ScopedVisibility.CanEdit(caller, playbook.Scope, playbook.TenantId, playbook.UserId))
+                        return (object)new { Error = "You may only delete your own playbooks; a tenant-wide playbook requires a tenant admin." };
 
                     await database.Playbooks.DeleteAsync(id).ConfigureAwait(false);
                     return (object)new { Status = "deleted", PlaybookId = id };

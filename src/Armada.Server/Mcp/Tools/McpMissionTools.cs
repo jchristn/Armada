@@ -50,9 +50,10 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     MissionIdArgs request = JsonSerializer.Deserialize<MissionIdArgs>(args!.Value, _JsonOptions)!;
                     string missionId = request.MissionId;
-                    Mission? mission = await database.Missions.ReadAsync(missionId).ConfigureAwait(false);
+                    Mission? mission = await McpCallerScope.ReadMissionAsync(database, caller, missionId).ConfigureAwait(false);
                     if (mission == null) return (object)new { Error = "Mission not found" };
                     mission.DiffSnapshot = null;
                     return (object)mission;
@@ -72,8 +73,9 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     MissionIdArgs request = JsonSerializer.Deserialize<MissionIdArgs>(args!.Value, _JsonOptions)!;
-                    Mission? mission = await database.Missions.ReadAsync(request.MissionId).ConfigureAwait(false);
+                    Mission? mission = await McpCallerScope.ReadMissionAsync(database, caller, request.MissionId).ConfigureAwait(false);
                     if (mission == null) return (object)new { Error = "Mission not found" };
                     Armada.Core.Services.AutoLandDecision? decision = await admiral.EvaluateAutoLandAsync(request.MissionId).ConfigureAwait(false);
                     if (decision == null) return (object)new { Error = "Mission does not have an associated vessel" };
@@ -116,6 +118,10 @@ namespace Armada.Server.Mcp.Tools
                 {
                     MissionCreateArgs request = JsonSerializer.Deserialize<MissionCreateArgs>(args!.Value, _JsonOptions)!;
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    if (await McpCallerScope.ReadVesselAsync(database, caller, request.VesselId).ConfigureAwait(false) == null)
+                        return (object)new { Error = "Vessel not found" };
+                    if (!String.IsNullOrEmpty(request.VoyageId) && await McpCallerScope.ReadVoyageAsync(database, caller, request.VoyageId).ConfigureAwait(false) == null)
+                        return (object)new { Error = "Voyage not found" };
                     Mission mission = new Mission();
                     mission.TenantId = String.IsNullOrEmpty(caller.TenantId) ? ArmadaConstants.DefaultTenantId : caller.TenantId;
                     mission.UserId = caller.UserId;
@@ -166,10 +172,17 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     MissionUpdateArgs request = JsonSerializer.Deserialize<MissionUpdateArgs>(args!.Value, _JsonOptions)!;
                     string missionId = request.MissionId;
-                    Mission? mission = await database.Missions.ReadAsync(missionId).ConfigureAwait(false);
+                    Mission? mission = await McpCallerScope.ReadMissionAsync(database, caller, missionId).ConfigureAwait(false);
                     if (mission == null) return (object)new { Error = "Mission not found" };
+                    if (!String.IsNullOrEmpty(request.VesselId) && await McpCallerScope.ReadVesselAsync(database, caller, request.VesselId).ConfigureAwait(false) == null)
+                        return (object)new { Error = "Vessel not found" };
+                    if (!String.IsNullOrEmpty(request.VoyageId) && await McpCallerScope.ReadVoyageAsync(database, caller, request.VoyageId).ConfigureAwait(false) == null)
+                        return (object)new { Error = "Voyage not found" };
+                    if (!String.IsNullOrEmpty(request.ParentMissionId) && await McpCallerScope.ReadMissionAsync(database, caller, request.ParentMissionId).ConfigureAwait(false) == null)
+                        return (object)new { Error = "Parent mission not found" };
                     if (request.Title != null)
                         mission.Title = request.Title;
                     if (request.Description != null)
@@ -209,9 +222,10 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     MissionIdArgs request = JsonSerializer.Deserialize<MissionIdArgs>(args!.Value, _JsonOptions)!;
                     string missionId = request.MissionId;
-                    Mission? mission = await database.Missions.ReadAsync(missionId).ConfigureAwait(false);
+                    Mission? mission = await McpCallerScope.ReadMissionAsync(database, caller, missionId).ConfigureAwait(false);
                     if (mission == null) return (object)new { Error = "Mission not found" };
 
                     // Release the captain if this mission was assigned to one
@@ -256,9 +270,10 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     MissionIdArgs request = JsonSerializer.Deserialize<MissionIdArgs>(args!.Value, _JsonOptions)!;
                     string missionId = request.MissionId;
-                    Mission? mission = await database.Missions.ReadAsync(missionId).ConfigureAwait(false);
+                    Mission? mission = await McpCallerScope.ReadMissionAsync(database, caller, missionId).ConfigureAwait(false);
                     if (mission == null) return (object)new { Error = "Mission not found" };
 
                     // Clean up associated dock/worktree if present
@@ -315,6 +330,7 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     DeleteMultipleArgs request = JsonSerializer.Deserialize<DeleteMultipleArgs>(args!.Value, _JsonOptions)!;
                     if (request.Ids == null || request.Ids.Count == 0)
                         return (object)new { Error = "ids is required and must not be empty" };
@@ -327,7 +343,7 @@ namespace Armada.Server.Mcp.Tools
                             result.Skipped.Add(new DeleteMultipleSkipped(id ?? "", "Empty ID"));
                             continue;
                         }
-                        Mission? mission = await database.Missions.ReadAsync(id).ConfigureAwait(false);
+                        Mission? mission = await McpCallerScope.ReadMissionAsync(database, caller, id).ConfigureAwait(false);
                         if (mission == null)
                         {
                             result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
@@ -392,9 +408,10 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     MissionRestartArgs request = JsonSerializer.Deserialize<MissionRestartArgs>(args!.Value, _JsonOptions)!;
                     string missionId = request.MissionId;
-                    Mission? mission = await database.Missions.ReadAsync(missionId).ConfigureAwait(false);
+                    Mission? mission = await McpCallerScope.ReadMissionAsync(database, caller, missionId).ConfigureAwait(false);
                     if (mission == null) return (object)new { Error = "Mission not found" };
 
                     if (mission.Status != MissionStatusEnum.Failed && mission.Status != MissionStatusEnum.Cancelled)
@@ -435,8 +452,11 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     if (landingService == null) return (object)new { Error = "Landing service not configured" };
                     MissionRetryLandingArgs request = JsonSerializer.Deserialize<MissionRetryLandingArgs>(args!.Value, _JsonOptions)!;
+                    if (await McpCallerScope.ReadMissionAsync(database, caller, request.MissionId).ConfigureAwait(false) == null)
+                        return (object)new { Error = "Mission not found" };
                     bool success = await landingService.RetryLandingAsync(request.MissionId).ConfigureAwait(false);
                     Mission? mission = await database.Missions.ReadAsync(request.MissionId).ConfigureAwait(false);
                     return (object)new { Success = success, Mission = mission };
@@ -457,11 +477,12 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     MissionTransitionArgs request = JsonSerializer.Deserialize<MissionTransitionArgs>(args!.Value, _JsonOptions)!;
                     string missionId = request.MissionId;
                     string statusStr = request.Status;
 
-                    Mission? mission = await database.Missions.ReadAsync(missionId).ConfigureAwait(false);
+                    Mission? mission = await McpCallerScope.ReadMissionAsync(database, caller, missionId).ConfigureAwait(false);
                     if (mission == null) return (object)new { Error = "Mission not found" };
 
                     if (!Enum.TryParse<MissionStatusEnum>(statusStr, true, out MissionStatusEnum newStatus))
@@ -504,9 +525,10 @@ namespace Armada.Server.Mcp.Tools
                     },
                     async (args) =>
                     {
+                        AuthContext caller = McpToolHelpers.ResolveCallerContext();
                         MissionIdArgs request = JsonSerializer.Deserialize<MissionIdArgs>(args!.Value, _JsonOptions)!;
                         string missionId = request.MissionId;
-                        Mission? mission = await database.Missions.ReadAsync(missionId).ConfigureAwait(false);
+                        Mission? mission = await McpCallerScope.ReadMissionAsync(database, caller, missionId).ConfigureAwait(false);
                         if (mission == null) return (object)new { Error = "Mission not found" };
 
                         // Check for a saved diff file first
@@ -577,9 +599,10 @@ namespace Armada.Server.Mcp.Tools
                     },
                     async (args) =>
                     {
+                        AuthContext caller = McpToolHelpers.ResolveCallerContext();
                         MissionLogArgs request = JsonSerializer.Deserialize<MissionLogArgs>(args!.Value, _JsonOptions)!;
                         string missionId = request.MissionId;
-                        Mission? mission = await database.Missions.ReadAsync(missionId).ConfigureAwait(false);
+                        Mission? mission = await McpCallerScope.ReadMissionAsync(database, caller, missionId).ConfigureAwait(false);
                         if (mission == null) return (object)new { Error = "Mission not found" };
 
                         string logPath = Path.Combine(settings.LogDirectory, "missions", missionId + ".log");
