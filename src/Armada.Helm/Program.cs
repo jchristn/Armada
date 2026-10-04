@@ -108,6 +108,7 @@ namespace Armada.Helm
             HelpRow("vessel list", "List all vessels (repositories)");
             HelpRow("vessel add", "Register a new vessel");
             HelpRow("vessel remove <id|name>", "Decommission a vessel");
+            HelpRow("vessel import <paths...> [--root <dir>]", "Discover repositories and import them as vessels");
 
             HelpHeading("Captains (armada captain ...)");
             HelpRow("captain list", "List all captains (agents)");
@@ -331,6 +332,9 @@ namespace Armada.Helm
                         .WithDescription("List all vessels");
                     vessel.AddCommand<VesselAddCommand>("add")
                         .WithDescription("Register a new vessel");
+                    vessel.AddCommand<VesselImportCommand>("import")
+                        .WithDescription("Discover repositories and import them as vessels")
+                        .WithExample("vessel", "import", "~/Code/my-repo", "--root", "~/Code", "--dry-run");
                     vessel.AddCommand<VesselRemoveCommand>("remove")
                         .WithDescription("Decommission a vessel (accepts name or ID)");
                 });

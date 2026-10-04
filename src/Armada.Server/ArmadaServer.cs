@@ -90,6 +90,8 @@ namespace Armada.Server
         private HarborService _HarborService = null!;
         private HarborConnectionManager _HarborConnectionManager = null!;
         private HarborLinkEndpoint _HarborLinkEndpoint = null!;
+        private IVesselService _VesselService = null!;
+        private IVesselImportService _VesselImportService = null!;
 
         private ISessionTokenService _SessionTokenService = null!;
         private IAuthenticationService _AuthenticationService = null!;
@@ -168,6 +170,8 @@ namespace Armada.Server
             _Admiral = admiralService;
             _MergeQueue = new MergeQueueService(_Logging, _Database, _Settings, _Git);
             _JobService = new Armada.Core.Services.JobService(_Database, _Logging);
+            _VesselService = new VesselService(_Database);
+            _VesselImportService = new VesselImportService(_Database, _Settings, new VesselDiscoveryService(_Database, _Settings), _VesselService, _JobService, _Logging);
             _MissionRecovery = new Armada.Core.Services.MissionRecoveryCoordinator(_Logging, _Database, _Settings);
             _LandingService = new LandingService(_Logging, _Database, _Settings, _Git);
             _TemplateService = new MessageTemplateService(_Logging, _PromptTemplateService);
@@ -621,7 +625,11 @@ namespace Armada.Server
 
             // Vessels
             VesselContextService vesselContextService = new VesselContextService(_Database, _RuntimeFactory, _Docks, _PromptTemplateService, _Logging);
-            new VesselRoutes(_Database, _VesselReadinessService, _LandingPreviewService, EmitEventAsync, _JsonOptions, _Docks, vesselContextService, _Git, _Settings)
+            new VesselRoutes(_Database, _VesselReadinessService, _LandingPreviewService, EmitEventAsync, _JsonOptions, _Docks, vesselContextService, _Git, _Settings, _VesselService)
+                .Register(_App, authenticate, _AuthorizationService);
+
+            // Vessel import (bulk onboarding)
+            new VesselImportRoutes(_VesselImportService, _Logging)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Workspace
@@ -1108,7 +1116,9 @@ namespace Armada.Server
                 _Logging,
                 _CaptainTools,
                 _ModelEndpointService,
-                _HarborService);
+                _HarborService,
+                _VesselService,
+                _VesselImportService);
         }
 
         /// <summary>

@@ -26,6 +26,7 @@ Machine-readable OpenAPI is available at `/openapi.json`, and the interactive Sw
   - [Status](#status)
   - [Fleets](#fleets)
   - [Vessels](#vessels)
+  - [Vessel Import](#vessel-import)
   - [Workspace](#workspace)
   - [Voyages](#voyages)
   - [Missions](#missions)
@@ -172,6 +173,11 @@ personas, pipelines, workflow profiles, project profiles, runbooks):
 | `/api/v1/settings` | PUT | AdminOnly | Partial update of server configuration and remote-control settings |
 | `/api/v1/fleets` | ALL | Authenticated | Tenant-scoped |
 | `/api/v1/vessels` | ALL | Authenticated | Tenant-scoped |
+| `/api/v1/vessels/import/browse` | GET | TenantAdmin | Lists directories on the Admiral host inside the allowed import roots |
+| `/api/v1/vessels/import/discover` | POST | TenantAdmin | Scans the Admiral host filesystem for git repositories |
+| `/api/v1/vessels/import` | POST | TenantAdmin | Creates vessels from a discovered batch |
+| `/api/v1/vessels/import/batches/enumerate` | POST | Authenticated | Tenant-scoped import history |
+| `/api/v1/vessels/import/batches/{id}` | GET | Authenticated | Tenant-scoped; another tenant's batch returns 404 |
 | `/api/v1/captains` | ALL | Authenticated | Tenant-scoped |
 | `/api/v1/missions` | ALL | Authenticated | Tenant-scoped |
 | `/api/v1/voyages` | ALL | Authenticated | Tenant-scoped |
@@ -923,6 +929,12 @@ Returns current server settings including ports, agent configuration, system pat
     "ReconnectBaseDelaySeconds": 5,
     "ReconnectMaxDelaySeconds": 60,
     "AllowInvalidCertificates": false
+  },
+  "Import": {
+    "AllowedRoots": [],
+    "MaxDepth": 6,
+    "ExcludedDirectoryNames": ["bin", "obj", "node_modules", "dist", ".git", ".vs", "packages", "TestResults", ".armada", "target", "venv", ".venv", "__pycache__"],
+    "InlineBatchLimit": 25
   }
 }
 ```
@@ -931,7 +943,7 @@ Returns current server settings including ports, agent configuration, system pat
 
 #### PUT /api/v1/settings
 
-Accepts partial updates to editable server settings. When `RemoteControl` is supplied, it replaces the full `RemoteControl` settings object.
+Accepts partial updates to editable server settings. When `RemoteControl` is supplied, it replaces the full `RemoteControl` settings object. When `Import` is supplied, it replaces the full `Import` (vessel import) settings object; see [Vessel Import](#vessel-import) for the fields and their ranges.
 
 Self-rebuild fields (see [SERVER_REBUILD.md](SERVER_REBUILD.md)):
 
@@ -1549,6 +1561,297 @@ Launch the chosen captain in a worktree of the vessel repository to analyze it a
 **Error:** `409` - A build is already in progress for this vessel
 **Error:** `501` - Model Context building is not available on this server
 **Error:** `504` - The build timed out
+
+---
+
+### Vessel Import
+
+Bulk onboarding of existing local repositories happens in two steps. **Discover** scans directories on the Admiral host and saves the result as an import batch (status `Discovered`); it creates no vessels. **Import** then creates vessels for the candidates the operator kept. Batches persist, so a review screen survives a reload, and they form the import history.
+
+Every vessel created by an import gets `RepoUrl` set to the repository's `origin` URL (or the local path when there is no origin), `WorkingDirectory` set to the discovered path, and **`LocalPath` left unset**, so deleting the vessel never deletes the operator's checkout.
+
+**Permissions.** Browse, discover, and import require **TenantAdmin** because they read the Admiral host filesystem. Batch history reads require authentication. All batches are scoped to the caller's tenant; another tenant's batch ID returns `404`.
+
+**Allowed roots.** Every browsed or discovered path must lie inside `Import.AllowedRoots` after full normalization (`.`/`..` collapsed, `~` expanded, symbolic links resolved), so `../` cannot escape. When `Import.AllowedRoots` is empty, paths are limited to the user profile directory of the account running the Admiral. A path outside the allowed roots returns `403` with `Data.Code = "PathNotAllowed"`.
+
+**Settings** (`Import` in `GET/PUT /api/v1/settings`, applied live):
+
+| Field | Default | Range | Description |
+|---|---|---|---|
+| `AllowedRoots` | `[]` | -- | Roots that browse and discover are limited to. Empty means the user profile directory. |
+| `MaxDepth` | `6` | 1-16 | Directory levels below a scan root that discovery searches. |
+| `ExcludedDirectoryNames` | `bin`, `obj`, `node_modules`, `dist`, `.git`, `.vs`, `packages`, `TestResults`, `.armada`, `target`, `venv`, `.venv`, `__pycache__` | -- | Names never descended into. Names starting with `.` are always skipped. |
+| `InlineBatchLimit` | `25` | 1-500 | Largest selection imported inside the request; larger selections run as a background job. |
+
+**Discovery rules.**
+
+- A directory is a repository when it contains a `.git` **directory**. Discovery never descends into a repository, so nested repositories and submodules are not reported separately.
+- A directory whose `.git` entry is a **file** is a worktree or submodule and is reported with status `Worktree` (not preselected).
+- Armada's own `ReposDirectory`, `DocksDirectory`, and `DataDirectory` are reported as `ArmadaManaged` and never scanned.
+- Symbolic links are not followed. Duplicate paths are removed case-insensitively on Windows and macOS and case-sensitively on Linux, and paths are reported with their on-disk casing.
+- Discovery stops at 5,000 candidates and reports `Truncated: true` with a `CandidateLimitReached` hint.
+- The remote is `git remote get-url origin`. The default branch is `git symbolic-ref --short refs/remotes/origin/HEAD` (without `origin/`), then the current branch, then `main`.
+- A candidate whose path matches an existing vessel's `WorkingDirectory`, or whose normalized remote matches an existing vessel's `RepoUrl` (scheme, credentials, port, host case, trailing `/` and `.git` ignored, so HTTPS and SSH forms match), gets status `AlreadyOnboarded` and `ExistingVesselId`.
+- `ProposedName` is the folder name, made unique within the tenant (and the batch) with `-2`, `-3`, ... suffixes. An `AlreadyOnboarded` candidate shows the existing vessel's name.
+
+**Candidate statuses (`CandidateStatus`):** `New`, `AlreadyOnboarded`, `Worktree`, `ArmadaManaged`, `NotFound` (the path does not exist on the Admiral host), `NotGit` (exists but contains no repository within the depth), `AccessDenied` (the input directory could not be read).
+
+**Item outcomes (`Outcome`) with `OutcomeReason` codes:**
+
+| Outcome | OutcomeReason | Meaning |
+|---|---|---|
+| `Pending` | null, or `Cancelled` | Not processed yet, or the background job was cancelled first |
+| `Created` | null | A vessel was created; `VesselId` is set |
+| `SkippedExisting` | `VesselAlreadyExists` | A matching vessel already exists; `ExistingVesselId` is set |
+| `SkippedNotSelected` | `NotSelected` | The candidate was not in `Paths` |
+| `Failed` | `NotImportable`, `PathMissing`, `CreateFailed` | The candidate's status cannot be imported, the directory disappeared, or vessel creation failed (`OutcomeMessage` has details) |
+
+**Batch statuses:** `Discovered`, `Importing`, `Completed`, `CompletedWithFailures`, `Failed` (the import as a whole failed, or a background job was cancelled).
+
+**Error responses** carry a machine-readable `Data` object, `{"Code": "...", "Path": "..."}`, with one of these codes: `InvalidRequest` (400), `HarborNotSupported` (400), `PathNotAllowed` (403), `DirectoryNotFound` (404), `BatchNotFound` (404), `BatchBusy` (409).
+
+---
+
+#### GET /api/v1/vessels/import/browse
+
+List the browsable subdirectories of a directory on the Admiral host, for building a folder picker. Excluded names, names starting with `.`, and symbolic links are skipped. Without `path`, lists the allowed roots.
+
+**Permission:** TenantAdmin
+
+**Query Parameters:**
+
+| Parameter | Description |
+|---|---|
+| `path` | Optional. Directory to list, **base64url-encoded UTF-8** (`+` to `-`, `/` to `_`, padding optional). A plain, percent-encoded absolute path is also accepted. Omit to list the allowed roots. |
+
+**Response:** `200 OK` - `VesselBrowseResult`
+
+```json
+{
+  "Path": "/Users/alex/Code",
+  "Parent": "/Users/alex",
+  "Entries": [
+    { "Name": "api", "Path": "/Users/alex/Code/api", "IsGitRepository": true, "IsWorktree": false, "HasSubdirectories": true },
+    { "Name": "experiments", "Path": "/Users/alex/Code/experiments", "IsGitRepository": false, "IsWorktree": false, "HasSubdirectories": true }
+  ]
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `Path` | string | The directory listed, or null when the allowed roots were listed |
+| `Parent` | string | Parent directory when it is still inside an allowed root, otherwise null |
+| `Entries[].Name` | string | Directory name |
+| `Entries[].Path` | string | Full path |
+| `Entries[].IsGitRepository` | bool | Contains a `.git` directory |
+| `Entries[].IsWorktree` | bool | Contains a `.git` file (worktree or submodule) |
+| `Entries[].HasSubdirectories` | bool | Has at least one browsable subdirectory |
+
+**Errors:** `400` relative or malformed path; `401`; `403` not a tenant admin, or path outside the allowed roots (`PathNotAllowed`); `404` directory not found (`DirectoryNotFound`).
+
+```bash
+# base64url of /Users/alex/Code
+curl "http://localhost:7890/api/v1/vessels/import/browse?path=L1VzZXJzL2FsZXgvQ29kZQ" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+#### POST /api/v1/vessels/import/discover
+
+Scan directories and roots on the Admiral host for git repositories and persist the result as an import batch. Creates no vessels.
+
+**Permission:** TenantAdmin
+
+**Request Body:** `VesselDiscoveryRequest`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `Directories` | string[] | one of the two | Absolute directories. A repository becomes one candidate; any other directory is scanned like a root. `~` is expanded. |
+| `Roots` | string[] | one of the two | Absolute roots to scan breadth-first. |
+| `MaxDepth` | int | no | Levels below each root to search (1-16, clamped). Default `Import.MaxDepth`. |
+| `HarborId` | string | no | Reserved for Harbor-side discovery; not supported yet (returns 400 `HarborNotSupported`). |
+
+At most 1,000 paths per request.
+
+```json
+{
+  "Directories": ["/Users/alex/Code/api"],
+  "Roots": ["/Users/alex/Code"],
+  "MaxDepth": 4
+}
+```
+
+**Response:** `200 OK` - `VesselImportDiscoverResponse`
+
+```json
+{
+  "BatchId": "vib_mut1abcd_Rp7EygrpeVo",
+  "Batch": {
+    "Id": "vib_mut1abcd_Rp7EygrpeVo",
+    "TenantId": "ten_system",
+    "UserId": "usr_system",
+    "Status": "Discovered",
+    "HarborId": null,
+    "FleetId": null,
+    "JobId": null,
+    "RequestedPathCount": 2,
+    "CandidateCount": 2,
+    "CreatedCount": 0,
+    "SkippedCount": 0,
+    "FailedCount": 0,
+    "CreatedUtc": "2026-10-04T03:54:07.034657Z",
+    "LastUpdateUtc": "2026-10-04T03:54:07.034936Z",
+    "CompletedUtc": null
+  },
+  "Candidates": [
+    {
+      "Id": "vii_mut1abce_xpuNadgd3wH",
+      "TenantId": "ten_system",
+      "BatchId": "vib_mut1abcd_Rp7EygrpeVo",
+      "Path": "/Users/alex/Code/api",
+      "ProposedName": "api",
+      "RemoteUrl": "git@github.com:acme/api.git",
+      "DefaultBranch": "main",
+      "CandidateStatus": "New",
+      "ExistingVesselId": null,
+      "Outcome": "Pending",
+      "OutcomeReason": null,
+      "OutcomeMessage": null,
+      "VesselId": null,
+      "CreatedUtc": "2026-10-04T03:54:07.036208Z",
+      "LastUpdateUtc": "2026-10-04T03:54:07.036524Z"
+    },
+    {
+      "Id": "vii_mut1abcf_ovNmui3k3aq",
+      "TenantId": "ten_system",
+      "BatchId": "vib_mut1abcd_Rp7EygrpeVo",
+      "Path": "/Users/alex/Code/api-feature",
+      "ProposedName": "api-feature",
+      "RemoteUrl": "git@github.com:acme/api.git",
+      "DefaultBranch": "feature/x",
+      "CandidateStatus": "Worktree",
+      "ExistingVesselId": null,
+      "Outcome": "Pending",
+      "OutcomeReason": null,
+      "OutcomeMessage": null,
+      "VesselId": null,
+      "CreatedUtc": "2026-10-04T03:54:07.036292Z",
+      "LastUpdateUtc": "2026-10-04T03:54:07.036531Z"
+    }
+  ],
+  "Truncated": false,
+  "Hints": []
+}
+```
+
+`Hints` is a list of `{"Code", "Message"}`. Codes: `PathNotVisibleToAdmiral` (every requested path is `NotFound`; typical for a containerized Admiral that cannot see the host directories, so mount them or use a Harbor) and `CandidateLimitReached`.
+
+**Errors:** `400` no paths, too many paths, relative path, or `HarborId` set; `401`; `403` not a tenant admin, or a path outside the allowed roots (`PathNotAllowed`).
+
+```bash
+curl -X POST http://localhost:7890/api/v1/vessels/import/discover \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"Roots": ["/Users/alex/Code"]}'
+```
+
+---
+
+#### POST /api/v1/vessels/import
+
+Create vessels for the selected candidates of a discovered batch. Selections at or below `Import.InlineBatchLimit` run inside the request; larger selections run as a background [job](#jobs) and the response returns immediately.
+
+Import is idempotent: a selected path that already has a vessel (by working directory or remote) is recorded as `SkippedExisting`, so re-running an import never creates duplicates. Unselected candidates are recorded as `SkippedNotSelected` (or `SkippedExisting` when already onboarded). A selected `Worktree` candidate is imported; selected `NotFound`, `NotGit`, `AccessDenied`, and `ArmadaManaged` candidates fail with `NotImportable`. Names are re-checked at import time and suffixed again if another vessel took the proposed name in the meantime.
+
+**Permission:** TenantAdmin
+
+**Request Body:** `VesselImportRequest`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `BatchId` | string | yes | Batch ID (`vib_` prefix) from discover |
+| `Paths` | string[] | yes | Candidate paths to import, exactly as returned in `Candidates[].Path`. Must not be empty; every path must belong to the batch. |
+| `FleetId` | string | no | Fleet (`flt_` prefix) to assign the vessels to; must exist in the tenant |
+| `Defaults.DefaultPipelineId` | string | no | Default pipeline (`ppl_` prefix) for the vessels |
+| `Defaults.LandingMode` | string | no | `LocalMerge`, `PullRequest`, `MergeQueue`, or `None` |
+
+```json
+{
+  "BatchId": "vib_mut1abcd_Rp7EygrpeVo",
+  "Paths": ["/Users/alex/Code/api"],
+  "FleetId": "flt_abc123",
+  "Defaults": { "DefaultPipelineId": null, "LandingMode": "PullRequest" }
+}
+```
+
+**Response (inline):** `200 OK` - `VesselImportResponse`
+
+```json
+{
+  "BatchId": "vib_mut1abcd_Rp7EygrpeVo",
+  "JobId": null,
+  "RunsInBackground": false,
+  "Batch": { "Id": "vib_mut1abcd_Rp7EygrpeVo", "Status": "Completed", "FleetId": "flt_abc123", "CreatedCount": 1, "SkippedCount": 1, "FailedCount": 0, "CompletedUtc": "2026-10-04T03:55:10.120000Z", "...": "..." },
+  "Items": [
+    { "Id": "vii_mut1abce_xpuNadgd3wH", "Path": "/Users/alex/Code/api", "CandidateStatus": "New", "Outcome": "Created", "OutcomeReason": null, "VesselId": "vsl_mut1b000_Q2w3e4r5t6y", "...": "..." },
+    { "Id": "vii_mut1abcf_ovNmui3k3aq", "Path": "/Users/alex/Code/api-feature", "CandidateStatus": "Worktree", "Outcome": "SkippedNotSelected", "OutcomeReason": "NotSelected", "...": "..." }
+  ]
+}
+```
+
+**Response (background):** `202 Accepted` - `VesselImportResponse` with `RunsInBackground: true`, `JobId` set, `Batch.Status` = `Importing`, and empty `Items`. Poll `GET /api/v1/vessels/import/batches/{id}` (or `GET /api/v1/jobs/{jobId}`) until the batch leaves `Importing`. The job's `ResultJson` is `{"batchId","createdCount","skippedCount","failedCount"}`; cancelling the job stops the import at the next checkpoint (remaining selected items stay `Pending` with reason `Cancelled`, and the batch becomes `Failed`).
+
+```json
+{
+  "BatchId": "vib_mut1abcd_Rp7EygrpeVo",
+  "JobId": "job_mut1c000_Z9x8c7v6b5n",
+  "RunsInBackground": true,
+  "Batch": { "Id": "vib_mut1abcd_Rp7EygrpeVo", "Status": "Importing", "JobId": "job_mut1c000_Z9x8c7v6b5n", "...": "..." },
+  "Items": []
+}
+```
+
+**Errors:** `400` missing `BatchId` or `Paths`, a path not in the batch, or an unknown fleet (`InvalidRequest`); `401`; `403` not a tenant admin; `404` batch not found in the tenant (`BatchNotFound`); `409` the batch is already being imported (`BatchBusy`).
+
+---
+
+#### POST /api/v1/vessels/import/batches/enumerate
+
+Paged import history for the caller's tenant, newest first by default.
+
+**Permission:** Authenticated
+
+**Request Body:** [EnumerationQuery](#post-enumerate-with-json-body) (optional). Honors `PageNumber`, `PageSize`, `Order`, `CreatedAfter`, `CreatedBefore`, and `Status` (a batch status name).
+
+```json
+{ "PageNumber": 1, "PageSize": 25, "Status": "Completed" }
+```
+
+**Response:** `200 OK` - paginated result of `VesselImportBatch` (see the shape under discover's `Batch`).
+
+---
+
+#### GET /api/v1/vessels/import/batches/{id}
+
+Return a batch with all of its items, ordered by path.
+
+**Permission:** Authenticated
+
+**Path Parameters:**
+| Parameter | Description |
+|---|---|
+| `id` | Batch ID (`vib_` prefix) |
+
+**Response:** `200 OK` - `VesselImportBatchDetail`
+
+```json
+{
+  "Batch": { "Id": "vib_mut1abcd_Rp7EygrpeVo", "Status": "Completed", "CreatedCount": 1, "...": "..." },
+  "Items": [ { "Id": "vii_mut1abce_xpuNadgd3wH", "Path": "/Users/alex/Code/api", "Outcome": "Created", "VesselId": "vsl_mut1b000_Q2w3e4r5t6y", "...": "..." } ]
+}
+```
+
+**Errors:** `401`; `404` batch not found in the caller's tenant (`BatchNotFound`).
 
 ---
 
