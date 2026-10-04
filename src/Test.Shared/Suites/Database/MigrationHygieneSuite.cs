@@ -198,7 +198,7 @@ namespace Test.Shared.Suites.Database
             string normalized = Regex.Replace(statement, @"\s+", " ").Trim();
             if (provider == "Sqlite")
             {
-                // v5: captains.max_parallelism removed (column superseded by per-captain single-mission slots).
+                // v8: captains.max_parallelism removed (column superseded by per-captain single-mission slots).
                 if (normalized.StartsWith("ALTER TABLE captains DROP COLUMN max_parallelism", StringComparison.OrdinalIgnoreCase)) return true;
 
                 // Multi-tenant table rebuild: rename to *_old, recreate with constraints, copy rows, drop *_old.
