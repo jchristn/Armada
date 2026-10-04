@@ -1,26 +1,32 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import type { WebSocketMessage } from '../types/models';
 import { useAuth } from './AuthContext';
+import { ArmadaSocket, buildSocketUrl } from '../lib/armadaSocket';
 
 type MessageHandler = (msg: WebSocketMessage) => void;
 
 interface WebSocketState {
   connected: boolean;
+  /** Increments every time the socket reconnects after a drop; pages refetch when it changes. */
+  reconnectCount: number;
   subscribe: (handler: MessageHandler) => () => void;
   send: (data: unknown) => void;
 }
 
 const WebSocketContext = createContext<WebSocketState | null>(null);
 
-const RECONNECT_DELAY = 3000;
-
+/**
+ * Owns the dashboard's single WebSocket. The connection authenticates with the current session token (sent as
+ * the `token` query parameter), reconnects with backoff, and fans every event out to subscribers.
+ */
 export function WebSocketProvider({ children }: { children: ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, sessionToken } = useAuth();
   const [connected, setConnected] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
+  const [reconnectCount, setReconnectCount] = useState(0);
   const handlersRef = useRef<Set<MessageHandler>>(new Set());
-  const reconnectTimerRef = useRef<number | null>(null);
-  const mountedRef = useRef(true);
+  const socketRef = useRef<ArmadaSocket | null>(null);
+  const tokenRef = useRef<string | null>(sessionToken);
+  tokenRef.current = sessionToken;
 
   const subscribe = useCallback((handler: MessageHandler) => {
     handlersRef.current.add(handler);
@@ -30,79 +36,32 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const send = useCallback((data: unknown) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(data));
-    }
-  }, []);
-
-  const connectWs = useCallback(() => {
-    if (!mountedRef.current) return;
-    try {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const url = `${protocol}//${window.location.host}/ws`;
-      const ws = new WebSocket(url);
-
-      ws.onopen = () => {
-        if (!mountedRef.current) { ws.close(); return; }
-        setConnected(true);
-        ws.send(JSON.stringify({ Route: 'subscribe' }));
-      };
-
-      ws.onmessage = (evt) => {
-        try {
-          const data = JSON.parse(evt.data) as WebSocketMessage;
-          handlersRef.current.forEach(handler => handler(data));
-        } catch {
-          // ignore parse errors
-        }
-      };
-
-      ws.onclose = () => {
-        if (!mountedRef.current) return;
-        setConnected(false);
-        wsRef.current = null;
-        reconnectTimerRef.current = window.setTimeout(() => {
-          if (mountedRef.current) connectWs();
-        }, RECONNECT_DELAY);
-      };
-
-      ws.onerror = () => {
-        setConnected(false);
-      };
-
-      wsRef.current = ws;
-    } catch {
-      setConnected(false);
-      reconnectTimerRef.current = window.setTimeout(() => {
-        if (mountedRef.current) connectWs();
-      }, RECONNECT_DELAY);
-    }
+    socketRef.current?.send(data);
   }, []);
 
   useEffect(() => {
-    mountedRef.current = true;
-
-    if (!isAuthenticated) {
-      return;
-    }
-
-    connectWs();
-
+    if (!isAuthenticated) return undefined;
+    const socket = new ArmadaSocket({
+      url: () => buildSocketUrl(window.location, tokenRef.current),
+      onMessage: (data) => {
+        if (!data || typeof data !== 'object') return;
+        handlersRef.current.forEach((handler) => {
+          try { handler(data as WebSocketMessage); } catch { /* one bad consumer must not break the others */ }
+        });
+      },
+      onStatus: setConnected,
+      onReconnected: () => setReconnectCount((count) => count + 1),
+    });
+    socketRef.current = socket;
+    socket.start();
     return () => {
-      mountedRef.current = false;
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
+      socket.stop();
+      if (socketRef.current === socket) socketRef.current = null;
     };
-  }, [isAuthenticated, connectWs]);
+  }, [isAuthenticated, sessionToken]);
 
   return (
-    <WebSocketContext.Provider value={{ connected, subscribe, send }}>
+    <WebSocketContext.Provider value={{ connected, reconnectCount, subscribe, send }}>
       {children}
     </WebSocketContext.Provider>
   );

@@ -2,7 +2,7 @@
 
 > **Type:** implementation plan (work-tracking). Annotate task status and the progress log as you go.
 >
-> **Status:** Not started
+> **Status:** In progress (Phase 4 dashboard done on feature/ask-ui)
 > **Last updated:** 2026-10-04
 
 Status values: `[ ]` not started, `[~]` in progress, `[x]` done, `[!]` blocked.
@@ -224,11 +224,11 @@ default.
 
 ### Phase 4 -- Dashboard
 
-- [ ] **P4.1** Thread list, routing, thread management (rename, pin, summarize, archive, delete), unread
+- [x] **P4.1** Thread list, routing, thread management (rename, pin, summarize, archive, delete), unread
   and working indicators.
-- [ ] **P4.2** Conversation rendering by message kind; confirm cards; live work cards; work strip.
-- [ ] **P4.3** Composer with quick actions and inline forms; stop; auto-approve toggle.
-- [ ] **P4.4** Scoped WebSocket client with token, reconnect, and refetch.
+- [x] **P4.2** Conversation rendering by message kind; confirm cards; live work cards; work strip.
+- [x] **P4.3** Composer with quick actions and inline forms; stop; auto-approve toggle.
+- [x] **P4.4** Scoped WebSocket client with token, reconnect, and refetch.
 
 ### Phase 5 -- Docs and verification
 
@@ -255,3 +255,50 @@ default.
 | Date | Author | Task(s) | Change |
 |------|--------|---------|--------|
 | 2026-10-04 | (design) | -- | Plan drafted from the user's request and confirmed decisions. |
+| 2026-10-04 | dashboard agent | P4.1-P4.4 | Dashboard built against typed mocks on `feature/ask-ui` (backend not merged yet): two-pane `/ask` + `/ask/:threadId`, thread management, message kinds, confirm and live work cards, work strip, composer with quick actions, token-authenticated socket with backoff and refetch on reconnect. Field-shape choices recorded under "UI assumptions" below. |
+
+## UI assumptions (dashboard, 2026-10-04)
+
+Where the contract above leaves a shape open, the dashboard (`src/Armada.Dashboard`) assumes the following. Every
+assumed field is optional in the UI types (`types/models.ts`) and every endpoint call is one named function in
+`api/client.ts`, so a different backend choice is a one-line change. Request bodies are PascalCase; responses are
+camelized by the client; unknown statuses and kinds render as plain text.
+
+- **AskThread** may carry `ActiveWorkCount` (int, tracked items still `Active`; drives the list's "working" dot until
+  live `ask.work` events arrive) and `ActiveTurnId` (string or null; when present it is authoritative for whether a
+  captain turn is running after a load or reconnect). An empty `Title` renders as "New conversation".
+- **AskThreadDetail** is `{ Thread, TrackedWork[], PendingProposals[] }`; an `AskTrackedWork` may embed its latest
+  `Snapshot`. Items without one are fetched with `GET .../work/{workId}` (up to 20, active first).
+- **AskMessage** embeds `ToolCalls[]` (`CallId`, `ToolName`, `ArgumentsText`, `ResultText`, `Ok`, `ElapsedMs`),
+  `Proposal`, `TrackedWork`, and has `CreatedUtc`. A message whose `Proposal` was already shown on its
+  `ActionProposal` message does not repeat the card on the `ActionResult`.
+- **Messages enumerate** returns `{ Messages, HasMore }`; without `BeforeSequence` it is the newest page. Order within
+  a page does not matter (the UI sorts by `Sequence`). Older pages use `BeforeSequence = <oldest loaded Sequence>`.
+- **AskActionProposal** may carry `ExpiresUtc` (shown on pending cards). A decided status (`Executed`, `Failed`,
+  `Rejected`, `Expired`) is never replaced by a stale `Pending`/`Approved` copy.
+- **AskWorkSnapshot** (flat, all optional except the first four): `TrackedWorkId`, `EntityType`, `EntityId`,
+  `Status`, `State`, `Title`, `Counts` (status -> count), `TotalCount`, `CompletedCount`, `FailedCount`,
+  `Missions[]` (`Id`, `Title`, `Status`, `VesselId`, `Persona`, `PipelineStage`, `CaptainId`, `CaptainName`,
+  `BranchName`, `CheckRunId`, `CheckRunStatus`, `MergeEntryId`, `MergeQueueStatus`, `PrUrl`, `LandingOutcome`,
+  `FailureReason`, `StartedUtc`, `CompletedUtc`), `Targets[]` (`Id`, `VesselId`, `VesselName`, `Status`, `Reason`,
+  `MissionId`, `VoyageId`), `ErrorText`, `StartedUtc`, `CompletedUtc`, `CapturedUtc`. Progress comes from the rows,
+  else `Counts`, else `CompletedCount`/`TotalCount`.
+- **Quick actions** (`GET /ask/quick-actions`) are an array (a `{ QuickActions | Actions | Objects }` wrapper is also
+  accepted) of `{ Name, Command, Title, Description, ToolName, ArgumentsSchema }`. Names the UI gives forms:
+  `dispatch` (tool `dispatch`, args `{ title, vesselId, missions: [{ title, description }], pipelineId? }`),
+  `fleet-action` (tool `run_fleet_action`, args `{ actionId, vesselIds }`), `import` (`ToolName` null; opens the
+  existing import wizard). Any other action runs its `ToolName` with `{}` (`status` -> `status`, `health` ->
+  `evaluate_vessel_health`). When the endpoint fails, the UI uses these five built-ins. `Arguments` are the MCP
+  tool's own camelCase argument names.
+- **New conversations** are created lazily on the first message or quick action from `/ask`, with `{ CaptainId }`
+  only (the server picks the title). `PUT` sends only the changed fields; `CaptainId: null` clears the captain.
+- **WebSocket**: the dashboard connects to `/ws?token=<session token>` and still sends `{ Route: "subscribe" }` on
+  open. Ask event payloads are camelCase (PascalCase is tolerated). `ask.turn.state` is matched case-insensitively and
+  may carry `error`; `ask.work` carries `trackedWorkId`, `snapshot`, and optionally `trackedWork`; `ask.thread`
+  carries the full thread. If `threadId` is missing, the nested entity's `threadId` (or `thread.id`) is used.
+- **Reconciliation**: after each terminal `ask.turn`, approve/reject, and quick action, the UI refetches the newest
+  message page and the thread detail, so a separate `ask.message` for the final reply or result is welcome but not
+  required. After a socket reconnect it refetches the thread list and the open thread.
+- **Read state**: the open thread is marked read (`POST .../read`) when it loads, when the tab becomes visible, and
+  when an `ask.thread` for it reports `UnreadCount > 0`.
+- `GET /ask/threads/{id}` returning 404 shows a "conversation not found" state.
