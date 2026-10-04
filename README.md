@@ -326,11 +326,13 @@ On first boot, Armada seeds a default tenant, user, and credential:
 
 Dashboard at `http://localhost:7890/dashboard`. API access with `Authorization: Bearer default`.
 
+The first dashboard sign-in with the default password asks you to choose a new one; until you do, that session can only change the password. Changing it also disables the `default` bearer token, so switch scripts to a new credential (create one under Server > Credentials; the token is shown once) or to the local API key the CLI uses. While default credentials are in use the dashboard shows a warning banner, and the Admiral refuses to listen on any address other than localhost (set `ARMADA_INITIAL_ADMIN_PASSWORD` before the first start for Docker and other headless installs, or `AllowDefaultCredentialsOnNetwork` to accept the risk explicitly).
+
 The dashboard supports language selection from the login screen and keeps the chosen locale for the authenticated session.
 
-> **Security:** Armada runs agents with auto-approve flags by default (Claude Code: `--dangerously-skip-permissions`, Codex: `--full-auto`, Gemini: `--approval-mode yolo`, Mux: `--yolo`, OpenCode: `--auto`). Agents can read, write, and execute in their worktrees without confirmation. Review the [configuration](#configuration) section before running in sensitive environments.
+### Running Agents Safely
 
-> **Important:** Change the default password in production environments.
+Captains run as CLI agents with your account's permissions, and by default with their auto-approve flags (Claude Code `--dangerously-skip-permissions`, Codex `--full-auto`, Gemini `--approval-mode yolo`, Cursor `--force`, Mux `--yolo`, OpenCode `--auto`), so they can read, write, and execute without confirmation. To run a captain without them, untick **Auto-approve agent tool use** when editing the captain (or pass `autoApprove: false` to the `create_captain` / `update_captain` MCP tools); the runtime then uses its safer mode (for example Claude Code `--permission-mode acceptEdits`, Codex `--sandbox workspace-write`), and shell commands need to be allowed in the runtime's own configuration. Run Armada under a dedicated account, keep it on localhost unless you need remote access, and review `audit.command` events for commands run through workspace exec, fleet actions, and check runs. See [Running agents safely](docs/SECURITY_REVIEW.md#running-agents-safely) and [SECURITY.md](SECURITY.md).
 
 For a deeper walkthrough, see the [Getting Started Guide](GETTING_STARTED.md).
 
@@ -788,7 +790,7 @@ As of v0.3.0, Armada supports multi-tenant authentication with three methods:
 | **Session Token** | `X-Token: <token>` | AES-256-CBC encrypted, 24-hour lifetime. Returned by `POST /api/v1/authenticate` |
 | **API Key** (deprecated) | `X-Api-Key: <key>` | Legacy. Maps to a synthetic admin identity. Migrate to bearer tokens |
 
-The default installation works with `Authorization: Bearer default`.
+The default installation works with `Authorization: Bearer default` until the default admin password is changed, which disables that token.
 
 All operational data is tenant-scoped. The authorization model:
 
@@ -864,7 +866,7 @@ armada mcp remove     # Remove those Armada MCP entries again
 
 From a source checkout, the same installer is `scripts/macos/install-mcp.sh` (or the `linux` / `windows` equivalent); it runs `armada mcp install --yes`.
 
-To add Armada to Claude Code manually instead of using `armada mcp install`, register its default HTTP MCP endpoint (`http://localhost:7891/mcp`, port 7891; no token is needed for local callers, and a token is only checked when one is sent):
+To add Armada to Claude Code manually instead of using `armada mcp install`, register its default HTTP MCP endpoint (`http://localhost:7891/mcp`, port 7891; no token is needed while the Admiral listens on localhost, which is the default, and a token that is sent must be valid):
 
 ```bash
 claude mcp add --transport http --scope user armada http://localhost:7891/mcp
@@ -876,7 +878,7 @@ Or run Armada's MCP server over stdio as a child process (requires the `armada` 
 claude mcp add --scope user armada -- armada mcp stdio
 ```
 
-Check the connection with `claude mcp list`; inside Claude Code, `/mcp` lists Armada's tools. For orchestrator instructions to paste into a `CLAUDE.md`, see [docs/INSTRUCTIONS_FOR_CLAUDE_CODE.md](docs/INSTRUCTIONS_FOR_CLAUDE_CODE.md). You do not need any of this for Ask Armada itself: Claude Code and ApiEndpoint captains used in Ask Armada threads are connected to Armada's MCP tools for every turn through a thread-scoped token.
+When the Admiral listens on another address (for example in Docker), MCP requires a credential: add `--header "Authorization: Bearer <token>"` to the `claude mcp add` command. Check the connection with `claude mcp list`; inside Claude Code, `/mcp` lists Armada's tools. For orchestrator instructions to paste into a `CLAUDE.md`, see [docs/INSTRUCTIONS_FOR_CLAUDE_CODE.md](docs/INSTRUCTIONS_FOR_CLAUDE_CODE.md). You do not need any of this for Ask Armada itself: Claude Code and ApiEndpoint captains used in Ask Armada threads are connected to Armada's MCP tools for every turn through a thread-scoped token.
 
 Drop `--scope user` to add it for the current project only; substitute your port if you changed `McpPort`. On **enterprise-managed** Claude Code this may fail with `not allowed by enterprise policy`. That restriction is set by your IT administrator (Claude Code's `allowedMcpServers` managed setting) and cannot be overridden locally; a Claude Code admin must allow `http://localhost:7891/mcp`. See [docs/MCP_API.md](docs/MCP_API.md#http-transport) for the exact managed-settings snippet and alternatives.
 
@@ -1020,7 +1022,6 @@ Representative usage:
 ```bash
 armada go "Add input validation to the signup form"   # quick dispatch, infers repo from CWD
 armada watch                                            # live status dashboard
-armada ask "any failures across the fleet?"            # conversational query
 armada mission show msn_abc123 --help                  # per-command help
 armada captain add claude-2 --runtime claude           # register another agent
 ```
@@ -1398,6 +1399,20 @@ Key changes:
 - Opt-in OpenTelemetry export (OTLP collector, in-process Prometheus scrape, and/or Loki); the Docker stack ships Prometheus, Loki, and Grafana with an "Armada Reliability" dashboard
 - Shared version metadata, Postman examples, and current-version API docs are updated for `v0.9.0`
 - Versioned migration handoff scripts are available in `migrations/` for `v0.8.0 -> v0.9.0`
+
+### v0.9.x to the next release (security hardening)
+
+These changes can affect existing installs and scripts:
+
+- **Default credentials:** after the default admin password is changed, `Authorization: Bearer default` stops working. The first dashboard sign-in with the default password requires a new password. The Admiral refuses to start on a non-loopback hostname while default credentials are in use unless `AllowDefaultCredentialsOnNetwork` is true; Docker compose requires `ARMADA_INITIAL_ADMIN_PASSWORD`.
+- **MCP:** unauthenticated MCP calls are accepted only when the Admiral listens on localhost (`Mcp.AllowUnauthenticatedLoopback`, default true). Remote MCP clients must send a credential. `backup`, `restore`, and `stop_server` need an admin credential even locally.
+- **Server control:** `POST /api/v1/server/stop`, `restart`, `rebuild`, and `rollback` always require an admin credential; `RequireAuthForShutdown` is ignored. The `armada` CLI sends the local API key.
+- **Self-registration:** `AllowSelfRegistration` now defaults to `false` for new settings files.
+- **Credentials:** bearer tokens are returned only when a credential is created; list and read return them masked.
+- **Permissions:** check-run writes and Harbor probes need a tenant admin; `POST .../enumerate` routes need only authentication. See [docs/SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md#permission-changes-in-w1).
+- **Harbor:** a Harbor connecting from another host must send an Armada credential as its access key.
+- **Removed:** `POST /api/v1/ask` and `armada ask` (use Ask Armada threads).
+- **Docker:** containers run as non-root (UID 1654 for the Admiral and proxy, 101 for the dashboard, which now listens on 8080). Make bind-mounted `db` and `logs` directories writable by UID 1654.
 
 ## Issues and Discussions
 

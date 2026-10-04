@@ -236,7 +236,7 @@ To register Armada with Claude Code manually, add it as an HTTP MCP server:
 claude mcp add --transport http --scope user armada http://localhost:7891/mcp
 ```
 
-Drop `--scope user` to add it for the current project only. The MCP server is unauthenticated on localhost, so no token or header is required; if you changed `McpPort`, substitute your port. Armada's `armada mcp install` (or `scripts/*/install-mcp`) configures this automatically for Claude Code and the other supported runtimes.
+Drop `--scope user` to add it for the current project only. While the Admiral listens on localhost (the default), no token or header is required; if you changed `McpPort`, substitute your port. When the Admiral listens on any other address (for example in Docker), every MCP call needs a credential: add `--header "Authorization: Bearer <token>"` (or `X-Api-Key`). Armada's `armada mcp install` (or `scripts/*/install-mcp`) configures this automatically for Claude Code and the other supported runtimes.
 
 **Enterprise-managed Claude Code.** If the add is rejected with `Cannot add MCP server 'armada': not allowed by enterprise policy`, your organization's Claude Code managed settings restrict which MCP servers may be added (via `allowedMcpServers` / `managed-mcp.json`). This is enforced by IT and **cannot** be overridden by a user, a project `.mcp.json`, or `--mcp-config`. Ask your Claude Code administrator to allow the Armada endpoint by adding it to `allowedMcpServers` in the managed settings — on Windows `C:\Program Files\ClaudeCode\managed-settings.json` (or, higher priority, the Claude.ai admin console at Admin Settings > Claude Code > Managed settings):
 
@@ -269,9 +269,31 @@ The MCP port can be configured in the Armada settings file. The hostname is shar
 
 ## Authentication
 
-The MCP server accepts an **optional** credential and scopes tool calls to the authenticated caller. Present a credential with the same headers the REST API accepts - `Authorization: Bearer <token>`, `X-Token: <session token>`, or `X-Api-Key: <api key>`. When a valid credential is presented, the caller's tenant/user/role identity flows into every tool handler and the tools are scoped **per-user exactly like the REST API** (a regular user sees only their own owned records and only tenant-wide plus their own configuration objects; a tenant/global admin sees the tenant/system). When no credential is presented, the request still succeeds and runs under the default tenant-admin context, so existing local/stdio workflows keep working unchanged.
+MCP is **authenticated by default** (Decision D2 in V1_READINESS.md). Present a credential with the same headers the
+REST API accepts: `Authorization: Bearer <token>`, `X-Token: <session token>`, or `X-Api-Key: <api key>`.
 
-> **Design:** authentication is additive, not mandatory. The transport does not reject anonymous calls (the local orchestrating agent is assumed trusted); it simply uses the caller's identity for scoping when one is supplied. Under the hood, `McpHttpServer.AuthenticationHandler` resolves the credential to an identity and Voltaic publishes it on the ambient `RpcCallContext`, which the tool handlers read via `McpToolHelpers.ResolveCallerContext()`. See [REST_API.md - Data Scoping](REST_API.md#data-scoping-who-sees-and-edits-what) for the full scoping model.
+- A presented credential must be valid; an invalid or expired one gets HTTP `401` (it no longer falls back to an
+  anonymous caller).
+- A request **without** a credential is accepted only when all of these hold: `Mcp.AllowUnauthenticatedLoopback` is
+  true (the default), the MCP listener's hostname (`Rest.Hostname`) is a loopback name (`localhost`, `127.0.0.1`,
+  `::1`), and the caller connects from loopback. Such a call runs as the default tenant's tenant admin, which is
+  what the local Claude Code setup in the README relies on. Otherwise it gets `401` with a `WWW-Authenticate` header.
+- With a valid credential, the caller's tenant, user, and role flow into every tool handler through Voltaic's ambient
+  `RpcCallContext` (`McpToolHelpers.ResolveCallerContext()`).
+
+### Tool permissions
+
+Every tool declares a requirement in `Armada.Core/Authorization/McpToolAuthorizationRegistry.cs`, checked on every
+call against the caller (including Ask Armada proposals executed after approval):
+
+| Level | Tools |
+|---|---|
+| Authenticated | Reads (`status`, `enumerate`, `get_*`, `list_*`, `mission_status`, `voyage_status`, logs, diffs, `inbox`, `vessel_health`, `search_memory`, `token_usage_summary`, ...) and writes to caller-owned resources (memories, model endpoints, harbors) |
+| TenantAdmin | Every other write or execution (dispatch, captains, missions, voyages, docks, merge queue, signals, events, objectives, backlog, personas, pipelines, prompt templates, playbooks, releases, deployments, runbooks, check runs, fleet actions, vessel import, vessel health) |
+| AdminOnly | `backup`, `restore`, `stop_server` (a credential is required even on loopback; use `X-Api-Key` from `settings.json`) |
+
+A denied call returns a tool error whose message names the required level. The full per-tool list is in
+[SECURITY_REVIEW.md](SECURITY_REVIEW.md#mcp-tools); a test fails when a registered tool has no declaration.
 
 ### MCP Authentication Scope
 
@@ -340,7 +362,7 @@ Common error responses across tools:
 
 MCP tools do not return HTTP status codes (MCP uses JSON-RPC, not HTTP). The presence of an `Error` field in the response indicates failure. On success, the response contains the requested data (entity object, status, list, etc.) without an `Error` field.
 
-The stdio transport has no network attack surface -- the only caller is the parent process that spawned Armada -- so it runs anonymously under the default tenant-admin context. The HTTP MCP transport accepts an optional credential and scopes tool calls to the authenticated caller when one is supplied (see [Authentication](#authentication)); it should still be bound to `localhost` or protected by a firewall in production.
+The stdio transport has no network attack surface -- the only caller is the parent process that spawned Armada -- so it runs anonymously under the default tenant-admin context. The HTTP MCP transport requires a credential except for loopback callers of a loopback-bound listener (see [Authentication](#authentication)).
 
 ---
 
@@ -606,7 +628,7 @@ No parameters required.
 { "Status": "shutting_down" }
 ```
 
-> **Note:** Only available when the server provides a stop callback (HTTP transport, not stdio).
+> **Note:** Only available when the server provides a stop callback (HTTP transport, not stdio). Requires an admin credential (for example `X-Api-Key`), even on loopback.
 
 ---
 
@@ -2487,7 +2509,8 @@ Register a new captain (AI agent).
     "muxTemperature": { "type": "number", "description": "Optional Mux temperature override" },
     "muxMaxTokens": { "type": "integer", "description": "Optional Mux max tokens override" },
     "muxSystemPromptPath": { "type": "string", "description": "Optional Mux system prompt file path" },
-    "muxApprovalPolicy": { "type": "string", "description": "Optional Mux approval policy override" }
+    "muxApprovalPolicy": { "type": "string", "description": "Optional Mux approval policy override" },
+    "autoApprove": { "type": "boolean", "description": "Whether the CLI captain runs with its auto-approve or permission-bypass flag (default true). False runs it without auto-approve where the runtime supports it." }
   },
   "required": ["name"]
 }

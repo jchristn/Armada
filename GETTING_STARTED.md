@@ -315,7 +315,7 @@ Log in with the default credentials:
 | Email | `admin@armada` |
 | Password | `password` |
 
-For API access from scripts or curl, use `Authorization: Bearer default`.
+Set `ARMADA_INITIAL_ADMIN_PASSWORD` (8+ characters) before `docker compose up`: the Admiral listens on all interfaces in the container and refuses to start while the default password is in use. Sign in with `admin@armada` and that password; the `default` bearer token is disabled. Create a credential for scripts under Server > Credentials (the token is shown once).
 
 Data is persisted in `docker/armada/db/`. To stop: `docker compose down`. To reset all data: run `docker/factory/reset.sh` (or `reset.bat` on Windows).
 
@@ -331,7 +331,7 @@ As of v0.3.0, all REST API endpoints require authentication. The default bearer 
 curl -H "Authorization: Bearer default" http://localhost:7890/api/v1/status
 ```
 
-The dashboard login screen accepts the default email (`admin@armada`) and password (`password`). After login, the dashboard uses encrypted session tokens automatically.
+The dashboard login screen accepts the default email (`admin@armada`) and password (`password`); the first sign-in asks for a new password (`PUT /api/v1/account/password`), which also disables the `default` bearer token. After login, the dashboard uses encrypted session tokens automatically. While default credentials are in use the Admiral only listens on localhost (see [SECURITY.md](SECURITY.md)).
 
 Creating a tenant through the admin UI/API also seeds a protected `admin@armada` user and default credential for that tenant.
 

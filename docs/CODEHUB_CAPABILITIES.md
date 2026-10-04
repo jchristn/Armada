@@ -823,10 +823,10 @@ These items apply to every phase. Tick them off per phase in the progress log.
 - [x] **IDs.** `vib_`, `vii_`, `fac_`, `far_`, `fat_`, `vhl_`, `vhf_`, `vdp_` and
   `vho_` are added to `Constants.cs`, with no collisions with existing prefixes
   (checked against `Constants.cs` on 2026-10-03).
-- [x] **AUTHENTICATION.** Armada authorizes by path through `PermissionLevel` in
-  `AuthorizationConfig`, not with AUTHENTICATION.md's `(ResourceType, Operation)`
-  model. These features follow Armada's existing model; that is a recorded
-  nonconformance and is not fixed here. Filesystem browse and discover, and
+- [x] **AUTHENTICATION.** Every route and MCP tool now declares an explicit
+  `(ResourceType, Operation)` requirement mapped to a `PermissionLevel` in
+  `RouteAuthorizationRegistry` / `McpToolAuthorizationRegistry`, checked centrally
+  (V1_READINESS W1.2; the earlier path-prefix nonconformance is resolved). Filesystem browse and discover, and
   Command-kind actions, are TenantAdmin because they read the host filesystem or
   execute code on it. Authorization denials on these routes are logged with the
   request ID.
