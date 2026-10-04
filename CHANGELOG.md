@@ -6,6 +6,12 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Terminal UI: Ask Armada and approvals
+- Ask Armada in the TUI: conversation list, conversation header, streaming transcript with confirm cards (approve with `a`, reject with `r`) and live work cards, a composer with `/` quick actions and inline Dispatch and Fleet action forms, the Ask dock (Ctrl+J) on every screen, and "Ask about this" (Alt+A).
+- Approvals center (Ctrl+A): Ask proposals, mission reviews, deployment approvals, failed landings, and stalled captains with single-key decisions using the dashboard's calls and confirmations, a header count, and actionable toasts.
+- TUI login handles the server's forced default-password change and warns while default credentials are in use.
+- Fixed: `Armada.Client` serialized raw JSON request values as an object, so quick-action arguments sent from the TUI did not reach the server correctly.
+
 ### Terminal UI (foundation)
 - Added `Armada.Client`, a typed .NET client covering every dashboard API function, with typed errors (status, code, request id), paging helpers, and a WebSocket client with typed events and automatic reconnect.
 - Added `armada tui`, the Armada terminal UI hosted in Helm, with server profiles and tokens stored in the OS keychain (0600 file fallback): email/tenant/password and API key login, a responsive shell with every dashboard route, a command palette that runs commands and jumps to entity IDs, help overlay, menu bar, notification center with actionable toasts, Dark/Light/High contrast/Auto themes, and the dashboard's languages. Screens arrive in later milestones; see `docs/TUI.md` and `TUI_APP_PLAN.md`.
