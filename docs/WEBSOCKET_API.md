@@ -24,6 +24,7 @@ If the selected deployment disconnects or the tunnel drops, the proxy closes the
 ## Table of Contents
 
 - [Connection](#connection)
+  - [Authentication](#authentication)
   - [URL Construction](#url-construction)
   - [Port Discovery](#port-discovery)
   - [SSL/TLS](#ssltls)
@@ -75,6 +76,37 @@ If the selected deployment disconnects or the tunnel drops, the proxy closes the
 ---
 
 ## Connection
+
+### Authentication
+
+Every `/ws` upgrade must be authenticated; an upgrade without a valid credential is refused with HTTP `401` before the
+handshake completes. The server accepts the same credentials as the REST API, in this order:
+
+1. REST headers on the upgrade request: `Authorization: Bearer <credential token>`, `X-Token: <session token>`, or
+   `X-Api-Key: <api key>` (non-browser clients).
+2. The `token` query parameter: `ws://localhost:7890/ws?token=<token>`. The value may be a session token (what the
+   dashboard holds after login), a bearer credential token, or the API key. Percent-encode it (session tokens contain
+   `+`, `/`, and `=`). **This is the recommended form for browsers.**
+3. The `Sec-WebSocket-Protocol` header: one protocol entry of the form `armada-token.<base64url(token)>` (an `armada`
+   marker entry is ignored; any other entry is also tried as a raw token). Note that the Admiral's WebSocket server
+   (Watson 7.2) does not echo a selected subprotocol in its `101` response, and browsers fail a connection that offered
+   subprotocols but received none, so browsers should use the query parameter; .NET `ClientWebSocket` and similar
+   clients accept the protocol form.
+
+Thread-scoped Ask Armada tokens (minted for a captain's MCP connection) are refused on `/ws` and on REST.
+
+Each socket keeps the identity that authenticated it (tenant, user, admin flags) and receives only what that identity is
+entitled to:
+
+| Event family | Delivered to |
+|---|---|
+| Entity changes (`mission.changed`, `voyage.changed`, `captain.changed`, `check-run.changed`, `objective.changed`, `deployment.*`, `incident.changed`, `runbook-execution.changed`, `approval-needed`, planning and objective-refinement session events, generic events) | Sockets of the entity's tenant. Global admins may opt in to every tenant with `{ "Route": "subscribe", "AllTenants": true }`. Events whose tenant cannot be resolved go to global admins only. |
+| Ask Armada events (`ask.*`) | Only the sockets of the thread owner (same tenant and user). The all-tenants opt-in does not apply. |
+
+Commands (`Route: "command"`) require a global administrator (see [command](#command)).
+
+Through `Armada.Proxy`, the browser's query string and `Sec-WebSocket-Protocol` header are forwarded to the deployment's
+local `/ws` upgrade, so the same token authenticates the relayed socket.
 
 ### URL Construction
 
@@ -161,6 +193,9 @@ Subscribe to real-time event broadcasts. Upon connection with this route, the se
 }
 ```
 
+A global administrator may add `"AllTenants": true` to receive entity events of every tenant (the snapshot echoes
+`"allTenants": true`). The flag is ignored for everyone else. Ask Armada events stay owner-only either way.
+
 **Server responds with:** a [`status.snapshot`](#statussnapshot) message.
 
 After the initial snapshot, the client will receive all broadcast events ([`mission.changed`](#missionchanged), [`voyage.changed`](#voyagechanged), [`captain.changed`](#captainchanged), [`objective.changed`](#objectivechanged), [`objective-refinement-session.changed`](#objective-refinement-sessionchanged), [`objective-refinement-session.message.created`](#objective-refinement-sessionmessagecreated), [`objective-refinement-session.message.updated`](#objective-refinement-sessionmessageupdated), [`objective-refinement-session.summary.created`](#objective-refinement-sessionsummarycreated), [`objective-refinement-session.applied`](#objective-refinement-sessionapplied), [`check-run.changed`](#check-runchanged), [`deployment.changed`](#deploymentchanged), [`deployment.progress`](#deploymentprogress), [`environment.health`](#environmenthealth), [`approval-needed`](#approval-needed), and [generic events](#generic-events)) as they occur.
@@ -183,13 +218,19 @@ Send a command to the Admiral for execution. The `action` field determines which
 
 **Server responds with:** a `command.result` or `command.error` message.
 
+**Authorization:** WebSocket commands operate outside tenant scope (they read and write records by id across every
+tenant), so every command, reads included, requires a **global administrator** (the API key identity or an admin user).
+Tenant admins and regular users receive `command.error` with `Forbidden: WebSocket commands require a global
+administrator. Use the REST API, which is tenant-scoped.` and use the REST API instead. `stop_server`, `backup`, and
+`restore` are therefore admin-only.
+
 See [Command Actions](#command-actions) for the current operational action set. This WebSocket surface focuses on real-time monitoring and core orchestration commands; newer REST-only helpers such as Workspace, planning sessions, request history, GitHub objective import, GitHub Actions sync, GitHub PR evidence, and runtime discovery remain HTTP-only.
 
 ---
 
 ## Server-Pushed Events
 
-These events are broadcast to **all connected clients** whenever state changes occur in the Armada system. Clients do not need to request these Ã¢â‚¬â€ they are pushed automatically after subscribing.
+These events are delivered to the connected clients **entitled to them** (see [Authentication](#authentication): the entity's tenant, plus opted-in global admins) whenever state changes occur in the Armada system. Clients do not need to request these Ã¢â‚¬â€ they are pushed automatically after subscribing.
 
 ### status.snapshot
 
@@ -636,6 +677,37 @@ Broadcast when a mission enters review and awaits an explicit approve or deny de
 | `data.voyageId` | string \| null | Linked voyage ID |
 | `data.reviewRequestedUtc` | string \| null | Review request timestamp |
 | `timestamp` | string | ISO 8601 UTC timestamp |
+
+---
+
+### Ask Armada thread events
+
+Sent only to the sockets of the thread's owner. Every payload carries `threadId`. Field names are camelCase.
+
+| Type | Payload | When |
+|---|---|---|
+| `ask.turn` | `{ threadId, turnId, state, messageId, error? }` | `state` is `started`, then `completed`, `failed`, or `cancelled` (`messageId` is the persisted reply or error message, null when cancelled) |
+| `ask.chunk` | `{ threadId, turnId, delta }` | Streamed reply text of a running turn |
+| `ask.thinking` | `{ threadId, turnId, delta }` | Streamed reasoning (when `ShowThinking`) |
+| `ask.tool` | `{ threadId, turnId, phase, id, name, arguments, ok, elapsedMs, result }` | A tool call started (`phase: "started"`) or completed (`"completed"`) |
+| `ask.message` | `{ threadId, message }` | Any persisted message (user, reply, proposal card, action result, work update, summary, error) with `toolCalls`, `proposal`, and `trackedWork` embedded; also re-sent for a confirm card when its proposal is decided |
+| `ask.proposal` | `{ threadId, proposal }` | A proposal was created or changed status (`expiresUtc` set while pending) |
+| `ask.work` | `{ threadId, trackedWorkId, snapshot, trackedWork }` | The snapshot of tracked work changed (see `AskWorkSnapshot` in REST_API.md) |
+| `ask.thread` | `{ threadId, thread }` | Title, counters (`messageCount`, `unreadCount`), `activeWorkCount`, or `activeTurnId` changed |
+
+The direct captain chat endpoint (`POST /api/v1/captains/{id}/chat` with a `TurnId`) also streams `ask.chunk`,
+`ask.thinking`, and `ask.tool` (without `threadId`) to the caller's own sockets only.
+
+```json
+{
+  "type": "ask.proposal",
+  "data": {
+    "threadId": "ath_muu5...",
+    "proposal": { "id": "aap_muu5...", "toolName": "dispatch", "status": "Pending", "summaryText": "Dispatch voyage \"Fix flaky test\" to vessel vsl_... with 1 mission(s)", "expiresUtc": "2026-10-04T19:00:00Z" }
+  },
+  "timestamp": "2026-10-04T18:00:00.000Z"
+}
+```
 
 ---
 

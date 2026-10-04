@@ -68,6 +68,11 @@ namespace Armada.Core.Database.Mysql
             VesselImportBatches = new VesselImportBatchMethods(_ConnectionString);
             VesselImportItems = new VesselImportItemMethods(_ConnectionString);
             VesselImportFleetRecommendations = new VesselImportFleetRecommendationMethods(_ConnectionString);
+            AskThreads = new AskThreadMethods(_ConnectionString);
+            AskMessages = new AskMessageMethods(_ConnectionString);
+            AskMessageToolCalls = new AskMessageToolCallMethods(_ConnectionString);
+            AskActionProposals = new AskActionProposalMethods(_ConnectionString);
+            AskTrackedWork = new AskTrackedWorkMethods(_ConnectionString);
             FleetActions = new FleetActionMethods(_ConnectionString);
             FleetActionRuns = new FleetActionRunMethods(_ConnectionString);
             FleetActionRunTargets = new FleetActionRunTargetMethods(_ConnectionString);
@@ -659,6 +664,11 @@ namespace Armada.Core.Database.Mysql
                     74,
                     "Add background discovery and fleet categorization columns to vessel_import_batches, a selected flag to vessel_import_items, plus vessel_import_fleet_recommendations and vessel_import_fleet_recommendation_vessels tables",
                     TableQueries.MigrationV74Statements
+                ),
+                new SchemaMigration(
+                    75,
+                    "Add ask_threads, ask_messages, ask_message_tool_calls, ask_action_proposals, and ask_tracked_work tables for Ask Armada conversation threads",
+                    TableQueries.MigrationV75Statements
                 )
             };
         }

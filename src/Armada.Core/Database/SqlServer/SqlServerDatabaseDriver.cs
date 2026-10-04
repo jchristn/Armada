@@ -72,6 +72,11 @@ namespace Armada.Core.Database.SqlServer
             VesselImportBatches = new VesselImportBatchMethods(this, _Settings, _Logging);
             VesselImportItems = new VesselImportItemMethods(this, _Settings, _Logging);
             VesselImportFleetRecommendations = new VesselImportFleetRecommendationMethods(this, _Settings, _Logging);
+            AskThreads = new AskThreadMethods(this, _Settings, _Logging);
+            AskMessages = new AskMessageMethods(this, _Settings, _Logging);
+            AskMessageToolCalls = new AskMessageToolCallMethods(this, _Settings, _Logging);
+            AskActionProposals = new AskActionProposalMethods(this, _Settings, _Logging);
+            AskTrackedWork = new AskTrackedWorkMethods(this, _Settings, _Logging);
             FleetActions = new FleetActionMethods(this, _Settings, _Logging);
             FleetActionRuns = new FleetActionRunMethods(this, _Settings, _Logging);
             FleetActionRunTargets = new FleetActionRunTargetMethods(this, _Settings, _Logging);

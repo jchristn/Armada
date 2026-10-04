@@ -1411,7 +1411,122 @@ namespace Armada.Core.Database.SqlServer.Queries
                     );",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_vessel_import_fleet_rec_vessels_tenant_batch') CREATE INDEX idx_vessel_import_fleet_rec_vessels_tenant_batch ON vessel_import_fleet_recommendation_vessels(tenant_id, batch_id);",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_vessel_import_fleet_rec_vessels_vessel') CREATE INDEX idx_vessel_import_fleet_rec_vessels_vessel ON vessel_import_fleet_recommendation_vessels(vessel_id);"
+                ),
+                new SchemaMigration(
+                    75,
+                    "Add ask_threads, ask_messages, ask_message_tool_calls, ask_action_proposals, and ask_tracked_work tables for Ask Armada conversation threads",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'ask_threads')
+                    CREATE TABLE ask_threads (
+                        id NVARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id NVARCHAR(64) NOT NULL,
+                        user_id NVARCHAR(64) NOT NULL,
+                        title NVARCHAR(256) NOT NULL,
+                        captain_id NVARCHAR(64),
+                        auto_approve BIT NOT NULL CONSTRAINT DF_ask_threads_auto_approve DEFAULT 0,
+                        summary_text NVARCHAR(MAX),
+                        summary_utc DATETIME2,
+                        pinned BIT NOT NULL CONSTRAINT DF_ask_threads_pinned DEFAULT 0,
+                        archived BIT NOT NULL CONSTRAINT DF_ask_threads_archived DEFAULT 0,
+                        last_message_utc DATETIME2,
+                        message_count INT NOT NULL CONSTRAINT DF_ask_threads_message_count DEFAULT 0,
+                        unread_count INT NOT NULL CONSTRAINT DF_ask_threads_unread_count DEFAULT 0,
+                        created_utc DATETIME2 NOT NULL,
+                        last_update_utc DATETIME2 NOT NULL
+                    );",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'ask_messages')
+                    CREATE TABLE ask_messages (
+                        id NVARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id NVARCHAR(64) NOT NULL,
+                        user_id NVARCHAR(64),
+                        thread_id NVARCHAR(64) NOT NULL,
+                        sequence INT NOT NULL,
+                        role NVARCHAR(64) NOT NULL,
+                        kind NVARCHAR(64) NOT NULL,
+                        content_text NVARCHAR(MAX) NOT NULL,
+                        thinking_text NVARCHAR(MAX),
+                        proposal_id NVARCHAR(64),
+                        tracked_work_id NVARCHAR(64),
+                        captain_id NVARCHAR(64),
+                        duration_ms BIGINT,
+                        created_utc DATETIME2 NOT NULL,
+                        last_update_utc DATETIME2 NOT NULL,
+                        CONSTRAINT FK_ask_messages_thread_id FOREIGN KEY (thread_id) REFERENCES ask_threads(id) ON DELETE CASCADE
+                    );",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'ask_message_tool_calls')
+                    CREATE TABLE ask_message_tool_calls (
+                        id NVARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id NVARCHAR(64) NOT NULL,
+                        user_id NVARCHAR(64),
+                        message_id NVARCHAR(64) NOT NULL,
+                        thread_id NVARCHAR(64) NOT NULL,
+                        call_id NVARCHAR(256),
+                        tool_name NVARCHAR(256) NOT NULL,
+                        arguments_text NVARCHAR(MAX),
+                        result_text NVARCHAR(MAX),
+                        ok BIT,
+                        elapsed_ms BIGINT,
+                        created_utc DATETIME2 NOT NULL,
+                        last_update_utc DATETIME2 NOT NULL,
+                        CONSTRAINT FK_ask_message_tool_calls_message_id FOREIGN KEY (message_id) REFERENCES ask_messages(id) ON DELETE CASCADE
+                    );",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'ask_action_proposals')
+                    CREATE TABLE ask_action_proposals (
+                        id NVARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id NVARCHAR(64) NOT NULL,
+                        user_id NVARCHAR(64),
+                        thread_id NVARCHAR(64) NOT NULL,
+                        message_id NVARCHAR(64),
+                        tool_name NVARCHAR(256) NOT NULL,
+                        arguments_text NVARCHAR(MAX) NOT NULL,
+                        summary_text NVARCHAR(MAX) NOT NULL,
+                        source NVARCHAR(64) NOT NULL,
+                        status NVARCHAR(64) NOT NULL,
+                        result_text NVARCHAR(MAX),
+                        error_text NVARCHAR(MAX),
+                        decided_by_user_id NVARCHAR(64),
+                        decided_utc DATETIME2,
+                        executed_utc DATETIME2,
+                        created_utc DATETIME2 NOT NULL,
+                        last_update_utc DATETIME2 NOT NULL,
+                        CONSTRAINT FK_ask_action_proposals_thread_id FOREIGN KEY (thread_id) REFERENCES ask_threads(id) ON DELETE CASCADE
+                    );",
+                    @"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'ask_tracked_work')
+                    CREATE TABLE ask_tracked_work (
+                        id NVARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id NVARCHAR(64) NOT NULL,
+                        user_id NVARCHAR(64),
+                        thread_id NVARCHAR(64) NOT NULL,
+                        entity_type NVARCHAR(64) NOT NULL,
+                        entity_id NVARCHAR(64) NOT NULL,
+                        title NVARCHAR(256) NOT NULL,
+                        status NVARCHAR(64),
+                        state NVARCHAR(64) NOT NULL,
+                        snapshot_hash NVARCHAR(64),
+                        last_change_utc DATETIME2,
+                        completed_utc DATETIME2,
+                        created_utc DATETIME2 NOT NULL,
+                        last_update_utc DATETIME2 NOT NULL,
+                        CONSTRAINT FK_ask_tracked_work_thread_id FOREIGN KEY (thread_id) REFERENCES ask_threads(id) ON DELETE CASCADE
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ask_threads_owner') CREATE INDEX idx_ask_threads_owner ON ask_threads(tenant_id, user_id, archived, pinned);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ask_threads_tenant_last_message') CREATE INDEX idx_ask_threads_tenant_last_message ON ask_threads(tenant_id, last_message_utc);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ask_messages_thread_sequence') CREATE UNIQUE INDEX idx_ask_messages_thread_sequence ON ask_messages(thread_id, sequence);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ask_messages_tenant_thread') CREATE INDEX idx_ask_messages_tenant_thread ON ask_messages(tenant_id, thread_id);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ask_message_tool_calls_message') CREATE INDEX idx_ask_message_tool_calls_message ON ask_message_tool_calls(tenant_id, message_id);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ask_message_tool_calls_thread') CREATE INDEX idx_ask_message_tool_calls_thread ON ask_message_tool_calls(tenant_id, thread_id);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ask_action_proposals_thread_status') CREATE INDEX idx_ask_action_proposals_thread_status ON ask_action_proposals(tenant_id, thread_id, status);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ask_action_proposals_status_created') CREATE INDEX idx_ask_action_proposals_status_created ON ask_action_proposals(status, created_utc);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ask_tracked_work_thread_entity') CREATE UNIQUE INDEX idx_ask_tracked_work_thread_entity ON ask_tracked_work(thread_id, entity_type, entity_id);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ask_tracked_work_tenant_thread') CREATE INDEX idx_ask_tracked_work_tenant_thread ON ask_tracked_work(tenant_id, thread_id);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ask_tracked_work_state') CREATE INDEX idx_ask_tracked_work_state ON ask_tracked_work(state);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ask_tracked_work_entity') CREATE INDEX idx_ask_tracked_work_entity ON ask_tracked_work(entity_type, entity_id);"
                 )
+
             };
         }
 

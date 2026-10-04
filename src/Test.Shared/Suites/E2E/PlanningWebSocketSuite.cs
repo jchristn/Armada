@@ -205,9 +205,7 @@ namespace Test.Shared.Suites.E2E
 
         private static async Task<ClientWebSocket> ConnectAsync(int restPort)
         {
-            ClientWebSocket ws = new ClientWebSocket();
-            await ws.ConnectAsync(new Uri("ws://127.0.0.1:" + restPort + "/ws"), CancellationToken.None).ConfigureAwait(false);
-            return ws;
+            return await E2EServerFixture.ConnectAuthenticatedWebSocketAsync(restPort).ConfigureAwait(false);
         }
 
         private static async Task SubscribeAsync(ClientWebSocket ws)

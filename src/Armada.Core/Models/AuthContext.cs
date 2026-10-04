@@ -48,6 +48,13 @@ namespace Armada.Core.Models
         /// </summary>
         public string? PrincipalDisplay { get; set; } = null;
 
+        /// <summary>
+        /// Ask Armada thread a session token is bound to, or null. A thread-scoped token is minted for a thread's captain
+        /// turn and is accepted only by the MCP server, where tool calls made with it go through the thread's approval
+        /// gate. REST and WebSocket authentication reject thread-scoped tokens.
+        /// </summary>
+        public string? AskThreadId { get; set; } = null;
+
         #endregion
 
         #region Constructors-and-Factories

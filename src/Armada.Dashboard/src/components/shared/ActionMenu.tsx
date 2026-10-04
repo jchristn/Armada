@@ -12,9 +12,11 @@ export interface ActionMenuItem {
 interface ActionMenuProps {
   items: ActionMenuItem[];
   id: string;
+  /** Accessible name and tooltip for the trigger (already localized); defaults to "Actions". */
+  triggerLabel?: string;
 }
 
-export default function ActionMenu({ items, id }: ActionMenuProps) {
+export default function ActionMenu({ items, id, triggerLabel }: ActionMenuProps) {
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const [dropUp, setDropUp] = useState(false);
@@ -100,7 +102,7 @@ export default function ActionMenu({ items, id }: ActionMenuProps) {
 
   return (
     <div className="action-menu-wrap" ref={wrapRef} data-menu-id={id}>
-      <button className="action-menu-btn" onClick={handleToggle} title={t('Actions')}>
+      <button type="button" className="action-menu-btn" onClick={handleToggle} title={triggerLabel ?? t('Actions')} aria-label={triggerLabel ?? t('Actions')} aria-haspopup="menu" aria-expanded={open}>
         &#8942;
       </button>
       {open && createPortal(

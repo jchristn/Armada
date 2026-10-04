@@ -24,8 +24,8 @@ namespace Armada.Server.WebSocket
         private readonly IGitService? _Git;
         private readonly Action? _OnStop;
         private readonly JsonSerializerOptions _JsonOptions;
-        private readonly Action<string, string, string?> _BroadcastMissionChange;
-        private readonly Action<string, string, string?> _BroadcastVoyageChange;
+        private readonly Action<Mission, string?> _BroadcastMissionChange;
+        private readonly Action<Voyage, string?> _BroadcastVoyageChange;
 
         /// <summary>
         /// Instantiate the command handler.
@@ -47,8 +47,8 @@ namespace Armada.Server.WebSocket
             IGitService? git,
             Action? onStop,
             JsonSerializerOptions jsonOptions,
-            Action<string, string, string?> broadcastMissionChange,
-            Action<string, string, string?> broadcastVoyageChange)
+            Action<Mission, string?> broadcastMissionChange,
+            Action<Voyage, string?> broadcastVoyageChange)
         {
             _Admiral = admiral;
             _Database = database;
@@ -59,6 +59,23 @@ namespace Armada.Server.WebSocket
             _JsonOptions = jsonOptions;
             _BroadcastMissionChange = broadcastMissionChange;
             _BroadcastVoyageChange = broadcastVoyageChange;
+        }
+
+        /// <summary>
+        /// Whether an identity may run a WebSocket command. The command handler operates outside tenant scope (it reads
+        /// and writes by id across every tenant, like the server-wide admin tools), so every command, including reads,
+        /// requires a global administrator; tenant admins and users use the tenant-scoped REST API instead. This keeps
+        /// stop_server, backup, and restore admin-only and makes it impossible for a tenant to touch another tenant's
+        /// records through the socket.
+        /// </summary>
+        /// <param name="auth">Identity of the socket.</param>
+        /// <param name="action">Command action.</param>
+        /// <returns>True when the command may run.</returns>
+        public static bool IsAuthorized(AuthContext? auth, string? action)
+        {
+            if (auth == null || !auth.IsAuthenticated) return false;
+            if (String.IsNullOrWhiteSpace(action)) return false;
+            return auth.IsAdmin;
         }
 
         /// <summary>
@@ -366,12 +383,12 @@ namespace Armada.Server.WebSocket
                             }
                         }
                         int cvCancelled = cvMissions.Count(m => m.Status == MissionStatusEnum.Cancelled);
-                        _BroadcastVoyageChange(cvId, VoyageStatusEnum.Cancelled.ToString(), cvVoyage.Title);
+                        _BroadcastVoyageChange(cvVoyage, VoyageStatusEnum.Cancelled.ToString());
                         foreach (Mission cvCm in cvMissions)
                         {
                             if (cvCm.Status == MissionStatusEnum.Cancelled)
                             {
-                                _BroadcastMissionChange(cvCm.Id, MissionStatusEnum.Cancelled.ToString(), cvCm.Title);
+                                _BroadcastMissionChange(cvCm, MissionStatusEnum.Cancelled.ToString());
                             }
                         }
                         return new { type = "command.result", action = "cancel_voyage", data = (object)new { Voyage = cvVoyage, CancelledMissions = cvCancelled } };
@@ -520,7 +537,7 @@ namespace Armada.Server.WebSocket
                         Signal tmSignal = new Signal(SignalTypeEnum.Progress, "Mission " + tmId + " transitioned to " + tmNewStatus);
                         if (!String.IsNullOrEmpty(tmMission.CaptainId)) tmSignal.FromCaptainId = tmMission.CaptainId;
                         await _Database.Signals.CreateAsync(tmSignal).ConfigureAwait(false);
-                        _BroadcastMissionChange(tmId, tmNewStatus.ToString(), tmMission.Title);
+                        _BroadcastMissionChange(tmMission, tmNewStatus.ToString());
                         return new { type = "command.result", action = "transition_mission_status", data = (object)tmMission };
                     }
                 }
@@ -557,7 +574,7 @@ namespace Armada.Server.WebSocket
                         cmMission.CompletedUtc = DateTime.UtcNow;
                         cmMission.LastUpdateUtc = DateTime.UtcNow;
                         cmMission = await _Database.Missions.UpdateAsync(cmMission).ConfigureAwait(false);
-                        _BroadcastMissionChange(cmId, MissionStatusEnum.Cancelled.ToString(), cmMission.Title);
+                        _BroadcastMissionChange(cmMission, MissionStatusEnum.Cancelled.ToString());
                         return new { type = "command.result", action = "cancel_mission", data = (object)cmMission };
                     }
                 }
@@ -641,7 +658,7 @@ namespace Armada.Server.WebSocket
                         Signal rmSignal = new Signal(SignalTypeEnum.Progress, "Mission " + rmId + " restarted");
                         await _Database.Signals.CreateAsync(rmSignal).ConfigureAwait(false);
 
-                        _BroadcastMissionChange(rmId, MissionStatusEnum.Pending.ToString(), rmMission.Title);
+                        _BroadcastMissionChange(rmMission, MissionStatusEnum.Pending.ToString());
                         return new { type = "command.result", action = "restart_mission", data = (object)rmMission };
                     }
                 }

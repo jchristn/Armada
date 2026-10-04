@@ -2834,3 +2834,204 @@ export interface FleetActionSettingsData {
   maxOutputBytes: number;
   runRetentionDays: number;
 }
+
+// ---------------------------------------------------------------------------
+// Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md). The server sends PascalCase; the API client camelizes.
+// Every field the plan does not pin down is optional so the UI tolerates a slightly different server shape.
+// ---------------------------------------------------------------------------
+
+export type AskMessageRole = 'User' | 'Assistant' | 'System';
+export type AskMessageKind = 'Text' | 'ActionProposal' | 'ActionResult' | 'WorkUpdate' | 'Summary' | 'Error';
+export type AskProposalStatus = 'Pending' | 'Approved' | 'Rejected' | 'Expired' | 'Executed' | 'Failed';
+export type AskProposalSource = 'Captain' | 'QuickAction';
+export type AskTrackedEntityType = 'Voyage' | 'Mission' | 'FleetActionRun' | 'Job' | 'VesselImportBatch';
+export type AskWorkState = 'Active' | 'Succeeded' | 'Failed' | 'Cancelled';
+export type AskTurnState = 'started' | 'completed' | 'failed' | 'cancelled';
+
+export interface AskThread {
+  id: string;
+  tenantId?: string | null;
+  userId?: string | null;
+  title: string;
+  captainId: string | null;
+  autoApprove: boolean;
+  summaryText?: string | null;
+  summaryUtc?: string | null;
+  pinned: boolean;
+  archived: boolean;
+  lastMessageUtc?: string | null;
+  messageCount?: number;
+  unreadCount?: number;
+  /** UI assumption: number of tracked items still Active (drives the "working" dot). */
+  activeWorkCount?: number;
+  /** UI assumption: id of the captain turn currently running, when one is. */
+  activeTurnId?: string | null;
+  createdUtc?: string;
+  lastUpdateUtc?: string;
+}
+
+export interface AskToolCall {
+  id?: string;
+  messageId?: string;
+  threadId?: string;
+  callId: string;
+  toolName: string;
+  argumentsText?: string | null;
+  resultText?: string | null;
+  ok?: boolean | null;
+  elapsedMs?: number | null;
+}
+
+export interface AskActionProposal {
+  id: string;
+  threadId: string;
+  messageId?: string | null;
+  toolName: string;
+  argumentsText?: string | null;
+  summaryText?: string | null;
+  source: AskProposalSource | string;
+  status: AskProposalStatus | string;
+  resultText?: string | null;
+  errorText?: string | null;
+  decidedByUserId?: string | null;
+  decidedUtc?: string | null;
+  executedUtc?: string | null;
+  /** UI assumption: when a pending proposal expires. */
+  expiresUtc?: string | null;
+  createdUtc?: string;
+}
+
+/** One mission row on a voyage (or mission) work card. */
+export interface AskMissionSnapshot {
+  id: string;
+  title?: string | null;
+  status: string;
+  vesselId?: string | null;
+  persona?: string | null;
+  pipelineStage?: string | null;
+  captainId?: string | null;
+  captainName?: string | null;
+  branchName?: string | null;
+  checkRunId?: string | null;
+  checkRunStatus?: string | null;
+  mergeEntryId?: string | null;
+  mergeQueueStatus?: string | null;
+  prUrl?: string | null;
+  landingOutcome?: string | null;
+  failureReason?: string | null;
+  startedUtc?: string | null;
+  completedUtc?: string | null;
+}
+
+/** One target row on a fleet action run work card. */
+export interface AskTargetSnapshot {
+  id: string;
+  vesselId?: string | null;
+  vesselName?: string | null;
+  status: string;
+  reason?: string | null;
+  missionId?: string | null;
+  voyageId?: string | null;
+}
+
+/**
+ * The live card data for one tracked item. Voyage and Mission snapshots fill `missions`; FleetActionRun fills
+ * `targets`; Job and VesselImportBatch use `completedCount` / `totalCount` and `errorText`.
+ */
+export interface AskWorkSnapshot {
+  trackedWorkId?: string;
+  entityType: AskTrackedEntityType | string;
+  entityId: string;
+  title?: string | null;
+  status: string;
+  state?: AskWorkState | string;
+  /** Count of children by status (missions or targets); keys are status names. */
+  counts?: Record<string, number> | null;
+  totalCount?: number | null;
+  completedCount?: number | null;
+  failedCount?: number | null;
+  missions?: AskMissionSnapshot[] | null;
+  targets?: AskTargetSnapshot[] | null;
+  errorText?: string | null;
+  startedUtc?: string | null;
+  completedUtc?: string | null;
+  capturedUtc?: string | null;
+}
+
+export interface AskTrackedWork {
+  id: string;
+  threadId: string;
+  entityType: AskTrackedEntityType | string;
+  entityId: string;
+  title?: string | null;
+  status?: string | null;
+  state: AskWorkState | string;
+  lastChangeUtc?: string | null;
+  completedUtc?: string | null;
+  createdUtc?: string;
+  /** UI assumption: the latest snapshot, when the server includes it. */
+  snapshot?: AskWorkSnapshot | null;
+}
+
+export interface AskMessage {
+  id: string;
+  threadId: string;
+  sequence: number;
+  role: AskMessageRole | string;
+  kind: AskMessageKind | string;
+  contentText?: string | null;
+  thinkingText?: string | null;
+  proposalId?: string | null;
+  trackedWorkId?: string | null;
+  captainId?: string | null;
+  durationMs?: number | null;
+  createdUtc?: string;
+  toolCalls?: AskToolCall[] | null;
+  proposal?: AskActionProposal | null;
+  trackedWork?: AskTrackedWork | null;
+}
+
+export interface AskThreadDetail {
+  thread: AskThread;
+  trackedWork?: AskTrackedWork[] | null;
+  pendingProposals?: AskActionProposal[] | null;
+}
+
+export interface AskMessagePage {
+  messages: AskMessage[];
+  hasMore: boolean;
+}
+
+export interface AskSendMessageResult {
+  messageId: string;
+  turnId: string;
+}
+
+export interface AskThreadEnumerateQuery {
+  pageNumber?: number;
+  pageSize?: number;
+  search?: string;
+  includeArchived?: boolean;
+}
+
+export interface AskThreadUpdateRequest {
+  title?: string;
+  captainId?: string | null;
+  autoApprove?: boolean;
+  pinned?: boolean;
+  archived?: boolean;
+}
+
+/** One entry of `GET /ask/quick-actions`. */
+export interface AskQuickAction {
+  /** Stable name, e.g. `dispatch`, `fleet-action`, `status`, `health`, `import`. */
+  name: string;
+  /** The slash command, e.g. `/dispatch`. */
+  command?: string;
+  title?: string;
+  description?: string;
+  /** The MCP tool the action runs; null for client-only actions such as `/import`. */
+  toolName?: string | null;
+  /** JSON schema of the tool arguments (object or JSON text). */
+  argumentsSchema?: unknown;
+}

@@ -163,7 +163,8 @@ export default function App() {
                       <Route path="project-profiles/:id" element={<ProjectProfileDetail />} />
                       <Route path="skills" element={<Navigate to="/configuration?tab=skills" replace />} />
                       <Route path="skills/:id" element={<SkillDetail />} />
-                      <Route path="ask" element={<AskArmada />} />
+                      {/* One optional-segment route so moving between /ask and /ask/:threadId keeps the page mounted. */}
+                      <Route path="ask/:threadId?" element={<AskArmada />} />
                       <Route path="inbox" element={<Inbox />} />
                       <Route path="delivery" element={<DeliveryHub />} />
                       <Route path="fleet-actions" element={<FleetActions />} />

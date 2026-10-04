@@ -200,6 +200,31 @@ namespace Armada.Core.Database
         public IVesselImportFleetRecommendationMethods VesselImportFleetRecommendations { get; protected set; } = null!;
 
         /// <summary>
+        /// Ask Armada conversation thread methods.
+        /// </summary>
+        public IAskThreadMethods AskThreads { get; protected set; } = null!;
+
+        /// <summary>
+        /// Ask Armada thread message methods.
+        /// </summary>
+        public IAskMessageMethods AskMessages { get; protected set; } = null!;
+
+        /// <summary>
+        /// Ask Armada message tool-call methods.
+        /// </summary>
+        public IAskMessageToolCallMethods AskMessageToolCalls { get; protected set; } = null!;
+
+        /// <summary>
+        /// Ask Armada action proposal methods.
+        /// </summary>
+        public IAskActionProposalMethods AskActionProposals { get; protected set; } = null!;
+
+        /// <summary>
+        /// Ask Armada tracked-work methods.
+        /// </summary>
+        public IAskTrackedWorkMethods AskTrackedWork { get; protected set; } = null!;
+
+        /// <summary>
         /// Fleet action definition operations.
         /// </summary>
         public IFleetActionMethods FleetActions { get; protected set; } = null!;
