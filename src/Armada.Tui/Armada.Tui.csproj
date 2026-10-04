@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Terminal client for Armada (the dashboard in a terminal), hosted by Helm as `armada tui`</Description>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Test.Shared" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="TUIKit" Version="1.2.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Armada.Client\Armada.Client.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="parity.json" LogicalName="Armada.Tui.parity.json" Condition="Exists('parity.json')" />
+  </ItemGroup>
+
+</Project>
