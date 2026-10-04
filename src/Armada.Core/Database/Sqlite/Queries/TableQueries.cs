@@ -1891,7 +1891,10 @@ namespace Armada.Core.Database.Sqlite.Queries
                     @"CREATE UNIQUE INDEX IF NOT EXISTS idx_ask_tracked_work_thread_entity ON ask_tracked_work(thread_id, entity_type, entity_id);",
                     @"CREATE INDEX IF NOT EXISTS idx_ask_tracked_work_tenant_thread ON ask_tracked_work(tenant_id, thread_id);",
                     @"CREATE INDEX IF NOT EXISTS idx_ask_tracked_work_state ON ask_tracked_work(state);",
-                    @"CREATE INDEX IF NOT EXISTS idx_ask_tracked_work_entity ON ask_tracked_work(entity_type, entity_id);")
+                    @"CREATE INDEX IF NOT EXISTS idx_ask_tracked_work_entity ON ask_tracked_work(entity_type, entity_id);"),
+
+                new SchemaMigration(76, "Add nullable auto_approve to vessels: a per-vessel override of the captain auto-approve setting for missions on the vessel",
+                    @"ALTER TABLE vessels ADD COLUMN auto_approve INTEGER NULL;")
 
             };
         }

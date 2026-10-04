@@ -45,6 +45,17 @@ namespace Armada.Core.Settings
         public bool NarrateMilestones { get; set; } = true;
 
         /// <summary>
+        /// When false (the default), Ask thread turns and milestone narrations run CLI captains without their
+        /// auto-approve or permission-bypass flags, whatever the captain's own auto-approve setting: Ask turns can be
+        /// started by any authenticated user, and Armada's proposal gate covers only Armada's MCP tools, not the CLI's
+        /// own shell and file tools. Claude Code then runs with <c>--permission-mode acceptEdits</c> in print mode, where
+        /// a tool that would need approval is refused rather than prompted, so a turn never waits for input. Set true
+        /// only when every account that can use Ask is trusted with a shell on the Admiral host; the captain's own
+        /// setting then applies.
+        /// </summary>
+        public bool CaptainAutoApprove { get; set; } = false;
+
+        /// <summary>
         /// Seconds a milestone narration may take before the deterministic sentence is used instead. Default 60,
         /// minimum 10, maximum 600; out-of-range values are clamped.
         /// </summary>

@@ -24,6 +24,8 @@ transport is consistent within itself, and the dashboard client camelizes REST r
   - [Bearer Token (Recommended)](#bearer-token-recommended)
   - [Encrypted Session Token](#encrypted-session-token)
   - [API Key (Deprecated)](#api-key-deprecated)
+  - [Password Storage](#password-storage)
+  - [Login Rate Limiting](#login-rate-limiting)
   - [Authorization Tiers](#authorization-tiers)
   - [Authorization Matrix](#authorization-matrix)
 - [Pagination](#pagination)
@@ -114,6 +116,36 @@ X-Api-Key: your-api-key-here
 ```
 
 > **Deprecation notice:** `X-Api-Key` will be removed in a future version. Migrate to bearer tokens for new integrations.
+
+### Password Storage
+
+Passwords are stored salted and stretched: PBKDF2-HMAC-SHA256 with a 16-byte random salt per user and 600,000
+iterations, in the form `pbkdf2-sha256$<iterations>$<salt>$<hash>`. The value stretched is the hex SHA-256 of the
+password, so the `PasswordSha256` field of `POST`/`PUT /api/v1/users` keeps working unchanged (send either `Password`
+or the hex SHA-256 as `PasswordSha256`); the server never stores or returns the unsalted value. Hashes written by
+earlier releases (unsalted SHA-256) are upgraded when the Admiral starts and, failing that, on the user's next
+successful login. An upgraded database cannot be used by an older Admiral for password login.
+
+### Login Rate Limiting
+
+Failed authentications are counted in memory (counters reset when the Admiral restarts) and locked out with
+exponential backoff, configured by the `loginRateLimit` settings:
+
+| Setting | Default | Meaning |
+|---------|---------|---------|
+| `loginRateLimit.enabled` | `true` | Turn rate limiting on or off |
+| `loginRateLimit.maxFailuresPerAccount` | `10` | Failed password logins for one account (tenant and email) within the window before the account is locked |
+| `loginRateLimit.maxFailuresPerAddress` | `50` | Failed password logins, bearer tokens, and API keys from one client address within the window before the address is locked; also the budget of `POST /api/v1/tenants/lookup` and `POST /api/v1/onboarding` requests per address (counted separately) |
+| `loginRateLimit.windowMinutes` | `15` | Window over which failures are counted |
+| `loginRateLimit.lockoutMinutes` | `15` | First lockout; each further lockout of the same key doubles it |
+| `loginRateLimit.maxLockoutMinutes` | `1440` | Cap on a doubled lockout |
+
+While an account or address is locked, `POST /api/v1/authenticate` (even with the right password), requests that
+present `Authorization` or `X-Api-Key` from the locked address (REST and MCP), and the lookup and onboarding routes
+return `429` with a `Retry-After` header (seconds) and `{"Error": "SlowDown"}`. A successful password login clears the
+account's counter. Session tokens (`X-Token`) are not guessable and keep working from a locked address. The client
+address is the TCP peer address (`X-Forwarded-For` is not trusted): behind a reverse proxy every client shares the
+proxy's address, so raise `maxFailuresPerAddress` there.
 
 ### Authorization Tiers
 
@@ -510,6 +542,7 @@ Authenticate with email and password to receive an encrypted session token. This
 **Errors:**
 - `400 Bad Request` - Missing required fields (TenantId, Email, Password)
 - `401 Unauthorized` - Invalid credentials or inactive tenant/user
+- `429 Too Many Requests` - The account or client address is locked out after repeated failures; `Retry-After` gives the seconds to wait (see [Login Rate Limiting](#login-rate-limiting))
 
 ---
 
@@ -1347,6 +1380,11 @@ Skipped entries include the entity ID and the reason (e.g., "Not found" or "Empt
 ### Vessels
 
 A vessel is a git repository registered with Armada.
+
+`AutoApprove` (boolean or null, default null) is a per-vessel override of the captain auto-approve setting for missions
+on the vessel: null uses each captain's own setting; true or false wins over it (see
+[SECURITY_REVIEW.md](SECURITY_REVIEW.md#running-agents-safely)). `PUT /api/v1/vessels/{id}` replaces the vessel, so send
+the current value back to keep it.
 
 #### GET /api/v1/vessels
 
@@ -3467,6 +3505,11 @@ When a snapshot changes, `ask.work` is pushed; milestones (work started, a missi
 opened a pull request, or could not land, and the item succeeded, failed, or was cancelled) post `WorkUpdate` messages, worded by the
 thread's captain when it is idle (`Ask.NarrateMilestones`, bounded by `Ask.NarrationTimeoutSeconds`) and otherwise a
 deterministic sentence. Captain and Armada messages increment `UnreadCount`; `POST .../read` resets it.
+
+Thread turns and narrations run the CLI captain without its auto-approve or permission-bypass flags unless the
+`Ask.CaptainAutoApprove` setting is true (default false). Armada's own MCP tools stay available to the captain (state
+changes become proposals); the CLI's shell and file tools outside its temporary working directory are refused, not
+prompted, so a turn never waits for input.
 
 **Models.**
 

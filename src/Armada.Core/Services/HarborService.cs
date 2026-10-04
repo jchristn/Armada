@@ -180,6 +180,7 @@ namespace Armada.Core.Services
         /// <param name="capabilities">Advertised capabilities.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The registered Harbor.</returns>
+        /// <exception cref="UnauthorizedAccessException">Thrown when the id is already registered to another tenant or user.</exception>
         public async Task<Harbor> UpsertFromHandshakeAsync(
             string harborId,
             string? tenantId,
@@ -218,6 +219,14 @@ namespace Armada.Core.Services
                 };
                 _Logging.Info(_Header + "harbor " + harborId + " connected (new registration)");
                 return await _Database.Harbors.CreateAsync(created, token).ConfigureAwait(false);
+            }
+
+            // A Harbor id stays bound to the identity that registered it: a link authenticated as another tenant or
+            // user cannot take over the registration (and with it the jobs routed to that Harbor). O-04.
+            if (!String.Equals(existing.TenantId ?? String.Empty, tenantId ?? String.Empty, StringComparison.Ordinal)
+                || !String.Equals(existing.UserId ?? String.Empty, userId ?? String.Empty, StringComparison.Ordinal))
+            {
+                throw new UnauthorizedAccessException("Harbor " + harborId + " is registered to a different identity; delete the Harbor or link with its owner's credential.");
             }
 
             existing.Name = name;

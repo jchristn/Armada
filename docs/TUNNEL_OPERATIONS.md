@@ -45,7 +45,7 @@ Armada stores remote tunnel configuration in `settings.json`:
     "tunnelUrl": null,
     "instanceId": null,
     "enrollmentToken": null,
-    "password": "armadaadmin",
+    "password": "replace-with-a-strong-shared-secret",
     "connectTimeoutSeconds": 15,
     "heartbeatIntervalSeconds": 30,
     "reconnectBaseDelaySeconds": 5,
@@ -60,7 +60,8 @@ Armada stores remote tunnel configuration in `settings.json`:
 - Leave `enabled` off unless you are actively testing the tunnel.
 - Prefer `wss://` endpoints outside local development.
 - Leave `instanceId` empty unless you want an operator-friendly override.
-- Keep `remoteControl.password` aligned with `ArmadaProxy.password`.
+- Keep `remoteControl.password` aligned with `ArmadaProxy.password`. The built-in default (`armadaadmin`) is refused by
+  the proxy unless it sets `allowDefaultPassword`, and the Admiral logs a warning while it is in use.
 - Use `allowInvalidCertificates = true` only for local development with self-signed certificates.
 
 ---
@@ -84,7 +85,7 @@ Armada stores remote tunnel configuration in `settings.json`:
     ],
     "requireEnrollmentToken": false,
     "enrollmentTokens": [],
-    "password": "armadaadmin",
+    "password": "replace-with-a-strong-shared-secret",
     "handshakeTimeoutSeconds": 15,
     "staleAfterSeconds": 90,
     "requestTimeoutSeconds": 20,
@@ -102,11 +103,18 @@ Armada stores remote tunnel configuration in `settings.json`:
 - `syslogServers`
 - `requireEnrollmentToken`
 - `enrollmentTokens`
-- `password`
+- `password` (required; `ARMADA_PROXY_PASSWORD` overrides it; the proxy refuses to start with the default `armadaadmin`)
+- `allowDefaultPassword` (default false; local testing only)
+- `loginMaxFailures`, `loginFailureWindowSeconds`, `loginLockoutSeconds` (defaults 10 / 900 / 900)
+- `trustForwardedHeaders` (default false), `secureCookie` (default false)
 - `handshakeTimeoutSeconds`
 - `staleAfterSeconds`
 - `requestTimeoutSeconds`
 - `maxRecentEvents`
+
+A tunnel that fails its handshake repeatedly (wrong password) locks its source address out for `loginLockoutSeconds`;
+the Admiral then sees handshake responses with status 429 (`too_many_attempts`). Fix the password, then wait out the
+lockout or restart the proxy (lockouts are in memory).
 
 ---
 
@@ -115,13 +123,16 @@ Armada stores remote tunnel configuration in `settings.json`:
 From the repo root:
 
 ```powershell
+$env:ARMADA_PROXY_PASSWORD = "replace-with-a-strong-shared-secret"
 dotnet run --project src/Armada.Proxy/Armada.Proxy.csproj --framework net10.0
 ```
 
+Without a configured password the proxy exits with an error naming `ARMADA_PROXY_PASSWORD` and `allowDefaultPassword`.
+
 Default endpoints:
 
-- health: `http://localhost:7893/api/v1/status/health`
-- instance list: `http://localhost:7893/api/v1/instances`
+- health: `http://localhost:7893/proxy-api/v1/status/health`
+- instance list (requires a proxy session; 401 otherwise): `http://localhost:7893/proxy-api/v1/instances`
 - remote shell: `http://localhost:7893/`
 - tunnel websocket: `ws://localhost:7893/tunnel`
 
@@ -132,7 +143,8 @@ Point Armada at the proxy by setting:
   "remoteControl": {
     "enabled": true,
     "tunnelUrl": "ws://localhost:7893/tunnel",
-    "enrollmentToken": null
+    "enrollmentToken": null,
+    "password": "replace-with-a-strong-shared-secret"
   }
 }
 ```

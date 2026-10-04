@@ -102,11 +102,14 @@ namespace Armada.Server
                             break;
                         }
 
-                        harborId = handshake.HarborId;
                         HarborSendDelegate send = (outbound, token) => SendAsync(session, outbound);
                         HarborHandshakeAck ack = await _Manager.OnHandshakeAsync(handshake, identity.TenantId, identity.UserId, send, ctx.Token).ConfigureAwait(false);
                         await SendAsync(session, ack).ConfigureAwait(false);
+
+                        // Only an accepted link owns the id: a refused link must not mark the registered Harbor
+                        // disconnected when it closes.
                         if (!ack.Accepted) break;
+                        harborId = handshake.HarborId;
                         continue;
                     }
 

@@ -56,6 +56,36 @@ namespace Armada.Core.Services
             string? apiKeyHeader,
             CancellationToken token = default)
         {
+            // 0. An Ask thread-scoped session token always wins. It marks the request as a thread call that the
+            // approval gate turns into proposals, so another credential on the same request (for example the user's
+            // own bearer token sent by a CLI's global config) must not be able to bypass the gate. A thread token
+            // combined with a credential for a different identity is refused outright.
+            if (!string.IsNullOrEmpty(sessionTokenHeader))
+            {
+                AuthContext? threadCtx = await AuthenticateBySessionTokenAsync(sessionTokenHeader, token).ConfigureAwait(false);
+                if (threadCtx != null && !string.IsNullOrEmpty(threadCtx.AskThreadId))
+                {
+                    AuthContext? other = null;
+                    if (!string.IsNullOrEmpty(authorizationHeader) && authorizationHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string otherBearer = authorizationHeader.Substring(7).Trim();
+                        if (!string.IsNullOrEmpty(otherBearer)) other = await AuthenticateByBearerTokenAsync(otherBearer, token).ConfigureAwait(false);
+                        if (other == null) return new AuthContext();
+                    }
+
+                    if (other == null && !string.IsNullOrEmpty(apiKeyHeader)) return new AuthContext();
+
+                    if (other != null
+                        && (!string.Equals(other.TenantId, threadCtx.TenantId, StringComparison.Ordinal)
+                            || !string.Equals(other.UserId, threadCtx.UserId, StringComparison.Ordinal)))
+                    {
+                        return new AuthContext();
+                    }
+
+                    return threadCtx;
+                }
+            }
+
             // 1. Check Bearer token (canonical auth path)
             if (!string.IsNullOrEmpty(authorizationHeader) && authorizationHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
             {
@@ -77,7 +107,9 @@ namespace Armada.Core.Services
             // 3. Check API key (X-Api-Key, deprecated but supported)
             if (!string.IsNullOrEmpty(apiKeyHeader) && !string.IsNullOrEmpty(_Settings.ApiKey))
             {
-                if (apiKeyHeader == _Settings.ApiKey)
+                if (System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+                    System.Text.Encoding.UTF8.GetBytes(apiKeyHeader),
+                    System.Text.Encoding.UTF8.GetBytes(_Settings.ApiKey)))
                 {
                     return AuthContext.Authenticated(
                         Constants.SystemTenantId,
@@ -117,6 +149,21 @@ namespace Armada.Core.Services
                 if (String.Equals(user.Id, Constants.SystemUserId, StringComparison.Ordinal)) return new AuthContext();
                 if (!user.Active) return new AuthContext();
                 if (!user.VerifyPassword(password)) return new AuthContext();
+
+                // Transparently upgrade a legacy unsalted (or weaker) hash now that the plaintext is known to be right.
+                if (PasswordHasher.NeedsRehash(user.PasswordSha256))
+                {
+                    try
+                    {
+                        user.PasswordSha256 = PasswordHasher.HashPassword(password);
+                        await _Database.Users.UpdateAsync(user, token).ConfigureAwait(false);
+                        _Logging.Info(_Header + "upgraded the stored password hash of user " + user.Id + " to " + PasswordHasher.Scheme);
+                    }
+                    catch (Exception ex)
+                    {
+                        _Logging.Warn(_Header + "password rehash failed for user " + user.Id + ": " + ex.Message);
+                    }
+                }
 
                 // Verify tenant is active
                 TenantMetadata? tenant = await _Database.Tenants.ReadAsync(tenantId, token).ConfigureAwait(false);

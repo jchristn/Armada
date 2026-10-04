@@ -23,6 +23,7 @@ namespace Armada.Server.Routes
         private readonly ArmadaSettings _settings;
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly Armada.Core.Services.DefaultCredentialService? _defaults;
+        private readonly Armada.Core.Services.LoginRateLimiter? _rateLimiter;
 
         /// <summary>
         /// Instantiate.
@@ -33,15 +34,18 @@ namespace Armada.Server.Routes
         /// <param name="settings">Application settings.</param>
         /// <param name="jsonOptions">JSON serializer options.</param>
         /// <param name="defaults">Default credential service (password change retires the seeded token; whoami reports defaults in use).</param>
+        /// <param name="rateLimiter">Login rate limiter (null disables rate limiting on these routes).</param>
         public AuthRoutes(
             ISessionTokenService sessionTokenService,
             IAuthenticationService authenticationService,
             DatabaseDriver database,
             ArmadaSettings settings,
             JsonSerializerOptions jsonOptions,
-            Armada.Core.Services.DefaultCredentialService? defaults = null)
+            Armada.Core.Services.DefaultCredentialService? defaults = null,
+            Armada.Core.Services.LoginRateLimiter? rateLimiter = null)
         {
             _defaults = defaults;
+            _rateLimiter = rateLimiter;
             _sessionTokenService = sessionTokenService;
             _authenticationService = authenticationService;
             _database = database;
@@ -68,6 +72,19 @@ namespace Armada.Server.Routes
                 if (!string.IsNullOrEmpty(body))
                     authReq = JsonSerializer.Deserialize<AuthenticateRequest>(body, _jsonOptions);
 
+                // Login rate limiting: a locked-out address (guessable credentials: password, bearer token, API key) or a
+                // locked-out account gets 429 with Retry-After, even when the credential is right. Session tokens (X-Token)
+                // are not guessable and keep working.
+                string? address = ClientAddress(req.Http);
+                bool passwordLogin = authReq != null && !string.IsNullOrEmpty(authReq.TenantId) && !string.IsNullOrEmpty(authReq.Email) && !string.IsNullOrEmpty(authReq.Password);
+                if (_rateLimiter != null)
+                {
+                    TimeSpan? retryAfter = null;
+                    if (passwordLogin) retryAfter = _rateLimiter.CheckPasswordLogin(authReq!.TenantId, authReq.Email, address);
+                    else if (PresentsGuessableCredential(req.Http)) retryAfter = _rateLimiter.CheckAddress(address);
+                    if (retryAfter != null) return (object)TooManyAttempts(req.Http, retryAfter.Value);
+                }
+
                 // Try header-based auth first
                 AuthContext headerCtx = await authenticate(req.Http).ConfigureAwait(false);
                 if (headerCtx.IsAuthenticated)
@@ -82,8 +99,10 @@ namespace Armada.Server.Routes
                 if (authReq != null && !string.IsNullOrEmpty(authReq.TenantId) && !string.IsNullOrEmpty(authReq.Email) && !string.IsNullOrEmpty(authReq.Password))
                 {
                     AuthContext credCtx = await _authenticationService.AuthenticateWithCredentialsAsync(authReq.TenantId, authReq.Email, authReq.Password).ConfigureAwait(false);
+                    if (!credCtx.IsAuthenticated) _rateLimiter?.RecordPasswordFailure(authReq.TenantId, authReq.Email, address);
                     if (credCtx.IsAuthenticated)
                     {
+                        _rateLimiter?.RecordPasswordSuccess(authReq.TenantId, authReq.Email);
                         AuthenticateResult result = _sessionTokenService.CreateToken(credCtx.TenantId!, credCtx.UserId!);
                         result.PasswordChangeRequired = credCtx.PasswordChangeRequired;
                         return (object)result;
@@ -190,6 +209,10 @@ namespace Armada.Server.Routes
             // Tenant Lookup
             app.Post("/api/v1/tenants/lookup", async (ApiRequest req) =>
             {
+                // Maps an email to its tenants: every request counts against a per-address budget.
+                TimeSpan? lookupRetry = _rateLimiter?.CheckAndCountLookup(ClientAddress(req.Http));
+                if (lookupRetry != null) return (object)TooManyAttempts(req.Http, lookupRetry.Value);
+
                 string body = req.Http.Request.DataAsString;
                 TenantLookupRequest? lookupReq = JsonSerializer.Deserialize<TenantLookupRequest>(body, _jsonOptions);
                 if (lookupReq == null || string.IsNullOrEmpty(lookupReq.Email))
@@ -219,6 +242,9 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 403;
                     return (object)new OnboardingResult { Success = false, ErrorMessage = "Self-registration is disabled" };
                 }
+
+                TimeSpan? onboardingRetry = _rateLimiter?.CheckAndCountLookup(ClientAddress(req.Http));
+                if (onboardingRetry != null) return (object)TooManyAttempts(req.Http, onboardingRetry.Value);
 
                 string body = req.Http.Request.DataAsString;
                 OnboardingRequest? onbReq = JsonSerializer.Deserialize<OnboardingRequest>(body, _jsonOptions);
@@ -261,6 +287,44 @@ namespace Armada.Server.Routes
                 };
             },
             api => api.WithTag("Authentication").WithSummary("Self-register a new user"));
+        }
+
+        /// <summary>
+        /// Client address of a request as seen by the listener (X-Forwarded-For is not trusted).
+        /// </summary>
+        /// <param name="ctx">HTTP context.</param>
+        /// <returns>Address, or null.</returns>
+        public static string? ClientAddress(HttpContextBase ctx)
+        {
+            if (ctx == null) return null;
+            string? address = ctx.Request.Source?.IpAddress?.ToString();
+            return string.IsNullOrEmpty(address) ? null : address;
+        }
+
+        /// <summary>
+        /// Whether a request presents a guessable credential header (Authorization or X-Api-Key). Session tokens (X-Token)
+        /// are encrypted by the server and are not counted.
+        /// </summary>
+        /// <param name="ctx">HTTP context.</param>
+        /// <returns>True when a guessable credential is presented.</returns>
+        public static bool PresentsGuessableCredential(HttpContextBase ctx)
+        {
+            if (ctx == null) return false;
+            return !string.IsNullOrEmpty(ctx.Request.Headers.Get("Authorization")) || !string.IsNullOrEmpty(ctx.Request.Headers.Get("X-Api-Key"));
+        }
+
+        /// <summary>
+        /// Prepare a 429 response with Retry-After and return its body.
+        /// </summary>
+        /// <param name="ctx">HTTP context.</param>
+        /// <param name="retryAfter">Remaining lockout.</param>
+        /// <returns>Error body.</returns>
+        public static ApiErrorResponse TooManyAttempts(HttpContextBase ctx, TimeSpan retryAfter)
+        {
+            string seconds = Armada.Core.Services.LoginRateLimiter.ToRetryAfterSeconds(retryAfter);
+            ctx.Response.StatusCode = 429;
+            ctx.Response.Headers.Add("Retry-After", seconds);
+            return new ApiErrorResponse { Error = ApiResultEnum.SlowDown, Message = "Too many failed attempts; try again in " + seconds + " seconds" };
         }
     }
 }

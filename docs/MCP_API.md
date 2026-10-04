@@ -1263,6 +1263,7 @@ Register a new vessel (git repository) in a fleet.
 | `workingDirectory` | string | No | Optional local directory where completed mission changes will be pulled after merge. When `repoUrl` is a local clone (a `file://` URL or an existing local path) and this is omitted, it is set automatically to that local clone so the vessel is immediately usable (e.g. for Rebuild Armada). |
 | `gitHubTokenOverride` | string | No | Optional per-vessel GitHub token override. The raw token is accepted on create but never returned by MCP reads. |
 | `allowConcurrentMissions` | boolean | No | Allow multiple concurrent missions on this vessel (default false) |
+| `autoApprove` | boolean | No | Per-vessel auto-approve override for missions on this vessel: true or false wins over the captain's setting; omit to use the captain's setting |
 | `enableModelContext` | boolean | No | Enable model context accumulation (default true) |
 | `defaultPipelineId` | string | No | Default pipeline ID for voyages dispatched to this vessel |
 
@@ -2032,6 +2033,8 @@ Update an existing vessel's properties.
     "workingDirectory": { "type": "string", "description": "New local directory where completed mission changes will be pulled after merge" },
     "gitHubTokenOverride": { "type": "string", "description": "Optional per-vessel GitHub token override. Empty string clears the existing override." },
     "allowConcurrentMissions": { "type": "boolean", "description": "Allow multiple concurrent missions on this vessel" },
+    "autoApprove": { "type": "boolean", "description": "Per-vessel auto-approve override for missions on this vessel: true or false wins over the captain's setting" },
+    "clearAutoApprove": { "type": "boolean", "description": "Remove the per-vessel auto-approve override so the captain's own setting applies" },
     "enableModelContext": { "type": "boolean", "description": "Enable or disable model context accumulation" },
     "modelContext": { "type": "string", "description": "Agent-accumulated context about this repository" },
     "defaultPipelineId": { "type": "string", "description": "Default pipeline ID for voyages dispatched to this vessel" },
@@ -2050,6 +2053,8 @@ Update an existing vessel's properties.
 ```
 
 **Response:** Updated [Vessel](#vessel) object, or `{ "Error": "Vessel not found" }`.
+
+`autoApprove` sets the per-vessel override (true or false wins over the captain's setting for missions on this vessel); `clearAutoApprove: true` removes it so the captain's own setting applies again. Omitting both keeps the stored value.
 
 When `gitHubTokenOverride` is omitted, MCP preserves the current stored override. Send `""` to clear the override and fall back to the global `GitHubToken` from Armada configuration.
 

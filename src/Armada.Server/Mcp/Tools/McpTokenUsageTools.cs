@@ -86,6 +86,15 @@ namespace Armada.Server.Mcp.Tools
                     query.VesselId = String.IsNullOrWhiteSpace(request.VesselId) ? null : request.VesselId;
                     query.CaptainId = String.IsNullOrWhiteSpace(request.CaptainId) ? null : request.CaptainId;
 
+                    // Same scoping as GET /api/v1/token-usage/summary: a global admin sees every tenant, a tenant admin
+                    // their tenant, and a regular user their own usage.
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    if (!McpCallerScope.IsGlobal(caller))
+                    {
+                        query.TenantId = caller.TenantId;
+                        if (!caller.IsTenantAdmin) query.UserId = caller.UserId;
+                    }
+
                     List<TokenUsageRecord> records = await database.TokenUsage.EnumerateForSummaryAsync(query).ConfigureAwait(false);
                     TokenUsageSummaryResult summary = TokenUsageSummaryBuilder.Build(records, query);
                     return (object)summary;

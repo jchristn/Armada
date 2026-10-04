@@ -286,7 +286,7 @@ namespace Armada.Server.Routes
                 if (body == null || body.EntryIds == null || body.EntryIds.Count == 0)
                     { req.Http.Response.StatusCode = 400; return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "EntryIds is required and must not be empty" }; }
 
-                MergeQueuePurgeResult result = await _mergeQueue.DeleteMultipleAsync(body.EntryIds).ConfigureAwait(false);
+                MergeQueuePurgeResult result = await _mergeQueue.DeleteMultipleAsync(body.EntryIds, ctx.IsAdmin ? null : ctx.TenantId).ConfigureAwait(false);
 
                 await _emitEvent("merge.batch_purged", "Batch purged " + result.EntriesPurged + " merge entries",
                     "merge_entry", null, null, null, null, null).ConfigureAwait(false);

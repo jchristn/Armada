@@ -6,7 +6,7 @@
 > **Scope:** the Admiral (REST, MCP, WebSocket, Harbor link, remote tunnel and dashboard relay), Armada.Proxy,
 > the Helm CLI's stdio MCP server, and every place that touches the host file system or runs a process.
 >
-> **Last updated:** 2026-10-04 (W1 security branch). **External review (W1.8):** not yet performed.
+> **Last updated:** 2026-10-04 (W1.9 security follow-ups). **External review (W1.8):** not yet performed.
 
 ## How to read this document
 
@@ -33,10 +33,10 @@ defense in depth), **Low** (hardening).
 | User session | `POST /api/v1/authenticate` (email + password, or any valid credential header) returns an encrypted session token sent as `X-Token` | The user's tenant; `IsAdmin` users are global admins, `IsTenantAdmin` users administer their tenant |
 | Bearer credential | `Authorization: Bearer <token>`; tokens are server-generated, shown once at creation, redacted on every read | The owning user |
 | Local API key | `X-Api-Key: <ApiKey from settings.json>`; generated on first start, read by the Helm CLI | The synthetic global admin `system@armada` (tenant `ten_system`), which can never log in with a password |
-| Ask thread token | Session token bound to one Ask thread, minted for a captain's MCP connection | MCP only; refused on REST and WebSocket; state-changing tool calls become proposals |
-| Loopback MCP caller | No credential, MCP listener bound to loopback, caller on loopback, `Mcp.AllowUnauthenticatedLoopback` true (default) | The default tenant's tenant admin (the local Claude Code setup) |
+| Ask thread token | Session token bound to one Ask thread, minted for a captain's MCP connection | MCP only; refused on REST and WebSocket; state-changing tool calls become proposals. When present it always wins over other credentials on the request; combined with a credential for a different identity (or the API key, or an invalid bearer) the request is refused (F-31) |
+| Loopback MCP caller | No credential, MCP listener bound to loopback, caller on loopback, `Mcp.AllowUnauthenticatedLoopback` true (default) | The default tenant's tenant admin (the local Claude Code setup); since F-25 every by-id tool is confined to the default tenant, so this caller is not unscoped (see O-20) |
 | Harbor | Link upgrade with `x-access-key` = an Armada credential (bearer token, session token, or API key) | The credential's tenant and user; unauthenticated links only from loopback to a loopback-bound Admiral |
-| Proxy user | Shared proxy password (challenge-response) | Reaches only the relay; every relayed call still needs Armada credentials (no per-user identity at the proxy, see O-11) |
+| Proxy user | Shared proxy password (challenge-response); the proxy refuses to start with a blank or default password (F-30) | Reaches only the relay; every relayed call still needs Armada credentials (no per-user identity at the proxy, see O-11) |
 
 ### Authorization
 
@@ -126,22 +126,30 @@ and the server log for them.
 | F-22 | Medium | Supply chain | No dependency scanning; the dashboard had a high npm advisory (undici, dev dependency). | `.github/workflows/security.yml` (NuGet vulnerable including transitive, `npm audit --audit-level=high`); lockfile updated. |
 | F-23 | High (mitigated) | Captains | CLI captains always ran with auto-approve flags (`--dangerously-skip-permissions`, `--full-auto` or the bypass flag on Windows, `--approval-mode yolo`, `--force`, `--auto`, `--yolo`). | Per-captain `autoApprove` switch honored by every CLI runtime; default unchanged (on); documented in [Running agents safely](#running-agents-safely). |
 | F-24 | Low | REST | The keyword `POST /api/v1/ask` responder shipped beside Ask threads (D3). | Removed with `AskArmadaService` and the `armada ask` CLI command. |
+| F-25 | High | MCP | O-01: 62 MCP tools read or acted on entities by id in any tenant, and create/update tools accepted other tenants' ids as references (`create_mission`, `dispatch`, `enqueue_merge`, `send_signal`, `add_vessel` fleet, memory sources, persona default captain). `stop_all` recalled every tenant's captains; `token_usage_summary`, `papercut_summary`, `list_prompt_templates`, and `health_check_model_endpoints` were server-wide. | W1.9: every by-id tool resolves the entity through `McpCallerScope` (global admin any tenant, tenant admin own tenant, user own entities: the REST rule) and answers the same not-found error as for a missing id; referenced ids are validated the same way; the server-wide tools are scoped to the caller (papercut events now carry the mission's tenant and user; `POST /api/v1/model-endpoints/health-check` too). `E2E.McpTenantIsolation` drives every advertised tool that takes an id as tenant B against seeded tenant A entities. |
+| F-26 | Medium | Authentication | O-05: passwords were unsalted SHA-256; no rate limiting on `/authenticate`, `/tenants/lookup`, `/onboarding`, or credential guessing. | Salted PBKDF2-HMAC-SHA256 (600,000 iterations) over the SHA-256 the API already accepts, so `PasswordSha256` is unchanged; legacy hashes are upgraded at startup and on login; constant-time verification (and API key comparison). `loginRateLimit` settings: per account (10 failures in 15 minutes) and per client address (50), lockout 15 minutes doubling up to 24 hours, 429 with `Retry-After` on `/authenticate`, credential-bearing REST and MCP requests, `/tenants/lookup`, `/onboarding`. |
+| F-27 | High | REST (Ask) | O-02: Ask thread turns (any authenticated user) ran CLI captains on the host with the captain's auto-approve flags. | `Ask.CaptainAutoApprove` (default false): turns and narrations launch the captain with auto-approve forced off (Claude Code: `--permission-mode acceptEdits --allowedTools mcp__armada`; shell and edits outside the temporary working directory are refused in print mode, not prompted, so a turn cannot hang). Verified with a real Claude Code captain. |
+| F-28 | Medium | Captains | W1.5 remainder: no per-vessel auto-approve; Harbor-launched captains always ran with auto-approve on whatever the captain setting. | `Vessel.AutoApprove` (null uses the captain setting; true or false wins) on REST, MCP (`add_vessel` / `update_vessel` `autoApprove`, `clearAutoApprove`), and the dashboard vessel form; migration 76. Harbor launches carry the resolved decision. |
+| F-29 | Medium | Harbor link | O-04 (part): a credentialed Harbor could take over another Harbor's connection by reusing its id; a refused link marked the owner's Harbor disconnected. | Harbor ids are bound to the identity (tenant and user) that registered them; another identity, or an unauthenticated link, is refused before the live connection is replaced. |
+| F-30 | Medium | Proxy | O-11 (part): default proxy password `armadaadmin`; `GET /proxy-api/v1/instances` unauthenticated; no login rate limiting; `X-Forwarded-For` trusted; session cookie never `Secure`. | The proxy refuses to start with a blank or default password unless `AllowDefaultPassword` / `ARMADA_PROXY_ALLOW_DEFAULT_PASSWORD` is set (`ARMADA_PROXY_PASSWORD` sets it; the proxy compose file requires it); the Admiral warns when `remoteControl.password` is the default. The instance list needs a proxy session. Logins and tunnel handshakes are rate limited per address (429, `Retry-After`). Forwarded headers are ignored unless `TrustForwardedHeaders`; `SecureCookie` setting. |
+| F-31 | High | MCP | Reported by the usability workstream: a captain whose CLI also sent the user's own bearer credential next to the Ask thread token was authenticated by the bearer (it took precedence), bypassing the thread approval gate. | A thread token always wins; a thread token with a different identity, the API key, or an invalid bearer is refused (`Services.AskThreadTokenPrecedence`). |
+| F-32 | Medium | REST | `POST /api/v1/merge-queue/purge` (batch) purged entries of any tenant by id. | The caller's tenant is passed to the purge (global admins unscoped). |
 
 ### Open
 
 | Id | Severity | Surface | Finding | Owner |
 |----|----------|---------|---------|-------|
-| O-01 | High (multi-tenant only) | MCP | A static scan finds 62 non-admin MCP tools whose handlers read or change entities by id without a caller tenant check (marked in the [MCP table](#mcp-tools)). A tenant admin of one tenant can act on another tenant's entities through MCP; regular users are limited to the read tools. Single-tenant installs are unaffected. | W1 follow-up: MCP tenancy pass (resolve every entity through the caller's scope, as the REST handlers do). |
-| O-02 | High | REST (Ask, chat, planning) | Any authenticated user can start an Ask thread turn (`POST /api/v1/ask/threads/{id}/messages`), which runs a CLI captain on the Admiral host with that captain's flags. Ask approval gates Armada's MCP tools, not the CLI's own shell tool, so with auto-approve on this is a shell on the host for every user. Chat and planning are `TenantAdmin`. | W6.3 / W1 follow-up. Mitigation now: set `autoApprove` false on captains used for Ask, keep self-registration off, and grant accounts deliberately. |
+| O-01 | High (multi-tenant only) | MCP | 62 non-admin MCP tools read or changed entities by id without a caller tenant check. | Closed in W1.9 (F-25). `status` stays server-wide like `GET /api/v1/status` (O-03). |
+| O-02 | High | REST (Ask, chat, planning) | Any authenticated user could start an Ask thread turn, which ran a CLI captain on the Admiral host with that captain's auto-approve flags. | Closed in W1.9 (F-27) for Ask turns. Direct captain chat and planning (`TenantAdmin`) still use the captain's own setting. Residual: in `acceptEdits` mode Claude Code may still edit files and run file-system commands inside the turn's temporary working directory; other runtimes keep their documented auto-approve-off behavior (Codex `--sandbox workspace-write`, Gemini `auto_edit`, Mux `deny`). Owner: W6.3. |
 | O-03 | Medium | REST, WebSocket | `GET /api/v1/status` and the WebSocket `subscribe` snapshot are server-wide: captain and mission counts, active voyage titles, and the last signals of every tenant reach any authenticated user. | W2.3 (scope the status shape per caller). |
-| O-04 | Medium | Harbor | Split-mode captains (experimental, D3) receive no MCP credential, so with authenticated MCP on a non-loopback Admiral their call-home tool calls are refused. A credentialed Harbor can also take over another Harbor's connection by reusing its id. | Harbor split mode: mint a per-launch session token into the launch's MCP config; bind Harbor ids to the credential that registered them. |
-| O-05 | Medium | Authentication | Passwords use unsalted SHA-256; there is no rate limiting or lockout on `/authenticate`, `/tenants/lookup` (maps an email to its tenants), or `/onboarding`. | W1 follow-up (AUTHENTICATION.md password security: salted adaptive hash, rate limiting). |
+| O-04 | Medium | Harbor | Split-mode captains (experimental, D3) receive no MCP credential, so with authenticated MCP on a non-loopback Admiral their call-home tool calls are refused. | Id takeover closed in W1.9 (F-29). Credential still open, deliberately: the Harbor runner ignores the advertised MCP URL and writes no MCP config, and the token's identity is not settled (the mission owner's token would be exposed to a Harbor operated by another user of the tenant or to a shared Harbor; the Harbor owner's identity can exceed the mission's tenant for an admin-registered shared Harbor). Proposed: a mission-scoped token type (MCP only, bound to the mission's tenant and user, expiring with the mission) written into a per-launch URL-based MCP config by the Harbor runner. Owner: Harbor split mode (experimental, D3). |
+| O-05 | Medium | Authentication | Passwords used unsalted SHA-256; no rate limiting or lockout. | Closed in W1.9 (F-26). Residual: lockouts are in memory (reset on restart); the WebSocket upgrade and Harbor link are not limited; behind a reverse proxy every client shares one address (raise `maxFailuresPerAddress`); an upgraded database cannot be used for password login by an older Admiral (UPGRADING.md). Owner: W1 follow-up. |
 | O-06 | Medium | REST | Creating a tenant seeds `admin@armada` with the default password in that tenant. It is caught by the banner and the forced password change, but not by the startup bind guard once the server is running. | W1 follow-up: seed a random password and require the creator to set one. |
 | O-07 | Medium | REST, MCP (TenantAdmin) | Vessel `RepoUrl`, `LocalPath`, and `WorkingDirectory` are not validated: `file://` and local paths clone any repository the Admiral can read, a `RepoUrl` starting with `-` is a possible git option injection, and a prepared bare repository's hooks run during worktree operations. Vessel import browse defaults to the Admiral user's home directory and does not resolve symlinks in the requested path. | W1 follow-up (path and URL allow-lists, `--` before user arguments to git). |
 | O-08 | Medium | Fleet actions (TenantAdmin) | Template variables (`vessel.name`, `vessel.defaultBranch`, `vessel.workingDirectory`, `vessel.buildCommand`, `health.summary`) are substituted into shell text unescaped. | Fleet Actions owner (shell-quote substitutions). |
 | O-09 | Medium | Deployments (TenantAdmin) | Environment health and verification URLs make server-side HTTP requests (SSRF to internal addresses). | Delivery owner (URL allow-list, block link-local and metadata addresses). |
 | O-10 | Low | REST | `/openapi.json` and `/swagger` are public. | Accepted: documentation only, no data. |
-| O-11 | Medium | Proxy | One shared password and no per-user identity; `GET /proxy-api/v1/instances` lists every instance without authentication; no rate limiting; the session cookie lacks `Secure`; `X-Forwarded-For` is trusted; the default tunnel password is `armadaadmin`; `AllowInvalidCertificates` disables TLS validation; the route policy blocks paths by exact string. Relayed calls still need Armada credentials. | Proxy owner (W1 follow-up). |
+| O-11 | Medium | Proxy | One shared password and no per-user identity; `AllowInvalidCertificates` disables TLS validation on the tunnel; the route policy blocks paths by exact string; lockouts are in memory; `/proxy-api/v1/auth/challenge` is not rate limited (one-time, expiring challenges). Relayed calls still need Armada credentials. | Partly closed in W1.9 (F-30: default password refused, instance list authenticated, login rate limiting, forwarded headers, `Secure` cookie). Remaining: proxy owner. |
 | O-12 | Low | MCP, WebSocket (AdminOnly) | `backup` and `restore` take arbitrary host paths. | Accepted: global admins are host operators; documented. |
 | O-13 | Low | WebSocket | Planning-session tool output and check-run output are broadcast to every socket in the tenant without secret scrubbing. | W1 follow-up (run broadcasts through `SecretRedactor`, owner-only delivery). |
 | O-14 | Low | Docker | The observability stack publishes Prometheus, Loki, and Grafana ports, Grafana uses `admin` / `admin`, and the Admiral's `/metrics` port 9464 is unauthenticated. | W5 / operations. |
@@ -149,7 +157,8 @@ and the server log for them.
 | O-16 | Low | Accounting | Operational events from `EmitEventAsync` carry no tenant or actor; authentication failures and authorization denials are not persisted events. | W1 follow-up (AUTHENTICATION.md accounting). |
 | O-17 | Low | REST | Self-service password change through `PUT /api/v1/users/{id}` does not ask for the current password (`PUT /api/v1/account/password` does). | W1 follow-up. |
 | O-18 | Low | CLI | `armada mcp stdio` has no authentication: it opens the database directly as the OS user. | Accepted: trust boundary is the OS account that can read `~/.armada`. |
-| O-19 | Low | Dashboard | The new security strings (password change screen, banner, auto-approve toggle, token-shown-once dialog) are English in every locale. | W6.6. |
+| O-19 | Low | Dashboard | The new security strings (password change screen, banner, auto-approve toggle, token-shown-once dialog, vessel auto-approve field, login rate-limit message) are English in every locale. | W6.6. |
+| O-20 | Medium | MCP (loopback) | With `Mcp.AllowUnauthenticatedLoopback` on (default, D2), any process on the Admiral host can call MCP without a credential as the default tenant's tenant admin. That includes local mission captains (they get no token, so their calls act in the default tenant whatever the mission's tenant) and, in principle, an Ask turn's captain that avoids its configured token. Mitigations: since F-25 this caller is confined to the default tenant; Ask turns use a strict per-turn MCP config carrying the thread token (F-31 makes it win), and with auto-approve off (F-27) the CLI cannot run arbitrary shell commands to reach the port another way. Not changed to a least-privileged identity because the README's local Claude Code setup relies on it (D2). Operators who expose Ask to untrusted users, or run several tenants, should set `Mcp.AllowUnauthenticatedLoopback` false and give captains credentials. | W1 follow-up: mint per-mission MCP tokens for local captains (the mission-scoped token type proposed for O-04), then default the loopback exception off for multi-tenant installs. |
 
 ### Permission changes in W1
 
@@ -179,7 +188,7 @@ permission-bypass flag so missions can run unattended:
 
 | Runtime | Default flag | With `autoApprove` false |
 |---------|--------------|--------------------------|
-| Claude Code | `--dangerously-skip-permissions` | `--permission-mode acceptEdits` (file edits allowed; shell and other tools need allow rules in the project's Claude Code settings) |
+| Claude Code | `--dangerously-skip-permissions` | `--permission-mode acceptEdits --allowedTools mcp__armada` (file edits allowed; Armada's MCP tools allowed because Armada authorizes each call; shell and other tools need allow rules in the project's Claude Code settings and are refused, not prompted, in print mode) |
 | Codex | `--full-auto` (`--dangerously-bypass-approvals-and-sandbox` on Windows) | `--sandbox workspace-write` (no approval bypass; writes confined to the workspace) |
 | Gemini | `--approval-mode yolo` | `--approval-mode auto_edit` |
 | Cursor | `--force` | no `--force` |
@@ -195,11 +204,16 @@ Recommendations:
 
 1. Run Armada under a dedicated, unprivileged OS account (or in the container), not your daily account, and give it
    only the repository and cloud credentials the missions need.
-2. Turn auto-approve off for captains whose missions do not need unattended shell access, and for every captain
-   used by Ask threads (O-02). Set it per captain in the dashboard (Captains, edit, "Auto-approve agent tool use"),
-   through MCP (`create_captain` / `update_captain` with `autoApprove`), or through REST (`runtimeOptionsJson`
-   containing `{"autoApprove": false}`). Without auto-approve, unattended missions that need shell commands stall or
-   fail unless the runtime's own configuration allows those commands.
+2. Turn auto-approve off for captains whose missions do not need unattended shell access. Set it per captain in the
+   dashboard (Captains, edit, "Auto-approve agent tool use"), through MCP (`create_captain` / `update_captain` with
+   `autoApprove`), or through REST (`runtimeOptionsJson` containing `{"autoApprove": false}`), or per vessel (Vessels,
+   edit, "Agent Auto-Approve"; MCP `add_vessel` / `update_vessel` `autoApprove`; REST `AutoApprove`), which wins over
+   the captain setting for missions on that vessel. Without auto-approve, unattended missions that need shell commands
+   stall or fail unless the runtime's own configuration allows those commands. Harbor launches apply the same resolved
+   setting.
+   Ask thread turns always run without auto-approve unless `Ask.CaptainAutoApprove` is true (default false): any
+   authenticated user can start a turn, and Ask's proposal gate covers Armada's MCP tools, not the CLI's own shell.
+   Leave it off unless every account that can use Ask is trusted with a shell on the Admiral host.
 3. Prefer Harbors on separate machines or VMs for untrusted repositories, and keep `RequireHarborForLaunch` on when
    captains must never run on the Admiral host.
 4. Keep the Admiral on localhost unless you need remote access; when you expose it, change the default password
@@ -221,14 +235,14 @@ only within the caller's tenant (tenant admins) or the caller's own records (reg
 | GET | `/openapi.json` | Documentation | ApiDocumentation:Read | None (public) | none | path | - |
 | GET | `/swagger` | Documentation | ApiDocumentation:Read | None (public) | none | path | - |
 | PUT | `/api/v1/account/password` | AuthRoutes | User:Update | Authenticated | caller tenant/user (handler) | typed JSON body | F-07 Fixed |
-| POST | `/api/v1/captains/{id}/chat` | AskRoutes | Captain:Execute | TenantAdmin | caller tenant/user (handler) | typed JSON body | O-02 Open |
+| POST | `/api/v1/captains/{id}/chat` | AskRoutes | Captain:Execute | TenantAdmin | caller tenant/user (handler) | typed JSON body | O-02 (captain setting; TenantAdmin) |
 | POST | `/api/v1/ask/threads/enumerate` | AskRoutes | AskThread:Read | Authenticated | caller tenant/user (handler) | no body / path | - |
 | POST | `/api/v1/ask/threads` | AskRoutes | AskThread:Create | Authenticated | caller tenant/user (handler) | no body / path | - |
 | GET | `/api/v1/ask/threads/{id}` | AskRoutes | AskThread:Read | Authenticated | caller tenant/user (handler) | path | - |
 | PUT | `/api/v1/ask/threads/{id}` | AskRoutes | AskThread:Update | Authenticated | caller tenant/user (handler) | no body / path | - |
 | DELETE | `/api/v1/ask/threads/{id}` | AskRoutes | AskThread:Delete | Authenticated | caller tenant/user (handler) | path | - |
 | POST | `/api/v1/ask/threads/{id}/messages/enumerate` | AskRoutes | AskThread:Read | Authenticated | caller tenant/user (handler) | no body / path | - |
-| POST | `/api/v1/ask/threads/{id}/messages` | AskRoutes | AskThread:Execute | Authenticated | caller tenant/user (handler) | no body / path | O-02 Open |
+| POST | `/api/v1/ask/threads/{id}/messages` | AskRoutes | AskThread:Execute | Authenticated | caller tenant/user (handler) | no body / path | F-27 Fixed |
 | POST | `/api/v1/ask/threads/{id}/cancel` | AskRoutes | AskThread:Execute | Authenticated | caller tenant/user (handler) | no body / path | - |
 | POST | `/api/v1/ask/threads/{id}/summarize` | AskRoutes | AskThread:Execute | Authenticated | caller tenant/user (handler) | no body / path | - |
 | POST | `/api/v1/ask/threads/{id}/read` | AskRoutes | AskThread:Execute | Authenticated | caller tenant/user (handler) | no body / path | - |
@@ -237,10 +251,10 @@ only within the caller's tenant (tenant admins) or the caller's own records (reg
 | POST | `/api/v1/ask/threads/{id}/proposals/{pid}/reject` | AskRoutes | AskThread:Execute | Authenticated | caller tenant/user (handler) | no body / path | - |
 | GET | `/api/v1/ask/threads/{id}/work/{workId}` | AskRoutes | AskThread:Read | Authenticated | caller tenant/user (handler) | path | - |
 | GET | `/api/v1/ask/quick-actions` | AskRoutes | AskThread:Read | Authenticated | caller tenant/user (handler) | typed JSON body | - |
-| POST | `/api/v1/authenticate` | AuthRoutes | Session:Execute | None (public) | none | typed JSON body | F-08, O-05 Fixed / Open |
+| POST | `/api/v1/authenticate` | AuthRoutes | Session:Execute | None (public) | none | typed JSON body | F-08, F-26 Fixed |
 | GET | `/api/v1/whoami` | AuthRoutes | Session:Read | Authenticated | caller tenant/user (handler) | path | - |
-| POST | `/api/v1/tenants/lookup` | AuthRoutes | Session:Read | None (public) | none | typed JSON body | O-05 Open |
-| POST | `/api/v1/onboarding` | AuthRoutes | User:Execute | None (public) | none | typed JSON body | F-10, O-05 Fixed / Open |
+| POST | `/api/v1/tenants/lookup` | AuthRoutes | Session:Read | None (public) | none | typed JSON body | F-26 Fixed (rate limited) |
+| POST | `/api/v1/onboarding` | AuthRoutes | User:Execute | None (public) | none | typed JSON body | F-10, F-26 Fixed |
 | GET | `/api/v1/backup` | BackupRoutes | Backup:Admin | AdminOnly | server-wide (admin) | path | O-12 Open |
 | POST | `/api/v1/restore` | BackupRoutes | Backup:Admin | AdminOnly | server-wide (admin) | no body / path | O-12 Open |
 | GET | `/api/v1/captains` | CaptainRoutes | Captain:Read | Authenticated | caller tenant/user (handler) | path + query | - |
@@ -573,51 +587,51 @@ only within the caller's tenant (tenant admins) or the caller's own records (reg
 Generated from `McpToolAuthorizationRegistry` (146 tools). Authentication: credential (`Authorization: Bearer`,
 `X-Token`, `X-Api-Key`) or, on a loopback-bound listener with `Mcp.AllowUnauthenticatedLoopback`, no credential
 (acts as the default tenant's tenant admin). Input: every tool deserializes its arguments into a typed `*Args` class.
-"Caller scoping" comes from a static scan of each handler for a caller-context check; "no caller check found (by id)"
-means the handler reads or writes the entity by id in any tenant (O-01).
+"Caller scoping": every tool that takes an entity id resolves it through `McpCallerScope` (F-25, W1.9), proven for every
+advertised tool by `E2E.McpTenantIsolation`; `status` stays server-wide like `GET /api/v1/status` (O-03).
 
 | Tool | Requirement | Level | Caller scoping | Findings |
 |------|-------------|-------|----------------|----------|
 | `enumerate` | All:Read | Authenticated | caller tenant/user | - |
-| `status` | Status:Read | Authenticated | no caller check found (by id) | O-01 Open |
+| `status` | Status:Read | Authenticated | server-wide | O-03 Open |
 | `get_backlog_item` | Objective:Read | Authenticated | caller tenant/user | - |
 | `get_backlog_planning_session` | PlanningSession:Read | Authenticated | caller tenant/user | - |
 | `get_backlog_refinement_session` | ObjectiveRefinementSession:Read | Authenticated | caller tenant/user | - |
-| `get_captain_log` | Captain:Read | Authenticated | no caller check found (by id) | O-01 Open |
-| `get_captain_tools` | Captain:Read | Authenticated | no caller check found (by id) | O-01 Open |
-| `get_captain` | Captain:Read | Authenticated | no caller check found (by id) | O-01 Open |
-| `get_check_run` | CheckRun:Read | Authenticated | no caller check found (by id) | O-01 Open |
+| `get_captain_log` | Captain:Read | Authenticated | caller tenant/user | F-25 Fixed |
+| `get_captain_tools` | Captain:Read | Authenticated | caller tenant/user | F-25 Fixed |
+| `get_captain` | Captain:Read | Authenticated | caller tenant/user | F-25 Fixed |
+| `get_check_run` | CheckRun:Read | Authenticated | caller tenant/user | F-25 Fixed |
 | `get_deployment` | Deployment:Read | Authenticated | caller tenant/user | - |
-| `get_dock` | Dock:Read | Authenticated | no caller check found (by id) | O-01 Open |
+| `get_dock` | Dock:Read | Authenticated | caller tenant/user | F-25 Fixed |
 | `get_fleet` | Fleet:Read | Authenticated | caller tenant/user | - |
 | `get_harbor` | Harbor:Read | Authenticated | caller tenant/user | - |
 | `get_memory` | Memory:Read | Authenticated | caller tenant/user | - |
-| `get_merge_entry` | MergeQueue:Read | Authenticated | no caller check found (by id) | O-01 Open |
-| `get_mission_diff` | Mission:Read | Authenticated | no caller check found (by id) | O-01 Open |
-| `get_mission_log` | Mission:Read | Authenticated | no caller check found (by id) | O-01 Open |
+| `get_merge_entry` | MergeQueue:Read | Authenticated | caller tenant/user | F-25 Fixed |
+| `get_mission_diff` | Mission:Read | Authenticated | caller tenant/user | F-25 Fixed |
+| `get_mission_log` | Mission:Read | Authenticated | caller tenant/user | F-25 Fixed |
 | `get_model_endpoint` | ModelEndpoint:Read | Authenticated | caller tenant/user | - |
 | `get_objective` | Objective:Read | Authenticated | caller tenant/user | - |
-| `get_persona` | Persona:Read | Authenticated | no caller check found (by id) | O-01 Open |
-| `get_pipeline` | Pipeline:Read | Authenticated | no caller check found (by id) | O-01 Open |
-| `get_playbook` | Playbook:Read | Authenticated | no caller check found (by id) | O-01 Open |
-| `get_prompt_template` | PromptTemplate:Read | Authenticated | no caller check found (by id) | O-01 Open |
+| `get_persona` | Persona:Read | Authenticated | caller tenant/user | F-25 Fixed |
+| `get_pipeline` | Pipeline:Read | Authenticated | caller tenant/user | F-25 Fixed |
+| `get_playbook` | Playbook:Read | Authenticated | caller tenant/user | F-25 Fixed |
+| `get_prompt_template` | PromptTemplate:Read | Authenticated | caller tenant/user | F-25 Fixed |
 | `get_release` | Release:Read | Authenticated | caller tenant/user | - |
 | `get_runbook_execution` | Runbook:Read | Authenticated | caller tenant/user | - |
 | `get_runbook` | Runbook:Read | Authenticated | caller tenant/user | - |
-| `get_vessel` | Vessel:Read | Authenticated | no caller check found (by id) | O-01 Open |
+| `get_vessel` | Vessel:Read | Authenticated | caller tenant/user | F-25 Fixed |
 | `inbox` | Inbox:Read | Authenticated | caller tenant/user | - |
 | `list_backlog_refinement_sessions` | ObjectiveRefinementSession:Read | Authenticated | caller tenant/user | - |
 | `list_backlog` | Objective:Read | Authenticated | caller tenant/user | - |
 | `list_objectives` | Objective:Read | Authenticated | caller tenant/user | - |
-| `list_prompt_templates` | PromptTemplate:Read | Authenticated | no caller check found (by id) | O-01 Open |
-| `mission_status` | Mission:Read | Authenticated | no caller check found (by id) | O-01 Open |
-| `papercut_summary` | Mission:Read | Authenticated | no caller check found (by id) | O-01 Open |
+| `list_prompt_templates` | PromptTemplate:Read | Authenticated | caller tenant/user | F-25 Fixed |
+| `mission_status` | Mission:Read | Authenticated | caller tenant/user | F-25 Fixed |
+| `papercut_summary` | Mission:Read | Authenticated | caller tenant/user | F-25 Fixed |
 | `search_memory` | Memory:Read | Authenticated | caller tenant/user | - |
-| `token_usage_summary` | TokenUsage:Read | Authenticated | no caller check found (by id) | O-01 Open |
+| `token_usage_summary` | TokenUsage:Read | Authenticated | caller tenant/user | F-25 Fixed |
 | `vessel_health` | VesselHealth:Read | Authenticated | caller tenant/user | - |
-| `voyage_status` | Voyage:Read | Authenticated | no caller check found (by id) | O-01 Open |
+| `voyage_status` | Voyage:Read | Authenticated | caller tenant/user | F-25 Fixed |
 | `fleet_action_run_status` | FleetActionRun:Read | Authenticated | caller tenant/user | - |
-| `evaluate_autoland` | Mission:Read | Authenticated | no caller check found (by id) | O-01 Open |
+| `evaluate_autoland` | Mission:Read | Authenticated | caller tenant/user | F-25 Fixed |
 | `create_memory` | Memory:Create | Authenticated | caller tenant/user | - |
 | `update_memory` | Memory:Update | Authenticated | caller tenant/user | - |
 | `delete_memory` | Memory:Delete | Authenticated | caller tenant/user | - |
@@ -625,56 +639,56 @@ means the handler reads or writes the entity by id in any tenant (O-01).
 | `update_model_endpoint` | ModelEndpoint:Update | Authenticated | caller tenant/user | - |
 | `delete_model_endpoint` | ModelEndpoint:Delete | Authenticated | caller tenant/user | - |
 | `validate_model_endpoint` | ModelEndpoint:Execute | Authenticated | caller tenant/user | - |
-| `health_check_model_endpoints` | ModelEndpoint:Execute | Authenticated | no caller check found (by id) | O-01 Open |
+| `health_check_model_endpoints` | ModelEndpoint:Execute | Authenticated | caller tenant/user | F-25 Fixed |
 | `create_harbor` | Harbor:Create | Authenticated | caller tenant/user | - |
 | `update_harbor` | Harbor:Update | Authenticated | caller tenant/user | - |
 | `delete_harbor` | Harbor:Delete | Authenticated | caller tenant/user | - |
 | `set_harbor_enabled` | Harbor:Update | Authenticated | caller tenant/user | - |
 | `add_vessel` | Vessel:Create | TenantAdmin | caller tenant/user | - |
-| `update_vessel` | Vessel:Update | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `delete_vessel` | Vessel:Delete | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `delete_vessels` | Vessel:Delete | TenantAdmin | no caller check found (by id) | O-01 Open |
+| `update_vessel` | Vessel:Update | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `delete_vessel` | Vessel:Delete | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `delete_vessels` | Vessel:Delete | TenantAdmin | caller tenant/user | F-25 Fixed |
 | `update_vessel_context` | Vessel:Update | TenantAdmin | caller tenant/user | - |
 | `create_fleet` | Fleet:Create | TenantAdmin | caller tenant/user | - |
 | `update_fleet` | Fleet:Update | TenantAdmin | caller tenant/user | - |
 | `delete_fleet` | Fleet:Delete | TenantAdmin | caller tenant/user | - |
 | `delete_fleets` | Fleet:Delete | TenantAdmin | caller tenant/user | - |
 | `create_captain` | Captain:Create | TenantAdmin | caller tenant/user | - |
-| `update_captain` | Captain:Update | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `delete_captain` | Captain:Delete | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `delete_captains` | Captain:Delete | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `stop_captain` | Captain:Execute | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `stop_all` | Captain:Execute | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `release_captain` | Captain:Execute | TenantAdmin | no caller check found (by id) | O-01 Open |
+| `update_captain` | Captain:Update | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `delete_captain` | Captain:Delete | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `delete_captains` | Captain:Delete | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `stop_captain` | Captain:Execute | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `stop_all` | Captain:Execute | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `release_captain` | Captain:Execute | TenantAdmin | caller tenant/user | F-25 Fixed |
 | `dispatch` | Voyage:Execute | TenantAdmin | caller tenant/user | - |
 | `create_mission` | Mission:Create | TenantAdmin | caller tenant/user | - |
-| `update_mission` | Mission:Update | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `cancel_mission` | Mission:Execute | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `restart_mission` | Mission:Execute | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `retry_landing` | Mission:Execute | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `transition_mission_status` | Mission:Update | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `delete_missions` | Mission:Delete | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `purge_mission` | Mission:Delete | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `cancel_voyage` | Voyage:Execute | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `delete_voyages` | Voyage:Delete | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `purge_voyage` | Voyage:Delete | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `delete_dock` | Dock:Delete | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `delete_docks` | Dock:Delete | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `purge_dock` | Dock:Delete | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `repair_dock` | Dock:Execute | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `unstick_dock` | Dock:Execute | TenantAdmin | no caller check found (by id) | O-01 Open |
+| `update_mission` | Mission:Update | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `cancel_mission` | Mission:Execute | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `restart_mission` | Mission:Execute | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `retry_landing` | Mission:Execute | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `transition_mission_status` | Mission:Update | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `delete_missions` | Mission:Delete | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `purge_mission` | Mission:Delete | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `cancel_voyage` | Voyage:Execute | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `delete_voyages` | Voyage:Delete | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `purge_voyage` | Voyage:Delete | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `delete_dock` | Dock:Delete | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `delete_docks` | Dock:Delete | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `purge_dock` | Dock:Delete | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `repair_dock` | Dock:Execute | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `unstick_dock` | Dock:Execute | TenantAdmin | caller tenant/user | F-25 Fixed |
 | `send_signal` | Signal:Execute | TenantAdmin | caller tenant/user | - |
-| `delete_signals` | Signal:Delete | TenantAdmin | no caller check found (by id) | O-01 Open |
+| `delete_signals` | Signal:Delete | TenantAdmin | caller tenant/user | F-25 Fixed |
 | `delete_event` | Event:Delete | TenantAdmin | caller tenant/user | F-19 Fixed |
 | `delete_events` | Event:Delete | TenantAdmin | caller tenant/user | F-19 Fixed |
 | `enqueue_merge` | MergeQueue:Create | TenantAdmin | caller tenant/user | - |
-| `cancel_merge` | MergeQueue:Execute | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `delete_merge` | MergeQueue:Delete | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `process_merge_entry` | MergeQueue:Execute | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `process_merge_queue` | MergeQueue:Execute | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `purge_merge_entries` | MergeQueue:Delete | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `purge_merge_entry` | MergeQueue:Delete | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `purge_merge_queue` | MergeQueue:Delete | TenantAdmin | no caller check found (by id) | O-01 Open |
+| `cancel_merge` | MergeQueue:Execute | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `delete_merge` | MergeQueue:Delete | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `process_merge_entry` | MergeQueue:Execute | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `process_merge_queue` | MergeQueue:Execute | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `purge_merge_entries` | MergeQueue:Delete | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `purge_merge_entry` | MergeQueue:Delete | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `purge_merge_queue` | MergeQueue:Delete | TenantAdmin | caller tenant/user | F-25 Fixed |
 | `create_objective` | Objective:Create | TenantAdmin | caller tenant/user | - |
 | `update_objective` | Objective:Update | TenantAdmin | caller tenant/user | - |
 | `delete_objective` | Objective:Delete | TenantAdmin | caller tenant/user | - |
@@ -691,17 +705,17 @@ means the handler reads or writes the entity by id in any tenant (O-01).
 | `summarize_backlog_refinement_session` | ObjectiveRefinementSession:Execute | TenantAdmin | caller tenant/user | - |
 | `apply_backlog_refinement_summary` | ObjectiveRefinementSession:Execute | TenantAdmin | caller tenant/user | - |
 | `create_playbook` | Playbook:Create | TenantAdmin | caller tenant/user | - |
-| `update_playbook` | Playbook:Update | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `delete_playbook` | Playbook:Delete | TenantAdmin | no caller check found (by id) | O-01 Open |
+| `update_playbook` | Playbook:Update | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `delete_playbook` | Playbook:Delete | TenantAdmin | caller tenant/user | F-25 Fixed |
 | `create_persona` | Persona:Create | TenantAdmin | caller tenant/user | - |
-| `update_persona` | Persona:Update | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `delete_persona` | Persona:Delete | TenantAdmin | no caller check found (by id) | O-01 Open |
+| `update_persona` | Persona:Update | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `delete_persona` | Persona:Delete | TenantAdmin | caller tenant/user | F-25 Fixed |
 | `create_pipeline` | Pipeline:Create | TenantAdmin | caller tenant/user | - |
-| `update_pipeline` | Pipeline:Update | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `delete_pipeline` | Pipeline:Delete | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `create_prompt_template` | PromptTemplate:Create | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `update_prompt_template` | PromptTemplate:Update | TenantAdmin | no caller check found (by id) | O-01 Open |
-| `reset_prompt_template` | PromptTemplate:Execute | TenantAdmin | no caller check found (by id) | O-01 Open |
+| `update_pipeline` | Pipeline:Update | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `delete_pipeline` | Pipeline:Delete | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `create_prompt_template` | PromptTemplate:Create | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `update_prompt_template` | PromptTemplate:Update | TenantAdmin | caller tenant/user | F-25 Fixed |
+| `reset_prompt_template` | PromptTemplate:Execute | TenantAdmin | caller tenant/user | F-25 Fixed |
 | `create_release` | Release:Create | TenantAdmin | caller tenant/user | - |
 | `create_deployment` | Deployment:Create | TenantAdmin | caller tenant/user | - |
 | `approve_deployment` | Deployment:Execute | TenantAdmin | caller tenant/user | - |
@@ -753,11 +767,11 @@ the REST credential headers; Ask thread tokens are refused. Query strings are no
 
 | Entry point | Authentication | Authorization | Tenant scoping | Input validation | Findings |
 |-------------|----------------|---------------|----------------|------------------|----------|
-| Harbor link (WebSocket at `Harbor.LinkPath`, default `/v1.0/harbor/connect`) | `x-access-key` (or `Authorization`) validated as an Armada credential; no credential only from loopback to a loopback-bound Admiral with `Harbor.RequireAuth` off | Any valid credential may register a Harbor for its own tenant and user; a global admin may name a tenant (`x-tenant-guid`) | Harbor registered under the credential's tenant and user | First message must be a handshake; messages parsed by `HarborProtocol` (malformed dropped) | F-05 Fixed; O-04 Open |
-| Server to Harbor messages (`launch`, `git`, `kill`, `stdin`, `deferredLaunch`) | Link already authenticated | Routed only to Harbors eligible for the mission's user or tenant | Harbor ownership | `git` carries an executable and arguments run on the Harbor host | O-04 Open |
-| Remote tunnel (Admiral dials `RemoteControl.TunnelUrl`) | Admiral proves the shared tunnel password (SHA-256 challenge with timestamp and nonce) and optional enrollment token | n/a | One instance id per Admiral | Envelope deserialization | O-11 Open (default password, `AllowInvalidCertificates`) |
+| Harbor link (WebSocket at `Harbor.LinkPath`, default `/v1.0/harbor/connect`) | `x-access-key` (or `Authorization`) validated as an Armada credential; no credential only from loopback to a loopback-bound Admiral with `Harbor.RequireAuth` off | Any valid credential may register a Harbor for its own tenant and user; a global admin may name a tenant (`x-tenant-guid`) | Harbor registered under the credential's tenant and user; an id stays bound to that identity | First message must be a handshake; messages parsed by `HarborProtocol` (malformed dropped) | F-05, F-29 Fixed; O-04 Open (MCP credential) |
+| Server to Harbor messages (`launch`, `git`, `kill`, `stdin`, `deferredLaunch`) | Link already authenticated | Routed only to Harbors eligible for the mission's user or tenant | Harbor ownership | `git` carries an executable and arguments run on the Harbor host; `launch` carries the resolved auto-approve decision (F-28) | O-04 Open (MCP credential) |
+| Remote tunnel (Admiral dials `RemoteControl.TunnelUrl`) | Admiral proves the shared tunnel password (SHA-256 challenge with timestamp and nonce) and optional enrollment token | n/a | One instance id per Admiral | Envelope deserialization | F-30 (Admiral warns on the default password); O-11 Open (`AllowInvalidCertificates`) |
 | Dashboard relay through the tunnel (`RemoteDashboardRelayService`) | Relayed requests replay to the loopback REST port with the browser's own `Authorization`, `X-Token`, `X-Api-Key`; cookies and proxy session headers stripped | Normal REST authorization (F-01 closes the unauthenticated server-control routes the relay used to reach) | Normal REST scoping | Only `/api/v1/*` and `/ws` are relayed | F-01 Fixed |
-| Armada.Proxy listener (port 7893): `/proxy-api/v1/auth/*`, `/proxy-api/v1/instances`, `/session/*`, `/tunnel`, browser `/ws`, `/api/v1/*` relay, static files | Shared proxy password (challenge-response, in-memory session cookie); `/tunnel` by tunnel password proof; `/instances` and health are public | Proxy route policy blocks a few paths by exact match; Armada credentials still required on the Admiral | None at the proxy (no per-user identity) | Exact-string route blocks | O-11 Open |
+| Armada.Proxy listener (port 7893): `/proxy-api/v1/auth/*`, `/proxy-api/v1/instances`, `/session/*`, `/tunnel`, browser `/ws`, `/api/v1/*` relay, static files | Shared proxy password (challenge-response, in-memory session cookie, `Secure` with `SecureCookie`); default or blank password refused at start; logins and tunnel handshakes rate limited per address; `/tunnel` by tunnel password proof; `/instances` needs a session; health is public | Proxy route policy blocks a few paths by exact match; Armada credentials still required on the Admiral | None at the proxy (no per-user identity) | Exact-string route blocks | F-30 Fixed; O-11 Open |
 | `armada mcp stdio` (Helm) | None (local process) | Same tool handlers; no MCP authorization wrapper | Default tenant | Typed tool args | O-18 Accepted |
 | Static files: `/`, `/dashboard/*`, `/assets/*`, `/img/*` | None | None (no data) | n/a | Embedded files only | - |
 | `/openapi.json`, `/swagger` | None | NoAuthRequired | n/a | n/a | O-10 Accepted |
@@ -778,7 +792,7 @@ the REST credential headers; Ask thread tokens are refused. Query strings are no
 | Backup and restore (REST download and upload; MCP and WebSocket with host paths) | Credential | AdminOnly | Server-wide (backups include `settings.json` with secrets) | Restore replaces the database and settings from the zip | F-03 Fixed; O-12 Accepted |
 | Factory reset (`POST /server/reset`: deletes logs, docks, repos, and the database) | Credential | AdminOnly | Server-wide | none | - |
 | Status doctor (`GET /doctor`: `git --version`, `command -v` for fixed names) | Credential | Authenticated | Server-wide | Fixed inputs | - |
-| Captain processes (mission, chat, planning, Ask turns) | n/a (launched by the Admiral) | Launching requires the route's level (dispatch TenantAdmin; Ask Authenticated) | Captain and mission tenant | Prompt text; runtime flags per [Running agents safely](#running-agents-safely) | F-23 Mitigated; O-02 Open |
+| Captain processes (mission, chat, planning, Ask turns) | n/a (launched by the Admiral) | Launching requires the route's level (dispatch TenantAdmin; Ask Authenticated) | Captain and mission tenant | Prompt text; runtime flags per [Running agents safely](#running-agents-safely) (captain setting, vessel override, Ask turns forced off) | F-23 Mitigated; F-27, F-28 Fixed; O-20 Open |
 
 ## Verification
 
@@ -793,3 +807,9 @@ the REST credential headers; Ask thread tokens are refused. Query strings are no
   audit events protected; tenant admin cannot take over a global admin.
 - `Services.SecurityHardening`: runtime flags with auto-approve off, managed-path guard, secret key detection,
   credential redaction, default password detection, loopback hostname detection.
+- `E2E.McpTenantIsolation` (F-25): every advertised MCP tool that takes an entity id, called by tenant B with tenant A's
+  ids, answers not-found or skips the id, never echoes tenant A data, and leaves tenant A's entities unchanged; the same
+  read tools succeed for tenant A; `stop_all` is tenant scoped. A by-id tool the suite cannot map fails it.
+- `Services.PasswordHashing`, `Services.LoginRateLimiter`, `E2E.LoginSecurity` (F-26); `Services.ProxySecurity` (F-30);
+  `Services.CaptainAutoApproveOverride` (F-27, F-28); `Services.HarborLaunchSecurity` (F-28, F-29);
+  `Services.AskThreadTokenPrecedence` (F-31).

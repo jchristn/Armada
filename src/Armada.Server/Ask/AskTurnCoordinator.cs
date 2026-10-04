@@ -10,6 +10,7 @@ namespace Armada.Server.Ask
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Core.Services.Ask;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
@@ -237,7 +238,7 @@ namespace Armada.Server.Ask
                 prompt.AppendLine("Work: " + AskMilestoneDetector.Describe(snapshot));
 
                 CaptainChatTurnOptions options = new CaptainChatTurnOptions();
-                options.Captain = captain;
+                options.Captain = CaptainForAskTurn(captain);
                 options.Prompt = prompt.ToString();
                 options.TenantId = thread.TenantId;
                 options.UserId = thread.UserId;
@@ -446,7 +447,7 @@ namespace Armada.Server.Ask
                 string? systemPrompt = await ResolveSystemPromptAsync().ConfigureAwait(false);
 
                 CaptainChatTurnOptions options = new CaptainChatTurnOptions();
-                options.Captain = captain;
+                options.Captain = CaptainForAskTurn(captain);
                 options.Prompt = BuildPrompt(current, captain, history, note, systemPrompt, await BuildFocusAsync(current).ConfigureAwait(false));
                 options.ShowThinking = showThinking;
                 options.TenantId = thread.TenantId;
@@ -557,7 +558,7 @@ namespace Armada.Server.Ask
                     if (captain != null)
                     {
                         CaptainChatTurnOptions options = new CaptainChatTurnOptions();
-                        options.Captain = captain;
+                        options.Captain = CaptainForAskTurn(captain);
                         options.Prompt = BuildPrompt(thread, captain, history,
                             "Summarize this conversation for the user in 3 to 6 short bullet points: what was asked, what was decided or started (with ids), and what is still open. Do not call any tools.", null);
                         options.TenantId = thread.TenantId;
@@ -640,7 +641,18 @@ namespace Armada.Server.Ask
             }
         }
 
-        private bool TryReserveCaptain(string captainId)
+        /// <summary>
+        /// The captain an Ask turn or narration launches: with <see cref="AskSettings.CaptainAutoApprove"/> off (the
+        /// default) a copy with auto-approve forced off, so the CLI's own shell and file tools are not pre-approved for
+        /// whoever can post to a thread (O-02); with it on, the captain's own setting.
+        /// </summary>
+        private Captain CaptainForAskTurn(Captain captain)
+        {
+            bool? forced = _Settings.Ask.CaptainAutoApprove ? (bool?)null : false;
+            return CaptainRuntimeOptions.WithEffectiveAutoApprove(captain, forced);
+        }
+
+                private bool TryReserveCaptain(string captainId)
         {
             while (true)
             {

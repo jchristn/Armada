@@ -253,6 +253,26 @@ namespace Armada.Core.Services
         public async Task<int> CheckHealthAllAsync(CancellationToken token = default)
         {
             List<ModelEndpoint> all = await _Database.ModelEndpoints.EnumerateAsync(token).ConfigureAwait(false);
+            return await CheckHealthAsync(all, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Run a health sweep across the enabled endpoints visible to the caller (every endpoint for a global admin,
+        /// otherwise the endpoints <see cref="EnumerateAsync(AuthContext, CancellationToken)"/> returns), with the same
+        /// deduplication as <see cref="CheckHealthAllAsync(CancellationToken)"/>.
+        /// </summary>
+        /// <param name="auth">Caller.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The number of distinct (base URL, provider, kind, API key) combinations probed.</returns>
+        public async Task<int> CheckHealthAllAsync(AuthContext auth, CancellationToken token = default)
+        {
+            if (auth == null) throw new ArgumentNullException(nameof(auth));
+            List<ModelEndpoint> visible = await EnumerateAsync(auth, token).ConfigureAwait(false);
+            return await CheckHealthAsync(visible, token).ConfigureAwait(false);
+        }
+
+        private async Task<int> CheckHealthAsync(List<ModelEndpoint> all, CancellationToken token)
+        {
             List<ModelEndpoint> enabled = all.Where(e => e.Enabled).ToList();
 
             // Ordinal (case-sensitive): the normalized URL is already lower-cased, but API keys are

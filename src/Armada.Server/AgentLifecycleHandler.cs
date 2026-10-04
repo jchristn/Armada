@@ -457,13 +457,15 @@ namespace Armada.Server
             int processId;
             try
             {
+                // A vessel-level auto-approve override wins over the captain's own setting for missions on that vessel.
+                Captain launchCaptain = CaptainRuntimeOptions.WithEffectiveAutoApprove(captain, vessel?.AutoApprove);
                 processId = await runtime.StartAsync(
                     dock.WorktreePath ?? throw new InvalidOperationException("Dock worktree path is null"),
                     prompt,
                     logFilePath: logFilePath,
                     finalMessageFilePath: finalMessageFilePath,
                     model: captain.Model,
-                    captain: captain,
+                    captain: launchCaptain,
                     isolateLaunch: _Settings.IsolateCaptainLaunch,
                     mcpPort: _Settings.McpPort).ConfigureAwait(false);
             }
@@ -806,7 +808,10 @@ namespace Armada.Server
                     parsed.Runtime = captain?.Runtime.ToString();
                     parsed.ReportedUtc = DateTime.UtcNow;
 
-                    await _Database.Events.CreateAsync(PapercutService.ToEvent(parsed)).ConfigureAwait(false);
+                    ArmadaEvent papercutEvent = PapercutService.ToEvent(parsed);
+                    papercutEvent.TenantId = mission?.TenantId ?? captain?.TenantId;
+                    papercutEvent.UserId = mission?.UserId ?? captain?.UserId;
+                    await _Database.Events.CreateAsync(papercutEvent).ConfigureAwait(false);
 
                     _Logging.Debug(_Header + "papercut from captain " + capturedCaptainId + " [" +
                         parsed.Category + "/" + parsed.Severity + "] " + parsed.Title);

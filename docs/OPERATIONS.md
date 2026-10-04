@@ -63,7 +63,10 @@ an outbound tunnel (`remoteControl.enabled`, `remoteControl.tunnelUrl`) to the p
 and a relayed dashboard on port 7893. The relay deliberately blocks or write-blocks some administrative routes; see
 [PROXY_API.md](PROXY_API.md) for the policy. Setup is in [REMOTE_MGMT.md](REMOTE_MGMT.md) and day-two operations,
 including the common failure modes, are in [TUNNEL_OPERATIONS.md](TUNNEL_OPERATIONS.md). The proxy and the tunnel
-share one password, which defaults to `armadaadmin` when not set. Set a real one before exposing the proxy.
+share one password. The proxy refuses to start while that password is blank or the built-in default `armadaadmin`
+(set `password` in `proxysettings.json` or `ARMADA_PROXY_PASSWORD`; `allowDefaultPassword` overrides this for a local
+test only), and the Admiral logs a warning when `remoteControl.password` is still the default. Proxy logins and tunnel
+handshakes are rate limited per client address (429 with `Retry-After`).
 
 ## Ports
 

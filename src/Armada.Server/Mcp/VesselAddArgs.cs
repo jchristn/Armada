@@ -46,6 +46,12 @@ namespace Armada.Server.Mcp
         public bool? AllowConcurrentMissions { get; set; }
 
         /// <summary>
+        /// Per-vessel auto-approve override for missions on this vessel: true or false wins over the captain's setting;
+        /// omit to leave the captain's setting in effect.
+        /// </summary>
+        public bool? AutoApprove { get; set; }
+
+        /// <summary>
         /// Whether to enable model context accumulation on this vessel. Default false.
         /// </summary>
         public bool? EnableModelContext { get; set; }

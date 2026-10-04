@@ -154,6 +154,8 @@ export interface Vessel {
   definitionOfDoneTestCommand?: string | null;
   definitionOfDoneTimeoutSeconds?: number;
   allowConcurrentMissions: boolean;
+  /** Per-vessel auto-approve override for missions; null or absent uses the captain setting. */
+  autoApprove?: boolean | null;
   defaultPipelineId: string | null;
   active: boolean;
   createdUtc: string;

@@ -463,6 +463,8 @@ namespace Armada.Core.Database.SqlServer
                 vessel.BranchCleanupPolicy = bcp;
             try { vessel.RequirePassingChecksToLand = Convert.ToBoolean(reader["require_passing_checks_to_land"]); }
             catch { vessel.RequirePassingChecksToLand = false; }
+            try { object autoApproveValue = reader["auto_approve"]; vessel.AutoApprove = autoApproveValue == null || autoApproveValue == DBNull.Value ? (bool?)null : Convert.ToBoolean(autoApproveValue); }
+            catch { vessel.AutoApprove = null; }
             try { vessel.AllowConcurrentMissions = Convert.ToBoolean(reader["allow_concurrent_missions"]); }
             catch { vessel.AllowConcurrentMissions = false; }
             try { vessel.DefaultPipelineId = NullableString(reader["default_pipeline_id"]); } catch { }

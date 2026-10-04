@@ -259,6 +259,11 @@ namespace Test.Shared.Infrastructure
             settings.McpPort = McpPort;
             settings.ApiKey = ApiKey;
             settings.HeartbeatIntervalSeconds = 300;
+            // Shared fixtures serve many suites from one loopback address, several of which test bad passwords and
+            // invalid tokens on purpose: lift the login rate limits so one suite cannot lock out the next. The limiter
+            // itself is covered by E2E.LoginSecurity on a dedicated server.
+            settings.LoginRateLimit.MaxFailuresPerAccount = 1000;
+            settings.LoginRateLimit.MaxFailuresPerAddress = 100000;
             // Bind the REST and MCP listeners to IPv4 loopback explicitly. The default "localhost"
             // makes clients resolve ::1 (IPv6) first on Windows, stalling every connection before it
             // falls back to 127.0.0.1 -- which massively inflates E2E time and pushes cases toward the

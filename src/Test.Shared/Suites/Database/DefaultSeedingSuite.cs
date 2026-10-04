@@ -74,9 +74,11 @@ namespace Test.Shared.Suites.Database
                     UserMaster? user = await db.Users.ReadAsync(Constants.DefaultTenantId, Constants.DefaultUserId);
                     AssertNotNull(user);
 
-                    string expectedHash = UserMaster.ComputePasswordHash(Constants.DefaultUserPassword);
-                    AssertEqual(expectedHash, user!.PasswordSha256);
+                    // Seeded salted and stretched (PBKDF2), never as the unsalted SHA-256 of the default password.
+                    AssertTrue(Armada.Core.Services.PasswordHasher.IsAdaptiveHash(user!.PasswordSha256), "seeded hash is PBKDF2");
+                    AssertFalse(user.PasswordSha256.Contains(UserMaster.ComputePasswordHash(Constants.DefaultUserPassword)), "no unsalted digest");
                     AssertTrue(user.VerifyPassword(Constants.DefaultUserPassword));
+                    AssertTrue(user.UsesDefaultPassword());
                 }
             }));
 

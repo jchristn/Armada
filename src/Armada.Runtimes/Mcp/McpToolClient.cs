@@ -110,26 +110,44 @@ namespace Armada.Runtimes.Mcp
         public async Task<List<McpRemoteTool>> ListToolsAsync(CancellationToken token = default)
         {
             List<McpRemoteTool> tools = new List<McpRemoteTool>();
-            JsonElement result = await SendAsync("tools/list", NextId(), new { }, token).ConfigureAwait(false);
+            string? cursor = null;
 
-            if (result.ValueKind == JsonValueKind.Object
-                && result.TryGetProperty("tools", out JsonElement toolsElement)
-                && toolsElement.ValueKind == JsonValueKind.Array)
+            // tools/list is paginated: follow nextCursor until the server stops issuing one (bounded so a
+            // misbehaving server cannot loop forever).
+            for (int page = 0; page < 100; page++)
             {
-                foreach (JsonElement toolElement in toolsElement.EnumerateArray())
+                object parameters = cursor == null ? (object)new { } : new { cursor = cursor };
+                JsonElement result = await SendAsync("tools/list", NextId(), parameters, token).ConfigureAwait(false);
+
+                if (result.ValueKind == JsonValueKind.Object
+                    && result.TryGetProperty("tools", out JsonElement toolsElement)
+                    && toolsElement.ValueKind == JsonValueKind.Array)
                 {
-                    if (toolElement.ValueKind != JsonValueKind.Object) continue;
+                    foreach (JsonElement toolElement in toolsElement.EnumerateArray())
+                    {
+                        if (toolElement.ValueKind != JsonValueKind.Object) continue;
 
-                    McpRemoteTool tool = new McpRemoteTool();
-                    if (toolElement.TryGetProperty("name", out JsonElement nameElement) && nameElement.ValueKind == JsonValueKind.String)
-                        tool.Name = nameElement.GetString() ?? String.Empty;
-                    if (toolElement.TryGetProperty("description", out JsonElement descElement) && descElement.ValueKind == JsonValueKind.String)
-                        tool.Description = descElement.GetString() ?? String.Empty;
-                    if (toolElement.TryGetProperty("inputSchema", out JsonElement schemaElement) && schemaElement.ValueKind == JsonValueKind.Object)
-                        tool.InputSchemaJson = schemaElement.GetRawText();
+                        McpRemoteTool tool = new McpRemoteTool();
+                        if (toolElement.TryGetProperty("name", out JsonElement nameElement) && nameElement.ValueKind == JsonValueKind.String)
+                            tool.Name = nameElement.GetString() ?? String.Empty;
+                        if (toolElement.TryGetProperty("description", out JsonElement descElement) && descElement.ValueKind == JsonValueKind.String)
+                            tool.Description = descElement.GetString() ?? String.Empty;
+                        if (toolElement.TryGetProperty("inputSchema", out JsonElement schemaElement) && schemaElement.ValueKind == JsonValueKind.Object)
+                            tool.InputSchemaJson = schemaElement.GetRawText();
 
-                    if (!String.IsNullOrWhiteSpace(tool.Name)) tools.Add(tool);
+                        if (!String.IsNullOrWhiteSpace(tool.Name)) tools.Add(tool);
+                    }
                 }
+
+                cursor = null;
+                if (result.ValueKind == JsonValueKind.Object
+                    && result.TryGetProperty("nextCursor", out JsonElement cursorElement)
+                    && cursorElement.ValueKind == JsonValueKind.String)
+                {
+                    cursor = cursorElement.GetString();
+                }
+
+                if (String.IsNullOrEmpty(cursor)) break;
             }
 
             return tools;

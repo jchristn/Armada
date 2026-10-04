@@ -112,7 +112,7 @@ namespace Armada.Server.Mcp
             McpTokenUsageTools.Register(register, database);
             McpDockTools.Register(register, database, dockService);
             if (logging != null) McpPlaybookTools.Register(register, database, logging);
-            if (mergeQueue != null) McpMergeQueueTools.Register(register, mergeQueue);
+            if (mergeQueue != null) McpMergeQueueTools.Register(register, mergeQueue, database);
             if (checkRunService != null) McpCheckRunTools.Register(register, database, checkRunService);
             if (objectiveService != null) McpObjectiveTools.Register(register, database, objectiveService, planningSessionCoordinator, objectiveRefinementCoordinator);
             if (releaseService != null) McpReleaseTools.Register(register, releaseService);
@@ -194,7 +194,7 @@ namespace Armada.Server.Mcp
             RegisterCatalogGroup("Armada MCP / Docks", register => McpDockTools.Register(register, database, dockService));
 
             if (logging != null) RegisterCatalogGroup("Armada MCP / Playbooks", register => McpPlaybookTools.Register(register, database, logging));
-            if (mergeQueue != null) RegisterCatalogGroup("Armada MCP / Merge Queue", register => McpMergeQueueTools.Register(register, mergeQueue));
+            if (mergeQueue != null) RegisterCatalogGroup("Armada MCP / Merge Queue", register => McpMergeQueueTools.Register(register, mergeQueue, database));
             if (checkRunService != null) RegisterCatalogGroup("Armada MCP / Check Runs", register => McpCheckRunTools.Register(register, database, checkRunService));
             if (objectiveService != null) RegisterCatalogGroup("Armada MCP / Objectives", register => McpObjectiveTools.Register(register, database, objectiveService, planningSessionCoordinator, objectiveRefinementCoordinator));
             if (releaseService != null) RegisterCatalogGroup("Armada MCP / Releases", register => McpReleaseTools.Register(register, releaseService));

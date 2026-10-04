@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLocale } from '../context/LocaleContext';
 import { useTheme } from '../context/ThemeContext';
-import { lookupTenants, authenticate } from '../api/client';
+import { lookupTenants, authenticate, ApiError } from '../api/client';
 import type { TenantListEntry } from '../types/models';
 import LanguageSelector from './shared/LanguageSelector';
 
@@ -78,8 +78,10 @@ export default function LoginFlow() {
       const result = await authenticate({ email, password, tenantId: selectedTenant.id });
       if (!result.success || !result.token) throw new Error(t('Authentication failed.'));
       await login(result.token);
-    } catch {
-      setError(t('Authentication failed.'));
+    } catch (err) {
+      setError(err instanceof ApiError && err.status === 429
+        ? t('Too many failed sign-in attempts. Wait a few minutes and try again.')
+        : t('Authentication failed.'));
     } finally {
       setBusy(false);
     }

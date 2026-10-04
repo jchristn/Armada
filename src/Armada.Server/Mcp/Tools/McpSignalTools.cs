@@ -47,6 +47,8 @@ namespace Armada.Server.Mcp.Tools
                     string captainId = request.CaptainId;
                     string message = request.Message;
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    if (await McpCallerScope.ReadCaptainAsync(database, caller, captainId).ConfigureAwait(false) == null)
+                        return (object)new { Error = "Captain not found" };
                     Signal signal = new Signal(SignalTypeEnum.Mail, message);
                     signal.TenantId = String.IsNullOrEmpty(caller.TenantId) ? ArmadaConstants.DefaultTenantId : caller.TenantId;
                     signal.UserId = caller.UserId;
@@ -69,6 +71,7 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     DeleteMultipleArgs request = JsonSerializer.Deserialize<DeleteMultipleArgs>(args!.Value, _JsonOptions)!;
                     if (request.Ids == null || request.Ids.Count == 0)
                         return (object)new { Error = "ids is required and must not be empty" };
@@ -81,7 +84,7 @@ namespace Armada.Server.Mcp.Tools
                             result.Skipped.Add(new DeleteMultipleSkipped(id ?? "", "Empty ID"));
                             continue;
                         }
-                        Signal? signal = await database.Signals.ReadAsync(id).ConfigureAwait(false);
+                        Signal? signal = await McpCallerScope.ReadSignalAsync(database, caller, id).ConfigureAwait(false);
                         if (signal == null)
                         {
                             result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));

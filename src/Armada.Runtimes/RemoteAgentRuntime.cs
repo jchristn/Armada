@@ -112,7 +112,8 @@ namespace Armada.Runtimes
                 Prompt = prompt,
                 PromptViaStdin = true,
                 Arguments = new List<string>(),
-                Environment = environment ?? new Dictionary<string, string>()
+                Environment = environment ?? new Dictionary<string, string>(),
+                AutoApprove = captain != null ? CaptainRuntimeOptions.GetAutoApprove(captain) : (bool?)null
             };
 
             // API-endpoint captains have no CLI on the Harbor; ship the resolved endpoint so the Harbor can

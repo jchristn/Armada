@@ -49,9 +49,10 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     VesselIdArgs request = JsonSerializer.Deserialize<VesselIdArgs>(args!.Value, _JsonOptions)!;
                     string vesselId = request.VesselId;
-                    Vessel? vessel = await database.Vessels.ReadAsync(vesselId).ConfigureAwait(false);
+                    Vessel? vessel = await McpCallerScope.ReadVesselAsync(database, caller, vesselId).ConfigureAwait(false);
                     if (vessel == null) return (object)new { Error = "Vessel not found" };
                     return (object)vessel;
                 });
@@ -73,6 +74,7 @@ namespace Armada.Server.Mcp.Tools
                         workingDirectory = new { type = "string", description = "Optional local directory where completed mission changes will be pulled after merge. When repoUrl is a local clone (a file:// URL or an existing local path) and this is omitted, it is set automatically to that local clone so the vessel is immediately usable (e.g. for Rebuild Armada)." },
                         gitHubTokenOverride = new { type = "string", description = "Optional per-vessel GitHub token override. Leave unset to use the global configured token." },
                         allowConcurrentMissions = new { type = "boolean", description = "Allow multiple concurrent missions on this vessel (default false)" },
+                        autoApprove = new { type = "boolean", description = "Per-vessel auto-approve override for missions on this vessel: true or false wins over the captain's setting; omit to use the captain's setting" },
                         enableModelContext = new { type = "boolean", description = "Enable model context accumulation -- agents will update context with key information discovered during missions (default false)" },
                         defaultPipelineId = new { type = "string", description = "Default pipeline ID for dispatches to this vessel (ppl_ prefix)" }
                     },
@@ -82,6 +84,8 @@ namespace Armada.Server.Mcp.Tools
                 {
                     VesselAddArgs request = JsonSerializer.Deserialize<VesselAddArgs>(args!.Value, _JsonOptions)!;
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    if (!String.IsNullOrEmpty(request.FleetId) && await McpCallerScope.ReadFleetAsync(database, caller, request.FleetId).ConfigureAwait(false) == null)
+                        return (object)new { Error = "Fleet not found" };
                     Vessel vessel = new Vessel();
                     vessel.TenantId = String.IsNullOrEmpty(caller.TenantId) ? ArmadaConstants.DefaultTenantId : caller.TenantId;
                     vessel.UserId = caller.UserId;
@@ -94,6 +98,7 @@ namespace Armada.Server.Mcp.Tools
                     vessel.WorkingDirectory = request.WorkingDirectory;
                     vessel.GitHubTokenOverride = request.GitHubTokenOverride;
                     vessel.AllowConcurrentMissions = request.AllowConcurrentMissions ?? false;
+                    vessel.AutoApprove = request.AutoApprove;
                     vessel.EnableModelContext = request.EnableModelContext ?? true;
                     vessel.DefaultPipelineId = request.DefaultPipelineId;
                     // A local-clone repoUrl with no explicit working directory gets that clone as its working
@@ -126,6 +131,8 @@ namespace Armada.Server.Mcp.Tools
                         workingDirectory = new { type = "string", description = "New local directory where completed mission changes will be pulled after merge" },
                         gitHubTokenOverride = new { type = "string", description = "Optional per-vessel GitHub token override. Empty string clears the existing override." },
                         allowConcurrentMissions = new { type = "boolean", description = "Allow multiple concurrent missions on this vessel" },
+                        autoApprove = new { type = "boolean", description = "Per-vessel auto-approve override for missions on this vessel: true or false wins over the captain's setting" },
+                        clearAutoApprove = new { type = "boolean", description = "Remove the per-vessel auto-approve override so the captain's own setting applies" },
                         enableModelContext = new { type = "boolean", description = "Enable or disable model context accumulation" },
                         modelContext = new { type = "string", description = "Agent-accumulated context about this repository" },
                         defaultPipelineId = new { type = "string", description = "Default pipeline ID for dispatches to this vessel (ppl_ prefix)" }
@@ -134,9 +141,10 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     VesselUpdateArgs request = JsonSerializer.Deserialize<VesselUpdateArgs>(args!.Value, _JsonOptions)!;
                     string vesselId = request.VesselId;
-                    Vessel? vessel = await database.Vessels.ReadAsync(vesselId).ConfigureAwait(false);
+                    Vessel? vessel = await McpCallerScope.ReadVesselAsync(database, caller, vesselId).ConfigureAwait(false);
                     if (vessel == null) return (object)new { Error = "Vessel not found" };
                     if (request.Name != null)
                         vessel.Name = request.Name;
@@ -157,6 +165,10 @@ namespace Armada.Server.Mcp.Tools
                     }
                     if (request.AllowConcurrentMissions.HasValue)
                         vessel.AllowConcurrentMissions = request.AllowConcurrentMissions.Value;
+                    if (request.ClearAutoApprove == true)
+                        vessel.AutoApprove = null;
+                    else if (request.AutoApprove.HasValue)
+                        vessel.AutoApprove = request.AutoApprove.Value;
                     if (request.EnableModelContext.HasValue)
                         vessel.EnableModelContext = request.EnableModelContext.Value;
                     if (request.ModelContext != null)
@@ -199,9 +211,10 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     VesselIdArgs request = JsonSerializer.Deserialize<VesselIdArgs>(args!.Value, _JsonOptions)!;
                     string vesselId = request.VesselId;
-                    Vessel? vessel = await database.Vessels.ReadAsync(vesselId).ConfigureAwait(false);
+                    Vessel? vessel = await McpCallerScope.ReadVesselAsync(database, caller, vesselId).ConfigureAwait(false);
                     if (vessel == null) return (object)new { Error = "Vessel not found" };
 
                     List<string> warnings = await CleanupVesselResourcesAsync(vessel, database, dockService, settings).ConfigureAwait(false);
@@ -226,6 +239,7 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     DeleteMultipleArgs request = JsonSerializer.Deserialize<DeleteMultipleArgs>(args!.Value, _JsonOptions)!;
                     if (request.Ids == null || request.Ids.Count == 0)
                         return (object)new { Error = "ids is required and must not be empty" };
@@ -238,7 +252,7 @@ namespace Armada.Server.Mcp.Tools
                             result.Skipped.Add(new DeleteMultipleSkipped(id ?? "", "Empty ID"));
                             continue;
                         }
-                        Vessel? vessel = await database.Vessels.ReadAsync(id).ConfigureAwait(false);
+                        Vessel? vessel = await McpCallerScope.ReadVesselAsync(database, caller, id).ConfigureAwait(false);
                         if (vessel == null)
                         {
                             result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
@@ -270,9 +284,10 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     VesselContextArgs request = JsonSerializer.Deserialize<VesselContextArgs>(args!.Value, _JsonOptions)!;
                     string vesselId = request.VesselId;
-                    Vessel? vessel = await database.Vessels.ReadAsync(vesselId).ConfigureAwait(false);
+                    Vessel? vessel = await McpCallerScope.ReadVesselAsync(database, caller, vesselId).ConfigureAwait(false);
                     if (vessel == null) return (object)new { Error = "Vessel not found" };
                     if (request.ProjectContext != null)
                         vessel.ProjectContext = request.ProjectContext;

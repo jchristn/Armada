@@ -99,6 +99,11 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     VoyageDispatchArgs request = JsonSerializer.Deserialize<VoyageDispatchArgs>(args!.Value, _JsonOptions)!;
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    if (!String.IsNullOrEmpty(request.VesselId) && await McpCallerScope.ReadVesselAsync(database, caller, request.VesselId).ConfigureAwait(false) == null)
+                        return (object)new { Error = "Vessel not found" };
+                    if (!String.IsNullOrWhiteSpace(request.ObjectiveId) && await McpCallerScope.ReadObjectiveAsync(database, caller, request.ObjectiveId).ConfigureAwait(false) == null)
+                        return (object)new { Error = "Objective not found" };
                     string title = request.Title;
                     string description = request.Description ?? "";
                     string vesselId = request.VesselId;
@@ -118,7 +123,6 @@ namespace Armada.Server.Mcp.Tools
 
                     string? pipelineId = validation.ResolvedPipelineId;
 
-                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     Voyage voyage;
                     if (validation.IsBareVoyage)
                     {
@@ -175,9 +179,10 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     VoyageStatusArgs request = JsonSerializer.Deserialize<VoyageStatusArgs>(args!.Value, _JsonOptions)!;
                     string voyageId = request.VoyageId;
-                    Voyage? voyage = await database.Voyages.ReadAsync(voyageId).ConfigureAwait(false);
+                    Voyage? voyage = await McpCallerScope.ReadVoyageAsync(database, caller, voyageId).ConfigureAwait(false);
                     if (voyage == null) return (object)new { Error = "Voyage not found" };
 
                     List<MissionSummary> missionSummaries = await database.Missions.EnumerateSummariesByVoyageAsync(voyageId).ConfigureAwait(false);
@@ -228,9 +233,10 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     VoyageIdArgs request = JsonSerializer.Deserialize<VoyageIdArgs>(args!.Value, _JsonOptions)!;
                     string voyageId = request.VoyageId;
-                    Voyage? voyage = await database.Voyages.ReadAsync(voyageId).ConfigureAwait(false);
+                    Voyage? voyage = await McpCallerScope.ReadVoyageAsync(database, caller, voyageId).ConfigureAwait(false);
                     if (voyage == null) return (object)new { Error = "Voyage not found" };
 
                     // Cancel only pending/assigned missions (in-progress work is left running)
@@ -290,9 +296,10 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     VoyageIdArgs request = JsonSerializer.Deserialize<VoyageIdArgs>(args!.Value, _JsonOptions)!;
                     string voyageId = request.VoyageId;
-                    Voyage? voyage = await database.Voyages.ReadAsync(voyageId).ConfigureAwait(false);
+                    Voyage? voyage = await McpCallerScope.ReadVoyageAsync(database, caller, voyageId).ConfigureAwait(false);
                     if (voyage == null) return (object)new { Error = "Voyage not found" };
 
                     // Block deletion of active voyages
@@ -330,6 +337,7 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     DeleteMultipleArgs request = JsonSerializer.Deserialize<DeleteMultipleArgs>(args!.Value, _JsonOptions)!;
                     if (request.Ids == null || request.Ids.Count == 0)
                         return (object)new { Error = "ids is required and must not be empty" };
@@ -342,7 +350,7 @@ namespace Armada.Server.Mcp.Tools
                             result.Skipped.Add(new DeleteMultipleSkipped(id ?? "", "Empty ID"));
                             continue;
                         }
-                        Voyage? voyage = await database.Voyages.ReadAsync(id).ConfigureAwait(false);
+                        Voyage? voyage = await McpCallerScope.ReadVoyageAsync(database, caller, id).ConfigureAwait(false);
                         if (voyage == null)
                         {
                             result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));

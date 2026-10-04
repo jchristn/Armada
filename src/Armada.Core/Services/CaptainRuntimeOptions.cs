@@ -98,6 +98,25 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// The captain to hand to a runtime for one launch with an auto-approve override applied. With a null override,
+        /// or one equal to the captain's effective setting, the captain itself is returned; otherwise a copy whose
+        /// runtime options carry the override (the stored captain is never changed).
+        /// </summary>
+        /// <param name="captain">Captain.</param>
+        /// <param name="autoApprove">Override for this launch (for example the vessel's or the Ask setting), or null.</param>
+        /// <returns>The captain to launch with.</returns>
+        public static Captain WithEffectiveAutoApprove(Captain captain, bool? autoApprove)
+        {
+            if (captain == null) throw new ArgumentNullException(nameof(captain));
+            if (!autoApprove.HasValue || GetAutoApprove(captain) == autoApprove.Value) return captain;
+
+            Captain copy = JsonSerializer.Deserialize<Captain>(JsonSerializer.Serialize(captain, _SerializerOptions), _SerializerOptions)
+                ?? throw new InvalidOperationException("Could not copy captain " + captain.Id + ".");
+            copy.RuntimeOptionsJson = WithAutoApprove(captain.RuntimeOptionsJson, autoApprove.Value);
+            return copy;
+        }
+
+        /// <summary>
         /// Whether a CLI captain runs with its runtime's auto-approve or permission-bypass flag (see
         /// <see cref="CaptainApprovalOptions.AutoApprove"/>). True unless the captain's runtime options set
         /// <c>autoApprove</c> to false; unreadable options keep the default.

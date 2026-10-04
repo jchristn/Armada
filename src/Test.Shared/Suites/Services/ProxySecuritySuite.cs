@@ -1,0 +1,322 @@
+namespace Test.Shared.Suites.Services
+{
+    using System;
+    using System.Collections.Generic;
+    using System.IO;
+    using System.Linq;
+    using System.Net;
+    using System.Net.Http;
+    using System.Net.Sockets;
+    using System.Text;
+    using System.Text.Json;
+    using System.Threading;
+    using System.Threading.Tasks;
+    using Armada.Core;
+    using Armada.Proxy;
+    using Armada.Proxy.Services;
+    using Armada.Proxy.Settings;
+    using SyslogLogging;
+    using Test.Shared.Infrastructure;
+    using Touchstone.Core;
+    using static Test.Shared.Infrastructure.Asserts;
+
+    /// <summary>
+    /// Proxy hardening (security review O-11): the proxy refuses to start with the built-in default password unless
+    /// explicitly allowed, the instance list requires a proxy session, failed logins are rate limited per client
+    /// address with 429 and Retry-After, forwarded headers are ignored unless trusted, and the session cookie can be
+    /// marked Secure.
+    /// </summary>
+    public sealed class ProxySecuritySuite : IArmadaTestSuite
+    {
+        #region Private-Members
+
+        private const string SuiteId = "Services.ProxySecurity";
+        private const string TestPassword = "proxy-security-password";
+
+        #endregion
+
+        #region Public-Methods
+
+        /// <summary>
+        /// Build the descriptor for the proxy security suite.
+        /// </summary>
+        /// <returns>The suite descriptor.</returns>
+        public TestSuiteDescriptor Build()
+        {
+            List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
+
+            cases.Add(CaseAsync("startup_refused_with_default_password", "Proxy refuses to start with a blank or default password", TestTags.Negative, async () =>
+            {
+                foreach (string? password in new string?[] { null, "", Constants.DefaultRemoteTunnelPassword })
+                {
+                    ProxySettings settings = CreateSettings(password);
+                    AssertTrue(settings.IsDefaultPassword, "password '" + (password ?? "(null)") + "' should count as the default");
+                    using (ArmadaProxyServer proxy = new ArmadaProxyServer(CreateLogging(), settings, quiet: true))
+                    {
+                        string? error = null;
+                        try
+                        {
+                            await proxy.StartAsync().ConfigureAwait(false);
+                        }
+                        catch (InvalidOperationException ex)
+                        {
+                            error = ex.Message;
+                        }
+
+                        AssertNotNull(error, "start should be refused for password '" + (password ?? "(null)") + "'");
+                        AssertContains(ProxySettings.PasswordEnvironmentVariable, error!, "error should name the env var to set");
+                        AssertContains("AllowDefaultPassword", error!, "error should name the override");
+                    }
+
+                    TryDelete(settings.DataDirectory);
+                }
+            }));
+
+            cases.Add(CaseAsync("startup_allowed_with_override_or_real_password", "Proxy starts with AllowDefaultPassword or a real password", TestTags.Positive, async () =>
+            {
+                ProxySettings allowDefault = CreateSettings(null);
+                allowDefault.AllowDefaultPassword = true;
+                AssertNull(allowDefault.GetStartupSecurityError(), "override should allow start");
+                await using (RunningProxy running = await RunningProxy.StartAsync(allowDefault).ConfigureAwait(false))
+                {
+                    HttpResponseMessage health = await running.Client.GetAsync("/proxy-api/v1/status/health").ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.OK, health.StatusCode, "health should be public");
+                }
+
+                ProxySettings real = CreateSettings(TestPassword);
+                AssertFalse(real.IsDefaultPassword, "a configured password is not the default");
+                AssertNull(real.GetStartupSecurityError(), "a real password should allow start");
+            }));
+
+            cases.Add(Case("environment_overrides_password_and_allow_flag", "ARMADA_PROXY_PASSWORD and ARMADA_PROXY_ALLOW_DEFAULT_PASSWORD override the settings file", TestTags.Positive, () =>
+            {
+                string? priorPassword = Environment.GetEnvironmentVariable(ProxySettings.PasswordEnvironmentVariable);
+                string? priorAllow = Environment.GetEnvironmentVariable(ProxySettings.AllowDefaultPasswordEnvironmentVariable);
+                try
+                {
+                    Environment.SetEnvironmentVariable(ProxySettings.PasswordEnvironmentVariable, "from-env-secret");
+                    Environment.SetEnvironmentVariable(ProxySettings.AllowDefaultPasswordEnvironmentVariable, "true");
+                    ProxySettings settings = new ProxySettings();
+                    settings.ApplyEnvironmentOverrides();
+                    AssertEqual("from-env-secret", settings.Password);
+                    AssertTrue(settings.AllowDefaultPassword, "allow flag from env");
+                }
+                finally
+                {
+                    Environment.SetEnvironmentVariable(ProxySettings.PasswordEnvironmentVariable, priorPassword);
+                    Environment.SetEnvironmentVariable(ProxySettings.AllowDefaultPasswordEnvironmentVariable, priorAllow);
+                }
+            }));
+
+            cases.Add(CaseAsync("instances_requires_proxy_session", "GET /proxy-api/v1/instances is 401 without a session and 200 with one", TestTags.Negative, async () =>
+            {
+                await using (RunningProxy running = await RunningProxy.StartAsync(CreateSettings(TestPassword)).ConfigureAwait(false))
+                {
+                    HttpResponseMessage anonymous = await running.Client.GetAsync("/proxy-api/v1/instances").ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.Unauthorized, anonymous.StatusCode, "instances should require a session");
+
+                    HttpResponseMessage login = await running.LoginAsync(TestPassword).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.OK, login.StatusCode, "login should succeed");
+
+                    HttpResponseMessage authenticated = await running.Client.GetAsync("/proxy-api/v1/instances").ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.OK, authenticated.StatusCode, "instances should be listed with a session");
+                }
+            }));
+
+            cases.Add(CaseAsync("login_lockout_returns_429_with_retry_after", "Repeated failed logins lock the client out with 429 and Retry-After, even for the right password", TestTags.Negative, async () =>
+            {
+                ProxySettings settings = CreateSettings(TestPassword);
+                settings.LoginMaxFailures = 3;
+                settings.LoginLockoutSeconds = 120;
+                await using (RunningProxy running = await RunningProxy.StartAsync(settings).ConfigureAwait(false))
+                {
+                    for (int i = 0; i < 3; i++)
+                    {
+                        // Spoofed forwarded addresses must not split the counter: forwarded headers are untrusted by default.
+                        HttpResponseMessage bad = await running.LoginAsync("wrong-password", "203.0.113." + (i + 1)).ConfigureAwait(false);
+                        AssertEqual(HttpStatusCode.Unauthorized, bad.StatusCode, "failed login " + (i + 1) + " should be 401");
+                    }
+
+                    HttpResponseMessage locked = await running.LoginAsync(TestPassword, "198.51.100.7").ConfigureAwait(false);
+                    AssertEqual((HttpStatusCode)429, locked.StatusCode, "locked-out client should get 429 even with the right password");
+                    AssertTrue(locked.Headers.TryGetValues("Retry-After", out IEnumerable<string>? retryValues), "429 should carry Retry-After");
+                    int retryAfter = Int32.Parse(retryValues!.First());
+                    AssertTrue(retryAfter > 0 && retryAfter <= 120, "Retry-After should be within the lockout, got " + retryAfter);
+                }
+            }));
+
+            cases.Add(Case("rate_limiter_window_lockout_and_success_reset", "Limiter counts failures in the window, locks out, expires, and resets on success", TestTags.Positive, () =>
+            {
+                DateTime now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                ProxySettings settings = CreateSettings(TestPassword);
+                settings.LoginMaxFailures = 3;
+                settings.LoginFailureWindowSeconds = 60;
+                settings.LoginLockoutSeconds = 30;
+                ProxyLoginRateLimiter limiter = new ProxyLoginRateLimiter(settings, () => now);
+
+                AssertFalse(limiter.RecordFailure("10.0.0.1", out int _), "first failure");
+                AssertFalse(limiter.RecordFailure("10.0.0.1", out int _), "second failure");
+                limiter.RecordSuccess("10.0.0.1");
+                AssertFalse(limiter.RecordFailure("10.0.0.1", out int _), "success reset the count");
+                AssertFalse(limiter.RecordFailure("10.0.0.1", out int _), "second after reset");
+
+                now = now.AddSeconds(61);
+                AssertFalse(limiter.RecordFailure("10.0.0.1", out int _), "old failures left the window");
+                AssertFalse(limiter.RecordFailure("10.0.0.1", out int _), "second in new window");
+                AssertTrue(limiter.RecordFailure("10.0.0.1", out int lockout), "third in window locks out");
+                AssertEqual(30, lockout);
+                AssertTrue(limiter.IsLockedOut("10.0.0.1", out int retry), "locked out");
+                AssertEqual(30, retry);
+                AssertFalse(limiter.IsLockedOut("10.0.0.2", out int _), "other client unaffected");
+
+                now = now.AddSeconds(31);
+                AssertFalse(limiter.IsLockedOut("10.0.0.1", out int _), "lockout expired");
+            }));
+
+            cases.Add(CaseAsync("secure_cookie_setting_marks_session_cookie_secure", "SecureCookie adds the Secure attribute to the session cookie", TestTags.Positive, async () =>
+            {
+                ProxySettings settings = CreateSettings(TestPassword);
+                settings.SecureCookie = true;
+                await using (RunningProxy running = await RunningProxy.StartAsync(settings).ConfigureAwait(false))
+                {
+                    HttpResponseMessage login = await running.LoginAsync(TestPassword).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.OK, login.StatusCode, "login should succeed");
+                    AssertTrue(login.Headers.TryGetValues("Set-Cookie", out IEnumerable<string>? cookies), "login should set a cookie");
+                    AssertContains("Secure", String.Join(";", cookies!), "cookie should be Secure");
+                }
+            }));
+
+            return new TestSuiteDescriptor(
+                suiteId: SuiteId,
+                displayName: "Proxy Security",
+                cases: cases);
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private static ProxySettings CreateSettings(string? password)
+        {
+            string dataDirectory = Path.Combine(Path.GetTempPath(), "armada-proxy-security-" + Guid.NewGuid().ToString("N"));
+            ProxySettings settings = new ProxySettings
+            {
+                Hostname = "127.0.0.1",
+                Port = ReservePort(),
+                Password = password,
+                DataDirectory = dataDirectory,
+                LogDirectory = Path.Combine(dataDirectory, "logs")
+            };
+            settings.InitializeDirectories();
+            return settings;
+        }
+
+        private static LoggingModule CreateLogging()
+        {
+            LoggingModule logging = new LoggingModule();
+            logging.Settings.EnableConsole = false;
+            return logging;
+        }
+
+        private static int ReservePort()
+        {
+            using TcpListener listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            listener.Stop();
+            return port;
+        }
+
+        private static void TryDelete(string directory)
+        {
+            try
+            {
+                if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            }
+            catch
+            {
+            }
+        }
+
+        private static TestCaseDescriptor Case(string caseId, string displayName, string tag, Action body)
+        {
+            return new TestCaseDescriptor(
+                suiteId: SuiteId,
+                caseId: caseId,
+                displayName: displayName,
+                executeAsync: (CancellationToken ct) => { body(); return Task.CompletedTask; },
+                tags: new List<string> { tag });
+        }
+
+        private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)
+        {
+            return new TestCaseDescriptor(
+                suiteId: SuiteId,
+                caseId: caseId,
+                displayName: displayName,
+                executeAsync: (CancellationToken ct) => body(),
+                tags: new List<string> { tag });
+        }
+
+        #endregion
+
+        #region Nested-Types
+
+        private sealed class RunningProxy : IAsyncDisposable
+        {
+            public ArmadaProxyServer Proxy { get; private set; } = null!;
+
+            public HttpClient Client { get; private set; } = null!;
+
+            public ProxySettings Settings { get; private set; } = null!;
+
+            public static async Task<RunningProxy> StartAsync(ProxySettings settings)
+            {
+                RunningProxy running = new RunningProxy();
+                running.Settings = settings;
+                running.Proxy = new ArmadaProxyServer(CreateLogging(), settings, quiet: true);
+                await running.Proxy.StartAsync().ConfigureAwait(false);
+                HttpClientHandler handler = new HttpClientHandler
+                {
+                    AllowAutoRedirect = false,
+                    CookieContainer = new CookieContainer(),
+                    UseCookies = true
+                };
+                running.Client = new HttpClient(handler)
+                {
+                    BaseAddress = new Uri("http://127.0.0.1:" + settings.Port + "/"),
+                    Timeout = TimeSpan.FromSeconds(15)
+                };
+                return running;
+            }
+
+            public async Task<HttpResponseMessage> LoginAsync(string password, string? forwardedFor = null)
+            {
+                HttpResponseMessage challengeResponse = await Client.GetAsync("/proxy-api/v1/auth/challenge").ConfigureAwait(false);
+                string challengeJson = await challengeResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                ChallengeBody challenge = JsonSerializer.Deserialize<ChallengeBody>(challengeJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+                string proof = RemoteTunnelAuth.ComputeBrowserLoginProof(password, challenge.Nonce);
+                string body = JsonSerializer.Serialize(new { nonce = challenge.Nonce, proofSha256 = proof });
+                HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, "/proxy-api/v1/auth/login");
+                request.Content = new StringContent(body, Encoding.UTF8, "application/json");
+                if (!String.IsNullOrEmpty(forwardedFor)) request.Headers.Add("X-Forwarded-For", forwardedFor);
+                return await Client.SendAsync(request).ConfigureAwait(false);
+            }
+
+            public ValueTask DisposeAsync()
+            {
+                Client?.Dispose();
+                Proxy?.Dispose();
+                TryDelete(Settings.DataDirectory);
+                return ValueTask.CompletedTask;
+            }
+        }
+
+        private sealed class ChallengeBody
+        {
+            public string Nonce { get; set; } = String.Empty;
+        }
+
+        #endregion
+    }
+}

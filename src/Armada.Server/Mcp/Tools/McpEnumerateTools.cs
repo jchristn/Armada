@@ -172,7 +172,7 @@ namespace Armada.Server.Mcp.Tools
                                     {
                                         v.Id, v.FleetId, v.Name, v.RepoUrl, v.LocalPath, v.WorkingDirectory,
                                         v.DefaultBranch, v.LandingMode, v.BranchCleanupPolicy,
-                                        v.AllowConcurrentMissions, v.Active, v.CreatedUtc, v.LastUpdateUtc,
+                                        v.AllowConcurrentMissions, v.AutoApprove, v.Active, v.CreatedUtc, v.LastUpdateUtc,
                                         v.HasGitHubTokenOverride,
                                         ProjectContextLength = v.ProjectContext?.Length ?? 0,
                                         StyleGuideLength = v.StyleGuide?.Length ?? 0,

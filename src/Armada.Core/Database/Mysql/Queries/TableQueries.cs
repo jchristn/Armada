@@ -1900,6 +1900,14 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration 76: nullable per-vessel auto-approve override.
+        /// </summary>
+        public static readonly string[] MigrationV76Statements = new string[]
+        {
+            @"ALTER TABLE vessels ADD COLUMN IF NOT EXISTS auto_approve TINYINT(1) NULL;"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

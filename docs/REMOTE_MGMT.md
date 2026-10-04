@@ -50,7 +50,7 @@ Proxy settings live under `ArmadaProxy`:
   "ArmadaProxy": {
     "hostname": "localhost",
     "port": 7893,
-    "password": "armadaadmin",
+    "password": "replace-with-a-strong-shared-secret",
     "requireEnrollmentToken": false,
     "enrollmentTokens": [],
     "handshakeTimeoutSeconds": 15,
@@ -63,7 +63,14 @@ Proxy settings live under `ArmadaProxy`:
 
 Important settings:
 
-- `password`: shared secret used by both the Armada tunnel handshake and proxy browser login
+- `password`: shared secret used by both the Armada tunnel handshake and proxy browser login. Required: the proxy
+  refuses to start while it is blank or the built-in default `armadaadmin` unless `allowDefaultPassword` is true (local
+  testing only). `ARMADA_PROXY_PASSWORD` overrides the file; the Docker compose file requires it. Set the same value as
+  `remoteControl.password` on each Armada instance.
+- `loginMaxFailures`, `loginFailureWindowSeconds`, `loginLockoutSeconds`: per-address lockout for failed logins and
+  tunnel handshakes (defaults 10 failures in 900 seconds lock out for 900 seconds; locked-out callers get 429 with
+  `Retry-After`)
+- `trustForwardedHeaders` (default false) and `secureCookie` (default false): see [PROXY_API.md](PROXY_API.md)
 - `requireEnrollmentToken` and `enrollmentTokens`: optional extra admission control for instances
 - `staleAfterSeconds`: when a connected instance is treated as stale without activity
 - `requestTimeoutSeconds`: timeout for live tunnel request/response relay calls
@@ -79,7 +86,7 @@ Armada outbound tunnel settings live under `remoteControl` in the Armada server 
     "tunnelUrl": "ws://localhost:7893/tunnel",
     "instanceId": null,
     "enrollmentToken": null,
-    "password": "armadaadmin",
+    "password": "replace-with-a-strong-shared-secret",
     "connectTimeoutSeconds": 15,
     "heartbeatIntervalSeconds": 30,
     "reconnectBaseDelaySeconds": 5,

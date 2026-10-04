@@ -53,9 +53,10 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     CaptainIdArgs request = JsonSerializer.Deserialize<CaptainIdArgs>(args!.Value, _JsonOptions)!;
                     string captainId = request.CaptainId;
-                    Captain? captain = await database.Captains.ReadAsync(captainId).ConfigureAwait(false);
+                    Captain? captain = await McpCallerScope.ReadCaptainAsync(database, caller, captainId).ConfigureAwait(false);
                     if (captain == null) return (object)new { Error = "Captain not found" };
                     return (object)captain;
                 });
@@ -74,8 +75,9 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     CaptainIdArgs request = JsonSerializer.Deserialize<CaptainIdArgs>(args!.Value, _JsonOptions)!;
-                    Captain? captain = await database.Captains.ReadAsync(request.CaptainId).ConfigureAwait(false);
+                    Captain? captain = await McpCallerScope.ReadCaptainAsync(database, caller, request.CaptainId).ConfigureAwait(false);
                     if (captain == null) return (object)new { Error = "Captain not found" };
                     if (captain.State != CaptainStateEnum.Quarantined)
                         return (object)new { Status = "not_quarantined", CaptainId = captain.Id };
@@ -104,9 +106,10 @@ namespace Armada.Server.Mcp.Tools
                     },
                     async (args) =>
                     {
+                        AuthContext caller = McpToolHelpers.ResolveCallerContext();
                         CaptainIdArgs request = JsonSerializer.Deserialize<CaptainIdArgs>(args!.Value, _JsonOptions)!;
                         string captainId = request.CaptainId;
-                        Captain? captain = await database.Captains.ReadAsync(captainId).ConfigureAwait(false);
+                        Captain? captain = await McpCallerScope.ReadCaptainAsync(database, caller, captainId).ConfigureAwait(false);
                         if (captain == null) return (object)new { Error = "Captain not found" };
                         return await captainToolService.DescribeAsync(captain).ConfigureAwait(false);
                     });
@@ -200,9 +203,10 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     CaptainUpdateArgs request = JsonSerializer.Deserialize<CaptainUpdateArgs>(args!.Value, _JsonOptions)!;
                     string captainId = request.CaptainId;
-                    Captain? captain = await database.Captains.ReadAsync(captainId).ConfigureAwait(false);
+                    Captain? captain = await McpCallerScope.ReadCaptainAsync(database, caller, captainId).ConfigureAwait(false);
                     if (captain == null) return (object)new { Error = "Captain not found" };
                     if (request.Name != null)
                         captain.Name = request.Name;
@@ -258,6 +262,12 @@ namespace Armada.Server.Mcp.Tools
                 {
                     CaptainIdArgs request = JsonSerializer.Deserialize<CaptainIdArgs>(args!.Value, _JsonOptions)!;
                     string captainId = request.CaptainId;
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    Captain? captain = await McpCallerScope.ReadCaptainAsync(database, caller, captainId).ConfigureAwait(false);
+
+                    // Same failure shape as before scoping (a tool execution error naming the id), for an id that does
+                    // not exist and for one in another tenant alike.
+                    if (captain == null) throw new InvalidOperationException("Captain not found: " + captainId);
                     if (onStopCaptain != null)
                         await onStopCaptain(captainId).ConfigureAwait(false);
                     await admiral.RecallCaptainAsync(captainId).ConfigureAwait(false);
@@ -270,7 +280,22 @@ namespace Armada.Server.Mcp.Tools
                 new { type = "object", properties = new { } },
                 async (args) =>
                 {
-                    await admiral.RecallAllAsync().ConfigureAwait(false);
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    if (McpCallerScope.IsGlobal(caller))
+                    {
+                        await admiral.RecallAllAsync().ConfigureAwait(false);
+                        return (object)new { Status = "all_stopped" };
+                    }
+
+                    // A tenant admin stops only the working captains of their own tenant.
+                    List<Captain> working = await database.Captains.EnumerateByStateAsync(CaptainStateEnum.Working).ConfigureAwait(false);
+                    foreach (Captain captain in working)
+                    {
+                        if (!McpCallerScope.CanAccess(caller, captain.TenantId, captain.UserId)) continue;
+                        if (onStopCaptain != null)
+                            await onStopCaptain(captain.Id).ConfigureAwait(false);
+                        await admiral.RecallCaptainAsync(captain.Id).ConfigureAwait(false);
+                    }
                     return (object)new { Status = "all_stopped" };
                 });
 
@@ -288,9 +313,10 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     CaptainIdArgs request = JsonSerializer.Deserialize<CaptainIdArgs>(args!.Value, _JsonOptions)!;
                     string captainId = request.CaptainId;
-                    Captain? captain = await database.Captains.ReadAsync(captainId).ConfigureAwait(false);
+                    Captain? captain = await McpCallerScope.ReadCaptainAsync(database, caller, captainId).ConfigureAwait(false);
                     if (captain == null) return (object)new { Error = "Captain not found" };
 
                     // Block deletion of working captains
@@ -321,6 +347,7 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     DeleteMultipleArgs request = JsonSerializer.Deserialize<DeleteMultipleArgs>(args!.Value, _JsonOptions)!;
                     if (request.Ids == null || request.Ids.Count == 0)
                         return (object)new { Error = "ids is required and must not be empty" };
@@ -333,7 +360,7 @@ namespace Armada.Server.Mcp.Tools
                             result.Skipped.Add(new DeleteMultipleSkipped(id ?? "", "Empty ID"));
                             continue;
                         }
-                        Captain? captain = await database.Captains.ReadAsync(id).ConfigureAwait(false);
+                        Captain? captain = await McpCallerScope.ReadCaptainAsync(database, caller, id).ConfigureAwait(false);
                         if (captain == null)
                         {
                             result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
@@ -377,9 +404,10 @@ namespace Armada.Server.Mcp.Tools
                     },
                     async (args) =>
                     {
+                        AuthContext caller = McpToolHelpers.ResolveCallerContext();
                         CaptainLogArgs request = JsonSerializer.Deserialize<CaptainLogArgs>(args!.Value, _JsonOptions)!;
                         string captainId = request.CaptainId;
-                        Captain? captain = await database.Captains.ReadAsync(captainId).ConfigureAwait(false);
+                        Captain? captain = await McpCallerScope.ReadCaptainAsync(database, caller, captainId).ConfigureAwait(false);
                         if (captain == null) return (object)new { Error = "Captain not found" };
 
                         string pointerPath = Path.Combine(settings.LogDirectory, "captains", captainId + ".current");
