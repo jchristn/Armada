@@ -134,9 +134,15 @@ namespace Test.Shared.Infrastructure
             }
         }
 
+        /// <summary>
+        /// When true, <see cref="CancelVoyageAsync"/> throws, simulating a database or dispatcher failure.
+        /// </summary>
+        public bool ThrowOnCancel { get; set; } = false;
+
         /// <inheritdoc />
         public Task CancelVoyageAsync(string voyageId, CancellationToken token = default)
         {
+            if (ThrowOnCancel) throw new InvalidOperationException("Simulated voyage cancel failure for " + voyageId);
             lock (_Lock)
             {
                 _Cancelled.Add(voyageId);

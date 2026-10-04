@@ -46,8 +46,8 @@ namespace Armada.Core.Database.Interfaces
 
         /// <summary>
         /// Enumerate batches in every tenant whose background work was in flight: discovery still running (status
-        /// Discovering) or fleet categorization Pending or Running. Used at Admiral startup to fail work orphaned by a
-        /// restart.
+        /// Discovering), a background import still running (status Importing), or fleet categorization Pending or
+        /// Running. Used at Admiral startup to fail work orphaned by a restart.
         /// </summary>
         /// <param name="token">Cancellation token.</param>
         /// <returns>Batches ordered by creation time, oldest first.</returns>

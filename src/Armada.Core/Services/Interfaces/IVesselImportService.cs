@@ -76,8 +76,9 @@ namespace Armada.Core.Services.Interfaces
         Task<VesselBrowseResult> BrowseAsync(string? path, CancellationToken token = default);
 
         /// <summary>
-        /// Fail work orphaned by an Admiral restart: batches still Discovering (and their jobs), plus any fleet
-        /// categorization that was Pending or Running. Call once at startup.
+        /// Fail work orphaned by an Admiral restart: batches still Discovering or Importing (and their jobs; vessels an
+        /// interrupted import already created are kept), plus any fleet categorization that was Pending or Running.
+        /// Call once at startup.
         /// </summary>
         /// <param name="token">Cancellation token.</param>
         Task RecoverAsync(CancellationToken token = default);

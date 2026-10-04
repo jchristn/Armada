@@ -370,6 +370,33 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(1, h.Dispatcher.Dispatched.Count, "nothing dispatched after cancel");
             }));
 
+            cases.Add(CaseAsync("mission_cancel_survives_dispatcher_failure", "Cancelling a Mission run finishes every target even when a voyage cancel fails", TestTags.Reliability, async () =>
+            {
+                using FleetActionTestHarness h = await FleetActionTestHarness.CreateAsync().ConfigureAwait(false);
+                List<Vessel> vessels = new List<Vessel>();
+                for (int i = 0; i < 3; i++) vessels.Add(await h.CreateVesselAsync("mcf" + i, null).ConfigureAwait(false));
+
+                FleetActionRun run = await h.Service.StartRunAsync(h.Admin, null, new FleetActionRunRequest
+                {
+                    VesselIds = vessels.Select(v => v.Id).ToList(),
+                    Concurrency = 2,
+                    Definition = new FleetActionUpsertRequest { Name = "m", Kind = FleetActionKindEnum.Mission, PromptTemplate = "do it" }
+                }).ConfigureAwait(false);
+                await h.Runner.SyncMissionRunsAsync().ConfigureAwait(false);
+                AssertEqual(2, h.Dispatcher.ActiveCount, "two voyages active");
+
+                h.Dispatcher.ThrowOnCancel = true;
+                FleetActionRun cancelled = await h.Service.CancelRunAsync(h.Admin, run.Id).ConfigureAwait(false);
+                AssertEqual(FleetActionRunStatusEnum.Cancelled, cancelled.Status);
+                AssertNotNull(cancelled.CompletedUtc, "run finished");
+                List<FleetActionRunTarget> targets = await h.TargetsAsync(run.Id).ConfigureAwait(false);
+                AssertFalse(targets.Exists(t => t.Status == FleetActionTargetStatusEnum.Running || t.Status == FleetActionTargetStatusEnum.Pending), "no target left unfinished");
+                AssertEqual(2, targets.Count(t => (t.ErrorText ?? "").Contains("Cancel the voyage directly")), "both running targets explain the failed voyage cancel");
+
+                FleetActionRun again = await h.Service.CancelRunAsync(h.Admin, run.Id).ConfigureAwait(false);
+                AssertEqual(FleetActionRunStatusEnum.Cancelled, again.Status, "cancelling again is a no-op");
+            }));
+
             cases.Add(CaseAsync("seeding_idempotent", "Built-ins seed once per tenant and a soft-deleted built-in is not re-seeded", TestTags.Positive, async () =>
             {
                 using FleetActionTestHarness h = await FleetActionTestHarness.CreateAsync().ConfigureAwait(false);
