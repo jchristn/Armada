@@ -28,6 +28,12 @@ RUN dotnet publish src/Armada.Proxy -c Release -f net10.0 -o /app --no-restore
 # --- Runtime stage ---
 FROM mcr.microsoft.com/dotnet/runtime:10.0 AS runtime
 WORKDIR /app
+
+# curl is required for the container healthcheck (probes 127.0.0.1:7893/proxy-api/v1/status/health).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /app .
 
 # Armada.Proxy default port: 7893

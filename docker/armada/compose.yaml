@@ -11,6 +11,16 @@ services:
       - ./armada.json:/app/data/armada.json
       - ./db:/app/data/db
       - ./logs:/app/data/logs
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:7890/api/v1/status/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 2
+      start_period: 30s
+    depends_on:
+      # The Admiral pushes its logs to Loki (telemetry.lokiEndpoint in armada.json).
+      loki:
+        condition: service_healthy
 
   armada-dashboard:
     build:
@@ -20,12 +30,20 @@ services:
       - "3000:80"
     environment:
       - ARMADA_SERVER_URL=http://armada-server:7890
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:80/"]
+      interval: 5s
+      timeout: 3s
+      retries: 2
     depends_on:
-      - armada-server
+      armada-server:
+        condition: service_healthy
 
   # --- Observability stack (Prometheus / Loki / Grafana) ---
   # Prometheus scrapes the Admiral's in-process /metrics endpoint (port 9464); Loki receives logs
   # pushed by the Admiral's telemetry host; Grafana visualizes both via provisioned datasources.
+  # The Prometheus and Loki images ship without curl (busybox only), so their healthchecks use the
+  # busybox wget against the same 127.0.0.1 endpoint; Grafana's image includes curl.
 
   prometheus:
     image: prom/prometheus:v3.1.0
@@ -37,8 +55,14 @@ services:
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9090/-/healthy"]
+      interval: 5s
+      timeout: 3s
+      retries: 2
     depends_on:
-      - armada-server
+      armada-server:
+        condition: service_healthy
 
   loki:
     image: grafana/loki:3.3.2
@@ -49,6 +73,14 @@ services:
       - loki-data:/loki
     command:
       - "-config.file=/etc/loki/local-config.yaml"
+    healthcheck:
+      # /ready returns 503 for roughly 15 seconds after start while the ingester warms up;
+      # start_period keeps those early probes from counting against the retry budget.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3100/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 2
+      start_period: 45s
 
   grafana:
     image: grafana/grafana:11.4.0
@@ -62,9 +94,17 @@ services:
       - ./observability/grafana/provisioning:/etc/grafana/provisioning
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards
       - grafana-data:/var/lib/grafana
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 2
+      start_period: 30s
     depends_on:
-      - prometheus
-      - loki
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
 
 volumes:
   prometheus-data:
