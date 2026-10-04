@@ -250,7 +250,7 @@ Corporate networks that perform TLS inspection present a self-signed root certif
 - macOS: `./scripts/macos/install.sh --insecure`
 - Windows: `scripts\windows\install.bat --insecure` (with a framework override, put the framework first: `scripts\windows\install.bat net8.0 --insecure`)
 
-The flag is recognized anywhere on the command line and propagates to every sub-script and tool it invokes (it sets `NODE_TLS_REJECT_UNAUTHORIZED=0` and `npm_config_strict_ssl=false` for the run). It affects **only** npm/Node. `dotnet`/NuGet use the OS certificate store, which IT-managed machines normally already trust, so those steps usually succeed without any flag — if `dotnet restore` also fails on certificates, an administrator must install the proxy's root CA into the OS trust store (no CLI flag can bypass that).
+The flag is recognized anywhere on the command line and propagates to every sub-script and tool it invokes (it sets `NODE_TLS_REJECT_UNAUTHORIZED=0` and `npm_config_strict_ssl=false` for the run). It affects **only** npm/Node. `dotnet`/NuGet use the OS certificate store, which IT-managed machines normally already trust, so those steps usually succeed without any flag. If `dotnet restore` also fails on certificates, an administrator must install the proxy's root CA into the OS trust store (no CLI flag can bypass that).
 
 Two related notes for locked-down machines:
 
@@ -862,17 +862,27 @@ armada mcp install    # Configure Claude Code, Codex, Gemini, and Cursor for Arm
 armada mcp remove     # Remove those Armada MCP entries again
 ```
 
-To add Armada to Claude Code manually instead of using `armada mcp install`, register its default HTTP MCP endpoint (`http://localhost:7891/mcp` — port 7891, unauthenticated on localhost):
+From a source checkout, the same installer is `scripts/macos/install-mcp.sh` (or the `linux` / `windows` equivalent); it runs `armada mcp install --yes`.
+
+To add Armada to Claude Code manually instead of using `armada mcp install`, register its default HTTP MCP endpoint (`http://localhost:7891/mcp`, port 7891; no token is needed for local callers, and a token is only checked when one is sent):
 
 ```bash
 claude mcp add --transport http --scope user armada http://localhost:7891/mcp
 ```
 
-Drop `--scope user` to add it for the current project only; substitute your port if you changed `McpPort`. On **enterprise-managed** Claude Code this may fail with `not allowed by enterprise policy` — that restriction is set by your IT administrator (Claude Code's `allowedMcpServers` managed setting) and cannot be overridden locally; a Claude Code admin must allow `http://localhost:7891/mcp`. See [docs/MCP_API.md](docs/MCP_API.md#http-transport) for the exact managed-settings snippet and alternatives.
+Or run Armada's MCP server over stdio as a child process (requires the `armada` CLI on your `PATH`):
+
+```bash
+claude mcp add --scope user armada -- armada mcp stdio
+```
+
+Check the connection with `claude mcp list`; inside Claude Code, `/mcp` lists Armada's tools. For orchestrator instructions to paste into a `CLAUDE.md`, see [docs/INSTRUCTIONS_FOR_CLAUDE_CODE.md](docs/INSTRUCTIONS_FOR_CLAUDE_CODE.md). You do not need any of this for Ask Armada itself: Claude Code and ApiEndpoint captains used in Ask Armada threads are connected to Armada's MCP tools for every turn through a thread-scoped token.
+
+Drop `--scope user` to add it for the current project only; substitute your port if you changed `McpPort`. On **enterprise-managed** Claude Code this may fail with `not allowed by enterprise policy`. That restriction is set by your IT administrator (Claude Code's `allowedMcpServers` managed setting) and cannot be overridden locally; a Claude Code admin must allow `http://localhost:7891/mcp`. See [docs/MCP_API.md](docs/MCP_API.md#http-transport) for the exact managed-settings snippet and alternatives.
 
 If you are working from source, MCP helper entrypoints are available under `scripts/windows/`, `scripts/linux/`, and `scripts/macos/`.
 
-Once installed, your MCP client can call tools like `status`, `dispatch`, `enumerate`, `voyage_status`, and `cancel_voyage`. There are also MCP tools for structured delivery and operations such as `run_check`, `get_check_run`, `retry_check_run`, `create_release`, `get_release`, `create_objective`, `get_objective`, `create_deployment`, `get_deployment`, `approve_deployment`, `verify_deployment`, `rollback_deployment`, `get_runbook`, `get_runbook_execution`, and `start_runbook_execution`, plus tool groups for playbook, persona, pipeline, and prompt-template management.
+Once installed, your MCP client can call tools like `status`, `dispatch`, `enumerate`, `voyage_status`, and `cancel_voyage`. There are also MCP tools for structured delivery and operations such as `run_check`, `get_check_run`, `retry_check_run`, `create_release`, `get_release`, `create_objective`, `get_objective`, `create_deployment`, `get_deployment`, `approve_deployment`, `verify_deployment`, `rollback_deployment`, `get_runbook`, `get_runbook_execution`, and `start_runbook_execution`, plus tool groups for playbook, persona, pipeline, and prompt-template management, vessel import (`discover_vessels`, `import_vessels`, `categorize_vessel_import`, `apply_fleet_recommendations`), fleet actions (`create_fleet_action`, `run_fleet_action`, `fleet_action_run_status`, `cancel_fleet_action_run`, and more), and vessel health (`vessel_health`, `evaluate_vessel_health`, `set_vessel_health_override`).
 
 ### Papercuts
 
