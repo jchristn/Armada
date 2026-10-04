@@ -1,0 +1,330 @@
+namespace Armada.Tui.Approvals
+{
+    using System;
+    using System.Threading.Tasks;
+    using Armada.Client;
+    using Armada.Client.Models;
+    using Armada.Core.Models;
+    using Armada.Tui.Modals;
+    using Armada.Tui.Services;
+    using Armada.Tui.Widgets;
+
+    /// <summary>
+    /// Decisions on approval items with the same API calls, confirmations, and toasts as the dashboard screen each
+    /// item comes from: Ask proposals (approve, reject), mission reviews (the Resolve Review dialog), deployments
+    /// (approve, deny with confirm), failed landings (retry landing), and stalled captains (stop, recall, restart with
+    /// confirm). A decided item leaves the queue and the inbox is re-polled. Call on the UI loop.
+    /// </summary>
+    public class ApprovalActions
+    {
+        #region Private-Members
+
+        private readonly TuiContext _Context;
+
+        #endregion
+
+        #region Constructors-and-Factories
+
+        /// <summary>
+        /// Instantiate.
+        /// </summary>
+        /// <param name="context">Services.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="context"/> is null.</exception>
+        public ApprovalActions(TuiContext context)
+        {
+            _Context = context ?? throw new ArgumentNullException(nameof(context));
+        }
+
+        #endregion
+
+        #region Public-Methods
+
+        /// <summary>
+        /// Approve (true) or reject (false) an Ask proposal.
+        /// </summary>
+        /// <param name="item">Item.</param>
+        /// <param name="approve">Approve.</param>
+        /// <returns>True when the call started.</returns>
+        public bool DecideProposal(ApprovalItem item, bool approve)
+        {
+            if (item == null || item.Kind != ApprovalKindEnum.AskProposal || _Context.Ask == null || String.IsNullOrEmpty(item.ParentId)) return false;
+            _Context.Ask.Decide(item.ParentId!, item.EntityId, approve);
+            return true;
+        }
+
+        /// <summary>
+        /// Show an Ask proposal's exact arguments (copy with <c>y</c>).
+        /// </summary>
+        /// <param name="item">Item.</param>
+        /// <returns>The viewer, or null.</returns>
+        public ViewerModal? ShowArguments(ApprovalItem item)
+        {
+            if (item == null || item.Kind != ApprovalKindEnum.AskProposal) return null;
+            string args = Pretty(item.Arguments);
+            ViewerModal viewer = new ViewerModal(_Context.Loc.T("Exact arguments") + ": " + (item.ToolName ?? ""), new JsonOrTextViewer(args), _Context.Loc, _Context.Theme.Current);
+            viewer.CopyRequested += (s, e) => _Context.Clipboard.Copy(item.Arguments ?? "", "Arguments");
+            _Context.Modals.Show(viewer);
+            return viewer;
+        }
+
+        /// <summary>
+        /// Open the Resolve Review dialog for a mission review with a verdict preselected, then submit the decision.
+        /// </summary>
+        /// <param name="item">Item.</param>
+        /// <param name="verdict">Preselected verdict.</param>
+        /// <returns>The dialog, or null.</returns>
+        public ReviewDecisionModal? ResolveReview(ApprovalItem item, ReviewVerdictEnum verdict)
+        {
+            if (item == null || item.Kind != ApprovalKindEnum.MissionReview) return null;
+            ReviewDecisionModal modal = new ReviewDecisionModal(item.EntityName ?? item.Title, verdict, null, _Context.Loc, _Context.Theme.Current);
+            _Context.Modals.Show(modal, result =>
+            {
+                if (result is ReviewDecision decision) SubmitReview(item, decision);
+            });
+            return modal;
+        }
+
+        /// <summary>
+        /// Submit a review decision (the dashboard's <c>submitReview</c>).
+        /// </summary>
+        /// <param name="item">Mission review item.</param>
+        /// <param name="decision">Decision.</param>
+        public void SubmitReview(ApprovalItem item, ReviewDecision decision)
+        {
+            string id = item.EntityId;
+            string title = item.EntityName ?? item.Title;
+            ArmadaClient client = _Context.Client;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    string comment = decision.Comment;
+                    string toast;
+                    NotificationSeverityEnum severity;
+                    if (decision.Verdict == ReviewVerdictEnum.Approve)
+                    {
+                        MissionReviewApproveRequest req = new MissionReviewApproveRequest();
+                        req.Comment = comment.Length > 0 ? comment : null;
+                        await client.ApproveMissionReviewAsync(id, req).ConfigureAwait(false);
+                        toast = "Review approved for \"{{title}}\".";
+                        severity = NotificationSeverityEnum.Success;
+                    }
+                    else if (decision.Verdict == ReviewVerdictEnum.Conditional)
+                    {
+                        MissionReviewApproveRequest req = new MissionReviewApproveRequest();
+                        req.Comment = comment;
+                        req.Conditional = true;
+                        await client.ApproveMissionReviewAsync(id, req).ConfigureAwait(false);
+                        toast = "Conditionally approved \"{{title}}\". The next step will consider your feedback.";
+                        severity = NotificationSeverityEnum.Success;
+                    }
+                    else if (decision.Verdict == ReviewVerdictEnum.MoreWork)
+                    {
+                        MissionReviewDenyRequest req = new MissionReviewDenyRequest();
+                        req.Comment = comment;
+                        req.Action = "RetryStage";
+                        await client.DenyMissionReviewAsync(id, req).ConfigureAwait(false);
+                        toast = "Sent \"{{title}}\" back for more work with your feedback.";
+                        severity = NotificationSeverityEnum.Warning;
+                    }
+                    else
+                    {
+                        MissionReviewDenyRequest req = new MissionReviewDenyRequest();
+                        req.Comment = comment.Length > 0 ? comment : null;
+                        req.Action = "FailPipeline";
+                        await client.DenyMissionReviewAsync(id, req).ConfigureAwait(false);
+                        toast = "Review denied for \"{{title}}\".";
+                        severity = NotificationSeverityEnum.Warning;
+                    }
+
+                    _Context.Dispatcher.Post(() =>
+                    {
+                        _Context.Notifications.Toast(severity, _Context.Loc.T(toast, LocalizationArgs.Of("title", title)));
+                        Resolved(item);
+                    });
+                }
+                catch (ArmadaApiException ex)
+                {
+                    _Context.Dispatcher.Post(() => _Context.ShowError(_Context.Loc.T("Review decision failed: {{message}}", LocalizationArgs.Of("message", ex.Message)), ex));
+                }
+            });
+        }
+
+        /// <summary>
+        /// Approve (true) or deny (false) a deployment after the dashboard's confirmation.
+        /// </summary>
+        /// <param name="item">Item.</param>
+        /// <param name="approve">Approve.</param>
+        /// <returns>The dialog, or null.</returns>
+        public ConfirmDialog? DecideDeployment(ApprovalItem item, bool approve)
+        {
+            if (item == null || item.Kind != ApprovalKindEnum.DeploymentApproval) return null;
+            string title = item.EntityName ?? item.Title;
+            string message = approve
+                ? _Context.Loc.T("Approve and execute \"{{title}}\"?", LocalizationArgs.Of("title", title))
+                : _Context.Loc.T("Deny \"{{title}}\" without executing it?", LocalizationArgs.Of("title", title));
+            return _Context.Confirm(approve ? "Approve Deployment" : "Deny Deployment", message, () =>
+            {
+                ArmadaClient client = _Context.Client;
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        Deployment? updated = approve
+                            ? await client.ApproveDeploymentAsync(item.EntityId).ConfigureAwait(false)
+                            : await client.DenyDeploymentAsync(item.EntityId).ConfigureAwait(false);
+                        string name = updated?.Title ?? title;
+                        _Context.Dispatcher.Post(() =>
+                        {
+                            _Context.Notifications.Toast(NotificationSeverityEnum.Success, _Context.Loc.T("Deployment \"{{title}}\" updated.", LocalizationArgs.Of("title", name)));
+                            Resolved(item);
+                        });
+                    }
+                    catch (ArmadaApiException ex)
+                    {
+                        _Context.Dispatcher.Post(() => _Context.ShowError("Action failed.", ex));
+                    }
+                });
+            }, approve ? "Approve" : "Deny");
+        }
+
+        /// <summary>
+        /// Retry a failed landing (no confirmation, like the dashboard's Missions list).
+        /// </summary>
+        /// <param name="item">Item.</param>
+        /// <returns>True when the call started.</returns>
+        public bool RetryLanding(ApprovalItem item)
+        {
+            if (item == null || item.Kind != ApprovalKindEnum.FailedLanding) return false;
+            string title = item.EntityName ?? item.Title;
+            ArmadaClient client = _Context.Client;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await client.RetryMissionLandingAsync(item.EntityId).ConfigureAwait(false);
+                    _Context.Dispatcher.Post(() =>
+                    {
+                        _Context.Notifications.Toast(NotificationSeverityEnum.Success, _Context.Loc.T("Landing succeeded for \"{{title}}\"", LocalizationArgs.Of("title", title)));
+                        Resolved(item);
+                    });
+                }
+                catch (ArmadaApiException ex)
+                {
+                    _Context.Dispatcher.Post(() => _Context.ShowError("Retry landing failed.", ex));
+                }
+            });
+            return true;
+        }
+
+        /// <summary>
+        /// Stop, recall, or restart a stalled captain after the dashboard's confirmation.
+        /// </summary>
+        /// <param name="item">Item.</param>
+        /// <param name="action">"stop", "recall", or "restart".</param>
+        /// <returns>The dialog, or null.</returns>
+        public ConfirmDialog? CaptainAction(ApprovalItem item, string action)
+        {
+            if (item == null || item.Kind != ApprovalKindEnum.StalledCaptain) return null;
+            string name = item.EntityName ?? item.Title;
+            string title;
+            string message;
+            string label;
+            if (action == "stop")
+            {
+                title = "Stop Captain";
+                message = _Context.Loc.T("Stop captain \"{{name}}\"? The captain process will be terminated.", LocalizationArgs.Of("name", name));
+                label = "Stop";
+            }
+            else if (action == "recall")
+            {
+                title = "Recall Captain";
+                message = _Context.Loc.T("Recall captain \"{{name}}\"? The captain will be recalled from its current mission.", LocalizationArgs.Of("name", name));
+                label = "Recall";
+            }
+            else if (action == "restart")
+            {
+                title = "Restart Captain";
+                message = _Context.Loc.T("Restart captain \"{{name}}\"? The captain will be deleted and recreated with the same saved configuration.", LocalizationArgs.Of("name", name));
+                label = "Restart";
+            }
+            else
+            {
+                return null;
+            }
+
+            return _Context.Confirm(title, message, () =>
+            {
+                ArmadaClient client = _Context.Client;
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        string toast;
+                        NotificationSeverityEnum severity = NotificationSeverityEnum.Warning;
+                        if (action == "stop")
+                        {
+                            await client.StopCaptainAsync(item.EntityId).ConfigureAwait(false);
+                            toast = "Captain \"{{name}}\" stopped.";
+                        }
+                        else if (action == "recall")
+                        {
+                            await client.RecallCaptainAsync(item.EntityId).ConfigureAwait(false);
+                            toast = "Captain \"{{name}}\" recalled.";
+                        }
+                        else
+                        {
+                            await client.RestartCaptainAsync(item.EntityId).ConfigureAwait(false);
+                            toast = "Captain \"{{name}}\" restarted.";
+                            severity = NotificationSeverityEnum.Success;
+                        }
+
+                        _Context.Dispatcher.Post(() =>
+                        {
+                            _Context.Notifications.Toast(severity, _Context.Loc.T(toast, LocalizationArgs.Of("name", name)));
+                            Resolved(item);
+                        });
+                    }
+                    catch (ArmadaApiException ex)
+                    {
+                        string failed = action == "stop" ? "Stop failed." : action == "recall" ? "Recall failed." : "Restart failed.";
+                        _Context.Dispatcher.Post(() => _Context.ShowError(failed, ex));
+                    }
+                });
+            }, label);
+        }
+
+        /// <summary>
+        /// Pretty-print JSON text, or return it as-is.
+        /// </summary>
+        /// <param name="raw">Text.</param>
+        /// <returns>Pretty text.</returns>
+        public static string Pretty(string? raw)
+        {
+            if (String.IsNullOrWhiteSpace(raw)) return "";
+            try
+            {
+                using (System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(raw!))
+                {
+                    return System.Text.Json.JsonSerializer.Serialize(doc.RootElement, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                }
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return raw!;
+            }
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private void Resolved(ApprovalItem item)
+        {
+            _Context.Approvals.Remove(item.Kind, item.EntityId);
+            _Context.Status.NudgeInbox();
+        }
+
+        #endregion
+    }
+}

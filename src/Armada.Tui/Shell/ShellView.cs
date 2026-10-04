@@ -49,7 +49,7 @@ namespace Armada.Tui.Shell
         /// <summary>
         /// Ask dock.
         /// </summary>
-        public AskDockView Dock { get; } = new AskDockView();
+        public AskDockView Dock { get; }
 
         /// <summary>
         /// Login view (while signed out).
@@ -107,6 +107,7 @@ namespace Armada.Tui.Shell
             Menu = new MenuBarView(context.Commands);
             Sidebar = new SidebarView(context);
             StatusBar = new StatusBarView(context);
+            Dock = new AskDockView(context);
             Login = new LoginView(context);
             foreach (ArmadaWidget w in new ArmadaWidget[] { Header, Menu, Sidebar, StatusBar, Dock, Login }) w.Localizer = context.Loc;
             Scope.Wrap = true;

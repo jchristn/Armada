@@ -70,6 +70,7 @@ namespace Armada.Tui
             // Ask
             c.Register(Cmd("ask.new", "New conversation", CommandMenuEnum.Ask, () => context.Navigate("/ask"), signedIn));
             c.Register(Cmd("ask.approvals", "Approvals center", CommandMenuEnum.Ask, () => context.Navigate("/approvals"), signedIn, "ctrl+a"));
+            c.Register(Cmd("ask.about-this", "Ask about this", CommandMenuEnum.Ask, () => context.Ask?.AskAbout(context.Router.Current), signedIn, "alt+a"));
             c.Register(Cmd("ask.notifications", "Notifications", CommandMenuEnum.Ask, () => ShowNotifications(context), null, "ctrl+n"));
             c.Register(Cmd("ask.toast-action", "Run the latest toast action", CommandMenuEnum.Ask, () => context.Notifications.RunLatestToastAction(), null, "ctrl+o"));
 

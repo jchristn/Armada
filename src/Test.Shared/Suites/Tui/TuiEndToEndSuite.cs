@@ -59,10 +59,21 @@ namespace Test.Shared.Suites.Tui
                     }
 
                     host.Type("password").Press("enter");
-                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Session.IsSignedIn, 10000), "signed in");
-                    AssertEqual("admin@armada", host.Tui.Context.Session.UserEmail, "user");
-                    AssertTrue(host.Tui.Context.Session.IsGlobalAdmin, "global admin role");
-                    TuiCase.Contains(host.Screen(), "[Global Admin]", "role badge");
+
+                    // The seeded admin still has the default password, so the server allows only the password change.
+                    // The fixture is shared, so this case checks the forced step and its validation without changing
+                    // the password (Tui.Login covers the full change against a stub, and the real run covers it live).
+                    AssertTrue(host.PumpUntil(() => host.Tui.Shell.Login.Step == Armada.Tui.Screens.LoginStepEnum.ChangePassword, 10000), "change-password step");
+                    AssertFalse(host.Tui.Context.Session.IsSignedIn, "not signed in until the password changes");
+                    AssertEqual("admin@armada", host.Tui.Context.Session.PendingIdentity!.User!.Email, "pending identity");
+                    TuiCase.Contains(host.Screen(), "Change the default password", "change step shown");
+                    host.Tui.Shell.Login.CurrentPassword.Value = "password";
+                    host.Tui.Shell.Login.NewPassword.Value = "a-new-password";
+                    host.Tui.Shell.Login.ConfirmPassword.Value = "a-different-one";
+                    host.Tui.Shell.Login.SubmitPasswordChange();
+                    AssertTrue(host.WaitForText("The new passwords do not match."), "validation");
+                    await host.Tui.Context.Session.SignOutAsync();
+                    AssertTrue(host.PumpUntil(() => host.Tui.Shell.Login.Step == Armada.Tui.Screens.LoginStepEnum.Email, 5000), "sign out returns to email");
                 }
             }, TestTags.EndToEnd));
 

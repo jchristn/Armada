@@ -6,8 +6,9 @@ namespace Armada.Tui.Services
 
     /// <summary>
     /// The single queue of everything waiting on the user (Ask proposals, mission reviews, deployment approvals, failed
-    /// landings, stalled captains). This skeleton drives the header count; the sources (socket events, inbox polling)
-    /// and the Approvals center are wired in later waves (W2.4, W3.3). Call on the UI loop thread.
+    /// landings, stalled captains). It drives the header and status bar counts, attention escalation for new items, and
+    /// the Approvals center. Sources: the Ask controller (proposal events and thread loads) and
+    /// <see cref="Armada.Tui.Approvals.ApprovalSources"/> (inbox polling and entity-change events). Call on the UI loop thread.
     /// </summary>
     public class ApprovalService
     {
@@ -56,11 +57,67 @@ namespace Armada.Tui.Services
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="item"/> is null.</exception>
         public void Upsert(ApprovalItem item)
         {
+            Upsert(item, true);
+        }
+
+        /// <summary>
+        /// Add or replace an item, optionally without raising <see cref="Arrived"/> for a new one (items the user is
+        /// already looking at, or the first sync after sign-in).
+        /// </summary>
+        /// <param name="item">Item.</param>
+        /// <param name="notify">Raise <see cref="Arrived"/> when the item is new.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="item"/> is null.</exception>
+        public void Upsert(ApprovalItem item, bool notify)
+        {
             if (item == null) throw new ArgumentNullException(nameof(item));
-            bool isNew = !_Items.ContainsKey(item.Key);
+            bool isNew = !_Items.TryGetValue(item.Key, out ApprovalItem? previous);
+            if (previous != null) item.CreatedUtc = previous.CreatedUtc;
             _Items[item.Key] = item;
-            if (isNew) Arrived?.Invoke(this, item);
+            if (isNew && notify) Arrived?.Invoke(this, item);
             Changed?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>
+        /// Replace every item of the given kinds with a new set (a full inbox poll): new items are added, items no
+        /// longer present are removed, and existing ones are updated.
+        /// </summary>
+        /// <param name="kinds">Kinds owned by the source.</param>
+        /// <param name="items">Current items.</param>
+        /// <param name="notify">Raise <see cref="Arrived"/> for new items.</param>
+        public void Sync(IEnumerable<ApprovalKindEnum> kinds, IEnumerable<ApprovalItem> items, bool notify)
+        {
+            HashSet<ApprovalKindEnum> owned = new HashSet<ApprovalKindEnum>(kinds);
+            List<ApprovalItem> incoming = items.Where(i => i != null && owned.Contains(i.Kind)).ToList();
+            HashSet<string> keep = new HashSet<string>(incoming.Select(i => i.Key), StringComparer.Ordinal);
+            bool changed = false;
+            foreach (string key in _Items.Where(p => owned.Contains(p.Value.Kind) && !keep.Contains(p.Key)).Select(p => p.Key).ToList())
+            {
+                _Items.Remove(key);
+                changed = true;
+            }
+
+            List<ApprovalItem> arrived = new List<ApprovalItem>();
+            foreach (ApprovalItem item in incoming)
+            {
+                if (_Items.TryGetValue(item.Key, out ApprovalItem? previous)) item.CreatedUtc = previous.CreatedUtc;
+                else arrived.Add(item);
+                _Items[item.Key] = item;
+                changed = true;
+            }
+
+            if (notify) foreach (ApprovalItem item in arrived) Arrived?.Invoke(this, item);
+            if (changed) Changed?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>
+        /// Find an item.
+        /// </summary>
+        /// <param name="kind">Kind.</param>
+        /// <param name="entityId">Entity id.</param>
+        /// <returns>Item or null.</returns>
+        public ApprovalItem? Find(ApprovalKindEnum kind, string entityId)
+        {
+            return _Items.TryGetValue(kind + ":" + entityId, out ApprovalItem? item) ? item : null;
         }
 
         /// <summary>

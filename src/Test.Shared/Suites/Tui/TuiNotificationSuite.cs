@@ -91,6 +91,43 @@ namespace Test.Shared.Suites.Tui
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "six_entity_events", "All six entity-change events map to the dashboard's text, severity, and links", () =>
+            {
+                using (TuiTestHost host = TuiCase.SignedIn(140, 40, "/missions"))
+                {
+                    NotificationService n = host.Tui.Context.Notifications;
+                    n.Clear();
+                    string[] events = new string[]
+                    {
+                        "{\"type\":\"mission.changed\",\"data\":{\"id\":\"msn_1\",\"title\":\"Fix tables\",\"status\":\"Landed\"}}",
+                        "{\"type\":\"voyage.changed\",\"data\":{\"id\":\"vyg_1\",\"title\":\"Table work\",\"status\":\"Complete\"}}",
+                        "{\"type\":\"captain.changed\",\"data\":{\"id\":\"cpt_1\",\"name\":\"claude-1\",\"state\":\"Stalled\"}}",
+                        "{\"type\":\"deployment.changed\",\"data\":{\"id\":\"dpl_1\",\"title\":\"Staging\",\"status\":\"Succeeded\",\"verificationStatus\":\"Passed\"}}",
+                        "{\"type\":\"objective.changed\",\"data\":{\"id\":\"obj_1\",\"title\":\"Faster CI\",\"status\":\"InProgress\"}}",
+                        "{\"type\":\"incident.changed\",\"data\":{\"id\":\"inc_1\",\"title\":\"Outage\",\"status\":\"Failed\"}}"
+                    };
+                    foreach (string e in events) host.Tui.Context.Events.Inject(ArmadaSocketMessage.Parse(e)!);
+                    host.Pump();
+                    AssertEqual(6, n.History.Count, "six notifications");
+                    Dictionary<string, NotificationEntry> byRoute = n.History.ToDictionary(h => h.Route ?? "", h => h);
+                    AssertEqual("Mission \"Fix tables\" - Landed", byRoute["/missions/msn_1"].Message, "mission text");
+                    AssertEqual(NotificationSeverityEnum.Success, byRoute["/missions/msn_1"].Severity, "mission severity");
+                    AssertEqual("Voyage Complete", byRoute["/voyages/vyg_1"].Title, "voyage title");
+                    AssertEqual("Captain \"claude-1\" - Stalled", byRoute["/captains/cpt_1"].Message, "captain uses name and state");
+                    AssertEqual(NotificationSeverityEnum.Warning, byRoute["/captains/cpt_1"].Severity, "stalled is a warning");
+                    AssertEqual("Succeeded / Passed", byRoute["/deployments/dpl_1"].Status, "deployment adds verification");
+                    AssertEqual(NotificationSeverityEnum.Info, byRoute["/backlog/obj_1"].Severity, "objective links to the backlog item");
+                    AssertEqual(NotificationSeverityEnum.Error, byRoute["/incidents/inc_1"].Severity, "incident failure is an error");
+                    AssertTrue(n.ActiveToasts().Count >= 6, "every change toasts");
+                    host.Tui.Context.Events.Inject(ArmadaSocketMessage.Parse(events[0])!);
+                    host.Pump();
+                    AssertEqual(6, n.History.Count, "repeated status deduplicated");
+                    host.Tui.Context.Events.Inject(ArmadaSocketMessage.Parse("{\"type\":\"mission.changed\",\"data\":{\"id\":\"msn_2\"}}")!);
+                    host.Pump();
+                    AssertEqual(6, n.History.Count, "no status, no notification");
+                }
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "center_modal", "The notification center lists entries and Enter opens the item", () =>
             {
                 using (TuiTestHost host = TuiCase.SignedIn(120, 40, "/jobs"))

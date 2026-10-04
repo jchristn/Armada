@@ -94,7 +94,7 @@ namespace Test.Shared.Suites.Tui
                     host.Press("ctrl+b");
                     TuiCase.NotContains(host.Screen(), "OPERATIONS", "sidebar hidden");
                     host.Press("ctrl+j");
-                    TuiCase.Contains(host.Screen(), "W2.7", "dock placeholder");
+                    TuiCase.Contains(host.Screen(), "Ask Armada: New conversation", "dock");
                     AssertTrue(host.Tui.Context.Prefs.Current.AskDockVisible, "dock persisted");
                 }
             }));

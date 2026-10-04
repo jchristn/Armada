@@ -20,6 +20,12 @@ namespace Test.Shared.Suites.Tui
     {
         private const string Suite = "Tui.Login";
 
+        private static string WhoAmIOpen()
+        {
+            string json = TuiFixtures.WhoAmI();
+            return json.Substring(0, json.Length - 1);
+        }
+
         /// <inheritdoc />
         public TestSuiteDescriptor Build()
         {
@@ -178,6 +184,89 @@ namespace Test.Shared.Suites.Tui
                     login.Language.Choose(login.Language.Options.First(o => o.Value == "de"));
                     AssertEqual("de", host.Tui.Context.Loc.Locale, "locale applied");
                     AssertEqual("de", host.Tui.Context.Prefs.Current.Locale, "locale persisted");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "forced_password_change", "The default password forces a change before the session can continue", () =>
+            {
+                StubHttpHandler stub = TuiFixtures.SignedInServer(1);
+                bool changed = false;
+                stub.On("GET", "/api/v1/whoami", body => StubHttpHandler.Response(HttpStatusCode.OK, changed
+                    ? TuiFixtures.WhoAmI()
+                    : WhoAmIOpen() + ",\"PasswordChangeRequired\":true,\"DefaultCredentialsInUse\":true}"));
+                stub.On("POST", "/api/v1/authenticate", body => StubHttpHandler.Response(HttpStatusCode.OK, "{\"Success\":true,\"Token\":\"tok_session\",\"PasswordChangeRequired\":true}"));
+                stub.On("PUT", "/api/v1/account/password", body =>
+                {
+                    if (!body.Contains("\"CurrentPassword\":\"password\"")) return StubHttpHandler.Response(HttpStatusCode.Forbidden, "{\"Message\":\"CurrentPassword is incorrect\"}");
+                    changed = true;
+                    return StubHttpHandler.Response(HttpStatusCode.OK, TuiFixtures.WhoAmI());
+                });
+                using (TuiTestHost host = new TuiTestHost(120, 40, stub, "http://127.0.0.1:9", o => o.StartRoute = "/inbox"))
+                {
+                    host.Start();
+                    host.Type("admin@armada").Press("enter");
+                    host.PumpUntil(() => host.Tui.Shell.Login.Step == LoginStepEnum.Password);
+                    host.Type("password").Press("enter");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Shell.Login.Step == LoginStepEnum.ChangePassword), "change-password step");
+                    AssertFalse(host.Tui.Context.Session.IsSignedIn, "not signed in yet");
+                    AssertTrue(host.Tui.Context.Session.PasswordChangePending, "pending");
+                    string frame = host.Screen();
+                    TuiCase.Contains(frame, "Change the default password", "title");
+                    TuiCase.Contains(frame, "Changing it also disables the default bearer token.", "dashboard explainer");
+                    AssertEqual(0, stub.Count("GET /api/v1/inbox"), "no other API calls while pending");
+                    LoginView login = host.Tui.Shell.Login;
+                    host.Type("password").Press("tab").Type("short").Press("tab").Type("short").Press("enter");
+                    AssertTrue(host.WaitForText("The new password must be at least 8 characters."), "length rule");
+                    login.NewPassword.Value = "long-enough-1";
+                    login.ConfirmPassword.Value = "long-enough-2";
+                    login.SubmitPasswordChange();
+                    AssertEqual("The new passwords do not match.", login.Error, "match rule");
+                    login.NewPassword.Value = "password";
+                    login.ConfirmPassword.Value = "password";
+                    login.SubmitPasswordChange();
+                    AssertEqual("Choose a password different from the default and the current one.", login.Error, "default rule");
+                    login.CurrentPassword.Value = "wrong";
+                    login.NewPassword.Value = "long-enough-1";
+                    login.ConfirmPassword.Value = "long-enough-1";
+                    login.SubmitPasswordChange();
+                    AssertTrue(host.PumpUntil(() => login.Error == "Password change failed. Check the current password and try again."), "server rejection: " + login.Error + " busy=" + login.Busy + " step=" + login.Step + " reqs=" + String.Join(",", stub.Requests));
+                    TuiCase.NotContains(host.Screen(), "long-enough-1", "passwords masked");
+                    login.CurrentPassword.Value = "password";
+                    login.SubmitPasswordChange();
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Session.IsSignedIn && host.Tui.Shell.Screen != null), "signed in after the change");
+                    AssertFalse(host.Tui.Context.Session.PasswordChangePending, "no longer pending");
+                    AssertEqual("/inbox", host.Tui.Context.Router.Current!.Path, "continued to the start route");
+                    AssertTrue(stub.Bodies.Any(b => b.Contains("\"NewPassword\":\"long-enough-1\"")), "PUT body");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "forced_change_sign_out", "Sign out from the change-password step returns to the email step", () =>
+            {
+                StubHttpHandler stub = TuiFixtures.SignedInServer(1);
+                stub.On("GET", "/api/v1/whoami", body => StubHttpHandler.Response(HttpStatusCode.OK, WhoAmIOpen() + ",\"PasswordChangeRequired\":true}"));
+                using (TuiTestHost host = new TuiTestHost(120, 40, stub))
+                {
+                    FileCredentialStore store = new FileCredentialStore(Path.Combine(host.TempDir, "creds.json"));
+                    store.SetAsync(SessionService.CredentialKey(host.Tui.Context.Session.Profile), "tok_saved").GetAwaiter().GetResult();
+                    host.Start();
+                    AssertTrue(host.PumpUntil(() => host.Tui.Shell.Login.Step == LoginStepEnum.ChangePassword), "resume lands on the change step");
+                    host.Tui.Shell.Login.Back();
+                    AssertTrue(host.PumpUntil(() => host.Tui.Shell.Login.Step == LoginStepEnum.Email && !host.Tui.Context.Session.PasswordChangePending), "signed out");
+                    AssertNull(store.GetAsync(SessionService.CredentialKey(host.Tui.Context.Session.Profile)).GetAwaiter().GetResult(), "token forgotten");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "default_credentials_warning", "whoami's default-credentials flag shows a persistent header warning", () =>
+            {
+                StubHttpHandler stub = TuiFixtures.SignedInServer(1);
+                stub.On("GET", "/api/v1/whoami", body => StubHttpHandler.Response(HttpStatusCode.OK, WhoAmIOpen() + ",\"DefaultCredentialsInUse\":true}"));
+                using (TuiTestHost host = TuiCase.SignedIn(140, 40, "/missions", stub))
+                {
+                    string frame = host.Screen();
+                    TuiCase.Contains(frame, "! Default credentials are in use.", "warning");
+                    AssertEqual(2, host.Tui.Shell.Header.Rows, "extra header row");
+                    host.Tui.Context.Navigate("/inbox");
+                    TuiCase.Contains(host.Screen(), "Default credentials are in use.", "persistent across screens");
                 }
             }));
 

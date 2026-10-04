@@ -49,6 +49,16 @@ namespace Armada.Tui
         public TuiStartOptions Options { get; }
 
         /// <summary>
+        /// The Ask Armada session.
+        /// </summary>
+        public Armada.Tui.Ask.AskController Ask { get; }
+
+        /// <summary>
+        /// Feeds the approvals queue from the inbox and entity-change events.
+        /// </summary>
+        public Armada.Tui.Approvals.ApprovalSources ApprovalSources { get; }
+
+        /// <summary>
         /// Completes when the asynchronous startup (catalog and session resume) has finished.
         /// </summary>
         public Task StartupTask { get; private set; } = Task.CompletedTask;
@@ -105,6 +115,11 @@ namespace Armada.Tui
             string locale = loc.SetLocale(prefs.Current.Locale ?? CultureInfo.CurrentUICulture.Name);
             session.Client.Options.AcceptLanguage = locale;
 
+            Ask = new Armada.Tui.Ask.AskController(Context);
+            Context.AttachAsk(Ask);
+            ApprovalSources = new Armada.Tui.Approvals.ApprovalSources(Context);
+            Screens.Register("AskScreen", (m, c) => new Armada.Tui.Screens.Ask.AskScreen(m, c));
+            Screens.Register("ApprovalsScreen", (m, c) => new Armada.Tui.Approvals.ApprovalsScreen(m, c));
             Shell = new ShellView(Context, Screens);
             GlobalCommands.Register(Context, Shell);
             Wire();
@@ -239,7 +254,11 @@ namespace Armada.Tui
             _App.AutoRenderNotifications = false;
             _App.Theme = Context.Theme.TuiKitTheme;
             _App.PasteReceived += text => Shell.HandlePaste(text);
-            _App.TerminalFocusChanged += focused => Context.Notifications.TerminalFocused = focused;
+            _App.TerminalFocusChanged += focused =>
+            {
+                Context.Notifications.TerminalFocused = focused;
+                Ask.OnTerminalFocusChanged(focused);
+            };
             Context.Theme.Changed += (s, t) =>
             {
                 _App.Theme = Context.Theme.TuiKitTheme;
@@ -272,6 +291,7 @@ namespace Armada.Tui
                 Context.Router.Navigate(Options.StartRoute ?? Context.Prefs.Current.LastRoute ?? "/ask");
                 Shell.FocusPane("main");
             };
+            Context.Session.PasswordChangeRequired += (s, e) => Shell.Login.ShowChangePassword();
             Context.Session.SignedOut += (s, reason) =>
             {
                 Context.Events.Stop();

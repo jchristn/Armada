@@ -24,7 +24,7 @@ namespace Armada.Tui.Shell
         /// </summary>
         public int Rows
         {
-            get { return _Context.Session.Proxy != null ? 2 : 1; }
+            get { return 1 + (_Context.Session.Proxy != null ? 1 : 0) + (_Context.Session.DefaultCredentialsInUse ? 1 : 0); }
         }
 
         #endregion
@@ -88,14 +88,24 @@ namespace Armada.Tui.Shell
                 rx += SurfaceText.Draw(surface, rx, 0, p.Key, p.Value.WithBackground(Theme.Header.Background), width - rx) + 2;
             }
 
-            if (_Context.Session.Proxy != null && surface.Size.Height > 1)
+            int row = 1;
+            if (_Context.Session.DefaultCredentialsInUse && surface.Size.Height > row)
+            {
+                CellStyle warn = Theme.Warning.WithAttribute(CellAttributes.Reverse, true);
+                SurfaceText.FillRow(surface, 0, row, width, warn);
+                string text = " ! " + T("Default credentials are in use.") + " " + T("An admin@armada account still has the default password, or the default bearer token is active. Change the password (each tenant's admin@armada signs in and is prompted) before exposing this server beyond localhost.");
+                SurfaceText.Draw(surface, 0, row, text, warn, width);
+                row++;
+            }
+
+            if (_Context.Session.Proxy != null && surface.Size.Height > row)
             {
                 Armada.Client.Models.ProxySessionContext proxy = _Context.Session.Proxy;
                 string strip = " " + T("Proxy") + ": " + (proxy.SelectedInstanceId ?? proxy.SelectedInstance?.InstanceId ?? "-")
                     + "  " + (proxy.SelectedInstance?.State ?? "") + "  v" + (proxy.SelectedInstance?.ArmadaVersion ?? "?")
                     + "   [" + T("Switch Deployment") + "] [" + T("Proxy Logout") + "] (File menu)";
-                SurfaceText.FillRow(surface, 0, 1, width, Theme.Header.WithForeground(Theme.Warning.Foreground));
-                SurfaceText.Draw(surface, 0, 1, strip, Theme.Header.WithForeground(Theme.Warning.Foreground), width);
+                SurfaceText.FillRow(surface, 0, row, width, Theme.Header.WithForeground(Theme.Warning.Foreground));
+                SurfaceText.Draw(surface, 0, row, strip, Theme.Header.WithForeground(Theme.Warning.Foreground), width);
             }
         }
 
