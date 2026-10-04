@@ -37,6 +37,22 @@ namespace Armada.Publisher.Manifest
         /// </summary>
         public string DeveloperIdApplication { get; set; } = string.Empty;
 
+        /// <summary>
+        /// The productbuild identity string for .pkg signing ("Developer ID Installer: Name (TEAMID)").
+        /// </summary>
+        public string DeveloperIdInstaller { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Name of the environment variable that, when set, overrides the codesign identity. Lets a local
+        /// build sign with an identity already in the login keychain without importing a certificate.
+        /// </summary>
+        public string SigningIdentitySecret { get; set; } = "APPLE_SIGNING_IDENTITY";
+
+        /// <summary>
+        /// Name of the environment variable that, when set, overrides the .pkg installer identity.
+        /// </summary>
+        public string InstallerIdentitySecret { get; set; } = "APPLE_INSTALLER_IDENTITY";
+
         #endregion
     }
 }

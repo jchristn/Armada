@@ -66,6 +66,7 @@ namespace Armada.Publisher.Build
                 "-p:PublishSingleFile=true",
                 "-p:IncludeNativeLibrariesForSelfExtract=true",
                 "-p:DebugType=none",
+                "-p:GenerateDocumentationFile=false",
                 "-p:Version=" + _Version,
                 "-o", outputDirectory
             };
@@ -81,7 +82,7 @@ namespace Armada.Publisher.Build
             {
                 // The published file name follows the assembly name, which may differ from BinaryName.
                 // Fall back to the single produced executable when the expected name is absent.
-                binaryPath = LocateProducedBinary(outputDirectory, runtimeIdentifier, binaryPath);
+                binaryPath = LocateProducedBinary(outputDirectory, runtimeIdentifier, binaryPath, Path.GetFileNameWithoutExtension(artifact.Project));
             }
 
             PublishedArtifact result = new PublishedArtifact
@@ -100,9 +101,14 @@ namespace Armada.Publisher.Build
 
         #region Private-Methods
 
-        private string LocateProducedBinary(string outputDirectory, string runtimeIdentifier, string expected)
+        private string LocateProducedBinary(string outputDirectory, string runtimeIdentifier, string expected, string assemblyName)
         {
             bool isWindows = runtimeIdentifier.StartsWith("win", StringComparison.OrdinalIgnoreCase);
+
+            // The apphost is named after the assembly (for example "Armada.Harbor"), which itself contains a
+            // dot, so try that name before scanning for an extensionless file.
+            string assemblyHost = Path.Combine(outputDirectory, isWindows ? assemblyName + ".exe" : assemblyName);
+            if (!string.IsNullOrEmpty(assemblyName) && File.Exists(assemblyHost)) return assemblyHost;
             string pattern = isWindows ? "*.exe" : "*";
 
             foreach (string candidate in Directory.EnumerateFiles(outputDirectory, pattern))

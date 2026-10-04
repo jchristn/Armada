@@ -3,7 +3,7 @@ rem ============================================================================
 rem  build-installers.bat - build the Windows installers Armada can produce on
 rem  this machine (CLI, Harbor, Server) and land them in installers\<version>\.
 rem
-rem  macOS (.dmg/.pkg) and Linux (.deb/.rpm/AppImage) installers cannot be built
+rem  macOS (.dmg/.pkg) and Linux (.deb/.rpm) installers cannot be built
 rem  on Windows; run build-installers.sh on those platforms, or push a tag to let
 rem  the CI matrix build all three operating systems at once.
 rem
@@ -36,8 +36,6 @@ set "FAILED="
 rem --- channels this OS owns -------------------------------------------------
 call :build inno-harbor
 call :build wix-server
-call :build choco-cli
-call :build winget-cli
 call :build nuget-cli
 
 rem --- collect the finished installers into installers\<version>\ ------------
@@ -46,6 +44,10 @@ echo Collecting installers into %OUT% ...
 if exist "%WORK%\packages" (
   for /r "%WORK%\packages" %%F in (*.exe *.msi *.nupkg) do copy /y "%%F" "%OUT%\" >nul
 )
+
+rem --- SHA256SUMS over everything collected ------------------------------------
+dotnet run --project "%PUBLISHER%" -c Release --no-build -- checksums --dir "%OUT%"
+if errorlevel 1 set "FAILED=!FAILED! checksums"
 
 echo.
 echo ============================================================
@@ -56,8 +58,8 @@ echo   Output: %OUT%
 echo ============================================================
 if not "!FAILED!"=="" (
   echo Note: failed channels are either missing a packaging tool ^(run
-  echo       "dotnet run --project %PUBLISHER% -- doctor"^) or their recipe is
-  echo       not yet implemented in Armada.Publisher.
+  echo       "dotnet run --project %PUBLISHER% -- doctor"^) or hit a build error
+  echo       shown in the channel output above.
 )
 endlocal
 exit /b 0

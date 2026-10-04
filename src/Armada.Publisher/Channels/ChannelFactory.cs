@@ -31,24 +31,11 @@ namespace Armada.Publisher.Channels
                     return new DebRpmChannel();
 
                 case ChannelKindEnum.Wix:
-                    return new StubChannel(kind, new List<ToolRequirement>
-                    {
-                        new ToolRequirement("wix", "dotnet tool install --global wix", "win"),
-                        new ToolRequirement("signtool", "Install the Windows SDK (ships on windows-latest).", "win")
-                    });
+                    return new WixChannel();
                 case ChannelKindEnum.Dmg:
-                    return new StubChannel(kind, new List<ToolRequirement>
-                    {
-                        new ToolRequirement("create-dmg", "brew install create-dmg", "osx"),
-                        new ToolRequirement("codesign", "Install Xcode command-line tools: xcode-select --install", "osx"),
-                        new ToolRequirement("notarytool", "Ships with Xcode command-line tools on macos-latest.", "osx")
-                    });
+                    return new DmgChannel();
                 case ChannelKindEnum.Pkg:
-                    return new StubChannel(kind, new List<ToolRequirement>
-                    {
-                        new ToolRequirement("pkgbuild", "Ships with Xcode command-line tools: xcode-select --install", "osx"),
-                        new ToolRequirement("codesign", "Install Xcode command-line tools: xcode-select --install", "osx")
-                    });
+                    return new PkgChannel();
                 case ChannelKindEnum.AppImage:
                     return new StubChannel(kind, new List<ToolRequirement>
                     {

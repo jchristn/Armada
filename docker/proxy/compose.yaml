@@ -11,3 +11,9 @@ services:
       - ./proxysettings.json:/config/proxysettings.json:ro
       - ./data:/app/data
       - ./logs:/app/data/logs
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:7893/proxy-api/v1/status/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 2
+      start_period: 20s

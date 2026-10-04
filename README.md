@@ -242,6 +242,24 @@ Examples:
 
 These `install.*` scripts build the solution, deploy dashboard assets, and install `Armada.Helm` as a global tool from the current checkout.
 
+#### Prebuilt installers and Docker
+
+Installing from source with the scripts above is the path the project uses day to day. Release builds also produce
+these packages, and these are the only supported install paths for 1.0:
+
+| Platform | What you get |
+|----------|--------------|
+| Any OS with .NET | The CLI as a global tool: `dotnet tool install --global Armada.Helm` |
+| Windows | Harbor `.exe` (Inno Setup) and the Admiral server `.msi` (WiX) |
+| macOS | `Armada Harbor.app` in a `.dmg`, and the Admiral server `.pkg` |
+| Linux | `.deb` and `.rpm` packages for the CLI, Harbor, and the server |
+| Docker | Admiral, dashboard, and proxy via `docker/armada/compose.yaml` and `docker/proxy/compose.yaml` (see [docs/DOCKER.md](docs/DOCKER.md)); `docker/update.sh` or `docker/update.bat` pulls and recreates the stack |
+
+Each release carries a `SHA256SUMS` file. Installers are code-signed only when the release was built with signing
+credentials; an unsigned Windows installer shows a SmartScreen prompt ("More info", then "Run anyway"), and an
+unsigned macOS app or package must be allowed once in **System Settings > Privacy & Security** ("Open Anyway").
+How the packages are built is described in [BUILDING_INSTALLERS.md](BUILDING_INSTALLERS.md).
+
 #### Behind an enterprise proxy or firewall
 
 Corporate networks that perform TLS inspection present a self-signed root certificate. Because npm ships its own CA bundle (separate from the operating system's certificate store), the dashboard build fails with `npm error code SELF_SIGNED_CERT_IN_CHAIN`. Add `--insecure` (alias `-k`, or `--no-strict-ssl`) to any install/update/reinstall/publish/mcp/task script to disable strict TLS validation for npm/Node for that run:

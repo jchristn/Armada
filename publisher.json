@@ -33,6 +33,8 @@
       "displayName": "Armada Harbor",
       "description": "Host-side tray runner for executing captains, git, and worktrees on a developer machine.",
       "icon": "src/Armada.Harbor/Assets/logo.ico",
+      "macIcon": "src/Armada.Harbor/Assets/logo-macos.png",
+      "bundleIdentifier": "com.joelchristner.armada.harbor",
       "startup": {
         "scope": "User",
         "installArgs": "--install-startup",
@@ -46,6 +48,7 @@
       "binaryName": "armada-server",
       "displayName": "Armada Admiral",
       "description": "Admiral server: REST API, MCP server, WebSocket, and web dashboard.",
+      "bundleIdentifier": "com.joelchristner.armada.server",
       "service": {
         "scope": "System",
         "serviceName": "armada",
@@ -58,16 +61,16 @@
   ],
   "channels": [
     { "name": "nuget-cli",     "kind": "NuGet",       "artifact": "helm",   "enabled": true,  "secretName": "NUGET_API_KEY" },
-    { "name": "homebrew-cli",  "kind": "Homebrew",    "artifact": "helm",   "enabled": true,  "formulaType": "formula", "tap": "jchristn/homebrew-tap", "secretName": "TAP_TOKEN" },
-    { "name": "scoop-cli",     "kind": "Scoop",       "artifact": "helm",   "enabled": true,  "bucket": "jchristn/scoop-bucket", "secretName": "TAP_TOKEN", "runtimes": ["win-x64", "win-arm64"] },
-    { "name": "choco-cli",     "kind": "Chocolatey",  "artifact": "helm",   "enabled": true,  "secretName": "CHOCOLATEY_API_KEY", "runtimes": ["win-x64"] },
-    { "name": "winget-cli",    "kind": "Winget",      "artifact": "helm",   "enabled": true,  "packageId": "jchristn.ArmadaCLI", "secretName": "WINGET_TOKEN", "runtimes": ["win-x64"] },
+    { "name": "homebrew-cli",  "kind": "Homebrew",    "artifact": "helm",   "enabled": false,  "formulaType": "formula", "tap": "jchristn/homebrew-tap", "secretName": "TAP_TOKEN" },
+    { "name": "scoop-cli",     "kind": "Scoop",       "artifact": "helm",   "enabled": false,  "bucket": "jchristn/scoop-bucket", "secretName": "TAP_TOKEN", "runtimes": ["win-x64", "win-arm64"] },
+    { "name": "choco-cli",     "kind": "Chocolatey",  "artifact": "helm",   "enabled": false,  "secretName": "CHOCOLATEY_API_KEY", "runtimes": ["win-x64"] },
+    { "name": "winget-cli",    "kind": "Winget",      "artifact": "helm",   "enabled": false,  "packageId": "jchristn.ArmadaCLI", "secretName": "WINGET_TOKEN", "runtimes": ["win-x64"] },
     { "name": "linux-cli",     "kind": "DebRpm",      "artifact": "helm",   "enabled": true,  "runtimes": ["linux-x64", "linux-arm64"] },
-    { "name": "appimage-cli",  "kind": "AppImage",    "artifact": "helm",   "enabled": true,  "runtimes": ["linux-x64", "linux-arm64"] },
+    { "name": "appimage-cli",  "kind": "AppImage",    "artifact": "helm",   "enabled": false,  "runtimes": ["linux-x64", "linux-arm64"] },
 
     { "name": "inno-harbor",   "kind": "Inno",        "artifact": "harbor", "enabled": true,  "runtimes": ["win-x64", "win-arm64"] },
     { "name": "dmg-harbor",    "kind": "Dmg",         "artifact": "harbor", "enabled": true,  "runtimes": ["osx-x64", "osx-arm64"] },
-    { "name": "brew-harbor",   "kind": "Homebrew",    "artifact": "harbor", "enabled": true,  "formulaType": "cask", "tap": "jchristn/homebrew-tap", "secretName": "TAP_TOKEN", "runtimes": ["osx-x64", "osx-arm64"] },
+    { "name": "brew-harbor",   "kind": "Homebrew",    "artifact": "harbor", "enabled": false,  "formulaType": "cask", "tap": "jchristn/homebrew-tap", "secretName": "TAP_TOKEN", "runtimes": ["osx-x64", "osx-arm64"] },
     { "name": "linux-harbor",  "kind": "DebRpm",      "artifact": "harbor", "enabled": true,  "runtimes": ["linux-x64", "linux-arm64"] },
 
     { "name": "wix-server",    "kind": "Wix",         "artifact": "server", "enabled": true,  "runtimes": ["win-x64"] },
@@ -86,7 +89,8 @@
       "notaryKeySecret": "APPLE_NOTARY_KEY",
       "notaryKeyIdSecret": "APPLE_NOTARY_KEY_ID",
       "notaryIssuerSecret": "APPLE_NOTARY_ISSUER",
-      "developerIdApplication": "Developer ID Application: Joel Christner (TEAMID)"
+      "developerIdApplication": "Developer ID Application: Joel Christner (TEAMID)",
+      "developerIdInstaller": "Developer ID Installer: Joel Christner (TEAMID)"
     },
     "linux": {
       "gpgPrivateKeySecret": "GPG_PRIVATE_KEY",

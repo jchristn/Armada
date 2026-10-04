@@ -1,7 +1,9 @@
 namespace Armada.Publisher.Build
 {
     using System;
+    using System.Collections.Generic;
     using System.IO;
+    using System.Text;
     using System.Security.Cryptography;
 
     /// <summary>
@@ -10,7 +12,71 @@ namespace Armada.Publisher.Build
     /// </summary>
     public static class ChecksumWriter
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Name of the per-release checksum manifest.
+        /// </summary>
+        public const string ManifestFileName = "SHA256SUMS";
+
+        /// <summary>
+        /// File extensions treated as release deliverables when writing checksum manifests.
+        /// </summary>
+        public static readonly string[] ReleaseExtensions = new string[]
+        {
+            ".exe", ".msi", ".dmg", ".pkg", ".deb", ".rpm", ".AppImage", ".nupkg", ".zip", ".tar.gz"
+        };
+
+        #endregion
+
         #region Public-Methods
+
+        /// <summary>
+        /// Return true when the file name ends with one of the release deliverable extensions.
+        /// </summary>
+        /// <param name="path">File path or name.</param>
+        /// <returns>True for installers and packages.</returns>
+        public static bool IsReleaseFile(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            string name = Path.GetFileName(path);
+            foreach (string extension in ReleaseExtensions)
+            {
+                if (name.EndsWith(extension, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Write "SHA256SUMS" in the directory covering every release file directly inside it, one
+        /// "&lt;hash&gt;  &lt;filename&gt;" line per file sorted by name (the format "sha256sum -c" and
+        /// "shasum -a 256 -c" read). Existing content is replaced so the manifest always matches the directory.
+        /// </summary>
+        /// <param name="directory">Directory holding the release files.</param>
+        /// <returns>Path to the manifest, or null when the directory has no release files.</returns>
+        public static string? WriteManifest(string directory)
+        {
+            if (string.IsNullOrEmpty(directory)) throw new ArgumentNullException(nameof(directory));
+            if (!Directory.Exists(directory)) throw new DirectoryNotFoundException("Directory not found: " + directory);
+
+            List<string> files = new List<string>();
+            foreach (string file in Directory.EnumerateFiles(directory))
+            {
+                if (IsReleaseFile(file)) files.Add(file);
+            }
+            if (files.Count == 0) return null;
+
+            files.Sort(StringComparer.Ordinal);
+            StringBuilder content = new StringBuilder();
+            foreach (string file in files)
+            {
+                content.Append(ComputeSha256(file)).Append("  ").Append(Path.GetFileName(file)).Append('\n');
+            }
+
+            string manifestPath = Path.Combine(directory, ManifestFileName);
+            File.WriteAllText(manifestPath, content.ToString());
+            return manifestPath;
+        }
 
         /// <summary>
         /// Compute the lowercase hexadecimal SHA-256 of a file.

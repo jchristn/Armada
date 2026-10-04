@@ -13,6 +13,7 @@ namespace Armada.Publisher
     ///   Armada.Publisher --channel &lt;name&gt; --version &lt;x.y.z&gt; [--manifest publisher.json] [--output artifacts]
     ///   Armada.Publisher --all --version &lt;x.y.z&gt; [--manifest publisher.json] [--output artifacts]
     ///   Armada.Publisher list [--manifest publisher.json]
+    ///   Armada.Publisher checksums --dir installers/&lt;version&gt;
     /// </summary>
     public static class Program
     {
@@ -44,6 +45,12 @@ namespace Armada.Publisher
                     case CliCommandEnum.Channel:
                         RequireVersion(options);
                         new ChannelRunner(manifest, repoRoot, options.Version, ResolveOutput(repoRoot, options)).RunChannel(options.ChannelName);
+                        return 0;
+
+                    case CliCommandEnum.Checksums:
+                        if (string.IsNullOrEmpty(options.Directory)) throw new InvalidOperationException("checksums requires --dir <directory>.");
+                        string? sums = Armada.Publisher.Build.ChecksumWriter.WriteManifest(Path.GetFullPath(options.Directory));
+                        Console.WriteLine(sums == null ? "No release files found in " + options.Directory : "Wrote " + sums);
                         return 0;
 
                     case CliCommandEnum.All:

@@ -49,6 +49,18 @@ namespace Armada.Publisher.Manifest
         public string? Icon { get; set; } = null;
 
         /// <summary>
+        /// Repo-relative path to a square PNG (1024x1024 recommended) from which the macOS .icns is
+        /// generated for .app bundles. Optional; bundles are built without an icon when absent.
+        /// </summary>
+        public string? MacIcon { get; set; } = null;
+
+        /// <summary>
+        /// Reverse-DNS bundle / package identifier used by macOS .app bundles, .pkg receipts, and
+        /// LaunchAgent labels. Optional; defaults to "com.joelchristner.armada." plus the artifact id.
+        /// </summary>
+        public string? BundleIdentifier { get; set; } = null;
+
+        /// <summary>
         /// Autostart registration for tray artifacts. Null for CLIs and services.
         /// </summary>
         public StartupDefinition? Startup { get; set; } = null;
@@ -57,6 +69,20 @@ namespace Armada.Publisher.Manifest
         /// System-service registration for daemon artifacts. Null for CLIs and tray apps.
         /// </summary>
         public ServiceDefinition? Service { get; set; } = null;
+
+        #endregion
+
+        #region Public-Methods
+
+        /// <summary>
+        /// Return the bundle identifier, falling back to the default reverse-DNS form.
+        /// </summary>
+        /// <returns>Reverse-DNS identifier.</returns>
+        public string ResolveBundleIdentifier()
+        {
+            if (!string.IsNullOrEmpty(BundleIdentifier)) return BundleIdentifier;
+            return "com.joelchristner.armada." + Id.ToLowerInvariant();
+        }
 
         #endregion
     }
