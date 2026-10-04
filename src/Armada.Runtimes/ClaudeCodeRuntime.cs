@@ -127,6 +127,12 @@ namespace Armada.Runtimes
                 // allow rule in the project's Claude Code settings; anything else is refused in print mode.
                 args.Add("--permission-mode");
                 args.Add("acceptEdits");
+
+                // Armada's own MCP tools stay usable: each call is authorized by Armada for the captain's caller (and
+                // Ask thread calls are turned into proposals), so pre-approving the armada server does not widen what
+                // the captain can do. Without this, print mode refuses every Armada tool call.
+                args.Add("--allowedTools");
+                args.Add("mcp__armada");
             }
 
             // The prompt is delivered on stdin (see UsePromptStdin), not as a CLI argument. On Windows the

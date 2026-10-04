@@ -79,6 +79,8 @@ namespace Test.Shared.Suites.Services
                 List<string> forcedOff = runtime.Args(CaptainRuntimeOptions.WithEffectiveAutoApprove(new Captain("c"), false));
                 AssertFalse(forcedOff.Contains("--dangerously-skip-permissions"), "no bypass when forced off");
                 AssertTrue(forcedOff.Contains("--permission-mode") && forcedOff.Contains("acceptEdits"), "acceptEdits when forced off");
+                int allowed = forcedOff.IndexOf("--allowedTools");
+                AssertTrue(allowed >= 0 && allowed + 1 < forcedOff.Count && forcedOff[allowed + 1] == "mcp__armada", "Armada MCP tools stay allowed when forced off");
 
                 Captain storedOff = new Captain("c2") { RuntimeOptionsJson = "{\"autoApprove\":false}" };
                 List<string> forcedOn = runtime.Args(CaptainRuntimeOptions.WithEffectiveAutoApprove(storedOff, true));
