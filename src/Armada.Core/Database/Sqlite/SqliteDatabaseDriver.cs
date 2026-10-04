@@ -261,25 +261,7 @@ namespace Armada.Core.Database.Sqlite
 
                     using (SqliteTransaction tx = conn.BeginTransaction())
                     {
-                        foreach (string sql in migration.Statements)
-                        {
-                            using (SqliteCommand cmd = conn.CreateCommand())
-                            {
-                                cmd.Transaction = tx;
-                                cmd.CommandText = sql;
-                                try
-                                {
-                                    await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                                }
-                                catch (SqliteException ex) when (ex.SqliteErrorCode == 1 && ex.Message.Contains("duplicate column name"))
-                                {
-                                    // Column already exists in the CREATE TABLE definition.
-                                    // This happens when migrations add columns that were later
-                                    // incorporated into the initial schema. Safe to skip.
-                                    _Logging.Debug(_Header + "migration v" + migration.Version + ": column already exists, skipping");
-                                }
-                            }
-                        }
+                        await ExecuteMigrationAsync(conn, tx, migration, token).ConfigureAwait(false);
 
                         // Record migration
                         using (SqliteCommand cmd = conn.CreateCommand())
@@ -376,6 +358,13 @@ namespace Armada.Core.Database.Sqlite
             }
         }
 
+        /// <inheritdoc />
+        public override int GetLatestSchemaVersion()
+        {
+            List<SchemaMigration> migrations = TableQueries.GetMigrations();
+            return migrations.Count == 0 ? 0 : migrations[migrations.Count - 1].Version;
+        }
+
         /// <summary>
         /// Dispose of resources.
         /// </summary>
@@ -390,6 +379,29 @@ namespace Armada.Core.Database.Sqlite
         #endregion
 
         #region Internal-Methods
+
+        /// <inheritdoc />
+        internal override IReadOnlyList<SchemaMigration> GetMigrationsForVerification()
+        {
+            return TableQueries.GetMigrations();
+        }
+
+        /// <inheritdoc />
+        internal override async Task ReplayMigrationsAsync(CancellationToken token = default)
+        {
+            using (SqliteConnection conn = new SqliteConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                foreach (SchemaMigration migration in TableQueries.GetMigrations())
+                {
+                    using (SqliteTransaction tx = conn.BeginTransaction())
+                    {
+                        await ExecuteMigrationAsync(conn, tx, migration, token).ConfigureAwait(false);
+                        tx.Commit();
+                    }
+                }
+            }
+        }
 
         /// <summary>
         /// Convert a DateTime to ISO 8601 format string.
@@ -942,6 +954,48 @@ namespace Armada.Core.Database.Sqlite
             cred.CreatedUtc = FromIso8601(reader["created_utc"].ToString()!);
             cred.LastUpdateUtc = FromIso8601(reader["last_update_utc"].ToString()!);
             return cred;
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private async Task ExecuteMigrationAsync(SqliteConnection conn, SqliteTransaction tx, SchemaMigration migration, CancellationToken token)
+        {
+            if (!String.IsNullOrEmpty(migration.AlreadyAppliedCheckSql))
+            {
+                using (SqliteCommand check = conn.CreateCommand())
+                {
+                    check.Transaction = tx;
+                    check.CommandText = migration.AlreadyAppliedCheckSql;
+                    object? found = await check.ExecuteScalarAsync(token).ConfigureAwait(false);
+                    if (found != null && found != DBNull.Value && Convert.ToInt64(found) != 0)
+                    {
+                        _Logging.Debug(_Header + "migration v" + migration.Version + ": schema already contains this change, skipping statements");
+                        return;
+                    }
+                }
+            }
+
+            foreach (string sql in migration.Statements)
+            {
+                using (SqliteCommand cmd = conn.CreateCommand())
+                {
+                    cmd.Transaction = tx;
+                    cmd.CommandText = sql;
+                    try
+                    {
+                        await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    }
+                    catch (SqliteException ex) when (ex.SqliteErrorCode == 1 && ex.Message.Contains("duplicate column name"))
+                    {
+                        // Column already exists in the CREATE TABLE definition. This happens when migrations add
+                        // columns that were later incorporated into the initial schema, and when a migration is
+                        // re-run against a schema that already contains it. Safe to skip.
+                        _Logging.Debug(_Header + "migration v" + migration.Version + ": column already exists, skipping");
+                    }
+                }
+            }
         }
 
         #endregion

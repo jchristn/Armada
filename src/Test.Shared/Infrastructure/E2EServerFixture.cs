@@ -240,6 +240,8 @@ namespace Test.Shared.Infrastructure
 
             ArmadaSettings settings = new ArmadaSettings();
             settings.DataDirectory = TempDir;
+            // Keep any settings save (PUT /api/v1/settings, restore) inside the temp directory, never ~/.armada.
+            settings.SettingsFilePath = Path.Combine(TempDir, "settings.json");
             settings.DatabasePath = dbSettings.Filename;
             settings.Database = dbSettings;
             settings.LogDirectory = Path.Combine(TempDir, "logs");

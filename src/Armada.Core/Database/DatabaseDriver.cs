@@ -288,9 +288,53 @@ namespace Armada.Core.Database
         public abstract Task<int> GetSchemaVersionAsync(CancellationToken token = default);
 
         /// <summary>
+        /// Get the highest schema version this build defines for the provider (the version
+        /// <see cref="InitializeAsync"/> migrates to).
+        /// </summary>
+        /// <returns>The latest known schema version.</returns>
+        public abstract int GetLatestSchemaVersion();
+
+        /// <summary>
+        /// Get the number of migrations <see cref="InitializeAsync"/> would apply: the count of defined
+        /// migrations newer than the database's current schema version. Zero when the schema is current.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The number of pending migrations.</returns>
+        public async Task<int> GetPendingMigrationCountAsync(CancellationToken token = default)
+        {
+            int current = await GetSchemaVersionAsync(token).ConfigureAwait(false);
+            int count = 0;
+            foreach (SchemaMigration migration in GetMigrationsForVerification())
+            {
+                if (migration.Version > current) count++;
+            }
+
+            return count;
+        }
+
+        /// <summary>
         /// Dispose.
         /// </summary>
         public abstract void Dispose();
+
+        #endregion
+
+        #region Internal-Methods
+
+        /// <summary>
+        /// The ordered migrations this driver applies, exposed so tests can verify them.
+        /// </summary>
+        /// <returns>Ordered migration list.</returns>
+        internal abstract IReadOnlyList<SchemaMigration> GetMigrationsForVerification();
+
+        /// <summary>
+        /// Re-execute the statements of every defined migration, in order, through the same per-statement path
+        /// <see cref="InitializeAsync"/> uses, without recording anything in schema_migrations. Used to verify
+        /// that every migration is idempotent (safe to re-run against a schema that already contains it).
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Task.</returns>
+        internal abstract Task ReplayMigrationsAsync(CancellationToken token = default);
 
         #endregion
     }

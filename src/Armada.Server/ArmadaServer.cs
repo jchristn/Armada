@@ -67,6 +67,7 @@ namespace Armada.Server
         private PersonaSeedService _PersonaSeedService = null!;
         private LogRotationService _LogRotation = null!;
         private DataExpiryService _DataExpiry = null!;
+        private RetentionService _Retention = null!;
         private RemoteTunnelManager _RemoteTunnel = null!;
         private RemoteDashboardRelayService _RemoteDashboardRelay = null!;
         private PlanningSessionCoordinator _PlanningSessions = null!;
@@ -156,6 +157,10 @@ namespace Armada.Server
 
             // Initialize database
             _Database = DatabaseDriverFactory.Create(_Settings.Database, _Logging);
+
+            // Before migrating an existing database: copy it (SQLite) or warn with the dump command and, when
+            // configured, refuse until a backup is confirmed (server providers). Throws MigrationBackupRequiredException.
+            await new MigrationBackupService(_Settings, _Logging).PrepareAsync(_Database).ConfigureAwait(false);
             await _Database.InitializeAsync().ConfigureAwait(false);
             _Logging.Debug(_Header + "database initialized");
 
@@ -277,6 +282,7 @@ namespace Armada.Server
             // Initialize log rotation and data expiry
             _LogRotation = new LogRotationService(_Logging, _Settings.MaxLogFileSizeBytes, _Settings.MaxLogFileCount);
             _DataExpiry = new DataExpiryService(_Logging, _Settings.Database.GetConnectionString(), _Settings.DataRetentionDays);
+            _Retention = new RetentionService(_Database, _Settings, _Logging);
 
             // Initialize handler classes (WebSocketHub is created later, so pass null initially)
             _MissionLanding = new MissionLandingHandler(
@@ -1456,8 +1462,19 @@ namespace Armada.Server
                     // Run data expiry every 100 health check cycles (~50 min at default interval)
                     if (_HealthCheckCycles % 100 == 0)
                     {
-                        await _DataExpiry.PurgeExpiredDataAsync(token).ConfigureAwait(false);
+                        // DataExpiryService talks to SQLite directly; on server providers it would throw and skip the
+                        // rest of this block, so it only runs for SQLite and each step is isolated.
+                        if (_Settings.Database.Type == DatabaseTypeEnum.Sqlite)
+                        {
+                            try { await _DataExpiry.PurgeExpiredDataAsync(token).ConfigureAwait(false); }
+                            catch (Exception expiryEx) when (!(expiryEx is OperationCanceledException)) { _Logging.Warn(_Header + "data expiry error: " + expiryEx.Message); }
+                        }
+
                         await PurgeExpiredRequestHistoryAsync(token).ConfigureAwait(false);
+
+                        // Retention: Ask threads (archive/delete), finished jobs, finished import batches.
+                        try { await _Retention.PruneAsync(token).ConfigureAwait(false); }
+                        catch (Exception retentionEx) when (!(retentionEx is OperationCanceledException)) { _Logging.Warn(_Header + "retention pruning error: " + retentionEx.Message); }
 
                         // Fleet actions: prune finished runs older than FleetActions.RunRetentionDays.
                         try { await _FleetActionRunner.PruneExpiredRunsAsync(token).ConfigureAwait(false); }

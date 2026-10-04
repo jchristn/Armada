@@ -711,6 +711,33 @@ namespace Armada.Core.Settings
             set => _RepositoryHealth = value ?? new RepositoryHealthSettings();
         }
 
+        /// <summary>
+        /// Retention for Ask threads, finished background jobs, and finished import batches, pruned on the
+        /// health-check loop's slow cadence. Never null; setting null restores the defaults.
+        /// </summary>
+        public RetentionSettings Retention
+        {
+            get => _Retention;
+            set => _Retention = value ?? new RetentionSettings();
+        }
+
+        /// <summary>
+        /// The settings file these settings were loaded from or last saved to, used by <see cref="SaveAsync"/> when no
+        /// path is given (and by backup and restore). Null means <see cref="DefaultSettingsPath"/>. Not persisted.
+        /// </summary>
+        [JsonIgnore]
+        public string? SettingsFilePath { get; set; } = null;
+
+        /// <summary>
+        /// The effective settings file path: <see cref="SettingsFilePath"/> when set, otherwise
+        /// <see cref="DefaultSettingsPath"/>.
+        /// </summary>
+        [JsonIgnore]
+        public string EffectiveSettingsFilePath
+        {
+            get { return String.IsNullOrEmpty(SettingsFilePath) ? DefaultSettingsPath : SettingsFilePath!; }
+        }
+
         #endregion
 
         #region Private-Members
@@ -767,6 +794,7 @@ namespace Armada.Core.Settings
         private FleetActionSettings _FleetActions = new FleetActionSettings();
         private AskSettings _Ask = new AskSettings();
         private RepositoryHealthSettings _RepositoryHealth = new RepositoryHealthSettings();
+        private RetentionSettings _Retention = new RetentionSettings();
         private DatabaseSettings _Database = new DatabaseSettings();
         private bool _DatabasePathConfigured = false;
 
@@ -837,11 +865,12 @@ namespace Armada.Core.Settings
         /// <summary>
         /// Save settings to a JSON file.
         /// </summary>
-        /// <param name="path">File path. Defaults to ~/.armada/settings.json.</param>
+        /// <param name="path">File path. Defaults to <see cref="EffectiveSettingsFilePath"/> (the file the settings were
+        /// loaded from, else ~/.armada/settings.json).</param>
         public async Task SaveAsync(string? path = null)
         {
             NormalizePaths();
-            path ??= DefaultSettingsPath;
+            path ??= EffectiveSettingsFilePath;
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             string json = JsonSerializer.Serialize(this, _SerializerOptions);
             await File.WriteAllTextAsync(path, json).ConfigureAwait(false);
@@ -858,12 +887,14 @@ namespace Armada.Core.Settings
             if (!File.Exists(path))
             {
                 ArmadaSettings defaults = new ArmadaSettings();
+                defaults.SettingsFilePath = path;
                 defaults.NormalizePaths();
                 return defaults;
             }
             string json = await File.ReadAllTextAsync(path).ConfigureAwait(false);
             ArmadaSettings? settings = JsonSerializer.Deserialize<ArmadaSettings>(json, _SerializerOptions);
             settings ??= new ArmadaSettings();
+            settings.SettingsFilePath = path;
             settings.NormalizePaths();
             return settings;
         }

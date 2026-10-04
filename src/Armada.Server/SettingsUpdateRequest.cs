@@ -111,5 +111,12 @@ namespace Armada.Server
         /// (values are clamped by the settings setters).
         /// </summary>
         public RepositoryHealthSettings? RepositoryHealth { get; set; }
+
+        /// <summary>
+        /// Optional retention settings update (AskThreadArchiveAfterDays, AskThreadDeleteAfterDays, JobRetentionDays,
+        /// ImportBatchRetentionDays). When supplied, replaces the full retention object; omitted fields take their
+        /// defaults and out-of-range values are clamped to 0..3650 (0 means never). Applied live.
+        /// </summary>
+        public RetentionSettings? Retention { get; set; }
     }
 }

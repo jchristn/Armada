@@ -101,6 +101,22 @@ namespace Armada.Core.Database.Postgresql.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<List<AskThread>> EnumerateInactiveAsync(DateTime inactiveBeforeUtc, bool includeArchived, int maxResults, CancellationToken token = default)
+        {
+            if (maxResults < 1) maxResults = 1;
+            if (maxResults > 1000) maxResults = 1000;
+
+            return await PostgresqlCommandHelper.QueryAsync(_ConnectionString,
+                "SELECT * FROM ask_threads WHERE pinned = @pinned" + (includeArchived ? "" : " AND archived = @archived") + " AND COALESCE(last_message_utc, created_utc) < @cutoff ORDER BY COALESCE(last_message_utc, created_utc) ASC LIMIT " + maxResults + ";",
+                cmd =>
+                {
+                    PostgresqlCommandHelper.Add(cmd, "@pinned", false);
+                    if (!includeArchived) PostgresqlCommandHelper.Add(cmd, "@archived", false);
+                    PostgresqlCommandHelper.AddDate(cmd, "@cutoff", inactiveBeforeUtc);
+                }, FromReader, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
         public async Task<AskThread> UpdateAsync(AskThread thread, CancellationToken token = default)
         {
             if (thread == null) throw new ArgumentNullException(nameof(thread));

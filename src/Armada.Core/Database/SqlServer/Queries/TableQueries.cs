@@ -44,7 +44,12 @@ namespace Armada.Core.Database.SqlServer.Queries
                     1,
                     "Initial schema: tenants, users, credentials, fleets, vessels, captains, voyages, missions, docks, signals, events, merge_entries with full multi-tenant support",
                     initialStatements.ToArray()
-                ),
+                )
+                {
+                    // The initial CREATE TABLE / CREATE INDEX statements are not re-runnable. SQL Server DDL is
+                    // transactional, so the tenants table existing means the whole migration was applied.
+                    AlreadyAppliedCheckSql = @"SELECT CASE WHEN OBJECT_ID(N'tenants', N'U') IS NOT NULL THEN 1 ELSE 0 END;"
+                },
                 new SchemaMigration(
                     2,
                     "Protected resources and user ownership",

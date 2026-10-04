@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Minimal host for an older Armada build, used by run-upgrade-test.sh / .bat. The script copies this project into
+    the extracted baseline source tree (src/UpgradeBaselineHost) and builds it there, so the reference below resolves
+    to the baseline's own Armada.Server. Target frameworks come from the baseline's Directory.Build.props.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Armada.Server/Armada.Server.csproj" />
+  </ItemGroup>
+
+</Project>

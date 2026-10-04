@@ -22,6 +22,15 @@ namespace Armada.Core.Database
         /// </summary>
         public IReadOnlyList<string> Statements { get; }
 
+        /// <summary>
+        /// Optional scalar query that detects whether the schema already contains this migration's change. When it
+        /// returns a non-zero number the statements are skipped (the version is still recorded). Set it on
+        /// migrations whose statements are not naturally re-runnable (for example a SQLite table rebuild), so that
+        /// re-applying the migration, after a partial failure or during verification, cannot damage the schema.
+        /// Null (the default) means the statements always run.
+        /// </summary>
+        public string? AlreadyAppliedCheckSql { get; set; } = null;
+
         #endregion
 
         #region Constructors-and-Factories

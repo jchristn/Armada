@@ -94,6 +94,22 @@ namespace Armada.Core.Database.Mysql.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<List<AskThread>> EnumerateInactiveAsync(DateTime inactiveBeforeUtc, bool includeArchived, int maxResults, CancellationToken token = default)
+        {
+            if (maxResults < 1) maxResults = 1;
+            if (maxResults > 1000) maxResults = 1000;
+
+            return await MysqlCommandHelper.QueryAsync(_ConnectionString,
+                "SELECT * FROM ask_threads WHERE pinned = @pinned" + (includeArchived ? "" : " AND archived = @archived") + " AND COALESCE(last_message_utc, created_utc) < @cutoff ORDER BY COALESCE(last_message_utc, created_utc) ASC LIMIT " + maxResults + ";",
+                cmd =>
+                {
+                    MysqlCommandHelper.Add(cmd, "@pinned", false);
+                    if (!includeArchived) MysqlCommandHelper.Add(cmd, "@archived", false);
+                    MysqlCommandHelper.AddDate(cmd, "@cutoff", inactiveBeforeUtc);
+                }, FromReader, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
         public async Task<AskThread> UpdateAsync(AskThread thread, CancellationToken token = default)
         {
             if (thread == null) throw new ArgumentNullException(nameof(thread));

@@ -7,6 +7,7 @@ namespace Armada.Server
     using System.Threading;
     using SyslogLogging;
     using Armada.Core;
+    using Armada.Core.Services;
     using Armada.Core.Settings;
 
     /// <summary>
@@ -70,7 +71,18 @@ namespace Armada.Server
 
             _Server = new ArmadaServer(_Logging, _Settings);
             _Server.OnStopping = () => waitHandle.Set();
-            await _Server.StartAsync().ConfigureAwait(false);
+            try
+            {
+                await _Server.StartAsync().ConfigureAwait(false);
+            }
+            catch (MigrationBackupRequiredException ex)
+            {
+                Console.Error.WriteLine();
+                Console.Error.WriteLine("Startup refused: " + ex.Message);
+                Console.Error.WriteLine();
+                try { _Server.Stop(); } catch { }
+                Environment.Exit(3);
+            }
 
             Console.WriteLine("Admiral running on port " + _Settings.AdmiralPort);
             Console.WriteLine("MCP server on port " + _Settings.McpPort);

@@ -2377,7 +2377,19 @@
         "{{type}}: {{title}}": "{{type}}: {{title}}",
         "Progress update": "Actualización de progreso",
         "Repository": "Repositorio",
-        "Default branch": "Rama predeterminada"
+        "Default branch": "Rama predeterminada",
+        "Data Retention": "Retención de datos",
+        "How long Armada keeps Ask threads, finished background jobs, and import history. 0 means never. Changes apply immediately; pruning runs in the background about once an hour.": "Cuánto tiempo conserva Armada las conversaciones de Ask, los trabajos en segundo plano terminados y el historial de importaciones. 0 significa nunca. Los cambios se aplican de inmediato; la limpieza se ejecuta en segundo plano aproximadamente una vez por hora.",
+        "Archive Ask threads after (days)": "Archivar conversaciones de Ask tras (días)",
+        "Threads with no activity for this long are archived; pinned threads never are (0-3650, default 90).": "Las conversaciones sin actividad durante este tiempo se archivan; las fijadas nunca (0-3650, predeterminado 90).",
+        "Delete Ask threads after (days)": "Eliminar conversaciones de Ask tras (días)",
+        "Threads with no activity for this long are deleted with their messages; pinned threads never are (0-3650, default 0).": "Las conversaciones sin actividad durante este tiempo se eliminan junto con sus mensajes; las fijadas nunca (0-3650, predeterminado 0).",
+        "Job retention (days)": "Retención de trabajos (días)",
+        "Finished background jobs older than this are deleted; the latest of each kind is kept (0-3650, default 30).": "Los trabajos en segundo plano terminados con más antigüedad que esta se eliminan; se conserva el más reciente de cada tipo (0-3650, predeterminado 30).",
+        "Import history retention (days)": "Retención del historial de importaciones (días)",
+        "Finished vessel import batches older than this are deleted; imported vessels are not affected (0-3650, default 90).": "Los lotes de importación de repositorios terminados con más antigüedad que esta se eliminan; los repositorios importados no se ven afectados (0-3650, predeterminado 90).",
+        "Save Retention Settings": "Guardar ajustes de retención",
+        "Retention settings saved and applied.": "Ajustes de retención guardados y aplicados."
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -3671,7 +3683,19 @@
         "{{type}}: {{title}}": "{{type}}:{{title}}",
         "Progress update": "进度更新",
         "Repository": "仓库",
-        "Default branch": "默认分支"
+        "Default branch": "默认分支",
+        "Data Retention": "数据保留",
+        "How long Armada keeps Ask threads, finished background jobs, and import history. 0 means never. Changes apply immediately; pruning runs in the background about once an hour.": "Armada 保留 Ask 对话、已完成的后台作业和导入历史记录的时长。0 表示永不。更改立即生效；清理大约每小时在后台运行一次。",
+        "Archive Ask threads after (days)": "Ask 对话归档天数",
+        "Threads with no activity for this long are archived; pinned threads never are (0-3650, default 90).": "在此期间没有活动的对话将被归档；已置顶的对话不会被归档（0-3650，默认 90）。",
+        "Delete Ask threads after (days)": "Ask 对话删除天数",
+        "Threads with no activity for this long are deleted with their messages; pinned threads never are (0-3650, default 0).": "在此期间没有活动的对话及其消息将被删除；已置顶的对话不会被删除（0-3650，默认 0）。",
+        "Job retention (days)": "作业保留期（天）",
+        "Finished background jobs older than this are deleted; the latest of each kind is kept (0-3650, default 30).": "早于此天数的已完成后台作业将被删除；每种类型保留最新的一个（0-3650，默认 30）。",
+        "Import history retention (days)": "导入历史记录保留期（天）",
+        "Finished vessel import batches older than this are deleted; imported vessels are not affected (0-3650, default 90).": "早于此天数的已完成仓库导入批次将被删除；已导入的仓库不受影响（0-3650，默认 90）。",
+        "Save Retention Settings": "保存保留设置",
+        "Retention settings saved and applied.": "保留设置已保存并生效。"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -4928,7 +4952,19 @@
         "{{type}}: {{title}}": "{{type}}：{{title}}",
         "Progress update": "進度更新",
         "Repository": "儲存庫",
-        "Default branch": "預設分支"
+        "Default branch": "預設分支",
+        "Data Retention": "資料保留",
+        "How long Armada keeps Ask threads, finished background jobs, and import history. 0 means never. Changes apply immediately; pruning runs in the background about once an hour.": "Armada 保留 Ask 對話、已完成的背景作業與匯入歷史記錄的時間。0 表示永不。變更立即生效；清除作業大約每小時在背景執行一次。",
+        "Archive Ask threads after (days)": "Ask 對話封存天數",
+        "Threads with no activity for this long are archived; pinned threads never are (0-3650, default 90).": "在此期間沒有活動的對話將被封存；已釘選的對話不會被封存（0-3650，預設 90）。",
+        "Delete Ask threads after (days)": "Ask 對話刪除天數",
+        "Threads with no activity for this long are deleted with their messages; pinned threads never are (0-3650, default 0).": "在此期間沒有活動的對話及其訊息將被刪除；已釘選的對話不會被刪除（0-3650，預設 0）。",
+        "Job retention (days)": "作業保留期（天）",
+        "Finished background jobs older than this are deleted; the latest of each kind is kept (0-3650, default 30).": "早於此天數的已完成背景作業將被刪除；每種類型保留最新的一個（0-3650，預設 30）。",
+        "Import history retention (days)": "匯入歷史記錄保留期（天）",
+        "Finished vessel import batches older than this are deleted; imported vessels are not affected (0-3650, default 90).": "早於此天數的已完成儲存庫匯入批次將被刪除；已匯入的儲存庫不受影響（0-3650，預設 90）。",
+        "Save Retention Settings": "儲存保留設定",
+        "Retention settings saved and applied.": "保留設定已儲存並套用。"
       },
       "sections": {}
     },
@@ -6144,7 +6180,19 @@
         "{{type}}: {{title}}": "{{type}}：{{title}}",
         "Progress update": "進度更新",
         "Repository": "儲存庫",
-        "Default branch": "預設分支"
+        "Default branch": "預設分支",
+        "Data Retention": "資料保留",
+        "How long Armada keeps Ask threads, finished background jobs, and import history. 0 means never. Changes apply immediately; pruning runs in the background about once an hour.": "Armada 保留 Ask 對話、已完成嘅背景工作同匯入記錄嘅時間。0 即係永不。改動即刻生效；清除大約每個鐘喺背景執行一次。",
+        "Archive Ask threads after (days)": "Ask 對話封存日數",
+        "Threads with no activity for this long are archived; pinned threads never are (0-3650, default 90).": "喺呢段時間冇活動嘅對話會被封存；已釘選嘅對話唔會（0-3650，預設 90）。",
+        "Delete Ask threads after (days)": "Ask 對話刪除日數",
+        "Threads with no activity for this long are deleted with their messages; pinned threads never are (0-3650, default 0).": "喺呢段時間冇活動嘅對話連同訊息會被刪除；已釘選嘅對話唔會（0-3650，預設 0）。",
+        "Job retention (days)": "工作保留（日）",
+        "Finished background jobs older than this are deleted; the latest of each kind is kept (0-3650, default 30).": "超過呢個日數嘅已完成背景工作會被刪除；每種類型會保留最新嗰個（0-3650，預設 30）。",
+        "Import history retention (days)": "匯入記錄保留（日）",
+        "Finished vessel import batches older than this are deleted; imported vessels are not affected (0-3650, default 90).": "超過呢個日數嘅已完成儲存庫匯入批次會被刪除；已匯入嘅儲存庫唔受影響（0-3650，預設 90）。",
+        "Save Retention Settings": "儲存保留設定",
+        "Retention settings saved and applied.": "保留設定已儲存並套用。"
       },
       "sections": {}
     },
@@ -7378,7 +7426,19 @@
         "{{type}}: {{title}}": "{{type}}: {{title}}",
         "Progress update": "進捗の更新",
         "Repository": "リポジトリ",
-        "Default branch": "デフォルトブランチ"
+        "Default branch": "デフォルトブランチ",
+        "Data Retention": "データの保持",
+        "How long Armada keeps Ask threads, finished background jobs, and import history. 0 means never. Changes apply immediately; pruning runs in the background about once an hour.": "Armada が Ask の会話、完了したバックグラウンドジョブ、インポート履歴を保持する期間です。0 は無期限を意味します。変更はすぐに適用されます。削除処理はバックグラウンドでおよそ 1 時間ごとに実行されます。",
+        "Archive Ask threads after (days)": "Ask の会話をアーカイブするまでの日数",
+        "Threads with no activity for this long are archived; pinned threads never are (0-3650, default 90).": "この期間アクティビティのない会話はアーカイブされます。ピン留めされた会話は対象外です（0-3650、既定 90）。",
+        "Delete Ask threads after (days)": "Ask の会話を削除するまでの日数",
+        "Threads with no activity for this long are deleted with their messages; pinned threads never are (0-3650, default 0).": "この期間アクティビティのない会話はメッセージとともに削除されます。ピン留めされた会話は対象外です（0-3650、既定 0）。",
+        "Job retention (days)": "ジョブの保持期間（日）",
+        "Finished background jobs older than this are deleted; the latest of each kind is kept (0-3650, default 30).": "これより古い完了済みのバックグラウンドジョブは削除されます。種類ごとに最新のものは保持されます（0-3650、既定 30）。",
+        "Import history retention (days)": "インポート履歴の保持期間（日）",
+        "Finished vessel import batches older than this are deleted; imported vessels are not affected (0-3650, default 90).": "これより古い完了済みのベッセルのインポートバッチは削除されます。インポート済みのベッセルには影響しません（0-3650、既定 90）。",
+        "Save Retention Settings": "保持設定を保存",
+        "Retention settings saved and applied.": "保持設定を保存して適用しました。"
       },
       "sections": {}
     },
@@ -8601,7 +8661,19 @@
         "{{type}}: {{title}}": "{{type}}: {{title}}",
         "Progress update": "Fortschritt",
         "Repository": "Repository",
-        "Default branch": "Standard-Branch"
+        "Default branch": "Standard-Branch",
+        "Data Retention": "Datenaufbewahrung",
+        "How long Armada keeps Ask threads, finished background jobs, and import history. 0 means never. Changes apply immediately; pruning runs in the background about once an hour.": "Wie lange Armada Ask-Unterhaltungen, abgeschlossene Hintergrundjobs und den Importverlauf aufbewahrt. 0 bedeutet nie. Änderungen gelten sofort; die Bereinigung läuft etwa einmal pro Stunde im Hintergrund.",
+        "Archive Ask threads after (days)": "Ask-Unterhaltungen archivieren nach (Tage)",
+        "Threads with no activity for this long are archived; pinned threads never are (0-3650, default 90).": "Unterhaltungen ohne Aktivität in diesem Zeitraum werden archiviert; angeheftete nie (0-3650, Standard 90).",
+        "Delete Ask threads after (days)": "Ask-Unterhaltungen löschen nach (Tage)",
+        "Threads with no activity for this long are deleted with their messages; pinned threads never are (0-3650, default 0).": "Unterhaltungen ohne Aktivität in diesem Zeitraum werden samt Nachrichten gelöscht; angeheftete nie (0-3650, Standard 0).",
+        "Job retention (days)": "Aufbewahrung von Jobs (Tage)",
+        "Finished background jobs older than this are deleted; the latest of each kind is kept (0-3650, default 30).": "Abgeschlossene Hintergrundjobs, die älter sind, werden gelöscht; der neueste jeder Art bleibt erhalten (0-3650, Standard 30).",
+        "Import history retention (days)": "Aufbewahrung des Importverlaufs (Tage)",
+        "Finished vessel import batches older than this are deleted; imported vessels are not affected (0-3650, default 90).": "Abgeschlossene Repository-Importvorgänge, die älter sind, werden gelöscht; importierte Repositories sind nicht betroffen (0-3650, Standard 90).",
+        "Save Retention Settings": "Aufbewahrungseinstellungen speichern",
+        "Retention settings saved and applied.": "Aufbewahrungseinstellungen gespeichert und angewendet."
       },
       "sections": {}
     },
@@ -9824,7 +9896,19 @@
         "{{type}}: {{title}}": "{{type}} : {{title}}",
         "Progress update": "Point d'avancement",
         "Repository": "Dépôt",
-        "Default branch": "Branche par défaut"
+        "Default branch": "Branche par défaut",
+        "Data Retention": "Conservation des données",
+        "How long Armada keeps Ask threads, finished background jobs, and import history. 0 means never. Changes apply immediately; pruning runs in the background about once an hour.": "Durée pendant laquelle Armada conserve les conversations Ask, les tâches de fond terminées et l'historique des importations. 0 signifie jamais. Les modifications s'appliquent immédiatement ; la purge s'exécute en arrière-plan environ une fois par heure.",
+        "Archive Ask threads after (days)": "Archiver les conversations Ask après (jours)",
+        "Threads with no activity for this long are archived; pinned threads never are (0-3650, default 90).": "Les conversations sans activité pendant cette durée sont archivées ; jamais les conversations épinglées (0-3650, 90 par défaut).",
+        "Delete Ask threads after (days)": "Supprimer les conversations Ask après (jours)",
+        "Threads with no activity for this long are deleted with their messages; pinned threads never are (0-3650, default 0).": "Les conversations sans activité pendant cette durée sont supprimées avec leurs messages ; jamais les conversations épinglées (0-3650, 0 par défaut).",
+        "Job retention (days)": "Conservation des tâches (jours)",
+        "Finished background jobs older than this are deleted; the latest of each kind is kept (0-3650, default 30).": "Les tâches de fond terminées plus anciennes que cette durée sont supprimées ; la plus récente de chaque type est conservée (0-3650, 30 par défaut).",
+        "Import history retention (days)": "Conservation de l'historique des importations (jours)",
+        "Finished vessel import batches older than this are deleted; imported vessels are not affected (0-3650, default 90).": "Les lots d'importation de dépôts terminés plus anciens que cette durée sont supprimés ; les dépôts importés ne sont pas affectés (0-3650, 90 par défaut).",
+        "Save Retention Settings": "Enregistrer les paramètres de conservation",
+        "Retention settings saved and applied.": "Paramètres de conservation enregistrés et appliqués."
       },
       "sections": {}
     },
@@ -11047,7 +11131,19 @@
         "{{type}}: {{title}}": "{{type}}: {{title}}",
         "Progress update": "Aggiornamento sui progressi",
         "Repository": "Repository",
-        "Default branch": "Branch predefinito"
+        "Default branch": "Branch predefinito",
+        "Data Retention": "Conservazione dei dati",
+        "How long Armada keeps Ask threads, finished background jobs, and import history. 0 means never. Changes apply immediately; pruning runs in the background about once an hour.": "Per quanto tempo Armada conserva le conversazioni Ask, i job in background conclusi e la cronologia delle importazioni. 0 significa mai. Le modifiche si applicano subito; la pulizia viene eseguita in background circa una volta all'ora.",
+        "Archive Ask threads after (days)": "Archivia conversazioni Ask dopo (giorni)",
+        "Threads with no activity for this long are archived; pinned threads never are (0-3650, default 90).": "Le conversazioni senza attività per questo periodo vengono archiviate; mai quelle fissate (0-3650, predefinito 90).",
+        "Delete Ask threads after (days)": "Elimina conversazioni Ask dopo (giorni)",
+        "Threads with no activity for this long are deleted with their messages; pinned threads never are (0-3650, default 0).": "Le conversazioni senza attività per questo periodo vengono eliminate insieme ai messaggi; mai quelle fissate (0-3650, predefinito 0).",
+        "Job retention (days)": "Conservazione dei job (giorni)",
+        "Finished background jobs older than this are deleted; the latest of each kind is kept (0-3650, default 30).": "I job in background conclusi più vecchi di così vengono eliminati; viene mantenuto il più recente di ogni tipo (0-3650, predefinito 30).",
+        "Import history retention (days)": "Conservazione della cronologia importazioni (giorni)",
+        "Finished vessel import batches older than this are deleted; imported vessels are not affected (0-3650, default 90).": "I lotti di importazione dei repository conclusi più vecchi di così vengono eliminati; i repository importati non sono interessati (0-3650, predefinito 90).",
+        "Save Retention Settings": "Salva impostazioni di conservazione",
+        "Retention settings saved and applied.": "Impostazioni di conservazione salvate e applicate."
       },
       "sections": {}
     }
