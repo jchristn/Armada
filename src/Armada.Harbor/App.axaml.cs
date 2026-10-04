@@ -8,6 +8,7 @@ namespace Armada.Harbor
     using Avalonia.Controls.ApplicationLifetimes;
     using Avalonia.Markup.Xaml;
     using Avalonia.Platform;
+    using Avalonia.Styling;
 
     /// <summary>
     /// The Armada Harbor Avalonia application. Framework code-behind, so it is a partial class as Avalonia
@@ -45,6 +46,7 @@ namespace Armada.Harbor
 
                 _Settings = HarborAppSettings.Load();
                 _Settings.Save();
+                ApplyAppearance(_Settings.Appearance);
 
                 _Window = new MainWindow(_Settings);
                 _Window.Show();
@@ -54,6 +56,17 @@ namespace Armada.Harbor
             }
 
             base.OnFrameworkInitializationCompleted();
+        }
+
+        /// <summary>
+        /// Apply a color scheme to the whole application. System follows the operating system's setting.
+        /// </summary>
+        /// <param name="appearance">Scheme to apply.</param>
+        public void ApplyAppearance(HarborAppearanceEnum appearance)
+        {
+            if (appearance == HarborAppearanceEnum.Light) RequestedThemeVariant = ThemeVariant.Light;
+            else if (appearance == HarborAppearanceEnum.Dark) RequestedThemeVariant = ThemeVariant.Dark;
+            else RequestedThemeVariant = ThemeVariant.Default;
         }
 
         #endregion

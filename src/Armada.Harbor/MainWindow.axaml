@@ -8,14 +8,25 @@
         Title="Armada Harbor">
   <DockPanel Margin="18">
 
-    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="14">
-      <Image Source="/Assets/logo.png" Width="42" Height="42" VerticalAlignment="Center" />
-      <StackPanel VerticalAlignment="Center">
-        <TextBlock Text="Armada Harbor" FontSize="22" FontWeight="Bold" />
-        <TextBlock Text="Detached host runner - executes captains, git, and worktrees for the Admiral."
-                   FontSize="12" Foreground="Gray" TextWrapping="Wrap" MaxWidth="460" />
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto">
+      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="14">
+        <Image Source="/Assets/logo.png" Width="42" Height="42" VerticalAlignment="Center" />
+        <StackPanel VerticalAlignment="Center">
+          <TextBlock Text="Armada Harbor" FontSize="22" FontWeight="Bold" />
+          <TextBlock Text="Detached host runner - executes captains, git, and worktrees for the Admiral."
+                     FontSize="12" Foreground="{DynamicResource HarborSecondaryTextBrush}" TextWrapping="Wrap" MaxWidth="380" />
+        </StackPanel>
       </StackPanel>
-    </StackPanel>
+      <StackPanel Grid.Column="1" VerticalAlignment="Top" Spacing="2">
+        <TextBlock Text="Appearance" FontSize="11" Foreground="{DynamicResource HarborSecondaryTextBrush}" />
+        <ComboBox x:Name="AppearanceBox" Width="104" SelectionChanged="OnAppearanceChanged"
+                  ToolTip.Tip="Color scheme: follow the system, or always light or dark">
+          <ComboBoxItem Content="System" />
+          <ComboBoxItem Content="Light" />
+          <ComboBoxItem Content="Dark" />
+        </ComboBox>
+      </StackPanel>
+    </Grid>
 
     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="10" Margin="0,14,0,0">
       <Button x:Name="ConnectButton" Content="Connect" Click="OnConnectClick" />
@@ -27,11 +38,14 @@
 
       <Grid Grid.Row="0" ColumnDefinitions="96,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="6">
         <TextBlock Grid.Row="0" Grid.Column="0" Text="Harbor" FontWeight="SemiBold" />
-        <SelectableTextBlock Grid.Row="0" Grid.Column="1" x:Name="HarborNameText" Text="-" TextWrapping="Wrap" />
+        <SelectableTextBlock Grid.Row="0" Grid.Column="1" x:Name="HarborNameText" Text="-" TextWrapping="Wrap"
+                             Foreground="{DynamicResource HarborSecondaryTextBrush}" />
         <TextBlock Grid.Row="1" Grid.Column="0" Text="Server" FontWeight="SemiBold" />
-        <SelectableTextBlock Grid.Row="1" Grid.Column="1" x:Name="ServerText" Text="-" TextWrapping="Wrap" />
+        <SelectableTextBlock Grid.Row="1" Grid.Column="1" x:Name="ServerText" Text="-" TextWrapping="Wrap"
+                             Foreground="{DynamicResource HarborSecondaryTextBrush}" />
         <TextBlock Grid.Row="2" Grid.Column="0" Text="MCP URL" FontWeight="SemiBold" />
-        <SelectableTextBlock Grid.Row="2" Grid.Column="1" x:Name="McpText" Text="-" TextWrapping="Wrap" />
+        <SelectableTextBlock Grid.Row="2" Grid.Column="1" x:Name="McpText" Text="-" TextWrapping="Wrap"
+                             Foreground="{DynamicResource HarborSecondaryTextBrush}" />
       </Grid>
 
       <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" Margin="0,12,0,0">
@@ -39,7 +53,7 @@
         <TextBlock x:Name="StatusText" Text="Idle" FontWeight="SemiBold" VerticalAlignment="Center" />
       </StackPanel>
 
-      <Border Grid.Row="2" BorderBrush="Gray" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,10,0,0" MaxHeight="120">
+      <Border Grid.Row="2" BorderBrush="{DynamicResource HarborBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,10,0,0" MaxHeight="120">
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <SelectableTextBlock x:Name="DetailText" TextWrapping="Wrap"
                                Text="Not connected. Click Connect to dial the Admiral." />
@@ -52,10 +66,11 @@
           <Button Grid.Column="1" Content="Copy" Click="OnCopyLogClick" Margin="0,0,6,0" />
           <Button Grid.Column="2" Content="Clear" Click="OnClearLogClick" />
         </Grid>
-        <Border Grid.Row="1" BorderBrush="Gray" BorderThickness="1" CornerRadius="6" Margin="0,6,0,0">
+        <Border Grid.Row="1" BorderBrush="{DynamicResource HarborBorderBrush}" BorderThickness="1" CornerRadius="6" Margin="0,6,0,0">
           <TextBox x:Name="LogBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
                    FontFamily="Consolas, Menlo, monospace" FontSize="12"
                    Background="Transparent" BorderThickness="0"
+                   Foreground="{DynamicResource HarborSecondaryTextBrush}"
                    VerticalContentAlignment="Top"
                    VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
                    Text="" />

@@ -1,6 +1,21 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Armada.Harbor.App">
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <!-- Secondary text (values, activity log, subtitle): grey that stays readable in each scheme. -->
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="HarborSecondaryTextBrush" Color="#4B5563" />
+          <SolidColorBrush x:Key="HarborBorderBrush" Color="#D1D5DB" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="HarborSecondaryTextBrush" Color="#9CA3AF" />
+          <SolidColorBrush x:Key="HarborBorderBrush" Color="#4B5563" />
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
   <Application.Styles>
     <FluentTheme />
   </Application.Styles>

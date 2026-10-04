@@ -55,6 +55,11 @@ namespace Armada.Harbor
         public List<string> Capabilities { get; set; } = new List<string> { "git" };
 
         /// <summary>
+        /// Window color scheme: System (default, follows the operating system), Light, or Dark.
+        /// </summary>
+        public HarborAppearanceEnum Appearance { get; set; } = HarborAppearanceEnum.System;
+
+        /// <summary>
         /// Heartbeat interval in milliseconds; 0 disables heartbeats.
         /// </summary>
         public int HeartbeatIntervalMs { get; set; } = 15000;

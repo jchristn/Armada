@@ -6,6 +6,7 @@ namespace Armada.Harbor
     using System.Net.WebSockets;
     using System.Threading;
     using System.Threading.Tasks;
+    using Avalonia;
     using Avalonia.Controls;
     using Avalonia.Interactivity;
     using Avalonia.Media;
@@ -62,6 +63,7 @@ namespace Armada.Harbor
             HarborNameText.Text = _Settings.Name + "  (" + _Settings.HarborId + ")";
             ServerText.Text = _Settings.ServerLinkUrl;
             SetStatus("Idle", _Gray);
+            AppearanceBox.SelectedIndex = (int)_Settings.Appearance;
 
             Closing += OnWindowClosing;
             Opened += OnWindowOpened;
@@ -83,6 +85,16 @@ namespace Armada.Harbor
             // Connect automatically on startup so an operator does not have to click Connect; the link loop
             // reconnects on its own after transient drops.
             StartConnecting(true);
+        }
+
+        private void OnAppearanceChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            if (AppearanceBox == null || AppearanceBox.SelectedIndex < 0) return;
+            HarborAppearanceEnum appearance = (HarborAppearanceEnum)AppearanceBox.SelectedIndex;
+            if (Application.Current is App app) app.ApplyAppearance(appearance);
+            if (_Settings.Appearance == appearance) return;
+            _Settings.Appearance = appearance;
+            _Settings.Save();
         }
 
         private void OnConnectClick(object? sender, RoutedEventArgs e)
