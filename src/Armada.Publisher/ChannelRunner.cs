@@ -51,6 +51,11 @@ namespace Armada.Publisher
         {
             ChannelDefinition? channel = _Manifest.FindChannel(channelName);
             if (channel == null) throw new InvalidOperationException("No channel named '" + channelName + "' in the manifest.");
+            if (!channel.Enabled)
+            {
+                Console.WriteLine("[skip] channel '" + channel.Name + "' is disabled in the manifest.");
+                return;
+            }
             RunChannel(channel);
         }
 
@@ -99,7 +104,20 @@ namespace Armada.Publisher
 
             IChannel implementation = ChannelFactory.Create(channel.Kind);
             implementation.Execute(context);
+            WriteChecksums(outputDirectory);
             Console.WriteLine("[done] channel '" + channel.Name + "' -> " + outputDirectory);
+        }
+
+        private static void WriteChecksums(string outputDirectory)
+        {
+            // A sidecar per package for package-manager manifests, plus SHA256SUMS for the directory.
+            foreach (string file in Directory.EnumerateFiles(outputDirectory))
+            {
+                if (ChecksumWriter.IsReleaseFile(file)) ChecksumWriter.WriteSidecar(file);
+            }
+
+            string? manifest = ChecksumWriter.WriteManifest(outputDirectory);
+            if (manifest != null) Console.WriteLine("[checksums] " + manifest);
         }
 
         private static bool RequiresSelfContainedPublish(ChannelKindEnum kind)

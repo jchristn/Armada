@@ -60,6 +60,50 @@ namespace Armada.Publisher
         }
 
         /// <summary>
+        /// Run a command and return its standard output. Standard error is streamed to the console.
+        /// Throws when the command exits non-zero.
+        /// </summary>
+        /// <param name="fileName">Executable to run.</param>
+        /// <param name="arguments">Argument list (each element is passed verbatim, no shell parsing).</param>
+        /// <param name="workingDirectory">Working directory, or null for the current directory.</param>
+        /// <returns>Captured standard output.</returns>
+        public static string Capture(string fileName, IEnumerable<string> arguments, string? workingDirectory = null)
+        {
+            if (string.IsNullOrEmpty(fileName)) throw new ArgumentNullException(nameof(fileName));
+
+            ProcessStartInfo info = new ProcessStartInfo
+            {
+                FileName = fileName,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            };
+
+            if (!string.IsNullOrEmpty(workingDirectory)) info.WorkingDirectory = workingDirectory;
+            foreach (string argument in arguments) info.ArgumentList.Add(argument);
+
+            StringBuilder output = new StringBuilder();
+            using (Process process = new Process())
+            {
+                process.StartInfo = info;
+                process.OutputDataReceived += (sender, e) => { if (e.Data != null) output.AppendLine(e.Data); };
+                process.ErrorDataReceived += (sender, e) => { if (e.Data != null) Console.Error.WriteLine(e.Data); };
+
+                process.Start();
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
+                process.WaitForExit();
+
+                if (process.ExitCode != 0)
+                {
+                    throw new InvalidOperationException("Command '" + fileName + "' failed with exit code " + process.ExitCode + ".");
+                }
+            }
+
+            return output.ToString();
+        }
+
+        /// <summary>
         /// Return true when an executable can be located on PATH.
         /// </summary>
         /// <param name="fileName">Executable name to probe (with or without extension).</param>

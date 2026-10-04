@@ -111,37 +111,7 @@ namespace Armada.Publisher.Channels
 
         private static void SignProducedInstallers(ChannelContext context)
         {
-            string certBase64 = Environment.GetEnvironmentVariable(context.Manifest.Signing.Windows.CertBase64Secret) ?? string.Empty;
-            string certPassword = Environment.GetEnvironmentVariable(context.Manifest.Signing.Windows.CertPasswordSecret) ?? string.Empty;
-            if (string.IsNullOrEmpty(certBase64))
-            {
-                Console.WriteLine("[inno] " + context.Manifest.Signing.Windows.CertBase64Secret + " not set; produced unsigned installer(s).");
-                return;
-            }
-
-            string pfxPath = Path.Combine(context.OutputDirectory, "codesign.pfx");
-            File.WriteAllBytes(pfxPath, Convert.FromBase64String(certBase64));
-            try
-            {
-                foreach (string installer in Directory.EnumerateFiles(context.OutputDirectory, "*.exe"))
-                {
-                    List<string> arguments = new List<string>
-                    {
-                        "sign", "/f", pfxPath,
-                        "/fd", "SHA256",
-                        "/tr", context.Manifest.Signing.Windows.TimestampUrl,
-                        "/td", "SHA256",
-                        installer
-                    };
-                    if (!string.IsNullOrEmpty(certPassword)) arguments.InsertRange(4, new List<string> { "/p", certPassword });
-                    ProcessRunner.Run("signtool", arguments, context.RepoRoot);
-                    ChecksumWriter.WriteSidecar(installer);
-                }
-            }
-            finally
-            {
-                if (File.Exists(pfxPath)) File.Delete(pfxPath);
-            }
+            AuthenticodeSigner.SignAll(context.Manifest.Signing.Windows, context.OutputDirectory, "*.exe", context.RepoRoot, "[inno]");
         }
 
         #endregion

@@ -28,6 +28,11 @@ namespace Armada.Publisher
         /// <summary>
         /// Run every enabled channel.
         /// </summary>
-        All
+        All,
+
+        /// <summary>
+        /// Write a SHA256SUMS manifest for the release files in a directory.
+        /// </summary>
+        Checksums
     }
 }

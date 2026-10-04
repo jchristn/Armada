@@ -3,8 +3,9 @@
 #  build-installers.sh - build the installers this OS can produce (CLI, Harbor,
 #  Server) and land them in installers/<version>/.
 #
-#  On macOS this builds .dmg / .pkg (and the Homebrew cask); on Linux it builds
-#  .deb / .rpm / AppImage. Windows installers (.exe/.msi) cannot be built here;
+#  On macOS this builds the Harbor .app in a .dmg and the Server .pkg; on Linux
+#  it builds .deb / .rpm. Both also pack the CLI NuGet tool. Windows installers
+#  (.exe/.msi) cannot be built here;
 #  run build-installers.bat on Windows, or push a tag to let the CI matrix build
 #  all three operating systems at once.
 #
@@ -54,13 +55,11 @@ case "$OS" in
   Darwin)
     build dmg-harbor
     build pkg-server
-    build brew-harbor
     ;;
   Linux)
     build linux-cli
     build linux-harbor
     build linux-server
-    build appimage-cli
     ;;
   *)
     echo "Unsupported OS for this script: $OS"
@@ -76,9 +75,13 @@ echo "Collecting installers into $OUT ..."
 if [ -d "$WORK/packages" ]; then
   find "$WORK/packages" -type f \
     \( -name '*.dmg' -o -name '*.pkg' -o -name '*.deb' -o -name '*.rpm' \
-       -o -name '*.AppImage' -o -name '*.nupkg' \) \
+       -o -name '*.nupkg' \) \
+    -not -path '*/packages/*/_work/*' \
     -exec cp {} "$OUT"/ \;
 fi
+
+# --- SHA256SUMS over everything collected ------------------------------------
+dotnet run --project "$PUBLISHER" -c Release --no-build -- checksums --dir "$OUT" || FAILED="$FAILED checksums"
 
 echo
 echo "============================================================"
@@ -89,6 +92,6 @@ echo "  Output: $OUT"
 echo "============================================================"
 if [ -n "$FAILED" ]; then
   echo "Note: failed channels are either missing a packaging tool (run"
-  echo "      \"dotnet run --project $PUBLISHER -- doctor\") or their recipe is"
-  echo "      not yet implemented in Armada.Publisher."
+  echo "      \"dotnet run --project $PUBLISHER -- doctor\") or hit a build error"
+  echo "      shown in the channel output above."
 fi

@@ -34,6 +34,11 @@ namespace Armada.Publisher
         /// </summary>
         public string OutputDirectory { get; set; } = string.Empty;
 
+        /// <summary>
+        /// Directory for the Checksums command.
+        /// </summary>
+        public string Directory { get; set; } = string.Empty;
+
         #endregion
 
         #region Public-Methods
@@ -59,6 +64,12 @@ namespace Armada.Publisher
                         break;
                     case "list":
                         options.Command = CliCommandEnum.List;
+                        break;
+                    case "checksums":
+                        options.Command = CliCommandEnum.Checksums;
+                        break;
+                    case "--dir":
+                        options.Directory = Next(args, ref i, "--dir");
                         break;
                     case "--all":
                         options.Command = CliCommandEnum.All;
@@ -100,6 +111,7 @@ namespace Armada.Publisher
             Console.WriteLine("  list                           List declared channels.");
             Console.WriteLine("  --channel <name> --version x   Run one channel at a version.");
             Console.WriteLine("  --all --version x              Run every enabled channel.");
+            Console.WriteLine("  checksums --dir <dir>          Write SHA256SUMS for the installers in a directory.");
             Console.WriteLine();
             Console.WriteLine("Options:");
             Console.WriteLine("  --manifest <path>              Manifest path (default: publisher.json).");

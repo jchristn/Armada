@@ -38,7 +38,7 @@ jobs:
           fi
 
   # ------------------------------------------------------------------
-  # Windows: Inno (.exe) + WiX (.msi); feeds winget + Chocolatey.
+  # Windows: Inno (.exe) for Harbor + WiX (.msi) for the server.
   # ------------------------------------------------------------------
   windows:
     needs: version
@@ -60,13 +60,9 @@ jobs:
         env:
           WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
           WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
-          CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
-          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
         run: |
           dotnet run --project src/Armada.Publisher -c Release -- --channel inno-harbor --version ${{ needs.version.outputs.version }}
           dotnet run --project src/Armada.Publisher -c Release -- --channel wix-server   --version ${{ needs.version.outputs.version }}
-          dotnet run --project src/Armada.Publisher -c Release -- --channel choco-cli    --version ${{ needs.version.outputs.version }}
-          dotnet run --project src/Armada.Publisher -c Release -- --channel winget-cli   --version ${{ needs.version.outputs.version }}
       - uses: actions/upload-artifact@v4
         with:
           name: windows
@@ -83,8 +79,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
-      - name: Install packaging tools
-        run: brew install create-dmg
+      # hdiutil, sips, iconutil, codesign, pkgbuild, productbuild, and xcrun ship with macos-latest.
       - name: Build the publisher
         run: dotnet build src/Armada.Publisher/Armada.Publisher.csproj -c Release
       - name: Preflight
@@ -96,18 +91,16 @@ jobs:
           APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
           APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
           APPLE_NOTARY_ISSUER: ${{ secrets.APPLE_NOTARY_ISSUER }}
-          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
         run: |
           dotnet run --project src/Armada.Publisher -c Release -- --channel dmg-harbor  --version ${{ needs.version.outputs.version }}
           dotnet run --project src/Armada.Publisher -c Release -- --channel pkg-server  --version ${{ needs.version.outputs.version }}
-          dotnet run --project src/Armada.Publisher -c Release -- --channel brew-harbor --version ${{ needs.version.outputs.version }}
       - uses: actions/upload-artifact@v4
         with:
           name: macos
           path: artifacts/**/*
 
   # ------------------------------------------------------------------
-  # Linux: .deb/.rpm/AppImage; GPG-signed apt/yum repo metadata.
+  # Linux: .deb/.rpm for the CLI, Harbor, and server.
   # ------------------------------------------------------------------
   linux:
     needs: version
@@ -120,9 +113,7 @@ jobs:
       - name: Install packaging tools
         run: |
           sudo gem install --no-document fpm
-          sudo apt-get update && sudo apt-get install -y aptly createrepo-c
-          curl -L -o /usr/local/bin/appimagetool https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
-          chmod +x /usr/local/bin/appimagetool
+          sudo apt-get update && sudo apt-get install -y rpm
       - name: Build the publisher
         run: dotnet build src/Armada.Publisher/Armada.Publisher.csproj -c Release
       - name: Preflight
@@ -133,7 +124,6 @@ jobs:
           REPO_SYNC_CREDENTIALS: ${{ secrets.REPO_SYNC_CREDENTIALS }}
         run: |
           dotnet run --project src/Armada.Publisher -c Release -- --channel linux-cli     --version ${{ needs.version.outputs.version }}
-          dotnet run --project src/Armada.Publisher -c Release -- --channel appimage-cli  --version ${{ needs.version.outputs.version }}
           dotnet run --project src/Armada.Publisher -c Release -- --channel linux-harbor  --version ${{ needs.version.outputs.version }}
           dotnet run --project src/Armada.Publisher -c Release -- --channel linux-server  --version ${{ needs.version.outputs.version }}
       - uses: actions/upload-artifact@v4
@@ -158,7 +148,8 @@ jobs:
         run: dotnet run --project src/Armada.Publisher -c Release -- --channel nuget-cli --version ${{ needs.version.outputs.version }}
 
   # ------------------------------------------------------------------
-  # Collect every OS's artifacts and attach them to a GitHub Release.
+  # Collect every OS's installers, write one SHA256SUMS covering all of
+  # them, and attach both to the GitHub Release.
   # ------------------------------------------------------------------
   release:
     needs: [version, windows, macos, linux, nuget]
@@ -167,15 +158,25 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: dist
+      - name: Flatten installers and write SHA256SUMS
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          find dist -type f -path '*/packages/*' -not -path '*/_work/*' \
+            \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' -o -name '*.pkg' \
+               -o -name '*.deb' -o -name '*.rpm' -o -name '*.nupkg' \) \
+            -exec cp {} release/ \;
+          cd release
+          sha256sum -- * | sort -k2 > SHA256SUMS
+          cat SHA256SUMS
       - name: Create or update the GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.version.outputs.version }}
-          files: dist/**/*
-          fail_on_unmatched_files: false
-      - name: Note pending external gates
+          files: release/*
+          fail_on_unmatched_files: true
+      - name: Note signing state
         run: |
-          echo "Automated up to submission. Remaining manual gates:"
-          echo "  - winget PR must be merged"
-          echo "  - Chocolatey package must clear moderation"
-          echo "  - Flathub/Snap submissions are reviewed"
+          echo "Installers are signed only when the WINDOWS_CERT_* and APPLE_* secrets are set."
+          echo "If they were not, the release notes must carry the unsigned-installer notice (docs/RELEASING.md)."
