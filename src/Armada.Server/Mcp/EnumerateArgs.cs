@@ -120,6 +120,22 @@ namespace Armada.Server.Mcp
         public bool? IncludeMessage { get; set; }
 
         /// <summary>
+        /// Fleet action run ID (far_ prefix). Required for entityType fleet_action_run_target.
+        /// </summary>
+        public string? RunId { get; set; }
+
+        /// <summary>
+        /// Include RenderedText, OutputText and ErrorText on fleet action run targets (default false). When false,
+        /// OutputLength, ErrorLength and RenderedLength hints are returned instead.
+        /// </summary>
+        public bool? IncludeOutput { get; set; }
+
+        /// <summary>
+        /// Include inactive (soft-deleted built-in) fleet actions (default false).
+        /// </summary>
+        public bool? IncludeInactive { get; set; }
+
+        /// <summary>
         /// Convert to an EnumerationQuery for database operations.
         /// </summary>
         /// <returns>Populated EnumerationQuery.</returns>

@@ -510,6 +510,9 @@ namespace Armada.Server.Routes
                 if (body.RebuildSlotRetentionCount.HasValue)
                     _settings.RebuildSlotRetentionCount = body.RebuildSlotRetentionCount.Value;
 
+                if (body.FleetActions != null)
+                    _settings.FleetActions = body.FleetActions;
+
                 bool remoteControlChanged = body.RemoteControl != null;
                 if (remoteControlChanged)
                     _settings.RemoteControl = body.RemoteControl!;
@@ -625,7 +628,8 @@ namespace Armada.Server.Routes
                 ReposDirectory = _settings.ReposDirectory,
                 SelfVesselId = _settings.SelfVesselId,
                 RebuildSlotRetentionCount = _settings.RebuildSlotRetentionCount,
-                RemoteControl = _settings.RemoteControl
+                RemoteControl = _settings.RemoteControl,
+                FleetActions = _settings.FleetActions
             };
         }
 

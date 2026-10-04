@@ -92,5 +92,12 @@ namespace Armada.Server
         /// When supplied, replaces the full remoteControl settings object.
         /// </summary>
         public RemoteControlSettings? RemoteControl { get; set; }
+
+        /// <summary>
+        /// Optional fleet action settings update (MaxConcurrency, DefaultTimeoutSeconds, MaxOutputBytes,
+        /// RunRetentionDays). When supplied, replaces the full fleetActions object; omitted fields take their
+        /// defaults and out-of-range values are clamped. Applied live.
+        /// </summary>
+        public FleetActionSettings? FleetActions { get; set; }
     }
 }
