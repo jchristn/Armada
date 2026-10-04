@@ -182,11 +182,20 @@ namespace Armada.Server.Mcp.Tools
         }
 
         /// <summary>
-        /// Perform a backup of the database and settings into a ZIP file.
+        /// Perform a backup of the database and settings into a ZIP file. SQLite only: the database is copied with the
+        /// SQLite online backup API (a consistent snapshot that includes uncheckpointed WAL content) and zipped with
+        /// settings.json and a manifest. The default destination is {DataDirectory}/backups.
         /// </summary>
+        /// <param name="database">Database driver.</param>
+        /// <param name="settings">Application settings.</param>
+        /// <param name="outputPath">ZIP path, or null for a timestamped file under {DataDirectory}/backups.</param>
+        /// <returns>Path, timestamp, schema version, size, and record counts.</returns>
+        /// <exception cref="NotSupportedException">When the database provider is not SQLite.</exception>
         public static async Task<object> PerformBackupAsync(DatabaseDriver database, ArmadaSettings settings, string? outputPath)
         {
-            string backupsDir = Path.Combine(ArmadaConstants.DefaultDataDirectory, "backups");
+            EnsureSqliteForBackup(settings);
+            string databasePath = settings.Database.Filename;
+            string backupsDir = Path.Combine(settings.DataDirectory, "backups");
             Directory.CreateDirectory(backupsDir);
 
             string timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd-HHmmss");
@@ -203,7 +212,7 @@ namespace Armada.Server.Mcp.Tools
                 // Use SQLite online backup API for a consistent snapshot
                 // Pooling=False ensures Windows releases the file handle when the connection is disposed,
                 // so that ZipFile.Open can read the temp file without "used by another process" errors.
-                string sourceConnStr = "Data Source=" + settings.DatabasePath;
+                string sourceConnStr = "Data Source=" + databasePath;
                 string destConnStr = "Data Source=" + tempDbPath + ";Pooling=False";
 
                 using (SqliteConnection sourceConn = new SqliteConnection(sourceConnStr))
@@ -214,15 +223,10 @@ namespace Armada.Server.Mcp.Tools
                     sourceConn.BackupDatabase(destConn);
                 }
 
-                // Get schema version
-                int schemaVersion = 0;
-                if (database is SqliteDatabaseDriver sqliteDriver)
-                {
-                    schemaVersion = await sqliteDriver.GetSchemaVersionAsync().ConfigureAwait(false);
-                }
+                int schemaVersion = await database.GetSchemaVersionAsync().ConfigureAwait(false);
 
                 // Get record counts
-                Dictionary<string, long> recordCounts = await GetRecordCountsAsync(settings.DatabasePath).ConfigureAwait(false);
+                Dictionary<string, long> recordCounts = await GetRecordCountsAsync(databasePath).ConfigureAwait(false);
 
                 // Build manifest
                 object manifest = new
@@ -246,7 +250,7 @@ namespace Armada.Server.Mcp.Tools
                 {
                     zip.CreateEntryFromFile(tempDbPath, "armada.db");
 
-                    string settingsPath = ArmadaSettings.DefaultSettingsPath;
+                    string settingsPath = settings.EffectiveSettingsFilePath;
                     if (File.Exists(settingsPath))
                     {
                         zip.CreateEntryFromFile(settingsPath, "settings.json");
@@ -277,10 +281,22 @@ namespace Armada.Server.Mcp.Tools
         }
 
         /// <summary>
-        /// Restore the database and settings from a ZIP backup file.
+        /// Restore the database and settings from a ZIP backup file. SQLite only. A safety backup of the current state
+        /// is written to {DataDirectory}/backups first; the backup's database is then copied into the live database
+        /// with the SQLite online backup API (so open connections and the WAL stay consistent), and settings.json is
+        /// replaced when the ZIP has one. Restart the server afterward so every component reloads.
         /// </summary>
+        /// <param name="database">Database driver.</param>
+        /// <param name="settings">Application settings.</param>
+        /// <param name="filePath">Path of the ZIP to restore.</param>
+        /// <param name="originalFilename">Name to report for the backup (for uploads).</param>
+        /// <returns>Status, safety backup path, restored schema version, and a message.</returns>
+        /// <exception cref="FileNotFoundException">When the ZIP does not exist.</exception>
+        /// <exception cref="InvalidOperationException">When the ZIP is not an Armada backup.</exception>
+        /// <exception cref="NotSupportedException">When the database provider is not SQLite.</exception>
         public static async Task<object> PerformRestoreAsync(DatabaseDriver database, ArmadaSettings settings, string filePath, string? originalFilename = null)
         {
+            EnsureSqliteForBackup(settings);
             if (!File.Exists(filePath))
                 throw new FileNotFoundException("Backup file not found: " + filePath);
 
@@ -304,7 +320,7 @@ namespace Armada.Server.Mcp.Tools
                 string extractedSettingsPath = Path.Combine(tempDir, "settings.json");
 
                 // Validate extracted database
-                string validateConnStr = "Data Source=" + extractedDbPath;
+                string validateConnStr = "Data Source=" + extractedDbPath + ";Pooling=False";
                 using (SqliteConnection validateConn = new SqliteConnection(validateConnStr))
                 {
                     await validateConn.OpenAsync().ConfigureAwait(false);
@@ -313,47 +329,43 @@ namespace Armada.Server.Mcp.Tools
                         cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations';";
                         object? result = await cmd.ExecuteScalarAsync().ConfigureAwait(false);
                         if (result == null || result == DBNull.Value)
-                            throw new InvalidOperationException("Extracted database does not contain schema_migrations table — not a valid Armada backup");
-                    }
-                }
-
-                // Checkpoint the current live database
-                string liveConnStr = "Data Source=" + settings.DatabasePath;
-                using (SqliteConnection liveConn = new SqliteConnection(liveConnStr))
-                {
-                    await liveConn.OpenAsync().ConfigureAwait(false);
-                    using (SqliteCommand cmd = liveConn.CreateCommand())
-                    {
-                        cmd.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
-                        await cmd.ExecuteNonQueryAsync().ConfigureAwait(false);
+                            throw new InvalidOperationException("Extracted database does not contain schema_migrations table; not a valid Armada backup");
                     }
                 }
 
                 // Create safety backup of current state
                 string timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd-HHmmss");
-                string backupsDir = Path.Combine(ArmadaConstants.DefaultDataDirectory, "backups");
+                string backupsDir = Path.Combine(settings.DataDirectory, "backups");
                 Directory.CreateDirectory(backupsDir);
                 string safetyBackupPath = Path.Combine(backupsDir, "pre-restore-" + timestamp + ".zip");
 
                 await PerformBackupAsync(database, settings, safetyBackupPath).ConfigureAwait(false);
 
-                // Replace database file
-                File.Copy(extractedDbPath, settings.DatabasePath, overwrite: true);
+                // Copy the backup into the live database page by page. Unlike overwriting the file, the online backup
+                // API takes the database lock, writes through the live WAL, and leaves connections other components
+                // hold open pointing at a consistent database.
+                using (SqliteConnection source = new SqliteConnection(validateConnStr))
+                using (SqliteConnection live = new SqliteConnection("Data Source=" + settings.Database.Filename))
+                {
+                    await source.OpenAsync().ConfigureAwait(false);
+                    await live.OpenAsync().ConfigureAwait(false);
+                    source.BackupDatabase(live);
+                    using (SqliteCommand checkpoint = live.CreateCommand())
+                    {
+                        checkpoint.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
+                        await checkpoint.ExecuteNonQueryAsync().ConfigureAwait(false);
+                    }
+                }
 
                 // Replace settings.json if present in backup
                 bool settingsRestored = false;
                 if (File.Exists(extractedSettingsPath))
                 {
-                    File.Copy(extractedSettingsPath, ArmadaSettings.DefaultSettingsPath, overwrite: true);
+                    File.Copy(extractedSettingsPath, settings.EffectiveSettingsFilePath, overwrite: true);
                     settingsRestored = true;
                 }
 
-                // Get schema version from restored database
-                int schemaVersion = 0;
-                if (database is SqliteDatabaseDriver sqliteDriver)
-                {
-                    schemaVersion = await sqliteDriver.GetSchemaVersionAsync().ConfigureAwait(false);
-                }
+                int schemaVersion = await database.GetSchemaVersionAsync().ConfigureAwait(false);
 
                 string displayName = !String.IsNullOrEmpty(originalFilename) ? originalFilename : Path.GetFileName(filePath);
                 string message = "Database restored from " + displayName + ". ";
@@ -376,6 +388,16 @@ namespace Armada.Server.Mcp.Tools
                     try { Directory.Delete(tempDir, recursive: true); }
                     catch { /* best effort cleanup */ }
                 }
+            }
+        }
+
+        private static void EnsureSqliteForBackup(ArmadaSettings settings)
+        {
+            if (settings == null) throw new ArgumentNullException(nameof(settings));
+            if (settings.Database.Type != DatabaseTypeEnum.Sqlite)
+            {
+                throw new NotSupportedException("Built-in backup and restore support SQLite only. Back up " + settings.Database.Type +
+                    " with its own tools (pg_dump, mysqldump, or BACKUP DATABASE); see docs/UPGRADING.md.");
             }
         }
     }

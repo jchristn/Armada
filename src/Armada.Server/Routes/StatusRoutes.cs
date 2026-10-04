@@ -144,7 +144,7 @@ namespace Armada.Server.Routes
                 // 1. Settings File
                 try
                 {
-                    string settingsPath = ArmadaSettings.DefaultSettingsPath;
+                    string settingsPath = _settings.EffectiveSettingsFilePath;
                     if (File.Exists(settingsPath))
                         results.Add(new { Name = "Settings", Status = "Pass", Message = "Settings loaded from " + settingsPath });
                     else
