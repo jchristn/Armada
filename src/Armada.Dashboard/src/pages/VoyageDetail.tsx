@@ -409,6 +409,7 @@ export default function VoyageDetail() {
       {/* Missions table */}
       <h3 style={{ marginBottom: 12 }}>{t('Missions')}</h3>
       {missions.length > 0 ? (
+        <div className="table-wrap">
         <table className="table">
           <thead>
             <tr>
@@ -423,10 +424,10 @@ export default function VoyageDetail() {
           <tbody>
             {missions.map(m => (
               <tr key={m.id} style={{ cursor: 'pointer' }} onClick={() => nav(`/missions/${m.id}`)}>
-                <td>
+                <td className="cell-title">
                   <strong>{m.title}</strong>
-                  <div className="text-muted mono" style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
-                    {m.id}
+                  <div className="id-display text-muted mono" style={{ fontSize: 11 }}>
+                    <span className="id-value" title={m.id}>{m.id}</span>
                     <CopyButton text={m.id} onClick={e => e.stopPropagation()} />
                   </div>
                 </td>
@@ -435,7 +436,9 @@ export default function VoyageDetail() {
                 </td>
                 <td>{m.vesselId ? <Link to={`/vessels/${m.vesselId}`} onClick={e => e.stopPropagation()}>{vesselName(m.vesselId)}</Link> : '-'}</td>
                 <td>{m.captainId ? <Link to={`/captains/${m.captainId}`} onClick={e => e.stopPropagation()}>{captainName(m.captainId)}</Link> : '-'}</td>
-                <td className="mono text-muted" style={{ fontSize: 11 }}>{m.branchName || '-'}</td>
+                <td className="mono text-muted" style={{ fontSize: 11 }} title={m.branchName || undefined}>
+                  <span className="cell-clip"><span>{m.branchName || '-'}</span></span>
+                </td>
                 <td onClick={e => e.stopPropagation()}>
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button className="btn-sm" onClick={() => handleMissionDiff(m.id, m.title)} title={t('View Diff')}>{t('Diff')}</button>
@@ -447,6 +450,7 @@ export default function VoyageDetail() {
             ))}
           </tbody>
         </table>
+        </div>
       ) : (
         <p className="text-muted">{t('No missions in this voyage.')}</p>
       )}

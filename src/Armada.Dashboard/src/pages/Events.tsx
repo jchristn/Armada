@@ -214,7 +214,7 @@ export default function Events() {
             onPageChange={p => setPageNumber(p)} onPageSizeChange={s => { setPageSize(s); setPageNumber(1); }} />
 
           <div className="table-wrap">
-            <table>
+            <table className="table-dense">
               <thead>
                 <tr>
                   <th className="col-checkbox">
@@ -267,15 +267,15 @@ export default function Events() {
                           <CopyButton text={evt.id} onClick={e => e.stopPropagation()} />
                         </span>
                       </td>
-                      <td style={{ whiteSpace: 'nowrap' }}>{evt.eventType}</td>
+                      <td><span className="cell-clip" title={evt.eventType}><span>{evt.eventType}</span></span></td>
                       <td className="text-dim">{evt.entityType || '-'}</td>
                       <td className="mono text-dim table-id-cell" onClick={e => e.stopPropagation()}>
                         {evt.entityId ? (
                           <span className="id-display">
                             {entRoute ? (
-                              <a href="#" className="id-value" onClick={e => { e.preventDefault(); navigate(entRoute); }}>{evt.entityId}</a>
+                              <a href="#" className="id-value" title={evt.entityId} onClick={e => { e.preventDefault(); navigate(entRoute); }}>{evt.entityId}</a>
                             ) : (
-                              <span className="id-value">{evt.entityId}</span>
+                              <span className="id-value" title={evt.entityId}>{evt.entityId}</span>
                             )}
                             <CopyButton text={evt.entityId} onClick={e => e.stopPropagation()} />
                           </span>
@@ -288,7 +288,7 @@ export default function Events() {
                       </td>
                       <td className="mono text-dim" onClick={e => e.stopPropagation()}>
                         {evt.missionId ? (
-                          <a href="#" onClick={e => { e.preventDefault(); navigate(`/missions/${evt.missionId}`); }}>{evt.missionId.substring(0, 8)}...</a>
+                          <span className="cell-clip"><a href="#" title={evt.missionId} onClick={e => { e.preventDefault(); navigate(`/missions/${evt.missionId}`); }}>{evt.missionId}</a></span>
                         ) : '-'}
                       </td>
                       <td onClick={e => e.stopPropagation()}>
@@ -298,13 +298,13 @@ export default function Events() {
                       </td>
                       <td className="mono text-dim" onClick={e => e.stopPropagation()}>
                         {evt.voyageId ? (
-                          <a href="#" onClick={e => { e.preventDefault(); navigate(`/voyages/${evt.voyageId}`); }}>{evt.voyageId.substring(0, 8)}...</a>
+                          <span className="cell-clip"><a href="#" title={evt.voyageId} onClick={e => { e.preventDefault(); navigate(`/voyages/${evt.voyageId}`); }}>{evt.voyageId}</a></span>
                         ) : '-'}
                       </td>
-                      <td style={{ maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={evt.message}>
-                        {evt.message}
+                      <td title={evt.message}>
+                        <span className="truncate-text">{evt.message}</span>
                       </td>
-                      <td className="text-dim" style={{ whiteSpace: 'nowrap' }} title={formatDateTime(evt.createdUtc)}>{formatRelativeTime(evt.createdUtc)}</td>
+                      <td className="text-dim" title={formatDateTime(evt.createdUtc)}>{formatRelativeTime(evt.createdUtc)}</td>
                       <td className="text-right" onClick={e => e.stopPropagation()}>
                         <ActionMenu id={`event-${evt.id}`} items={[
                           { label: 'View Detail', onClick: () => navigate(`/events/${evt.id}`) },

@@ -241,8 +241,8 @@ export default function Docks() {
                         </span>
                       ) : '-'}
                     </td>
-                    <td className="mono text-dim" style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={d.worktreePath || ''}>
-                      {d.worktreePath || '-'}
+                    <td className="mono text-dim" title={d.worktreePath || ''}>
+                      <span className="cell-clip"><span>{d.worktreePath || '-'}</span></span>
                     </td>
                     <td>{d.active ? t('Yes') : t('No')}</td>
                     <td className="text-dim" title={formatDateTime(d.createdUtc)}>{formatRelativeTime(d.createdUtc)}</td>

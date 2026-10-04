@@ -36,6 +36,10 @@ import RunActionModal from '../components/fleetActions/RunActionModal';
 
 const TABLE_KEY = 'vessel-health';
 const PINNED_COLUMNS = ['vessel', 'overall'];
+// Secondary columns hidden until the user turns them on (Columns menu); the detail modal always shows them.
+// Bump DEFAULT_COLUMNS_VERSION when this list grows so stored selections pick up the new defaults once.
+const DEFAULT_HIDDEN_COLUMNS = ['lastCommit', 'evaluated'];
+const DEFAULT_COLUMNS_VERSION = 1;
 const TEXT_DEBOUNCE_MS = 350;
 
 interface VesselHealthProps {
@@ -84,7 +88,7 @@ export default function VesselHealth({ onRunAction }: VesselHealthProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryKey = searchParams.toString();
   const filters = useMemo(() => filtersFromQuery(new URLSearchParams(queryKey)), [queryKey]);
-  const prefs = useTablePrefs(TABLE_KEY, { pinned: PINNED_COLUMNS });
+  const prefs = useTablePrefs(TABLE_KEY, { pinned: PINNED_COLUMNS, defaultHidden: DEFAULT_HIDDEN_COLUMNS, defaultsVersion: DEFAULT_COLUMNS_VERSION });
 
   const [rows, setRows] = useState<VesselHealthRow[]>([]);
   const [runActionIds, setRunActionIds] = useState<string[] | null>(null);
@@ -275,7 +279,7 @@ export default function VesselHealth({ onRunAction }: VesselHealthProps) {
           <Link to={`/vessels/${encodeURIComponent(row.vesselId)}`} onClick={(e) => e.stopPropagation()} title={row.vesselId}>
             <strong>{row.vesselName || row.vesselId}</strong>
           </Link>
-          {row.currentBranch && <span className="mono text-dim vh-branch" title={t('Checked-out branch')}>{row.currentBranch}</span>}
+          {row.currentBranch && <span className="mono text-dim vh-branch" title={`${t('Checked-out branch')}: ${row.currentBranch}`}>{row.currentBranch}</span>}
         </div>
       ),
     },
@@ -284,8 +288,9 @@ export default function VesselHealth({ onRunAction }: VesselHealthProps) {
       label: msg('Fleet'),
       title: msg('Fleet the vessel belongs to'),
       sort: 'FleetName',
+      className: 'vh-col-fleet',
       render: (row) => (row.fleetId
-        ? <Link to={`/fleets/${encodeURIComponent(row.fleetId)}`} onClick={(e) => e.stopPropagation()}>{row.fleetName || row.fleetId}</Link>
+        ? <Link className="line-clamp-2" to={`/fleets/${encodeURIComponent(row.fleetId)}`} onClick={(e) => e.stopPropagation()} title={row.fleetName || row.fleetId}>{row.fleetName || row.fleetId}</Link>
         : <span className="text-dim">-</span>),
     },
     {
@@ -398,7 +403,7 @@ export default function VesselHealth({ onRunAction }: VesselHealthProps) {
       title: msg('Time of the last commit on the checked-out branch'),
       sort: 'LastCommitUtc',
       render: (row) => (row.lastCommitUtc
-        ? <span className="vh-nowrap" title={formatDateTime(row.lastCommitUtc)}>{formatRelativeTime(row.lastCommitUtc)}</span>
+        ? <span title={formatDateTime(row.lastCommitUtc)}>{formatRelativeTime(row.lastCommitUtc)}</span>
         : <span className="text-dim">-</span>),
     },
     {
@@ -407,7 +412,7 @@ export default function VesselHealth({ onRunAction }: VesselHealthProps) {
       title: msg('When this vessel was last evaluated'),
       sort: 'EvaluatedUtc',
       render: (row) => (row.evaluatedUtc
-        ? <span className="vh-nowrap" title={formatDateTime(row.evaluatedUtc)}>{formatRelativeTime(row.evaluatedUtc)}</span>
+        ? <span title={formatDateTime(row.evaluatedUtc)}>{formatRelativeTime(row.evaluatedUtc)}</span>
         : <span className="text-dim">{t('Never')}</span>),
     },
   ];
@@ -665,7 +670,7 @@ export default function VesselHealth({ onRunAction }: VesselHealthProps) {
               ariaLabel={t('Choose visible columns')}
               onToggle={(v) => prefs.toggleColumn(v)}
               align="right"
-              footer={<button type="button" className="btn btn-sm" onClick={() => prefs.resetColumns()}>{t('Show all')}</button>}
+              footer={<button type="button" className="btn btn-sm" onClick={() => prefs.showAllColumns()}>{t('Show all')}</button>}
             />
           </div>
 

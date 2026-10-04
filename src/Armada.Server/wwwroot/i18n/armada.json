@@ -2223,7 +2223,9 @@
         "{count, plural, one {The captain has up to # minute.} other {The captain has up to # minutes.}}": "{count, plural, one {El capitán dispone de hasta # minuto.} other {El capitán dispone de hasta # minutos.}}",
         "import": "importación",
         "Fleet categorization time limit (minutes)": "Límite de tiempo de la categorización de flotas (minutos)",
-        "Longest a captain may spend recommending fleets for an import before it is stopped (1-240, default 20).": "Tiempo máximo que un capitán puede dedicar a recomendar flotas para una importación antes de detenerlo (1-240, predeterminado 20)."
+        "Longest a captain may spend recommending fleets for an import before it is stopped (1-240, default 20).": "Tiempo máximo que un capitán puede dedicar a recomendar flotas para una importación antes de detenerlo (1-240, predeterminado 20).",
+        "Repository": "Repositorio",
+        "Default branch": "Rama predeterminada"
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -3359,7 +3361,9 @@
         "{count, plural, one {The captain has up to # minute.} other {The captain has up to # minutes.}}": "{count, plural, one {船长最多有 # 分钟。} other {船长最多有 # 分钟。}}",
         "import": "导入",
         "Fleet categorization time limit (minutes)": "舰队分类时限（分钟）",
-        "Longest a captain may spend recommending fleets for an import before it is stopped (1-240, default 20).": "船长为一次导入推荐舰队的最长时间，超时将被停止（1-240，默认 20）。"
+        "Longest a captain may spend recommending fleets for an import before it is stopped (1-240, default 20).": "船长为一次导入推荐舰队的最长时间，超时将被停止（1-240，默认 20）。",
+        "Repository": "仓库",
+        "Default branch": "默认分支"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -4458,7 +4462,9 @@
         "{count, plural, one {The captain has up to # minute.} other {The captain has up to # minutes.}}": "{count, plural, one {船長最多有 # 分鐘。} other {船長最多有 # 分鐘。}}",
         "import": "匯入",
         "Fleet categorization time limit (minutes)": "艦隊分類時限（分鐘）",
-        "Longest a captain may spend recommending fleets for an import before it is stopped (1-240, default 20).": "船長為一次匯入推薦艦隊的最長時間，逾時將被停止（1-240，預設 20）。"
+        "Longest a captain may spend recommending fleets for an import before it is stopped (1-240, default 20).": "船長為一次匯入推薦艦隊的最長時間，逾時將被停止（1-240，預設 20）。",
+        "Repository": "儲存庫",
+        "Default branch": "預設分支"
       },
       "sections": {}
     },
@@ -5516,7 +5522,9 @@
         "{count, plural, one {The captain has up to # minute.} other {The captain has up to # minutes.}}": "{count, plural, one {船長最多有 # 分鐘。} other {船長最多有 # 分鐘。}}",
         "import": "匯入",
         "Fleet categorization time limit (minutes)": "艦隊分類時限（分鐘）",
-        "Longest a captain may spend recommending fleets for an import before it is stopped (1-240, default 20).": "船長為一次匯入推薦艦隊最長可以用幾耐，超時會被停止（1-240，預設 20）。"
+        "Longest a captain may spend recommending fleets for an import before it is stopped (1-240, default 20).": "船長為一次匯入推薦艦隊最長可以用幾耐，超時會被停止（1-240，預設 20）。",
+        "Repository": "儲存庫",
+        "Default branch": "預設分支"
       },
       "sections": {}
     },
@@ -6592,7 +6600,9 @@
         "{count, plural, one {The captain has up to # minute.} other {The captain has up to # minutes.}}": "{count, plural, one {キャプテンの制限時間は最大 # 分です。} other {キャプテンの制限時間は最大 # 分です。}}",
         "import": "インポート",
         "Fleet categorization time limit (minutes)": "フリート分類の制限時間（分）",
-        "Longest a captain may spend recommending fleets for an import before it is stopped (1-240, default 20).": "1 回のインポートでキャプテンがフリートの推奨に使える最長時間。超えると停止します（1-240、既定 20）。"
+        "Longest a captain may spend recommending fleets for an import before it is stopped (1-240, default 20).": "1 回のインポートでキャプテンがフリートの推奨に使える最長時間。超えると停止します（1-240、既定 20）。",
+        "Repository": "リポジトリ",
+        "Default branch": "デフォルトブランチ"
       },
       "sections": {}
     },
@@ -7657,7 +7667,9 @@
         "{count, plural, one {The captain has up to # minute.} other {The captain has up to # minutes.}}": "{count, plural, one {Der Captain hat bis zu # Minute Zeit.} other {Der Captain hat bis zu # Minuten Zeit.}}",
         "import": "Import",
         "Fleet categorization time limit (minutes)": "Zeitlimit der Flottenkategorisierung (Minuten)",
-        "Longest a captain may spend recommending fleets for an import before it is stopped (1-240, default 20).": "Höchstdauer, die ein Captain für Flottenempfehlungen eines Imports aufwenden darf, bevor er gestoppt wird (1-240, Standard 20)."
+        "Longest a captain may spend recommending fleets for an import before it is stopped (1-240, default 20).": "Höchstdauer, die ein Captain für Flottenempfehlungen eines Imports aufwenden darf, bevor er gestoppt wird (1-240, Standard 20).",
+        "Repository": "Repository",
+        "Default branch": "Standard-Branch"
       },
       "sections": {}
     },
@@ -8722,7 +8734,9 @@
         "{count, plural, one {The captain has up to # minute.} other {The captain has up to # minutes.}}": "{count, plural, one {Le capitaine dispose de # minute au maximum.} other {Le capitaine dispose de # minutes au maximum.}}",
         "import": "importation",
         "Fleet categorization time limit (minutes)": "Délai de la catégorisation des flottes (minutes)",
-        "Longest a captain may spend recommending fleets for an import before it is stopped (1-240, default 20).": "Durée maximale qu'un capitaine peut consacrer aux recommandations de flottes d'une importation avant d'être arrêté (1-240, 20 par défaut)."
+        "Longest a captain may spend recommending fleets for an import before it is stopped (1-240, default 20).": "Durée maximale qu'un capitaine peut consacrer aux recommandations de flottes d'une importation avant d'être arrêté (1-240, 20 par défaut).",
+        "Repository": "Dépôt",
+        "Default branch": "Branche par défaut"
       },
       "sections": {}
     },
@@ -9787,7 +9801,9 @@
         "{count, plural, one {The captain has up to # minute.} other {The captain has up to # minutes.}}": "{count, plural, one {Il capitano ha fino a # minuto.} other {Il capitano ha fino a # minuti.}}",
         "import": "importazione",
         "Fleet categorization time limit (minutes)": "Limite di tempo della categorizzazione delle flotte (minuti)",
-        "Longest a captain may spend recommending fleets for an import before it is stopped (1-240, default 20).": "Tempo massimo che un capitano può dedicare a suggerire flotte per un'importazione prima di essere fermato (1-240, predefinito 20)."
+        "Longest a captain may spend recommending fleets for an import before it is stopped (1-240, default 20).": "Tempo massimo che un capitano può dedicare a suggerire flotte per un'importazione prima di essere fermato (1-240, predefinito 20).",
+        "Repository": "Repository",
+        "Default branch": "Branch predefinito"
       },
       "sections": {}
     }
