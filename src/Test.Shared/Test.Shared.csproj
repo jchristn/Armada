@@ -19,6 +19,8 @@
     <ProjectReference Include="..\Armada.Runtimes\Armada.Runtimes.csproj" />
     <ProjectReference Include="..\Armada.Server\Armada.Server.csproj" />
     <ProjectReference Include="..\Armada.Proxy\Armada.Proxy.csproj" />
+    <ProjectReference Include="..\Armada.Client\Armada.Client.csproj" />
+    <ProjectReference Include="..\Armada.Tui\Armada.Tui.csproj" />
   </ItemGroup>
 
 </Project>
