@@ -151,7 +151,7 @@ describe('AskArmada thread list', () => {
     renderAt('/ask');
     await screen.findByText('Checkout tests');
     fireEvent.click(screen.getByRole('button', { name: 'Actions for Checkout tests' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Rename' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
     const input = screen.getByLabelText('Conversation title');
     fireEvent.change(input, { target: { value: 'Checkout flake' } });
     fireEvent.submit(input.closest('form')!);
@@ -164,7 +164,7 @@ describe('AskArmada thread list', () => {
     renderAt('/ask');
     await screen.findByText('Checkout tests');
     fireEvent.click(screen.getByRole('button', { name: 'Actions for Checkout tests' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Pin' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Pin' }));
     await waitFor(() => expect(api.updateAskThread).toHaveBeenCalledWith('ath_3', { pinned: true }));
     await waitFor(() => expect(threadRows().map((r) => r.getAttribute('title'))).toEqual(['Billing fix', 'Checkout tests', 'Dependency sweep']));
   });
@@ -174,7 +174,7 @@ describe('AskArmada thread list', () => {
     renderAt('/ask');
     await screen.findByText('Checkout tests');
     fireEvent.click(screen.getByRole('button', { name: 'Actions for Checkout tests' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
     expect(deleteAskThread).not.toHaveBeenCalled();
     expect(screen.getByText(/Work it started keeps running/)).toBeInTheDocument();
     const dialog = screen.getByText('Delete conversation').closest('.modal-box') as HTMLElement;
@@ -315,6 +315,25 @@ describe('AskArmada integration fixes', () => {
     vi.mocked(api.getCaptainTools).mockResolvedValue({ runtime: 'Codex', armadaToolCount: 0 } as never);
     renderAt('/ask/ath_1');
     expect(await screen.findByText(/not connected to Armada over MCP/)).toBeInTheDocument();
+  });
+
+  it('treats a Codex captain as gated when the server reports askApprovalGated', async () => {
+    vi.mocked(api.listCaptains).mockResolvedValue(page([{ id: 'cpt_1', name: 'Ada', runtime: 'Codex', model: 'gpt' } as never]));
+    vi.mocked(api.getCaptainTools).mockResolvedValue({ runtime: 'Codex', armadaToolCount: 0, askApprovalGated: true } as never);
+    renderAt('/ask/ath_1');
+    await screen.findByText('Checkout tests');
+    await waitFor(() => expect(api.getCaptainTools).toHaveBeenCalled());
+    expect(screen.queryByText(/not connected to Armada over MCP/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('ask-ungated-note')).not.toBeInTheDocument();
+  });
+
+  it('shows a persistent note when the captain\'s actions are not gated', async () => {
+    vi.mocked(api.listCaptains).mockResolvedValue(page([{ id: 'cpt_1', name: 'Ada', runtime: 'Custom', model: null } as never]));
+    vi.mocked(api.getCaptainTools).mockResolvedValue({ runtime: 'Custom', armadaToolCount: 12, askApprovalGated: false } as never);
+    renderAt('/ask/ath_1');
+    const note = await screen.findByTestId('ask-ungated-note');
+    expect(note).toHaveAttribute('role', 'note');
+    expect(note).toHaveTextContent('Actions from this captain run without approval cards.');
   });
 
   it('does not render the empty reply reserved while the captain is still writing', async () => {

@@ -189,7 +189,7 @@ export default function Voyages() {
               <thead>
                 <tr>
                   <th className="col-checkbox">
-                    <input type="checkbox" checked={table.allSelected} onChange={e => e.target.checked ? table.selectAll() : table.clearSelection()} title={t('Select all voyages')} />
+                    <input aria-label={t('Select all voyages')} type="checkbox" checked={table.allSelected} onChange={e => e.target.checked ? table.selectAll() : table.clearSelection()} title={t('Select all voyages')} />
                   </th>
                   <th className="sortable" onClick={() => table.handleSort('title')} title={t('Voyage title -- click to sort')}>
                     {t('Title')}{table.sortIcon('title')}
@@ -218,7 +218,7 @@ export default function Voyages() {
                 {table.sorted.map(v => (
                   <tr key={v.id} className="clickable" onClick={() => setViewRecord(v as unknown as Record<string, unknown>)}>
                     <td className="col-checkbox" onClick={e => e.stopPropagation()}>
-                      <input type="checkbox" checked={table.selected.includes(v.id)} onChange={() => table.toggleSelect(v.id)} title={t('Select this voyage')} />
+                      <input aria-label={t('Select this voyage')} type="checkbox" checked={table.selected.includes(v.id)} onChange={() => table.toggleSelect(v.id)} title={t('Select this voyage')} />
                     </td>
                     <td className="cell-title" title={v.title}>
                       <strong className="line-clamp-2">{v.title}</strong>

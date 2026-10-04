@@ -65,10 +65,16 @@ namespace Test.Shared.Suites.Runtimes
                 InspectableCodexRuntime runtime = CreateRuntime();
                 List<string> args = runtime.Args("test prompt");
                 AssertEqual("exec", args[0]);
+                AssertTrue(args.Contains("--skip-git-repo-check"), "chat turns run outside a git repository");
                 if (OperatingSystem.IsWindows())
                     AssertTrue(args.Contains("--dangerously-bypass-approvals-and-sandbox"));
                 else
-                    AssertTrue(args.Contains("--full-auto"));
+                {
+                    AssertFalse(args.Contains("--full-auto"), "codex exec no longer accepts --full-auto");
+                    int sandbox = args.IndexOf("--sandbox");
+                    AssertTrue(sandbox >= 0, "expected --sandbox");
+                    AssertEqual("workspace-write", args[sandbox + 1]);
+                }
                 // The prompt is delivered on stdin, not as a CLI argument (avoids Windows cmd.exe
                 // multi-line-argument truncation), so it must not appear in the argument list.
                 AssertFalse(args.Contains("test prompt"));

@@ -69,6 +69,35 @@ Repo-relative deployment script paths:
 - macOS: `scripts/macos/install-launchd-agent.sh`, `scripts/macos/update-launchd-agent.sh`, `scripts/macos/healthcheck-server.sh`
 - Windows: `scripts/windows/install-windows-task.bat`, `scripts/windows/update-windows-task.bat`, `scripts/windows/healthcheck-server.bat`
 
+## First mission with the setup wizard
+
+The fastest way to see Armada land real work is the setup wizard in the dashboard. It opens on its own the first
+time you sign in to an empty Armada (and later from Dashboard, Setup Wizard).
+
+1. Open `http://localhost:7890/dashboard` and sign in with `admin@armada` / `password`.
+2. **Objective:** select Start Setup.
+3. **Fleet:** keep "Armada Starter Fleet" and select Create Fleet.
+4. **Vessel:** enter a name, the repository (a clone URL or a local path such as `~/code/hello`), and, to have
+   finished work merged for you, the path of your local checkout as Working Directory with Landing Mode set to
+   Local Merge. Local Merge merges into that checkout and pushes it to its `origin` remote, so the checkout needs
+   one. Leave Landing Mode on None if you would rather review the branch yourself; the mission then stops at
+   WorkProduced with its branch kept for you. Select Register Vessel.
+5. **Captain:** the runtime defaults to Claude Code. Pick another runtime if that is the CLI you have installed and
+   signed in, then select Create Captain.
+6. **Dispatch:** the default mission only inspects the repository. For a first landed change, replace it with
+   something small, for example "Append the line 'Armada was here.' to README.md and commit the change." Select
+   Dispatch Mission.
+7. **Handoff:** the status updates on its own every few seconds. With Local Merge it reaches Complete once the
+   commit is merged into your checkout. Open Mission shows the diff and the captain's log.
+
+Measured on macOS (2026-10-04) from a fresh data directory with Claude Code 2.1.289 and a one-commit repository:
+the server was serving the dashboard 2 seconds after start, the wizard took about 3 seconds of clicking when driven
+by a script (budget one to two minutes by hand to read and type), and the mission went from dispatch to Complete in
+about 15 seconds. Installing the .NET SDK and the agent CLI and signing in to the CLI are not included; with those
+done, the whole path fits comfortably in ten minutes.
+
+---
+
 ## Planning Workflow
 
 If you want to work out the plan with a captain before dispatching anything, use the dashboard planning screen:

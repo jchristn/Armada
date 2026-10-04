@@ -35,6 +35,9 @@ export default function Layout() {
     }
   });
   const [sections, setSections] = useState<Record<string, boolean>>({ ...DEFAULT_EXPANDED_SECTIONS });
+  // At phone and tablet widths the sidebar is off-canvas; the top-bar button opens it instead of collapsing it.
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  useEffect(() => { setMobileNavOpen(false); }, [location.pathname, location.search]);
   const [healthStatus, setHealthStatus] = useState<HealthStatus>('unknown');
   const [proxyContext, setProxyContext] = useState<ProxySessionContext | null>(null);
 
@@ -233,6 +236,7 @@ export default function Layout() {
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#main-content" onClick={(e) => { e.preventDefault(); document.getElementById('main-content')?.focus(); }}>{t('Skip to main content')}</a>
       {showProxyContext && (
         <div className="proxy-context-strip proxy-context-shell-strip">
           <div className="proxy-context-copy">
@@ -264,7 +268,7 @@ export default function Layout() {
       )}
 
       <div className={layoutClassName} style={{ gridTemplateColumns: collapsed ? '56px 1fr' : '220px 1fr' }}>
-        <aside className={`sidebar${collapsed ? ' sidebar-collapsed' : ''}`}>
+        <aside className={`sidebar${collapsed && !mobileNavOpen ? ' sidebar-collapsed' : ''}${mobileNavOpen ? ' sidebar-open' : ''}`}>
         <div className="sidebar-brand">
           <img
             src="/img/logo-light-grey.png"
@@ -302,7 +306,7 @@ export default function Layout() {
               className={`sidebar-section${isSectionActive(section.matchers) ? ' section-active' : ''}${!sections[section.key] ? ' collapsed' : ''}`}
             >
               {!collapsed && (
-                <button className="sidebar-section-header" onClick={() => toggleSection(section.key)}>
+                <button className="sidebar-section-header" aria-expanded={!!sections[section.key]} onClick={() => toggleSection(section.key)}>
                   {t(section.label)}
                   <span className="sidebar-section-chevron">
                     <svg viewBox="0 0 24 24">
@@ -324,12 +328,16 @@ export default function Layout() {
           </div>
         )}
         </aside>
+        {mobileNavOpen && <div className="sidebar-overlay" aria-hidden="true" onClick={() => setMobileNavOpen(false)} />}
 
         <div className="main-content-area">
           <div className="top-bar">
             <button
               className="top-bar-collapse-btn"
-              onClick={() => setCollapsed((prev) => !prev)}
+              onClick={() => {
+                if (window.matchMedia?.('(max-width: 768px)').matches) setMobileNavOpen((open) => !open);
+                else setCollapsed((prev) => !prev);
+              }}
               title={collapsed ? t('Expand sidebar') : t('Collapse sidebar')}
               aria-label={collapsed ? t('Expand sidebar') : t('Collapse sidebar')}
             >
@@ -394,7 +402,7 @@ export default function Layout() {
             </button>
           </div>
 
-          <main className="main">
+          <main className="main" id="main-content" tabIndex={-1}>
             <DefaultCredentialsBanner />
             <div className="view">
               <Outlet />

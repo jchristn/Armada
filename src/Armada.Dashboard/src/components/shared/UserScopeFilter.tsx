@@ -40,7 +40,7 @@ export default function UserScopeFilter({ value, onChange }: UserScopeFilterProp
   }
 
   return (
-    <select value={value} onChange={(event) => onChange(event.target.value)} title={t('View records for a specific user')}>
+    <select aria-label={t('View records for a specific user')} value={value} onChange={(event) => onChange(event.target.value)} title={t('View records for a specific user')}>
       <option value="">{t('All users')}</option>
       {users.map((user) => (
         <option key={user.id} value={user.id}>{userLabel(user)}</option>

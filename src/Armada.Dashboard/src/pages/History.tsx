@@ -439,7 +439,7 @@ export default function History() {
             onChange={(event) => setTextFilter(event.target.value)}
             placeholder={t('Search title, status, route, or metadata...')}
           />
-          <select value={objectiveFilter} onChange={(event) => setObjectiveFilter(event.target.value)}>
+          <select aria-label={t('All backlog items')} value={objectiveFilter} onChange={(event) => setObjectiveFilter(event.target.value)}>
             <option value="all">{t('All backlog items')}</option>
             {objectives.map((objective) => (
               <option key={objective.id} value={objective.id}>{objective.title}</option>
@@ -451,13 +451,13 @@ export default function History() {
             onChange={(event) => setActorFilter(event.target.value)}
             placeholder={t('Filter by actor or principal...')}
           />
-          <select value={vesselFilter} onChange={(event) => setVesselFilter(event.target.value)}>
+          <select aria-label={t('All vessels')} value={vesselFilter} onChange={(event) => setVesselFilter(event.target.value)}>
             <option value="all">{t('All vessels')}</option>
             {vessels.map((vessel) => (
               <option key={vessel.id} value={vessel.id}>{vessel.name}</option>
             ))}
           </select>
-          <select value={sourceTypeFilter} onChange={(event) => setSourceTypeFilter(event.target.value)}>
+          <select aria-label={t('All source types')} value={sourceTypeFilter} onChange={(event) => setSourceTypeFilter(event.target.value)}>
             <option value="all">{t('All source types')}</option>
             {distinctSourceTypes.map((sourceType) => (
               <option key={sourceType} value={sourceType}>{sourceType}</option>

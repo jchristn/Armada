@@ -300,6 +300,60 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("landing_mode_none_does_not_merge_into_working_directory", "LandingMode None leaves the mission WorkProduced and never merges into the working directory", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    StubGitService git = new StubGitService();
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
+                    StubMergeQueueService mergeQueue = new StubMergeQueueService();
+                    MissionLandingHandler handler = new MissionLandingHandler(
+                        logging, testDb.Driver, settings, git, mergeQueue, new MessageTemplateService(logging), null, dockService, null);
+
+                    LandingTestEntitiesResult entities = await CreateTestEntitiesAsync(testDb.Driver, LandingModeEnum.None);
+                    git.ExistingBranches.Add(entities.Dock.BranchName!);
+                    entities.Mission.Status = MissionStatusEnum.WorkProduced;
+                    entities.Mission.DiffSnapshot = "diff --git a/README.md b/README.md";
+                    await testDb.Driver.Missions.UpdateAsync(entities.Mission).ConfigureAwait(false);
+
+                    await handler.HandleMissionCompleteAsync(entities.Mission, entities.Dock).ConfigureAwait(false);
+
+                    AssertEqual(0, git.MergeBranchCalls.Count, "LandingMode None must not merge locally");
+                    AssertEqual(0, git.PushCalls.Count, "LandingMode None must not push");
+                    AssertEqual(0, mergeQueue.Enqueued.Count, "LandingMode None must not enqueue");
+                    Mission? updated = await testDb.Driver.Missions.ReadAsync(entities.Mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.WorkProduced, updated!.Status, "Mission should stay WorkProduced for manual landing");
+                }
+            }));
+
+            cases.Add(CaseAsync("landing_mode_merge_queue_enqueues_instead_of_local_merge", "LandingMode MergeQueue enqueues the branch even when the vessel has a working directory", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    StubGitService git = new StubGitService();
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
+                    StubMergeQueueService mergeQueue = new StubMergeQueueService();
+                    MissionLandingHandler handler = new MissionLandingHandler(
+                        logging, testDb.Driver, settings, git, mergeQueue, new MessageTemplateService(logging), null, dockService, null);
+
+                    LandingTestEntitiesResult entities = await CreateTestEntitiesAsync(testDb.Driver, LandingModeEnum.MergeQueue);
+                    git.ExistingBranches.Add(entities.Dock.BranchName!);
+                    entities.Mission.Status = MissionStatusEnum.WorkProduced;
+                    entities.Mission.DiffSnapshot = "diff --git a/README.md b/README.md";
+                    await testDb.Driver.Missions.UpdateAsync(entities.Mission).ConfigureAwait(false);
+
+                    await handler.HandleMissionCompleteAsync(entities.Mission, entities.Dock).ConfigureAwait(false);
+
+                    AssertEqual(0, git.MergeBranchCalls.Count, "MergeQueue mode must not merge locally");
+                    AssertEqual(1, mergeQueue.Enqueued.Count, "MergeQueue mode should enqueue the mission branch");
+                    AssertEqual(entities.Dock.BranchName, mergeQueue.Enqueued[0].BranchName, "Enqueued branch");
+                }
+            }));
+
             // === Status Transition Validation ===
 
             cases.Add(CaseAsync("pull_request_open_allows_transition_to_complete", "PullRequestOpen allows transition to Complete", TestTags.Positive, () =>
@@ -418,7 +472,12 @@ namespace Test.Shared.Suites.Services
         /// </summary>
         private sealed class StubMergeQueueService : IMergeQueueService
         {
-            public Task<MergeEntry> EnqueueAsync(MergeEntry entry, CancellationToken token = default) => Task.FromResult(entry);
+            public List<MergeEntry> Enqueued { get; } = new List<MergeEntry>();
+            public Task<MergeEntry> EnqueueAsync(MergeEntry entry, CancellationToken token = default)
+            {
+                Enqueued.Add(entry);
+                return Task.FromResult(entry);
+            }
             public Task ProcessQueueAsync(CancellationToken token = default) => Task.CompletedTask;
             public Task CancelAsync(string entryId, string? tenantId = null, CancellationToken token = default) => Task.CompletedTask;
             public Task<List<MergeEntry>> ListAsync(string? tenantId = null, CancellationToken token = default) => Task.FromResult(new List<MergeEntry>());

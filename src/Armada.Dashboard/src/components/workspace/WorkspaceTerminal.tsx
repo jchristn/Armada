@@ -62,9 +62,9 @@ export default function WorkspaceTerminal({ vesselId }: { vesselId: string }) {
   }
 
   const colorFor = (kind: TerminalLine['kind']) =>
-    kind === 'command' ? 'var(--accent, #7aa2ff)'
-      : kind === 'stderr' ? 'var(--danger, #ff6b6b)'
-        : kind === 'meta' ? 'var(--text-dim)'
+    kind === 'command' ? '#93c5fd'
+      : kind === 'stderr' ? '#fca5a5'
+        : kind === 'meta' ? '#94a3b8'
           : undefined;
 
   return (
@@ -87,7 +87,7 @@ export default function WorkspaceTerminal({ vesselId }: { vesselId: string }) {
         }}
       >
         {lines.length === 0 ? (
-          <div className="text-dim">{t('Run a command in the vessel working tree (e.g. git status, ls, npm test).')}</div>
+          <div style={{ color: '#94a3b8' }}>{t('Run a command in the vessel working tree (e.g. git status, ls, npm test).')}</div>
         ) : (
           lines.map((line, i) => (
             <pre key={i} style={{ margin: 0, whiteSpace: 'pre-wrap', color: colorFor(line.kind) }}>{line.text}</pre>

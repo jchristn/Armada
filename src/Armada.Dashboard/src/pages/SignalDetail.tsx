@@ -98,7 +98,7 @@ export default function SignalDetail() {
   return (
     <div>
       {/* Breadcrumb */}
-      <div style={{ marginBottom: 16, fontSize: 13 }}>
+      <div className="breadcrumb" style={{ marginBottom: 16, fontSize: 13 }}>
         <Link to="/signals">{t('Signals')}</Link>
         <span className="text-muted"> / </span>
         <span className="mono">{signal.id}</span>

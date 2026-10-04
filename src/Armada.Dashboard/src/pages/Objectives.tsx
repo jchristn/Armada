@@ -476,43 +476,43 @@ export default function Objectives() {
             onChange={(event) => setSearch(event.target.value)}
             placeholder={t('Search by title, description, owner, category, captain, tags, or ID...')}
           />
-          <select value={kindFilter} onChange={(event) => setKindFilter(event.target.value as typeof kindFilter)}>
+          <select aria-label={t('All kinds')} value={kindFilter} onChange={(event) => setKindFilter(event.target.value as typeof kindFilter)}>
             <option value="all">{t('All kinds')}</option>
             {OBJECTIVE_KINDS.map((kind) => (
               <option key={kind} value={kind}>{kind}</option>
             ))}
           </select>
-          <select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as typeof priorityFilter)}>
+          <select aria-label={t('All priorities')} value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as typeof priorityFilter)}>
             <option value="all">{t('All priorities')}</option>
             {OBJECTIVE_PRIORITIES.map((priority) => (
               <option key={priority} value={priority}>{priority}</option>
             ))}
           </select>
-          <select value={backlogStateFilter} onChange={(event) => setBacklogStateFilter(event.target.value as typeof backlogStateFilter)}>
+          <select aria-label={t('All backlog states')} value={backlogStateFilter} onChange={(event) => setBacklogStateFilter(event.target.value as typeof backlogStateFilter)}>
             <option value="all">{t('All backlog states')}</option>
             {OBJECTIVE_BACKLOG_STATES.map((state) => (
               <option key={state} value={state}>{state}</option>
             ))}
           </select>
-          <select value={effortFilter} onChange={(event) => setEffortFilter(event.target.value as typeof effortFilter)}>
+          <select aria-label={t('All effort sizes')} value={effortFilter} onChange={(event) => setEffortFilter(event.target.value as typeof effortFilter)}>
             <option value="all">{t('All effort sizes')}</option>
             {OBJECTIVE_EFFORTS.map((effort) => (
               <option key={effort} value={effort}>{effort}</option>
             ))}
           </select>
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
+          <select aria-label={t('All lifecycle statuses')} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
             <option value="all">{t('All lifecycle statuses')}</option>
             {OBJECTIVE_STATUSES.map((status) => (
               <option key={status} value={status}>{status}</option>
             ))}
           </select>
-          <select value={fleetFilter} onChange={(event) => setFleetFilter(event.target.value)}>
+          <select aria-label={t('All fleets')} value={fleetFilter} onChange={(event) => setFleetFilter(event.target.value)}>
             <option value="all">{t('All fleets')}</option>
             {fleets.map((fleet) => (
               <option key={fleet.id} value={fleet.id}>{fleet.name}</option>
             ))}
           </select>
-          <select value={vesselFilter} onChange={(event) => setVesselFilter(event.target.value)}>
+          <select aria-label={t('All vessels')} value={vesselFilter} onChange={(event) => setVesselFilter(event.target.value)}>
             <option value="all">{t('All vessels')}</option>
             {vessels.map((vessel) => (
               <option key={vessel.id} value={vessel.id}>{vessel.name}</option>
@@ -530,7 +530,7 @@ export default function Objectives() {
             onChange={(event) => setTargetVersionFilter(event.target.value)}
             placeholder={t('Target version filter')}
           />
-          <select value={sortBy} onChange={(event) => setSortBy(event.target.value as BacklogSortKey)}>
+          <select aria-label={t('Sort by rank')} value={sortBy} onChange={(event) => setSortBy(event.target.value as BacklogSortKey)}>
             <option value="rank">{t('Sort by rank')}</option>
             <option value="priority">{t('Sort by priority')}</option>
             <option value="updated">{t('Sort by last updated')}</option>

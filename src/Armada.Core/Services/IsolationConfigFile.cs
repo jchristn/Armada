@@ -22,6 +22,14 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// When true, <see cref="RelativePath"/> is relative to the agent's working directory instead of the scoped
+        /// configuration directory. Used for project-local client configuration (for example <c>.gemini/settings.json</c>
+        /// or <c>.cursor/mcp.json</c>) in a throwaway working directory, which a CLI merges with the host user's own
+        /// configuration instead of replacing it. Default false.
+        /// </summary>
+        public bool RelativeToWorkingDirectory { get; set; } = false;
+
+        /// <summary>
         /// Exact contents to write to the file.
         /// </summary>
         public string Contents

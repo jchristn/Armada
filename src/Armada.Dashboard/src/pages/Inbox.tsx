@@ -12,8 +12,8 @@ import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 
 function severityColor(severity: InboxSeverity): string {
-  if (severity === 'Critical') return 'var(--danger, #ff6b6b)';
-  if (severity === 'Warning') return 'var(--warning, #d98a00)';
+  if (severity === 'Critical') return 'var(--red)';
+  if (severity === 'Warning') return 'var(--yellow)';
   return 'var(--text-dim)';
 }
 

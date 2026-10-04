@@ -139,11 +139,11 @@ export default function MissionHistoryChart({ vessels, fleets, onRefresh }: Miss
       <div className="mission-history-header">
         <span className="mission-history-title">{t('Mission History')}</span>
         <div className="mission-history-controls">
-          <select value={fleetId} onChange={e => { setFleetId(e.target.value); setVesselId(''); }} title={t('Filter by fleet')}>
+          <select aria-label={t('Filter by fleet')} value={fleetId} onChange={e => { setFleetId(e.target.value); setVesselId(''); }} title={t('Filter by fleet')}>
             <option value="">{t('All Fleets')}</option>
             {fleets.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
           </select>
-          <select value={vesselId} onChange={e => setVesselId(e.target.value)} title={t('Filter by vessel')}>
+          <select aria-label={t('Filter by vessel')} value={vesselId} onChange={e => setVesselId(e.target.value)} title={t('Filter by vessel')}>
             <option value="">{t('All Vessels')}</option>
             {filteredVessels.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
           </select>

@@ -182,7 +182,7 @@ export default function Docks() {
               <thead>
                 <tr>
                   <th className="col-checkbox">
-                    <input type="checkbox" checked={table.allSelected} onChange={e => e.target.checked ? table.selectAll() : table.clearSelection()} title={t('Select all docks')} />
+                    <input aria-label={t('Select all docks')} type="checkbox" checked={table.allSelected} onChange={e => e.target.checked ? table.selectAll() : table.clearSelection()} title={t('Select all docks')} />
                   </th>
                   <th>{t('ID')}</th>
                   <th>{t('Vessel')}</th>
@@ -215,7 +215,7 @@ export default function Docks() {
                 {table.sorted.map(d => (
                   <tr key={d.id} className="clickable" onClick={() => setViewRecord(d as unknown as Record<string, unknown>)}>
                     <td className="col-checkbox" onClick={e => e.stopPropagation()}>
-                      <input type="checkbox" checked={table.selected.includes(d.id)} onChange={() => table.toggleSelect(d.id)} title={t('Select this dock')} />
+                      <input aria-label={t('Select this dock')} type="checkbox" checked={table.selected.includes(d.id)} onChange={() => table.toggleSelect(d.id)} title={t('Select this dock')} />
                     </td>
                     <td className="mono text-dim table-id-cell">
                       <span className="id-display">

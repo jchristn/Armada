@@ -74,8 +74,11 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(off.Contains("--full-auto"));
                 AssertFalse(off.Contains("--dangerously-bypass-approvals-and-sandbox"));
                 AssertTrue(off.Contains("--sandbox") && off.Contains("workspace-write"));
+                // Codex 0.159 removed --full-auto from 'codex exec' (which never prompts); "full-auto" is now the
+                // workspace-write sandbox on macOS/Linux and the bypass flag on Windows.
                 List<string> on = runtime.Args(new Captain("on"));
-                AssertTrue(on.Contains("--full-auto") || on.Contains("--dangerously-bypass-approvals-and-sandbox"));
+                AssertFalse(on.Contains("--full-auto"), "removed flag is never passed");
+                AssertTrue((on.Contains("--sandbox") && on.Contains("workspace-write")) || on.Contains("--dangerously-bypass-approvals-and-sandbox"));
             }));
 
             cases.Add(Case("gemini_without_auto_approve", "Gemini uses auto_edit instead of yolo when auto-approve is off", TestTags.Positive, () =>

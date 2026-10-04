@@ -92,6 +92,11 @@ namespace Armada.Runtimes
 
             args.Add("exec");
 
+            // Chat and planning turns run in a throwaway directory that is not a git repository; 'codex exec' refuses to
+            // start there ("Not inside a trusted directory") without this flag. Mission worktrees are repositories, so
+            // the flag changes nothing for them.
+            args.Add("--skip-git-repo-check");
+
             if (!CaptainRuntimeOptions.GetAutoApprove(captain))
             {
                 // No approval bypass: run sandboxed to the workspace (no network, no writes outside the worktree).
@@ -108,7 +113,11 @@ namespace Armada.Runtimes
             }
             else if (String.Equals(ApprovalMode, "full-auto", StringComparison.OrdinalIgnoreCase))
             {
-                args.Add("--full-auto");
+                // "full-auto" means: run without prompting, inside the workspace-write sandbox. Codex 0.159 removed the
+                // --full-auto alias from 'codex exec' (exec never prompts); --sandbox workspace-write is the equivalent
+                // and is accepted by older releases too.
+                args.Add("--sandbox");
+                args.Add("workspace-write");
             }
 
             if (!String.IsNullOrEmpty(model))
@@ -143,6 +152,18 @@ namespace Armada.Runtimes
         /// from stdin, and this avoids the Windows cmd.exe multi-line-argument truncation.
         /// </summary>
         protected override bool UsePromptStdin => true;
+
+        /// <summary>
+        /// Read the host user's Codex config.toml (CODEX_HOME, then ~/.codex) so a thread-scoped launch can disable the
+        /// user's own Armada entries for the turn. The file is never modified.
+        /// </summary>
+        /// <param name="request">The plan request to populate.</param>
+        protected override void PopulateHostMcpConfiguration(CaptainThreadMcpPlanRequest request)
+        {
+            string? codexHome = Environment.GetEnvironmentVariable("CODEX_HOME");
+            if (String.IsNullOrWhiteSpace(codexHome)) codexHome = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex");
+            request.HostCodexConfigToml = TryReadHostFile(Path.Combine(codexHome, "config.toml"));
+        }
 
         #endregion
     }

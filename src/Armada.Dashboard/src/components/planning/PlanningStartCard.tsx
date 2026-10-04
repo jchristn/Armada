@@ -74,7 +74,7 @@ export default function PlanningStartCard(props: PlanningStartCardProps) {
         <div className="dispatch-form">
           <div className="form-group planning-start-title-group">
             <label>{t('Title')}</label>
-            <input
+            <input aria-label={t('Title')}
               value={title}
               disabled={creating}
               onChange={(event) => onTitleChange(event.target.value)}
@@ -85,7 +85,7 @@ export default function PlanningStartCard(props: PlanningStartCardProps) {
           <div className="planning-start-grid">
             <div className="form-group">
               <label>{t('Captain')}</label>
-              <select value={captainId} disabled={creating} onChange={(event) => onCaptainChange(event.target.value)}>
+              <select aria-label={t('Captain')} value={captainId} disabled={creating} onChange={(event) => onCaptainChange(event.target.value)}>
                 <option value="">{t('Select a captain...')}</option>
                 {captains.map((captain) => (
                   <option
@@ -101,7 +101,7 @@ export default function PlanningStartCard(props: PlanningStartCardProps) {
 
             <div className="form-group">
               <label>{t('Fleet')}</label>
-              <select value={fleetId} disabled={creating} onChange={(event) => onFleetChange(event.target.value)}>
+              <select aria-label={t('Fleet')} value={fleetId} disabled={creating} onChange={(event) => onFleetChange(event.target.value)}>
                 <option value="">{t('Any fleet')}</option>
                 {fleets.map((fleet) => (
                   <option key={fleet.id} value={fleet.id}>
@@ -113,7 +113,7 @@ export default function PlanningStartCard(props: PlanningStartCardProps) {
 
             <div className="form-group">
               <label>{t('Vessel')}</label>
-              <select value={vesselId} disabled={creating} onChange={(event) => onVesselChange(event.target.value)}>
+              <select aria-label={t('Vessel')} value={vesselId} disabled={creating} onChange={(event) => onVesselChange(event.target.value)}>
                 <option value="">{t('Select a vessel...')}</option>
                 {availableVessels.map((vessel) => (
                   <option key={vessel.id} value={vessel.id}>
@@ -128,7 +128,7 @@ export default function PlanningStartCard(props: PlanningStartCardProps) {
                 <label>{t('Pipeline')}</label>
                 <Link to="/pipelines" className="form-label-link">{t('Manage pipelines')}</Link>
               </div>
-              <select value={pipelineId} disabled={creating} onChange={(event) => onPipelineChange(event.target.value)}>
+              <select aria-label={t('Pipeline')} value={pipelineId} disabled={creating} onChange={(event) => onPipelineChange(event.target.value)}>
                 <option value="">{t('Inherit later during dispatch')}</option>
                 {pipelines.map((pipeline) => (
                   <option key={pipeline.id} value={pipeline.id}>

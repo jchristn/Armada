@@ -4,9 +4,9 @@ import { useLocale } from '../../context/LocaleContext';
 
 function lineColor(line: string): string | undefined {
   if (line.startsWith('+') && !line.startsWith('+++')) return 'var(--success, #4caf50)';
-  if (line.startsWith('-') && !line.startsWith('---')) return 'var(--danger, #ff6b6b)';
-  if (line.startsWith('@@')) return 'var(--accent, #7aa2ff)';
-  if (line.startsWith('diff ') || line.startsWith('index ') || line.startsWith('+++') || line.startsWith('---')) return 'var(--text-dim)';
+  if (line.startsWith('-') && !line.startsWith('---')) return '#fca5a5';
+  if (line.startsWith('@@')) return '#93c5fd';
+  if (line.startsWith('diff ') || line.startsWith('index ') || line.startsWith('+++') || line.startsWith('---')) return '#94a3b8';
   return undefined;
 }
 

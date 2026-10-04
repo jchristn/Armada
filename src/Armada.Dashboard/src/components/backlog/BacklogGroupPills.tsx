@@ -14,7 +14,7 @@ export default function BacklogGroupPills({
   onChange,
 }: BacklogGroupPillsProps) {
   return (
-    <div className="backlog-group-pills" role="tablist" aria-label="Backlog group views">
+    <div className="backlog-group-pills" role="group" aria-label="Backlog group views">
       {groups.map((group) => (
         <button
           key={group.key}

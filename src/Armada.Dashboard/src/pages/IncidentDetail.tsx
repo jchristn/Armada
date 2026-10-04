@@ -450,12 +450,12 @@ export default function IncidentDetail() {
           <div className="detail-form-grid">
             <div className="detail-field detail-field-full">
               <span className="detail-label">{t('Title')}</span>
-              <input value={title} onChange={(event) => setTitle(event.target.value)} disabled={!canManage} />
+              <input aria-label={t('Title')} value={title} onChange={(event) => setTitle(event.target.value)} disabled={!canManage} />
             </div>
 
             <div className="detail-field">
               <span className="detail-label">{t('Status')}</span>
-              <select value={status} onChange={(event) => setStatus(event.target.value as IncidentStatus)} disabled={!canManage}>
+              <select aria-label={t('Status')} value={status} onChange={(event) => setStatus(event.target.value as IncidentStatus)} disabled={!canManage}>
                 {INCIDENT_STATUSES.map((value) => (
                   <option key={value} value={value}>{value}</option>
                 ))}
@@ -464,7 +464,7 @@ export default function IncidentDetail() {
 
             <div className="detail-field">
               <span className="detail-label">{t('Severity')}</span>
-              <select value={severity} onChange={(event) => setSeverity(event.target.value as IncidentSeverity)} disabled={!canManage}>
+              <select aria-label={t('Severity')} value={severity} onChange={(event) => setSeverity(event.target.value as IncidentSeverity)} disabled={!canManage}>
                 {INCIDENT_SEVERITIES.map((value) => (
                   <option key={value} value={value}>{value}</option>
                 ))}
@@ -473,7 +473,7 @@ export default function IncidentDetail() {
 
             <div className="detail-field">
               <span className="detail-label">{t('Vessel')}</span>
-              <select value={vesselId} onChange={(event) => setVesselId(event.target.value)} disabled={!canManage}>
+              <select aria-label={t('Vessel')} value={vesselId} onChange={(event) => setVesselId(event.target.value)} disabled={!canManage}>
                 <option value="">{t('Select a vessel')}</option>
                 {vessels.map((vessel) => (
                   <option key={vessel.id} value={vessel.id}>{vessel.name}</option>
@@ -483,7 +483,7 @@ export default function IncidentDetail() {
 
             <div className="detail-field">
               <span className="detail-label">{t('Environment')}</span>
-              <select value={environmentId} onChange={(event) => setEnvironmentId(event.target.value)} disabled={!canManage}>
+              <select aria-label={t('Environment')} value={environmentId} onChange={(event) => setEnvironmentId(event.target.value)} disabled={!canManage}>
                 <option value="">{t('Select an environment')}</option>
                 {environments.map((environment) => (
                   <option key={environment.id} value={environment.id}>{environment.name}</option>
@@ -493,12 +493,12 @@ export default function IncidentDetail() {
 
             <div className="detail-field">
               <span className="detail-label">{t('Environment Name')}</span>
-              <input value={environmentName} onChange={(event) => setEnvironmentName(event.target.value)} disabled={!canManage} />
+              <input aria-label={t('Environment Name')} value={environmentName} onChange={(event) => setEnvironmentName(event.target.value)} disabled={!canManage} />
             </div>
 
             <div className="detail-field">
               <span className="detail-label">{t('Deployment')}</span>
-              <select value={deploymentId} onChange={(event) => setDeploymentId(event.target.value)} disabled={!canManage}>
+              <select aria-label={t('Deployment')} value={deploymentId} onChange={(event) => setDeploymentId(event.target.value)} disabled={!canManage}>
                 <option value="">{t('No linked deployment')}</option>
                 {deployments.map((deployment) => (
                   <option key={deployment.id} value={deployment.id}>{deployment.title}</option>
@@ -508,7 +508,7 @@ export default function IncidentDetail() {
 
             <div className="detail-field">
               <span className="detail-label">{t('Release')}</span>
-              <select value={releaseId} onChange={(event) => setReleaseId(event.target.value)} disabled={!canManage}>
+              <select aria-label={t('Release')} value={releaseId} onChange={(event) => setReleaseId(event.target.value)} disabled={!canManage}>
                 <option value="">{t('No linked release')}</option>
                 {releases.map((release) => (
                   <option key={release.id} value={release.id}>{release.title}</option>
@@ -518,57 +518,57 @@ export default function IncidentDetail() {
 
             <div className="detail-field">
               <span className="detail-label">{t('Mission ID')}</span>
-              <input value={missionId} onChange={(event) => setMissionId(event.target.value)} disabled={!canManage} placeholder="mis_..." />
+              <input aria-label={t('Mission ID')} value={missionId} onChange={(event) => setMissionId(event.target.value)} disabled={!canManage} placeholder="mis_..." />
             </div>
 
             <div className="detail-field">
               <span className="detail-label">{t('Voyage ID')}</span>
-              <input value={voyageId} onChange={(event) => setVoyageId(event.target.value)} disabled={!canManage} placeholder="voy_..." />
+              <input aria-label={t('Voyage ID')} value={voyageId} onChange={(event) => setVoyageId(event.target.value)} disabled={!canManage} placeholder="voy_..." />
             </div>
 
             <div className="detail-field">
               <span className="detail-label">{t('Detected')}</span>
-              <input type="datetime-local" value={detectedUtc} onChange={(event) => setDetectedUtc(event.target.value)} disabled={!canManage} />
+              <input aria-label={t('Detected')} type="datetime-local" value={detectedUtc} onChange={(event) => setDetectedUtc(event.target.value)} disabled={!canManage} />
             </div>
 
             <div className="detail-field">
               <span className="detail-label">{t('Mitigated')}</span>
-              <input type="datetime-local" value={mitigatedUtc} onChange={(event) => setMitigatedUtc(event.target.value)} disabled={!canManage} />
+              <input aria-label={t('Mitigated')} type="datetime-local" value={mitigatedUtc} onChange={(event) => setMitigatedUtc(event.target.value)} disabled={!canManage} />
             </div>
 
             <div className="detail-field">
               <span className="detail-label">{t('Closed')}</span>
-              <input type="datetime-local" value={closedUtc} onChange={(event) => setClosedUtc(event.target.value)} disabled={!canManage} />
+              <input aria-label={t('Closed')} type="datetime-local" value={closedUtc} onChange={(event) => setClosedUtc(event.target.value)} disabled={!canManage} />
             </div>
 
             <div className="detail-field">
               <span className="detail-label">{t('Rollback Deployment')}</span>
-              <input value={rollbackDeploymentId} onChange={(event) => setRollbackDeploymentId(event.target.value)} disabled={!canManage} placeholder="dpl_..." />
+              <input aria-label={t('Rollback Deployment')} value={rollbackDeploymentId} onChange={(event) => setRollbackDeploymentId(event.target.value)} disabled={!canManage} placeholder="dpl_..." />
             </div>
 
             <div className="detail-field detail-field-full">
               <span className="detail-label">{t('Summary')}</span>
-              <textarea rows={3} value={summary} onChange={(event) => setSummary(event.target.value)} disabled={!canManage} />
+              <textarea aria-label={t('Summary')} rows={3} value={summary} onChange={(event) => setSummary(event.target.value)} disabled={!canManage} />
             </div>
 
             <div className="detail-field detail-field-full">
               <span className="detail-label">{t('Impact')}</span>
-              <textarea rows={3} value={impact} onChange={(event) => setImpact(event.target.value)} disabled={!canManage} />
+              <textarea aria-label={t('Impact')} rows={3} value={impact} onChange={(event) => setImpact(event.target.value)} disabled={!canManage} />
             </div>
 
             <div className="detail-field detail-field-full">
               <span className="detail-label">{t('Root Cause')}</span>
-              <textarea rows={3} value={rootCause} onChange={(event) => setRootCause(event.target.value)} disabled={!canManage} />
+              <textarea aria-label={t('Root Cause')} rows={3} value={rootCause} onChange={(event) => setRootCause(event.target.value)} disabled={!canManage} />
             </div>
 
             <div className="detail-field detail-field-full">
               <span className="detail-label">{t('Recovery Notes')}</span>
-              <textarea rows={4} value={recoveryNotes} onChange={(event) => setRecoveryNotes(event.target.value)} disabled={!canManage} />
+              <textarea aria-label={t('Recovery Notes')} rows={4} value={recoveryNotes} onChange={(event) => setRecoveryNotes(event.target.value)} disabled={!canManage} />
             </div>
 
             <div className="detail-field detail-field-full">
               <span className="detail-label">{t('Postmortem')}</span>
-              <textarea rows={5} value={postmortem} onChange={(event) => setPostmortem(event.target.value)} disabled={!canManage} />
+              <textarea aria-label={t('Postmortem')} rows={5} value={postmortem} onChange={(event) => setPostmortem(event.target.value)} disabled={!canManage} />
             </div>
           </div>
 

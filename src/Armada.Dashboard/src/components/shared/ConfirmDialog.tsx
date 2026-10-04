@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { useDialog } from '../../lib/dialogA11y';
 import { useLocale } from '../../context/LocaleContext';
 
 interface ConfirmDialogProps {
@@ -30,6 +31,10 @@ export default function ConfirmDialog({
 }: ConfirmDialogProps) {
   const { t } = useLocale();
   const [confirmationText, setConfirmationText] = useState('');
+  const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  const messageId = useId();
+  useDialog(panelRef, open, onCancel);
 
   useEffect(() => {
     if (open) setConfirmationText('');
@@ -40,12 +45,18 @@ export default function ConfirmDialog({
   return (
     <div className="modal-overlay" style={{ zIndex: 1500 }} onClick={onCancel}>
       <div
+        ref={panelRef}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={messageId}
+        tabIndex={-1}
         className="modal-box"
         style={width ? { maxWidth: width } : undefined}
         onClick={e => e.stopPropagation()}
       >
-        <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>{t(title)}</h3>
-        <p style={{ fontSize: '0.9rem', marginBottom: '1.25rem', color: 'var(--text)' }}>
+        <h3 id={titleId} style={{ marginTop: 0, marginBottom: '1rem' }}>{t(title)}</h3>
+        <p id={messageId} style={{ fontSize: '0.9rem', marginBottom: '1.25rem', color: 'var(--text)' }}>
           {message}
         </p>
         {requireDeleteConfirm && (
@@ -63,14 +74,16 @@ export default function ConfirmDialog({
               value={confirmationText}
               onChange={e => setConfirmationText(e.target.value)}
               placeholder={t('delete')}
+              aria-label={t('Type `delete` into the confirmation box to continue.')}
             />
           </>
         )}
         <div className="modal-actions">
-          <button className="btn" onClick={onCancel}>
+          <button type="button" className="btn" onClick={onCancel}>
             {t(cancelLabel)}
           </button>
           <button
+            type="button"
             className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`}
             onClick={onConfirm}
             disabled={requireDeleteConfirm && confirmationText !== 'delete'}

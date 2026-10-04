@@ -93,7 +93,7 @@ function TreeBranch(props: WorkspaceTreeProps & { directoryPath: string; depth: 
                 )}
 
                 {!entry.isDirectory ? (
-                  <input
+                  <input aria-label="Select file for Workspace actions"
                     className="workspace-tree-checkbox"
                     type="checkbox"
                     checked={selected}

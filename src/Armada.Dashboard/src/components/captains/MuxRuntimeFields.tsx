@@ -61,7 +61,7 @@ export default function MuxRuntimeFields({ runtime, form, onChange, t, compact =
       <div className="wizard-form-grid">
         <div className="form-group">
           <label title={t('Optional mux config directory override. Leave blank to use mux defaults.')}>{t('Mux Config Directory')}</label>
-          <input
+          <input aria-label={t('Mux Config Directory')}
             value={form.muxConfigDirectory}
             onChange={(event) => onChange({ muxConfigDirectory: event.target.value })}
             placeholder={t('Optional path, e.g. C:\\Users\\you\\.mux')}
@@ -69,7 +69,7 @@ export default function MuxRuntimeFields({ runtime, form, onChange, t, compact =
         </div>
         <div className="form-group">
           <label title={t('Named mux endpoint to validate and launch for this captain.')}>{t('Mux Endpoint')}</label>
-          <input
+          <input aria-label={t('Mux Endpoint')}
             list="mux-endpoint-options"
             value={form.muxEndpoint}
             onChange={(event) => onChange({ muxEndpoint: event.target.value })}
@@ -98,7 +98,7 @@ export default function MuxRuntimeFields({ runtime, form, onChange, t, compact =
         <div className="wizard-form-grid" style={{ marginTop: '0.75rem' }}>
           <div className="form-group">
             <label>{t('Mux Base URL')}</label>
-            <input
+            <input aria-label={t('Mux Base URL')}
               value={form.muxBaseUrl}
               onChange={(event) => onChange({ muxBaseUrl: event.target.value })}
               placeholder={t('Optional override')}
@@ -106,7 +106,7 @@ export default function MuxRuntimeFields({ runtime, form, onChange, t, compact =
           </div>
           <div className="form-group">
             <label>{t('Mux Adapter Type')}</label>
-            <input
+            <input aria-label={t('Mux Adapter Type')}
               value={form.muxAdapterType}
               onChange={(event) => onChange({ muxAdapterType: event.target.value })}
               placeholder={t('Optional override')}
@@ -114,7 +114,7 @@ export default function MuxRuntimeFields({ runtime, form, onChange, t, compact =
           </div>
           <div className="form-group">
             <label>{t('Mux Temperature')}</label>
-            <input
+            <input aria-label={t('Mux Temperature')}
               value={form.muxTemperature}
               onChange={(event) => onChange({ muxTemperature: event.target.value })}
               placeholder={t('Optional number')}
@@ -122,7 +122,7 @@ export default function MuxRuntimeFields({ runtime, form, onChange, t, compact =
           </div>
           <div className="form-group">
             <label>{t('Mux Max Tokens')}</label>
-            <input
+            <input aria-label={t('Mux Max Tokens')}
               value={form.muxMaxTokens}
               onChange={(event) => onChange({ muxMaxTokens: event.target.value })}
               placeholder={t('Optional integer')}
@@ -130,7 +130,7 @@ export default function MuxRuntimeFields({ runtime, form, onChange, t, compact =
           </div>
           <div className="form-group">
             <label>{t('Mux System Prompt Path')}</label>
-            <input
+            <input aria-label={t('Mux System Prompt Path')}
               value={form.muxSystemPromptPath}
               onChange={(event) => onChange({ muxSystemPromptPath: event.target.value })}
               placeholder={t('Optional path')}
@@ -138,7 +138,7 @@ export default function MuxRuntimeFields({ runtime, form, onChange, t, compact =
           </div>
           <div className="form-group">
             <label>{t('Mux Approval Policy')}</label>
-            <select
+            <select aria-label={t('Mux Approval Policy')}
               value={form.muxApprovalPolicy}
               onChange={(event) => onChange({ muxApprovalPolicy: event.target.value })}
             >

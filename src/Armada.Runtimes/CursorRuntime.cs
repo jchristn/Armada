@@ -110,6 +110,16 @@ namespace Armada.Runtimes
         /// </summary>
         protected override bool UsePromptStdin => true;
 
+        /// <summary>
+        /// Read the host user's ~/.cursor/mcp.json so a thread-scoped launch can redefine the user's own Armada entries
+        /// in the turn's project configuration. The file is never modified.
+        /// </summary>
+        /// <param name="request">The plan request to populate.</param>
+        protected override void PopulateHostMcpConfiguration(Armada.Core.Services.CaptainThreadMcpPlanRequest request)
+        {
+            request.HostCursorMcpJson = TryReadHostFile(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cursor", "mcp.json"));
+        }
+
         #endregion
     }
 }

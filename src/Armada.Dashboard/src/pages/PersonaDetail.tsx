@@ -317,7 +317,7 @@ export default function PersonaDetail() {
               </div>
               <div className="form-field detail-field-full">
                 <label>{t('Template Description')}</label>
-                <input
+                <input aria-label={t('Template Description')}
                   value={promptDescription}
                   onChange={e => {
                     setPromptDescription(e.target.value);
@@ -331,7 +331,7 @@ export default function PersonaDetail() {
                   <label style={{ marginBottom: 0 }}>{t('Prompt Content')}</label>
                   <span className="text-dim">{t('{{count}} characters', { count: promptContent.length.toLocaleString() })}</span>
                 </div>
-                <textarea
+                <textarea aria-label={t('Prompt Content')}
                   rows={18}
                   value={promptContent}
                   onChange={e => {

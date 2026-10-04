@@ -789,7 +789,7 @@ export default function Workspace() {
                 <button type="button" className="btn btn-sm" onClick={openContextModal}>{t('Context')}</button>
               </div>
 
-              <select
+              <select aria-label={t('Switch vessel')}
                 className="workspace-header-select"
                 value={vesselId}
                 onChange={(event) => navigate(`/workspace/${event.target.value}`)}
@@ -893,6 +893,7 @@ export default function Workspace() {
                     <textarea
                       ref={editorRef}
                       className="workspace-editor-input"
+                      aria-label={activeFile.path}
                       value={activeDraft}
                       onChange={(event) => updateDraft(activeFile.path, event.target.value)}
                       onScroll={(event) => syncLineNumberScroll(editorLineNumberRef, event.currentTarget.scrollTop)}
@@ -1052,6 +1053,7 @@ export default function Workspace() {
               </div>
               <textarea
                 className="workspace-context-textarea"
+                aria-label={t('Project Context')}
                 value={contextDrafts.projectContext}
                 onChange={(event) => setContextDrafts((current) => ({ ...current, projectContext: event.target.value }))}
                 spellCheck={false}
@@ -1067,6 +1069,7 @@ export default function Workspace() {
               </div>
               <textarea
                 className="workspace-context-textarea"
+                aria-label={t('Style Guide')}
                 value={contextDrafts.styleGuide}
                 onChange={(event) => setContextDrafts((current) => ({ ...current, styleGuide: event.target.value }))}
                 spellCheck={false}
@@ -1082,6 +1085,7 @@ export default function Workspace() {
               </div>
               <textarea
                 className="workspace-context-textarea"
+                aria-label={t('Model Context')}
                 value={contextDrafts.modelContext}
                 onChange={(event) => setContextDrafts((current) => ({ ...current, modelContext: event.target.value }))}
                 spellCheck={false}

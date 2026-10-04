@@ -2,7 +2,7 @@
 
 A captain is whatever actually does the work on a mission: a coding-agent CLI that Armada launches as a child
 process, or an in-process loop that talks to an inference endpoint directly. Armada ships seven runtimes. They are not
-equal. Claude Code gets the most attention in the code (token streaming, tool cards, gated Ask threads), Mux and
+equal. Claude Code gets the most attention in the code (token streaming, tool cards), Mux and
 OpenCode come close because they speak structured JSON, and Codex, Gemini, and Cursor are driven as plain-text CLIs.
 
 Everything below is read from the runtime code (`src/Armada.Runtimes`, `src/Armada.Core/Services`, and the chat and
@@ -45,7 +45,7 @@ captain hosts and upgrade them on purpose.
 | Missions | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | Planning sessions | Yes | Yes | Yes | Yes | Yes | Yes | No |
 | Ask Armada threads | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| Ask approval gating | Yes | No | No | No | No | No | Yes |
+| Ask approval gating | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | Streaming replies (chat and planning) | Token deltas | Line by line | Line by line | Line by line | Token deltas | JSON events | Per model response |
 | Thinking display | Prompted block | Prompted block | Prompted block | Prompted block | Native | Native | Prompted block |
 | Tool-call cards in chat | Yes | No | No | No | Yes | Yes | Yes |
@@ -59,12 +59,36 @@ A few of those cells need more than one word.
 **Ask approval gating** is the one that matters most. Ask threads hold mutating Armada tool calls for a human to
 approve unless the thread is set to auto-approve. That only works when the captain's connection to Armada's MCP server
 carries a thread-scoped session token, because the token is how the server knows which thread a tool call belongs to.
-`CaptainChatService` binds that token for exactly two runtimes. ApiEndpoint captains get it through `ARMADA_MCP_URL` and
-`ARMADA_MCP_TOKEN`. Claude Code gets a per-launch strict MCP config with the token in an `X-Token` header. Every other
-CLI runtime keeps whatever MCP configuration the host user has, so its Armada tool calls arrive as ordinary
-authenticated calls and are not held for approval. The dashboard reflects the same split: the Ask page treats only
-`ClaudeCode` and `ApiEndpoint` as runtimes the server connects to Armada's tools. W6.3 in `V1_READINESS.md` tracks
-extending this.
+ApiEndpoint captains get the token through `ARMADA_MCP_URL` and `ARMADA_MCP_TOKEN`. Every CLI runtime gets it from
+`CaptainThreadMcpPlanner` for each Ask turn, using the CLI's own per-invocation override so its login stays where the
+CLI expects it (no `HOME`, `CODEX_HOME`, or config-directory redirect). The token travels in the `ARMADA_MCP_TOKEN`
+environment variable and is sent as an `X-Token` header; where the CLI expands environment variables in its MCP
+configuration the token is not written to disk or put on the command line.
+
+| Runtime | How an Ask turn reaches Armada with the thread token | Other Armada entries in the user's config |
+|---------|------------------------------------------------------|--------------------------------------------|
+| Claude Code | `--strict-mcp-config --mcp-config <per-launch file>` (token in the file, deleted when the process exits) | Ignored (strict) |
+| Codex | `-c mcp_servers.<name>={ url, env_http_headers = { "X-Token" = "ARMADA_MCP_TOKEN" }, default_tools_approval_mode = "approve" }` | Disabled with `-c mcp_servers.<alias>.enabled=false`; the scoped entry is named `armada`, or `armada_ask` when the user already has an `armada` entry |
+| Gemini | `.gemini/settings.json` in the turn's throwaway working directory (`httpUrl`, header `$ARMADA_MCP_TOKEN`), `GEMINI_CLI_TRUST_WORKSPACE=true`, `--allowed-mcp-server-names armada` | Not loaded (allow list) |
+| Cursor | `.cursor/mcp.json` in the throwaway working directory (header `${env:ARMADA_MCP_TOKEN}`); `--force` approves it | Each alias found in `~/.cursor/mcp.json` is redefined as the scoped server |
+| Mux | `--mcp-config <per-launch file> --strict-mcp-config` (API-key auth in `X-Token`, value `${ARMADA_MCP_TOKEN}`) | Ignored (strict) |
+| OpenCode | `OPENCODE_CONFIG_CONTENT` merged over the user's config: a fresh remote entry (header `{env:ARMADA_MCP_TOKEN}`) | Disabled with `"enabled": false`; same naming rule as Codex |
+
+An "alias" is any server whose name contains `armada`, whose URL targets the Admiral MCP port, or whose command runs
+the `armada` CLI or `Armada.Helm`. Codex and OpenCode merge an override into an existing entry of the same name (an
+`Authorization` header in the user's entry would survive and win over `X-Token`), which is why they get a fresh entry
+instead. Codex needs `default_tools_approval_mode = "approve"` because `codex exec` never prompts and otherwise refuses
+every MCP call; the human approval happens in the Ask thread. The Gemini trust variable applies only to the throwaway
+directory (an untrusted folder loads no MCP servers at all). Verified on macOS on 2026-10-04 with real CLIs: full Ask
+turns with Codex 0.159.3 (signed in), Claude Code 2.1.289, and OpenCode 1.18.34 (free `opencode/big-pickle` model)
+produced a pending proposal and nothing ran until approval; Gemini CLI 0.62.0, cursor-agent 2026.10.01, and Mux 1.1.1
+were verified up to the MCP handshake (the server received the thread token in `X-Token`) because no signed-in account
+or model endpoint was available for them. The Codex override uses `default_tools_approval_mode`, which older Codex
+releases may not accept; Mux needs 0.7.0 or newer for `--strict-mcp-config`.
+
+A `Custom` runtime is not gated, and neither is a captain on a server whose MCP listener is off. The dashboard reads
+`askApprovalGated` from `GET /api/v1/captains/{id}/tools`; when it is false, the Ask conversation shows a persistent
+note under the header: "Actions from this captain run without approval cards."
 
 **Planning** runs for any CLI runtime. ApiEndpoint and Harbor-hosted (remote) runtimes report
 `SupportsPlanningSessions = false`, and the coordinator refuses them. The user-facing reason string on `Captain` still
@@ -129,11 +153,13 @@ Guides: [INSTRUCTIONS_FOR_CLAUDE_CODE.md](INSTRUCTIONS_FOR_CLAUDE_CODE.md),
 ### Codex
 
 ```
-codex exec --full-auto [--model <model>] [-c model_reasoning_effort=<level>] [--output-last-message <file>]
+codex exec --skip-git-repo-check --sandbox workspace-write [--model <model>] [-c model_reasoning_effort=<level>] [--output-last-message <file>]
 ```
 
-The approval mode defaults to `full-auto`. On Windows, `full-auto` is sent as `--dangerously-bypass-approvals-and-sandbox`
-instead, and a `dangerous` mode sends that flag on every OS. The final reply is read from the
+The approval mode defaults to `full-auto`, sent as `--sandbox workspace-write` (Codex 0.159 removed the `--full-auto`
+alias from `codex exec`, which never prompts). `--skip-git-repo-check` lets chat and planning turns start in their
+throwaway directory, which is not a git repository. On Windows, `full-auto` is sent as
+`--dangerously-bypass-approvals-and-sandbox` instead, and a `dangerous` mode sends that flag on every OS. The final reply is read from the
 `--output-last-message` file. Isolated launches write `config.toml` with an `[mcp_servers.armada]` entry and set
 `CODEX_HOME` to the scoped directory. When Armada validates a Codex captain it first runs `git init` in the scratch
 directory, since Codex expects to run inside a git repository.
@@ -208,7 +234,7 @@ has the coding tools only.
 ## Running agents safely
 
 Every CLI runtime is launched with its "do not ask me" switch on by default: `--dangerously-skip-permissions` for
-Claude Code, `--full-auto` for Codex (and `--dangerously-bypass-approvals-and-sandbox` on Windows), `--approval-mode
+Claude Code, `--sandbox workspace-write` for Codex (and `--dangerously-bypass-approvals-and-sandbox` on Windows), `--approval-mode
 yolo` for Gemini, `--force` for Cursor, `--yolo` for Mux unless an approval policy is set, and `--auto` for OpenCode.
 A captain runs unattended inside a git worktree, so there is nobody to answer a permission prompt; without these flags
 the mission would stall on its first shell command.

@@ -77,15 +77,48 @@ export default function ActionMenu({ items, id, triggerLabel }: ActionMenuProps)
     return () => document.removeEventListener('click', handleClick, true);
   }, [open]);
 
-  // Close on escape
+  // Keyboard: the menu renders in a portal at the end of <body>, so move focus into it when it opens, let the arrow
+  // keys, Home and End move between items, and hand focus back to the trigger on Escape or Tab.
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuItems = useCallback(
+    () => Array.from(dropdownRef.current?.querySelectorAll<HTMLButtonElement>('.action-menu-item:not(:disabled)') ?? []),
+    [],
+  );
+  useEffect(() => {
+    if (!open) return;
+    const first = menuItems()[0];
+    if (first) first.focus();
+  }, [open, menuItems]);
   useEffect(() => {
     if (!open) return;
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') {
+        // Capture phase: close only the menu, not a dialog the menu sits in.
+        e.stopPropagation();
+        e.preventDefault();
+        setOpen(false);
+        triggerRef.current?.focus();
+        return;
+      }
+      if (!dropdownRef.current?.contains(document.activeElement)) return;
+      const list = menuItems();
+      const index = list.indexOf(document.activeElement as HTMLButtonElement);
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const next = e.key === 'ArrowDown' ? (index + 1) % list.length : (index - 1 + list.length) % list.length;
+        list[next]?.focus();
+      } else if (e.key === 'Home' || e.key === 'End') {
+        e.preventDefault();
+        list[e.key === 'Home' ? 0 : list.length - 1]?.focus();
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
     };
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [open]);
+    document.addEventListener('keydown', handleKey, true);
+    return () => document.removeEventListener('keydown', handleKey, true);
+  }, [open, menuItems]);
 
   useEffect(() => {
     if (!open) return;
@@ -102,13 +135,15 @@ export default function ActionMenu({ items, id, triggerLabel }: ActionMenuProps)
 
   return (
     <div className="action-menu-wrap" ref={wrapRef} data-menu-id={id}>
-      <button type="button" className="action-menu-btn" onClick={handleToggle} title={triggerLabel ?? t('Actions')} aria-label={triggerLabel ?? t('Actions')} aria-haspopup="menu" aria-expanded={open}>
+      <button ref={triggerRef} type="button" className="action-menu-btn" onClick={handleToggle} title={triggerLabel ?? t('Actions')} aria-label={triggerLabel ?? t('Actions')} aria-haspopup="menu" aria-expanded={open}>
         &#8942;
       </button>
       {open && createPortal(
         <div
           ref={dropdownRef}
           className={`action-menu-dropdown action-menu-dropdown-fixed${dropUp ? ' drop-up' : ''}`}
+          role="menu"
+          aria-label={triggerLabel ?? t('Actions')}
           style={{ top: `${menuStyle.top}px`, left: `${menuStyle.left}px`, minWidth: `${menuStyle.minWidth}px` }}
           onClick={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
@@ -116,12 +151,16 @@ export default function ActionMenu({ items, id, triggerLabel }: ActionMenuProps)
           {items.map((item, i) => (
             <button
               key={i}
+              type="button"
+              role="menuitem"
               className={`action-menu-item${item.danger ? ' danger' : ''}`}
               disabled={item.disabled}
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 setOpen(false);
+                // Return focus to the trigger first so a dialog the item opens restores focus to it on close.
+                triggerRef.current?.focus();
                 item.onClick();
               }}
             >

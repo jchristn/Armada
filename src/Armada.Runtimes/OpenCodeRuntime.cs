@@ -182,6 +182,33 @@ namespace Armada.Runtimes
         /// </summary>
         protected override bool UsePromptStdin => true;
 
+        /// <summary>
+        /// Read the host user's OpenCode configuration (global opencode.json / opencode.jsonc / config.json and any
+        /// OPENCODE_CONFIG file) and the inherited OPENCODE_CONFIG_CONTENT so a thread-scoped launch can disable the user's
+        /// own Armada entries and merge into, rather than replace, inline configuration. Nothing is modified.
+        /// </summary>
+        /// <param name="request">The plan request to populate.</param>
+        protected override void PopulateHostMcpConfiguration(CaptainThreadMcpPlanRequest request)
+        {
+            List<string> documents = new List<string>();
+            string? xdgConfig = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
+            string globalDirectory = !String.IsNullOrWhiteSpace(xdgConfig)
+                ? Path.Combine(xdgConfig, "opencode")
+                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config", "opencode");
+            foreach (string fileName in new string[] { "opencode.jsonc", "opencode.json", "config.json" })
+            {
+                string? text = TryReadHostFile(Path.Combine(globalDirectory, fileName));
+                if (!String.IsNullOrWhiteSpace(text)) documents.Add(text!);
+            }
+
+            string? customPath = Environment.GetEnvironmentVariable("OPENCODE_CONFIG");
+            string? custom = TryReadHostFile(customPath);
+            if (!String.IsNullOrWhiteSpace(custom)) documents.Add(custom!);
+
+            request.HostOpenCodeConfigDocuments = documents;
+            request.ExistingOpenCodeConfigContent = Environment.GetEnvironmentVariable("OPENCODE_CONFIG_CONTENT");
+        }
+
         #endregion
     }
 }

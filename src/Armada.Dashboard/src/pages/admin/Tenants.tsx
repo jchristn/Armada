@@ -217,7 +217,7 @@ export default function Tenants() {
             <table>
               <thead>
                 <tr>
-                  <th className="col-checkbox"><input type="checkbox" checked={allSelected} onChange={e => e.target.checked ? setSelected(filtered.map(tenant => tenant.id)) : setSelected([])} title={t('Select all tenants')} /></th>
+                  <th className="col-checkbox"><input aria-label={t('Select all tenants')} type="checkbox" checked={allSelected} onChange={e => e.target.checked ? setSelected(filtered.map(tenant => tenant.id)) : setSelected([])} title={t('Select all tenants')} /></th>
                   <th className="sortable" onClick={() => handleSort('name')}>{t('Name')}{sortIcon('name')}</th>
                   <th>{t('ID')}</th>
                   <th className="sortable" onClick={() => handleSort('active')}>{t('Active')}{sortIcon('active')}</th>
@@ -240,7 +240,7 @@ export default function Tenants() {
                       ? openEdit(tenant)
                       : setJsonData({ open: true, title: `Tenant: ${tenant.name}`, data: tenant })}
                   >
-                    <td className="col-checkbox" onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.includes(tenant.id)} onChange={() => toggleSelect(tenant.id)} title={t('Select this tenant')} /></td>
+                    <td className="col-checkbox" onClick={e => e.stopPropagation()}><input aria-label={t('Select this tenant')} type="checkbox" checked={selected.includes(tenant.id)} onChange={() => toggleSelect(tenant.id)} title={t('Select this tenant')} /></td>
                     <td><strong>{tenant.name}</strong></td>
                     <td className="mono text-dim table-id-cell">
                       <span className="id-display">

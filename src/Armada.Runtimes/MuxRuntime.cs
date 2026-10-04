@@ -118,6 +118,27 @@ namespace Armada.Runtimes
             }
         }
 
+        /// <summary>
+        /// Insert launch-plan arguments before the positional prompt (Mux's last argument). When the plan supplies its own
+        /// --mcp-config, the config directory's --mcp-config added by the command builder is dropped so only the plan's
+        /// (strict) server document is loaded.
+        /// </summary>
+        /// <param name="args">The runtime's arguments, modified in place.</param>
+        /// <param name="extraArguments">The plan's extra arguments.</param>
+        protected override void AppendLaunchArguments(List<string> args, List<string> extraArguments)
+        {
+            if (extraArguments == null || extraArguments.Count == 0) return;
+
+            if (extraArguments.Contains("--mcp-config"))
+            {
+                int existing = args.IndexOf("--mcp-config");
+                if (existing >= 0 && existing + 1 < args.Count - 1) args.RemoveRange(existing, 2);
+            }
+
+            int insertAt = args.Count > 0 ? args.Count - 1 : 0;
+            args.InsertRange(insertAt, extraArguments);
+        }
+
         #endregion
     }
 }

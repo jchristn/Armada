@@ -44,6 +44,7 @@ namespace Armada.Server
                 CaptainId = captain.Id,
                 CaptainName = captain.Name,
                 Runtime = captain.Runtime.ToString(),
+                AskApprovalGated = Armada.Core.Services.CaptainThreadMcpPlanner.SupportsApprovalGating(captain.Runtime),
                 ArmadaToolCount = 0,
                 Tools = new List<CaptainToolSummary>()
             };

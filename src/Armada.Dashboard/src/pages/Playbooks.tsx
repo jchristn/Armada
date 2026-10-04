@@ -253,7 +253,7 @@ export default function Playbooks() {
             onChange={(event) => setSearch(event.target.value)}
             placeholder={t('Search by filename, description, or ID...')}
           />
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | 'active' | 'inactive')}>
+          <select aria-label={t('All statuses')} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | 'active' | 'inactive')}>
             <option value="all">{t('All statuses')}</option>
             <option value="active">{t('Active only')}</option>
             <option value="inactive">{t('Inactive only')}</option>

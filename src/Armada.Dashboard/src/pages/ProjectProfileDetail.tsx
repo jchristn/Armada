@@ -327,7 +327,7 @@ export default function ProjectProfileDetail() {
       <div className="card" style={{ padding: '1rem', marginBottom: '1rem' }}>
         <h3>{t('Skills')}</h3>
         <p className="text-dim" style={{ marginTop: 0 }}>{t('One skill per line. Attached to this project.')}</p>
-        <textarea rows={4} value={skills} onChange={(e) => setSkills(e.target.value)} disabled={!canManage} placeholder={'dotnet\ntdd'} />
+        <textarea aria-label={t('Skills')} rows={4} value={skills} onChange={(e) => setSkills(e.target.value)} disabled={!canManage} placeholder={'dotnet\ntdd'} />
       </div>
 
       {!createMode && (
@@ -335,7 +335,7 @@ export default function ProjectProfileDetail() {
           <div className="view-header" style={{ marginBottom: '0.5rem' }}>
             <h3>{t('Persona Prompt Diff')}</h3>
             <div className="view-actions">
-              <input list="known-personas" type="text" value={previewPersona} onChange={(e) => setPreviewPersona(e.target.value)} />
+              <input list="known-personas" type="text" aria-label={t('Persona')} value={previewPersona} onChange={(e) => setPreviewPersona(e.target.value)} />
               <button className="btn" onClick={loadPreview} disabled={previewLoading}>
                 {previewLoading ? t('Loading...') : t('Preview')}
               </button>

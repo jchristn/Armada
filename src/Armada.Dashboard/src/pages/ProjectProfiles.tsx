@@ -301,13 +301,13 @@ export default function ProjectProfiles() {
             onChange={(event) => setSearch(event.target.value)}
             placeholder={t('Search by name, description, or ID...')}
           />
-          <select value={scopeFilter} onChange={(event) => setScopeFilter(event.target.value as typeof scopeFilter)}>
+          <select aria-label={t('All scopes')} value={scopeFilter} onChange={(event) => setScopeFilter(event.target.value as typeof scopeFilter)}>
             <option value="all">{t('All scopes')}</option>
             <option value="Global">{t('Global')}</option>
             <option value="Fleet">{t('Fleet')}</option>
             <option value="Vessel">{t('Vessel')}</option>
           </select>
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
+          <select aria-label={t('All statuses')} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
             <option value="all">{t('All statuses')}</option>
             <option value="active">{t('Active only')}</option>
             <option value="inactive">{t('Inactive only')}</option>

@@ -3193,6 +3193,7 @@ Describe the Armada MCP tools available through a specific captain, including ru
   "toolsEnabled": true,
   "effectiveToolCount": 42,
   "armadaToolCount": 37,
+  "askApprovalGated": true,
   "tools": [
     {
       "name": "get_status",
@@ -6960,6 +6961,7 @@ Captain-scoped Armada MCP tool availability and catalog metadata.
   "toolsEnabled": true,
   "effectiveToolCount": 42,
   "armadaToolCount": 37,
+  "askApprovalGated": true,
   "tools": [
     {
       "name": "get_status",
@@ -6983,6 +6985,7 @@ Captain-scoped Armada MCP tool availability and catalog metadata.
 | `toolsEnabled` | bool? | Whether the runtime reported tool calling enabled when applicable |
 | `effectiveToolCount` | int? | Runtime-reported total tool count when applicable |
 | `armadaToolCount` | int | Number of Armada MCP tools in the returned catalog |
+| `askApprovalGated` | bool | Whether Ask thread turns run by this captain connect to Armada with a thread-scoped token, so mutating Armada tool calls are held as approval cards (true for every product runtime; false for `Custom`) |
 | `tools` | [CaptainToolSummary](#captaintoolsummary)[] | Ordered tool list |
 
 ---

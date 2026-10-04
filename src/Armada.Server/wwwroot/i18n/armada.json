@@ -22,7 +22,9 @@
         "es-ES",
         "es-MX",
         "es-419"
-      ]
+      ],
+      "beta": true,
+      "betaLabel": "beta"
     },
     {
       "code": "zh-Hans",
@@ -34,7 +36,9 @@
         "zh-CN",
         "zh-SG",
         "cmn-Hans"
-      ]
+      ],
+      "beta": true,
+      "betaLabel": "测试版"
     },
     {
       "code": "zh-Hant",
@@ -44,7 +48,9 @@
       "aliases": [
         "zh-TW",
         "cmn-Hant"
-      ]
+      ],
+      "beta": true,
+      "betaLabel": "測試版"
     },
     {
       "code": "yue-Hant",
@@ -56,7 +62,9 @@
         "zh-MO",
         "yue",
         "yue-HK"
-      ]
+      ],
+      "beta": true,
+      "betaLabel": "測試版"
     },
     {
       "code": "ja",
@@ -65,7 +73,9 @@
       "dir": "ltr",
       "aliases": [
         "ja-JP"
-      ]
+      ],
+      "beta": true,
+      "betaLabel": "ベータ版"
     },
     {
       "code": "de",
@@ -74,7 +84,9 @@
       "dir": "ltr",
       "aliases": [
         "de-DE"
-      ]
+      ],
+      "beta": true,
+      "betaLabel": "Beta"
     },
     {
       "code": "fr",
@@ -84,7 +96,9 @@
       "aliases": [
         "fr-FR",
         "fr-CA"
-      ]
+      ],
+      "beta": true,
+      "betaLabel": "bêta"
     },
     {
       "code": "it",
@@ -93,7 +107,9 @@
       "dir": "ltr",
       "aliases": [
         "it-IT"
-      ]
+      ],
+      "beta": true,
+      "betaLabel": "beta"
     }
   ],
   "locales": {
@@ -2389,7 +2405,13 @@
         "Import history retention (days)": "Retención del historial de importaciones (días)",
         "Finished vessel import batches older than this are deleted; imported vessels are not affected (0-3650, default 90).": "Los lotes de importación de repositorios terminados con más antigüedad que esta se eliminan; los repositorios importados no se ven afectados (0-3650, predeterminado 90).",
         "Save Retention Settings": "Guardar ajustes de retención",
-        "Retention settings saved and applied.": "Ajustes de retención guardados y aplicados."
+        "Retention settings saved and applied.": "Ajustes de retención guardados y aplicados.",
+        "Actions from this captain run without approval cards.": "Las acciones de este capitán se ejecutan sin tarjetas de aprobación.",
+        "This runtime uses its own Armada connection, so anything it does through Armada tools happens immediately.": "Este runtime usa su propia conexión con Armada, así que todo lo que haga con las herramientas de Armada ocurre de inmediato.",
+        "Skip to main content": "Saltar al contenido principal",
+        "Page number": "Número de página",
+        "Items per page": "Elementos por página",
+        "Log lines to show": "Líneas de registro que mostrar"
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -3695,7 +3717,13 @@
         "Import history retention (days)": "导入历史记录保留期（天）",
         "Finished vessel import batches older than this are deleted; imported vessels are not affected (0-3650, default 90).": "早于此天数的已完成仓库导入批次将被删除；已导入的仓库不受影响（0-3650，默认 90）。",
         "Save Retention Settings": "保存保留设置",
-        "Retention settings saved and applied.": "保留设置已保存并生效。"
+        "Retention settings saved and applied.": "保留设置已保存并生效。",
+        "Actions from this captain run without approval cards.": "此队长的操作会直接运行，不显示批准卡片。",
+        "This runtime uses its own Armada connection, so anything it does through Armada tools happens immediately.": "此运行时使用自己的 Armada 连接，因此它通过 Armada 工具执行的任何操作都会立即生效。",
+        "Skip to main content": "跳到主要内容",
+        "Page number": "页码",
+        "Items per page": "每页条目数",
+        "Log lines to show": "要显示的日志行数"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -4964,7 +4992,13 @@
         "Import history retention (days)": "匯入歷史記錄保留期（天）",
         "Finished vessel import batches older than this are deleted; imported vessels are not affected (0-3650, default 90).": "早於此天數的已完成儲存庫匯入批次將被刪除；已匯入的儲存庫不受影響（0-3650，預設 90）。",
         "Save Retention Settings": "儲存保留設定",
-        "Retention settings saved and applied.": "保留設定已儲存並套用。"
+        "Retention settings saved and applied.": "保留設定已儲存並套用。",
+        "Actions from this captain run without approval cards.": "此隊長的操作會直接執行，不顯示核准卡片。",
+        "This runtime uses its own Armada connection, so anything it does through Armada tools happens immediately.": "此執行環境使用自己的 Armada 連線，因此它透過 Armada 工具執行的任何操作都會立即生效。",
+        "Skip to main content": "跳至主要內容",
+        "Page number": "頁碼",
+        "Items per page": "每頁項目數",
+        "Log lines to show": "要顯示的記錄行數"
       },
       "sections": {}
     },
@@ -6192,7 +6226,13 @@
         "Import history retention (days)": "匯入記錄保留（日）",
         "Finished vessel import batches older than this are deleted; imported vessels are not affected (0-3650, default 90).": "超過呢個日數嘅已完成儲存庫匯入批次會被刪除；已匯入嘅儲存庫唔受影響（0-3650，預設 90）。",
         "Save Retention Settings": "儲存保留設定",
-        "Retention settings saved and applied.": "保留設定已儲存並套用。"
+        "Retention settings saved and applied.": "保留設定已儲存並套用。",
+        "Actions from this captain run without approval cards.": "呢個隊長嘅操作會直接執行，唔會顯示批准卡。",
+        "This runtime uses its own Armada connection, so anything it does through Armada tools happens immediately.": "呢個執行環境用緊自己嘅 Armada 連線，所以佢透過 Armada 工具做嘅任何嘢都會即刻生效。",
+        "Skip to main content": "跳去主要內容",
+        "Page number": "頁碼",
+        "Items per page": "每頁項目數",
+        "Log lines to show": "要顯示嘅記錄行數"
       },
       "sections": {}
     },
@@ -7438,7 +7478,13 @@
         "Import history retention (days)": "インポート履歴の保持期間（日）",
         "Finished vessel import batches older than this are deleted; imported vessels are not affected (0-3650, default 90).": "これより古い完了済みのベッセルのインポートバッチは削除されます。インポート済みのベッセルには影響しません（0-3650、既定 90）。",
         "Save Retention Settings": "保持設定を保存",
-        "Retention settings saved and applied.": "保持設定を保存して適用しました。"
+        "Retention settings saved and applied.": "保持設定を保存して適用しました。",
+        "Actions from this captain run without approval cards.": "このキャプテンのアクションは承認カードなしで実行されます。",
+        "This runtime uses its own Armada connection, so anything it does through Armada tools happens immediately.": "このランタイムは独自の Armada 接続を使用するため、Armada ツールを通じた操作はすぐに実行されます。",
+        "Skip to main content": "メインコンテンツへスキップ",
+        "Page number": "ページ番号",
+        "Items per page": "1ページあたりの件数",
+        "Log lines to show": "表示するログ行数"
       },
       "sections": {}
     },
@@ -8673,7 +8719,13 @@
         "Import history retention (days)": "Aufbewahrung des Importverlaufs (Tage)",
         "Finished vessel import batches older than this are deleted; imported vessels are not affected (0-3650, default 90).": "Abgeschlossene Repository-Importvorgänge, die älter sind, werden gelöscht; importierte Repositories sind nicht betroffen (0-3650, Standard 90).",
         "Save Retention Settings": "Aufbewahrungseinstellungen speichern",
-        "Retention settings saved and applied.": "Aufbewahrungseinstellungen gespeichert und angewendet."
+        "Retention settings saved and applied.": "Aufbewahrungseinstellungen gespeichert und angewendet.",
+        "Actions from this captain run without approval cards.": "Aktionen dieses Captains laufen ohne Freigabekarten.",
+        "This runtime uses its own Armada connection, so anything it does through Armada tools happens immediately.": "Diese Laufzeit nutzt ihre eigene Armada-Verbindung, daher wird alles, was sie über Armada-Tools tut, sofort ausgeführt.",
+        "Skip to main content": "Zum Hauptinhalt springen",
+        "Page number": "Seitenzahl",
+        "Items per page": "Einträge pro Seite",
+        "Log lines to show": "Anzuzeigende Protokollzeilen"
       },
       "sections": {}
     },
@@ -9908,7 +9960,13 @@
         "Import history retention (days)": "Conservation de l'historique des importations (jours)",
         "Finished vessel import batches older than this are deleted; imported vessels are not affected (0-3650, default 90).": "Les lots d'importation de dépôts terminés plus anciens que cette durée sont supprimés ; les dépôts importés ne sont pas affectés (0-3650, 90 par défaut).",
         "Save Retention Settings": "Enregistrer les paramètres de conservation",
-        "Retention settings saved and applied.": "Paramètres de conservation enregistrés et appliqués."
+        "Retention settings saved and applied.": "Paramètres de conservation enregistrés et appliqués.",
+        "Actions from this captain run without approval cards.": "Les actions de ce capitaine s'exécutent sans cartes d'approbation.",
+        "This runtime uses its own Armada connection, so anything it does through Armada tools happens immediately.": "Ce runtime utilise sa propre connexion à Armada : tout ce qu'il fait avec les outils Armada s'applique immédiatement.",
+        "Skip to main content": "Aller au contenu principal",
+        "Page number": "Numéro de page",
+        "Items per page": "Éléments par page",
+        "Log lines to show": "Lignes de journal à afficher"
       },
       "sections": {}
     },
@@ -11143,7 +11201,13 @@
         "Import history retention (days)": "Conservazione della cronologia importazioni (giorni)",
         "Finished vessel import batches older than this are deleted; imported vessels are not affected (0-3650, default 90).": "I lotti di importazione dei repository conclusi più vecchi di così vengono eliminati; i repository importati non sono interessati (0-3650, predefinito 90).",
         "Save Retention Settings": "Salva impostazioni di conservazione",
-        "Retention settings saved and applied.": "Impostazioni di conservazione salvate e applicate."
+        "Retention settings saved and applied.": "Impostazioni di conservazione salvate e applicate.",
+        "Actions from this captain run without approval cards.": "Le azioni di questo capitano vengono eseguite senza schede di approvazione.",
+        "This runtime uses its own Armada connection, so anything it does through Armada tools happens immediately.": "Questo runtime usa la propria connessione ad Armada, quindi tutto ciò che fa tramite gli strumenti di Armada avviene subito.",
+        "Skip to main content": "Vai al contenuto principale",
+        "Page number": "Numero di pagina",
+        "Items per page": "Elementi per pagina",
+        "Log lines to show": "Righe di log da mostrare"
       },
       "sections": {}
     }

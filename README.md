@@ -350,7 +350,7 @@ The dashboard supports language selection from the login screen and keeps the ch
 
 ### Running Agents Safely
 
-Captains run as CLI agents with your account's permissions, and by default with their auto-approve flags (Claude Code `--dangerously-skip-permissions`, Codex `--full-auto`, Gemini `--approval-mode yolo`, Cursor `--force`, Mux `--yolo`, OpenCode `--auto`), so they can read, write, and execute without confirmation. To run a captain without them, untick **Auto-approve agent tool use** when editing the captain (or pass `autoApprove: false` to the `create_captain` / `update_captain` MCP tools); the runtime then uses its safer mode (for example Claude Code `--permission-mode acceptEdits`, Codex `--sandbox workspace-write`), and shell commands need to be allowed in the runtime's own configuration. Run Armada under a dedicated account, keep it on localhost unless you need remote access, and review `audit.command` events for commands run through workspace exec, fleet actions, and check runs. See [Running agents safely](docs/SECURITY_REVIEW.md#running-agents-safely) and [SECURITY.md](SECURITY.md).
+Captains run as CLI agents with your account's permissions, and by default with their auto-approve flags (Claude Code `--dangerously-skip-permissions`, Codex `--sandbox workspace-write`, Gemini `--approval-mode yolo`, Cursor `--force`, Mux `--yolo`, OpenCode `--auto`), so they can read, write, and execute without confirmation. To run a captain without them, untick **Auto-approve agent tool use** when editing the captain (or pass `autoApprove: false` to the `create_captain` / `update_captain` MCP tools); the runtime then uses its safer mode (for example Claude Code `--permission-mode acceptEdits`, Codex `--sandbox workspace-write`), and shell commands need to be allowed in the runtime's own configuration. Run Armada under a dedicated account, keep it on localhost unless you need remote access, and review `audit.command` events for commands run through workspace exec, fleet actions, and check runs. See [Running agents safely](docs/SECURITY_REVIEW.md#running-agents-safely) and [SECURITY.md](SECURITY.md).
 
 For a deeper walkthrough, see the [Getting Started Guide](GETTING_STARTED.md).
 
@@ -459,6 +459,7 @@ This is useful for architecture rules, coding standards, migration checklists, r
 The dashboard supports live language selection and locale-aware formatting across both the React shell and the legacy embedded surfaces.
 
 - Supported locales: English, Spanish, Mandarin (Simplified), Mandarin (Traditional), Cantonese, Japanese, German, French, and Italian.
+- English is the reviewed locale. The other eight ship labeled "beta" in both language pickers (for example "Deutsch (Beta)", "Italiano (beta)") until a native speaker has reviewed them; text that has no translation falls back to English.
 - Language selection is available from login, setup, and the authenticated shell, and the active locale persists between sessions.
 - Shared UI elements such as notifications, pagination, dialogs, labels, date/time formatting, and numeric formatting honor the selected locale.
 - Route-level coverage includes list pages, detail pages, admin screens, setup flows, and server-management views so common actions do not fall back to English unexpectedly.

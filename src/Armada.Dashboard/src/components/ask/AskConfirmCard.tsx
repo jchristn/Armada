@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import type { AskActionProposal } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
 import StatusBadge from '../shared/StatusBadge';
@@ -31,6 +32,8 @@ export default function AskConfirmCard({ proposal, onApprove, onReject, busy, co
   const args = prettyJson(proposal.argumentsText);
   const result = prettyJson(proposal.resultText);
   const fromQuickAction = String(proposal.source).toLowerCase() === 'quickaction';
+  // Approve and Reject are described by the proposal summary so a screen reader says what they act on.
+  const summaryId = useId();
 
   return (
     <div className={`ask-confirm-card is-${normalized || 'unknown'}${compact ? ' is-compact' : ''}`} role="group" aria-label={t('Action: {{tool}}', { tool: proposal.toolName })}>
@@ -43,7 +46,7 @@ export default function AskConfirmCard({ proposal, onApprove, onReject, busy, co
         <span className="ask-confirm-status"><StatusBadge status={status} /></span>
       </div>
 
-      {proposal.summaryText && <p className="ask-confirm-summary">{proposal.summaryText}</p>}
+      {proposal.summaryText && <p id={summaryId} className="ask-confirm-summary">{proposal.summaryText}</p>}
 
       {args && (
         <details className="ask-confirm-details">
@@ -62,10 +65,10 @@ export default function AskConfirmCard({ proposal, onApprove, onReject, busy, co
               ? t('Nothing runs until you approve. Expires {{time}}.', { time: formatRelativeTime(proposal.expiresUtc) })
               : t('Nothing runs until you approve.')}
           </span>
-          <button type="button" className="btn btn-sm" onClick={() => onReject?.(proposal)} disabled={busy || !onReject}>
+          <button type="button" className="btn btn-sm" aria-describedby={proposal.summaryText ? summaryId : undefined} onClick={() => onReject?.(proposal)} disabled={busy || !onReject}>
             {t('Reject')}
           </button>
-          <button type="button" className="btn btn-sm btn-primary" onClick={() => onApprove?.(proposal)} disabled={busy || !onApprove}>
+          <button type="button" className="btn btn-sm btn-primary" aria-describedby={proposal.summaryText ? summaryId : undefined} onClick={() => onApprove?.(proposal)} disabled={busy || !onApprove}>
             {busy ? t('Working...') : t('Approve')}
           </button>
         </div>

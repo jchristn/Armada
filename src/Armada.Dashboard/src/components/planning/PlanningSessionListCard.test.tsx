@@ -73,7 +73,7 @@ describe('PlanningSessionListCard', () => {
 
     await user.click(screen.getByRole('button', { name: /Recent Sessions/ }));
     await user.click(screen.getByTitle('Actions'));
-    await user.click(screen.getByRole('button', { name: 'End Session' }));
+    await user.click(screen.getByRole('menuitem', { name: 'End Session' }));
 
     expect(onEndSession).toHaveBeenCalledTimes(1);
     expect(onEndSession.mock.calls[0][0].id).toBe('psn_active');
@@ -87,7 +87,7 @@ describe('PlanningSessionListCard', () => {
 
     await user.click(screen.getByRole('button', { name: /Recent Sessions/ }));
     await user.click(screen.getByTitle('Actions'));
-    await user.click(screen.getByRole('button', { name: 'Delete' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
 
     expect(onDeleteSession).toHaveBeenCalledTimes(1);
     expect(onDeleteSession.mock.calls[0][0].id).toBe('psn_active');

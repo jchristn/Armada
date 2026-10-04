@@ -234,7 +234,7 @@ export default function Dispatch() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0 1.5rem' }}>
             <div className="form-group">
               <label>{t('Vessel')}</label>
-              <select
+              <select aria-label={t('Vessel')}
                 value={vesselId}
                 onChange={(e) => setVesselId(e.target.value)}
                 required
@@ -252,7 +252,7 @@ export default function Dispatch() {
                 <label>{t('Pipeline')}</label>
                 <Link to="/pipelines" className="form-label-link">{t('Manage pipelines')}</Link>
               </div>
-              <select
+              <select aria-label={t('Pipeline')}
                 value={selectedPipeline}
                 onChange={(e) => setSelectedPipeline(e.target.value)}
               >
@@ -266,7 +266,7 @@ export default function Dispatch() {
             </div>
             <div className="form-group">
               <label>{t('Priority')}</label>
-              <input
+              <input aria-label={t('Higher priority missions are assigned first (default 100)')}
                 type="number"
                 value={priority}
                 onChange={(e) => setPriority(parseInt(e.target.value) || 100)}
@@ -277,7 +277,7 @@ export default function Dispatch() {
             </div>
             <div className="form-group">
               <label>{t('Voyage Title')}</label>
-              <input
+              <input aria-label={t('Voyage Title')}
                 value={voyageTitle}
                 onChange={(e) => setVoyageTitle(e.target.value)}
                 placeholder={t('Optional override for the voyage title')}
@@ -288,7 +288,7 @@ export default function Dispatch() {
           {/* Prompt */}
           <div className="form-group">
             <label>{t('Description')}</label>
-            <textarea
+            <textarea aria-label={t('Description')}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               rows={12}

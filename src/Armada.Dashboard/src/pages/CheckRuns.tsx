@@ -508,13 +508,13 @@ export default function CheckRuns() {
 
       <div className="card" style={{ padding: '1rem', marginBottom: '1rem' }}>
         <div className="playbook-filter-row">
-          <select value={vesselFilter} onChange={(event) => setVesselFilter(event.target.value)}>
+          <select aria-label={t('All vessels')} value={vesselFilter} onChange={(event) => setVesselFilter(event.target.value)}>
             <option value="all">{t('All vessels')}</option>
             {vessels.map((vessel) => (
               <option key={vessel.id} value={vessel.id}>{vessel.name}</option>
             ))}
           </select>
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
+          <select aria-label={t('All statuses')} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
             <option value="all">{t('All statuses')}</option>
             <option value="Passed">{t('Passed')}</option>
             <option value="Failed">{t('Failed')}</option>
@@ -522,12 +522,12 @@ export default function CheckRuns() {
             <option value="Pending">{t('Pending')}</option>
             <option value="Canceled">{t('Canceled')}</option>
           </select>
-          <select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value as typeof sourceFilter)}>
+          <select aria-label={t('All sources')} value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value as typeof sourceFilter)}>
             <option value="all">{t('All sources')}</option>
             <option value="Armada">{t('Armada')}</option>
             <option value="External">{t('External')}</option>
           </select>
-          <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as typeof typeFilter)}>
+          <select aria-label={t('All check types')} value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as typeof typeFilter)}>
             <option value="all">{t('All check types')}</option>
             {ALL_CHECK_TYPES.map((type) => (
               <option key={type} value={type}>{type}</option>

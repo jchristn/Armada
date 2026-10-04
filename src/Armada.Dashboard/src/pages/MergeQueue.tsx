@@ -387,7 +387,7 @@ export default function MergeQueue() {
               <thead>
                 <tr>
                   <th className="col-checkbox">
-                    <input type="checkbox" checked={allSelected} onChange={e => e.target.checked ? selectAll() : clearSelection()} title={t('Select all entries')} />
+                    <input aria-label={t('Select all entries')} type="checkbox" checked={allSelected} onChange={e => e.target.checked ? selectAll() : clearSelection()} title={t('Select all entries')} />
                   </th>
                   <th>{t('ID')}</th>
                   <th className="sortable" onClick={() => handleSort('branchName')} title={t('Branch -- click to sort')}>
@@ -415,7 +415,7 @@ export default function MergeQueue() {
                   <td></td>
                   <td></td>
                   <td>
-                    <select className="col-filter" title={t('Filter by vessel')} value={colFilters.vesselId} onChange={e => { setColFilters(f => ({ ...f, vesselId: e.target.value })); }}>
+                    <select aria-label={t('Filter by vessel')} className="col-filter" title={t('Filter by vessel')} value={colFilters.vesselId} onChange={e => { setColFilters(f => ({ ...f, vesselId: e.target.value })); }}>
                       <option value="">{t('All Vessels')}</option>
                       {vessels.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                     </select>
@@ -427,7 +427,7 @@ export default function MergeQueue() {
                 {sorted.map(entry => (
                   <tr key={entry.id} className="clickable" onClick={() => setViewRecord(entry as unknown as Record<string, unknown>)}>
                     <td className="col-checkbox" onClick={e => e.stopPropagation()}>
-                      <input type="checkbox" checked={selected.includes(entry.id)} onChange={() => toggleSelect(entry.id)} title={t('Select this entry')} />
+                      <input aria-label={t('Select this entry')} type="checkbox" checked={selected.includes(entry.id)} onChange={() => toggleSelect(entry.id)} title={t('Select this entry')} />
                     </td>
                     <td className="mono text-dim table-id-cell">
                       <span className="id-display">
