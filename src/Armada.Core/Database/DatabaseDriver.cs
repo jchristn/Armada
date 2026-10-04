@@ -184,6 +184,51 @@ namespace Armada.Core.Database
         /// </summary>
         public IMemoryMethods Memories { get; protected set; } = null!;
 
+        /// <summary>
+        /// Vessel import batch operations.
+        /// </summary>
+        public IVesselImportBatchMethods VesselImportBatches { get; protected set; } = null!;
+
+        /// <summary>
+        /// Vessel import item (candidate) operations.
+        /// </summary>
+        public IVesselImportItemMethods VesselImportItems { get; protected set; } = null!;
+
+        /// <summary>
+        /// Fleet action definition operations.
+        /// </summary>
+        public IFleetActionMethods FleetActions { get; protected set; } = null!;
+
+        /// <summary>
+        /// Fleet action run operations.
+        /// </summary>
+        public IFleetActionRunMethods FleetActionRuns { get; protected set; } = null!;
+
+        /// <summary>
+        /// Fleet action run target operations.
+        /// </summary>
+        public IFleetActionRunTargetMethods FleetActionRunTargets { get; protected set; } = null!;
+
+        /// <summary>
+        /// Vessel health row operations.
+        /// </summary>
+        public IVesselHealthMethods VesselHealth { get; protected set; } = null!;
+
+        /// <summary>
+        /// Vessel health finding operations.
+        /// </summary>
+        public IVesselHealthFindingMethods VesselHealthFindings { get; protected set; } = null!;
+
+        /// <summary>
+        /// Vessel dependency operations.
+        /// </summary>
+        public IVesselDependencyMethods VesselDependencies { get; protected set; } = null!;
+
+        /// <summary>
+        /// Vessel health override operations.
+        /// </summary>
+        public IVesselHealthOverrideMethods VesselHealthOverrides { get; protected set; } = null!;
+
         #endregion
 
         #region Constructors-and-Factories

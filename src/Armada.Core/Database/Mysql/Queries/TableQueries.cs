@@ -1486,6 +1486,266 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration v71 statements: add vessel_import_batches and vessel_import_items tables for bulk vessel import.
+        /// </summary>
+        public static readonly string[] MigrationV71Statements = new string[]
+        {
+            @"CREATE TABLE IF NOT EXISTS vessel_import_batches (
+                id VARCHAR(64) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(64) NOT NULL,
+                user_id VARCHAR(64),
+                status VARCHAR(32) NOT NULL DEFAULT 'Discovered',
+                harbor_id VARCHAR(64),
+                fleet_id VARCHAR(64),
+                job_id VARCHAR(64),
+                requested_path_count INT NOT NULL DEFAULT 0,
+                candidate_count INT NOT NULL DEFAULT 0,
+                created_count INT NOT NULL DEFAULT 0,
+                skipped_count INT NOT NULL DEFAULT 0,
+                failed_count INT NOT NULL DEFAULT 0,
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL,
+                completed_utc DATETIME(6)
+            );",
+            "CREATE INDEX idx_vessel_import_batches_tenant_created ON vessel_import_batches(tenant_id, created_utc);",
+            "CREATE INDEX idx_vessel_import_batches_tenant_status ON vessel_import_batches(tenant_id, status);",
+            @"CREATE TABLE IF NOT EXISTS vessel_import_items (
+                id VARCHAR(64) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(64) NOT NULL,
+                batch_id VARCHAR(64) NOT NULL,
+                path VARCHAR(1024) NOT NULL,
+                proposed_name VARCHAR(256) NOT NULL,
+                remote_url LONGTEXT,
+                default_branch VARCHAR(256),
+                candidate_status VARCHAR(32) NOT NULL DEFAULT 'New',
+                existing_vessel_id VARCHAR(64),
+                outcome VARCHAR(32) NOT NULL DEFAULT 'Pending',
+                outcome_reason VARCHAR(256),
+                outcome_message LONGTEXT,
+                vessel_id VARCHAR(64),
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL,
+                FOREIGN KEY (batch_id) REFERENCES vessel_import_batches(id) ON DELETE CASCADE
+            );",
+            "CREATE UNIQUE INDEX idx_vessel_import_items_tenant_batch_path ON vessel_import_items(tenant_id, batch_id, path(600));",
+            "CREATE INDEX idx_vessel_import_items_batch ON vessel_import_items(batch_id);",
+            "CREATE INDEX idx_vessel_import_items_tenant_outcome ON vessel_import_items(tenant_id, outcome);"
+        };
+
+
+
+        /// <summary>
+        /// Migration v72 statements: add fleet_actions, fleet_action_runs, and fleet_action_run_targets tables.
+        /// </summary>
+        public static readonly string[] MigrationV72Statements = new string[]
+        {
+            @"CREATE TABLE IF NOT EXISTS fleet_actions (
+                id VARCHAR(64) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(64) NOT NULL,
+                user_id VARCHAR(64),
+                name VARCHAR(256) NOT NULL,
+                description LONGTEXT,
+                kind VARCHAR(32) NOT NULL DEFAULT 'Command',
+                command_text LONGTEXT,
+                prompt_template LONGTEXT,
+                pipeline_id VARCHAR(64),
+                persona VARCHAR(256),
+                timeout_seconds INT NOT NULL DEFAULT 300,
+                default_concurrency INT NOT NULL DEFAULT 4,
+                requires_clean_working_tree TINYINT(1) NOT NULL DEFAULT 1,
+                is_built_in TINYINT(1) NOT NULL DEFAULT 0,
+                built_in_key VARCHAR(256),
+                active TINYINT(1) NOT NULL DEFAULT 1,
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL
+            );",
+            "CREATE INDEX idx_fleet_actions_tenant_created ON fleet_actions(tenant_id, created_utc);",
+            "CREATE INDEX idx_fleet_actions_tenant_name ON fleet_actions(tenant_id, name);",
+            "CREATE INDEX idx_fleet_actions_tenant_builtin ON fleet_actions(tenant_id, built_in_key);",
+            "CREATE INDEX idx_fleet_actions_tenant_active ON fleet_actions(tenant_id, active);",
+            @"CREATE TABLE IF NOT EXISTS fleet_action_runs (
+                id VARCHAR(64) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(64) NOT NULL,
+                user_id VARCHAR(64),
+                action_id VARCHAR(64),
+                action_name VARCHAR(256) NOT NULL,
+                kind VARCHAR(32) NOT NULL DEFAULT 'Command',
+                command_text LONGTEXT,
+                prompt_template LONGTEXT,
+                pipeline_id VARCHAR(64),
+                persona VARCHAR(256),
+                timeout_seconds INT NOT NULL DEFAULT 300,
+                requires_clean_working_tree TINYINT(1) NOT NULL DEFAULT 1,
+                concurrency INT NOT NULL DEFAULT 4,
+                status VARCHAR(32) NOT NULL DEFAULT 'Pending',
+                target_count INT NOT NULL DEFAULT 0,
+                succeeded_count INT NOT NULL DEFAULT 0,
+                failed_count INT NOT NULL DEFAULT 0,
+                skipped_count INT NOT NULL DEFAULT 0,
+                cancelled_count INT NOT NULL DEFAULT 0,
+                started_utc DATETIME(6),
+                completed_utc DATETIME(6),
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL
+            );",
+            "CREATE INDEX idx_fleet_action_runs_tenant_created ON fleet_action_runs(tenant_id, created_utc);",
+            "CREATE INDEX idx_fleet_action_runs_tenant_status ON fleet_action_runs(tenant_id, status);",
+            "CREATE INDEX idx_fleet_action_runs_status ON fleet_action_runs(status);",
+            "CREATE INDEX idx_fleet_action_runs_action ON fleet_action_runs(action_id);",
+            @"CREATE TABLE IF NOT EXISTS fleet_action_run_targets (
+                id VARCHAR(64) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(64) NOT NULL,
+                run_id VARCHAR(64) NOT NULL,
+                vessel_id VARCHAR(64) NOT NULL,
+                vessel_name VARCHAR(256) NOT NULL,
+                status VARCHAR(32) NOT NULL DEFAULT 'Pending',
+                skip_reason VARCHAR(256),
+                failure_reason VARCHAR(256),
+                rendered_text LONGTEXT,
+                exit_code INT,
+                output_text LONGTEXT,
+                error_text LONGTEXT,
+                output_truncated TINYINT(1) NOT NULL DEFAULT 0,
+                voyage_id VARCHAR(64),
+                started_utc DATETIME(6),
+                completed_utc DATETIME(6),
+                duration_ms BIGINT,
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL,
+                FOREIGN KEY (run_id) REFERENCES fleet_action_runs(id) ON DELETE CASCADE
+            );",
+            "CREATE INDEX idx_fleet_action_run_targets_tenant_run_status ON fleet_action_run_targets(tenant_id, run_id, status);",
+            "CREATE INDEX idx_fleet_action_run_targets_run_vessel_name ON fleet_action_run_targets(run_id, vessel_name);",
+            "CREATE INDEX idx_fleet_action_run_targets_vessel ON fleet_action_run_targets(vessel_id);",
+            "CREATE INDEX idx_fleet_action_run_targets_voyage ON fleet_action_run_targets(voyage_id);"
+        };
+
+
+
+        /// <summary>
+        /// Migration v73 statements: add vessel_health, vessel_health_findings, vessel_dependencies, and vessel_health_overrides tables.
+        /// </summary>
+        public static readonly string[] MigrationV73Statements = new string[]
+        {
+            @"CREATE TABLE IF NOT EXISTS vessel_health (
+                id VARCHAR(64) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(64) NOT NULL,
+                vessel_id VARCHAR(450) NOT NULL,
+                overall_status VARCHAR(32) NOT NULL DEFAULT 'Unknown',
+                evaluated_utc DATETIME(6),
+                evaluation_duration_ms BIGINT,
+                error_code VARCHAR(256),
+                evaluated_path LONGTEXT,
+                current_branch VARCHAR(256),
+                is_dirty TINYINT(1),
+                untracked_count INT,
+                ahead_of_default INT,
+                behind_default INT,
+                ahead_of_upstream INT,
+                behind_upstream INT,
+                last_commit_utc DATETIME(6),
+                branch_count INT,
+                stale_branch_count INT,
+                armada_branch_count INT,
+                primary_language VARCHAR(256),
+                project_count INT,
+                outdated_count INT,
+                outdated_major_count INT,
+                vulnerable_count INT,
+                max_vulnerability_severity VARCHAR(32) NOT NULL DEFAULT 'None',
+                dependency_status VARCHAR(32) NOT NULL DEFAULT 'Unknown',
+                vulnerability_status VARCHAR(32) NOT NULL DEFAULT 'Unknown',
+                test_infra_status VARCHAR(32) NOT NULL DEFAULT 'Unknown',
+                ci_status VARCHAR(32) NOT NULL DEFAULT 'Unknown',
+                divergence_status VARCHAR(32) NOT NULL DEFAULT 'Unknown',
+                working_tree_status VARCHAR(32) NOT NULL DEFAULT 'Unknown',
+                branch_status VARCHAR(32) NOT NULL DEFAULT 'Unknown',
+                readiness_status VARCHAR(32) NOT NULL DEFAULT 'Unknown',
+                mission_outcome_status VARCHAR(32) NOT NULL DEFAULT 'Unknown',
+                last_check_run_status VARCHAR(256),
+                has_ci_config TINYINT(1),
+                has_license TINYINT(1),
+                has_readme TINYINT(1),
+                readiness_error_count INT,
+                recent_mission_failure_count INT,
+                manifest_hash VARCHAR(256),
+                dependencies_evaluated_utc DATETIME(6),
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL,
+                FOREIGN KEY (vessel_id) REFERENCES vessels(id) ON DELETE CASCADE
+            );",
+            "CREATE UNIQUE INDEX idx_vessel_health_vessel ON vessel_health(vessel_id);",
+            "CREATE INDEX idx_vessel_health_tenant_overall ON vessel_health(tenant_id, overall_status);",
+            "CREATE INDEX idx_vessel_health_tenant_ahead_of_def ON vessel_health(tenant_id, ahead_of_default);",
+            "CREATE INDEX idx_vessel_health_tenant_behind_def ON vessel_health(tenant_id, behind_default);",
+            "CREATE INDEX idx_vessel_health_tenant_is_dirty ON vessel_health(tenant_id, is_dirty);",
+            "CREATE INDEX idx_vessel_health_tenant_branch ON vessel_health(tenant_id, branch_count);",
+            "CREATE INDEX idx_vessel_health_tenant_stale_branch ON vessel_health(tenant_id, stale_branch_count);",
+            "CREATE INDEX idx_vessel_health_tenant_outdated ON vessel_health(tenant_id, outdated_count);",
+            "CREATE INDEX idx_vessel_health_tenant_outdated_major ON vessel_health(tenant_id, outdated_major_count);",
+            "CREATE INDEX idx_vessel_health_tenant_vulnerable ON vessel_health(tenant_id, vulnerable_count);",
+            "CREATE INDEX idx_vessel_health_tenant_dependency ON vessel_health(tenant_id, dependency_status);",
+            "CREATE INDEX idx_vessel_health_tenant_test_infra ON vessel_health(tenant_id, test_infra_status);",
+            "CREATE INDEX idx_vessel_health_tenant_ci ON vessel_health(tenant_id, ci_status);",
+            "CREATE INDEX idx_vessel_health_tenant_last_commit ON vessel_health(tenant_id, last_commit_utc);",
+            "CREATE INDEX idx_vessel_health_tenant_evaluated ON vessel_health(tenant_id, evaluated_utc);",
+            "CREATE INDEX idx_vessel_health_tenant_primary_language ON vessel_health(tenant_id, primary_language);",
+            "CREATE INDEX idx_vessel_health_tenant_current_branch ON vessel_health(tenant_id, current_branch);",
+            "CREATE INDEX idx_vessel_health_tenant_has_ci_config ON vessel_health(tenant_id, has_ci_config);",
+            "CREATE INDEX idx_vessel_health_tenant_max_vulnerability_severity ON vessel_health(tenant_id, max_vulnerability_severity);",
+            @"CREATE TABLE IF NOT EXISTS vessel_health_findings (
+                id VARCHAR(64) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(64) NOT NULL,
+                vessel_id VARCHAR(450) NOT NULL,
+                criterion VARCHAR(32) NOT NULL,
+                status VARCHAR(32) NOT NULL DEFAULT 'Unknown',
+                detail_code VARCHAR(256),
+                value_a BIGINT,
+                value_b BIGINT,
+                evaluated_utc DATETIME(6) NOT NULL,
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL,
+                FOREIGN KEY (vessel_id) REFERENCES vessels(id) ON DELETE CASCADE
+            );",
+            "CREATE INDEX idx_vessel_health_findings_tenant_vessel ON vessel_health_findings(tenant_id, vessel_id);",
+            "CREATE INDEX idx_vessel_health_findings_vessel_criterion ON vessel_health_findings(vessel_id, criterion);",
+            @"CREATE TABLE IF NOT EXISTS vessel_dependencies (
+                id VARCHAR(64) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(64) NOT NULL,
+                vessel_id VARCHAR(450) NOT NULL,
+                ecosystem VARCHAR(32) NOT NULL,
+                project_path LONGTEXT,
+                package_name VARCHAR(256) NOT NULL,
+                current_version VARCHAR(256),
+                latest_version VARCHAR(256),
+                drift VARCHAR(32) NOT NULL DEFAULT 'None',
+                is_vulnerable TINYINT(1) NOT NULL DEFAULT 0,
+                severity VARCHAR(32) NOT NULL DEFAULT 'None',
+                advisory_url LONGTEXT,
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL,
+                FOREIGN KEY (vessel_id) REFERENCES vessels(id) ON DELETE CASCADE
+            );",
+            "CREATE INDEX idx_vessel_dependencies_tenant_vessel ON vessel_dependencies(tenant_id, vessel_id);",
+            "CREATE INDEX idx_vessel_dependencies_tenant_drift ON vessel_dependencies(tenant_id, drift);",
+            "CREATE INDEX idx_vessel_dependencies_tenant_severity ON vessel_dependencies(tenant_id, severity);",
+            @"CREATE TABLE IF NOT EXISTS vessel_health_overrides (
+                id VARCHAR(64) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(64) NOT NULL,
+                vessel_id VARCHAR(450) NOT NULL,
+                user_id VARCHAR(64),
+                criterion VARCHAR(32) NOT NULL,
+                status VARCHAR(32) NOT NULL DEFAULT 'Unknown',
+                note LONGTEXT,
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL,
+                FOREIGN KEY (vessel_id) REFERENCES vessels(id) ON DELETE CASCADE
+            );",
+            "CREATE UNIQUE INDEX idx_vessel_health_overrides_tenant_vessel_criterion ON vessel_health_overrides(tenant_id, vessel_id, criterion);",
+            "CREATE INDEX idx_vessel_health_overrides_vessel ON vessel_health_overrides(vessel_id);"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

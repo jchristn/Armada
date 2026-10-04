@@ -160,6 +160,51 @@ namespace Armada.Core
         public static readonly string MemoryIdPrefix = "mem_";
 
         /// <summary>
+        /// Vessel import batch ID prefix.
+        /// </summary>
+        public static readonly string VesselImportBatchIdPrefix = "vib_";
+
+        /// <summary>
+        /// Vessel import item (candidate) ID prefix.
+        /// </summary>
+        public static readonly string VesselImportItemIdPrefix = "vii_";
+
+        /// <summary>
+        /// Fleet action definition ID prefix.
+        /// </summary>
+        public static readonly string FleetActionIdPrefix = "fac_";
+
+        /// <summary>
+        /// Fleet action run ID prefix.
+        /// </summary>
+        public static readonly string FleetActionRunIdPrefix = "far_";
+
+        /// <summary>
+        /// Fleet action run target ID prefix.
+        /// </summary>
+        public static readonly string FleetActionRunTargetIdPrefix = "fat_";
+
+        /// <summary>
+        /// Vessel health row ID prefix.
+        /// </summary>
+        public static readonly string VesselHealthIdPrefix = "vhl_";
+
+        /// <summary>
+        /// Vessel health finding ID prefix.
+        /// </summary>
+        public static readonly string VesselHealthFindingIdPrefix = "vhf_";
+
+        /// <summary>
+        /// Vessel dependency ID prefix.
+        /// </summary>
+        public static readonly string VesselDependencyIdPrefix = "vdp_";
+
+        /// <summary>
+        /// Vessel health override ID prefix.
+        /// </summary>
+        public static readonly string VesselHealthOverrideIdPrefix = "vho_";
+
+        /// <summary>
         /// Default per-phase timeout, in seconds, for the in-dock Definition-of-Done gate (30 minutes).
         /// </summary>
         public const int DefaultDefinitionOfDoneTimeoutSeconds = 1800;

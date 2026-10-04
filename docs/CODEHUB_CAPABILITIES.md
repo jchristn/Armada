@@ -575,10 +575,11 @@ because Phase C has nothing to grade until vessels exist in bulk.
 
 ### Phase A -- Vessel Import
 
-- [ ] **A1 -- Settings.** Add `VesselImportSettings` (`Import`) to `ArmadaSettings`
+- [~] **A1 -- Settings.** Add `VesselImportSettings` (`Import`) to `ArmadaSettings`
   with the fields above.
   _Acceptance:_ out-of-range values clamp; env overrides apply; the Settings page
   shows and saves them.
+  _Note (2026-10-03):_ `VesselImportSettings` class and `ArmadaSettings.Import` added with clamping; Settings page/API exposure and env overrides not done (no existing env-override mechanism).
 
 - [ ] **A2 -- Discovery engine.** `VesselDiscoveryService` in
   `src/Armada.Core/Services/` (interface in `Interfaces/`), with
@@ -604,11 +605,12 @@ because Phase C has nothing to grade until vessels exist in bulk.
   _Acceptance:_ existing vessel route and MCP suites pass unchanged; a new case
   asserts a local-path import leaves `LocalPath` null.
 
-- [ ] **A4 -- Persistence.** `VesselImportBatch` (`vib_`) and `VesselImportItem`
+- [x] **A4 -- Persistence.** `VesselImportBatch` (`vib_`) and `VesselImportItem`
   (`vii_`) models, `IVesselImportMethods`, four provider implementations, and
   migration v71 (or the next free number) in all four `TableQueries.cs` plus the
   MySQL wiring. Unique index on `(tenant_id, batch_id, path)`.
   _Acceptance:_ `VesselImportDatabaseSuite` passes on every provider in the matrix.
+  _Note (2026-10-03):_ shipped as `IVesselImportBatchMethods` + `IVesselImportItemMethods`, migration v71; suite green on all four providers.
 
 - [ ] **A5 -- Import execution.** `VesselImportService.ImportAsync`: inline at or
   below `InlineBatchLimit`, otherwise a `Job`. Per-item outcomes are `Created`,
@@ -644,9 +646,10 @@ because Phase C has nothing to grade until vessels exist in bulk.
 
 ### Phase B -- Fleet Actions
 
-- [ ] **B1 -- Settings.** Add `FleetActionSettings`.
+- [~] **B1 -- Settings.** Add `FleetActionSettings`.
+  _Note (2026-10-03):_ class and `ArmadaSettings.FleetActions` added; Settings page/API exposure pending.
 
-- [ ] **B2 -- Models and persistence.** `FleetAction` (`fac_`), `FleetActionRun`
+- [x] **B2 -- Models and persistence.** `FleetAction` (`fac_`), `FleetActionRun`
   (`far_`), `FleetActionRunTarget` (`fat_`), with enums `FleetActionKindEnum`,
   `FleetActionRunStatusEnum` and `FleetActionTargetStatusEnum`. Add the interfaces,
   four provider implementations, and the next migration. Index
@@ -654,6 +657,7 @@ because Phase C has nothing to grade until vessels exist in bulk.
   explicitly named unmanaged-text columns; every status and number is typed.
   _Acceptance:_ database suite on every provider, including concurrent target
   updates on SQLite under the write lock.
+  _Note (2026-10-03):_ migration v72; SQLite writes serialized through the driver write lock; suite green on all four providers.
 
 - [ ] **B3 -- Template renderer.** `FleetActionTemplateRenderer` resolves the fixed
   variable set. An unknown variable fails validation with a 400 that names it.
@@ -698,14 +702,16 @@ because Phase C has nothing to grade until vessels exist in bulk.
 
 ### Phase C -- Vessel Health
 
-- [ ] **C1 -- Settings.** Add `RepositoryHealthSettings`, including thresholds.
+- [~] **C1 -- Settings.** Add `RepositoryHealthSettings`, including thresholds.
+  _Note (2026-10-03):_ `RepositoryHealthSettings` + `RepositoryHealthThresholds` added; Settings page/API exposure pending.
 
-- [ ] **C2 -- Models and persistence.** Add the four tables above (`vhl_`, `vhf_`,
+- [x] **C2 -- Models and persistence.** Add the four tables above (`vhl_`, `vhf_`,
   `vdp_`, `vho_`), interfaces, provider implementations, and a migration. Index every
   column the enumerate filter or sort exposes, plus `(tenant_id, overall_status)`.
   Deleting a vessel cascades.
   _Acceptance:_ database suite on all providers, with sort and filter on every
   whitelisted column.
+  _Note (2026-10-03):_ migration v73; status columns hold effective (override-aware) values; vessel delete cascades via FK ON DELETE CASCADE; suite green on all four providers.
 
 - [ ] **C3 -- Criterion framework.** `IVesselHealthCriterion`,
   `VesselHealthEvaluator` (runs the applicable criteria, applies the rollup and
@@ -886,3 +892,4 @@ Append a dated row whenever you advance a task. Keep newest at the bottom.
 | Date | Author | Task(s) | Change |
 |------|--------|---------|--------|
 | 2026-10-03 | (design) | -- | Initial plan drafted from a review of CodeHub (`~/Code/Codehub`) and Armada's current vessel, job, dispatch, git and dashboard surfaces. |
+| 2026-10-03 | Claude | A1, A4, B1, B2, C1, C2 | Settings classes, models/enums, ID prefixes, interfaces, four provider implementations, migrations v71-v73, and Database suites (VesselImport, FleetAction, VesselHealth). |

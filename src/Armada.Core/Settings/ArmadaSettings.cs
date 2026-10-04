@@ -671,6 +671,36 @@ namespace Armada.Core.Settings
             set => _Harbor = value ?? new HarborServerSettings();
         }
 
+        /// <summary>
+        /// Bulk vessel import settings (discovery roots, depth, excluded directory names, inline batch limit).
+        /// Never null; setting null restores the defaults.
+        /// </summary>
+        public VesselImportSettings Import
+        {
+            get => _Import;
+            set => _Import = value ?? new VesselImportSettings();
+        }
+
+        /// <summary>
+        /// Fleet action settings (concurrency cap, default timeout, output cap, run retention).
+        /// Never null; setting null restores the defaults.
+        /// </summary>
+        public FleetActionSettings FleetActions
+        {
+            get => _FleetActions;
+            set => _FleetActions = value ?? new FleetActionSettings();
+        }
+
+        /// <summary>
+        /// Vessel health evaluation settings (schedule, concurrency, freshness, scored criteria, thresholds).
+        /// Never null; setting null restores the defaults.
+        /// </summary>
+        public RepositoryHealthSettings RepositoryHealth
+        {
+            get => _RepositoryHealth;
+            set => _RepositoryHealth = value ?? new RepositoryHealthSettings();
+        }
+
         #endregion
 
         #region Private-Members
@@ -723,6 +753,9 @@ namespace Armada.Core.Settings
         private RemoteControlSettings _RemoteControl = new RemoteControlSettings();
         private TelemetrySettings _Telemetry = new TelemetrySettings();
         private HarborServerSettings _Harbor = new HarborServerSettings();
+        private VesselImportSettings _Import = new VesselImportSettings();
+        private FleetActionSettings _FleetActions = new FleetActionSettings();
+        private RepositoryHealthSettings _RepositoryHealth = new RepositoryHealthSettings();
         private DatabaseSettings _Database = new DatabaseSettings();
         private bool _DatabasePathConfigured = false;
 

@@ -65,6 +65,15 @@ namespace Armada.Core.Database.Mysql
             ModelEndpoints = new ModelEndpointMethods(_ConnectionString);
             Harbors = new HarborMethods(_ConnectionString);
             Memories = new MemoryMethods(_ConnectionString);
+            VesselImportBatches = new VesselImportBatchMethods(_ConnectionString);
+            VesselImportItems = new VesselImportItemMethods(_ConnectionString);
+            FleetActions = new FleetActionMethods(_ConnectionString);
+            FleetActionRuns = new FleetActionRunMethods(_ConnectionString);
+            FleetActionRunTargets = new FleetActionRunTargetMethods(_ConnectionString);
+            VesselHealth = new VesselHealthMethods(_ConnectionString);
+            VesselHealthFindings = new VesselHealthFindingMethods(_ConnectionString);
+            VesselDependencies = new VesselDependencyMethods(_ConnectionString);
+            VesselHealthOverrides = new VesselHealthOverrideMethods(_ConnectionString);
             ObjectiveRefinementSessions = new ObjectiveRefinementSessionMethods(_ConnectionString);
             ObjectiveRefinementMessages = new ObjectiveRefinementMessageMethods(_ConnectionString);
             Docks = new DockMethods(_ConnectionString);
@@ -629,6 +638,21 @@ namespace Armada.Core.Database.Mysql
                     70,
                     "Add memories and memory_tags tables for durable agent memory",
                     TableQueries.MigrationV70Statements
+                ),
+                new SchemaMigration(
+                    71,
+                    "Add vessel_import_batches and vessel_import_items tables for bulk vessel import",
+                    TableQueries.MigrationV71Statements
+                ),
+                new SchemaMigration(
+                    72,
+                    "Add fleet_actions, fleet_action_runs, and fleet_action_run_targets tables",
+                    TableQueries.MigrationV72Statements
+                ),
+                new SchemaMigration(
+                    73,
+                    "Add vessel_health, vessel_health_findings, vessel_dependencies, and vessel_health_overrides tables",
+                    TableQueries.MigrationV73Statements
                 )
             };
         }

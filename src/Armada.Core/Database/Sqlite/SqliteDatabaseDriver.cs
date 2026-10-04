@@ -30,6 +30,15 @@ namespace Armada.Core.Database.Sqlite
             get { return _ConnectionString; }
         }
 
+        /// <summary>
+        /// In-process write lock. Writers that use it queue for the SQLite database lock instead of contending
+        /// for it, which keeps concurrent multi-statement write transactions from failing with SQLITE_BUSY.
+        /// </summary>
+        internal SemaphoreSlim WriteLock
+        {
+            get { return _Semaphore; }
+        }
+
         #endregion
 
         #region Private-Members
@@ -93,6 +102,15 @@ namespace Armada.Core.Database.Sqlite
             ModelEndpoints = new ModelEndpointMethods(this, _Settings, _Logging);
             Harbors = new HarborMethods(this, _Settings, _Logging);
             Memories = new MemoryMethods(this, _Settings, _Logging);
+            VesselImportBatches = new VesselImportBatchMethods(this, _Settings, _Logging);
+            VesselImportItems = new VesselImportItemMethods(this, _Settings, _Logging);
+            FleetActions = new FleetActionMethods(this, _Settings, _Logging);
+            FleetActionRuns = new FleetActionRunMethods(this, _Settings, _Logging);
+            FleetActionRunTargets = new FleetActionRunTargetMethods(this, _Settings, _Logging);
+            VesselHealth = new VesselHealthMethods(this, _Settings, _Logging);
+            VesselHealthFindings = new VesselHealthFindingMethods(this, _Settings, _Logging);
+            VesselDependencies = new VesselDependencyMethods(this, _Settings, _Logging);
+            VesselHealthOverrides = new VesselHealthOverrideMethods(this, _Settings, _Logging);
         }
 
         /// <summary>
@@ -142,6 +160,15 @@ namespace Armada.Core.Database.Sqlite
             ModelEndpoints = new ModelEndpointMethods(this, _Settings, _Logging);
             Harbors = new HarborMethods(this, _Settings, _Logging);
             Memories = new MemoryMethods(this, _Settings, _Logging);
+            VesselImportBatches = new VesselImportBatchMethods(this, _Settings, _Logging);
+            VesselImportItems = new VesselImportItemMethods(this, _Settings, _Logging);
+            FleetActions = new FleetActionMethods(this, _Settings, _Logging);
+            FleetActionRuns = new FleetActionRunMethods(this, _Settings, _Logging);
+            FleetActionRunTargets = new FleetActionRunTargetMethods(this, _Settings, _Logging);
+            VesselHealth = new VesselHealthMethods(this, _Settings, _Logging);
+            VesselHealthFindings = new VesselHealthFindingMethods(this, _Settings, _Logging);
+            VesselDependencies = new VesselDependencyMethods(this, _Settings, _Logging);
+            VesselHealthOverrides = new VesselHealthOverrideMethods(this, _Settings, _Logging);
         }
 
         /// <summary>

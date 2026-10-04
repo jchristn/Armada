@@ -69,6 +69,15 @@ namespace Armada.Core.Database.SqlServer
             ModelEndpoints = new ModelEndpointMethods(this, _Settings, _Logging);
             Harbors = new HarborMethods(this, _Settings, _Logging);
             Memories = new MemoryMethods(this, _Settings, _Logging);
+            VesselImportBatches = new VesselImportBatchMethods(this, _Settings, _Logging);
+            VesselImportItems = new VesselImportItemMethods(this, _Settings, _Logging);
+            FleetActions = new FleetActionMethods(this, _Settings, _Logging);
+            FleetActionRuns = new FleetActionRunMethods(this, _Settings, _Logging);
+            FleetActionRunTargets = new FleetActionRunTargetMethods(this, _Settings, _Logging);
+            VesselHealth = new VesselHealthMethods(this, _Settings, _Logging);
+            VesselHealthFindings = new VesselHealthFindingMethods(this, _Settings, _Logging);
+            VesselDependencies = new VesselDependencyMethods(this, _Settings, _Logging);
+            VesselHealthOverrides = new VesselHealthOverrideMethods(this, _Settings, _Logging);
             ObjectiveRefinementSessions = new ObjectiveRefinementSessionMethods(this, _Settings, _Logging);
             ObjectiveRefinementMessages = new ObjectiveRefinementMessageMethods(this, _Settings, _Logging);
             Docks = new DockMethods(this, _Settings, _Logging);
