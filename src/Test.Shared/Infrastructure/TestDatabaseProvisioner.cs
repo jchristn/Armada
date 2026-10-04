@@ -17,6 +17,24 @@ namespace Test.Shared.Infrastructure
     /// </summary>
     public static class TestDatabaseProvisioner
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Command timeout, in seconds, for the harness's own CREATE/DROP/inspection statements. Default 120; override
+        /// with ARMADA_TEST_DB_COMMAND_TIMEOUT. Clamped to 30-600.
+        /// </summary>
+        public static int CommandTimeoutSeconds
+        {
+            get
+            {
+                string? value = Environment.GetEnvironmentVariable("ARMADA_TEST_DB_COMMAND_TIMEOUT");
+                int seconds = Int32.TryParse(value, out int parsed) ? parsed : 120;
+                return Math.Min(600, Math.Max(30, seconds));
+            }
+        }
+
+        #endregion
+
         #region Public-Methods
 
         /// <summary>
@@ -166,7 +184,17 @@ namespace Test.Shared.Infrastructure
 
         private static string MaintenanceConnectionString()
         {
-            return TestDatabaseConfig.BuildSettings(TestDatabaseConfig.MaintenanceDatabaseName()).GetConnectionString();
+            string connectionString = TestDatabaseConfig.BuildSettings(TestDatabaseConfig.MaintenanceDatabaseName()).GetConnectionString();
+            if (TestDatabaseConfig.Type == DatabaseTypeEnum.SqlServer)
+            {
+                // CREATE DATABASE copies the model database and DROP DATABASE ... WITH ROLLBACK IMMEDIATE waits for
+                // sessions to close; both can exceed the client's 15 s connect / 30 s command defaults on a slow or
+                // emulated server even though nothing is wrong. These are test-harness statements, not product queries.
+                SqlConnectionStringBuilder builder = new SqlConnectionStringBuilder(connectionString);
+                builder.ConnectTimeout = Math.Max(builder.ConnectTimeout, 60);
+                connectionString = builder.ConnectionString;
+            }
+            return connectionString;
         }
 
         private static async Task ExecutePostgresAsync(string connectionString, string sql, CancellationToken token)
@@ -177,6 +205,7 @@ namespace Test.Shared.Infrastructure
                 using (NpgsqlCommand command = connection.CreateCommand())
                 {
                     command.CommandText = sql;
+                    command.CommandTimeout = CommandTimeoutSeconds;
                     await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
             }
@@ -190,6 +219,7 @@ namespace Test.Shared.Infrastructure
                 using (MySqlCommand command = connection.CreateCommand())
                 {
                     command.CommandText = sql;
+                    command.CommandTimeout = CommandTimeoutSeconds;
                     await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
             }
@@ -203,6 +233,7 @@ namespace Test.Shared.Infrastructure
                 using (SqlCommand command = connection.CreateCommand())
                 {
                     command.CommandText = sql;
+                    command.CommandTimeout = CommandTimeoutSeconds;
                     await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
             }
@@ -217,6 +248,7 @@ namespace Test.Shared.Infrastructure
                 using (NpgsqlCommand command = connection.CreateCommand())
                 {
                     command.CommandText = sql;
+                    command.CommandTimeout = CommandTimeoutSeconds;
                     using (NpgsqlDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
                         while (await reader.ReadAsync(token).ConfigureAwait(false)) results.Add(reader.GetString(0));
@@ -235,6 +267,7 @@ namespace Test.Shared.Infrastructure
                 using (MySqlCommand command = connection.CreateCommand())
                 {
                     command.CommandText = sql;
+                    command.CommandTimeout = CommandTimeoutSeconds;
                     using (MySqlDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
                         while (await reader.ReadAsync(token).ConfigureAwait(false)) results.Add(reader.GetString(0));
@@ -253,6 +286,7 @@ namespace Test.Shared.Infrastructure
                 using (SqlCommand command = connection.CreateCommand())
                 {
                     command.CommandText = sql;
+                    command.CommandTimeout = CommandTimeoutSeconds;
                     using (SqlDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
                         while (await reader.ReadAsync(token).ConfigureAwait(false)) results.Add(reader.GetString(0));
