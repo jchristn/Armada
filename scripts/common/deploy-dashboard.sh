@@ -30,7 +30,18 @@ if command -v node >/dev/null 2>&1; then
     fi
 
     echo "[deploy-dashboard] Building..."
-    npm run build
+    if ! npm run build; then
+        # A stale or foreign node_modules (for example one installed on another OS) breaks the
+        # toolchain; reinstall from the lockfile and try once more, as deploy-dashboard.bat does.
+        if [ -f "package-lock.json" ]; then
+            echo "[deploy-dashboard] Initial build failed. Reinstalling dashboard dependencies and retrying..."
+            rm -rf node_modules
+            npm ci
+            npm run build
+        else
+            exit 1
+        fi
+    fi
 
     if [ ! -f "${DIST_DIR}/index.html" ]; then
         echo "ERROR: Dashboard build did not produce dist/index.html"

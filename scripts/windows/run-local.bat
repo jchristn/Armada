@@ -1,12 +1,14 @@
 @echo off
 setlocal
 
-REM Build and run Armada locally for development: builds the server and Harbor, launches the server in its
-REM own window, waits for it to become healthy, then launches Harbor in its own window.
+REM Build and run Armada locally for development: builds the server and Harbor, builds and deploys the
+REM dashboard (deploy-dashboard.bat, into %USERPROFILE%\.armada\dashboard where the server serves it from),
+REM launches the server in its own window, waits for it to become healthy, then launches Harbor in its own window.
 REM
 REM Usage:
 REM   run-local.bat [-f <framework>|--framework <framework>|<framework>]
 REM The framework (e.g. net8.0 or net10.0) is used to BOTH build and run; default net10.0.
+REM Set ARMADA_SKIP_DASHBOARD=1 to skip the dashboard build and keep the currently deployed dashboard.
 
 set "SCRIPT_DIR=%~dp0"
 if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
@@ -25,6 +27,13 @@ dotnet build "%REPO_ROOT%\src\Armada.Server\Armada.Server.csproj" --framework %F
 if errorlevel 1 exit /b 1
 dotnet build "%REPO_ROOT%\src\Armada.Harbor\Armada.Harbor.csproj" --framework %FRAMEWORK%
 if errorlevel 1 exit /b 1
+
+if "%ARMADA_SKIP_DASHBOARD%"=="1" (
+    echo [run-local] Skipping dashboard build ^(ARMADA_SKIP_DASHBOARD=1^).
+) else (
+    call "%SCRIPT_DIR%\deploy-dashboard.bat" %*
+    if errorlevel 1 exit /b 1
+)
 
 echo [run-local] Starting Armada Server (%FRAMEWORK%)...
 start "Armada Server" cmd /k dotnet run --project "%REPO_ROOT%\src\Armada.Server" --framework %FRAMEWORK% --no-build

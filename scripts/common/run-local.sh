@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Build and run Armada locally for development: builds the server and Harbor, starts the server in the
-# background, waits for it to become healthy, then runs Harbor in the foreground. When Harbor exits (or you
-# Ctrl+C), the background server is stopped too.
+# Build and run Armada locally for development: builds the server and Harbor, builds and deploys the
+# dashboard (deploy-dashboard.sh, into ~/.armada/dashboard where the server serves it from), starts the
+# server in the background, waits for it to become healthy, then runs Harbor in the foreground. When Harbor
+# exits (or you Ctrl+C), the background server is stopped too.
 #
 # Usage:
 #   run-local.sh [-f <framework>|--framework <framework>|<framework>]
 # The framework (e.g. net8.0 or net10.0) is used to BOTH build and run; default net10.0.
+# Set ARMADA_SKIP_DASHBOARD=1 to skip the dashboard build and keep the currently deployed dashboard.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -22,6 +24,12 @@ HEALTH_URL="${BASE_URL%/}/api/v1/status/health"
 echo "[run-local] Building server + Harbor (framework ${FRAMEWORK})..."
 dotnet build "${REPO_ROOT}/src/Armada.Server/Armada.Server.csproj" --framework "${FRAMEWORK}"
 dotnet build "${REPO_ROOT}/src/Armada.Harbor/Armada.Harbor.csproj" --framework "${FRAMEWORK}"
+
+if [ "${ARMADA_SKIP_DASHBOARD:-0}" = "1" ]; then
+    echo "[run-local] Skipping dashboard build (ARMADA_SKIP_DASHBOARD=1)."
+else
+    "${SCRIPT_DIR}/deploy-dashboard.sh" "$@"
+fi
 
 echo "[run-local] Starting Armada Server (${FRAMEWORK})..."
 dotnet run --project "${REPO_ROOT}/src/Armada.Server" --framework "${FRAMEWORK}" --no-build &
