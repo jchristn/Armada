@@ -9,6 +9,7 @@ import { clearProxySessionInstance, getHealth, getProxySessionContext, listCapta
 import SetupWizard, { isSetupComplete, clearSetupComplete } from './SetupWizard';
 import LanguageSelector from './shared/LanguageSelector';
 import NotificationBell from './shared/NotificationBell';
+import BackgroundActivityIndicator from './shared/BackgroundActivityIndicator';
 import CommandPalette from './shared/CommandPalette';
 import { dashboardItem, askArmadaItem, navSections, DEFAULT_EXPANDED_SECTIONS, type NavItem } from './navConfig';
 import { useInboxCount } from '../lib/useInboxCount';
@@ -364,6 +365,8 @@ export default function Layout() {
                 <span className="auth-badge auth-badge-user">{user.user?.email}</span>
               </>
             )}
+
+            {user && <BackgroundActivityIndicator />}
 
             <NotificationBell />
 

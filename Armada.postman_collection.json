@@ -256,6 +256,10 @@
       "value": "",
       "type": "string",
       "description": "Fleet action run target ID (fat_ prefix)."
+    },
+    {
+      "key": "discoveryJobId",
+      "value": ""
     }
   ],
   "item": [
@@ -2588,6 +2592,167 @@
               ]
             },
             "description": "Batch with all items and outcomes. Another tenant's batch returns 404."
+          }
+        },
+        {
+          "name": "Discover Repositories (Background)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessels/import/discover",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessels",
+                "import",
+                "discover"
+              ]
+            },
+            "description": "Same as Discover Repositories, but RunInBackground=true: the request is validated, then returns 202 with JobId and the batch in status Discovering. Poll Get Import Batch until the status is Discovered (candidates in Items) or Failed (ErrorMessage). Captures batchId and discoveryJobId. TenantAdmin.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Roots\": [\n    \"{{importRoot}}\"\n  ],\n  \"RunInBackground\": true\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "    const body = pm.response.json();",
+                  "    if (body && body.BatchId) pm.collectionVariables.set('batchId', body.BatchId);",
+                  "    if (body && body.JobId) pm.collectionVariables.set('discoveryJobId', body.JobId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Import Selected With Fleet Categorization",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessels/import",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessels",
+                "import"
+              ]
+            },
+            "description": "Imports the selected candidates and then starts a FleetCategorization job: the captain analyzes the selected repositories and recommends fleets. CaptainId must exist in the tenant (400 otherwise) and be Idle when the job starts. Omit Prompt to use the import.fleet_categorization prompt template. Poll Get Import Batch until CategorizationStatus is Completed, Failed, or Applied. TenantAdmin.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"BatchId\": \"{{batchId}}\",\n  \"Paths\": [\n    \"{{importRoot}}/example-repo\"\n  ],\n  \"Categorization\": {\n    \"Enabled\": true,\n    \"CaptainId\": \"{{captainId}}\",\n    \"Prompt\": null,\n    \"ApplyAutomatically\": false\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Default Categorization Prompt",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessels/import/categorization/default-prompt",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessels",
+                "import",
+                "categorization",
+                "default-prompt"
+              ]
+            },
+            "description": "Returns the import.fleet_categorization prompt template text that pre-fills the categorization instructions, and the run time limit (Import.CategorizationTimeoutMinutes). TenantAdmin."
+          }
+        },
+        {
+          "name": "Run or Retry Fleet Categorization",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessels/import/batches/{{batchId}}/categorize",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessels",
+                "import",
+                "batches",
+                "{{batchId}}",
+                "categorize"
+              ]
+            },
+            "description": "Runs (or retries) fleet categorization for a batch whose import finished. Omitted fields reuse the previous captain, prompt, and auto-apply choice; an empty body retries the last run. Returns 202 with the batch (CategorizationStatus Pending). 409 when the import has not finished or categorization is running. TenantAdmin.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "Apply Fleet Recommendations",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vessels/import/batches/{{batchId}}/fleet-recommendations/apply",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vessels",
+                "import",
+                "batches",
+                "{{batchId}}",
+                "fleet-recommendations",
+                "apply"
+              ]
+            },
+            "description": "Applies a (possibly edited) list of fleets: reuses tenant fleets with the same name (case-insensitive) or creates them, and assigns each listed vessel. Vessels must belong to the batch and appear in only one fleet; a fleet named Uncategorized is never created. Marks CategorizationStatus Applied. TenantAdmin.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Fleets\": [\n    {\n      \"Name\": \"Payments Platform\",\n      \"Description\": \"Services that move money.\",\n      \"VesselIds\": [\n        \"{{vesselId}}\"\n      ]\n    }\n  ]\n}"
+            }
           }
         }
       ]

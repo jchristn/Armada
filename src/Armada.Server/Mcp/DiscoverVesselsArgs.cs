@@ -21,5 +21,10 @@ namespace Armada.Server.Mcp
         /// Maximum scan depth (1-16), or null for the configured default.
         /// </summary>
         public int? MaxDepth { get; set; }
+
+        /// <summary>
+        /// When true, discovery runs as a background job and the batch starts in status Discovering.
+        /// </summary>
+        public bool? RunInBackground { get; set; }
     }
 }

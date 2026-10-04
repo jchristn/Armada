@@ -5,6 +5,9 @@ import importHistorySource from '../components/vessels/import/ImportHistory.tsx?
 import importResultsSource from '../components/vessels/import/ImportResultsStep.tsx?raw';
 import importReviewSource from '../components/vessels/import/ImportReviewStep.tsx?raw';
 import importWizardSource from '../components/vessels/import/ImportWizard.tsx?raw';
+import importCategorizationSource from '../components/vessels/import/ImportCategorizationOptions.tsx?raw';
+import fleetRecommendationsSource from '../components/vessels/import/FleetRecommendationsPanel.tsx?raw';
+import backgroundActivitySource from '../components/shared/BackgroundActivityIndicator.tsx?raw';
 import actionFormSource from '../components/fleetActions/FleetActionFormModal.tsx?raw';
 import runsTableSource from '../components/fleetActions/FleetActionRunsTable.tsx?raw';
 import actionsTableSource from '../components/fleetActions/FleetActionsTable.tsx?raw';
@@ -44,6 +47,7 @@ const NOT_KEYS = new Set(['unknown-variables', 'Command']);
 /** Files whose every translatable literal belongs to the vessel import or fleet action features. */
 const FEATURE_SOURCES = [
   browseTreeSource, importHistorySource, importResultsSource, importReviewSource, importWizardSource,
+  importCategorizationSource, fleetRecommendationsSource, backgroundActivitySource,
   actionFormSource, runsTableSource, actionsTableSource, runActionSource, runProgressSource, targetDrawerSource,
   templateHelpSource, vesselPickerSource, settingsSource, listEditorSource, dialogShellSource, stateBlocksSource,
   fleetActionsPageSource, runDetailSource,

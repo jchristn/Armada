@@ -534,10 +534,10 @@ namespace Armada.Server.Routes
                 if (captain == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Captain not found" }; }
 
                 // Block deletion of working captains
-                if (captain.State == CaptainStateEnum.Working || captain.State == CaptainStateEnum.Planning || captain.State == CaptainStateEnum.Refining)
+                if (captain.State == CaptainStateEnum.Working || captain.State == CaptainStateEnum.Planning || captain.State == CaptainStateEnum.Refining || captain.State == CaptainStateEnum.Analyzing)
                 {
                     req.Http.Response.StatusCode = 409;
-                    return (object)new { Error = "Conflict", Message = "Cannot delete captain while state is Working, Planning, or Refining. Stop the captain first." };
+                    return (object)new { Error = "Conflict", Message = "Cannot delete captain while state is Working, Planning, Refining, or Analyzing. Stop the captain first." };
                 }
 
                 // Block deletion if captain has active missions
@@ -604,9 +604,9 @@ namespace Armada.Server.Routes
                         result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
                         continue;
                     }
-                    if (captain.State == CaptainStateEnum.Working || captain.State == CaptainStateEnum.Planning || captain.State == CaptainStateEnum.Refining)
+                    if (captain.State == CaptainStateEnum.Working || captain.State == CaptainStateEnum.Planning || captain.State == CaptainStateEnum.Refining || captain.State == CaptainStateEnum.Analyzing)
                     {
-                        result.Skipped.Add(new DeleteMultipleSkipped(id, "Cannot delete captain while state is Working, Planning, or Refining. Stop the captain first."));
+                        result.Skipped.Add(new DeleteMultipleSkipped(id, "Cannot delete captain while state is Working, Planning, Refining, or Analyzing. Stop the captain first."));
                         continue;
                     }
                     List<Mission> captainMissions = ctx.IsAdmin

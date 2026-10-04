@@ -54,6 +54,8 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
   - **Vessel Import**
     - [discover_vessels](#discover_vessels)
     - [import_vessels](#import_vessels)
+    - [categorize_vessel_import](#categorize_vessel_import)
+    - [apply_fleet_recommendations](#apply_fleet_recommendations)
   - **Vessel Health**
     - [vessel_health](#vessel_health)
     - [evaluate_vessel_health](#evaluate_vessel_health)
@@ -1227,7 +1229,8 @@ Requires a tenant admin caller. Every path must lie inside `Import.AllowedRoots`
   "properties": {
     "directories": { "type": "array", "items": { "type": "string" }, "description": "Absolute directories. A git repository becomes one candidate; any other directory is scanned like a root." },
     "roots": { "type": "array", "items": { "type": "string" }, "description": "Absolute roots to scan for git repositories." },
-    "maxDepth": { "type": "integer", "description": "Maximum scan depth below each root (1-16, default Import.MaxDepth)" }
+    "maxDepth": { "type": "integer", "description": "Maximum scan depth below each root (1-16, default Import.MaxDepth)" },
+    "runInBackground": { "type": "boolean", "description": "Run discovery as a background job: returns jobId and the batch in status Discovering; poll the batch until it is Discovered or Failed" }
   }
 }
 ```
@@ -1237,6 +1240,7 @@ Requires a tenant admin caller. Every path must lie inside `Import.AllowedRoots`
 | `directories` | string[] | One of the two | Absolute directories (`~` is expanded) |
 | `roots` | string[] | One of the two | Absolute roots to scan |
 | `maxDepth` | integer | No | Levels below each root to search, 1-16 |
+| `runInBackground` | boolean | No | Default `false`. When `true`, returns at once with `RunsInBackground: true`, `JobId`, and the batch in status `Discovering` (no candidates); poll the batch until `Discovered` or `Failed` |
 
 **Example Input:**
 
@@ -1269,7 +1273,11 @@ Requires a tenant admin caller.
     "allNew": { "type": "boolean", "description": "Import every candidate with status New (paths is then ignored)" },
     "fleetId": { "type": "string", "description": "Fleet ID (flt_ prefix) to assign the vessels to" },
     "defaultPipelineId": { "type": "string", "description": "Default pipeline ID (ppl_ prefix) for the vessels" },
-    "landingMode": { "type": "string", "description": "Landing mode for the vessels: LocalMerge, PullRequest, MergeQueue, or None" }
+    "landingMode": { "type": "string", "description": "Landing mode for the vessels: LocalMerge, PullRequest, MergeQueue, or None" },
+    "categorize": { "type": "boolean", "description": "After the import, have a captain analyze the selected repositories and recommend fleets (FleetCategorization job). Requires captainId" },
+    "captainId": { "type": "string", "description": "Captain ID (cpt_ prefix) that recommends fleets; must exist in your tenant and should be Idle" },
+    "prompt": { "type": "string", "description": "Categorization instructions; omit to use the import.fleet_categorization prompt template. The output-format contract is always appended" },
+    "applyFleetsAutomatically": { "type": "boolean", "description": "Apply the recommended fleets automatically when categorization completes (default false: review, then call apply_fleet_recommendations)" }
   },
   "required": ["batchId"]
 }
@@ -1283,6 +1291,10 @@ Requires a tenant admin caller.
 | `fleetId` | string | No | Fleet to assign the vessels to (must exist in the tenant) |
 | `defaultPipelineId` | string | No | Default pipeline for the vessels |
 | `landingMode` | string | No | `LocalMerge`, `PullRequest`, `MergeQueue`, or `None` |
+| `categorize` | boolean | No | Recommend fleets with a captain after the import (see [REST_API.md](REST_API.md#vessel-import), Fleet categorization) |
+| `captainId` | string | With `categorize` | Captain that recommends fleets; must exist in the tenant |
+| `prompt` | string | No | Instructions for the captain; default is the `import.fleet_categorization` prompt template |
+| `applyFleetsAutomatically` | boolean | No | Apply the recommendations as soon as the captain finishes |
 
 **Example Input:**
 
@@ -1292,7 +1304,69 @@ Requires a tenant admin caller.
 
 **Response:** `VesselImportResponse`: `BatchId`, `JobId` (null when inline), `RunsInBackground`, `Batch` (with `Status`, `CreatedCount`, `SkippedCount`, `FailedCount`), and `Items` (every [VesselImportItem](#vesselimportitem) with its `Outcome`, `OutcomeReason`, and `VesselId`; empty for a background import).
 
-On failure returns `{ "Error": "...", "Code": "..." }` with `Code` one of `InvalidRequest` (no paths, a path not in the batch, an unknown fleet or landing mode, or `allNew` with no New candidates), `BatchNotFound`, or `BatchBusy` (the batch is already being imported).
+On failure returns `{ "Error": "...", "Code": "..." }` with `Code` one of `InvalidRequest` (no paths, a path not in the batch, an unknown fleet or landing mode, or `allNew` with no New candidates), `BatchNotFound`, or `BatchBusy` (the batch is already being imported, is still discovering, or has a categorization running). A categorization with a missing or unknown captain returns `InvalidRequest` before any vessel is created.
+
+---
+
+### categorize_vessel_import
+
+Run or retry fleet categorization for an import batch whose import finished: a captain reads a generated manifest of the batch's selected repositories in a scratch directory and recommends fleets (a `FleetCategorization` background job). Omitted arguments reuse the batch's previous captain, prompt, and auto-apply choice. Poll the batch until `CategorizationStatus` is `Completed`, `Failed`, or `Applied`; cancel with the job cancel endpoint. Requires a tenant admin caller.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "batchId": { "type": "string", "description": "Batch ID (vib_ prefix)" },
+    "captainId": { "type": "string", "description": "Captain ID (cpt_ prefix); omit to reuse the previous captain" },
+    "prompt": { "type": "string", "description": "Instructions; omit to reuse the previous run's instructions" },
+    "applyFleetsAutomatically": { "type": "boolean", "description": "Apply the recommendations automatically when the run completes" }
+  },
+  "required": ["batchId"]
+}
+```
+
+**Response:** the [VesselImportBatch](#vesselimportbatch) with `CategorizationStatus: "Pending"` and `CategorizationJobId`. On failure `{ "Error", "Code" }` with `BatchNotFound`, `BatchBusy` (import not finished or categorization already running), or `InvalidRequest` (no captain known, or the captain does not exist).
+
+---
+
+### apply_fleet_recommendations
+
+Apply fleet recommendations to an import batch. Pass `fleets` to apply an edited list, or omit it to apply the captain's stored recommendations unchanged. Each fleet is reused when the tenant already has a fleet with the same name (case-insensitive) and created otherwise; each listed vessel is assigned to it. A fleet named `Uncategorized` is never created (its vessels keep their fleet). Requires a tenant admin caller.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "batchId": { "type": "string", "description": "Batch ID (vib_ prefix)" },
+    "fleets": {
+      "type": "array",
+      "description": "Fleets to apply; omit to apply the stored recommendations",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "Fleet name" },
+          "description": { "type": "string", "description": "Description for a newly created fleet" },
+          "vesselIds": { "type": "array", "items": { "type": "string" }, "description": "Vessel IDs (vsl_ prefix) from the batch" }
+        },
+        "required": ["name", "vesselIds"]
+      }
+    }
+  },
+  "required": ["batchId"]
+}
+```
+
+**Example Input:**
+
+```json
+{ "batchId": "vib_mut1abcd_Rp7EygrpeVo", "fleets": [ { "name": "Payments Platform", "vesselIds": ["vsl_mut1b000_Q2w3e4r5t6y"] } ] }
+```
+
+**Response:** `FleetRecommendationApplyResult`: `BatchId`, `Fleets` (created or reused), `CreatedFleetIds`, `Assignments` (`VesselId`, `VesselName`, `FleetId`, `FleetName`, `PreviousFleetId`), and `Batch`. On failure `{ "Error", "Code" }` with `BatchNotFound`, `BatchBusy` (discovery, import, or categorization still running), or `InvalidRequest` (unnamed fleet, a vessel listed twice or not in the batch, or no stored recommendations).
 
 #### VesselImportBatch
 
@@ -1300,8 +1374,13 @@ On failure returns `{ "Error": "...", "Code": "..." }` with `Code` one of `Inval
 |---|---|---|
 | `Id` | string | `vib_` prefix |
 | `TenantId`, `UserId` | string | Owner |
-| `Status` | string | `Discovered`, `Importing`, `Completed`, `CompletedWithFailures`, `Failed` |
-| `HarborId`, `FleetId`, `JobId` | string | Discovery host (null = Admiral), assigned fleet, background job |
+| `Status` | string | `Discovering`, `Discovered`, `Importing`, `Completed`, `CompletedWithFailures`, `Failed` |
+| `HarborId`, `FleetId`, `JobId` | string | Discovery host (null = Admiral), assigned fleet, background import job |
+| `DiscoveryJobId`, `Truncated`, `ErrorMessage` | string, bool, string | Background discovery job, candidate cap reached, and why discovery or the import failed |
+| `CategorizationStatus` | string | `None`, `Pending`, `Running`, `Completed`, `Failed`, `Applied` |
+| `CategorizationCaptainId`, `CategorizationJobId` | string | Captain and job of the latest categorization run |
+| `CategorizationPrompt`, `CategorizationApplyAutomatically`, `CategorizationError` | string, bool, string | Instructions used, auto-apply choice, and failure reason |
+| `CategorizationStartedUtc`, `CategorizationCompletedUtc` | datetime | Categorization timestamps |
 | `RequestedPathCount`, `CandidateCount`, `CreatedCount`, `SkippedCount`, `FailedCount` | int | Counts from discovery and the latest import |
 | `CreatedUtc`, `LastUpdateUtc`, `CompletedUtc` | datetime | Timestamps |
 
@@ -1320,6 +1399,7 @@ On failure returns `{ "Error": "...", "Code": "..." }` with `Code` one of `Inval
 | `OutcomeReason` | string | `VesselAlreadyExists`, `NotSelected`, `NotImportable`, `PathMissing`, `CreateFailed`, `Cancelled`, or null |
 | `OutcomeMessage` | string | Diagnostic text, or null |
 | `VesselId` | string | Vessel created for this item, or null |
+| `Selected` | bool | The operator selected this candidate in the latest import |
 
 ---
 

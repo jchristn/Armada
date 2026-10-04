@@ -12,8 +12,9 @@ namespace Armada.Server.Mcp.Tools
     using Armada.Core.Services.Interfaces;
 
     /// <summary>
-    /// Registers MCP tools for bulk vessel import (discover_vessels, import_vessels). Both require a tenant admin
-    /// caller, matching the REST API, because they read the Admiral host filesystem.
+    /// Registers MCP tools for bulk vessel import (discover_vessels, import_vessels) and fleet categorization
+    /// (categorize_vessel_import, apply_fleet_recommendations). All require a tenant admin caller, matching the REST
+    /// API, because they read the Admiral host filesystem or change vessels and fleets.
     /// </summary>
     public static class McpVesselImportTools
     {
@@ -28,8 +29,9 @@ namespace Armada.Server.Mcp.Tools
         /// </summary>
         /// <param name="register">Delegate to register each tool.</param>
         /// <param name="importService">Vessel import service.</param>
+        /// <param name="categorizationService">Fleet categorization service, or null to omit the categorization tools.</param>
         /// <exception cref="ArgumentNullException">Thrown when importService is null.</exception>
-        public static void Register(RegisterToolDelegate register, IVesselImportService importService)
+        public static void Register(RegisterToolDelegate register, IVesselImportService importService, IFleetCategorizationService? categorizationService = null)
         {
             if (importService == null) throw new ArgumentNullException(nameof(importService));
 
@@ -43,7 +45,8 @@ namespace Armada.Server.Mcp.Tools
                     {
                         directories = new { type = "array", items = new { type = "string" }, description = "Absolute directories. A git repository becomes one candidate; any other directory is scanned like a root." },
                         roots = new { type = "array", items = new { type = "string" }, description = "Absolute roots to scan for git repositories." },
-                        maxDepth = new { type = "integer", description = "Maximum scan depth below each root (1-16, default Import.MaxDepth)" }
+                        maxDepth = new { type = "integer", description = "Maximum scan depth below each root (1-16, default Import.MaxDepth)" },
+                        runInBackground = new { type = "boolean", description = "Run discovery as a background job: returns jobId and the batch in status Discovering; poll the batch until it is Discovered or Failed" }
                     }
                 },
                 async (args) =>
@@ -58,6 +61,7 @@ namespace Armada.Server.Mcp.Tools
                     discovery.Directories = request.Directories ?? new List<string>();
                     discovery.Roots = request.Roots ?? new List<string>();
                     discovery.MaxDepth = request.MaxDepth;
+                    discovery.RunInBackground = request.RunInBackground == true;
 
                     try
                     {
@@ -91,7 +95,11 @@ namespace Armada.Server.Mcp.Tools
                         allNew = new { type = "boolean", description = "Import every candidate with status New (paths is then ignored)" },
                         fleetId = new { type = "string", description = "Fleet ID (flt_ prefix) to assign the vessels to" },
                         defaultPipelineId = new { type = "string", description = "Default pipeline ID (ppl_ prefix) for the vessels" },
-                        landingMode = new { type = "string", description = "Landing mode for the vessels: LocalMerge, PullRequest, MergeQueue, or None" }
+                        landingMode = new { type = "string", description = "Landing mode for the vessels: LocalMerge, PullRequest, MergeQueue, or None" },
+                        categorize = new { type = "boolean", description = "After the import, have a captain analyze the selected repositories and recommend fleets (FleetCategorization job). Requires captainId" },
+                        captainId = new { type = "string", description = "Captain ID (cpt_ prefix) that recommends fleets; must exist in your tenant and should be Idle" },
+                        prompt = new { type = "string", description = "Categorization instructions; omit to use the import.fleet_categorization prompt template. The output-format contract is always appended" },
+                        applyFleetsAutomatically = new { type = "boolean", description = "Apply the recommended fleets automatically when categorization completes (default false: review, then call apply_fleet_recommendations)" }
                     },
                     required = new[] { "batchId" }
                 },
@@ -106,6 +114,15 @@ namespace Armada.Server.Mcp.Tools
                     VesselImportRequest import = new VesselImportRequest();
                     import.BatchId = request.BatchId;
                     import.FleetId = request.FleetId;
+                    if (request.Categorize == true)
+                    {
+                        VesselImportCategorizationRequest categorization = new VesselImportCategorizationRequest();
+                        categorization.Enabled = true;
+                        categorization.CaptainId = request.CaptainId;
+                        categorization.Prompt = request.Prompt;
+                        categorization.ApplyAutomatically = request.ApplyFleetsAutomatically == true;
+                        import.Categorization = categorization;
+                    }
 
                     if (request.AllNew == true)
                     {
@@ -136,6 +153,138 @@ namespace Armada.Server.Mcp.Tools
                     try
                     {
                         VesselImportResponse result = await importService.ImportAsync(tenantId, caller.UserId, import).ConfigureAwait(false);
+                        return (object)result;
+                    }
+                    catch (KeyNotFoundException ex)
+                    {
+                        return (object)new { Error = ex.Message, Code = VesselImportCodes.BatchNotFound };
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        return (object)new { Error = ex.Message, Code = VesselImportCodes.BatchBusy };
+                    }
+                    catch (ArgumentException ex)
+                    {
+                        return (object)new { Error = ex.Message, Code = VesselImportCodes.InvalidRequest };
+                    }
+                });
+
+            if (categorizationService != null) RegisterCategorizationTools(register, importService, categorizationService);
+        }
+
+        private static void RegisterCategorizationTools(RegisterToolDelegate register, IVesselImportService importService, IFleetCategorizationService categorizationService)
+        {
+            register(
+                "categorize_vessel_import",
+                "Run or retry fleet categorization for an import batch whose import finished: a captain reads a manifest of the batch's selected repositories and recommends fleets (FleetCategorization background job). Omitted arguments reuse the batch's previous captain, prompt, and auto-apply choice. Poll the batch (enumerate entityType vessel_import_batch, or the job) until categorizationStatus is Completed, Failed, or Applied. Requires tenant admin.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        batchId = new { type = "string", description = "Batch ID (vib_ prefix)" },
+                        captainId = new { type = "string", description = "Captain ID (cpt_ prefix); omit to reuse the previous captain" },
+                        prompt = new { type = "string", description = "Instructions; omit to reuse the previous run's instructions" },
+                        applyFleetsAutomatically = new { type = "boolean", description = "Apply the recommendations automatically when the run completes" }
+                    },
+                    required = new[] { "batchId" }
+                },
+                async (args) =>
+                {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    if (!caller.IsAdmin && !caller.IsTenantAdmin) return (object)new { Error = "categorize_vessel_import requires a tenant admin" };
+
+                    CategorizeVesselImportArgs request = JsonSerializer.Deserialize<CategorizeVesselImportArgs>(args!.Value, _JsonOptions)!;
+                    VesselImportCategorizationRequest overrides = new VesselImportCategorizationRequest();
+                    overrides.Enabled = true;
+                    overrides.CaptainId = request.CaptainId;
+                    overrides.Prompt = request.Prompt;
+                    try
+                    {
+                        string tenantId = ResolveTenant(caller);
+                        if (request.ApplyFleetsAutomatically.HasValue) overrides.ApplyAutomatically = request.ApplyFleetsAutomatically.Value;
+                        else
+                        {
+                            VesselImportBatchDetail? existing = await importService.ReadBatchAsync(tenantId, request.BatchId).ConfigureAwait(false);
+                            if (existing == null) return (object)new { Error = "Import batch not found", Code = VesselImportCodes.BatchNotFound };
+                            overrides.ApplyAutomatically = existing.Batch.CategorizationApplyAutomatically;
+                        }
+
+                        VesselImportBatch batch = await categorizationService.CategorizeAsync(tenantId, request.BatchId, caller.UserId, overrides).ConfigureAwait(false);
+                        return (object)batch;
+                    }
+                    catch (KeyNotFoundException ex)
+                    {
+                        return (object)new { Error = ex.Message, Code = VesselImportCodes.BatchNotFound };
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        return (object)new { Error = ex.Message, Code = VesselImportCodes.BatchBusy };
+                    }
+                    catch (ArgumentException ex)
+                    {
+                        return (object)new { Error = ex.Message, Code = VesselImportCodes.InvalidRequest };
+                    }
+                });
+
+            register(
+                "apply_fleet_recommendations",
+                "Apply fleet recommendations to an import batch: reuses tenant fleets with the same name (case-insensitive) or creates them, and assigns each listed vessel. Pass fleets to apply an edited list, or omit it to apply the captain's stored recommendations unchanged. A fleet named Uncategorized is not created. Requires tenant admin.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        batchId = new { type = "string", description = "Batch ID (vib_ prefix)" },
+                        fleets = new
+                        {
+                            type = "array",
+                            description = "Fleets to apply; omit to apply the stored recommendations",
+                            items = new
+                            {
+                                type = "object",
+                                properties = new
+                                {
+                                    name = new { type = "string", description = "Fleet name" },
+                                    description = new { type = "string", description = "Description for a newly created fleet" },
+                                    vesselIds = new { type = "array", items = new { type = "string" }, description = "Vessel IDs (vsl_ prefix) from the batch" }
+                                },
+                                required = new[] { "name", "vesselIds" }
+                            }
+                        }
+                    },
+                    required = new[] { "batchId" }
+                },
+                async (args) =>
+                {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    if (!caller.IsAdmin && !caller.IsTenantAdmin) return (object)new { Error = "apply_fleet_recommendations requires a tenant admin" };
+
+                    ApplyFleetRecommendationsArgs request = JsonSerializer.Deserialize<ApplyFleetRecommendationsArgs>(args!.Value, _JsonOptions)!;
+                    string tenantId = ResolveTenant(caller);
+                    FleetRecommendationApplyRequest apply = new FleetRecommendationApplyRequest();
+                    if (request.Fleets != null && request.Fleets.Count > 0)
+                    {
+                        apply.Fleets = request.Fleets;
+                    }
+                    else
+                    {
+                        VesselImportBatchDetail? detail = await importService.ReadBatchAsync(tenantId, request.BatchId).ConfigureAwait(false);
+                        if (detail == null) return (object)new { Error = "Import batch not found", Code = VesselImportCodes.BatchNotFound };
+                        if (detail.FleetRecommendations.Count == 0) return (object)new { Error = "Batch has no fleet recommendations to apply", Code = VesselImportCodes.InvalidRequest };
+                        foreach (VesselImportFleetRecommendation recommendation in detail.FleetRecommendations)
+                        {
+                            FleetRecommendationApplyFleet fleet = new FleetRecommendationApplyFleet();
+                            fleet.Name = recommendation.Name;
+                            fleet.Description = recommendation.Description;
+                            fleet.VesselIds = new List<string>(recommendation.VesselIds);
+                            apply.Fleets.Add(fleet);
+                        }
+                    }
+
+                    try
+                    {
+                        FleetRecommendationApplyResult result = await categorizationService.ApplyAsync(tenantId, request.BatchId, caller.UserId, apply).ConfigureAwait(false);
                         return (object)result;
                     }
                     catch (KeyNotFoundException ex)

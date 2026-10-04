@@ -50,6 +50,13 @@ namespace Armada.Core.Enums
         /// dispatch selection until its quarantine expires.
         /// </summary>
         [EnumMember(Value = "Quarantined")]
-        Quarantined
+        Quarantined,
+
+        /// <summary>
+        /// Captain is reserved for a one-off analysis job outside any mission or dock (for example recommending fleets
+        /// for imported repositories). It returns to Idle when the job finishes, fails, or is cancelled.
+        /// </summary>
+        [EnumMember(Value = "Analyzing")]
+        Analyzing
     }
 }

@@ -66,6 +66,7 @@ namespace Armada.Server.Mcp
         /// <param name="vesselImportService">Optional vessel import service for discover_vessels and import_vessels.</param>
         /// <param name="fleetActionService">Optional fleet action service for fleet action tools.</param>
         /// <param name="vesselHealthService">Optional vessel health service for health inspection, evaluation, and override tools.</param>
+        /// <param name="fleetCategorizationService">Optional fleet categorization service for import categorization tools.</param>
         public static void RegisterAll(
             RegisterToolDelegate register,
             DatabaseDriver database,
@@ -93,14 +94,15 @@ namespace Armada.Server.Mcp
             IVesselService? vesselService = null,
             IVesselImportService? vesselImportService = null,
             FleetActionService? fleetActionService = null,
-            VesselHealthService? vesselHealthService = null)
+            VesselHealthService? vesselHealthService = null,
+            IFleetCategorizationService? fleetCategorizationService = null)
         {
             McpStatusTools.Register(register, admiral, onStop);
             if (logging != null) McpInboxTools.Register(register, database, logging);
             McpEnumerateTools.Register(register, database, mergeQueue);
             McpFleetTools.Register(register, database);
             McpVesselTools.Register(register, database, dockService, vesselService);
-            if (vesselImportService != null) McpVesselImportTools.Register(register, vesselImportService);
+            if (vesselImportService != null) McpVesselImportTools.Register(register, vesselImportService, fleetCategorizationService);
             McpVoyageTools.Register(register, database, admiral, settings);
             McpMissionTools.Register(register, database, admiral, settings, git, landingService);
             McpCaptainTools.Register(register, database, admiral, settings, onStopCaptain, agentLifecycle, captainToolService);
@@ -156,7 +158,8 @@ namespace Armada.Server.Mcp
             IVesselService? vesselService = null,
             IVesselImportService? vesselImportService = null,
             FleetActionService? fleetActionService = null,
-            VesselHealthService? vesselHealthService = null)
+            VesselHealthService? vesselHealthService = null,
+            IFleetCategorizationService? fleetCategorizationService = null)
         {
             List<CaptainToolSummary> tools = new List<CaptainToolSummary>();
 
@@ -180,7 +183,7 @@ namespace Armada.Server.Mcp
             RegisterCatalogGroup("Armada MCP / Enumeration", register => McpEnumerateTools.Register(register, database, mergeQueue));
             RegisterCatalogGroup("Armada MCP / Fleets", register => McpFleetTools.Register(register, database));
             RegisterCatalogGroup("Armada MCP / Vessels", register => McpVesselTools.Register(register, database, dockService, vesselService));
-            if (vesselImportService != null) RegisterCatalogGroup("Armada MCP / Vessel Import", register => McpVesselImportTools.Register(register, vesselImportService));
+            if (vesselImportService != null) RegisterCatalogGroup("Armada MCP / Vessel Import", register => McpVesselImportTools.Register(register, vesselImportService, fleetCategorizationService));
             RegisterCatalogGroup("Armada MCP / Voyages", register => McpVoyageTools.Register(register, database, admiral, settings));
             RegisterCatalogGroup("Armada MCP / Missions", register => McpMissionTools.Register(register, database, admiral, settings, git, landingService));
             RegisterCatalogGroup("Armada MCP / Captains", register => McpCaptainTools.Register(register, database, admiral, settings, onStopCaptain, agentLifecycle));

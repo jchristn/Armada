@@ -1460,7 +1460,46 @@ namespace Armada.Core.Database.Postgresql.Queries
                         FOREIGN KEY (vessel_id) REFERENCES vessels(id) ON DELETE CASCADE
                     );",
                     @"CREATE UNIQUE INDEX IF NOT EXISTS idx_vessel_health_overrides_tenant_vessel_criterion ON vessel_health_overrides(tenant_id, vessel_id, criterion);",
-                    @"CREATE INDEX IF NOT EXISTS idx_vessel_health_overrides_vessel ON vessel_health_overrides(vessel_id);")
+                    @"CREATE INDEX IF NOT EXISTS idx_vessel_health_overrides_vessel ON vessel_health_overrides(vessel_id);"),
+                new SchemaMigration(74, "Add background discovery and fleet categorization columns to vessel_import_batches, a selected flag to vessel_import_items, plus vessel_import_fleet_recommendations and vessel_import_fleet_recommendation_vessels tables",
+                    @"ALTER TABLE vessel_import_items ADD COLUMN IF NOT EXISTS selected BOOLEAN NOT NULL DEFAULT FALSE;",
+                    @"ALTER TABLE vessel_import_batches ADD COLUMN IF NOT EXISTS discovery_job_id TEXT;",
+                    @"ALTER TABLE vessel_import_batches ADD COLUMN IF NOT EXISTS truncated BOOLEAN NOT NULL DEFAULT FALSE;",
+                    @"ALTER TABLE vessel_import_batches ADD COLUMN IF NOT EXISTS error_message TEXT;",
+                    @"ALTER TABLE vessel_import_batches ADD COLUMN IF NOT EXISTS categorization_status TEXT NOT NULL DEFAULT 'None';",
+                    @"ALTER TABLE vessel_import_batches ADD COLUMN IF NOT EXISTS categorization_captain_id TEXT;",
+                    @"ALTER TABLE vessel_import_batches ADD COLUMN IF NOT EXISTS categorization_job_id TEXT;",
+                    @"ALTER TABLE vessel_import_batches ADD COLUMN IF NOT EXISTS categorization_prompt TEXT;",
+                    @"ALTER TABLE vessel_import_batches ADD COLUMN IF NOT EXISTS categorization_apply_automatically BOOLEAN NOT NULL DEFAULT FALSE;",
+                    @"ALTER TABLE vessel_import_batches ADD COLUMN IF NOT EXISTS categorization_error TEXT;",
+                    @"ALTER TABLE vessel_import_batches ADD COLUMN IF NOT EXISTS categorization_started_utc TIMESTAMP;",
+                    @"ALTER TABLE vessel_import_batches ADD COLUMN IF NOT EXISTS categorization_completed_utc TIMESTAMP;",
+                    @"CREATE INDEX IF NOT EXISTS idx_vessel_import_batches_tenant_categorization ON vessel_import_batches(tenant_id, categorization_status);",
+                    @"CREATE TABLE IF NOT EXISTS vessel_import_fleet_recommendations (
+                        id TEXT PRIMARY KEY,
+                        tenant_id TEXT NOT NULL,
+                        batch_id TEXT NOT NULL,
+                        name TEXT NOT NULL,
+                        description TEXT,
+                        rationale TEXT,
+                        sort_order INTEGER NOT NULL DEFAULT 0,
+                        applied_fleet_id TEXT,
+                        created_utc TIMESTAMP NOT NULL,
+                        last_update_utc TIMESTAMP NOT NULL,
+                        FOREIGN KEY (batch_id) REFERENCES vessel_import_batches(id) ON DELETE CASCADE
+                    );",
+                    @"CREATE INDEX IF NOT EXISTS idx_vessel_import_fleet_recs_tenant_batch ON vessel_import_fleet_recommendations(tenant_id, batch_id, sort_order);",
+                    @"CREATE TABLE IF NOT EXISTS vessel_import_fleet_recommendation_vessels (
+                        recommendation_id TEXT NOT NULL,
+                        tenant_id TEXT NOT NULL,
+                        batch_id TEXT NOT NULL,
+                        vessel_id TEXT NOT NULL,
+                        sort_order INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY (recommendation_id, vessel_id),
+                        FOREIGN KEY (recommendation_id) REFERENCES vessel_import_fleet_recommendations(id) ON DELETE CASCADE
+                    );",
+                    @"CREATE INDEX IF NOT EXISTS idx_vessel_import_fleet_rec_vessels_tenant_batch ON vessel_import_fleet_recommendation_vessels(tenant_id, batch_id);",
+                    @"CREATE INDEX IF NOT EXISTS idx_vessel_import_fleet_rec_vessels_vessel ON vessel_import_fleet_recommendation_vessels(vessel_id);")
             };
         }
 

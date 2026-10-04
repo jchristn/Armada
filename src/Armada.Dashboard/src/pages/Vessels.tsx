@@ -68,10 +68,11 @@ export default function Vessels() {
   const location = useLocation();
   const { t } = useLocale();
   const { pushToast } = useNotifications();
-  const { isTenantAdmin } = useAuth();
+  const { isTenantAdmin, user } = useAuth();
 
   // Import wizard: opened from the header button, or by the /vessels/import deep link.
   const importRoute = location.pathname.replace(/\/+$/, '').endsWith('/vessels/import');
+  const importBatchId = importRoute ? new URLSearchParams(location.search).get('batch') : null;
   const [importOpen, setImportOpen] = useState(importRoute);
   useEffect(() => { if (importRoute) setImportOpen(true); }, [importRoute]);
   function closeImport() {
@@ -556,7 +557,7 @@ export default function Vessels() {
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
 
-      <ImportWizard open={importOpen} onClose={closeImport} onImported={() => void load()} />
+      <ImportWizard open={importOpen} onClose={closeImport} onImported={() => void load()} initialBatchId={importBatchId} tenantId={user?.user?.tenantId ?? null} />
       {runActionIds && (
         <RunActionModal
           open

@@ -28,12 +28,33 @@ namespace Armada.Core.Models
             set => _Items = value ?? new List<VesselImportItem>();
         }
 
+        /// <summary>
+        /// Advisory discovery hints rebuilt from the batch (candidate cap reached, paths not visible to the Admiral).
+        /// Never null.
+        /// </summary>
+        public List<VesselImportHint> Hints
+        {
+            get => _Hints;
+            set => _Hints = value ?? new List<VesselImportHint>();
+        }
+
+        /// <summary>
+        /// Fleet recommendations from the latest categorization run, in display order. Never null.
+        /// </summary>
+        public List<VesselImportFleetRecommendation> FleetRecommendations
+        {
+            get => _FleetRecommendations;
+            set => _FleetRecommendations = value ?? new List<VesselImportFleetRecommendation>();
+        }
+
         #endregion
 
         #region Private-Members
 
         private VesselImportBatch _Batch = new VesselImportBatch();
         private List<VesselImportItem> _Items = new List<VesselImportItem>();
+        private List<VesselImportHint> _Hints = new List<VesselImportHint>();
+        private List<VesselImportFleetRecommendation> _FleetRecommendations = new List<VesselImportFleetRecommendation>();
 
         #endregion
 

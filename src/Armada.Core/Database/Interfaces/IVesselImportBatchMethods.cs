@@ -43,5 +43,14 @@ namespace Armada.Core.Database.Interfaces
         /// CreatedAfter, CreatedBefore, and Status (a <see cref="Armada.Core.Enums.VesselImportBatchStatusEnum"/> name).
         /// </summary>
         Task<EnumerationResult<VesselImportBatch>> EnumerateAsync(string tenantId, EnumerationQuery query, CancellationToken token = default);
+
+        /// <summary>
+        /// Enumerate batches in every tenant whose background work was in flight: discovery still running (status
+        /// Discovering) or fleet categorization Pending or Running. Used at Admiral startup to fail work orphaned by a
+        /// restart.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Batches ordered by creation time, oldest first.</returns>
+        Task<List<VesselImportBatch>> EnumerateInProgressAsync(CancellationToken token = default);
     }
 }

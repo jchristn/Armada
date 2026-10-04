@@ -12,7 +12,9 @@ namespace Armada.Core.Services.Interfaces
     {
         /// <summary>
         /// Run discovery and persist the result as a batch in status Discovered with one item per candidate. Creates
-        /// no vessels.
+        /// no vessels. When <see cref="VesselDiscoveryRequest.RunInBackground"/> is true the request is validated, the
+        /// batch is created in status Discovering, and the scan runs as a VesselDiscovery job; the response carries the
+        /// job identifier and no candidates.
         /// </summary>
         /// <param name="tenantId">Caller's tenant.</param>
         /// <param name="userId">Caller's user, or null.</param>
@@ -72,5 +74,12 @@ namespace Armada.Core.Services.Interfaces
         /// <exception cref="Armada.Core.Services.VesselImportPathNotAllowedException">Thrown when the path is outside the allowed roots.</exception>
         /// <exception cref="System.IO.DirectoryNotFoundException">Thrown when the directory does not exist.</exception>
         Task<VesselBrowseResult> BrowseAsync(string? path, CancellationToken token = default);
+
+        /// <summary>
+        /// Fail work orphaned by an Admiral restart: batches still Discovering (and their jobs), plus any fleet
+        /// categorization that was Pending or Running. Call once at startup.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        Task RecoverAsync(CancellationToken token = default);
     }
 }

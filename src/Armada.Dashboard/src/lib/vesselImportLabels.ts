@@ -1,9 +1,9 @@
 import type { BadgeIcon, BadgeTone } from '../components/shared/CodeStatusBadge';
-import type { VesselImportBatchStatus, VesselImportCandidateStatus, VesselImportOutcome } from '../types/models';
+import type { Job, VesselImportBatch, VesselImportBatchStatus, VesselImportCandidateStatus, VesselImportCategorizationStatus, VesselImportOutcome } from '../types/models';
 import type { StatusMeta, Translate } from './fleetActionLabels';
 
 export const CANDIDATE_STATUSES: VesselImportCandidateStatus[] = ['New', 'AlreadyOnboarded', 'Worktree', 'ArmadaManaged', 'NotFound', 'NotGit', 'AccessDenied'];
-export const BATCH_STATUSES: VesselImportBatchStatus[] = ['Discovered', 'Importing', 'Completed', 'CompletedWithFailures', 'Failed'];
+export const BATCH_STATUSES: VesselImportBatchStatus[] = ['Discovering', 'Discovered', 'Importing', 'Completed', 'CompletedWithFailures', 'Failed'];
 export const OUTCOMES: VesselImportOutcome[] = ['Pending', 'Created', 'SkippedExisting', 'SkippedNotSelected', 'Failed'];
 
 /** Candidate statuses that the import endpoint will create a vessel for when selected. */
@@ -28,11 +28,32 @@ export const OUTCOME_META: Record<VesselImportOutcome, StatusMeta> = {
 };
 
 export const BATCH_STATUS_META: Record<VesselImportBatchStatus, StatusMeta> = {
+  Discovering: { label: 'Discovering', description: 'Repositories are being scanned in the background.', tone: 'running', icon: 'spinner' },
   Discovered: { label: 'Discovered', description: 'Candidates were found; nothing has been imported yet.', tone: 'pending', icon: 'clock' },
   Importing: { label: 'Importing', description: 'Vessels are being created in the background.', tone: 'running', icon: 'spinner' },
   Completed: { label: 'Completed', description: 'The import finished without failures.', tone: 'success', icon: 'check' },
   CompletedWithFailures: { label: 'Completed with failures', description: 'The import finished and at least one item failed.', tone: 'warning', icon: 'alert' },
   Failed: { label: 'Failed', description: 'The import as a whole failed or the background job was cancelled.', tone: 'failed', icon: 'x' },
+};
+
+export const CATEGORIZATION_STATUS_META: Record<VesselImportCategorizationStatus, StatusMeta> = {
+  None: { label: 'No fleet recommendations', description: 'Fleet categorization was not requested for this import.', tone: 'skipped', icon: 'skip' },
+  Pending: { label: 'Fleet recommendations queued', description: 'A captain will analyze the repositories when the import finishes.', tone: 'pending', icon: 'clock' },
+  Running: { label: 'Recommending fleets', description: 'A captain is analyzing the repositories in the background.', tone: 'running', icon: 'spinner' },
+  Completed: { label: 'Fleets recommended', description: 'Recommendations are ready to review and apply.', tone: 'info', icon: 'dot' },
+  Failed: { label: 'Fleet recommendation failed', description: 'The captain could not produce recommendations; see the error and retry.', tone: 'failed', icon: 'x' },
+  Applied: { label: 'Fleets applied', description: 'Recommended fleets were created or reused and the vessels assigned.', tone: 'success', icon: 'check' },
+};
+
+/** Background job kinds mapped to friendly English source names for the activity indicator. */
+export const JOB_KIND_LABELS: Record<string, string> = {
+  VesselDiscovery: 'Discovering repositories',
+  VesselImport: 'Importing repositories',
+  FleetCategorization: 'Recommending fleets',
+  Report: 'Building a report',
+  Cleanup: 'Cleaning up',
+  Sync: 'Syncing',
+  Generic: 'Background task',
 };
 
 /** Item outcome reason codes mapped to English source labels. */
@@ -76,6 +97,43 @@ export function outcomeBadge(t: Translate, outcome: VesselImportOutcome) {
 
 export function batchStatusBadge(t: Translate, status: VesselImportBatchStatus) {
   return badge(t, BATCH_STATUS_META[status], status);
+}
+
+export function categorizationBadge(t: Translate, status: VesselImportCategorizationStatus) {
+  return badge(t, CATEGORIZATION_STATUS_META[status], status);
+}
+
+/** True while discovery, the import, or fleet categorization of a batch is still running. */
+export function isBatchBusy(batch: VesselImportBatch | null | undefined): boolean {
+  if (!batch) return false;
+  return batch.status === 'Discovering' || batch.status === 'Importing' || isCategorizing(batch);
+}
+
+/** True while fleet categorization of a batch is queued or running. */
+export function isCategorizing(batch: VesselImportBatch | null | undefined): boolean {
+  return !!batch && (batch.categorizationStatus === 'Pending' || batch.categorizationStatus === 'Running');
+}
+
+/** Import batch identifier mentioned in a job name (import, discovery, and categorization jobs name their batch). */
+export function jobBatchId(job: Pick<Job, 'name'>): string | null {
+  const match = /vib_[A-Za-z0-9_-]+/.exec(job.name || '');
+  return match ? match[0] : null;
+}
+
+/** Friendly, translated name for a background job. */
+export function jobFriendlyName(t: Translate, job: Pick<Job, 'kind' | 'name'>): string {
+  if (job.kind === 'Report' && job.name === 'Vessel health evaluation') return t('Evaluating vessel health');
+  const label = JOB_KIND_LABELS[job.kind];
+  return label ? t(label) : job.name;
+}
+
+/** Dashboard route for a background job: import-related jobs open their batch, everything else the Jobs page. */
+export function jobRoute(job: Pick<Job, 'kind' | 'name'>): string {
+  const batchId = jobBatchId(job);
+  if (batchId && (job.kind === 'VesselDiscovery' || job.kind === 'VesselImport' || job.kind === 'FleetCategorization')) {
+    return `/vessels/import?batch=${encodeURIComponent(batchId)}`;
+  }
+  return '/jobs';
 }
 
 export function outcomeReasonLabel(t: Translate, code: string | null | undefined): string {

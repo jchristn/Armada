@@ -27,6 +27,17 @@ namespace Armada.Core.Services.Interfaces
         Task<VesselDiscoveryResult> DiscoverAsync(string tenantId, VesselDiscoveryRequest request, CancellationToken token = default);
 
         /// <summary>
+        /// Validate a discovery request without scanning: the same checks <see cref="DiscoverAsync"/> performs before it
+        /// touches the filesystem. Lets a background discovery reject bad input synchronously.
+        /// </summary>
+        /// <param name="request">Discovery request.</param>
+        /// <exception cref="ArgumentNullException">Thrown when request is null.</exception>
+        /// <exception cref="ArgumentException">Thrown when no paths are given, too many are given, or a path is relative or malformed.</exception>
+        /// <exception cref="NotSupportedException">Thrown when a Harbor is requested.</exception>
+        /// <exception cref="Armada.Core.Services.VesselImportPathNotAllowedException">Thrown when a path is outside the allowed roots.</exception>
+        void ValidateRequest(VesselDiscoveryRequest request);
+
+        /// <summary>
         /// List the browsable subdirectories of a directory, or the allowed roots when no path is given.
         /// </summary>
         /// <param name="path">Absolute directory path, or null or empty for the allowed roots.</param>

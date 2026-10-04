@@ -22,9 +22,10 @@ interface NumberField {
 }
 
 /** Field ranges mirror the backend clamps (VesselImportSettings / FleetActionSettings). */
-export const IMPORT_RANGES: Record<'maxDepth' | 'inlineBatchLimit', NumberField> = {
+export const IMPORT_RANGES: Record<'maxDepth' | 'inlineBatchLimit' | 'categorizationTimeoutMinutes', NumberField> = {
   maxDepth: { key: 'maxDepth', min: 1, max: 16 },
   inlineBatchLimit: { key: 'inlineBatchLimit', min: 1, max: 500 },
+  categorizationTimeoutMinutes: { key: 'categorizationTimeoutMinutes', min: 1, max: 240 },
 };
 
 export const FLEET_ACTION_RANGES: Record<keyof FleetActionSettingsData, NumberField> = {
@@ -46,16 +47,17 @@ const IMPORT_DEFAULTS: VesselImportSettingsData = {
   maxDepth: 6,
   excludedDirectoryNames: ['bin', 'obj', 'node_modules', 'dist', '.git', '.vs', 'packages', 'TestResults', '.armada', 'target', 'venv', '.venv', '__pycache__'],
   inlineBatchLimit: 25,
+  categorizationTimeoutMinutes: 20,
 };
 
 const FLEET_DEFAULTS: FleetActionSettingsData = { maxConcurrency: 8, defaultTimeoutSeconds: 300, maxOutputBytes: 65536, runRetentionDays: 30 };
 
-interface ImportDraft { allowedRoots: string[]; excludedDirectoryNames: string[]; maxDepth: string; inlineBatchLimit: string }
+interface ImportDraft { allowedRoots: string[]; excludedDirectoryNames: string[]; maxDepth: string; inlineBatchLimit: string; categorizationTimeoutMinutes: string }
 interface FleetDraft { maxConcurrency: string; defaultTimeoutSeconds: string; maxOutputBytes: string; runRetentionDays: string }
 
 function toImportDraft(s: VesselImportSettingsData | null | undefined): ImportDraft {
   const v = s ?? IMPORT_DEFAULTS;
-  return { allowedRoots: [...(v.allowedRoots ?? [])], excludedDirectoryNames: [...(v.excludedDirectoryNames ?? [])], maxDepth: String(v.maxDepth), inlineBatchLimit: String(v.inlineBatchLimit) };
+  return { allowedRoots: [...(v.allowedRoots ?? [])], excludedDirectoryNames: [...(v.excludedDirectoryNames ?? [])], maxDepth: String(v.maxDepth), inlineBatchLimit: String(v.inlineBatchLimit), categorizationTimeoutMinutes: String(v.categorizationTimeoutMinutes ?? 20) };
 }
 
 function toFleetDraft(s: FleetActionSettingsData | null | undefined): FleetDraft {
@@ -83,6 +85,7 @@ export default function ImportFleetActionSettings({ importSettings, fleetActionS
   const importErrors = {
     maxDepth: rangeError(importDraft.maxDepth, IMPORT_RANGES.maxDepth),
     inlineBatchLimit: rangeError(importDraft.inlineBatchLimit, IMPORT_RANGES.inlineBatchLimit),
+    categorizationTimeoutMinutes: rangeError(importDraft.categorizationTimeoutMinutes, IMPORT_RANGES.categorizationTimeoutMinutes),
   };
   const fleetErrors = {
     maxConcurrency: rangeError(fleetDraft.maxConcurrency, FLEET_ACTION_RANGES.maxConcurrency),
@@ -90,7 +93,7 @@ export default function ImportFleetActionSettings({ importSettings, fleetActionS
     maxOutputBytes: rangeError(fleetDraft.maxOutputBytes, FLEET_ACTION_RANGES.maxOutputBytes),
     runRetentionDays: rangeError(fleetDraft.runRetentionDays, FLEET_ACTION_RANGES.runRetentionDays),
   };
-  const importValid = !importErrors.maxDepth && !importErrors.inlineBatchLimit;
+  const importValid = !importErrors.maxDepth && !importErrors.inlineBatchLimit && !importErrors.categorizationTimeoutMinutes;
   const fleetValid = Object.values(fleetErrors).every((e) => !e);
 
   const rangeText = (r: NumberField) => t('Must be a whole number from {{min}} to {{max}}.', { min: r.min.toLocaleString(), max: r.max.toLocaleString() });
@@ -105,6 +108,7 @@ export default function ImportFleetActionSettings({ importSettings, fleetActionS
           maxDepth: Number(importDraft.maxDepth),
           excludedDirectoryNames: importDraft.excludedDirectoryNames,
           inlineBatchLimit: Number(importDraft.inlineBatchLimit),
+          categorizationTimeoutMinutes: Number(importDraft.categorizationTimeoutMinutes),
         },
       });
       setImportDirty(false);
@@ -183,6 +187,7 @@ export default function ImportFleetActionSettings({ importSettings, fleetActionS
           <div className="settings-grid">
             {numberInput('import-max-depth', t('Max depth'), t('Folder levels searched below each scan root (1-16, default 6).'), importDraft.maxDepth, importErrors.maxDepth, IMPORT_RANGES.maxDepth, (v) => setImport({ maxDepth: v }))}
             {numberInput('import-inline-limit', t('Inline batch limit'), t('Largest selection imported inside the request; larger imports run as a background job (1-500, default 25).'), importDraft.inlineBatchLimit, importErrors.inlineBatchLimit, IMPORT_RANGES.inlineBatchLimit, (v) => setImport({ inlineBatchLimit: v }))}
+            {numberInput('import-categorization-timeout', t('Fleet categorization time limit (minutes)'), t('Longest a captain may spend recommending fleets for an import before it is stopped (1-240, default 20).'), importDraft.categorizationTimeoutMinutes, importErrors.categorizationTimeoutMinutes, IMPORT_RANGES.categorizationTimeoutMinutes, (v) => setImport({ categorizationTimeoutMinutes: v }))}
           </div>
           <div className="settings-actions">
             <button type="button" className="btn-primary btn-sm" onClick={() => void saveImport()} disabled={!importValid || savingImport || !importDirty}>

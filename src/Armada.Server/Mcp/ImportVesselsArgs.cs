@@ -36,5 +36,25 @@ namespace Armada.Server.Mcp
         /// Landing mode name for created vessels (LocalMerge, PullRequest, MergeQueue, None).
         /// </summary>
         public string? LandingMode { get; set; }
+
+        /// <summary>
+        /// When true, a captain recommends fleets for the imported vessels after the import (requires CaptainId).
+        /// </summary>
+        public bool? Categorize { get; set; }
+
+        /// <summary>
+        /// Captain ID (cpt_ prefix) that performs fleet categorization.
+        /// </summary>
+        public string? CaptainId { get; set; }
+
+        /// <summary>
+        /// Categorization instructions; omit to use the import.fleet_categorization prompt template.
+        /// </summary>
+        public string? Prompt { get; set; }
+
+        /// <summary>
+        /// When true, apply the captain's fleet recommendations automatically when categorization completes.
+        /// </summary>
+        public bool? ApplyFleetsAutomatically { get; set; }
     }
 }

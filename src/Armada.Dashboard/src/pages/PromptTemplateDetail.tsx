@@ -73,7 +73,7 @@ const PARAMETER_GROUPS: ParameterGroup[] = [
   },
 ];
 
-const PROMPT_TEMPLATE_CATEGORY_OPTIONS = ['mission', 'persona', 'structure', 'commit', 'landing', 'agent'] as const;
+const PROMPT_TEMPLATE_CATEGORY_OPTIONS = ['mission', 'persona', 'structure', 'commit', 'landing', 'agent', 'import'] as const;
 
 export default function PromptTemplateDetail() {
   const { t, formatDateTime } = useLocale();

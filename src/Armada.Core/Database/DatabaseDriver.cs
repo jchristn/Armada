@@ -195,6 +195,11 @@ namespace Armada.Core.Database
         public IVesselImportItemMethods VesselImportItems { get; protected set; } = null!;
 
         /// <summary>
+        /// Vessel import fleet recommendation methods.
+        /// </summary>
+        public IVesselImportFleetRecommendationMethods VesselImportFleetRecommendations { get; protected set; } = null!;
+
+        /// <summary>
         /// Fleet action definition operations.
         /// </summary>
         public IFleetActionMethods FleetActions { get; protected set; } = null!;

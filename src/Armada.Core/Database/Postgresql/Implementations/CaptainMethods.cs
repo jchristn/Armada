@@ -767,6 +767,60 @@ namespace Armada.Core.Database.Postgresql.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<bool> TryReserveAsync(string tenantId, string captainId, CaptainStateEnum state, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (string.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));
+            if (state == CaptainStateEnum.Idle) throw new ArgumentException("Reserving a captain requires a non-Idle state.", nameof(state));
+            DateTime now = DateTime.UtcNow;
+            using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (NpgsqlCommand cmd = new NpgsqlCommand())
+                {
+                    cmd.Connection = conn;
+                    cmd.CommandText = @"UPDATE captains SET
+                        state = @state,
+                        last_update_utc = @last_update_utc
+                        WHERE tenant_id = @tenantId AND id = @id AND state = 'Idle';";
+                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
+                    cmd.Parameters.AddWithValue("@id", captainId);
+                    cmd.Parameters.AddWithValue("@state", state.ToString());
+                    cmd.Parameters.AddWithValue("@last_update_utc", now);
+                    int rowsAffected = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    return rowsAffected > 0;
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> TryReleaseAsync(string tenantId, string captainId, CaptainStateEnum state, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (string.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));
+            DateTime now = DateTime.UtcNow;
+            using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (NpgsqlCommand cmd = new NpgsqlCommand())
+                {
+                    cmd.Connection = conn;
+                    cmd.CommandText = @"UPDATE captains SET
+                        state = 'Idle',
+                        process_id = NULL,
+                        last_update_utc = @last_update_utc
+                        WHERE tenant_id = @tenantId AND id = @id AND state = @state;";
+                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
+                    cmd.Parameters.AddWithValue("@id", captainId);
+                    cmd.Parameters.AddWithValue("@state", state.ToString());
+                    cmd.Parameters.AddWithValue("@last_update_utc", now);
+                    int rowsAffected = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    return rowsAffected > 0;
+                }
+            }
+        }
+
+        /// <inheritdoc />
         public async Task<Captain?> ReadAsync(string tenantId, string userId, string id, CancellationToken token = default)
         {
             if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));

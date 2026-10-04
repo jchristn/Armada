@@ -129,6 +129,10 @@ import type {
   VesselImportResponse,
   VesselImportBatch,
   VesselImportBatchDetail,
+  VesselImportCategorizationRequest,
+  FleetRecommendationApplyRequest,
+  FleetRecommendationApplyResult,
+  FleetCategorizationDefaultPrompt,
   FleetAction,
   FleetActionUpsertRequest,
   FleetActionRunRequest,
@@ -1227,6 +1231,18 @@ export const enumerateVesselImportBatches = (query?: { pageNumber?: number; page
 /** A batch with all of its items, ordered by path. */
 export const getVesselImportBatch = (id: string) =>
   get<VesselImportBatchDetail>(`/api/v1/vessels/import/batches/${encodeURIComponent(id)}`);
+
+/** The default fleet categorization instructions (the import.fleet_categorization prompt template). */
+export const getFleetCategorizationDefaultPrompt = () =>
+  get<FleetCategorizationDefaultPrompt>('/api/v1/vessels/import/categorization/default-prompt');
+
+/** Run or retry fleet categorization for an imported batch; omitted fields reuse the previous run. */
+export const categorizeVesselImport = (id: string, data?: Partial<VesselImportCategorizationRequest>) =>
+  post<VesselImportBatch>(`/api/v1/vessels/import/batches/${encodeURIComponent(id)}/categorize`, data ?? {});
+
+/** Apply (possibly edited) fleet recommendations: reuse fleets by name or create them, then assign vessels. */
+export const applyFleetRecommendations = (id: string, data: FleetRecommendationApplyRequest) =>
+  post<FleetRecommendationApplyResult>(`/api/v1/vessels/import/batches/${encodeURIComponent(id)}/fleet-recommendations/apply`, data);
 
 // ---------------------------------------------------------------------------
 // Fleet Actions

@@ -867,6 +867,58 @@ namespace Armada.Core.Database.Mysql.Implementations
             }
         }
 
+        /// <inheritdoc />
+        public async Task<bool> TryReserveAsync(string tenantId, string captainId, CaptainStateEnum state, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (string.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));
+            if (state == CaptainStateEnum.Idle) throw new ArgumentException("Reserving a captain requires a non-Idle state.", nameof(state));
+            DateTime now = DateTime.UtcNow;
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (MySqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = @"UPDATE captains SET
+                        state = @state,
+                        last_update_utc = @last_update_utc
+                        WHERE tenant_id = @tenantId AND id = @id AND state = 'Idle';";
+                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
+                    cmd.Parameters.AddWithValue("@id", captainId);
+                    cmd.Parameters.AddWithValue("@state", state.ToString());
+                    cmd.Parameters.AddWithValue("@last_update_utc", ToIso8601(now));
+                    int rowsAffected = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    return rowsAffected > 0;
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> TryReleaseAsync(string tenantId, string captainId, CaptainStateEnum state, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (string.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));
+            DateTime now = DateTime.UtcNow;
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (MySqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = @"UPDATE captains SET
+                        state = 'Idle',
+                        process_id = NULL,
+                        last_update_utc = @last_update_utc
+                        WHERE tenant_id = @tenantId AND id = @id AND state = @state;";
+                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
+                    cmd.Parameters.AddWithValue("@id", captainId);
+                    cmd.Parameters.AddWithValue("@state", state.ToString());
+                    cmd.Parameters.AddWithValue("@last_update_utc", ToIso8601(now));
+                    int rowsAffected = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    return rowsAffected > 0;
+                }
+            }
+        }
+
         /// <summary>
         /// Atomically claim a captain for a mission. Sets state to Working and assigns
         /// mission/dock IDs, but only if the captain is currently Idle.

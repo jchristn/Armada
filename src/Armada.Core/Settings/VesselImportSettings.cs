@@ -51,6 +51,16 @@ namespace Armada.Core.Settings
             set => _InlineBatchLimit = value < 1 ? 1 : (value > 500 ? 500 : value);
         }
 
+        /// <summary>
+        /// Longest a captain may spend recommending fleets for an import before its process is stopped and the
+        /// categorization fails. Default 20 minutes, minimum 1, maximum 240; out-of-range values are clamped.
+        /// </summary>
+        public int CategorizationTimeoutMinutes
+        {
+            get => _CategorizationTimeoutMinutes;
+            set => _CategorizationTimeoutMinutes = value < 1 ? 1 : (value > 240 ? 240 : value);
+        }
+
         #endregion
 
         #region Private-Members
@@ -63,6 +73,7 @@ namespace Armada.Core.Settings
             ".armada", "target", "venv", ".venv", "__pycache__"
         };
         private int _InlineBatchLimit = 25;
+        private int _CategorizationTimeoutMinutes = 20;
 
         #endregion
 

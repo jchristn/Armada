@@ -93,6 +93,7 @@ namespace Armada.Server
         private HarborLinkEndpoint _HarborLinkEndpoint = null!;
         private IVesselService _VesselService = null!;
         private IVesselImportService _VesselImportService = null!;
+        private IFleetCategorizationService _FleetCategorizationService = null!;
         private FleetActionRunner _FleetActionRunner = null!;
         private FleetActionService _FleetActionService = null!;
 
@@ -174,11 +175,12 @@ namespace Armada.Server
             _MergeQueue = new MergeQueueService(_Logging, _Database, _Settings, _Git);
             _JobService = new Armada.Core.Services.JobService(_Database, _Logging);
             _VesselService = new VesselService(_Database);
-            _VesselImportService = new VesselImportService(_Database, _Settings, new VesselDiscoveryService(_Database, _Settings), _VesselService, _JobService, _Logging);
             _MissionRecovery = new Armada.Core.Services.MissionRecoveryCoordinator(_Logging, _Database, _Settings);
             _LandingService = new LandingService(_Logging, _Database, _Settings, _Git);
             _TemplateService = new MessageTemplateService(_Logging, _PromptTemplateService);
             _RuntimeFactory = new AgentRuntimeFactory(_Logging, ResolveInferenceEndpoint);
+            _FleetCategorizationService = new FleetCategorizationService(_Database, _Settings, _JobService, new CaptainPromptRunner(_RuntimeFactory, _Logging), _PromptTemplateService, _Logging);
+            _VesselImportService = new VesselImportService(_Database, _Settings, new VesselDiscoveryService(_Database, _Settings), _VesselService, _JobService, _Logging, _FleetCategorizationService);
             _Workspace = new WorkspaceService();
             _RequestHistoryCapture = new RequestHistoryCaptureService(_Settings);
             _WorkflowProfileService = new WorkflowProfileService(_Database, _Logging);
@@ -479,6 +481,16 @@ namespace Armada.Server
 
             try
             {
+                await _VesselImportService.RecoverAsync(_TokenSource.Token).ConfigureAwait(false);
+                _Logging.Debug(_Header + "vessel import recovery completed");
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "vessel import recovery error: " + ex.ToString());
+            }
+
+            try
+            {
                 await _ObjectiveRefinementSessions.RecoverSessionsAsync(_TokenSource.Token).ConfigureAwait(false);
                 _Logging.Debug(_Header + "objective refinement session recovery completed");
             }
@@ -670,7 +682,7 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Vessel import (bulk onboarding)
-            new VesselImportRoutes(_VesselImportService, _Logging)
+            new VesselImportRoutes(_VesselImportService, _FleetCategorizationService, _Logging)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Workspace
@@ -1169,7 +1181,8 @@ namespace Armada.Server
                 _VesselService,
                 _VesselImportService,
                 _FleetActionService,
-                _VesselHealthService);
+                _VesselHealthService,
+                _FleetCategorizationService);
         }
 
         /// <summary>

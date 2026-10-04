@@ -5,7 +5,7 @@ import { useLocale } from '../../../context/LocaleContext';
 import CodeStatusBadge from '../../shared/CodeStatusBadge';
 import Pagination from '../../shared/Pagination';
 import { EmptyState, ErrorState, LoadingState } from '../../shared/StateBlocks';
-import { BATCH_STATUSES, BATCH_STATUS_META, batchStatusBadge } from '../../../lib/vesselImportLabels';
+import { BATCH_STATUSES, BATCH_STATUS_META, batchStatusBadge, categorizationBadge } from '../../../lib/vesselImportLabels';
 
 interface ImportHistoryProps {
   onOpen: (batch: VesselImportBatch) => void;
@@ -83,14 +83,19 @@ export default function ImportHistory({ onOpen }: ImportHistoryProps) {
                       {formatRelativeTime(b.createdUtc)}
                       <div className="text-dim mono cell-subline">{b.id}</div>
                     </td>
-                    <td><CodeStatusBadge {...batchStatusBadge(t, b.status)} /></td>
+                    <td>
+                      <CodeStatusBadge {...batchStatusBadge(t, b.status)} />
+                      {b.categorizationStatus && b.categorizationStatus !== 'None' && (
+                        <div className="cell-subline"><CodeStatusBadge {...categorizationBadge(t, b.categorizationStatus)} /></div>
+                      )}
+                    </td>
                     <td className="text-right mono">{b.requestedPathCount.toLocaleString()}</td>
                     <td className="text-right mono">{b.candidateCount.toLocaleString()}</td>
                     <td className="text-right mono">{b.createdCount.toLocaleString()}</td>
                     <td className="text-right mono">{b.skippedCount.toLocaleString()}</td>
                     <td className="text-right mono">{b.failedCount.toLocaleString()}</td>
                     <td className="text-right" onClick={(e) => e.stopPropagation()}>
-                      <button type="button" className="btn btn-sm" onClick={() => onOpen(b)}>{b.status === 'Discovered' ? t('Continue') : t('View')}</button>
+                      <button type="button" className="btn btn-sm" onClick={() => onOpen(b)}>{b.status === 'Discovered' || b.status === 'Discovering' || b.categorizationStatus === 'Completed' ? t('Continue') : t('View')}</button>
                     </td>
                   </tr>
                 ))}

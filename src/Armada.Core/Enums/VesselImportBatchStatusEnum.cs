@@ -31,6 +31,12 @@ namespace Armada.Core.Enums
         /// <summary>
         /// The import as a whole failed before completing.
         /// </summary>
-        Failed
+        Failed,
+
+        /// <summary>
+        /// Discovery is running as a background job; candidates are not recorded yet. Moves to Discovered when the
+        /// scan finishes, or to Failed (with an error message) when it does not.
+        /// </summary>
+        Discovering
     }
 }

@@ -19,6 +19,11 @@ namespace Armada.Core.Services
     {
         #region Public-Members
 
+        /// <summary>
+        /// Name of the built-in template that holds the default fleet categorization instructions for bulk imports.
+        /// </summary>
+        public const string FleetCategorizationTemplateName = "import.fleet_categorization";
+
         #endregion
 
         #region Private-Members
@@ -1005,6 +1010,22 @@ namespace Armada.Core.Services
                     "**{MissionTitle}**\n" +
                     "\n" +
                     "{MissionDescription}"
+            };
+
+            defaults[FleetCategorizationTemplateName] = new EmbeddedTemplate
+            {
+                Name = FleetCategorizationTemplateName,
+                Description = "Default instructions for the captain that recommends fleets for repositories imported in bulk. The Admiral appends the output-format contract, so edits here cannot break parsing.",
+                Category = "import",
+                Content =
+                    "Look at all of the repositories listed in REPOSITORIES.md, figure out what each one does, then group them " +
+                    "into a small set of recommended fleets of related repositories.\n" +
+                    "\n" +
+                    "- Prefer 3-10 fleets with short, descriptive names (for example \"Payments Platform\" or \"Developer Tooling\").\n" +
+                    "- Group repositories that are built, deployed, or changed together, or that serve the same product area.\n" +
+                    "- Give each fleet a one-sentence description and a short rationale explaining why its repositories belong together.\n" +
+                    "- Use REPOSITORIES.md first. Open a repository at its path only when the manifest is not enough to tell what it does.\n" +
+                    "- Put every repository in exactly one fleet.\n"
             };
 
             return defaults;

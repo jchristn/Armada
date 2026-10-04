@@ -89,6 +89,12 @@ namespace Armada.Core.Models
         public string? VesselId { get; set; } = null;
 
         /// <summary>
+        /// True when the operator selected this candidate in the latest import of the batch. Set by the import;
+        /// discovery leaves it false.
+        /// </summary>
+        public bool Selected { get; set; } = false;
+
+        /// <summary>
         /// Creation timestamp in UTC.
         /// </summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;

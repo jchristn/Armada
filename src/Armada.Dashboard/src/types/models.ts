@@ -2506,7 +2506,8 @@ export interface Memory {
 // Vessel Import (bulk onboarding of existing local repositories)
 // ---------------------------------------------------------------------------
 
-export type VesselImportBatchStatus = 'Discovered' | 'Importing' | 'Completed' | 'CompletedWithFailures' | 'Failed';
+export type VesselImportBatchStatus = 'Discovering' | 'Discovered' | 'Importing' | 'Completed' | 'CompletedWithFailures' | 'Failed';
+export type VesselImportCategorizationStatus = 'None' | 'Pending' | 'Running' | 'Completed' | 'Failed' | 'Applied';
 export type VesselImportCandidateStatus = 'New' | 'AlreadyOnboarded' | 'Worktree' | 'ArmadaManaged' | 'NotFound' | 'NotGit' | 'AccessDenied';
 export type VesselImportOutcome = 'Pending' | 'Created' | 'SkippedExisting' | 'SkippedNotSelected' | 'Failed';
 
@@ -2540,6 +2541,17 @@ export interface VesselImportBatch {
   createdUtc: string;
   lastUpdateUtc: string;
   completedUtc: string | null;
+  discoveryJobId?: string | null;
+  truncated?: boolean;
+  errorMessage?: string | null;
+  categorizationStatus?: VesselImportCategorizationStatus;
+  categorizationCaptainId?: string | null;
+  categorizationJobId?: string | null;
+  categorizationPrompt?: string | null;
+  categorizationApplyAutomatically?: boolean;
+  categorizationError?: string | null;
+  categorizationStartedUtc?: string | null;
+  categorizationCompletedUtc?: string | null;
 }
 
 export interface VesselImportItem {
@@ -2556,6 +2568,7 @@ export interface VesselImportItem {
   outcomeReason: string | null;
   outcomeMessage: string | null;
   vesselId: string | null;
+  selected?: boolean;
   createdUtc: string;
   lastUpdateUtc: string;
 }
@@ -2569,10 +2582,13 @@ export interface VesselDiscoveryRequest {
   Directories?: string[];
   Roots?: string[];
   MaxDepth?: number;
+  RunInBackground?: boolean;
 }
 
 export interface VesselImportDiscoverResponse {
   batchId: string;
+  jobId?: string | null;
+  runsInBackground?: boolean;
   batch: VesselImportBatch;
   candidates: VesselImportItem[];
   truncated: boolean;
@@ -2587,6 +2603,57 @@ export interface VesselImportRequest {
     DefaultPipelineId?: string | null;
     LandingMode?: string | null;
   } | null;
+  Categorization?: VesselImportCategorizationRequest | null;
+}
+
+/** Optional captain-driven fleet categorization requested with an import. */
+export interface VesselImportCategorizationRequest {
+  Enabled: boolean;
+  CaptainId?: string | null;
+  Prompt?: string | null;
+  ApplyAutomatically?: boolean;
+}
+
+/** One fleet a captain recommended for an import batch. */
+export interface VesselImportFleetRecommendation {
+  id: string;
+  tenantId: string | null;
+  batchId: string;
+  name: string;
+  description: string | null;
+  rationale: string | null;
+  sortOrder: number;
+  appliedFleetId: string | null;
+  vesselIds: string[];
+  createdUtc: string;
+  lastUpdateUtc: string;
+}
+
+/** Body of POST /api/v1/vessels/import/batches/{id}/fleet-recommendations/apply. */
+export interface FleetRecommendationApplyRequest {
+  Fleets: Array<{ Name: string; Description?: string | null; VesselIds: string[] }>;
+}
+
+export interface FleetRecommendationAssignment {
+  vesselId: string;
+  vesselName: string | null;
+  fleetId: string;
+  fleetName: string;
+  previousFleetId: string | null;
+}
+
+export interface FleetRecommendationApplyResult {
+  batchId: string;
+  fleets: Fleet[];
+  createdFleetIds: string[];
+  assignments: FleetRecommendationAssignment[];
+  batch: VesselImportBatch | null;
+}
+
+export interface FleetCategorizationDefaultPrompt {
+  templateName: string;
+  prompt: string;
+  timeoutMinutes: number;
 }
 
 export interface VesselImportResponse {
@@ -2600,6 +2667,8 @@ export interface VesselImportResponse {
 export interface VesselImportBatchDetail {
   batch: VesselImportBatch;
   items: VesselImportItem[];
+  hints?: VesselImportHint[];
+  fleetRecommendations?: VesselImportFleetRecommendation[];
 }
 
 /** Machine-readable error detail carried in `data` of vessel import error responses. */
@@ -2756,6 +2825,7 @@ export interface VesselImportSettingsData {
   maxDepth: number;
   excludedDirectoryNames: string[];
   inlineBatchLimit: number;
+  categorizationTimeoutMinutes?: number;
 }
 
 export interface FleetActionSettingsData {

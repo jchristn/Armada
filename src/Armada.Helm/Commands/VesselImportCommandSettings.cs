@@ -49,5 +49,33 @@ namespace Armada.Helm.Commands
         [Description("Import without prompting")]
         [CommandOption("--yes|-y")]
         public bool Yes { get; set; } = false;
+
+        /// <summary>
+        /// Have a captain recommend fleets for the imported vessels after the import.
+        /// </summary>
+        [Description("After the import, have a captain recommend fleets for the imported repositories (requires --captain)")]
+        [CommandOption("--categorize")]
+        public bool Categorize { get; set; } = false;
+
+        /// <summary>
+        /// Captain ID that recommends fleets.
+        /// </summary>
+        [Description("Captain ID (cpt_) that recommends fleets")]
+        [CommandOption("--captain")]
+        public string? Captain { get; set; }
+
+        /// <summary>
+        /// File with categorization instructions.
+        /// </summary>
+        [Description("File with categorization instructions (default: the import.fleet_categorization prompt template)")]
+        [CommandOption("--prompt-file")]
+        public string? PromptFile { get; set; }
+
+        /// <summary>
+        /// Apply the recommended fleets automatically.
+        /// </summary>
+        [Description("Apply the recommended fleets automatically when categorization completes")]
+        [CommandOption("--apply")]
+        public bool Apply { get; set; } = false;
     }
 }

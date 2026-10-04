@@ -96,6 +96,62 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
+        /// Background discovery job identifier when discovery ran in the background, otherwise null.
+        /// </summary>
+        public string? DiscoveryJobId { get; set; } = null;
+
+        /// <summary>
+        /// True when discovery stopped at the candidate cap and more candidates may exist.
+        /// </summary>
+        public bool Truncated { get; set; } = false;
+
+        /// <summary>
+        /// Why background discovery or the import failed, or null.
+        /// </summary>
+        public string? ErrorMessage { get; set; } = null;
+
+        /// <summary>
+        /// Fleet categorization status. Default None (no categorization requested).
+        /// </summary>
+        public VesselImportCategorizationStatusEnum CategorizationStatus { get; set; } = VesselImportCategorizationStatusEnum.None;
+
+        /// <summary>
+        /// Captain (cpt_ prefix) that performs fleet categorization, or null.
+        /// </summary>
+        public string? CategorizationCaptainId { get; set; } = null;
+
+        /// <summary>
+        /// Background job (job_ prefix) of the latest fleet categorization run, or null.
+        /// </summary>
+        public string? CategorizationJobId { get; set; } = null;
+
+        /// <summary>
+        /// Instructions given to the captain for the latest categorization run (without the output-format contract
+        /// the Admiral appends), or null.
+        /// </summary>
+        public string? CategorizationPrompt { get; set; } = null;
+
+        /// <summary>
+        /// True to apply the captain's recommendations automatically when categorization completes.
+        /// </summary>
+        public bool CategorizationApplyAutomatically { get; set; } = false;
+
+        /// <summary>
+        /// Why categorization failed, or null.
+        /// </summary>
+        public string? CategorizationError { get; set; } = null;
+
+        /// <summary>
+        /// When the latest categorization run started (UTC), or null.
+        /// </summary>
+        public DateTime? CategorizationStartedUtc { get; set; } = null;
+
+        /// <summary>
+        /// When the latest categorization run reached Completed, Failed, or Applied (UTC), or null.
+        /// </summary>
+        public DateTime? CategorizationCompletedUtc { get; set; } = null;
+
+        /// <summary>
         /// Creation timestamp in UTC.
         /// </summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;

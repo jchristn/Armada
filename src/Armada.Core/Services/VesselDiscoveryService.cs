@@ -109,18 +109,7 @@ namespace Armada.Core.Services
         public async Task<VesselDiscoveryResult> DiscoverAsync(string tenantId, VesselDiscoveryRequest request, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
-            if (request == null) throw new ArgumentNullException(nameof(request));
-            if (!String.IsNullOrWhiteSpace(request.HarborId))
-                throw new NotSupportedException("Discovery on a Harbor is not supported yet; omit harborId to discover on the Admiral host.");
-
-            List<string> rawPaths = request.Directories.Concat(request.Roots).Where(p => !String.IsNullOrWhiteSpace(p)).ToList();
-            if (rawPaths.Count == 0) throw new ArgumentException("At least one directory or root is required.", nameof(request));
-            if (rawPaths.Count > _MaxRequestPaths)
-                throw new ArgumentException("Too many paths: " + rawPaths.Count + " (maximum " + _MaxRequestPaths + ").", nameof(request));
-
-            List<string> inputs = VesselImportPaths.NormalizeDistinct(rawPaths);
-            List<string> allowedRoots = GetAllowedRoots();
-            foreach (string input in inputs) EnsureAllowed(input, allowedRoots);
+            List<string> inputs = ValidateAndNormalize(request);
 
             int maxDepth = request.MaxDepth ?? _Settings.Import.MaxDepth;
             HashSet<string> excluded = new HashSet<string>(_Settings.Import.ExcludedDirectoryNames, StringComparer.OrdinalIgnoreCase);
@@ -218,6 +207,12 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
+        public void ValidateRequest(VesselDiscoveryRequest request)
+        {
+            ValidateAndNormalize(request);
+        }
+
+        /// <inheritdoc />
         public Task<VesselBrowseResult> BrowseAsync(string? path, CancellationToken token = default)
         {
             List<string> allowedRoots = GetAllowedRoots();
@@ -295,6 +290,23 @@ namespace Armada.Core.Services
         #endregion
 
         #region Private-Methods
+
+        private List<string> ValidateAndNormalize(VesselDiscoveryRequest request)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            if (!String.IsNullOrWhiteSpace(request.HarborId))
+                throw new NotSupportedException("Discovery on a Harbor is not supported yet; omit harborId to discover on the Admiral host.");
+
+            List<string> rawPaths = request.Directories.Concat(request.Roots).Where(p => !String.IsNullOrWhiteSpace(p)).ToList();
+            if (rawPaths.Count == 0) throw new ArgumentException("At least one directory or root is required.", nameof(request));
+            if (rawPaths.Count > _MaxRequestPaths)
+                throw new ArgumentException("Too many paths: " + rawPaths.Count + " (maximum " + _MaxRequestPaths + ").", nameof(request));
+
+            List<string> inputs = VesselImportPaths.NormalizeDistinct(rawPaths);
+            List<string> allowedRoots = GetAllowedRoots();
+            foreach (string input in inputs) EnsureAllowed(input, allowedRoots);
+            return inputs;
+        }
 
         private static void EnsureAllowed(string normalized, List<string> allowedRoots)
         {

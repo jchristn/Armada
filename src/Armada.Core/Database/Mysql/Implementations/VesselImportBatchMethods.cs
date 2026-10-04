@@ -16,8 +16,8 @@ namespace Armada.Core.Database.Mysql.Implementations
     {
         #region Private-Members
 
-        private static readonly string _Columns = "id, tenant_id, user_id, status, harbor_id, fleet_id, job_id, requested_path_count, candidate_count, created_count, skipped_count, failed_count, created_utc, last_update_utc, completed_utc";
-        private static readonly string _Values = "@id, @tenant_id, @user_id, @status, @harbor_id, @fleet_id, @job_id, @requested_path_count, @candidate_count, @created_count, @skipped_count, @failed_count, @created_utc, @last_update_utc, @completed_utc";
+        private static readonly string _Columns = "id, tenant_id, user_id, status, harbor_id, fleet_id, job_id, requested_path_count, candidate_count, created_count, skipped_count, failed_count, created_utc, last_update_utc, completed_utc, discovery_job_id, truncated, error_message, categorization_status, categorization_captain_id, categorization_job_id, categorization_prompt, categorization_apply_automatically, categorization_error, categorization_started_utc, categorization_completed_utc";
+        private static readonly string _Values = "@id, @tenant_id, @user_id, @status, @harbor_id, @fleet_id, @job_id, @requested_path_count, @candidate_count, @created_count, @skipped_count, @failed_count, @created_utc, @last_update_utc, @completed_utc, @discovery_job_id, @truncated, @error_message, @categorization_status, @categorization_captain_id, @categorization_job_id, @categorization_prompt, @categorization_apply_automatically, @categorization_error, @categorization_started_utc, @categorization_completed_utc";
 
         private readonly string _ConnectionString;
         private readonly SemaphoreSlim? _WriteLock;
@@ -94,7 +94,12 @@ namespace Armada.Core.Database.Mysql.Implementations
                     tenant_id = @tenant_id, user_id = @user_id, status = @status, harbor_id = @harbor_id, fleet_id = @fleet_id,
                     job_id = @job_id, requested_path_count = @requested_path_count, candidate_count = @candidate_count,
                     created_count = @created_count, skipped_count = @skipped_count, failed_count = @failed_count,
-                    created_utc = @created_utc, last_update_utc = @last_update_utc, completed_utc = @completed_utc
+                    created_utc = @created_utc, last_update_utc = @last_update_utc, completed_utc = @completed_utc,
+                    discovery_job_id = @discovery_job_id, truncated = @truncated, error_message = @error_message,
+                    categorization_status = @categorization_status, categorization_captain_id = @categorization_captain_id,
+                    categorization_job_id = @categorization_job_id, categorization_prompt = @categorization_prompt,
+                    categorization_apply_automatically = @categorization_apply_automatically, categorization_error = @categorization_error,
+                    categorization_started_utc = @categorization_started_utc, categorization_completed_utc = @categorization_completed_utc
                     WHERE id = @id;", cmd => Bind(cmd, batch), token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
 
@@ -107,6 +112,8 @@ namespace Armada.Core.Database.Mysql.Implementations
             if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
             await MysqlCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (MySqlConnection conn, MySqlTransaction tx) =>
             {
+                await MysqlCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM vessel_import_fleet_recommendation_vessels WHERE batch_id = @id;", cmd => MysqlCommandHelper.Add(cmd, "@id", id), token).ConfigureAwait(false);
+                await MysqlCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM vessel_import_fleet_recommendations WHERE batch_id = @id;", cmd => MysqlCommandHelper.Add(cmd, "@id", id), token).ConfigureAwait(false);
                 await MysqlCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM vessel_import_items WHERE batch_id = @id;", cmd => MysqlCommandHelper.Add(cmd, "@id", id), token).ConfigureAwait(false);
                 await MysqlCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM vessel_import_batches WHERE id = @id;", cmd => MysqlCommandHelper.Add(cmd, "@id", id), token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
@@ -124,6 +131,8 @@ namespace Armada.Core.Database.Mysql.Implementations
                     MysqlCommandHelper.Add(cmd, "@tenant_id", tenantId);
                     MysqlCommandHelper.Add(cmd, "@id", id);
                 };
+                await MysqlCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM vessel_import_fleet_recommendation_vessels WHERE tenant_id = @tenant_id AND batch_id = @id;", bind, token).ConfigureAwait(false);
+                await MysqlCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM vessel_import_fleet_recommendations WHERE tenant_id = @tenant_id AND batch_id = @id;", bind, token).ConfigureAwait(false);
                 await MysqlCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM vessel_import_items WHERE tenant_id = @tenant_id AND batch_id = @id;", bind, token).ConfigureAwait(false);
                 await MysqlCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM vessel_import_batches WHERE tenant_id = @tenant_id AND id = @id;", bind, token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
@@ -162,6 +171,14 @@ namespace Armada.Core.Database.Mysql.Implementations
             }
         }
 
+        /// <inheritdoc />
+        public async Task<List<VesselImportBatch>> EnumerateInProgressAsync(CancellationToken token = default)
+        {
+            return await MysqlCommandHelper.QueryAsync(_ConnectionString,
+                "SELECT * FROM vessel_import_batches WHERE status = 'Discovering' OR categorization_status IN ('Pending', 'Running') ORDER BY created_utc ASC;",
+                null, FromReader, token).ConfigureAwait(false);
+        }
+
         #endregion
 
         #region Private-Methods
@@ -188,6 +205,17 @@ namespace Armada.Core.Database.Mysql.Implementations
             MysqlCommandHelper.AddDate(cmd, "@created_utc", batch.CreatedUtc);
             MysqlCommandHelper.AddDate(cmd, "@last_update_utc", batch.LastUpdateUtc);
             MysqlCommandHelper.AddDate(cmd, "@completed_utc", batch.CompletedUtc);
+            MysqlCommandHelper.Add(cmd, "@discovery_job_id", batch.DiscoveryJobId);
+            MysqlCommandHelper.Add(cmd, "@truncated", batch.Truncated);
+            MysqlCommandHelper.Add(cmd, "@error_message", batch.ErrorMessage);
+            MysqlCommandHelper.Add(cmd, "@categorization_status", batch.CategorizationStatus.ToString());
+            MysqlCommandHelper.Add(cmd, "@categorization_captain_id", batch.CategorizationCaptainId);
+            MysqlCommandHelper.Add(cmd, "@categorization_job_id", batch.CategorizationJobId);
+            MysqlCommandHelper.Add(cmd, "@categorization_prompt", batch.CategorizationPrompt);
+            MysqlCommandHelper.Add(cmd, "@categorization_apply_automatically", batch.CategorizationApplyAutomatically);
+            MysqlCommandHelper.Add(cmd, "@categorization_error", batch.CategorizationError);
+            MysqlCommandHelper.AddDate(cmd, "@categorization_started_utc", batch.CategorizationStartedUtc);
+            MysqlCommandHelper.AddDate(cmd, "@categorization_completed_utc", batch.CategorizationCompletedUtc);
         }
 
         private static VesselImportBatch FromReader(MySqlDataReader reader)
@@ -208,6 +236,17 @@ namespace Armada.Core.Database.Mysql.Implementations
             batch.CreatedUtc = MysqlCommandHelper.ReadDate(reader["created_utc"]);
             batch.LastUpdateUtc = MysqlCommandHelper.ReadDate(reader["last_update_utc"]);
             batch.CompletedUtc = MysqlCommandHelper.ReadNullableDate(reader["completed_utc"]);
+            batch.DiscoveryJobId = MysqlCommandHelper.ReadString(reader["discovery_job_id"]);
+            batch.Truncated = MysqlCommandHelper.ReadBool(reader["truncated"], false);
+            batch.ErrorMessage = MysqlCommandHelper.ReadString(reader["error_message"]);
+            batch.CategorizationStatus = MysqlCommandHelper.ReadEnum(reader["categorization_status"], VesselImportCategorizationStatusEnum.None);
+            batch.CategorizationCaptainId = MysqlCommandHelper.ReadString(reader["categorization_captain_id"]);
+            batch.CategorizationJobId = MysqlCommandHelper.ReadString(reader["categorization_job_id"]);
+            batch.CategorizationPrompt = MysqlCommandHelper.ReadString(reader["categorization_prompt"]);
+            batch.CategorizationApplyAutomatically = MysqlCommandHelper.ReadBool(reader["categorization_apply_automatically"], false);
+            batch.CategorizationError = MysqlCommandHelper.ReadString(reader["categorization_error"]);
+            batch.CategorizationStartedUtc = MysqlCommandHelper.ReadNullableDate(reader["categorization_started_utc"]);
+            batch.CategorizationCompletedUtc = MysqlCommandHelper.ReadNullableDate(reader["categorization_completed_utc"]);
             return batch;
         }
 

@@ -103,6 +103,31 @@ namespace Armada.Helm.Commands
             importBody.BatchId = discovered.BatchId;
             importBody.Paths = selectable.Select(c => c.Path).ToList();
             importBody.FleetId = fleetId;
+            if (settings.Categorize)
+            {
+                if (String.IsNullOrWhiteSpace(settings.Captain))
+                {
+                    AnsiConsole.MarkupLine("[red]--categorize requires --captain <id>.[/]");
+                    return 1;
+                }
+
+                VesselImportCategorizationRequest categorization = new VesselImportCategorizationRequest();
+                categorization.Enabled = true;
+                categorization.CaptainId = settings.Captain;
+                categorization.ApplyAutomatically = settings.Apply;
+                if (!String.IsNullOrWhiteSpace(settings.PromptFile))
+                {
+                    if (!File.Exists(settings.PromptFile))
+                    {
+                        AnsiConsole.MarkupLine($"[red]Prompt file not found:[/] {Markup.Escape(settings.PromptFile)}");
+                        return 1;
+                    }
+
+                    categorization.Prompt = await File.ReadAllTextAsync(settings.PromptFile, cancellationToken).ConfigureAwait(false);
+                }
+
+                importBody.Categorization = categorization;
+            }
 
             VesselImportResponse? imported = await PostAsync<VesselImportResponse>("/api/v1/vessels/import", importBody).ConfigureAwait(false);
             if (imported == null)
@@ -115,6 +140,11 @@ namespace Armada.Helm.Commands
             {
                 WriteJson(imported);
                 return 0;
+            }
+
+            if (settings.Categorize)
+            {
+                AnsiConsole.MarkupLine($"Fleet categorization runs in the background for batch [bold]{Markup.Escape(imported.BatchId)}[/]; review it in the dashboard import history or with GET /api/v1/vessels/import/batches/{Markup.Escape(imported.BatchId)}.");
             }
 
             if (imported.RunsInBackground)
