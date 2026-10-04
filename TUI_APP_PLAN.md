@@ -3,7 +3,7 @@
 > **Type:** implementation plan (work-tracking). Annotate task status and the progress log as you go; keep this
 > document in sync with what actually shipped.
 >
-> **Status:** Not started
+> **Status:** In progress (W0 and W1 foundation done; screens start with W2)
 > **Built on:** TUIKit 1.2.1 (`TUIKit` on NuGet; source at `~/Code/Tuikit`)
 > **Parity baseline:** the web dashboard at `src/Armada.Dashboard` as of 2026-10-04 (52 page routes, 37 hub tabs,
 > about 45 modals and drawers, 317 server-calling API client functions, 29 WebSocket event types)
@@ -519,34 +519,36 @@ REST_API.md.
 
 ### W0. Client library
 
-- [ ] **W0.1** `Armada.Client` project: HTTP plumbing (base URL, bearer/token/API-key auth, 401 hook, JSON with the
+- [x] **W0.1** `Armada.Client` project: HTTP plumbing (base URL, bearer/token/API-key auth, 401 hook, JSON with the
   server's PascalCase, error mapping to a typed `ArmadaApiException` with code, message, request id), typed models.
-- [ ] **W0.2** One method per dashboard API function (317), generated where possible from OpenAPI and hand-finished,
+- [x] **W0.2** One method per dashboard API function (317), generated where possible from OpenAPI and hand-finished,
   grouped by area (Missions, Voyages, Vessels, Ask, ...). Each async method takes a `CancellationToken`.
-- [ ] **W0.3** `ArmadaSocket`: `?token=` auth, subscribe, typed events for all 29 types, reconnect with exponential
+- [x] **W0.3** `ArmadaSocket`: `?token=` auth, subscribe, typed events for all 29 types, reconnect with exponential
   backoff (1 s to 30 s, jitter), reconnect counter.
-- [ ] **W0.4** Contract tests: every client method exercised against `E2EServerFixture`; a test that compares the method
+- [~] **W0.4** Contract tests: every client method exercised against `E2EServerFixture`; a test that compares the method
   list with `api/client.ts` exports (parity of the client itself).
+  Status: the export-parity test is done (Tui.Parity); the Client.Contract suite covers a representative subset per
+  area (14 cases, 74 distinct methods) against `E2EServerFixture`. Exercising every method is still open.
 
 ### W1. Shell and foundation
 
-- [ ] **W1.1** `Armada.Tui` project, `armada tui` command in Helm, startup flags, preferences file, server profiles.
-- [ ] **W1.2** Shell layout (header, menu bar, sidebar, main, Ask dock, status bar) with stable regions and swappable
+- [x] **W1.1** `Armada.Tui` project, `armada tui` command in Helm, startup flags, preferences file, server profiles.
+- [x] **W1.2** Shell layout (header, menu bar, sidebar, main, Ask dock, status bar) with stable regions and swappable
   roots.
-- [ ] **W1.3** Responsive breakpoints from a size watcher; minimum size screen.
-- [ ] **W1.4** Focus router: hierarchical focus inside hubs, tabs, split and scroll views; consistent `Tab` order.
-- [ ] **W1.5** Binding layer: change events for selection, text, and validation over TUIKit widgets.
-- [ ] **W1.6** `ArmadaGrid<T>` with every feature listed under "Shared widgets"; virtualization; CJK-safe widths.
-- [ ] **W1.7** `SelectField`, `MultiSelectField`, `ActionMenu`, `Button`, `FormView`, `DetailView`, `Drawer`, `Wizard`,
+- [x] **W1.3** Responsive breakpoints from a size watcher; minimum size screen.
+- [x] **W1.4** Focus router: hierarchical focus inside hubs, tabs, split and scroll views; consistent `Tab` order.
+- [x] **W1.5** Binding layer: change events for selection, text, and validation over TUIKit widgets.
+- [x] **W1.6** `ArmadaGrid<T>` with every feature listed under "Shared widgets"; virtualization; CJK-safe widths.
+- [x] **W1.7** `SelectField`, `MultiSelectField`, `ActionMenu`, `Button`, `FormView`, `DetailView`, `Drawer`, `Wizard`,
   `TriStateField`, `DateField`.
-- [ ] **W1.8** `ThemeService` with Light, Dark, HighContrast, Auto, pushing styles to every widget instance.
-- [ ] **W1.9** Command palette modal and help overlay generated from `CommandService`.
-- [ ] **W1.10** Notification center with history, actionable toasts, bell and OS notification hooks.
-- [ ] **W1.11** `EventPump` with `app.Post` marshaling and burst coalescing; `RefreshService`.
-- [ ] **W1.12** `Router` with deep links and back/forward; `ClipboardService`; `ExternalService`.
-- [ ] **W1.13** `LocalizationService` using the server catalog; ICU plurals; locale formatting.
-- [ ] **W1.14** Login (email/tenant/password and API key), session handling, roles, proxy-mode strip.
-- [ ] **W1.15** Shared viewers: JSON, diff, log, Markdown, charts; confirm and error dialogs.
+- [x] **W1.8** `ThemeService` with Light, Dark, HighContrast, Auto, pushing styles to every widget instance.
+- [x] **W1.9** Command palette modal and help overlay generated from `CommandService`.
+- [x] **W1.10** Notification center with history, actionable toasts, bell and OS notification hooks.
+- [x] **W1.11** `EventPump` with `app.Post` marshaling and burst coalescing; `RefreshService`.
+- [x] **W1.12** `Router` with deep links and back/forward; `ClipboardService`; `ExternalService`.
+- [x] **W1.13** `LocalizationService` using the server catalog; ICU plurals; locale formatting.
+- [x] **W1.14** Login (email/tenant/password and API key), session handling, roles, proxy-mode strip.
+- [x] **W1.15** Shared viewers: JSON, diff, log, Markdown, charts; confirm and error dialogs.
 
 ### W2. Ask Armada
 
@@ -595,7 +597,8 @@ REST_API.md.
 
 ### W8. Quality
 
-- [ ] **W8.1** Parity enforcement (below).
+- [~] **W8.1** Parity enforcement (below). Manifest generated (`scripts/tui/generate-parity-manifest.py`) and the
+  coverage checks run in Tui.Parity; the "no planned entries in release builds" check is not enforced yet.
 - [ ] **W8.2** Headless test suites: one keyboard-flow test per screen (open, filter, select, row action, modal,
   confirm) with `HeadlessBackend` and `WidgetTester`; Ask streaming and approval tests with a scripted event source.
 - [ ] **W8.3** End-to-end suite against `E2EServerFixture`: login, Ask dispatch with approval through landing (stub
@@ -610,7 +613,9 @@ REST_API.md.
 
 ### W9. Docs and distribution
 
-- [ ] **W9.1** `docs/TUI.md`: install, start, profiles, key map, screens, approvals, notifications, troubleshooting.
+- [~] **W9.1** `docs/TUI.md`: install, start, profiles, key map, screens, approvals, notifications, troubleshooting.
+  Install, start, profiles, login, navigation, notifications, and the key map are written; screens, approvals, and
+  troubleshooting follow the waves that build them.
 - [ ] **W9.2** README section and screenshots (text captures from `Snapshot`).
 - [ ] **W9.3** Ships with Helm (`armada tui`) in every channel Helm ships in; CHANGELOG entry.
 
@@ -694,3 +699,4 @@ before Milestone B; U5, U6 before Milestone E).
 | Date | Author | Task(s) | Change |
 |------|--------|---------|--------|
 | 2026-10-04 | (design) | -- | Plan drafted from a full inventory of the dashboard (routes, tabs, modals, API functions, WebSocket events, settings) and a survey of TUIKit 1.2.1. |
+| 2026-10-04 | Claude (tui-foundation) | W0, W1, W8.1, W9.1 | Armada.Client (all 317 client.ts functions as typed async methods, generated by `scripts/tui/generate-client-methods.py` and hand-finished; ArmadaSocket with typed events, backoff 1-30 s with jitter, reconnect counter; paging helpers). Armada.Tui foundation: `armada tui` in Helm, preferences and profiles, keychain/wincred/secret-tool credential stores with a 0600 file fallback, single-root shell with responsive layout and focus router, binding layer, ArmadaGrid, form widgets, viewers, dialogs, themes, commands/menu/palette/help, notifications and approvals skeleton, event pump, refresh, router with every dashboard route (placeholders for unbuilt screens), clipboard, external editor, i18n over the dashboard catalog, login and session. Parity manifest and Tui.Parity suite. Tests: Tui.* and Client.* suites (headless and live server). Deviations: the dashboard handles 28 WebSocket event types plus `status.snapshot` (the plan said 29); `GET /fleets/{id}` returns `{ Fleet, Vessels }`, so `GetFleetAsync` returns `FleetDetail`; API keys pasted on the login screen are tried as X-Token, bearer, then X-Api-Key. |
