@@ -51,6 +51,10 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [update_vessel_context](#update_vessel_context)
     - [delete_vessel](#delete_vessel)
     - [delete_vessels](#delete_vessels)
+  - **Vessel Health**
+    - [vessel_health](#vessel_health)
+    - [evaluate_vessel_health](#evaluate_vessel_health)
+    - [set_vessel_health_override](#set_vessel_health_override)
   - **Voyages**
     - [dispatch](#dispatch)
     - [voyage_status](#voyage_status)
@@ -557,7 +561,7 @@ No parameters required.
 
 ### enumerate
 
-Paginated enumeration of any entity type with filtering and sorting. This is the MCP equivalent of the `POST /api/v1/{entity}/enumerate` REST endpoints. Returns paginated results with total counts, page metadata, and query timing. Supports: objectives (aliases `backlog`, `backlog_item`, `backlog_items`), fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, memories, prompt_templates, pipelines, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, jobs, model_endpoints.
+Paginated enumeration of any entity type with filtering and sorting. This is the MCP equivalent of the `POST /api/v1/{entity}/enumerate` REST endpoints. Returns paginated results with total counts, page metadata, and query timing. Supports: objectives (aliases `backlog`, `backlog_item`, `backlog_items`), fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, memories, prompt_templates, pipelines, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, jobs, model_endpoints, vessel_health.
 
 **Input Schema:**
 
@@ -565,7 +569,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 {
   "type": "object",
   "properties": {
-    "entityType": { "type": "string", "description": "Entity type to enumerate (objectives [aliases backlog, backlog_item, backlog_items], fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, memories, prompt_templates, pipelines, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, jobs, model_endpoints)" },
+    "entityType": { "type": "string", "description": "Entity type to enumerate (objectives [aliases backlog, backlog_item, backlog_items], fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, harbors, playbooks, personas, memories, prompt_templates, pipelines, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, jobs, model_endpoints, vessel_health)" },
     "pageNumber": { "type": "integer", "description": "Page number (1-based, default 1)" },
     "pageSize": { "type": "integer", "description": "Results per page (default 10, max 1000)" },
     "order": { "type": "string", "description": "Sort order: CreatedAscending, CreatedDescending" },
@@ -621,6 +625,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 | `memories` | `search` (plus paginated browse) |
 | `jobs` | (paginated browse only) |
 | `model_endpoints` | `createdAfter`, `createdBefore` (current MCP enumeration is primarily paginated browse) |
+| `vessel_health` (aliases `vessel-health`, `health`) | `status` (overall status: Pass/Warn/Fail/NotApplicable/Unknown), `fleetId`, `search` (vessel name substring). Every active vessel appears, including never-evaluated ones. Rows are sorted by vessel name; for richer filters and sorting use `POST /api/v1/vessel-health/enumerate` |
 
 | Include flag | Applies to | Default | Description |
 |---|---|---|---|
@@ -1787,6 +1792,109 @@ Permanently delete multiple vessels from the database by ID. Returns a summary o
 ```
 
 Returns `{ "Error": "ids is required and must not be empty" }` if no IDs are provided.
+
+---
+
+### vessel_health
+
+Get one vessel's health: the row with effective (override-aware) statuses, the raw findings, and the manual overrides. Dependency rows are excluded by default to conserve context; `DependencyCount` is always returned. The row and finding fields, enum spellings, and detail codes match `GET /api/v1/vessels/{id}/health` in [REST_API.md](REST_API.md#vessel-health). To list vessels by health, use [`enumerate`](#enumerate) with `entityType` `vessel_health`.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "vesselId": { "type": "string", "description": "Vessel ID (vsl_ prefix)" },
+    "includeDependencies": { "type": "boolean", "description": "Include outdated/vulnerable dependency rows (default false)" }
+  },
+  "required": ["vesselId"]
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `vesselId` | string | Yes | Vessel ID (prefix `vsl_`) |
+| `includeDependencies` | boolean | No | Include the `Dependencies` list (default `false`) |
+
+**Response:**
+
+```json
+{
+  "Health": { "VesselId": "vsl_...", "OverallStatus": "Fail", "DependencyStatus": "Fail", "OutdatedCount": 23, "...": "..." },
+  "Findings": [ { "Criterion": "Dependencies", "Status": "Fail", "DetailCode": "OutdatedPackages", "ValueA": 23, "ValueB": 5, "...": "..." } ],
+  "Overrides": [],
+  "DependencyCount": 30
+}
+```
+
+Returns `{ "Error": "Vessel not found" }` when the vessel is not in the caller's tenant.
+
+---
+
+### evaluate_vessel_health
+
+Start a background vessel health evaluation job for specific vessels, a fleet, or every active vessel in the tenant. Only one evaluation runs per tenant at a time; when one is already running, nothing starts and `AlreadyRunning` is `true` with the running job's ID. Requires a tenant admin (or global admin) caller.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "vesselIds": { "type": "array", "items": { "type": "string" }, "description": "Vessel IDs to evaluate (default: all active vessels)" },
+    "fleetId": { "type": "string", "description": "Evaluate the active vessels of this fleet (ignored when vesselIds is set)" },
+    "force": { "type": "boolean", "description": "Force dependency and vulnerability checks even when fresh (default true)" }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `vesselIds` | string[] | No | Evaluate exactly these vessels |
+| `fleetId` | string | No | Evaluate the fleet's active vessels |
+| `force` | boolean | No | Run dependency checks even when the manifests are unchanged and fresh (default `true`) |
+
+**Response:**
+
+```json
+{ "JobId": "job_...", "AlreadyRunning": false, "VesselCount": 12 }
+```
+
+Poll the job with `enumerate` (`entityType` `jobs`) or `GET /api/v1/jobs/{id}`. Returns `{ "Error": "Vessel vsl_... was not found." }` for an unknown vessel or fleet.
+
+---
+
+### set_vessel_health_override
+
+Set, or with `remove` set to `true` remove, a manual status override for one criterion or for `Overall`. Effective statuses are recomputed immediately from the stored findings. Requires a tenant admin (or global admin) caller.
+
+**Input Schema:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "vesselId": { "type": "string", "description": "Vessel ID (vsl_ prefix)" },
+    "criterion": { "type": "string", "description": "GitDivergence, WorkingTree, Branches, CommitRecency, Dependencies, Vulnerabilities, TestInfrastructure, ContinuousIntegration, ArmadaReadiness, MissionOutcomes, or Overall" },
+    "status": { "type": "string", "description": "Pass, Warn, Fail, NotApplicable, or Unknown (required unless remove is true)" },
+    "note": { "type": "string", "description": "Optional note explaining the override" },
+    "remove": { "type": "boolean", "description": "Remove the override instead of setting it (default false)" }
+  },
+  "required": ["vesselId", "criterion"]
+}
+```
+
+**Response:**
+
+```json
+{
+  "Health": { "VesselId": "vsl_...", "OverallStatus": "Pass", "DependencyStatus": "Pass", "...": "..." },
+  "Overrides": [ { "Criterion": "Dependencies", "Status": "Pass", "Note": "Pinned on purpose", "...": "..." } ]
+}
+```
+
+Returns `{ "Error": "..." }` for an unknown criterion, a missing or invalid status, a non-admin caller, or a vessel outside the caller's tenant.
 
 ---
 

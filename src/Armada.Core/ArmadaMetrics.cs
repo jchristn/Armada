@@ -55,5 +55,13 @@ namespace Armada.Core
         /// <summary>Merge-queue entries processed to a terminal state.</summary>
         public static readonly Counter<long> MergeEntriesProcessed =
             _Meter.CreateCounter<long>("armada.mergequeue.processed", null, "Merge-queue entries processed");
+
+        /// <summary>Vessel health evaluations, one per vessel, labeled by outcome (Succeeded, Failed, Cancelled).</summary>
+        public static readonly Counter<long> HealthEvaluations =
+            _Meter.CreateCounter<long>("armada.health.evaluations", null, "Vessel health evaluations");
+
+        /// <summary>Duration in seconds of each vessel health criterion evaluation, labeled by criterion.</summary>
+        public static readonly Histogram<double> HealthCriterionDuration =
+            _Meter.CreateHistogram<double>("armada.health.criterion_duration_seconds", null, "Vessel health criterion duration in seconds");
     }
 }

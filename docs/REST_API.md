@@ -26,6 +26,7 @@ Machine-readable OpenAPI is available at `/openapi.json`, and the interactive Sw
   - [Status](#status)
   - [Fleets](#fleets)
   - [Vessels](#vessels)
+  - [Vessel Health](#vessel-health)
   - [Workspace](#workspace)
   - [Voyages](#voyages)
   - [Missions](#missions)
@@ -172,6 +173,11 @@ personas, pipelines, workflow profiles, project profiles, runbooks):
 | `/api/v1/settings` | PUT | AdminOnly | Partial update of server configuration and remote-control settings |
 | `/api/v1/fleets` | ALL | Authenticated | Tenant-scoped |
 | `/api/v1/vessels` | ALL | Authenticated | Tenant-scoped |
+| `/api/v1/vessel-health/enumerate` | POST | Authenticated | Tenant-scoped vessel health rows |
+| `/api/v1/vessel-health/summary` | GET | Authenticated | Tenant-scoped KPI counts |
+| `/api/v1/vessel-health/evaluate` | POST | TenantAdmin | Starts an evaluation job (409 when one is running) |
+| `/api/v1/vessels/{id}/health` | GET | Authenticated | Tenant-scoped; 404 for another tenant's vessel |
+| `/api/v1/vessels/{id}/health/overrides/{criterion}` | PUT, DELETE | TenantAdmin | Manual overrides |
 | `/api/v1/captains` | ALL | Authenticated | Tenant-scoped |
 | `/api/v1/missions` | ALL | Authenticated | Tenant-scoped |
 | `/api/v1/voyages` | ALL | Authenticated | Tenant-scoped |
@@ -941,6 +947,24 @@ Self-rebuild fields (see [SERVER_REBUILD.md](SERVER_REBUILD.md)):
 | `RebuildSlotRetentionCount` | int | Published build slots to retain for rollback. Minimum 1. |
 | `RebuildSupervisorHarborId` | string | Optional on-box Harbor (`hbr_` prefix) that performs the health-gated cutover with rollback. Null uses the in-process baton. |
 
+Vessel health settings (see [VESSEL_HEALTH.md](VESSEL_HEALTH.md)): `GET /api/v1/settings` returns a `RepositoryHealth` object, and when `RepositoryHealth` is supplied on PUT it replaces the whole object. Out-of-range values are clamped, and every value applies live (the next scheduler tick or evaluation uses it).
+
+```json
+{
+  "RepositoryHealth": {
+    "IntervalMinutes": 360,
+    "MaxConcurrency": 4,
+    "FetchBeforeEvaluate": true,
+    "DependencyMaxAgeHours": 24,
+    "DependencyCommandTimeoutSeconds": 120,
+    "StaleBranchDays": 90,
+    "MissionWindowDays": 7,
+    "ScoredCriteria": ["GitDivergence", "WorkingTree", "Branches", "Dependencies", "Vulnerabilities", "TestInfrastructure", "ArmadaReadiness", "MissionOutcomes"],
+    "Thresholds": { "BehindWarn": 1, "BehindFail": 21, "StaleBranchWarn": 4, "StaleBranchFail": 11, "MissionFailureWarn": 1, "MissionFailureFail": 3 }
+  }
+}
+```
+
 **Request Body:** partial settings object
 
 ```json
@@ -1549,6 +1573,309 @@ Launch the chosen captain in a worktree of the vessel repository to analyze it a
 **Error:** `409` - A build is already in progress for this vessel
 **Error:** `501` - Model Context building is not available on this server
 **Error:** `504` - The build timed out
+
+---
+
+### Vessel Health
+
+Vessel health grades every vessel against a fixed set of criteria (git divergence, working tree, branches, commit recency, dependencies, vulnerabilities, test infrastructure, continuous integration, Armada readiness, and recent mission outcomes) and stores one current row per vessel plus one finding per criterion. The status columns on the row are *effective* values: manual overrides are already applied, so the list, detail, and summary endpoints always agree. Findings keep the *raw* evaluated status. See [VESSEL_HEALTH.md](VESSEL_HEALTH.md) for what each criterion measures and how it is graded.
+
+All vessel health routes are scoped to the caller's tenant, which comes from the authentication context and never from the request body. A vessel in another tenant returns `404`. Like every other Armada route, responses are serialized with PascalCase property names, enum values as strings, and null-valued properties omitted (the dashboard client camelizes keys).
+
+#### POST /api/v1/vessel-health/enumerate
+
+Filtered, sorted, paged health rows. Permission: Authenticated. Filtering, sorting, and paging run in SQL against indexed columns. Every active vessel in the tenant is a candidate row, including vessels that have never been evaluated; those rows have no `Id`, `Unknown` statuses, and no measurements, so they match an `Unknown` status filter.
+
+**Request body** (`VesselHealthEnumerateRequest`, every field optional; an empty body uses the defaults):
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| `PageNumber` | int | 1 | Values below 1 are clamped to 1 |
+| `PageSize` | int | 25 | Clamped to 1..500 |
+| `SortBy` | string | `VesselName` | One of `VesselName`, `FleetName`, `OverallStatus`, `Divergence` (ahead + behind), `AheadOfDefault`, `BehindDefault`, `IsDirty`, `BranchCount`, `StaleBranchCount`, `OutdatedCount`, `OutdatedMajorCount`, `VulnerableCount`, `DependencyStatus`, `TestInfraStatus`, `CiStatus`, `LastCommitUtc`, `EvaluatedUtc` |
+| `SortDescending` | bool | false | Status columns sort by rank (Fail, Warn, Pass, then Unknown and NotApplicable); nulls always sort last; ties break on vessel name then id |
+| `NameContains` | string | null | Case-insensitive substring of the vessel name |
+| `FleetId` | string | null | Exact fleet id |
+| `PrimaryLanguage` | string | null | Case-insensitive exact match, for example `CSharp` |
+| `CurrentBranchContains` | string | null | Case-insensitive substring |
+| `OverallStatus` | string[] | `[]` | Any of `Pass`, `Warn`, `Fail`, `NotApplicable`, `Unknown` |
+| `DependencyStatus` | string[] | `[]` | Same values |
+| `TestInfraStatus` | string[] | `[]` | Same values |
+| `IsDirty` | bool | null | |
+| `HasCiConfig` | bool | null | |
+| `Divergence` | string | null | `Ahead` (ahead, not behind), `Behind` (behind, not ahead), `Diverged` (both), `Even` (neither; evaluated vessels only) |
+| `MinBranchCount` / `MaxBranchCount` | int | null | Inclusive |
+| `LastCommitAfterUtc` / `LastCommitBeforeUtc` | datetime | null | Exclusive |
+| `IncludeInactive` | bool | false | Include inactive vessels |
+
+```json
+{ "PageNumber": 1, "PageSize": 25, "SortBy": "OverallStatus", "SortDescending": true, "OverallStatus": ["Fail", "Warn"], "FleetId": "flt_..." }
+```
+
+**Response** `200`: the standard [paginated response shape](#paginated-response-shape) (`EnumerationResult<VesselHealth>`). Vessel health uses the same envelope as every other Armada enumeration, so existing dashboard tables can consume it without a new adapter:
+
+```json
+{
+  "Success": true,
+  "PageNumber": 1,
+  "PageSize": 25,
+  "TotalPages": 1,
+  "TotalRecords": 2,
+  "Objects": [
+    {
+      "Id": "vhl_...",
+      "TenantId": "ten_system",
+      "VesselId": "vsl_...",
+      "OverallStatus": "Fail",
+      "EvaluatedUtc": "2026-10-04T04:31:02.83Z",
+      "EvaluationDurationMs": 11661,
+      "EvaluatedPath": "/Users/me/code/app",
+      "CurrentBranch": "main",
+      "IsDirty": true,
+      "UntrackedCount": 3,
+      "AheadOfDefault": 0,
+      "BehindDefault": 4,
+      "AheadOfUpstream": 0,
+      "BehindUpstream": 4,
+      "LastCommitUtc": "2026-09-30T18:02:11Z",
+      "BranchCount": 5,
+      "StaleBranchCount": 1,
+      "ArmadaBranchCount": 0,
+      "PrimaryLanguage": "CSharp",
+      "ProjectCount": 12,
+      "OutdatedCount": 23,
+      "OutdatedMajorCount": 5,
+      "VulnerableCount": 3,
+      "MaxVulnerabilitySeverity": "High",
+      "DependencyStatus": "Fail",
+      "VulnerabilityStatus": "Fail",
+      "TestInfraStatus": "Warn",
+      "CiStatus": "Pass",
+      "DivergenceStatus": "Warn",
+      "WorkingTreeStatus": "Fail",
+      "BranchStatus": "Pass",
+      "ReadinessStatus": "Warn",
+      "MissionOutcomeStatus": "Pass",
+      "LastCheckRunStatus": "Passed",
+      "HasCiConfig": true,
+      "HasLicense": true,
+      "HasReadme": true,
+      "ReadinessErrorCount": 0,
+      "RecentMissionFailureCount": 0,
+      "ManifestHash": "5f2c...",
+      "DependenciesEvaluatedUtc": "2026-10-04T04:31:02.83Z",
+      "CreatedUtc": "2026-10-04T04:31:02.83Z",
+      "LastUpdateUtc": "2026-10-04T04:31:02.83Z",
+      "VesselName": "app",
+      "FleetId": "flt_...",
+      "FleetName": "Default"
+    },
+    {
+      "TenantId": "ten_system",
+      "VesselId": "vsl_...",
+      "OverallStatus": "Unknown",
+      "MaxVulnerabilitySeverity": "None",
+      "DependencyStatus": "Unknown",
+      "VulnerabilityStatus": "Unknown",
+      "TestInfraStatus": "Unknown",
+      "CiStatus": "Unknown",
+      "DivergenceStatus": "Unknown",
+      "WorkingTreeStatus": "Unknown",
+      "BranchStatus": "Unknown",
+      "ReadinessStatus": "Unknown",
+      "MissionOutcomeStatus": "Unknown",
+      "VesselName": "never-evaluated"
+    }
+  ],
+  "TotalMs": 3.66
+}
+```
+
+Notes on the row:
+
+- `ErrorCode` appears only when the evaluation itself could not reach a repository; its only value today is `RepositoryUnavailable`.
+- `LastCheckRunStatus` is the status of the latest completed test check run (`Passed`, `Failed`, or `Canceled`), or absent.
+- `ManifestHash` and `DependenciesEvaluatedUtc` describe when dependency and vulnerability checks last ran. `DependenciesEvaluatedUtc` is absent after a dependency tool failure so the next evaluation retries.
+- There is no status column for `CommitRecency` (it is informational); use `LastCommitUtc`.
+
+Errors: `400` when the body is not valid JSON or contains an unknown enum value.
+
+#### GET /api/v1/vessel-health/summary
+
+KPI counts for the caller's tenant, based on effective statuses, over active vessels only. Permission: Authenticated.
+
+```json
+{
+  "TotalVessels": 42,
+  "Pass": 20,
+  "Warn": 9,
+  "Fail": 6,
+  "Unknown": 2,
+  "NotApplicable": 0,
+  "NotEvaluated": 5,
+  "OutdatedMajorVessels": 7,
+  "HighOrCriticalVulnerabilityVessels": 3
+}
+```
+
+`Pass + Warn + Fail + Unknown + NotApplicable + NotEvaluated = TotalVessels`. `OutdatedMajorVessels` counts vessels with `OutdatedMajorCount > 0`; `HighOrCriticalVulnerabilityVessels` counts vessels whose `MaxVulnerabilitySeverity` is `High` or `Critical`.
+
+#### GET /api/v1/vessels/{id}/health
+
+The vessel's row, raw findings, outdated or vulnerable dependencies, and overrides. Permission: Authenticated. Returns `404` when the vessel does not exist in the caller's tenant. For a vessel that has never been evaluated, `Health` has no `Id`, carries `VesselName`, `FleetId`, and `FleetName`, and the three lists are empty.
+
+```json
+{
+  "Health": { "Id": "vhl_...", "VesselId": "vsl_...", "OverallStatus": "Fail", "...": "same fields as an enumerate row" },
+  "Findings": [
+    {
+      "Id": "vhf_...",
+      "TenantId": "ten_system",
+      "VesselId": "vsl_...",
+      "Criterion": "Dependencies",
+      "Status": "Fail",
+      "DetailCode": "OutdatedPackages",
+      "ValueA": 23,
+      "ValueB": 5,
+      "EvaluatedUtc": "2026-10-04T04:31:02.83Z",
+      "CreatedUtc": "2026-10-04T04:31:02.83Z",
+      "LastUpdateUtc": "2026-10-04T04:31:02.83Z"
+    }
+  ],
+  "Dependencies": [
+    {
+      "Id": "vdp_...",
+      "TenantId": "ten_system",
+      "VesselId": "vsl_...",
+      "Ecosystem": "NuGet",
+      "ProjectPath": "src/App/App.csproj",
+      "PackageName": "Newtonsoft.Json",
+      "CurrentVersion": "12.0.1",
+      "LatestVersion": "13.0.4",
+      "Drift": "Major",
+      "IsVulnerable": true,
+      "Severity": "High",
+      "AdvisoryUrl": "https://github.com/advisories/GHSA-5crp-9r3c-p9vr",
+      "CreatedUtc": "...",
+      "LastUpdateUtc": "..."
+    }
+  ],
+  "Overrides": [
+    {
+      "Id": "vho_...",
+      "TenantId": "ten_system",
+      "VesselId": "vsl_...",
+      "UserId": "usr_...",
+      "Criterion": "Dependencies",
+      "Status": "Pass",
+      "Note": "Pinned on purpose until the v13 migration",
+      "CreatedUtc": "...",
+      "LastUpdateUtc": "..."
+    }
+  ]
+}
+```
+
+`Findings` hold one entry per criterion (`GitDivergence`, `WorkingTree`, `Branches`, `CommitRecency`, `Dependencies`, `Vulnerabilities`, `TestInfrastructure`, `ContinuousIntegration`, `ArmadaReadiness`, `MissionOutcomes`); there is no `Overall` finding. `Ecosystem` is `NuGet` or `npm`; `ProjectPath` is repository-relative (the project file for NuGet, the `package.json` for npm). `Drift` is `None`, `Patch`, `Minor`, or `Major`; `Severity` is `None`, `Low`, `Moderate`, `High`, or `Critical`. A dependency that is both outdated and vulnerable appears once with both sets of fields. For npm vulnerabilities, `CurrentVersion` holds the vulnerable range reported by `npm audit` and `AdvisoryUrl` is absent.
+
+#### POST /api/v1/vessel-health/evaluate
+
+Starts a background evaluation job. Permission: TenantAdmin.
+
+```json
+{ "VesselIds": ["vsl_..."], "FleetId": null, "Force": true }
+```
+
+| Field | Notes |
+|-------|-------|
+| `VesselIds` | Evaluate exactly these vessels (inactive ones included). Each must exist in the tenant, otherwise `404` |
+| `FleetId` | When `VesselIds` is empty: evaluate the fleet's active vessels. Unknown fleet returns `404` |
+| `Force` | Run dependency and vulnerability checks even when fresh. Absent or null means `true` for manual evaluation; scheduled evaluations never force |
+
+With an empty body every active vessel in the tenant is evaluated. Only one evaluation job runs per tenant at a time.
+
+**Response** `202` (started) or `409` (an evaluation is already running; nothing was started). Both use the same shape:
+
+```json
+{ "JobId": "job_...", "AlreadyRunning": false, "VesselCount": 12 }
+```
+
+```json
+{ "JobId": "job_...", "AlreadyRunning": true, "VesselCount": 0 }
+```
+
+The job is an ordinary [job](#jobs) with `Kind = "Report"` and `Name = "Vessel health evaluation"`. Poll `GET /api/v1/jobs/{JobId}` for `Status` (`Queued`, `Running`, `Succeeded`, `Failed`, `Cancelled`) and `Progress` (0..100, updated after each vessel). Cancel with `POST /api/v1/jobs/{JobId}/cancel`; remaining vessels are skipped within a few seconds. When the job finishes, `ResultJson` holds a camelCase summary:
+
+```json
+{ "requested": 12, "evaluated": 11, "failed": 1, "force": true, "scheduled": false }
+```
+
+Per-vessel failures are isolated: one vessel failing does not fail the job.
+
+#### PUT /api/v1/vessels/{id}/health/overrides/{criterion}
+
+Sets a manual status for one criterion, or for `Overall`, and immediately recomputes the vessel's effective status columns from its stored findings (no re-evaluation). Permission: TenantAdmin. `{criterion}` is a criterion name, matched case-insensitively: `GitDivergence`, `WorkingTree`, `Branches`, `CommitRecency`, `Dependencies`, `Vulnerabilities`, `TestInfrastructure`, `ContinuousIntegration`, `ArmadaReadiness`, `MissionOutcomes`, or `Overall`. Numeric values are rejected.
+
+```json
+{ "Status": "Pass", "Note": "Pinned on purpose until the v13 migration" }
+```
+
+`Status` is required (`Pass`, `Warn`, `Fail`, `NotApplicable`, `Unknown`). `Note` is optional, trimmed, and truncated to 4000 characters. Setting an override again replaces it. An override on a vessel that has never been evaluated is stored and applied at its first evaluation.
+
+**Response** `200`: the same body as `GET /api/v1/vessels/{id}/health`. Errors: `400` for an unknown criterion, a missing or invalid status, or invalid JSON; `404` when the vessel is not in the tenant.
+
+#### DELETE /api/v1/vessels/{id}/health/overrides/{criterion}
+
+Removes the override for one criterion and recomputes the effective statuses. Permission: TenantAdmin. **Response** `200`: the same body as `GET /api/v1/vessels/{id}/health`. Deleting an override that does not exist is not an error. Errors: `400` for an unknown criterion; `404` when the vessel is not in the tenant.
+
+#### Vessel health detail codes
+
+Findings carry a stable `DetailCode` plus two integers, `ValueA` and `ValueB`, so clients can render localized text such as "23 outdated packages (5 major)". Values not listed are absent (null).
+
+| DetailCode | Criterion | Status | ValueA | ValueB |
+|------------|-----------|--------|--------|--------|
+| `EvaluationError` | any | Unknown | | |
+| `RepositoryUnavailable` | any criterion that needs a repository | Unknown | | |
+| `BareRepository` | WorkingTree, TestInfrastructure, Dependencies, Vulnerabilities | NotApplicable | | |
+| `NotApplicable` | any | NotApplicable | | |
+| `Even` | GitDivergence | Pass | commits ahead (0) | commits behind (0) |
+| `Ahead` | GitDivergence | Pass | commits ahead | commits behind (0) |
+| `Behind` | GitDivergence | Warn or Fail | commits ahead (0) | commits behind |
+| `Diverged` | GitDivergence | Fail | commits ahead of default | commits behind default |
+| `FetchFailed` | GitDivergence | Unknown | | |
+| `DefaultBranchMissing` | GitDivergence | Unknown | | |
+| `NoCommits` | GitDivergence, CommitRecency | Unknown | | |
+| `Clean` | WorkingTree | Pass | modified tracked files (0) | untracked files (0) |
+| `UntrackedOnly` | WorkingTree | Warn | modified tracked files (0) | untracked files |
+| `Modified` | WorkingTree | Fail | modified tracked files | untracked files |
+| `BranchesOk` | Branches | Pass | stale branches | armada/* branches (0) |
+| `StaleBranches` | Branches | Warn or Fail | stale branches | armada/* branches |
+| `ArmadaBranches` | Branches | Warn | stale branches | armada/* branches |
+| `LastCommitAge` | CommitRecency | Pass | whole days since the last commit | |
+| `NoOutdatedPackages` | Dependencies | Pass | 0 | 0 |
+| `OutdatedPackages` | Dependencies | Warn or Fail | distinct outdated packages | distinct packages with major drift |
+| `NoVulnerabilities` | Vulnerabilities | Pass | 0 | 0 |
+| `VulnerablePackages` | Vulnerabilities | Warn or Fail | distinct vulnerable packages | highest severity rank (1 Low, 2 Moderate, 3 High, 4 Critical) |
+| `NoPackageManifests` | Dependencies, Vulnerabilities | NotApplicable | | |
+| `ToolMissing` | Dependencies, Vulnerabilities | Unknown | | |
+| `RestoreRequired` | Dependencies, Vulnerabilities | Unknown | | |
+| `Timeout` | Dependencies, Vulnerabilities | Unknown | timeout in seconds | |
+| `ParseError` | Dependencies, Vulnerabilities | Unknown | | |
+| `ToolFailed` | Dependencies, Vulnerabilities | Unknown | exit code (when known) | |
+| `TestsPassing` | TestInfrastructure | Pass | test indicators found | |
+| `NoTestRun` | TestInfrastructure | Warn | test indicators found | |
+| `LastTestRunFailed` | TestInfrastructure | Warn | test indicators found | |
+| `NoTestsFound` | TestInfrastructure | Fail | recognized projects | |
+| `NoRecognizedProject` | TestInfrastructure | NotApplicable | | |
+| `CiConfigured` | ContinuousIntegration | Pass | CI configuration files | |
+| `NoCiConfig` | ContinuousIntegration | Fail | 0 | |
+| `ReadinessOk` | ArmadaReadiness | Pass | errors (0) | warnings (0) |
+| `ReadinessWarnings` | ArmadaReadiness | Warn | errors (0) | warnings |
+| `ReadinessErrors` | ArmadaReadiness | Fail | errors | warnings |
+| `NoRecentFailures` | MissionOutcomes | Pass | failures (0) | window in days |
+| `RecentFailures` | MissionOutcomes | Pass, Warn, or Fail | failed and landing-failed missions | window in days |
+
+`RecentFailures` grades Pass only when the failure count is below `Thresholds.MissionFailureWarn` (possible when that threshold is raised above 1).
 
 ---
 
@@ -6769,6 +7096,12 @@ This table is a quick route index, not the canonical exhaustive contract. Use `/
 | 122 | GET | `/api/v1/project-profiles/{id}` | Get project profile | Yes |
 | 123 | PUT | `/api/v1/project-profiles/{id}` | Update project profile | Yes |
 | 124 | DELETE | `/api/v1/project-profiles/{id}` | Delete project profile | Yes |
+| 125 | POST | `/api/v1/vessel-health/enumerate` | Enumerate vessel health rows | Yes |
+| 126 | GET | `/api/v1/vessel-health/summary` | Vessel health KPI counts | Yes |
+| 127 | POST | `/api/v1/vessel-health/evaluate` | Start a vessel health evaluation job | TenantAdmin |
+| 128 | GET | `/api/v1/vessels/{id}/health` | Vessel health detail | Yes |
+| 129 | PUT | `/api/v1/vessels/{id}/health/overrides/{criterion}` | Set a vessel health override | TenantAdmin |
+| 130 | DELETE | `/api/v1/vessels/{id}/health/overrides/{criterion}` | Remove a vessel health override | TenantAdmin |
 
 \* Gated by `AllowSelfRegistration` setting.
 \*\* Non-admin users are scoped to their own records only.

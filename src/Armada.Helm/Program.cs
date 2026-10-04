@@ -250,6 +250,12 @@ namespace Armada.Helm
                     .WithExample("ask", "\"any failures?\"")
                     .WithExample("ask", "\"how many captains?\"");
 
+                config.AddCommand<HealthCommand>("health")
+                    .WithDescription("Show vessel health (outdated dependencies, tests, branches, divergence)")
+                    .WithExample("health")
+                    .WithExample("health", "--status", "Fail")
+                    .WithExample("health", "--fleet", "flt_abc123", "--evaluate");
+
                 config.AddCommand<ResetCommand>("reset")
                     .WithDescription("Destructively reset all Armada data back to zero");
 

@@ -76,6 +76,7 @@ namespace Armada.Server
         private WorkflowProfileService _WorkflowProfileService = null!;
         private ProjectProfileService _ProjectProfileService = null!;
         private VesselReadinessService _VesselReadinessService = null!;
+        private Armada.Core.Services.Health.VesselHealthService _VesselHealthService = null!;
         private DeploymentEnvironmentService _EnvironmentService = null!;
         private CheckRunService _CheckRunService = null!;
         private ObjectiveService _ObjectiveService = null!;
@@ -179,6 +180,15 @@ namespace Armada.Server
             _VesselReadinessService = new VesselReadinessService(_Database, _WorkflowProfileService, _Logging);
             _EnvironmentService = new DeploymentEnvironmentService(_Database, _WorkflowProfileService, _Logging);
             _CheckRunService = new CheckRunService(_Database, _WorkflowProfileService, _VesselReadinessService, _Logging);
+
+            // Vessel health: evaluator (pluggable criteria) plus the service that owns evaluation jobs and overrides.
+            Armada.Core.Services.Health.DependencyScanner healthDependencyScanner = new Armada.Core.Services.Health.DependencyScanner(
+                new Armada.Core.Services.Health.DependencyToolRunner(new LocalHostCommandExecutor()));
+            Armada.Core.Services.Health.VesselHealthEvaluator healthEvaluator = new Armada.Core.Services.Health.VesselHealthEvaluator(
+                _Database, _Git, _Settings,
+                Armada.Core.Services.Health.VesselHealthEvaluator.CreateDefaultCriteria(_Database, _VesselReadinessService, healthDependencyScanner),
+                _Logging);
+            _VesselHealthService = new Armada.Core.Services.Health.VesselHealthService(_Database, _Settings, healthEvaluator, _JobService, _Logging);
             _ObjectiveService = new ObjectiveService(_Database);
             _ReleaseService = new ReleaseService(_Database, _WorkflowProfileService, _Logging);
             _DeploymentService = new DeploymentService(_Database, _WorkflowProfileService, _EnvironmentService, _CheckRunService, _Logging);
@@ -484,6 +494,7 @@ namespace Armada.Server
                 _Logging.Warn(_Header + "error stopping agent processes on shutdown: " + ex.ToString());
             }
 
+            _VesselHealthService?.Dispose();
             _TokenSource.Cancel();
             _RemoteTunnel?.StopAsync().GetAwaiter().GetResult();
             _RemoteDashboardRelay?.DisposeAsync().GetAwaiter().GetResult();
@@ -740,6 +751,10 @@ namespace Armada.Server
 
             // Background jobs
             new Routes.JobRoutes(_Database, _JobService)
+                .Register(_App, authenticate, _AuthorizationService);
+
+            // Vessel health
+            new VesselHealthRoutes(_VesselHealthService)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Prompt templates
@@ -1108,7 +1123,8 @@ namespace Armada.Server
                 _Logging,
                 _CaptainTools,
                 _ModelEndpointService,
-                _HarborService);
+                _HarborService,
+                _VesselHealthService);
         }
 
         /// <summary>
@@ -1220,6 +1236,11 @@ namespace Armada.Server
                     // Reap background jobs whose worker died so they do not hang in Running.
                     try { await _JobService.MaintainAsync(token).ConfigureAwait(false); }
                     catch (Exception jobEx) { _Logging.Warn(_Header + "job maintenance error: " + jobEx.Message); }
+
+                    // Vessel health schedule: start an evaluation per tenant every RepositoryHealth.IntervalMinutes
+                    // (0 disables). Elapsed time is tracked from the last evaluation job, so restarts do not re-trigger.
+                    try { await _VesselHealthService.RunScheduleAsync(token).ConfigureAwait(false); }
+                    catch (Exception healthEx) when (!(healthEx is OperationCanceledException)) { _Logging.Warn(_Header + "vessel health schedule error: " + healthEx.Message); }
 
                     // Autonomous mission recovery: classify failures, open/link incidents, dispatch bounded
                     // rescue missions, and advance incidents Open -> Mitigated -> Closed from mission evidence.

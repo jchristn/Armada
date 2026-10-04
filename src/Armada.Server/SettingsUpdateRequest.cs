@@ -92,5 +92,11 @@ namespace Armada.Server
         /// When supplied, replaces the full remoteControl settings object.
         /// </summary>
         public RemoteControlSettings? RemoteControl { get; set; }
+
+        /// <summary>
+        /// Optional vessel health settings update. When supplied, replaces the full repositoryHealth settings object
+        /// (values are clamped by the settings setters).
+        /// </summary>
+        public RepositoryHealthSettings? RepositoryHealth { get; set; }
     }
 }

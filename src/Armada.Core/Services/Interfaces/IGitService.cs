@@ -263,5 +263,71 @@ namespace Armada.Core.Services.Interfaces
         /// <param name="token">Cancellation token.</param>
         /// <returns>The terms found in the tree.</returns>
         Task<IReadOnlyList<string>> FindExistingSubjectTermsAsync(string worktreePath, IReadOnlyList<string> terms, CancellationToken token = default);
+
+        /// <summary>
+        /// Fetch every configured remote with pruning (git fetch --all --prune) without changing any repository
+        /// configuration. Intended for a user's own checkout, where Armada must not rewrite the remote refspec.
+        /// </summary>
+        /// <param name="repoPath">Repository path (working tree or bare repository).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <exception cref="ArgumentNullException">Thrown when repoPath is null or empty.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the fetch fails.</exception>
+        /// <exception cref="TimeoutException">Thrown when the fetch does not finish in time.</exception>
+        Task FetchRemotesAsync(string repoPath, CancellationToken token = default);
+
+        /// <summary>
+        /// Count commits between two refs (git rev-list --left-right --count baseRef...headRef). Ahead is the number
+        /// of commits on headRef that are not on baseRef; Behind is the number of commits on baseRef that are not on
+        /// headRef.
+        /// </summary>
+        /// <param name="repoPath">Repository path (working tree or bare repository).</param>
+        /// <param name="baseRef">Base ref (for example "origin/main" or "@{u}").</param>
+        /// <param name="headRef">Head ref (for example "HEAD").</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The counts, or null when either ref does not resolve.</returns>
+        Task<GitDivergenceCounts?> GetDivergenceAsync(string repoPath, string baseRef, string headRef, CancellationToken token = default);
+
+        /// <summary>
+        /// Summarize the working tree (git status --porcelain): modified tracked files and untracked files.
+        /// </summary>
+        /// <param name="repoPath">Working tree path.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The working tree status.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when repoPath is null or empty.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when git status fails (for example on a bare repository).</exception>
+        Task<GitWorkingTreeStatus> GetWorkingTreeStatusAsync(string repoPath, CancellationToken token = default);
+
+        /// <summary>
+        /// Get the checked-out branch name (git symbolic-ref --short HEAD).
+        /// </summary>
+        /// <param name="repoPath">Repository path.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The branch name, or null when HEAD is detached or cannot be read.</returns>
+        Task<string?> GetCurrentBranchAsync(string repoPath, CancellationToken token = default);
+
+        /// <summary>
+        /// Get the committer timestamp of the HEAD commit (git log -1 --format=%cI) in UTC.
+        /// </summary>
+        /// <param name="repoPath">Repository path.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The timestamp, or null when the repository has no commits.</returns>
+        Task<DateTime?> GetLastCommitUtcAsync(string repoPath, CancellationToken token = default);
+
+        /// <summary>
+        /// List repository-relative paths of every file tracked at HEAD (git ls-tree -r --name-only HEAD). Works on
+        /// bare repositories as well as working trees.
+        /// </summary>
+        /// <param name="repoPath">Repository path.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Tracked file paths with forward slashes; empty when the repository has no commits.</returns>
+        Task<IReadOnlyList<string>> ListTrackedFilesAsync(string repoPath, CancellationToken token = default);
+
+        /// <summary>
+        /// Check whether a path is a bare git repository (git rev-parse --is-bare-repository).
+        /// </summary>
+        /// <param name="path">Path to check.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True for a bare repository; false for a working tree or a non-repository.</returns>
+        Task<bool> IsBareRepositoryAsync(string path, CancellationToken token = default);
     }
 }

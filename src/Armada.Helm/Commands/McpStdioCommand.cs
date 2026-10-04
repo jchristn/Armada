@@ -103,6 +103,14 @@ namespace Armada.Helm.Commands
             RunbookService runbookService = new RunbookService(database, logging);
             ModelEndpointService modelEndpointService = new ModelEndpointService(database, logging);
             HarborService harborService = new HarborService(database, logging);
+            Armada.Core.Services.Health.VesselHealthEvaluator vesselHealthEvaluator = new Armada.Core.Services.Health.VesselHealthEvaluator(
+                database, git, armadaSettings,
+                Armada.Core.Services.Health.VesselHealthEvaluator.CreateDefaultCriteria(
+                    database, vesselReadinessService,
+                    new Armada.Core.Services.Health.DependencyScanner(new Armada.Core.Services.Health.DependencyToolRunner(new LocalHostCommandExecutor()))),
+                logging);
+            using Armada.Core.Services.Health.VesselHealthService vesselHealthService = new Armada.Core.Services.Health.VesselHealthService(
+                database, armadaSettings, vesselHealthEvaluator, new JobService(database, logging), logging);
             // Adapt Armada's JsonElement-based tool handlers to Voltaic's RpcParameters API.
             void RegisterAdapted(string name, string description, object inputSchema, Func<JsonElement?, Task<object>> handler)
             {
@@ -137,7 +145,8 @@ namespace Armada.Helm.Commands
                 agentLifecycle: agentLifecycle,
                 templateService: promptTemplateService,
                 modelEndpointService: modelEndpointService,
-                harborService: harborService);
+                harborService: harborService,
+                vesselHealthService: vesselHealthService);
 
             // Run until stdin closes or process is killed
             using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

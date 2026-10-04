@@ -97,5 +97,19 @@ namespace Test.Shared.Infrastructure
         public Task<IReadOnlyList<Armada.Core.Models.BranchInfo>> ListBranchesAsync(string repoPath, string defaultBranch = "main", CancellationToken token = default) => Task.FromResult<IReadOnlyList<Armada.Core.Models.BranchInfo>>(new List<Armada.Core.Models.BranchInfo>());
         public Task PushLocalBranchAsync(string repoPath, string branchName, string remoteName = "origin", CancellationToken token = default) => Task.CompletedTask;
         public Task MergeBranchesAsync(string repoPath, string sourceBranch, string targetBranch, bool push, CancellationToken token = default) => Task.CompletedTask;
+        /// <summary>Fetch remotes (no-op).</summary>
+        public Task FetchRemotesAsync(string repoPath, CancellationToken token = default) => Task.CompletedTask;
+        /// <summary>Report divergence (always even).</summary>
+        public Task<Armada.Core.Models.GitDivergenceCounts?> GetDivergenceAsync(string repoPath, string baseRef, string headRef, CancellationToken token = default) => Task.FromResult<Armada.Core.Models.GitDivergenceCounts?>(new Armada.Core.Models.GitDivergenceCounts(0, 0));
+        /// <summary>Report a clean working tree.</summary>
+        public Task<Armada.Core.Models.GitWorkingTreeStatus> GetWorkingTreeStatusAsync(string repoPath, CancellationToken token = default) => Task.FromResult(new Armada.Core.Models.GitWorkingTreeStatus());
+        /// <summary>Report the current branch (always main).</summary>
+        public Task<string?> GetCurrentBranchAsync(string repoPath, CancellationToken token = default) => Task.FromResult<string?>("main");
+        /// <summary>Report the last commit time (now).</summary>
+        public Task<DateTime?> GetLastCommitUtcAsync(string repoPath, CancellationToken token = default) => Task.FromResult<DateTime?>(DateTime.UtcNow);
+        /// <summary>List tracked files (none).</summary>
+        public Task<IReadOnlyList<string>> ListTrackedFilesAsync(string repoPath, CancellationToken token = default) => Task.FromResult<IReadOnlyList<string>>(new List<string>());
+        /// <summary>Report whether a path is bare (always false).</summary>
+        public Task<bool> IsBareRepositoryAsync(string path, CancellationToken token = default) => Task.FromResult(false);
     }
 }
