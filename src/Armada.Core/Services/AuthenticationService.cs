@@ -77,7 +77,9 @@ namespace Armada.Core.Services
             // 3. Check API key (X-Api-Key, deprecated but supported)
             if (!string.IsNullOrEmpty(apiKeyHeader) && !string.IsNullOrEmpty(_Settings.ApiKey))
             {
-                if (apiKeyHeader == _Settings.ApiKey)
+                if (System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+                    System.Text.Encoding.UTF8.GetBytes(apiKeyHeader),
+                    System.Text.Encoding.UTF8.GetBytes(_Settings.ApiKey)))
                 {
                     return AuthContext.Authenticated(
                         Constants.SystemTenantId,
@@ -117,6 +119,21 @@ namespace Armada.Core.Services
                 if (String.Equals(user.Id, Constants.SystemUserId, StringComparison.Ordinal)) return new AuthContext();
                 if (!user.Active) return new AuthContext();
                 if (!user.VerifyPassword(password)) return new AuthContext();
+
+                // Transparently upgrade a legacy unsalted (or weaker) hash now that the plaintext is known to be right.
+                if (PasswordHasher.NeedsRehash(user.PasswordSha256))
+                {
+                    try
+                    {
+                        user.PasswordSha256 = PasswordHasher.HashPassword(password);
+                        await _Database.Users.UpdateAsync(user, token).ConfigureAwait(false);
+                        _Logging.Info(_Header + "upgraded the stored password hash of user " + user.Id + " to " + PasswordHasher.Scheme);
+                    }
+                    catch (Exception ex)
+                    {
+                        _Logging.Warn(_Header + "password rehash failed for user " + user.Id + ": " + ex.Message);
+                    }
+                }
 
                 // Verify tenant is active
                 TenantMetadata? tenant = await _Database.Tenants.ReadAsync(tenantId, token).ConfigureAwait(false);

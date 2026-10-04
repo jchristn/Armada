@@ -110,6 +110,14 @@ sqlcmd -S <host>,<port> -U <user> -C -Q "ALTER DATABASE [<database>] SET SINGLE_
 
 For every server provider, start the Admiral once the restore finishes. If the restored schema is older than the build you start, it migrates again (with the warning, and the confirmation if you require one).
 
+## Password hashes
+
+Starting with the 1.0 security release, user passwords are stored as salted PBKDF2-HMAC-SHA256 instead of unsalted
+SHA-256. No migration or user action is needed: the Admiral rewrites every legacy hash when it starts (it stretches the
+stored SHA-256 value, so every password keeps working), and any hash it could not rewrite is upgraded on that user's
+next successful login. Once upgraded, the database cannot be used for password login by an older Admiral; restore the
+pre-upgrade backup if you need to roll back.
+
 ## Migration guarantees
 
 Every migration on every provider is held to two rules, and `Database.MigrationHygiene` checks both on each test run (the database parity script runs it on all four providers):
