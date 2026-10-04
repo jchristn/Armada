@@ -220,8 +220,8 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0, response.Items.Count, "no items in 202 response");
 
                 VesselImportBatch? batch = null;
-                DateTime deadline = DateTime.UtcNow.AddSeconds(30);
-                while (DateTime.UtcNow < deadline)
+                MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(30));
+                while (!deadline.Passed)
                 {
                     batch = await testDb.Driver.VesselImportBatches.ReadAsync(discovered.BatchId).ConfigureAwait(false);
                     if (batch != null && batch.Status != VesselImportBatchStatusEnum.Importing) break;
@@ -260,8 +260,8 @@ namespace Test.Shared.Suites.Services
                 gated.Release();
 
                 VesselImportBatch? batch = null;
-                DateTime deadline = DateTime.UtcNow.AddSeconds(30);
-                while (DateTime.UtcNow < deadline)
+                MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(30));
+                while (!deadline.Passed)
                 {
                     batch = await testDb.Driver.VesselImportBatches.ReadAsync(discovered.BatchId).ConfigureAwait(false);
                     if (batch != null && batch.Status != VesselImportBatchStatusEnum.Importing) break;

@@ -328,8 +328,8 @@ namespace Test.Shared.Suites.Services
 
             public async Task<T> WaitForAsync<T>(string method, Func<T, bool> predicate, int timeoutMs = 5000) where T : class
             {
-                DateTime deadlineUtc = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-                while (DateTime.UtcNow < deadlineUtc)
+                MonotonicDeadline deadlineUtc = MonotonicDeadline.After(TimeSpan.FromMilliseconds(timeoutMs));
+                while (!deadlineUtc.Passed)
                 {
                     foreach ((string Method, object? Payload) entry in _Events)
                     {

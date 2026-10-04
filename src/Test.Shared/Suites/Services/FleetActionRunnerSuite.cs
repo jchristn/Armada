@@ -105,8 +105,8 @@ namespace Test.Shared.Suites.Services
                 FleetActionRun run = await h.StartCommandAsync("sleep 4; echo done > marker.txt", vessels.Select(v => v.Id).ToList(), concurrency: 1, requiresClean: false).ConfigureAwait(false);
 
                 FleetActionRunTarget? running = null;
-                DateTime deadline = DateTime.UtcNow.AddSeconds(30);
-                while (running == null && DateTime.UtcNow < deadline)
+                MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(30));
+                while (running == null && !deadline.Passed)
                 {
                     running = (await h.TargetsAsync(run.Id).ConfigureAwait(false)).FirstOrDefault(t => t.Status == FleetActionTargetStatusEnum.Running);
                     if (running == null) await Task.Delay(50).ConfigureAwait(false);
@@ -221,8 +221,8 @@ namespace Test.Shared.Suites.Services
 
                 FleetActionRun run = await h.StartCommandAsync("sleep 1", vessels.Select(v => v.Id).ToList(), concurrency: 4, requiresClean: false).ConfigureAwait(false);
                 int maxInFlight = 0;
-                DateTime deadline = DateTime.UtcNow.AddSeconds(45);
-                while (DateTime.UtcNow < deadline)
+                MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(45));
+                while (!deadline.Passed)
                 {
                     maxInFlight = Math.Max(maxInFlight, h.Runner.GlobalInFlight);
                     FleetActionRun? current = await h.Db.Driver.FleetActionRuns.ReadAsync(run.Id).ConfigureAwait(false);

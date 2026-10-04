@@ -656,9 +656,9 @@ namespace Test.Shared.Suites.Services
 
         private static async Task<VesselImportBatch> WaitForBatchAsync(DatabaseDriver db, string batchId, Func<VesselImportBatch, bool> done)
         {
-            DateTime deadline = DateTime.UtcNow.AddSeconds(30);
+            MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(30));
             VesselImportBatch? batch = null;
-            while (DateTime.UtcNow < deadline)
+            while (!deadline.Passed)
             {
                 batch = await db.VesselImportBatches.ReadAsync(batchId).ConfigureAwait(false);
                 if (batch != null && done(batch)) return batch;
@@ -682,8 +682,8 @@ namespace Test.Shared.Suites.Services
 
         private static async Task WaitForCaptainStateAsync(DatabaseDriver db, string captainId, CaptainStateEnum state)
         {
-            DateTime deadline = DateTime.UtcNow.AddSeconds(10);
-            while (DateTime.UtcNow < deadline)
+            MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(10));
+            while (!deadline.Passed)
             {
                 Captain? captain = await db.Captains.ReadAsync(captainId).ConfigureAwait(false);
                 if (captain != null && captain.State == state) return;

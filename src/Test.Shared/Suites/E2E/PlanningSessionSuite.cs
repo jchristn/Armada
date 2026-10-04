@@ -211,8 +211,8 @@ namespace Test.Shared.Suites.E2E
 
         private static async Task<PlanningSessionDetailResponse> WaitForAssistantOutputAsync(HttpClient authClient, string sessionId, int timeoutMs = 15000)
         {
-            DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-            while (DateTime.UtcNow < deadline)
+            MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromMilliseconds(timeoutMs));
+            while (!deadline.Passed)
             {
                 HttpResponseMessage resp = await authClient.GetAsync("/api/v1/planning-sessions/" + sessionId).ConfigureAwait(false);
                 resp.EnsureSuccessStatusCode();
@@ -232,8 +232,8 @@ namespace Test.Shared.Suites.E2E
 
         private static async Task<PlanningSessionDetailResponse> WaitForSessionStatusAsync(HttpClient authClient, string sessionId, string expectedStatus, int timeoutMs = 15000)
         {
-            DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-            while (DateTime.UtcNow < deadline)
+            MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromMilliseconds(timeoutMs));
+            while (!deadline.Passed)
             {
                 HttpResponseMessage resp = await authClient.GetAsync("/api/v1/planning-sessions/" + sessionId).ConfigureAwait(false);
                 resp.EnsureSuccessStatusCode();

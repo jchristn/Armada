@@ -183,8 +183,8 @@ namespace Test.Shared.Infrastructure
         /// <returns>True when the condition held.</returns>
         public static async Task<bool> WaitUntilAsync(Func<Task<bool>> condition, int timeoutMs = 5000)
         {
-            DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-            while (DateTime.UtcNow < deadline)
+            MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromMilliseconds(timeoutMs));
+            while (!deadline.Passed)
             {
                 if (await condition().ConfigureAwait(false)) return true;
                 await Task.Delay(25).ConfigureAwait(false);

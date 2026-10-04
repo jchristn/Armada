@@ -25,9 +25,9 @@ namespace Test.Shared.Infrastructure
         /// <exception cref="AssertionException">The job did not finish in time.</exception>
         public static async Task<Job> ForTerminalAsync(DatabaseDriver db, string jobId, int timeoutSeconds = 30)
         {
-            DateTime deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+            MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(timeoutSeconds));
             Job? job = null;
-            while (DateTime.UtcNow < deadline)
+            while (!deadline.Passed)
             {
                 job = await db.Jobs.ReadAsync(jobId).ConfigureAwait(false);
                 if (job != null && (job.Status == JobStatusEnum.Succeeded || job.Status == JobStatusEnum.Failed || job.Status == JobStatusEnum.Cancelled))

@@ -353,9 +353,9 @@ namespace Test.Shared.Infrastructure
             // both listeners: REST health and the MCP server's unauthenticated health check (GET /), since the MCP
             // listener starts separately from REST.
             ReadinessProbe probe = new ReadinessProbe();
-            DateTime deadline = DateTime.UtcNow.Add(timeout);
+            MonotonicDeadline deadline = MonotonicDeadline.After(timeout);
             int delayMs = 50;
-            while (DateTime.UtcNow < deadline)
+            while (!deadline.Passed)
             {
                 if (!probe.RestOk) probe.Rest = await ProbeAsync(AuthClient, "/api/v1/status/health").ConfigureAwait(false);
                 if (probe.RestOk && !probe.McpOk) probe.Mcp = await ProbeAsync(McpClient, "/").ConfigureAwait(false);

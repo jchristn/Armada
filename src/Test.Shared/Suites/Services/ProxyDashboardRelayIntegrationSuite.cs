@@ -484,8 +484,8 @@ namespace Test.Shared.Suites.Services
 
             public async Task WaitForConnectedInstanceAsync(string instanceId, int timeoutMs = 5000)
             {
-                DateTime deadlineUtc = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-                while (DateTime.UtcNow < deadlineUtc)
+                MonotonicDeadline deadlineUtc = MonotonicDeadline.After(TimeSpan.FromMilliseconds(timeoutMs));
+                while (!deadlineUtc.Passed)
                 {
                     using JsonDocument instances = await GetJsonAsync("/proxy-api/v1/instances").ConfigureAwait(false);
                     JsonElement array = instances.RootElement.GetProperty("instances");

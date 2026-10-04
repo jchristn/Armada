@@ -453,8 +453,8 @@ namespace Test.Shared.Suites.E2E
             Func<ObjectiveRefinementSessionDetail, bool> predicate,
             int timeoutMs = 15000)
         {
-            DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-            while (DateTime.UtcNow < deadline)
+            MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromMilliseconds(timeoutMs));
+            while (!deadline.Passed)
             {
                 HttpResponseMessage response = await authClient.GetAsync("/api/v1/objective-refinement-sessions/" + sessionId).ConfigureAwait(false);
                 AssertEqual(HttpStatusCode.OK, response.StatusCode);

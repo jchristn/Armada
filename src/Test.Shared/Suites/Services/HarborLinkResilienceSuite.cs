@@ -218,10 +218,10 @@ namespace Test.Shared.Suites.Services
 
         private static async Task WaitUntilAsync(Func<bool> condition)
         {
-            DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+            MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(5));
             while (!condition())
             {
-                if (DateTime.UtcNow > deadline) throw new TimeoutException("condition not met within 5 s");
+                if (deadline.Passed) throw new TimeoutException("condition not met within 5 s");
                 await Task.Delay(10).ConfigureAwait(false);
             }
         }
