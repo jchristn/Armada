@@ -6,6 +6,18 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### v1.0 readiness: security
+- **Breaking:** every REST route and MCP tool declares an explicit authorization requirement in a central registry, checked before the handler runs; undeclared routes and tools fail closed, and a test fails when one is missing. 19 enumerate routes now need only authentication; check-run writes and Harbor probes need a tenant admin.
+- **Breaking:** MCP is authenticated by default; unauthenticated calls are accepted only on a localhost-bound listener from localhost (`Mcp.AllowUnauthenticatedLoopback`, default true); `backup`, `restore`, and `stop_server` require an admin credential.
+- **Breaking:** `POST /api/v1/server/stop`, `restart`, `rebuild`, and `rollback` always require an admin (`RequireAuthForShutdown` is deprecated and ignored). Previously they needed no login by default, and rebuild could run a build from a caller-chosen path.
+- **Breaking:** the first sign-in as `admin@armada` with the default password must set a new password (`PUT /api/v1/account/password`), which also disables the `default` bearer token; the dashboard warns while defaults are in use; the Admiral refuses non-localhost hostnames with default credentials unless `AllowDefaultCredentialsOnNetwork` is set; new `ARMADA_INITIAL_ADMIN_PASSWORD` for headless and Docker installs.
+- `AllowSelfRegistration` now defaults to false; the system API-key identity can no longer log in with a password; tenant admins can no longer modify or mint credentials for global admins; Harbor links must present a valid credential unless both ends are on localhost.
+- New per-captain `autoApprove` switch runs CLI captains without their auto-approve flags; `audit.command` events are recorded for workspace exec, fleet action commands, check runs, Harbor probes, and merge-queue tests (only global admins can delete audit events).
+- Bearer tokens are shown once at creation and masked on reads; remote-tunnel secrets are masked in settings; request history redacts secret-bearing keys, secret-shaped values, and query strings; deleting a vessel only removes directories inside the managed repos and docks directories.
+- Containers run as non-root on pinned base images (the dashboard container listens on 8080); new `security.yml` workflow scans NuGet and npm dependencies; new `docs/SECURITY_REVIEW.md` and `SECURITY.md`.
+- Removed: the keyword `POST /api/v1/ask` responder and the `armada ask` CLI command (use Ask Armada threads).
+- Fixed: the MCP listener now binds when the hostname is `0.0.0.0`.
+
 ### v1.0 readiness: upgrades and data safety
 - Startup backs up a SQLite database before applying migrations (`{DataDirectory}/backups/pre-migration-*`, newest 5 kept); server providers log the dump command and can be configured to refuse to migrate until a backup is confirmed (`Database.RequireBackupConfirmationForMigrations`).
 - New Data Retention settings: Ask threads archive after 90 idle days (deletion optional), finished jobs delete after 30 days, finished import batches after 90 days; editable on the Server settings page.

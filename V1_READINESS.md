@@ -70,35 +70,40 @@ everything after them assumes a stable, safe surface.
 
 The goal is a written threat model and a closed list of findings, not just fixes for what is already known.
 
-- [ ] **W1.1 Surface inventory.** List every entry point with its authentication, authorization rule, tenant
+- [x] **W1.1 Surface inventory.** List every entry point with its authentication, authorization rule, tenant
   scoping, and input validation: all REST routes (from the route registrars and `/openapi.json`), every MCP tool,
   every WebSocket route and command, the Harbor link protocol, the proxy relay, and every place that touches the host
   file system or runs a process (vessel import browse/discover, Fleet Actions commands, workspace exec, docks, git,
   self-rebuild, backup/restore).
   _Acceptance:_ `docs/SECURITY_REVIEW.md` with one row per entry point and an owner for each gap.
-- [ ] **W1.2 Authorization model.** Replace the path-prefix rules with an explicit `(ResourceType, Operation)`
+- [x] **W1.2 Authorization model.** Replace the path-prefix rules with an explicit `(ResourceType, Operation)`
   requirement declared on each route and MCP tool, checked centrally, with a test that fails the build when a route or
   tool has no declared requirement. Keep `PermissionLevel` as the mapping target if that is simpler, but make the
   declaration per route, not per prefix.
   _Acceptance:_ the "undeclared route" test exists and passes; the AUTHENTICATION.md nonconformance note is removed.
-- [ ] **W1.3 MCP authentication.** Decide and implement: authenticated by default, with an explicit
+- [x] **W1.3 MCP authentication.** Decide and implement: authenticated by default, with an explicit
   `Mcp.AllowUnauthenticatedLoopback` setting (default true only when bound to loopback) for the local developer
   experience. Non-loopback MCP requires a token.
   _Acceptance:_ an unauthenticated MCP call to a non-loopback binding is refused (test); local Claude Code setup in the
   README still works unchanged.
-- [ ] **W1.4 Safe defaults.** Force a password change for `admin@armada` on first dashboard login; disable the
+- [x] **W1.4 Safe defaults.** Force a password change for `admin@armada` on first dashboard login; disable the
   `default` bearer token once a real credential exists; refuse to bind to a non-loopback address with default
   credentials unless an explicit override is set; show a persistent dashboard warning while defaults are in use.
   _Acceptance:_ a fresh Docker install cannot be driven with `Bearer default` from another host.
-- [ ] **W1.5 Captain execution safety.** Document the auto-approve flags in a "Running agents safely" section, add a
+- [~] **W1.5 Captain execution safety.** Document the auto-approve flags in a "Running agents safely" section, add a
   per-vessel and per-captain setting to run CLI captains without auto-approve where the runtime supports it, and make
   Fleet Actions Command runs and workspace exec require TenantAdmin plus an audit record.
   _Acceptance:_ audit records exist for every shell command Armada runs on a user's behalf.
-- [ ] **W1.6 Secrets.** Verify no API keys, tokens, or passwords are returned by any read endpoint, written to logs,
+- [x] **W1.6 Secrets.** Verify no API keys, tokens, or passwords are returned by any read endpoint, written to logs,
   or captured in request history bodies; redact them in captured bodies, not just headers.
   _Acceptance:_ a test seeds known secrets and greps responses, logs, and request history for them.
-- [ ] **W1.7 Dependency and container hygiene.** Enable dependency vulnerability scanning (NuGet and npm) in CI, run
+- [x] **W1.7 Dependency and container hygiene.** Enable dependency vulnerability scanning (NuGet and npm) in CI, run
   the containers as a non-root user, and pin base images.
+- [ ] **W1.9 Security follow-ups from W1.1** (`docs/SECURITY_REVIEW.md`): O-01 tenant checks in the 62 MCP tools that
+  act on entities by id; O-02 Ask turns run CLI captains on the host with auto-approve flags (default Ask captains to
+  auto-approve off, or require tenant admin); O-04 split-mode captains get no MCP credential; O-05 salted password
+  hashing (PBKDF2/Argon2 with transparent rehash) and login rate limiting; O-11 proxy hardening; per-vessel
+  auto-approve setting (W1.5 shipped per-captain only).
 - [ ] **W1.8 External review.** One review pass by someone other than the author against the W1.1 inventory.
 
 ### W2. API and contract freeze
@@ -198,7 +203,7 @@ The goal is a written threat model and a closed list of findings, not just fixes
   guides checked against the frozen surface; remove em-dashes repo-wide per the writing requirements.
 - [x] **W7.2 Operations guide.** `docs/OPERATIONS.md`: deployment topologies, ports, TLS, backups, upgrades,
   retention, telemetry, troubleshooting.
-- [ ] **W7.3 Security guide.** `SECURITY.md` with how to report vulnerabilities and the security model summary from
+- [x] **W7.3 Security guide.** `SECURITY.md` with how to report vulnerabilities and the security model summary from
   W1.
 
 ### W8. Release process
@@ -242,3 +247,4 @@ history), captain-suggested Ask thread titles, commit-message enforcement at lan
 | 2026-10-04 | (design) | -- | Plan drafted from the 2026-10-04 working session. |
 | 2026-10-04 | ops agent | W4.1, W4.3, W5.1-W5.4, W6.2, W7.2, W8.1 | CI on push/PR (3 OSes x net8/net10, dashboard dist check), nightly parity, non-D1 channels disabled, DOCKERHUB_README and docker/update scripts, healthchecks on every HTTP service, macOS Harbor .app/.dmg and server .pkg built and verified locally, WiX channel (unverified on Windows), SHA256SUMS, CAPTAINS/OPERATIONS/RELEASING docs. Found W5.6. |
 | 2026-10-04 | data agent | W3.1-W3.5 | Upgrade test from v0.9.0 (release commit e456b008 and image commit 574a8a1a) passes on SQLite, PostgreSQL, MySQL, SQL Server; SQLite backup before migrate, server-provider warning/confirmation; all migrations re-runnable (fixed SQLite v15, PostgreSQL guards, SQL Server v1); retention for Ask threads, jobs, import batches; SQLite restore drill; docs/UPGRADING.md. Follow-up: data expiry of voyages/missions/signals/events is SQLite-only. |
+| 2026-10-04 | security agent | W1.1-W1.7, W7.3, D3 | Surface inventory (24 findings fixed, 19 open with owners), per-route and per-tool authorization registries checked centrally with a coverage test, MCP auth per D2, forced password change and default-token retirement, non-loopback refusal with defaults, per-captain auto-approve switch, audit.command events, secret redaction, non-root pinned containers, security.yml, SECURITY.md; keyword /api/v1/ask and `armada ask` removed. Critical fixes: unauthenticated server stop/restart/rebuild (RCE), anonymous MCP as tenant admin with host-path backup/restore, shell via check-run command override. Merged; full suite 2954 (2945 passed, 9 skipped, 0 failed). |
