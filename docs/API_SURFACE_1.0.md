@@ -30,7 +30,7 @@ administrator).
 | WebSocket commands | 59 | 0 |
 | WebSocket event types | 65 | 0 |
 | CLI commands | 58 | 0 |
-| Settings keys | 166 | 12 |
+| Settings keys | 174 | 12 |
 
 ## REST API
 
@@ -396,7 +396,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 
 | Tool | Auth | Arguments | Status |
 |---|---|---|---|
-| `add_vessel` | TenantAdmin | `allowConcurrentMissions: boolean`, `defaultBranch: string`, `defaultPipelineId: string`, `enableModelContext: boolean`, `fleetId*: string`, `gitHubTokenOverride: string`, `name*: string`, `projectContext: string`, `repoUrl*: string`, `styleGuide: string`, `workingDirectory: string` |  |
+| `add_vessel` | TenantAdmin | `allowConcurrentMissions: boolean`, `autoApprove: boolean`, `defaultBranch: string`, `defaultPipelineId: string`, `enableModelContext: boolean`, `fleetId*: string`, `gitHubTokenOverride: string`, `name*: string`, `projectContext: string`, `repoUrl*: string`, `styleGuide: string`, `workingDirectory: string` |  |
 | `apply_backlog_refinement_summary` | TenantAdmin | `markMessageSelected: boolean`, `messageId: string`, `promoteBacklogState: boolean`, `sessionId*: string` |  |
 | `apply_fleet_recommendations` | TenantAdmin | `batchId*: string`, `fleets: array<object>` |  |
 | `approve_deployment` | TenantAdmin | `comment: string`, `deploymentId*: string` |  |
@@ -536,7 +536,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `update_pipeline` | TenantAdmin | `description: string`, `name*: string`, `stages: array<object>` |  |
 | `update_playbook` | TenantAdmin | `active: boolean`, `content: string`, `description: string`, `fileName: string`, `id*: string` |  |
 | `update_prompt_template` | TenantAdmin | `content*: string`, `description: string`, `name*: string` |  |
-| `update_vessel` | TenantAdmin | `allowConcurrentMissions: boolean`, `defaultBranch: string`, `defaultPipelineId: string`, `enableModelContext: boolean`, `gitHubTokenOverride: string`, `modelContext: string`, `name: string`, `projectContext: string`, `repoUrl: string`, `styleGuide: string`, `vesselId*: string`, `workingDirectory: string` |  |
+| `update_vessel` | TenantAdmin | `allowConcurrentMissions: boolean`, `autoApprove: boolean`, `clearAutoApprove: boolean`, `defaultBranch: string`, `defaultPipelineId: string`, `enableModelContext: boolean`, `gitHubTokenOverride: string`, `modelContext: string`, `name: string`, `projectContext: string`, `repoUrl: string`, `styleGuide: string`, `vesselId*: string`, `workingDirectory: string` |  |
 | `update_vessel_context` | TenantAdmin | `modelContext: string`, `projectContext: string`, `styleGuide: string`, `vesselId*: string` |  |
 | `validate_model_endpoint` | Authenticated | `endpointId*: string` |  |
 | `verify_deployment` | TenantAdmin | `deploymentId*: string` |  |
@@ -723,6 +723,7 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `allowSelfRegistration` | bool | `false` |  |
 | `apiKey` | string | `null` |  |
 | `ask` | object |  |  |
+| `ask.captainAutoApprove` | bool | `false` |  |
 | `ask.historyTurns` | int | `20` |  |
 | `ask.narrateMilestones` | bool | `true` |  |
 | `ask.narrationTimeoutSeconds` | int | `60` |  |
@@ -792,6 +793,13 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `isolateCaptainLaunch` | bool | `false` |  |
 | `landingMode` | enum LandingModeEnum (LocalMerge\|PullRequest\|MergeQueue\|None)? | `null` |  |
 | `logDirectory` | string | `"~/.armada/logs"` |  |
+| `loginRateLimit` | object |  |  |
+| `loginRateLimit.enabled` | bool | `true` |  |
+| `loginRateLimit.lockoutMinutes` | int | `15` |  |
+| `loginRateLimit.maxFailuresPerAccount` | int | `10` |  |
+| `loginRateLimit.maxFailuresPerAddress` | int | `50` |  |
+| `loginRateLimit.maxLockoutMinutes` | int | `1440` |  |
+| `loginRateLimit.windowMinutes` | int | `15` |  |
 | `maxCaptains` | int | `0` |  |
 | `maxConcurrentMissions` | int | `0` |  |
 | `maxLandingRetries` | int | `3` |  |

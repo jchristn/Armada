@@ -5658,6 +5658,11 @@
           "required": false
         },
         {
+          "name": "autoApprove",
+          "type": "boolean",
+          "required": false
+        },
+        {
           "name": "defaultBranch",
           "type": "string",
           "required": false
@@ -9873,6 +9878,16 @@
       "arguments": [
         {
           "name": "allowConcurrentMissions",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "autoApprove",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "clearAutoApprove",
           "type": "boolean",
           "required": false
         },
@@ -14639,6 +14654,12 @@
       "experimental": false
     },
     {
+      "key": "ask.captainAutoApprove",
+      "type": "bool",
+      "default": "false",
+      "experimental": false
+    },
+    {
       "key": "ask.historyTurns",
       "type": "int",
       "default": "20",
@@ -15050,6 +15071,48 @@
       "key": "logDirectory",
       "type": "string",
       "default": "\"~/.armada/logs\"",
+      "experimental": false
+    },
+    {
+      "key": "loginRateLimit",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "loginRateLimit.enabled",
+      "type": "bool",
+      "default": "true",
+      "experimental": false
+    },
+    {
+      "key": "loginRateLimit.lockoutMinutes",
+      "type": "int",
+      "default": "15",
+      "experimental": false
+    },
+    {
+      "key": "loginRateLimit.maxFailuresPerAccount",
+      "type": "int",
+      "default": "10",
+      "experimental": false
+    },
+    {
+      "key": "loginRateLimit.maxFailuresPerAddress",
+      "type": "int",
+      "default": "50",
+      "experimental": false
+    },
+    {
+      "key": "loginRateLimit.maxLockoutMinutes",
+      "type": "int",
+      "default": "1440",
+      "experimental": false
+    },
+    {
+      "key": "loginRateLimit.windowMinutes",
+      "type": "int",
+      "default": "15",
       "experimental": false
     },
     {

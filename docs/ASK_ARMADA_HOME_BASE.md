@@ -247,6 +247,7 @@ default.
 | `ProposalExpiryMinutes` | 60 | 1-1440 |
 | `TrackerIntervalSeconds` | 5 | 2-300 |
 | `NarrateMilestones` | true | -- |
+| `CaptainAutoApprove` | false | -- (when false, turns and narrations run the CLI captain without its auto-approve flags whatever the captain setting; see docs/SECURITY_REVIEW.md, O-02) |
 | `NarrationTimeoutSeconds` | 60 | 10-600 |
 | `TurnTimeoutMinutes` | 15 | 1-120 |
 

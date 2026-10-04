@@ -1381,6 +1381,11 @@ Skipped entries include the entity ID and the reason (e.g., "Not found" or "Empt
 
 A vessel is a git repository registered with Armada.
 
+`AutoApprove` (boolean or null, default null) is a per-vessel override of the captain auto-approve setting for missions
+on the vessel: null uses each captain's own setting; true or false wins over it (see
+[SECURITY_REVIEW.md](SECURITY_REVIEW.md#running-agents-safely)). `PUT /api/v1/vessels/{id}` replaces the vessel, so send
+the current value back to keep it.
+
 #### GET /api/v1/vessels
 
 List all vessels with pagination.
@@ -3499,6 +3504,11 @@ When a snapshot changes, `ask.work` is pushed; milestones (work started, a missi
 opened a pull request, or could not land, and the item succeeded, failed, or was cancelled) post `WorkUpdate` messages, worded by the
 thread's captain when it is idle (`Ask.NarrateMilestones`, bounded by `Ask.NarrationTimeoutSeconds`) and otherwise a
 deterministic sentence. Captain and Armada messages increment `UnreadCount`; `POST .../read` resets it.
+
+Thread turns and narrations run the CLI captain without its auto-approve or permission-bypass flags unless the
+`Ask.CaptainAutoApprove` setting is true (default false). Armada's own MCP tools stay available to the captain (state
+changes become proposals); the CLI's shell and file tools outside its temporary working directory are refused, not
+prompted, so a turn never waits for input.
 
 **Models.**
 
