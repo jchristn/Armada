@@ -154,15 +154,7 @@ namespace Armada.Core.Database.SqlServer
 
                     using (SqlTransaction tx = (SqlTransaction)await conn.BeginTransactionAsync(token).ConfigureAwait(false))
                     {
-                        foreach (string sql in migration.Statements)
-                        {
-                            using (SqlCommand cmd = conn.CreateCommand())
-                            {
-                                cmd.Transaction = tx;
-                                cmd.CommandText = sql;
-                                await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                            }
-                        }
+                        await ExecuteMigrationAsync(conn, tx, migration, token).ConfigureAwait(false);
 
                         // Record migration
                         using (SqlCommand cmd = conn.CreateCommand())
@@ -270,9 +262,63 @@ namespace Armada.Core.Database.SqlServer
             _Logging.Debug(_Header + "disposed");
         }
 
+        /// <inheritdoc />
+        public override int GetLatestSchemaVersion()
+        {
+            List<SchemaMigration> migrations = TableQueries.GetMigrations();
+            return migrations.Count == 0 ? 0 : migrations[migrations.Count - 1].Version;
+        }
+
         #endregion
 
         #region Internal-Methods
+
+        /// <inheritdoc />
+        internal override IReadOnlyList<SchemaMigration> GetMigrationsForVerification()
+        {
+            return TableQueries.GetMigrations();
+        }
+
+        /// <inheritdoc />
+        internal override async Task ReplayMigrationsAsync(CancellationToken token = default)
+        {
+            using (SqlConnection conn = new SqlConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                foreach (SchemaMigration migration in TableQueries.GetMigrations())
+                {
+                    using (SqlTransaction tx = (SqlTransaction)await conn.BeginTransactionAsync(token).ConfigureAwait(false))
+                    {
+                        await ExecuteMigrationAsync(conn, tx, migration, token).ConfigureAwait(false);
+                        await tx.CommitAsync(token).ConfigureAwait(false);
+                    }
+                }
+            }
+        }
+
+        private static async Task ExecuteMigrationAsync(SqlConnection conn, SqlTransaction tx, SchemaMigration migration, CancellationToken token)
+        {
+            if (!String.IsNullOrEmpty(migration.AlreadyAppliedCheckSql))
+            {
+                using (SqlCommand check = conn.CreateCommand())
+                {
+                    check.Transaction = tx;
+                    check.CommandText = migration.AlreadyAppliedCheckSql;
+                    object? found = await check.ExecuteScalarAsync(token).ConfigureAwait(false);
+                    if (found != null && found != DBNull.Value && Convert.ToInt64(found) != 0) return;
+                }
+            }
+
+            foreach (string sql in migration.Statements)
+            {
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.Transaction = tx;
+                    cmd.CommandText = sql;
+                    await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                }
+            }
+        }
 
         /// <summary>
         /// Convert a DateTime to ISO 8601 format string.

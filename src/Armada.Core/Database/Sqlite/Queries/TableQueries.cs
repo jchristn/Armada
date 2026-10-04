@@ -670,7 +670,13 @@ namespace Armada.Core.Database.Sqlite.Queries
                     @"CREATE INDEX IF NOT EXISTS idx_events_tenant_user ON events(tenant_id, user_id);",
                     @"CREATE INDEX IF NOT EXISTS idx_merge_entries_user ON merge_entries(user_id);",
                     @"CREATE INDEX IF NOT EXISTS idx_merge_entries_tenant_user ON merge_entries(tenant_id, user_id);"
-                ),
+                )
+                {
+                    // The rebuild (rename, recreate, copy, drop) is not re-runnable: replaying it on a later schema
+                    // would re-point newer tables' foreign keys at the *_old copies and drop columns added since.
+                    // A fleets -> tenants foreign key only exists once this migration has run.
+                    AlreadyAppliedCheckSql = @"SELECT COUNT(*) FROM pragma_foreign_key_list('fleets') WHERE ""table"" = 'tenants';"
+                },
                 new SchemaMigration(16, "Add tenant admin role to users",
                     @"ALTER TABLE users ADD COLUMN is_tenant_admin INTEGER NOT NULL DEFAULT 0;",
                     @"UPDATE users SET is_tenant_admin = 1 WHERE is_admin = 1;"

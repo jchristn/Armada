@@ -149,10 +149,7 @@ namespace Armada.Core.Database.Mysql
 
                     using (MySqlTransaction tx = await conn.BeginTransactionAsync(token).ConfigureAwait(false))
                     {
-                        foreach (string sql in migration.Statements)
-                        {
-                            await ExecuteMigrationStatementAsync(conn, tx, sql, token).ConfigureAwait(false);
-                        }
+                        await ExecuteMigrationAsync(conn, tx, migration, token).ConfigureAwait(false);
 
                         // Record migration
                         using (MySqlCommand cmd = conn.CreateCommand())
@@ -345,6 +342,40 @@ namespace Armada.Core.Database.Mysql
             if (_Disposed) return;
             _Disposed = true;
             _Logging.Debug(_Header + "disposed");
+        }
+
+        /// <inheritdoc />
+        public override int GetLatestSchemaVersion()
+        {
+            List<SchemaMigration> migrations = GetMigrations();
+            return migrations.Count == 0 ? 0 : migrations[migrations.Count - 1].Version;
+        }
+
+        #endregion
+
+        #region Internal-Methods
+
+        /// <inheritdoc />
+        internal override IReadOnlyList<SchemaMigration> GetMigrationsForVerification()
+        {
+            return GetMigrations();
+        }
+
+        /// <inheritdoc />
+        internal override async Task ReplayMigrationsAsync(CancellationToken token = default)
+        {
+            using (MySqlConnection conn = await GetConnectionAsync(token).ConfigureAwait(false))
+            {
+                foreach (SchemaMigration migration in GetMigrations())
+                {
+                    using (MySqlTransaction tx = await conn.BeginTransactionAsync(token).ConfigureAwait(false))
+                    {
+                        await ExecuteMigrationAsync(conn, tx, migration, token).ConfigureAwait(false);
+
+                        await tx.CommitAsync(token).ConfigureAwait(false);
+                    }
+                }
+            }
         }
 
         #endregion
@@ -912,6 +943,25 @@ namespace Armada.Core.Database.Mysql
             entry.TestStartedUtc = FromIso8601Nullable(reader["test_started_utc"]);
             entry.CompletedUtc = FromIso8601Nullable(reader["completed_utc"]);
             return entry;
+        }
+
+        private async Task ExecuteMigrationAsync(MySqlConnection conn, MySqlTransaction tx, SchemaMigration migration, CancellationToken token)
+        {
+            if (!String.IsNullOrEmpty(migration.AlreadyAppliedCheckSql))
+            {
+                using (MySqlCommand check = conn.CreateCommand())
+                {
+                    check.Transaction = tx;
+                    check.CommandText = migration.AlreadyAppliedCheckSql;
+                    object? found = await check.ExecuteScalarAsync(token).ConfigureAwait(false);
+                    if (found != null && found != DBNull.Value && Convert.ToInt64(found) != 0) return;
+                }
+            }
+
+            foreach (string sql in migration.Statements)
+            {
+                await ExecuteMigrationStatementAsync(conn, tx, sql, token).ConfigureAwait(false);
+            }
         }
 
         private async Task ExecuteMigrationStatementAsync(

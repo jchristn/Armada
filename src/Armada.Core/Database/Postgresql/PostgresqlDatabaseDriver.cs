@@ -152,16 +152,7 @@ namespace Armada.Core.Database.Postgresql
 
                     using (NpgsqlTransaction tx = await conn.BeginTransactionAsync(token).ConfigureAwait(false))
                     {
-                        foreach (string sql in migration.Statements)
-                        {
-                            using (NpgsqlCommand cmd = new NpgsqlCommand())
-                            {
-                                cmd.Connection = conn;
-                                cmd.Transaction = tx;
-                                cmd.CommandText = sql;
-                                await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                            }
-                        }
+                        await ExecuteMigrationAsync(conn, tx, migration, token).ConfigureAwait(false);
 
                         // Record migration
                         using (NpgsqlCommand cmd = new NpgsqlCommand())
@@ -249,9 +240,69 @@ namespace Armada.Core.Database.Postgresql
             return new NpgsqlConnection(_ConnectionString);
         }
 
+        /// <inheritdoc />
+        public override int GetLatestSchemaVersion()
+        {
+            List<SchemaMigration> migrations = TableQueries.GetMigrations();
+            return migrations.Count == 0 ? 0 : migrations[migrations.Count - 1].Version;
+        }
+
+        #endregion
+
+        #region Internal-Methods
+
+        /// <inheritdoc />
+        internal override IReadOnlyList<SchemaMigration> GetMigrationsForVerification()
+        {
+            return TableQueries.GetMigrations();
+        }
+
+        /// <inheritdoc />
+        internal override async Task ReplayMigrationsAsync(CancellationToken token = default)
+        {
+            using (NpgsqlConnection conn = new NpgsqlConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                foreach (SchemaMigration migration in TableQueries.GetMigrations())
+                {
+                    using (NpgsqlTransaction tx = await conn.BeginTransactionAsync(token).ConfigureAwait(false))
+                    {
+                        await ExecuteMigrationAsync(conn, tx, migration, token).ConfigureAwait(false);
+                        await tx.CommitAsync(token).ConfigureAwait(false);
+                    }
+                }
+            }
+        }
+
         #endregion
 
         #region Private-Methods
+
+        private static async Task ExecuteMigrationAsync(NpgsqlConnection conn, NpgsqlTransaction tx, SchemaMigration migration, CancellationToken token)
+        {
+            if (!String.IsNullOrEmpty(migration.AlreadyAppliedCheckSql))
+            {
+                using (NpgsqlCommand check = new NpgsqlCommand())
+                {
+                    check.Connection = conn;
+                    check.Transaction = tx;
+                    check.CommandText = migration.AlreadyAppliedCheckSql;
+                    object? found = await check.ExecuteScalarAsync(token).ConfigureAwait(false);
+                    if (found != null && found != DBNull.Value && Convert.ToInt64(found) != 0) return;
+                }
+            }
+
+            foreach (string sql in migration.Statements)
+            {
+                using (NpgsqlCommand cmd = new NpgsqlCommand())
+                {
+                    cmd.Connection = conn;
+                    cmd.Transaction = tx;
+                    cmd.CommandText = sql;
+                    await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                }
+            }
+        }
 
         private void InitializeImplementations()
         {
