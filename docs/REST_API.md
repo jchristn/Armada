@@ -3331,7 +3331,7 @@ Send a chat turn directly to a captain's configured model (Mux/Ollama endpoints)
 |---|---|---|---|
 | `Message` | string | yes | The new user message to send to the captain's model |
 | `History` | array | no | Prior conversation turns (oldest first), excluding the new message |
-| `TurnId` | string | no | Client-generated turn id; when set, the reply is also streamed as `ask.chunk` WebSocket events tagged with this id |
+| `TurnId` | string | no | Client-generated turn id; when set, the reply is also streamed as `ask.chunk` WebSocket events tagged with this id (to the caller's own sockets only) |
 | `ShowThinking` | bool | no | When `true`, ask the runtime to surface the model's reasoning (honored by the Mux runtime) |
 
 **Response:** `200 OK` - `CaptainChatResponse`
@@ -3346,6 +3346,106 @@ Send a chat turn directly to a captain's configured model (Mux/Ollama endpoints)
   "Thinking": null
 }
 ```
+
+
+#### Ask Armada threads
+
+Ask Armada threads are private, persisted conversations. Every thread route requires authentication and is **owner-scoped**:
+a thread of another user (even an admin's, or one in the same tenant) returns `404`. The work a thread starts stays
+visible tenant-wide on the normal pages. Live updates arrive over the WebSocket (`ask.*` events, owner-only; see
+WEBSOCKET_API.md). Retention: threads are kept until deleted; there is no automatic expiry.
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| POST | `/api/v1/ask/threads/enumerate` | `AskThreadEnumerateRequest` | `200` `EnumerationResult<AskThread>`, pinned first, then most recent activity |
+| POST | `/api/v1/ask/threads` | `AskThreadCreateRequest` | `201` `AskThread` |
+| GET | `/api/v1/ask/threads/{id}` | | `200` `AskThreadDetail` |
+| PUT | `/api/v1/ask/threads/{id}` | `AskThreadUpdateRequest` | `200` `AskThread` |
+| DELETE | `/api/v1/ask/threads/{id}` | | `204` (stops a running turn; deletes messages, tool calls, proposals, tracked-work rows; the work itself is untouched) |
+| POST | `/api/v1/ask/threads/{id}/messages/enumerate` | `AskMessageEnumerateRequest` | `200` `AskMessagePage` |
+| POST | `/api/v1/ask/threads/{id}/messages` | `AskMessageSendRequest` | `202` `AskMessageSendResponse`; `409` while a turn runs |
+| POST | `/api/v1/ask/threads/{id}/cancel` | | `200` `{ "Cancelled": true }`; `409` when no turn runs |
+| POST | `/api/v1/ask/threads/{id}/summarize` | | `202` `AskMessageSendResponse` (`TurnId` null without a captain); `409` while a turn runs |
+| POST | `/api/v1/ask/threads/{id}/read` | | `200` `AskThread` with `UnreadCount = 0` |
+| POST | `/api/v1/ask/threads/{id}/actions` | `AskActionRequest` | `200` `AskActionProposal` (executed or failed); `400` unknown tool |
+| POST | `/api/v1/ask/threads/{id}/proposals/{pid}/approve` | | `200` `AskActionProposal` (`Executed` or `Failed`); `409` when not pending or expired |
+| POST | `/api/v1/ask/threads/{id}/proposals/{pid}/reject` | | `200` `AskActionProposal` (`Rejected`); `409` when not pending |
+| GET | `/api/v1/ask/threads/{id}/work/{workId}` | | `200` `AskWorkSnapshot` |
+| GET | `/api/v1/ask/quick-actions` | | `200` `AskQuickAction[]` |
+
+**Turn flow.** `POST .../messages` persists the user message (the first message also names a thread still titled
+"New conversation"), returns `202 { MessageId, TurnId }`, and, when the thread has a captain, runs the turn in the
+background. The prompt is built server-side from the thread summary plus the last `Ask.HistoryTurns` messages. The
+captain reaches Armada's MCP server with a **thread-scoped session token** (ApiEndpoint captains through
+`ARMADA_MCP_URL`/`ARMADA_MCP_TOKEN`, Claude Code through a per-launch `--strict-mcp-config` file carrying an `X-Token`
+header). Read-only tools run; any other tool becomes a `Pending` proposal with an `ActionProposal` confirm-card message
+unless the thread's `AutoApprove` is on (then it runs and is recorded as `Executed`). The reply and its tool calls are
+persisted as one `Assistant` message; failures post an `Error` message. One turn runs per thread at a time; the turn is
+limited to `Ask.TurnTimeoutMinutes`.
+
+**Approvals.** Approve executes the tool in-process through the same MCP tool handler (same validation and tenant
+scoping as a direct MCP call by the approving user), records `ResultText`, posts an `ActionResult` (or `Error`) message,
+starts tracking the work the result created, and runs a short follow-up captain turn. Pending proposals expire after
+`Ask.ProposalExpiryMinutes`. **Quick actions** use the same path: the form is the confirmation, so the proposal is
+created `Approved` (`Source: QuickAction`) and executes immediately. Tool names and argument shapes are exactly those of
+the MCP API, for example `{ "ToolName": "dispatch", "Arguments": { "title": "...", "vesselId": "vsl_...", "missions": [{ "title": "...", "description": "..." }] } }`.
+
+**Work linking.** `dispatch` and `create_voyage` track the Voyage; `create_mission`, `retry_mission`, and
+`restart_mission` the Mission; `run_fleet_action` the FleetActionRun; `evaluate_vessel_health` the Job;
+`import_vessels` and `discover_vessels` the VesselImportBatch (and its Job when it runs in the background);
+`cancel_voyage`, `cancel_mission`, and `cancel_fleet_action_run` refresh the item if the thread tracks it.
+
+**Monitoring.** Active tracked work is re-snapshotted on entity change events and every `Ask.TrackerIntervalSeconds`.
+When a snapshot changes, `ask.work` is pushed; milestones (work started, a mission failed, landed, opened a pull
+request, or could not land, and the item succeeded, failed, or was cancelled) post `WorkUpdate` messages, worded by the
+thread's captain when it is idle (`Ask.NarrateMilestones`, bounded by `Ask.NarrationTimeoutSeconds`) and otherwise a
+deterministic sentence. Captain and Armada messages increment `UnreadCount`; `POST .../read` resets it.
+
+**Models.**
+
+`AskThread`: `Id` (ath_), `TenantId`, `UserId`, `Title`, `CaptainId`, `AutoApprove`, `SummaryText`, `SummaryUtc`,
+`Pinned`, `Archived`, `LastMessageUtc`, `MessageCount`, `UnreadCount`, `ActiveWorkCount` (computed), `ActiveTurnId`
+(computed; set while a turn runs), `CreatedUtc`, `LastUpdateUtc`.
+
+`AskThreadDetail`: `{ Thread, TrackedWork: AskTrackedWork[] (each with Snapshot), PendingProposals: AskActionProposal[] }`.
+
+`AskMessage`: `Id` (amg_), `ThreadId`, `Sequence` (per-thread, strictly increasing), `Role` (`User`, `Assistant`,
+`System`), `Kind` (`Text`, `ActionProposal`, `ActionResult`, `WorkUpdate`, `Summary`, `Error`), `ContentText`,
+`ThinkingText`, `ProposalId`, `TrackedWorkId`, `CaptainId`, `DurationMs`, `CreatedUtc`, `LastUpdateUtc`, plus embedded
+`ToolCalls` (`AskMessageToolCall`: `Id` atc_, `CallId`, `ToolName`, `ArgumentsText`, `ResultText`, `Ok`, `ElapsedMs`),
+`Proposal`, and `TrackedWork` (with `Snapshot`).
+
+`AskMessagePage`: `{ Messages, HasMore }`. Without `BeforeSequence` the newest page is returned; messages are in ascending
+sequence within the page; pass the oldest loaded `Sequence` as `BeforeSequence` for older pages. `PageSize` 1-200
+(default 50).
+
+`AskActionProposal`: `Id` (aap_), `ThreadId`, `MessageId`, `ToolName`, `ArgumentsText` (exact JSON arguments),
+`SummaryText`, `Source` (`Captain`, `QuickAction`), `Status` (`Pending`, `Approved`, `Rejected`, `Expired`, `Executed`,
+`Failed`), `ResultText`, `ErrorText`, `DecidedByUserId`, `DecidedUtc`, `ExecutedUtc`, `ExpiresUtc` (computed, pending
+only), `CreatedUtc`, `LastUpdateUtc`.
+
+`AskTrackedWork`: `Id` (atw_), `ThreadId`, `EntityType` (`Voyage`, `Mission`, `FleetActionRun`, `Job`,
+`VesselImportBatch`), `EntityId`, `Title`, `Status`, `State` (`Active`, `Succeeded`, `Failed`, `Cancelled`),
+`SnapshotHash`, `LastChangeUtc`, `CompletedUtc`, `Snapshot` (embedded on reads).
+
+`AskWorkSnapshot` (flat): `TrackedWorkId`, `ThreadId`, `EntityType`, `EntityId`, `Title`, `Status`, `State`, `Found`,
+`TotalCount`, `CompletedCount`, `FailedCount`, `ActiveCount`, `Progress` (0-100), `Counts` (status -> count),
+`Missions[]` (`Id`, `Title`, `Status`, `VoyageId`, `VesselId`, `Persona`, `PipelineStage`, `CaptainId`, `CaptainName`,
+`BranchName`, `CheckRunId`, `CheckRunStatus`, `MergeEntryId`, `MergeQueueStatus` (alias `MergeStatus`), `PrUrl`,
+`LandingOutcome` (`Landed`, `PullRequestOpen`, `PullRequestMerged`, `LandingFailed`), `FailureReason`, `StartedUtc`,
+`CompletedUtc`), `Targets[]` for fleet action runs (`Id`, `VesselId`, `VesselName`, `Status`, `Reason`, `VoyageId`,
+`MissionId`, `ExitCode`), `ErrorText`, `StartedUtc`, `CompletedUtc`, `CapturedUtc`.
+
+`AskQuickAction`: `Name`, `Command`, `Title`, `Description`, `ToolName`, `ReadOnly`, `RequiresTenantAdmin`,
+`Arguments[]` (`Name`, `Label`, `Type`, `Required`, `Description`, `DefaultValue`), `ArgumentsSchema` (JSON schema). The
+catalog: `/dispatch` (`dispatch`), `/fleet-action` (`run_fleet_action`), `/status` (`status`), `/health`
+(`evaluate_vessel_health`, all arguments optional), `/import` (`discover_vessels`).
+
+Requests: `AskThreadEnumerateRequest { PageNumber (1), PageSize (25, 1-100), Search, IncludeArchived }`;
+`AskThreadCreateRequest { Title?, CaptainId?, AutoApprove? }`; `AskThreadUpdateRequest { Title?, CaptainId?,
+AutoApprove?, Pinned?, Archived? }` (absent fields unchanged; `"CaptainId": null` clears the captain);
+`AskMessageEnumerateRequest { BeforeSequence?, PageSize }`; `AskMessageSendRequest { Content (required, max 32000),
+ShowThinking? }`; `AskActionRequest { ToolName, Arguments }`.
 
 ---
 
@@ -7733,6 +7833,21 @@ This table is a quick route index, not the canonical exhaustive contract. Use `/
 | 80 | DELETE | `/api/v1/captains/{id}` | Delete captain | Yes |
 | 81 | POST | `/api/v1/ask` | Ask Armada a question | Yes |
 | 82 | POST | `/api/v1/captains/{id}/chat` | Chat with a captain | Yes |
+| 82a | POST | `/api/v1/ask/threads/enumerate` | Enumerate my Ask threads | Yes (owner) |
+| 82b | POST | `/api/v1/ask/threads` | Create Ask thread | Yes |
+| 82c | GET | `/api/v1/ask/threads/{id}` | Ask thread detail | Yes (owner) |
+| 82d | PUT | `/api/v1/ask/threads/{id}` | Update Ask thread | Yes (owner) |
+| 82e | DELETE | `/api/v1/ask/threads/{id}` | Delete Ask thread | Yes (owner) |
+| 82f | POST | `/api/v1/ask/threads/{id}/messages/enumerate` | Enumerate thread messages | Yes (owner) |
+| 82g | POST | `/api/v1/ask/threads/{id}/messages` | Send a message (202) | Yes (owner) |
+| 82h | POST | `/api/v1/ask/threads/{id}/cancel` | Stop the running turn | Yes (owner) |
+| 82i | POST | `/api/v1/ask/threads/{id}/summarize` | Summarize thread (202) | Yes (owner) |
+| 82j | POST | `/api/v1/ask/threads/{id}/read` | Mark thread read | Yes (owner) |
+| 82k | POST | `/api/v1/ask/threads/{id}/actions` | Run a quick action | Yes (owner) |
+| 82l | POST | `/api/v1/ask/threads/{id}/proposals/{pid}/approve` | Approve proposal | Yes (owner) |
+| 82m | POST | `/api/v1/ask/threads/{id}/proposals/{pid}/reject` | Reject proposal | Yes (owner) |
+| 82n | GET | `/api/v1/ask/threads/{id}/work/{workId}` | Work snapshot | Yes (owner) |
+| 82o | GET | `/api/v1/ask/quick-actions` | Quick action catalog | Yes |
 | 83 | GET | `/api/v1/signals` | List signals (paginated) | Yes |
 | 84 | POST | `/api/v1/signals/enumerate` | Enumerate signals | Yes |
 | 85 | POST | `/api/v1/signals` | Send signal | Yes |

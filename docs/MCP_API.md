@@ -29,6 +29,7 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
   - [Port Configuration](#port-configuration)
 - [Authentication](#authentication)
   - [MCP Authentication Scope](#mcp-authentication-scope)
+  - [Ask Armada Thread-Scoped Calls](#ask-armada-thread-scoped-calls)
 - [Tools](#tools)
   - **Status**
     - [status](#status)
@@ -277,6 +278,44 @@ The MCP server accepts an **optional** credential and scopes tool calls to the a
 Owned (Category A) entities - fleets, vessels, captains, missions, voyages, docks, signals, events, merge queue, objectives/backlog - are scoped to the authenticated caller across `enumerate` and the entity tools. Configuration (Category B) entities remain tenant-visible through MCP; per-object ownership editing is enforced by their services. If you need strict multi-tenant isolation for untrusted MCP clients, bind the MCP port to localhost or a firewalled interface and require a credential at the network layer.
 
 ---
+
+### Ask Armada Thread-Scoped Calls
+
+When a captain answers in an Ask Armada conversation, the server mints a short-lived **thread-scoped session token** for
+the thread owner (lifetime `Ask.TurnTimeoutMinutes` + 5 minutes) and gives it to the captain's MCP connection:
+ApiEndpoint captains receive it through `ARMADA_MCP_URL` / `ARMADA_MCP_TOKEN` (sent as `X-Token`), and Claude Code
+captains are launched with `--strict-mcp-config --mcp-config <per-launch file>` whose `armada` server entry carries
+`"headers": { "X-Token": "<token>" }` (the file is written to a per-launch directory and deleted when the process exits).
+Other CLI runtimes keep their host MCP configuration in thread turns and are not gated.
+
+The MCP authentication handler validates the token like any session token and adds an `askThreadId` claim. Every tool
+handler is registered through the Ask gate, which checks that claim:
+
+- **Read-only tools** run normally: `status`, `enumerate`, `inbox`, `voyage_status`, `mission_status`,
+  `fleet_action_run_status`, `vessel_health`, `papercut_summary`, `token_usage_summary`, `search_memory`,
+  `evaluate_autoland`, every `get_*` reader (`get_backlog_item`, `get_backlog_planning_session`,
+  `get_backlog_refinement_session`, `get_captain`, `get_captain_log`, `get_captain_tools`, `get_check_run`,
+  `get_deployment`, `get_dock`, `get_fleet`, `get_harbor`, `get_memory`, `get_merge_entry`, `get_mission_diff`,
+  `get_mission_log`, `get_model_endpoint`, `get_objective`, `get_persona`, `get_pipeline`, `get_playbook`,
+  `get_prompt_template`, `get_release`, `get_runbook`, `get_runbook_execution`, `get_vessel`), and the `list_*` readers
+  (`list_backlog`, `list_backlog_refinement_sessions`, `list_objectives`, `list_prompt_templates`). The list lives in
+  `AskToolPolicy`; any tool not on it (including tools added later) is treated as state-changing.
+- **Any other tool**, when the thread's `AutoApprove` is off, is **not executed**. A `Pending` proposal and an
+  `ActionProposal` message are created, `ask.proposal` is sent to the owner, and the tool returns this text to the
+  captain:
+
+  ```
+  Proposed as aap_<id> and waiting for the user's approval in this conversation. Do not retry; tell the user what you proposed.
+  ```
+
+- With `AutoApprove` on, the tool runs immediately (its real result goes back to the captain) and is recorded as an
+  `Executed` proposal with an `ActionResult` message.
+
+Approving a proposal (`POST /api/v1/ask/threads/{id}/proposals/{pid}/approve`) executes the stored tool call in-process
+through the same registered handler, under an ambient caller context for the approving user, so validation and tenant
+scoping are identical to a direct MCP call by that user. A thread-scoped token whose thread no longer exists, or belongs
+to a different user, gets `{ "Error": "The conversation for this session no longer exists." }`. Thread-scoped tokens are
+refused by the REST API and `/ws`. Calls without the claim (normal MCP clients, `armada mcp stdio`) are unaffected.
 
 ## Error Responses
 

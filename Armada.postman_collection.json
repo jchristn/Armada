@@ -260,6 +260,24 @@
     {
       "key": "discoveryJobId",
       "value": ""
+    },
+    {
+      "key": "askThreadId",
+      "value": "",
+      "type": "string",
+      "description": "Ask thread ID (ath_ prefix), captured by Create Ask Thread."
+    },
+    {
+      "key": "askProposalId",
+      "value": "",
+      "type": "string",
+      "description": "Ask action proposal ID (aap_ prefix)."
+    },
+    {
+      "key": "askTrackedWorkId",
+      "value": "",
+      "type": "string",
+      "description": "Ask tracked work ID (atw_ prefix)."
     }
   ],
   "item": [
@@ -10439,6 +10457,498 @@
               ]
             },
             "description": "Send a chat turn directly to a captain configured model and return the reply plus per-turn timing and token metrics."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Ask Threads",
+      "description": "Ask Armada conversation threads (owner-scoped). Live updates arrive over /ws?token=<token> as ask.* events.",
+      "item": [
+        {
+          "name": "Enumerate Ask Threads",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ask/threads/enumerate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ask",
+                "threads",
+                "enumerate"
+              ]
+            },
+            "description": "The caller's threads, pinned first, then most recent activity. Archived threads are excluded unless IncludeArchived is true.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25,\n  \"Search\": null,\n  \"IncludeArchived\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Ask Thread",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ask/threads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ask",
+                "threads"
+              ]
+            },
+            "description": "Creates a private thread. The title defaults to \"New conversation\" and is replaced by the first message. Captures askThreadId.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"CaptainId\": \"{{captainId}}\",\n  \"AutoApprove\": false\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "  var json = pm.response.json();",
+                  "  if (json && json.Id) { pm.collectionVariables.set('askThreadId', json.Id); }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Ask Thread",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ask/threads/{{askThreadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ask",
+                "threads",
+                "{{askThreadId}}"
+              ]
+            },
+            "description": "Thread detail: the thread, tracked work with embedded snapshots, and pending proposals. Another user's thread returns 404."
+          }
+        },
+        {
+          "name": "Update Ask Thread",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ask/threads/{{askThreadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ask",
+                "threads",
+                "{{askThreadId}}"
+              ]
+            },
+            "description": "Absent fields are unchanged; \"CaptainId\": null clears the captain.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Title\": \"Release prep\",\n  \"Pinned\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Enumerate Thread Messages",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ask/threads/{{askThreadId}}/messages/enumerate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ask",
+                "threads",
+                "{{askThreadId}}",
+                "messages",
+                "enumerate"
+              ]
+            },
+            "description": "Newest page when BeforeSequence is omitted; pass the oldest loaded Sequence for older pages. Response: { Messages, HasMore }.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"PageSize\": 50\n}"
+            }
+          }
+        },
+        {
+          "name": "Send Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ask/threads/{{askThreadId}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ask",
+                "threads",
+                "{{askThreadId}}",
+                "messages"
+              ]
+            },
+            "description": "Persists the message and runs the captain turn in the background (202 { MessageId, TurnId }). Streaming arrives as ask.* WebSocket events. 409 while a turn runs.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Content\": \"How many voyages are running?\",\n  \"ShowThinking\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "Cancel Turn",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ask/threads/{{askThreadId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ask",
+                "threads",
+                "{{askThreadId}}",
+                "cancel"
+              ]
+            },
+            "description": "Stops the running captain turn (409 when none runs)."
+          }
+        },
+        {
+          "name": "Summarize Thread",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ask/threads/{{askThreadId}}/summarize",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ask",
+                "threads",
+                "{{askThreadId}}",
+                "summarize"
+              ]
+            },
+            "description": "Writes a summary in the background (202), posts a Summary message, and sets SummaryText."
+          }
+        },
+        {
+          "name": "Mark Thread Read",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ask/threads/{{askThreadId}}/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ask",
+                "threads",
+                "{{askThreadId}}",
+                "read"
+              ]
+            },
+            "description": "Resets UnreadCount to 0."
+          }
+        },
+        {
+          "name": "Run Quick Action (status)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ask/threads/{{askThreadId}}/actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ask",
+                "threads",
+                "{{askThreadId}}",
+                "actions"
+              ]
+            },
+            "description": "Runs an MCP tool as an already-approved QuickAction proposal and returns the executed proposal.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ToolName\": \"status\",\n  \"Arguments\": {}\n}"
+            }
+          }
+        },
+        {
+          "name": "Run Quick Action (dispatch)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ask/threads/{{askThreadId}}/actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ask",
+                "threads",
+                "{{askThreadId}}",
+                "actions"
+              ]
+            },
+            "description": "Dispatches a voyage with the dispatch tool's own argument names; the voyage is tracked in the thread. Captures askProposalId.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ToolName\": \"dispatch\",\n  \"Arguments\": {\n    \"title\": \"Docs touch-up\",\n    \"vesselId\": \"{{vesselId}}\",\n    \"missions\": [\n      {\n        \"title\": \"Fix README typo\",\n        \"description\": \"Correct one typo in README.md\"\n      }\n    ]\n  }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "  var json = pm.response.json();",
+                  "  if (json && json.Id) { pm.collectionVariables.set('askProposalId', json.Id); }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve Proposal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ask/threads/{{askThreadId}}/proposals/{{askProposalId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ask",
+                "threads",
+                "{{askThreadId}}",
+                "proposals",
+                "{{askProposalId}}",
+                "approve"
+              ]
+            },
+            "description": "Executes the proposed tool through the same MCP tool handler (Executed or Failed). 409 when not pending or expired."
+          }
+        },
+        {
+          "name": "Reject Proposal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ask/threads/{{askThreadId}}/proposals/{{askProposalId}}/reject",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ask",
+                "threads",
+                "{{askThreadId}}",
+                "proposals",
+                "{{askProposalId}}",
+                "reject"
+              ]
+            },
+            "description": "Marks a pending proposal Rejected; it never executes."
+          }
+        },
+        {
+          "name": "Get Work Snapshot",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ask/threads/{{askThreadId}}/work/{{askTrackedWorkId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ask",
+                "threads",
+                "{{askThreadId}}",
+                "work",
+                "{{askTrackedWorkId}}"
+              ]
+            },
+            "description": "Current work-card snapshot of one tracked item."
+          }
+        },
+        {
+          "name": "List Quick Actions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ask/quick-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ask",
+                "quick-actions"
+              ]
+            },
+            "description": "Quick action catalog with the MCP tool and argument schema of each."
+          }
+        },
+        {
+          "name": "Delete Ask Thread",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ask/threads/{{askThreadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ask",
+                "threads",
+                "{{askThreadId}}"
+              ]
+            },
+            "description": "Deletes the thread with its messages, tool calls, proposals, and tracked-work rows (204). The work itself is untouched."
           }
         }
       ]
