@@ -9,7 +9,11 @@ namespace Armada.Publisher.Channels
 
     /// <summary>
     /// Builds .deb and .rpm packages from one staging directory with fpm, for each Linux runtime
-    /// identifier. Service artifacts also carry a systemd unit inside the package.
+    /// identifier. The payload goes to /usr/lib/&lt;binary&gt; with a /usr/bin symlink. Service artifacts register
+    /// themselves through their own flags, like the Inno and WiX installers: the after-install script runs
+    /// "--install-service" (as root this writes /etc/systemd/system/&lt;service&gt;.service, enables it, and starts it)
+    /// and the before-remove script runs "--uninstall-service" on removal (not on upgrade). Both scripts are skipped
+    /// when systemd is not running (containers, chroots) and never fail the package transaction.
     /// </summary>
     public class DebRpmChannel : IChannel
     {
@@ -49,8 +53,20 @@ namespace Armada.Publisher.Channels
                 string stagingDirectory = StagePayload(context, published);
                 string architecture = published.RuntimeIdentifier.EndsWith("arm64", StringComparison.OrdinalIgnoreCase) ? "arm64" : "amd64";
 
-                BuildPackage(context, stagingDirectory, "deb", architecture);
-                BuildPackage(context, stagingDirectory, "rpm", architecture);
+                List<string> scriptArguments = new List<string>();
+                ServiceDefinition? service = context.Artifact.Service;
+                if (service != null && !string.IsNullOrEmpty(service.InstallArgs))
+                {
+                    string executable = InstalledExecutable(context, published);
+                    string afterInstall = Path.Combine(context.OutputDirectory, "after-install-" + published.RuntimeIdentifier + ".sh");
+                    string beforeRemove = Path.Combine(context.OutputDirectory, "before-remove-" + published.RuntimeIdentifier + ".sh");
+                    File.WriteAllText(afterInstall, BuildAfterInstallScript(executable, service));
+                    File.WriteAllText(beforeRemove, BuildBeforeRemoveScript(executable, service));
+                    scriptArguments.AddRange(new List<string> { "--after-install", afterInstall, "--before-remove", beforeRemove });
+                }
+
+                BuildPackage(context, stagingDirectory, "deb", architecture, scriptArguments);
+                BuildPackage(context, stagingDirectory, "rpm", architecture, scriptArguments);
             }
         }
 
@@ -61,6 +77,7 @@ namespace Armada.Publisher.Channels
         private static string StagePayload(ChannelContext context, PublishedArtifact published)
         {
             string stagingRoot = Path.Combine(context.OutputDirectory, "stage-" + published.RuntimeIdentifier);
+            if (Directory.Exists(stagingRoot)) Directory.Delete(stagingRoot, true);
             string installDir = Path.Combine(stagingRoot, "usr", "lib", context.Artifact.BinaryName);
             Directory.CreateDirectory(installDir);
 
@@ -70,41 +87,73 @@ namespace Armada.Publisher.Channels
                 File.Copy(file, Path.Combine(installDir, Path.GetFileName(file)), true);
             }
 
-            // Symlink into PATH for CLIs.
+            // Symlink into PATH (fpm keeps symlinks from a dir source).
             string binDir = Path.Combine(stagingRoot, "usr", "bin");
             Directory.CreateDirectory(binDir);
-            File.WriteAllText(
-                Path.Combine(binDir, context.Artifact.BinaryName + ".link"),
-                "/usr/lib/" + context.Artifact.BinaryName + "/" + Path.GetFileName(published.BinaryPath));
-
-            if (context.Artifact.Service != null)
-            {
-                WriteSystemdUnit(context, stagingRoot);
-            }
+            File.CreateSymbolicLink(Path.Combine(binDir, context.Artifact.BinaryName), InstalledExecutable(context, published));
 
             return stagingRoot;
         }
 
-        private static void WriteSystemdUnit(ChannelContext context, string stagingRoot)
+        /// <summary>
+        /// Absolute path of the executable once the package is installed.
+        /// </summary>
+        /// <param name="context">Channel context.</param>
+        /// <param name="published">Published runtime output.</param>
+        /// <returns>Path under /usr/lib.</returns>
+        public static string InstalledExecutable(ChannelContext context, PublishedArtifact published)
         {
-            string unitDirectory = Path.Combine(stagingRoot, "lib", "systemd", "system");
-            Directory.CreateDirectory(unitDirectory);
-
-            string binaryPath = "/usr/lib/" + context.Artifact.BinaryName + "/" + context.Artifact.BinaryName;
-            string unit =
-                "[Unit]\n"
-                + "Description=" + context.Artifact.DisplayName + "\n"
-                + "After=network.target\n\n"
-                + "[Service]\n"
-                + "ExecStart=" + binaryPath + " " + context.Artifact.Service!.RunArgs + "\n"
-                + "Restart=on-failure\n\n"
-                + "[Install]\n"
-                + "WantedBy=multi-user.target\n";
-
-            File.WriteAllText(Path.Combine(unitDirectory, context.Artifact.Service!.ServiceName + ".service"), unit);
+            if (context == null) throw new ArgumentNullException(nameof(context));
+            if (published == null) throw new ArgumentNullException(nameof(published));
+            return "/usr/lib/" + context.Artifact.BinaryName + "/" + Path.GetFileName(published.BinaryPath);
         }
 
-        private static void BuildPackage(ChannelContext context, string stagingDirectory, string outputType, string architecture)
+        /// <summary>
+        /// After-install script for a service artifact. Deb passes "configure &lt;old-version&gt;" and rpm passes the
+        /// installed-instance count; on an upgrade the running service is restarted so it picks up the new binary.
+        /// </summary>
+        /// <param name="executable">Installed executable path.</param>
+        /// <param name="service">Service definition.</param>
+        /// <returns>POSIX sh script.</returns>
+        public static string BuildAfterInstallScript(string executable, ServiceDefinition service)
+        {
+            if (service == null) throw new ArgumentNullException(nameof(service));
+            return "#!/bin/sh\n"
+                + "# Register the service through the binary's own flag (same contract as the Windows installers).\n"
+                + "if [ ! -d /run/systemd/system ]; then\n"
+                + "  echo \"" + service.ServiceName + ": systemd is not running; skipped service registration. Run '" + executable + " " + service.InstallArgs + "' later.\" >&2\n"
+                + "  exit 0\n"
+                + "fi\n"
+                + "\"" + executable + "\" " + service.InstallArgs + " || echo \"" + service.ServiceName + ": service registration failed; retry with 'sudo " + executable + " " + service.InstallArgs + "'\" >&2\n"
+                + "UPGRADE=0\n"
+                + "if [ \"$1\" = \"configure\" ] && [ -n \"$2\" ]; then UPGRADE=1; fi\n"
+                + "if [ \"$1\" -ge 2 ] 2>/dev/null; then UPGRADE=1; fi\n"
+                + "if [ \"$UPGRADE\" = \"1\" ]; then systemctl try-restart " + service.ServiceName + ".service || true; fi\n"
+                + "exit 0\n";
+        }
+
+        /// <summary>
+        /// Before-remove script for a service artifact: unregisters on removal only (deb "remove"/"purge", rpm "0"),
+        /// never on upgrade.
+        /// </summary>
+        /// <param name="executable">Installed executable path.</param>
+        /// <param name="service">Service definition.</param>
+        /// <returns>POSIX sh script.</returns>
+        public static string BuildBeforeRemoveScript(string executable, ServiceDefinition service)
+        {
+            if (service == null) throw new ArgumentNullException(nameof(service));
+            return "#!/bin/sh\n"
+                + "case \"$1\" in\n"
+                + "  remove|purge|0)\n"
+                + "    if [ -d /run/systemd/system ]; then\n"
+                + "      \"" + executable + "\" " + service.UninstallArgs + " || true\n"
+                + "    fi\n"
+                + "    ;;\n"
+                + "esac\n"
+                + "exit 0\n";
+        }
+
+        private static void BuildPackage(ChannelContext context, string stagingDirectory, string outputType, string architecture, List<string> scriptArguments)
         {
             string packageName = context.Artifact.BinaryName;
             List<string> arguments = new List<string>
@@ -121,6 +170,7 @@ namespace Armada.Publisher.Channels
                 "-p", context.OutputDirectory,
                 "--force"
             };
+            arguments.AddRange(scriptArguments);
             ProcessRunner.Run("fpm", arguments, context.RepoRoot);
         }
 

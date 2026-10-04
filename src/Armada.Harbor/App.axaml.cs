@@ -49,7 +49,15 @@ namespace Armada.Harbor
                 ApplyAppearance(_Settings.Appearance);
 
                 _Window = new MainWindow(_Settings);
-                _Window.Show();
+                if (Program.StartMinimized)
+                {
+                    // Started by the login item: stay in the tray, but connect as if the window had opened.
+                    _Window.StartAutoConnect();
+                }
+                else
+                {
+                    _Window.Show();
+                }
 
                 ApplyDockIcon();
                 InstallTray(desktop);

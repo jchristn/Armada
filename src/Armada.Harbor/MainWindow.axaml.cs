@@ -71,6 +71,19 @@ namespace Armada.Harbor
 
         #endregion
 
+        #region Public-Methods
+
+        /// <summary>
+        /// Start the link loop without showing the window (used when Harbor starts minimized at login). Calling it when
+        /// the loop is already running does nothing.
+        /// </summary>
+        public void StartAutoConnect()
+        {
+            StartConnecting(true);
+        }
+
+        #endregion
+
         #region Private-Methods
 
         private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
