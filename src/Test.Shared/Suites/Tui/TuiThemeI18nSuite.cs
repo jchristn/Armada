@@ -75,8 +75,8 @@ namespace Test.Shared.Suites.Tui
                 loc.SetCatalog(Catalog());
                 loc.SetLocale("ja-JP");
                 AssertEqual("ja", loc.Locale, "alias normalized");
-                AssertEqual("ミッション", loc.T("Missions"), "term");
-                AssertEqual("ダッシュボード", loc.T("Dashboard"), "term 2");
+                AssertEqual("\u30df\u30c3\u30b7\u30e7\u30f3", loc.T("Missions"), "term");
+                AssertEqual("\u30c0\u30c3\u30b7\u30e5\u30dc\u30fc\u30c9", loc.T("Dashboard"), "term 2");
                 AssertEqual("Unknown text", loc.T("Unknown text"), "fallback to English");
                 string msg = "{count, plural, =0 {Import repositories} one {Import # repository} other {Import # repositories}}";
                 loc.SetLocale("en");
@@ -104,22 +104,22 @@ namespace Test.Shared.Suites.Tui
                     host.PumpUntil(() => host.Tui.Context.Session.IsSignedIn && host.Tui.Shell.Screen != null);
                     host.Tui.Context.Loc.SetLocale("ja");
                     string frame = host.Screen();
-                    TuiCase.Contains(frame, "ミッション", "Missions translated");
-                    TuiCase.Contains(frame, "ダッシュボード", "Dashboard translated");
+                    TuiCase.Contains(frame, "\u30df\u30c3\u30b7\u30e7\u30f3", "Missions translated");
+                    TuiCase.Contains(frame, "\u30c0\u30c3\u30b7\u30e5\u30dc\u30fc\u30c9", "Dashboard translated");
                     foreach (string line in frame.Split('\n').Where(l => l.Length > 0))
                     {
                         AssertTrue(TextCells.Width(line) <= 120, "row fits the terminal width: " + line);
                     }
 
-                    int bar = frame.Split('\n').Where(l => l.Contains("ダッシュボード")).Select(l => TextCells.Width(l.Substring(0, l.IndexOf('|')))).First();
-                    int plain = frame.Split('\n').Where(l => l.Contains("|") && !l.Contains("ダッ")).Select(l => TextCells.Width(l.Substring(0, l.IndexOf('|')))).First();
+                    int bar = frame.Split('\n').Where(l => l.Contains("\u30c0\u30c3\u30b7\u30e5\u30dc\u30fc\u30c9")).Select(l => TextCells.Width(l.Substring(0, l.IndexOf('|')))).First();
+                    int plain = frame.Split('\n').Where(l => l.Contains("|") && !l.Contains("\u30c0\u30c3")).Select(l => TextCells.Width(l.Substring(0, l.IndexOf('|')))).First();
                     AssertEqual(plain, bar, "sidebar border aligned on CJK rows");
                 }
             }));
 
             cases.Add(TuiCase.Sync(Suite, "text_cells", "Cell-width helpers truncate, pad, and wrap CJK correctly", () =>
             {
-                string cjk = "修复表格宽度";
+                string cjk = "\u4fee\u590d\u8868\u683c\u5bbd\u5ea6";
                 AssertEqual(12, TextCells.Width(cjk), "width");
                 AssertEqual(10, TextCells.Width(TextCells.PadRight(cjk, 10)), "pad keeps width");
                 AssertEqual(7, TextCells.Width(TextCells.Truncate("abcdefghij", 7)), "truncate");
@@ -146,8 +146,8 @@ namespace Test.Shared.Suites.Tui
             catalog.DefaultLocale = "en";
             catalog.SupportedLocales = LocalizationService.DefaultLocales.ToList();
             I18nLocalePack ja = new I18nLocalePack();
-            ja.Terms = new Dictionary<string, string> { ["Missions"] = "ミッション", ["Dashboard"] = "ダッシュボード", ["Help"] = "ヘルプ" };
-            ja.Phrases = new Dictionary<string, string> { ["Needs You"] = "対応が必要", ["Coming in a later milestone"] = "今後のマイルストーンで提供" };
+            ja.Terms = new Dictionary<string, string> { ["Missions"] = "\u30df\u30c3\u30b7\u30e7\u30f3", ["Dashboard"] = "\u30c0\u30c3\u30b7\u30e5\u30dc\u30fc\u30c9", ["Help"] = "\u30d8\u30eb\u30d7" };
+            ja.Phrases = new Dictionary<string, string> { ["Needs You"] = "\u5bfe\u5fdc\u304c\u5fc5\u8981", ["Coming in a later milestone"] = "\u4eca\u5f8c\u306e\u30de\u30a4\u30eb\u30b9\u30c8\u30fc\u30f3\u3067\u63d0\u4f9b" };
             I18nLocalePack de = new I18nLocalePack();
             de.Phrases = new Dictionary<string, string> { ["{count, plural, =0 {Import repositories} one {Import # repository} other {Import # repositories}}"] = "{count, plural, =0 {Repositorys importieren} one {# Repository importieren} other {# Repositorys importieren}}" };
             catalog.Locales["ja"] = ja;

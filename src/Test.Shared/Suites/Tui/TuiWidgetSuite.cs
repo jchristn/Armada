@@ -36,8 +36,8 @@ namespace Test.Shared.Suites.Tui
                 input.HandleKey(KeyEvent.Special(KeyCode.Left));
                 input.HandleKey(KeyEvent.Special(KeyCode.Backspace));
                 AssertEqual("helo", input.Value, "backspace before caret");
-                input.Insert("修复");
-                AssertEqual("hel修复o", input.Value, "insert at caret");
+                input.Insert("\u4fee\u590d");
+                AssertEqual("hel\u4fee\u590do", input.Value, "insert at caret");
                 input.HandleKey(KeyEvent.Char('w', KeyModifiers.Ctrl));
                 AssertEqual("o", input.Value, "ctrl+w deletes a word");
                 input.HandleKey(KeyEvent.Char('u', KeyModifiers.Ctrl));

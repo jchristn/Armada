@@ -213,7 +213,7 @@ namespace Test.Shared.Suites.Tui
                 string q = ArmadaQueryString.FromObject(req);
                 AssertTrue(q.Contains("route=/api/v1/missions"), "route keeps slashes");
                 AssertTrue(q.Contains("isSuccess=false"), "nullable false sent");
-                AssertEqual("L3RtcC_8", ArmadaQueryString.Base64Url("/tmp?¼").Substring(0, 8), "base64url");
+                AssertEqual("L3RtcD_CvA", ArmadaQueryString.Base64Url("/tmp?\u00bc"), "base64url without padding");
             }));
 
             cases.Add(TuiCase.Async(Suite, "error_mapping_and_401", "Errors map to ArmadaApiException with code and request id; 401 raises Unauthorized", async () =>

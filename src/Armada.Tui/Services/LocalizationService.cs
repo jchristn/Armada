@@ -359,13 +359,13 @@ namespace Armada.Tui.Services
         {
             List<I18nLocaleMeta> list = new List<I18nLocaleMeta>();
             list.Add(Meta("en", "English", "English", "en-US", "en-GB", "en-CA", "en-AU"));
-            list.Add(Meta("es", "Spanish", "Español", "es-ES", "es-MX", "es-419"));
-            list.Add(Meta("zh-Hans", "Mandarin (Simplified)", "简体中文", "zh", "zh-CN", "zh-SG", "cmn-Hans"));
-            list.Add(Meta("zh-Hant", "Mandarin (Traditional)", "繁體中文", "zh-TW", "cmn-Hant"));
-            list.Add(Meta("yue-Hant", "Cantonese", "粵語", "zh-HK", "zh-MO", "yue", "yue-HK"));
-            list.Add(Meta("ja", "Japanese", "日本語", "ja-JP"));
+            list.Add(Meta("es", "Spanish", "Espa\u00f1ol", "es-ES", "es-MX", "es-419"));
+            list.Add(Meta("zh-Hans", "Mandarin (Simplified)", "\u7b80\u4f53\u4e2d\u6587", "zh", "zh-CN", "zh-SG", "cmn-Hans"));
+            list.Add(Meta("zh-Hant", "Mandarin (Traditional)", "\u7e41\u9ad4\u4e2d\u6587", "zh-TW", "cmn-Hant"));
+            list.Add(Meta("yue-Hant", "Cantonese", "\u7cb5\u8a9e", "zh-HK", "zh-MO", "yue", "yue-HK"));
+            list.Add(Meta("ja", "Japanese", "\u65e5\u672c\u8a9e", "ja-JP"));
             list.Add(Meta("de", "German", "Deutsch", "de-DE"));
-            list.Add(Meta("fr", "French", "Français", "fr-FR", "fr-CA"));
+            list.Add(Meta("fr", "French", "Fran\u00e7ais", "fr-FR", "fr-CA"));
             list.Add(Meta("it", "Italian", "Italiano", "it-IT"));
             return list.AsReadOnly();
         }

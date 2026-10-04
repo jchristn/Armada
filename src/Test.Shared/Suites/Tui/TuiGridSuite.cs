@@ -158,7 +158,7 @@ namespace Test.Shared.Suites.Tui
             {
                 List<TestGridRow> rows = new List<TestGridRow>
                 {
-                    new TestGridRow { Id = "a", Name = "修复表格", Status = "Complete", Count = 1 },
+                    new TestGridRow { Id = "a", Name = "\u4fee\u590d\u8868\u683c", Status = "Complete", Count = 1 },
                     new TestGridRow { Id = "b", Name = "abcd", Status = "Failed", Count = 2 }
                 };
                 ArmadaGrid<TestGridRow> grid = Grid(rows);
