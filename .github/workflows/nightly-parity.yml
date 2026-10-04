@@ -1,0 +1,71 @@
+name: nightly-parity
+
+# Runs the Database suite against SQLite, PostgreSQL, MySQL, and SQL Server every night.
+# ubuntu-latest runs the SQL Server image natively on amd64, which avoids the query timeouts seen
+# under emulation on Apple Silicon. Each server provider runs in a throwaway container started by
+# scripts/common/run-db-parity-tests.sh and removed afterward.
+on:
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+    inputs:
+      providers:
+        description: "Comma-separated providers (sqlite,postgresql,mysql,sqlserver)"
+        required: false
+        default: "sqlite,postgresql,mysql,sqlserver"
+        type: string
+      framework:
+        description: "Target framework (net8.0 or net10.0)"
+        required: false
+        default: "net10.0"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-parity
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Pre-pull database images
+        shell: bash
+        run: |
+          docker pull "${ARMADA_POSTGRES_IMAGE:-postgres:17-alpine}"
+          docker pull "${ARMADA_MYSQL_IMAGE:-mysql:8.4}"
+          docker pull "${ARMADA_SQLSERVER_IMAGE:-mcr.microsoft.com/mssql/server:2022-latest}"
+
+      - name: Run provider parity
+        shell: bash
+        env:
+          PROVIDERS: ${{ inputs.providers || 'sqlite,postgresql,mysql,sqlserver' }}
+          FRAMEWORK: ${{ inputs.framework || 'net10.0' }}
+        run: |
+          set -o pipefail
+          mkdir -p parity-results
+          bash scripts/common/run-db-parity-tests.sh --providers "$PROVIDERS" --framework "$FRAMEWORK" \
+            2>&1 | tee parity-results/parity.log
+
+      - name: Upload parity log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-results
+          path: parity-results/
+          if-no-files-found: warn
