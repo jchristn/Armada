@@ -58,6 +58,15 @@ as `armada_*_total` series:
 | `armada_docks_provisioned_total`        | Docks provisioned                                   |
 | `armada_docks_reclaimed_total`          | Docks reclaimed                                     |
 | `armada_mergequeue_processed_total`     | Merge-queue entries processed to a terminal state   |
+| `armada_fleet_action_targets_total`     | Fleet action targets finished; labels `kind` (Command, Mission) and `outcome` (Succeeded, Failed, TimedOut, Skipped, Cancelled) |
+| `armada_health_evaluations_total`       | Vessel health evaluations, one per vessel; label `outcome` (Succeeded, Failed, Cancelled) |
+| `armada_vessel_import_items_total`      | Vessel import items processed; label `outcome` (Created, SkippedExisting, SkippedNotSelected, Failed) |
+
+Two histograms cover the slow paths: `armada_fleet_action_target_duration_seconds` (label `kind`) and
+`armada_health_criterion_duration_seconds` (label `criterion`). Labels stay low-cardinality on purpose:
+vessel IDs, paths, and commands never appear in metric labels. Health evaluations also emit spans from the
+`Armada` activity source, one root span per evaluation job with a `stage:<Criterion>` child per
+criterion.
 
 Standard .NET runtime, ASP.NET Core hosting, and HTTP client metrics are exported alongside these.
 
@@ -68,7 +77,8 @@ Standard .NET runtime, ASP.NET Core hosting, and HTTP client metrics are exporte
 - **prometheus** (port `9090`) scrapes the Admiral's `/metrics` endpoint (`armada-server:9464`).
 - **loki** (port `3100`) receives logs pushed by the Admiral.
 - **grafana** (port `3001`, login `admin` / `admin`) is pre-provisioned with Prometheus and Loki
-  datasources and an "Armada Reliability" dashboard.
+  datasources and two dashboards: "Armada Reliability" and "Armada Fleet Operations" (fleet action
+  runs, vessel health evaluations, and vessel imports).
 
 The container config (`docker/armada/armada.json`) enables telemetry with Prometheus scraping and Loki
 push already pointed at the stack. Bring everything up with:
@@ -86,6 +96,7 @@ Config files live under `docker/armada/observability/`:
 - `loki-config.yaml` -- single-binary Loki config
 - `grafana/provisioning/` -- datasource and dashboard providers
 - `grafana/dashboards/armada-reliability.json` -- the reliability dashboard
+- `grafana/dashboards/armada-fleet-operations.json` -- fleet actions, vessel health, and vessel import
 
 ## Local (non-Docker) use
 

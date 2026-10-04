@@ -387,6 +387,7 @@ namespace Armada.Core.Services
                 }
 
                 await ProcessItemAsync(item, selected.Contains(item.Id), request, tenantId, userId, index, token).ConfigureAwait(false);
+                ArmadaMetrics.VesselImportItems.Add(1, new KeyValuePair<string, object?>("outcome", item.Outcome.ToString()));
                 if (item.Outcome == VesselImportOutcomeEnum.Created) created++;
                 else if (item.Outcome == VesselImportOutcomeEnum.Failed) failed++;
                 else skipped++;

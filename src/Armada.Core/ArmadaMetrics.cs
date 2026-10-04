@@ -78,5 +78,12 @@ namespace Armada.Core
         /// <summary>Duration in seconds of each vessel health criterion evaluation, labeled by criterion.</summary>
         public static readonly Histogram<double> HealthCriterionDuration =
             _Meter.CreateHistogram<double>("armada.health.criterion_duration_seconds", null, "Vessel health criterion duration in seconds");
+
+        /// <summary>
+        /// Vessel import items processed by an import, exported as armada_vessel_import_items_total. Tag: outcome
+        /// (Created, SkippedExisting, SkippedNotSelected, Failed). No paths or vessel identifiers are tagged.
+        /// </summary>
+        public static readonly Counter<long> VesselImportItems =
+            _Meter.CreateCounter<long>("armada.vessel_import.items", null, "Vessel import items processed");
     }
 }
