@@ -106,6 +106,49 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(3, during.Messages.Count, "reservation existed while the captain was writing");
             }));
 
+            cases.Add(CaseAsync("focus_scopes_follow_up_questions", "A turn's prompt names the work this conversation started and its vessels, so follow-ups are scoped", async () =>
+            {
+                using AskTestHarness h = await AskTestHarness.CreateAsync().ConfigureAwait(false);
+                AuthContext owner = AskTestHarness.User("usr_focus");
+                Captain captain = await NewCaptainAsync(h, "usr_focus").ConfigureAwait(false);
+
+                Vessel vessel = new Vessel("TUIKit", "https://github.com/example/tuikit.git");
+                vessel.TenantId = Constants.DefaultTenantId;
+                vessel = await h.Db.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+                Voyage voyage = new Voyage("Fix the table renderer");
+                voyage.TenantId = Constants.DefaultTenantId;
+                voyage = await h.Db.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
+                Mission mission = new Mission("Fix column widths");
+                mission.TenantId = Constants.DefaultTenantId;
+                mission.VoyageId = voyage.Id;
+                mission.VesselId = vessel.Id;
+                await h.Db.Driver.Missions.CreateAsync(mission).ConfigureAwait(false);
+
+                AskThread unfocused = await h.Threads.CreateThreadAsync(owner, new AskThreadCreateRequest { CaptainId = captain.Id }).ConfigureAwait(false);
+                await h.Turns.SendMessageAsync(owner, unfocused.Id, new AskMessageSendRequest { Content = "What's running?" }).ConfigureAwait(false);
+                await WaitForTurnEndAsync(h, unfocused.Id).ConfigureAwait(false);
+                AssertFalse(h.Runner.Calls.Last().Prompt.Contains("Conversation focus"), "no focus block before any work is started");
+
+                AskThread thread = await h.Threads.CreateThreadAsync(owner, new AskThreadCreateRequest { CaptainId = captain.Id }).ConfigureAwait(false);
+                AskTrackedWork work = new AskTrackedWork();
+                work.TenantId = Constants.DefaultTenantId;
+                work.UserId = "usr_focus";
+                work.ThreadId = thread.Id;
+                work.EntityType = AskTrackedEntityTypeEnum.Voyage;
+                work.EntityId = voyage.Id;
+                work.Title = voyage.Title;
+                work.Status = "InProgress";
+                await h.Db.Driver.AskTrackedWork.CreateOrGetAsync(work).ConfigureAwait(false);
+
+                await h.Turns.SendMessageAsync(owner, thread.Id, new AskMessageSendRequest { Content = "What's running?" }).ConfigureAwait(false);
+                await WaitForTurnEndAsync(h, thread.Id).ConfigureAwait(false);
+                string prompt = h.Runner.Calls.Last().Prompt;
+                AssertContains("Conversation focus", prompt);
+                AssertContains("\"Fix the table renderer\" (" + voyage.Id + ") on TUIKit (" + vessel.Id + "): InProgress (active)", prompt);
+                AssertContains("Vessels this conversation is working with: TUIKit (" + vessel.Id + ")", prompt);
+                AssertTrue(prompt.IndexOf("Conversation focus", StringComparison.Ordinal) < prompt.IndexOf("User: What's running?", StringComparison.Ordinal), "focus precedes the question");
+            }));
+
             cases.Add(CaseAsync("one_turn_per_thread", "A second message while a turn runs is refused with 409; cancel stops the turn", async () =>
             {
                 using AskTestHarness h = await AskTestHarness.CreateAsync().ConfigureAwait(false);

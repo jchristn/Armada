@@ -431,13 +431,11 @@ namespace Armada.Server
                 dock,
                 _PromptTemplateService).ConfigureAwait(false);
 
-            if (_Settings.MessageTemplates.EnableCommitMetadata)
-            {
-                Dictionary<string, string> templateContext = _TemplateService.BuildContext(mission, captain, null, null, dock);
-                string commitInstructions = _TemplateService.RenderCommitInstructions(_Settings.MessageTemplates, templateContext);
-                if (!String.IsNullOrEmpty(commitInstructions))
-                    prompt += "\n\n" + commitInstructions;
-            }
+            // Commit message guidance always applies; the Armada trailers are added only when commit metadata is on.
+            Dictionary<string, string> templateContext = _TemplateService.BuildContext(mission, captain, null, null, dock);
+            string commitInstructions = await _TemplateService.RenderCommitInstructionsAsync(_Settings.MessageTemplates, templateContext).ConfigureAwait(false);
+            if (!String.IsNullOrEmpty(commitInstructions))
+                prompt += "\n\n" + commitInstructions;
 
             string missionLogDir = Path.Combine(_Settings.LogDirectory, "missions");
             string logFilePath = Path.Combine(missionLogDir, mission.Id + ".log");

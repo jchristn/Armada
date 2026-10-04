@@ -280,10 +280,28 @@ namespace Armada.Server.Ask
         /// <returns>The prompt.</returns>
         public static string BuildPrompt(AskThread thread, Captain captain, List<AskMessage> history, string? note, string? systemPrompt)
         {
+            return BuildPrompt(thread, captain, history, note, systemPrompt, null);
+        }
+
+        /// <summary>
+        /// Build the prompt for a thread turn, including the conversation focus: the work this conversation started
+        /// and the vessels involved, so follow-up questions such as "what's running?" can be scoped to them.
+        /// </summary>
+        /// <param name="thread">Thread.</param>
+        /// <param name="captain">Captain.</param>
+        /// <param name="history">Recent messages, oldest first (the last user message last when present).</param>
+        /// <param name="note">Server note appended after the history (follow-up turns), or null.</param>
+        /// <param name="systemPrompt">Ask system prompt, or null.</param>
+        /// <param name="focus">Conversation focus block (see <see cref="BuildFocusText"/>), or null when the conversation has started no work.</param>
+        /// <returns>The prompt.</returns>
+        public static string BuildPrompt(AskThread thread, Captain captain, List<AskMessage> history, string? note, string? systemPrompt, string? focus)
+        {
             StringBuilder builder = new StringBuilder();
             if (!String.IsNullOrWhiteSpace(systemPrompt)) builder.AppendLine(systemPrompt.Trim()).AppendLine();
             if (captain != null && !String.IsNullOrWhiteSpace(captain.SystemInstructions)) builder.AppendLine(captain.SystemInstructions.Trim()).AppendLine();
             builder.AppendLine(ThreadInstructions).AppendLine();
+
+            if (!String.IsNullOrWhiteSpace(focus)) builder.AppendLine(focus!.Trim()).AppendLine();
 
             if (!String.IsNullOrWhiteSpace(thread.SummaryText))
             {
@@ -307,9 +325,93 @@ namespace Armada.Server.Ask
             return builder.ToString().TrimEnd();
         }
 
+        /// <summary>
+        /// Render the conversation focus block from the work a conversation started (most recent first) and the
+        /// vessels that work touched. Returns null when there is nothing to report.
+        /// </summary>
+        /// <param name="work">Tracked work, most recent first.</param>
+        /// <param name="workVessels">Vessel display text per tracked work id (for example "TUIKit (vsl_...)"), may be empty.</param>
+        /// <param name="vessels">Distinct vessels involved, most recent first, as display text.</param>
+        /// <returns>The focus block, or null.</returns>
+        public static string? BuildFocusText(List<AskTrackedWork> work, Dictionary<string, string> workVessels, List<string> vessels)
+        {
+            if (work == null || work.Count < 1) return null;
+            StringBuilder builder = new StringBuilder();
+            builder.AppendLine("Conversation focus (work started in this conversation, most recent first):");
+            foreach (AskTrackedWork item in work.Take(10))
+            {
+                string line = "- " + item.EntityType + " \"" + Clip(item.Title, 120) + "\" (" + item.EntityId + ")";
+                if (workVessels != null && workVessels.TryGetValue(item.Id, out string? on) && !String.IsNullOrEmpty(on)) line += " on " + on;
+                line += ": " + (String.IsNullOrEmpty(item.Status) ? item.State.ToString() : item.Status) + (item.State == AskTrackedWorkStateEnum.Active ? " (active)" : "");
+                builder.AppendLine(line);
+            }
+
+            if (vessels != null && vessels.Count > 0)
+                builder.AppendLine("Vessels this conversation is working with: " + String.Join(", ", vessels.Take(10)) + ".");
+            builder.Append("Scope follow-up questions to this focus unless the user asks about the whole fleet (see Conversation scope).");
+            return builder.ToString();
+        }
+
         #endregion
 
         #region Private-Methods
+
+        private async Task<string?> BuildFocusAsync(AskThread thread)
+        {
+            try
+            {
+                List<AskTrackedWork> work = await _Database.AskTrackedWork.EnumerateByThreadAsync(thread.TenantId!, thread.Id).ConfigureAwait(false);
+                if (work.Count < 1) return null;
+                work = work.OrderByDescending(w => w.CreatedUtc).ToList();
+
+                Dictionary<string, string> vesselNames = new Dictionary<string, string>(StringComparer.Ordinal);
+                Dictionary<string, string> workVessels = new Dictionary<string, string>(StringComparer.Ordinal);
+                List<string> ordered = new List<string>();
+
+                foreach (AskTrackedWork item in work.Take(10))
+                {
+                    List<string> ids = new List<string>();
+                    if (item.EntityType == AskTrackedEntityTypeEnum.Voyage)
+                    {
+                        List<Mission> missions = await _Database.Missions.EnumerateByVoyageAsync(thread.TenantId!, item.EntityId).ConfigureAwait(false);
+                        ids.AddRange(missions.Where(m => !String.IsNullOrEmpty(m.VesselId)).Select(m => m.VesselId!));
+                    }
+                    else if (item.EntityType == AskTrackedEntityTypeEnum.Mission)
+                    {
+                        Mission? mission = await _Database.Missions.ReadAsync(thread.TenantId!, item.EntityId).ConfigureAwait(false);
+                        if (mission != null && !String.IsNullOrEmpty(mission.VesselId)) ids.Add(mission.VesselId!);
+                    }
+                    else if (item.EntityType == AskTrackedEntityTypeEnum.FleetActionRun)
+                    {
+                        List<FleetActionRunTarget> targets = await _Database.FleetActionRunTargets.ReadAllByRunAsync(item.EntityId).ConfigureAwait(false);
+                        ids.AddRange(targets.Where(t => String.Equals(t.TenantId, thread.TenantId, StringComparison.Ordinal)).Select(t => t.VesselId));
+                    }
+
+                    List<string> labels = new List<string>();
+                    foreach (string id in ids.Distinct(StringComparer.Ordinal).Take(10))
+                    {
+                        if (!vesselNames.TryGetValue(id, out string? label))
+                        {
+                            Vessel? vessel = await _Database.Vessels.ReadAsync(thread.TenantId!, id).ConfigureAwait(false);
+                            label = vessel != null ? vessel.Name + " (" + id + ")" : id;
+                            vesselNames[id] = label;
+                            ordered.Add(label);
+                        }
+
+                        labels.Add(label);
+                    }
+
+                    if (labels.Count > 0) workVessels[item.Id] = String.Join(", ", labels.Take(3)) + (labels.Count > 3 ? " and " + (labels.Count - 3) + " more" : "");
+                }
+
+                return BuildFocusText(work, workVessels, ordered);
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException))
+            {
+                _Logging.Debug(_Header + "could not build conversation focus for thread " + thread.Id + ": " + ex.Message);
+                return null;
+            }
+        }
 
         private async Task RunTurnAsync(AskThread thread, AskTurnHandle handle, int? userSequence, string? note, bool showThinking)
         {
@@ -345,7 +447,7 @@ namespace Armada.Server.Ask
 
                 CaptainChatTurnOptions options = new CaptainChatTurnOptions();
                 options.Captain = captain;
-                options.Prompt = BuildPrompt(current, captain, history, note, systemPrompt);
+                options.Prompt = BuildPrompt(current, captain, history, note, systemPrompt, await BuildFocusAsync(current).ConfigureAwait(false));
                 options.ShowThinking = showThinking;
                 options.TenantId = thread.TenantId;
                 options.UserId = thread.UserId;

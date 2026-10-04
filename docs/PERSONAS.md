@@ -110,7 +110,8 @@ This avoids the .csproj embedded resource complexity and keeps templates co-loca
   - `mission.merge_conflict_avoidance` -- multi-captain conflict rules
   - `mission.progress_signals` -- ARMADA:PROGRESS/STATUS/MESSAGE format
   - `mission.model_context_updates` -- instructions for updating vessel model context
-  - `commit.instructions_preamble` -- commit trailer injection instructions
+  - `commit.instructions_preamble` -- commit message instructions, sent with every mission
+  - `commit.trailers_preamble` -- introduces the Armada commit trailers; sent only when commit metadata is enabled
   - `agent.launch_prompt` -- short CLI prompt wrapper
   - `persona.worker` -- default worker persona (current captain behavior)
   - `persona.architect` -- architect persona
@@ -176,7 +177,7 @@ Goal: every string that forms part of a prompt to an agent must be resolvable fr
   - Currently hardcoded in `MissionLandingHandler.cs:215-221`
 - [x] Refactor `MissionService.GenerateClaudeMdAsync` to resolve all wrapper/metadata sections through `ResolveSectionAsync` instead of inline strings
 - [x] Refactor `MissionLandingHandler` PR body generation to resolve through template service
-- [x] Refactor `MessageTemplateService.RenderCommitInstructions` to resolve preamble from `commit.instructions_preamble` template at runtime
+- [x] Refactor `MessageTemplateService.RenderCommitInstructionsAsync` to resolve `commit.instructions_preamble` (and `commit.trailers_preamble`) through `ResolveAsync`, so operator edits apply
 - [x] Seed all new templates in `PromptTemplateService._EmbeddedDefaults` (7 new: 6 structure + 1 landing)
 - [x] Update dashboard Prompt Template editor with category tab bar for quick filtering by structure/mission/persona/commit/landing/agent
 
@@ -697,7 +698,7 @@ All prompts that are or were hardcoded in C#. Status column indicates current st
 | 10 | `mission.progress_signals` | mission | ARMADA signal format documentation | **DONE** -- template-resolved |
 | 11 | `mission.model_context_updates` | mission | Instructions for updating vessel model context | **DONE** -- template-resolved |
 | 12 | `agent.launch_prompt` | agent | Short CLI prompt: `Mission: {MissionTitle}\n\n{MissionDescription}` | **DONE** -- template-resolved |
-| 13 | `commit.instructions_preamble` | commit | "IMPORTANT: Every git commit MUST include a full manifest and description of what changed..." | **DONE** -- resolved at runtime via GetEmbeddedDefault |
+| 13 | `commit.instructions_preamble` | commit | "IMPORTANT: Every git commit MUST include a full manifest and description of what changed..." | **DONE** -- resolved at runtime via ResolveAsync (operator edits apply); always sent, trailers split into `commit.trailers_preamble` |
 | 14 | `landing.pr_body` | landing | PR body: `## Mission\n**{MissionTitle}**\n\n{MissionDescription}` | **DONE** -- template-resolved |
 | 15 | `commit.message_template` | commit | Commit trailer template | Already configurable via MessageTemplateSettings |
 | 16 | `commit.pr_description_template` | commit | PR description metadata | Already configurable via MessageTemplateSettings |

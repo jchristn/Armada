@@ -121,30 +121,33 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Render commit message instructions for injection into an agent prompt.
+        /// Render commit message instructions for injection into an agent prompt. The descriptive-message guidance
+        /// (<c>commit.instructions_preamble</c>) is always included; the Armada trailers, introduced by
+        /// <c>commit.trailers_preamble</c>, are appended only when <see cref="MessageTemplateSettings.EnableCommitMetadata"/>
+        /// is on and the trailer template renders to something. Both templates honor operator overrides saved under
+        /// Configuration > Prompts.
         /// </summary>
-        public string RenderCommitInstructions(MessageTemplateSettings settings, Dictionary<string, string> context)
+        /// <param name="settings">Message template settings.</param>
+        /// <param name="context">Placeholder values for the trailer template.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The instructions to append to the prompt.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when settings is null.</exception>
+        public async Task<string> RenderCommitInstructionsAsync(MessageTemplateSettings settings, Dictionary<string, string> context, CancellationToken token = default)
         {
             if (settings == null) throw new ArgumentNullException(nameof(settings));
-            if (!settings.EnableCommitMetadata) return "";
 
-            string rendered = RenderTemplate(settings.CommitMessageTemplate, context);
-            if (String.IsNullOrWhiteSpace(rendered)) return "";
+            string preamble = await ResolveTemplateTextAsync("commit.instructions_preamble", PromptTemplateService.CommitInstructionsPreambleDefault, token).ConfigureAwait(false);
+            string instructions = preamble.Trim();
 
-            string preamble;
-            if (_PromptTemplates != null)
+            if (settings.EnableCommitMetadata)
             {
-                string? resolved = _PromptTemplates.GetEmbeddedDefault("commit.instructions_preamble");
-                preamble = !String.IsNullOrEmpty(resolved)
-                    ? resolved
-                    : "IMPORTANT: Every git commit you create MUST have a clear, descriptive commit message. The message MUST include: (1) a concise summary line stating what the commit does, and (2) a full manifest and description of what was changed -- list every file added, modified, or deleted and, for each, explain what changed and why. After that description, append the following trailers at the end of the commit message (after a blank line):";
+                string rendered = RenderTemplate(settings.CommitMessageTemplate, context ?? new Dictionary<string, string>());
+                if (!String.IsNullOrWhiteSpace(rendered))
+                {
+                    string trailersPreamble = await ResolveTemplateTextAsync("commit.trailers_preamble", PromptTemplateService.CommitTrailersPreambleDefault, token).ConfigureAwait(false);
+                    instructions += " " + trailersPreamble.Trim() + rendered;
+                }
             }
-            else
-            {
-                preamble = "IMPORTANT: Every git commit you create MUST have a clear, descriptive commit message. The message MUST include: (1) a concise summary line stating what the commit does, and (2) a full manifest and description of what was changed -- list every file added, modified, or deleted and, for each, explain what changed and why. After that description, append the following trailers at the end of the commit message (after a blank line):";
-            }
-
-            string instructions = preamble + rendered;
 
             _Logging.Debug(_Header + "rendered commit instructions for agent prompt");
             return instructions;
@@ -181,5 +184,22 @@ namespace Armada.Core.Services
         }
 
         #endregion
+
+        private async Task<string> ResolveTemplateTextAsync(string name, string fallback, CancellationToken token)
+        {
+            if (_PromptTemplates == null) return fallback;
+            try
+            {
+                PromptTemplate? template = await _PromptTemplates.ResolveAsync(name, token).ConfigureAwait(false);
+                if (template != null && !String.IsNullOrWhiteSpace(template.Content)) return template.Content;
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException))
+            {
+                _Logging.Warn(_Header + "could not resolve template " + name + ", using the built-in default: " + ex.Message);
+            }
+
+            return fallback;
+        }
+
     }
 }

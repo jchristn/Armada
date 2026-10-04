@@ -232,6 +232,32 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("ask_system_scope_guidance_and_upgrade", "ask.system carries conversation-scope guidance and an untouched previous built-in is upgraded", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    LoggingModule logging = new LoggingModule();
+                    PromptTemplateService templates = new PromptTemplateService(testDb.Driver, logging);
+                    await templates.SeedDefaultsAsync().ConfigureAwait(false);
+                    PromptTemplate? row = await testDb.Driver.PromptTemplates.ReadByNameAsync("ask.system").ConfigureAwait(false);
+                    AssertContains("## Conversation scope", row!.Content, "new installs get the scope guidance");
+
+                    string previous = (string)typeof(PromptTemplateService).GetField("_AskSystemPreviousDefault", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!.GetValue(null)!;
+                    AssertFalse(previous.Contains("## Conversation scope"), "previous default lacks the guidance");
+                    row.Content = previous;
+                    await testDb.Driver.PromptTemplates.UpdateAsync(row).ConfigureAwait(false);
+                    await templates.SeedDefaultsAsync().ConfigureAwait(false);
+                    row = await testDb.Driver.PromptTemplates.ReadByNameAsync("ask.system").ConfigureAwait(false);
+                    AssertContains("## Conversation scope", row!.Content, "untouched previous built-in upgraded");
+
+                    row.Content = "My own Ask prompt.";
+                    await testDb.Driver.PromptTemplates.UpdateAsync(row).ConfigureAwait(false);
+                    await templates.SeedDefaultsAsync().ConfigureAwait(false);
+                    row = await testDb.Driver.PromptTemplates.ReadByNameAsync("ask.system").ConfigureAwait(false);
+                    AssertEqual("My own Ask prompt.", row!.Content, "operator edit kept");
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Prompt Template Service",

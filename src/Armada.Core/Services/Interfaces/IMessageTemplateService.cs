@@ -28,13 +28,16 @@ namespace Armada.Core.Services.Interfaces
         Dictionary<string, string> BuildContext(Mission mission, Captain? captain = null, Vessel? vessel = null, Voyage? voyage = null, Dock? dock = null);
 
         /// <summary>
-        /// Render commit message instructions for injection into an agent prompt.
-        /// Returns empty string if commit metadata is disabled.
+        /// Render commit message instructions for injection into an agent prompt. The descriptive commit message
+        /// guidance is always returned; the Armada trailers are appended only when commit metadata is enabled.
+        /// Operator overrides of the <c>commit.instructions_preamble</c> and <c>commit.trailers_preamble</c>
+        /// templates are honored.
         /// </summary>
         /// <param name="settings">Message template settings.</param>
-        /// <param name="context">Placeholder context dictionary.</param>
-        /// <returns>Agent-friendly instruction text, or empty string.</returns>
-        string RenderCommitInstructions(MessageTemplateSettings settings, Dictionary<string, string> context);
+        /// <param name="context">Placeholder context dictionary for the trailer template.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Agent-friendly instruction text.</returns>
+        Task<string> RenderCommitInstructionsAsync(MessageTemplateSettings settings, Dictionary<string, string> context, CancellationToken token = default);
 
         /// <summary>
         /// Render a PR description by appending template metadata to the base body.

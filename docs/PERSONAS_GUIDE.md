@@ -318,7 +318,7 @@ defaults for all templates. You can customize any template and reset at any time
 | **persona** | Core persona instructions | `persona.worker`, `persona.architect`, `persona.judge`, `persona.test_engineer` |
 | **mission** | Mission-level rules and constraints | `mission.rules`, `mission.context_conservation`, `mission.merge_conflict_avoidance`, `mission.progress_signals`, `mission.model_context_updates` |
 | **structure** | Layout wrappers for CLAUDE.md sections | `mission.metadata`, `mission.captain_instructions_wrapper`, `mission.project_context_wrapper`, `mission.code_style_wrapper`, `mission.model_context_wrapper`, `mission.existing_instructions_wrapper` |
-| **commit** | Commit message and trailer instructions | `commit.instructions_preamble` |
+| **commit** | Commit message instructions (always sent) and the sentence introducing the Armada trailers (sent only when commit metadata is enabled) | `commit.instructions_preamble`, `commit.trailers_preamble` |
 | **landing** | PR creation templates | `landing.pr_body` |
 | **agent** | Agent launch prompts | `agent.launch_prompt` |
 

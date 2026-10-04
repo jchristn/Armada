@@ -137,7 +137,7 @@ namespace Test.Shared.Suites.Services
 
             // RenderCommitInstructions
 
-            cases.Add(Case("render_commit_instructions_enabled_setting_returns_instructions", "RenderCommitInstructions EnabledSetting ReturnsInstructions", TestTags.Positive, () =>
+            cases.Add(CaseAsync("render_commit_instructions_enabled_setting_returns_instructions", "RenderCommitInstructions EnabledSetting ReturnsGuidanceAndTrailers", TestTags.Positive, async () =>
             {
                 MessageTemplateService service = CreateService();
                 MessageTemplateSettings settings = new MessageTemplateSettings();
@@ -149,23 +149,72 @@ namespace Test.Shared.Suites.Services
                     ["VesselId"] = "vsl_jkl"
                 };
 
-                string result = service.RenderCommitInstructions(settings, context);
+                string result = await service.RenderCommitInstructionsAsync(settings, context).ConfigureAwait(false);
 
                 AssertContains("msn_abc", result);
                 AssertContains("vyg_def", result);
                 AssertContains("cpt_ghi", result);
                 AssertContains("vsl_jkl", result);
                 AssertContains("IMPORTANT", result);
+                AssertContains("list every file added, modified, or deleted", result);
+                AssertContains("append the following trailers", result);
             }));
 
-            cases.Add(Case("render_commit_instructions_disabled_setting_returns_empty", "RenderCommitInstructions DisabledSetting ReturnsEmpty", TestTags.Negative, () =>
+            cases.Add(CaseAsync("render_commit_instructions_disabled_metadata_keeps_guidance", "RenderCommitInstructions MetadataDisabled KeepsDescriptiveGuidanceWithoutTrailers", TestTags.Positive, async () =>
             {
                 MessageTemplateService service = CreateService();
                 MessageTemplateSettings settings = new MessageTemplateSettings();
                 settings.EnableCommitMetadata = false;
 
-                string result = service.RenderCommitInstructions(settings, new Dictionary<string, string>());
-                AssertEqual("", result);
+                string result = await service.RenderCommitInstructionsAsync(settings, new Dictionary<string, string> { ["MissionId"] = "msn_abc" }).ConfigureAwait(false);
+                AssertContains("list every file added, modified, or deleted", result, "descriptive guidance still applies");
+                AssertFalse(result.Contains("trailers"), "no trailer instruction when metadata is off");
+                AssertFalse(result.Contains("msn_abc"), "no trailers rendered");
+            }));
+
+            cases.Add(CaseAsync("render_commit_instructions_honors_template_overrides", "RenderCommitInstructions Honors Edited Templates", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    LoggingModule logging = new LoggingModule();
+                    PromptTemplateService templates = new PromptTemplateService(testDb.Driver, logging);
+                    await templates.SeedDefaultsAsync().ConfigureAwait(false);
+                    PromptTemplate? preamble = await testDb.Driver.PromptTemplates.ReadByNameAsync("commit.instructions_preamble").ConfigureAwait(false);
+                    AssertNotNull(preamble, "seeded");
+                    preamble!.Content = "Write commit messages as a bulleted changelog of every file.";
+                    await testDb.Driver.PromptTemplates.UpdateAsync(preamble).ConfigureAwait(false);
+
+                    MessageTemplateService service = new MessageTemplateService(logging, templates);
+                    string result = await service.RenderCommitInstructionsAsync(new MessageTemplateSettings(), new Dictionary<string, string> { ["MissionId"] = "msn_abc" }).ConfigureAwait(false);
+                    AssertContains("bulleted changelog of every file", result, "operator edit is used");
+                    AssertFalse(result.Contains("IMPORTANT: Every git commit"), "built-in text is not used once edited");
+                    AssertContains("msn_abc", result, "trailers still appended");
+                }
+            }));
+
+            cases.Add(CaseAsync("commit_preamble_legacy_builtin_is_upgraded_but_edits_are_kept", "Seeding upgrades the legacy built-in commit preamble and keeps operator edits", TestTags.Positive, async () =>
+            {
+                string legacy = "IMPORTANT: Every git commit you create MUST have a clear, descriptive commit message. The message MUST include: (1) a concise summary line stating what the commit does, and (2) a full manifest and description of what was changed -- list every file added, modified, or deleted and, for each, explain what changed and why. After that description, append the following trailers at the end of the commit message (after a blank line):";
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    LoggingModule logging = new LoggingModule();
+                    PromptTemplateService templates = new PromptTemplateService(testDb.Driver, logging);
+                    await templates.SeedDefaultsAsync().ConfigureAwait(false);
+                    PromptTemplate? row = await testDb.Driver.PromptTemplates.ReadByNameAsync("commit.instructions_preamble").ConfigureAwait(false);
+                    row!.Content = legacy;
+                    await testDb.Driver.PromptTemplates.UpdateAsync(row).ConfigureAwait(false);
+
+                    await templates.SeedDefaultsAsync().ConfigureAwait(false);
+                    row = await testDb.Driver.PromptTemplates.ReadByNameAsync("commit.instructions_preamble").ConfigureAwait(false);
+                    AssertEqual(PromptTemplateService.CommitInstructionsPreambleDefault, row!.Content, "legacy built-in upgraded");
+                    AssertNotNull(await testDb.Driver.PromptTemplates.ReadByNameAsync("commit.trailers_preamble").ConfigureAwait(false), "trailers template seeded");
+
+                    row.Content = "My own commit rules.";
+                    await testDb.Driver.PromptTemplates.UpdateAsync(row).ConfigureAwait(false);
+                    await templates.SeedDefaultsAsync().ConfigureAwait(false);
+                    row = await testDb.Driver.PromptTemplates.ReadByNameAsync("commit.instructions_preamble").ConfigureAwait(false);
+                    AssertEqual("My own commit rules.", row!.Content, "operator edit kept");
+                }
             }));
 
             // RenderPrDescription
@@ -266,10 +315,10 @@ namespace Test.Shared.Suites.Services
                 AssertThrows<ArgumentNullException>(() => new MessageTemplateService(null!));
             }));
 
-            cases.Add(Case("render_commit_instructions_null_settings_throws", "RenderCommitInstructions NullSettings Throws", TestTags.Negative, () =>
+            cases.Add(CaseAsync("render_commit_instructions_null_settings_throws", "RenderCommitInstructions NullSettings Throws", TestTags.Negative, async () =>
             {
                 MessageTemplateService service = CreateService();
-                AssertThrows<ArgumentNullException>(() => service.RenderCommitInstructions(null!, new Dictionary<string, string>()));
+                await AssertThrowsAsync<ArgumentNullException>(() => service.RenderCommitInstructionsAsync(null!, new Dictionary<string, string>())).ConfigureAwait(false);
             }));
 
             cases.Add(Case("render_pr_description_null_settings_throws", "RenderPrDescription NullSettings Throws", TestTags.Negative, () =>

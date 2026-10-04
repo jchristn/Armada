@@ -122,6 +122,34 @@ namespace Armada.Core.Services
             "- If the operator asks you to do or look up something and you have no tool for it, say so in one sentence -- do not ask for irrelevant details or invent a process. For example, if asked to create a vessel, dispatch a mission, or change fleet state and you have no such tool, reply that you cannot do it from this chat and tell them how instead: use a captain connected to Armada over MCP, or the Armada dashboard (Vessels / Dispatch) or the armada CLI.\n" +
             "- Never fabricate ids, results, fields, or capabilities. If you are unsure or lack the context, say so plainly.\n" +
             "\n" +
+            "## Conversation scope\n" +
+            "- Keep track of what this conversation is about: the vessels, fleets, voyages, and missions the operator named, and any work started here (listed under \"Conversation focus\" when present).\n" +
+            "- Follow-up questions without an explicit target (\"what's running?\", \"any failures?\", \"how is it going?\", \"is it done?\") refer to that focus. Scope your lookups to it -- pass the vessel, fleet, or voyage filters to enumerate, or use voyage_status / mission_status -- and answer for those items, not for the whole fleet.\n" +
+            "- Answer fleet-wide when the operator asks about everything (\"across the fleet\", \"all vessels\", \"overall\", \"anything else\"), names a different target, or the conversation has no focus yet.\n" +
+            "- Start a scoped answer by naming the scope in a few words (for example \"On TUIKit: ...\"). If something notable is happening outside the focus (for example a failure on another vessel), you may add one short line about it.\n" +
+            "- If the focus is ambiguous (several vessels were discussed), use the most recently discussed one and say so, or ask a one-line question.\n" +
+            "- \"Failures\" include missions in Failed and LandingFailed status and failed merge-queue entries; check all of them before saying nothing failed.\n" +
+            "\n" +
+            "## Style\n" +
+            "- Prefer short, direct answers. Use lists and code blocks only where they genuinely help.\n" +
+            "- This is a conversational chat, not a mission: do not modify files, run destructive commands, or dispatch work unless the operator explicitly asks you to.\n";
+
+        /// <summary>
+        /// The Ask Armada system prompt before the conversation-scope guidance was added. Used to upgrade an
+        /// untouched built-in template in place.
+        /// </summary>
+        private const string _AskSystemPreviousDefault =
+            "You are an AI captain in Armada's \"Ask Armada\" chat.\n" +
+            "\n" +
+            "## What you can do\n" +
+            "- Only use tools that are actually provided to you in this session. Never claim to have tools, MCP access, or the ability to inspect or change Armada state unless those tools are present and you can call them.\n" +
+            "- When tools ARE available, use them to look up live state (for example status and enumerate) or to take an action the operator requested, rather than guessing or describing what you would do.\n" +
+            "- Questions are usually about Armada operations -- fleets, vessels, captains, missions, voyages, docks, and the merge queue -- unless the operator clearly means something else.\n" +
+            "\n" +
+            "## When you cannot do something\n" +
+            "- If the operator asks you to do or look up something and you have no tool for it, say so in one sentence -- do not ask for irrelevant details or invent a process. For example, if asked to create a vessel, dispatch a mission, or change fleet state and you have no such tool, reply that you cannot do it from this chat and tell them how instead: use a captain connected to Armada over MCP, or the Armada dashboard (Vessels / Dispatch) or the armada CLI.\n" +
+            "- Never fabricate ids, results, fields, or capabilities. If you are unsure or lack the context, say so plainly.\n" +
+            "\n" +
             "## Style\n" +
             "- Prefer short, direct answers. Use lists and code blocks only where they genuinely help.\n" +
             "- This is a conversational chat, not a mission: do not modify files, run destructive commands, or dispatch work unless the operator explicitly asks you to.\n";
@@ -161,6 +189,25 @@ namespace Armada.Core.Services
             "rely on the vessel model context.\n";
 
         /// <summary>
+        /// Default content of the <c>commit.instructions_preamble</c> template: what every commit message a captain
+        /// writes must contain. Injected into every mission prompt, whether or not commit trailers are enabled.
+        /// </summary>
+        public static readonly string CommitInstructionsPreambleDefault =
+            "IMPORTANT: Every git commit you create MUST have a clear, descriptive commit message. The message MUST include: " +
+            "(1) a concise summary line stating what the commit does, and (2) a full manifest and description of what was " +
+            "changed -- list every file added, modified, or deleted and, for each, explain what changed and why.";
+
+        /// <summary>
+        /// Default content of the <c>commit.trailers_preamble</c> template: the sentence that introduces the Armada
+        /// commit trailers when commit metadata is enabled.
+        /// </summary>
+        public static readonly string CommitTrailersPreambleDefault =
+            "After that description, append the following trailers at the end of the commit message (after a blank line):";
+
+        private static readonly string _CommitInstructionsPreambleLegacyDefault =
+            "IMPORTANT: Every git commit you create MUST have a clear, descriptive commit message. The message MUST include: (1) a concise summary line stating what the commit does, and (2) a full manifest and description of what was changed -- list every file added, modified, or deleted and, for each, explain what changed and why. After that description, append the following trailers at the end of the commit message (after a blank line):";
+
+        /// <summary>
         /// Seed all built-in templates into the database if they don't already exist.
         /// Called on startup.
         /// </summary>
@@ -198,6 +245,27 @@ namespace Armada.Core.Services
             await UpgradeLegacyPersonaTemplateReferencesAsync(token).ConfigureAwait(false);
             await UpgradeBuiltInPersonaMemoryRecallAsync(token).ConfigureAwait(false);
             await UpgradeBuiltInAskSystemAsync(token).ConfigureAwait(false);
+            await UpgradeBuiltInCommitPreambleAsync(token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Upgrade the built-in commit instructions preamble in place when it still holds the original seeded content,
+        /// which ended by introducing the commit trailers. The trailer sentence now lives in
+        /// <c>commit.trailers_preamble</c> so the commit message guidance applies even when trailers are disabled. An
+        /// operator who has edited the template keeps their version untouched.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        private async Task UpgradeBuiltInCommitPreambleAsync(CancellationToken token)
+        {
+            PromptTemplate? existing = await _Database.PromptTemplates.ReadByNameAsync("commit.instructions_preamble", token).ConfigureAwait(false);
+            if (existing == null || !existing.IsBuiltIn) return;
+            if (!String.Equals(existing.Content, _CommitInstructionsPreambleLegacyDefault, StringComparison.Ordinal)) return;
+
+            existing.Content = CommitInstructionsPreambleDefault;
+            existing.Description = "Commit message instructions injected into every mission prompt: what a commit message must contain.";
+            existing.LastUpdateUtc = DateTime.UtcNow;
+            await _Database.PromptTemplates.UpdateAsync(existing, token).ConfigureAwait(false);
+            _Logging.Debug(_Header + "upgraded built-in commit.instructions_preamble to the current default");
         }
 
         /// <summary>
@@ -210,7 +278,8 @@ namespace Armada.Core.Services
         {
             PromptTemplate? existing = await _Database.PromptTemplates.ReadByNameAsync("ask.system", token).ConfigureAwait(false);
             if (existing == null || !existing.IsBuiltIn) return;
-            if (!String.Equals(existing.Content, _AskSystemLegacyDefault, StringComparison.Ordinal)) return;
+            if (!String.Equals(existing.Content, _AskSystemLegacyDefault, StringComparison.Ordinal)
+                && !String.Equals(existing.Content, _AskSystemPreviousDefault, StringComparison.Ordinal)) return;
 
             existing.Content = _AskSystemDefault;
             existing.LastUpdateUtc = DateTime.UtcNow;
@@ -520,9 +589,17 @@ namespace Armada.Core.Services
             defaults["commit.instructions_preamble"] = new EmbeddedTemplate
             {
                 Name = "commit.instructions_preamble",
-                Description = "Preamble text for commit message trailer instructions injected into agent prompts.",
+                Description = "Commit message instructions injected into every mission prompt: what a commit message must contain.",
                 Category = "commit",
-                Content = "IMPORTANT: Every git commit you create MUST have a clear, descriptive commit message. The message MUST include: (1) a concise summary line stating what the commit does, and (2) a full manifest and description of what was changed -- list every file added, modified, or deleted and, for each, explain what changed and why. After that description, append the following trailers at the end of the commit message (after a blank line):"
+                Content = CommitInstructionsPreambleDefault
+            };
+
+            defaults["commit.trailers_preamble"] = new EmbeddedTemplate
+            {
+                Name = "commit.trailers_preamble",
+                Description = "Sentence that introduces the Armada commit trailers; used only when commit metadata is enabled.",
+                Category = "commit",
+                Content = CommitTrailersPreambleDefault
             };
 
             defaults["persona.worker"] = new EmbeddedTemplate
