@@ -1792,6 +1792,114 @@ namespace Armada.Core.Database.Mysql.Queries
         };
 
         /// <summary>
+        /// Migration v75 statements: Ask Armada conversation threads (ask_threads, ask_messages, ask_message_tool_calls,
+        /// ask_action_proposals, ask_tracked_work).
+        /// </summary>
+        public static readonly string[] MigrationV75Statements = new string[]
+        {
+            @"CREATE TABLE IF NOT EXISTS ask_threads (
+                id VARCHAR(64) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(64) NOT NULL,
+                user_id VARCHAR(64) NOT NULL,
+                title VARCHAR(256) NOT NULL,
+                captain_id VARCHAR(64),
+                auto_approve TINYINT(1) NOT NULL DEFAULT 0,
+                summary_text LONGTEXT,
+                summary_utc DATETIME(6),
+                pinned TINYINT(1) NOT NULL DEFAULT 0,
+                archived TINYINT(1) NOT NULL DEFAULT 0,
+                last_message_utc DATETIME(6),
+                message_count INT NOT NULL DEFAULT 0,
+                unread_count INT NOT NULL DEFAULT 0,
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL
+            );",
+            @"CREATE TABLE IF NOT EXISTS ask_messages (
+                id VARCHAR(64) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(64) NOT NULL,
+                user_id VARCHAR(64),
+                thread_id VARCHAR(64) NOT NULL,
+                sequence INT NOT NULL,
+                role VARCHAR(64) NOT NULL,
+                kind VARCHAR(64) NOT NULL,
+                content_text LONGTEXT NOT NULL,
+                thinking_text LONGTEXT,
+                proposal_id VARCHAR(64),
+                tracked_work_id VARCHAR(64),
+                captain_id VARCHAR(64),
+                duration_ms BIGINT,
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL,
+                FOREIGN KEY (thread_id) REFERENCES ask_threads(id) ON DELETE CASCADE
+            );",
+            @"CREATE TABLE IF NOT EXISTS ask_message_tool_calls (
+                id VARCHAR(64) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(64) NOT NULL,
+                user_id VARCHAR(64),
+                message_id VARCHAR(64) NOT NULL,
+                thread_id VARCHAR(64) NOT NULL,
+                call_id VARCHAR(256),
+                tool_name VARCHAR(256) NOT NULL,
+                arguments_text LONGTEXT,
+                result_text LONGTEXT,
+                ok TINYINT(1),
+                elapsed_ms BIGINT,
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL,
+                FOREIGN KEY (message_id) REFERENCES ask_messages(id) ON DELETE CASCADE
+            );",
+            @"CREATE TABLE IF NOT EXISTS ask_action_proposals (
+                id VARCHAR(64) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(64) NOT NULL,
+                user_id VARCHAR(64),
+                thread_id VARCHAR(64) NOT NULL,
+                message_id VARCHAR(64),
+                tool_name VARCHAR(256) NOT NULL,
+                arguments_text LONGTEXT NOT NULL,
+                summary_text LONGTEXT NOT NULL,
+                source VARCHAR(64) NOT NULL,
+                status VARCHAR(64) NOT NULL,
+                result_text LONGTEXT,
+                error_text LONGTEXT,
+                decided_by_user_id VARCHAR(64),
+                decided_utc DATETIME(6),
+                executed_utc DATETIME(6),
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL,
+                FOREIGN KEY (thread_id) REFERENCES ask_threads(id) ON DELETE CASCADE
+            );",
+            @"CREATE TABLE IF NOT EXISTS ask_tracked_work (
+                id VARCHAR(64) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(64) NOT NULL,
+                user_id VARCHAR(64),
+                thread_id VARCHAR(64) NOT NULL,
+                entity_type VARCHAR(64) NOT NULL,
+                entity_id VARCHAR(64) NOT NULL,
+                title VARCHAR(256) NOT NULL,
+                status VARCHAR(64),
+                state VARCHAR(64) NOT NULL,
+                snapshot_hash VARCHAR(64),
+                last_change_utc DATETIME(6),
+                completed_utc DATETIME(6),
+                created_utc DATETIME(6) NOT NULL,
+                last_update_utc DATETIME(6) NOT NULL,
+                FOREIGN KEY (thread_id) REFERENCES ask_threads(id) ON DELETE CASCADE
+            );",
+            "CREATE INDEX idx_ask_threads_owner ON ask_threads(tenant_id, user_id, archived, pinned);",
+            "CREATE INDEX idx_ask_threads_tenant_last_message ON ask_threads(tenant_id, last_message_utc);",
+            "CREATE UNIQUE INDEX idx_ask_messages_thread_sequence ON ask_messages(thread_id, sequence);",
+            "CREATE INDEX idx_ask_messages_tenant_thread ON ask_messages(tenant_id, thread_id);",
+            "CREATE INDEX idx_ask_message_tool_calls_message ON ask_message_tool_calls(tenant_id, message_id);",
+            "CREATE INDEX idx_ask_message_tool_calls_thread ON ask_message_tool_calls(tenant_id, thread_id);",
+            "CREATE INDEX idx_ask_action_proposals_thread_status ON ask_action_proposals(tenant_id, thread_id, status);",
+            "CREATE INDEX idx_ask_action_proposals_status_created ON ask_action_proposals(status, created_utc);",
+            "CREATE UNIQUE INDEX idx_ask_tracked_work_thread_entity ON ask_tracked_work(thread_id, entity_type, entity_id);",
+            "CREATE INDEX idx_ask_tracked_work_tenant_thread ON ask_tracked_work(tenant_id, thread_id);",
+            "CREATE INDEX idx_ask_tracked_work_state ON ask_tracked_work(state);",
+            "CREATE INDEX idx_ask_tracked_work_entity ON ask_tracked_work(entity_type, entity_id);"
+        };
+
+        /// <summary>
         /// Index DDL statements for all tables.
         /// </summary>
         public static readonly string[] Indexes = new string[]

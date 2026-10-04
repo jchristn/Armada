@@ -301,12 +301,12 @@ namespace Armada.Server.Routes
                 // Broadcast voyage and mission cancellations for dashboard toast notifications
                 if (_webSocketHub != null)
                 {
-                    _webSocketHub.BroadcastVoyageChange(id, VoyageStatusEnum.Cancelled.ToString(), voyage.Title);
+                    _webSocketHub.BroadcastVoyageChange(voyage, VoyageStatusEnum.Cancelled.ToString());
                     foreach (Mission cm in missions)
                     {
                         if (cm.Status == MissionStatusEnum.Cancelled)
                         {
-                            _webSocketHub.BroadcastMissionChange(cm.Id, MissionStatusEnum.Cancelled.ToString(), cm.Title);
+                            _webSocketHub.BroadcastMissionChange(cm, MissionStatusEnum.Cancelled.ToString());
                         }
                     }
                 }

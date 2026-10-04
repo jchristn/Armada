@@ -361,12 +361,23 @@ namespace Armada.Server
                 };
             });
 
-            // Set timestamp on request start
+            // Set timestamp on request start, and authenticate /ws upgrades before the handshake: Watson completes the
+            // WebSocket handshake before invoking the route handler, so an unauthenticated upgrade must be refused here
+            // with 401 (the Harbor link path is separate and keeps its own authentication).
             _App.Routes.PreRouting = async (HttpContextBase ctx) =>
             {
                 ctx.Timestamp.Start = DateTime.UtcNow;
                 ctx.Response.ContentType = "application/json";
-                await Task.CompletedTask.ConfigureAwait(false);
+                if (IsDashboardWebSocketUpgrade(ctx) && _WebSocketHub != null)
+                {
+                    AuthContext wsAuth = await _WebSocketHub.AuthorizeUpgradeAsync(ctx).ConfigureAwait(false);
+                    if (!wsAuth.IsAuthenticated)
+                    {
+                        ctx.Response.StatusCode = 401;
+                        ctx.Response.ContentType = "application/json";
+                        await ctx.Response.Send("{\"error\":\"Authentication required\",\"message\":\"Pass a token as ?token= or in Sec-WebSocket-Protocol, or the REST credential headers\"}").ConfigureAwait(false);
+                    }
+                }
             };
 
             // Log every API call and apply CORS on every response
@@ -395,7 +406,10 @@ namespace Armada.Server
             };
 
             // Initialize WebSocket hub (before routes so it's available for injection)
-            _WebSocketHub = new ArmadaWebSocketHub(_Logging, _Admiral, _Database, _MergeQueue, _Settings, _Git, () => { OnStopping?.Invoke(); _TokenSource.Cancel(); });
+            _WebSocketHub = new ArmadaWebSocketHub(
+                _Logging, _Admiral, _Database, _MergeQueue, _Settings, _Git,
+                () => { OnStopping?.Invoke(); _TokenSource.Cancel(); },
+                (authHeader, tokenHeader, apiKeyHeader) => _AuthenticationService.AuthenticateAsync(authHeader, tokenHeader, apiKeyHeader));
             _AgentLifecycle.SetWebSocketHub(_WebSocketHub);
             _MissionLanding.SetWebSocketHub(_WebSocketHub);
             missionService.OnReviewRequested = _WebSocketHub.BroadcastApprovalNeeded;
@@ -563,6 +577,14 @@ namespace Armada.Server
             _RequestAuthContexts.Remove(ctx);
             _RequestAuthContexts.Add(ctx, result);
             return result;
+        }
+
+        private static bool IsDashboardWebSocketUpgrade(HttpContextBase ctx)
+        {
+            string path = ctx.Request.Url.RawWithoutQuery ?? String.Empty;
+            if (!String.Equals(path.TrimEnd('/'), "/ws", StringComparison.OrdinalIgnoreCase)) return false;
+            string? upgrade = ctx.Request.Headers.Get("Upgrade");
+            return !String.IsNullOrEmpty(upgrade) && upgrade.IndexOf("websocket", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private async Task<AuthenticationResult> AuthenticateMcpRequestAsync(System.Net.HttpListenerRequest request)
@@ -1223,10 +1245,11 @@ namespace Armada.Server
                 evt.VoyageId = voyageId;
                 await _Database.Events.CreateAsync(evt).ConfigureAwait(false);
 
-                // Broadcast to WebSocket clients
+                // Broadcast to the WebSocket clients of the entity's tenant
                 if (_WebSocketHub != null)
                 {
-                    _WebSocketHub.BroadcastEvent(eventType, message, new
+                    string? tenantId = await ResolveEventTenantAsync(entityType, entityId, captainId, missionId, vesselId, voyageId).ConfigureAwait(false);
+                    _WebSocketHub.BroadcastToTenant(tenantId, eventType, message, new
                     {
                         entityType = entityType,
                         entityId = entityId,
@@ -1252,6 +1275,76 @@ namespace Armada.Server
             {
                 _Logging.Warn(_Header + "error emitting event: " + ex.ToString());
             }
+        }
+
+        private async Task<string?> ResolveEventTenantAsync(string? entityType, string? entityId, string? captainId, string? missionId, string? vesselId, string? voyageId)
+        {
+            try
+            {
+                if (!String.IsNullOrEmpty(missionId))
+                {
+                    Mission? mission = await _Database.Missions.ReadAsync(missionId).ConfigureAwait(false);
+                    if (!String.IsNullOrEmpty(mission?.TenantId)) return mission!.TenantId;
+                }
+
+                if (!String.IsNullOrEmpty(voyageId))
+                {
+                    Voyage? voyage = await _Database.Voyages.ReadAsync(voyageId).ConfigureAwait(false);
+                    if (!String.IsNullOrEmpty(voyage?.TenantId)) return voyage!.TenantId;
+                }
+
+                if (!String.IsNullOrEmpty(vesselId))
+                {
+                    Vessel? vessel = await _Database.Vessels.ReadAsync(vesselId).ConfigureAwait(false);
+                    if (!String.IsNullOrEmpty(vessel?.TenantId)) return vessel!.TenantId;
+                }
+
+                if (!String.IsNullOrEmpty(captainId))
+                {
+                    Captain? captain = await _Database.Captains.ReadAsync(captainId).ConfigureAwait(false);
+                    if (!String.IsNullOrEmpty(captain?.TenantId)) return captain!.TenantId;
+                }
+
+                if (!String.IsNullOrEmpty(entityId))
+                {
+                    string type = (entityType ?? String.Empty).ToLowerInvariant();
+                    if (type == "fleet")
+                    {
+                        Fleet? fleet = await _Database.Fleets.ReadAsync(entityId).ConfigureAwait(false);
+                        return fleet?.TenantId;
+                    }
+
+                    if (type == "dock")
+                    {
+                        Dock? dock = await _Database.Docks.ReadAsync(entityId).ConfigureAwait(false);
+                        return dock?.TenantId;
+                    }
+
+                    if (type == "signal")
+                    {
+                        Signal? signal = await _Database.Signals.ReadAsync(entityId).ConfigureAwait(false);
+                        return signal?.TenantId;
+                    }
+
+                    if (type == "merge-entry" || type == "merge_entry" || type == "mergeentry")
+                    {
+                        MergeEntry? entry = await _Database.MergeEntries.ReadAsync(entityId).ConfigureAwait(false);
+                        return entry?.TenantId;
+                    }
+
+                    if (type == "planning-session")
+                    {
+                        PlanningSession? session = await _Database.PlanningSessions.ReadAsync(entityId).ConfigureAwait(false);
+                        return session?.TenantId;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _Logging.Debug(_Header + "event tenant resolution failed: " + ex.Message);
+            }
+
+            return null;
         }
 
         private async Task HealthCheckLoopAsync(CancellationToken token)

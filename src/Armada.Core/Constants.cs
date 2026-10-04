@@ -210,6 +210,31 @@ namespace Armada.Core
         public static readonly string VesselHealthOverrideIdPrefix = "vho_";
 
         /// <summary>
+        /// ID prefix for Ask Armada conversation threads.
+        /// </summary>
+        public static readonly string AskThreadIdPrefix = "ath_";
+
+        /// <summary>
+        /// ID prefix for Ask Armada thread messages.
+        /// </summary>
+        public static readonly string AskMessageIdPrefix = "amg_";
+
+        /// <summary>
+        /// ID prefix for tool calls recorded on Ask Armada messages.
+        /// </summary>
+        public static readonly string AskToolCallIdPrefix = "atc_";
+
+        /// <summary>
+        /// ID prefix for Ask Armada action proposals.
+        /// </summary>
+        public static readonly string AskActionProposalIdPrefix = "aap_";
+
+        /// <summary>
+        /// ID prefix for work tracked by Ask Armada threads.
+        /// </summary>
+        public static readonly string AskTrackedWorkIdPrefix = "atw_";
+
+        /// <summary>
         /// Default per-phase timeout, in seconds, for the in-dock Definition-of-Done gate (30 minutes).
         /// </summary>
         public const int DefaultDefinitionOfDoneTimeoutSeconds = 1800;

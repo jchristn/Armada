@@ -70,6 +70,7 @@ namespace Test.Shared.Infrastructure
 
         #region Private-Members
 
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, string> _ApiKeysByRestPort = new System.Collections.Concurrent.ConcurrentDictionary<int, string>();
         private static readonly SemaphoreSlim _Gate = new SemaphoreSlim(1, 1);
         private static E2EServerFixture? _Current;
         private static object? _CurrentKey;
@@ -179,6 +180,31 @@ namespace Test.Shared.Infrastructure
             }
         }
 
+        /// <summary>
+        /// API key of the in-process server listening on a REST port, so WebSocket helpers that only know the port can
+        /// authenticate their /ws upgrade.
+        /// </summary>
+        /// <param name="restPort">REST port.</param>
+        /// <returns>The API key, or null when no fixture uses the port.</returns>
+        public static string? ApiKeyForRestPort(int restPort)
+        {
+            return _ApiKeysByRestPort.TryGetValue(restPort, out string? key) ? key : null;
+        }
+
+        /// <summary>
+        /// Connect an admin-authenticated (X-Api-Key) WebSocket to the fixture's /ws endpoint.
+        /// </summary>
+        /// <param name="restPort">REST port.</param>
+        /// <returns>The connected socket.</returns>
+        public static async Task<System.Net.WebSockets.ClientWebSocket> ConnectAuthenticatedWebSocketAsync(int restPort)
+        {
+            System.Net.WebSockets.ClientWebSocket ws = new System.Net.WebSockets.ClientWebSocket();
+            string? apiKey = ApiKeyForRestPort(restPort);
+            if (!String.IsNullOrEmpty(apiKey)) ws.Options.SetRequestHeader("X-Api-Key", apiKey);
+            await ws.ConnectAsync(new Uri("ws://127.0.0.1:" + restPort + "/ws"), CancellationToken.None).ConfigureAwait(false);
+            return ws;
+        }
+
         #endregion
 
         #region Private-Methods
@@ -202,6 +228,7 @@ namespace Test.Shared.Infrastructure
             RestPort = GetAvailablePort();
             McpPort = GetAvailablePort();
             ApiKey = "test-key-" + Guid.NewGuid().ToString("N");
+            _ApiKeysByRestPort[RestPort] = ApiKey;
 
             LoggingModule logging = new LoggingModule();
             logging.Settings.EnableConsole = false;

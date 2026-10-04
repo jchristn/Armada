@@ -309,7 +309,19 @@ namespace Armada.Server
                 };
             }
 
-            RelayWebSocketSession relaySession = new RelayWebSocketSession(proxySocketId, CreateLocalWebSocket());
+            ClientWebSocket localSocket = CreateLocalWebSocket();
+            if (!String.IsNullOrWhiteSpace(request.Subprotocols))
+            {
+                foreach (string protocol in request.Subprotocols.Split(','))
+                {
+                    string trimmed = protocol.Trim();
+                    if (trimmed.Length == 0) continue;
+                    try { localSocket.Options.AddSubProtocol(trimmed); }
+                    catch (ArgumentException) { }
+                }
+            }
+
+            RelayWebSocketSession relaySession = new RelayWebSocketSession(proxySocketId, localSocket);
             if (!_WebSocketSessions.TryAdd(proxySocketId, relaySession))
             {
                 return new RemoteTunnelRequestResult
@@ -322,7 +334,7 @@ namespace Armada.Server
 
             try
             {
-                await relaySession.Socket.ConnectAsync(BuildLocalWebSocketUri(path), token).ConfigureAwait(false);
+                await relaySession.Socket.ConnectAsync(BuildLocalWebSocketUri(path, request.QueryString), token).ConfigureAwait(false);
                 relaySession.ReceiveTask = Task.Run(() => ReceiveLoopAsync(relaySession));
 
                 return new RemoteTunnelRequestResult
@@ -578,14 +590,15 @@ namespace Armada.Server
             return builder.Uri;
         }
 
-        private Uri BuildLocalWebSocketUri(string path)
+        private Uri BuildLocalWebSocketUri(string path, string? queryString)
         {
             UriBuilder builder = new UriBuilder
             {
                 Scheme = _Settings.Rest.Ssl ? "wss" : "ws",
                 Host = ResolveLoopbackHost(),
                 Port = _Settings.AdmiralPort,
-                Path = path
+                Path = path,
+                Query = String.IsNullOrWhiteSpace(queryString) ? String.Empty : queryString.TrimStart('?')
             };
 
             return builder.Uri;

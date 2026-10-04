@@ -13,6 +13,7 @@ namespace Armada.Server
     using Armada.Core.Services.Interfaces;
     using Armada.Runtimes;
     using Armada.Runtimes.Interfaces;
+    using Armada.Server.Ask;
     using Armada.Server.WebSocket;
     using SyslogLogging;
 
@@ -22,8 +23,10 @@ namespace Armada.Server
     /// Cursor) is invoked through its <see cref="IAgentRuntime"/> adapter in a throwaway working directory;
     /// the agent's final response is read from the runtime's final-message artifact. There is no separate
     /// model-endpoint (PolyPrompt) path: Mux, like the others, is a CLI that runs headless.
+    /// Streaming events of the direct chat endpoint go only to the caller's own sockets; Ask Armada threads use
+    /// <see cref="RunTurnAsync"/>, which takes a fully built prompt, a thread-scoped MCP token, and callbacks.
     /// </summary>
-    public class CaptainChatService
+    public class CaptainChatService : IAskCaptainTurnRunner
     {
         #region Private-Members
 
@@ -111,6 +114,79 @@ namespace Armada.Server
             }
 
             string prompt = BuildPrompt(captain, request, askSystemPrompt);
+
+            CaptainChatTurnOptions options = new CaptainChatTurnOptions();
+            options.Captain = captain;
+            options.Prompt = prompt;
+            options.ShowThinking = request.ShowThinking;
+            options.TenantId = captain.TenantId;
+            options.TimeoutMs = _DefaultTimeoutMs;
+
+            // In-process (ApiEndpoint) captains have no CLI harness and thus no MCP config of their own. To let an Ask
+            // Armada chat actually drive Armada's orchestration tools, mint a short-lived session token for the caller;
+            // the runtime connects to Armada's own MCP server, which authenticates the token and scopes every tool call
+            // to this caller -- exactly as a real per-user MCP client would.
+            if (captain.Runtime == AgentRuntimeEnum.ApiEndpoint
+                && _SessionTokenService != null
+                && _McpPort > 0
+                && !String.IsNullOrEmpty(auth.TenantId)
+                && !String.IsNullOrEmpty(auth.UserId))
+            {
+                try
+                {
+                    AuthenticateResult minted = _SessionTokenService.CreateToken(auth.TenantId!, auth.UserId!);
+                    if (!String.IsNullOrEmpty(minted.Token)) options.McpSessionToken = minted.Token;
+                }
+                catch (Exception mintEx)
+                {
+                    _Logging.Warn(_Header + "could not mint MCP session token for chat: " + mintEx.Message);
+                }
+            }
+
+            // Stream to the caller's own sockets only (never to other users or tenants).
+            string? turnId = request.TurnId;
+            if (!String.IsNullOrEmpty(turnId) && !String.IsNullOrEmpty(auth.TenantId) && !String.IsNullOrEmpty(auth.UserId))
+            {
+                string tenantId = auth.TenantId!;
+                string userId = auth.UserId!;
+                options.OnChunk = delta => SendToCaller(tenantId, userId, "ask.chunk", new { turnId, delta });
+                options.OnThinking = delta => SendToCaller(tenantId, userId, "ask.thinking", new { turnId, delta });
+                options.OnTool = activity => SendToCaller(tenantId, userId, "ask.tool", new { turnId, phase = activity.Phase, id = activity.Id, name = activity.Name, arguments = activity.Arguments, ok = activity.Ok, elapsedMs = activity.ElapsedMs, result = activity.Result });
+            }
+
+            CaptainChatTurnResult result = await RunCoreAsync(options, false, token).ConfigureAwait(false);
+            return result.Response;
+        }
+
+        /// <inheritdoc />
+        public async Task<CaptainChatTurnResult> RunTurnAsync(CaptainChatTurnOptions options, CancellationToken token = default)
+        {
+            if (options == null) throw new ArgumentNullException(nameof(options));
+            if (String.IsNullOrWhiteSpace(options.Prompt)) return new CaptainChatTurnResult { Response = Fail("A prompt is required.") };
+            return await RunCoreAsync(options, true, token).ConfigureAwait(false);
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        /// <summary>
+        /// Run one headless turn. When <paramref name="scopedMcp"/> is true and a session token is supplied, the captain's
+        /// Armada MCP connection is bound to that token: ApiEndpoint captains through ARMADA_MCP_URL/ARMADA_MCP_TOKEN, and
+        /// Claude Code through a per-launch strict MCP config with an X-Token header (other CLI runtimes keep their host
+        /// configuration).
+        /// </summary>
+        private async Task<CaptainChatTurnResult> RunCoreAsync(CaptainChatTurnOptions options, bool scopedMcp, CancellationToken token)
+        {
+            Captain captain = options.Captain;
+            string captainId = captain.Id;
+            string prompt = options.Prompt;
+            bool showThinking = options.ShowThinking;
+            ToolCallCollector toolCalls = new ToolCallCollector();
+            Action<string> emitChunk = delta => { if (!String.IsNullOrEmpty(delta)) { try { options.OnChunk?.Invoke(delta); } catch { } } };
+            Action<string> emitThinking = delta => { if (!String.IsNullOrEmpty(delta)) { try { options.OnThinking?.Invoke(delta); } catch { } } };
+            Action<CaptainToolActivity> emitTool = activity => { toolCalls.Observe(activity); try { options.OnTool?.Invoke(activity); } catch { } };
+
             string workingDirectory = Path.Combine(Path.GetTempPath(), "armada-chat-" + Guid.NewGuid().ToString("N"));
             string finalMessageFilePath = Path.Combine(workingDirectory, "reply.txt");
 
@@ -127,7 +203,7 @@ namespace Armada.Server
                 }
                 catch (Exception e)
                 {
-                    return Fail("This captain's runtime (" + captain.Runtime + ") could not be launched for chat: " + e.Message);
+                    return Failed("This captain's runtime (" + captain.Runtime + ") could not be launched for chat: " + e.Message);
                 }
 
                 // Claude Code streams token-by-token only in streaming-JSON mode; enable it for chat so the
@@ -156,8 +232,7 @@ namespace Armada.Server
                 int? reportedTokens = null;
                 string? reportedModel = null;
                 string? claudeFinalReply = null;
-                string? turnId = request.TurnId;
-
+                
                 runtime.OnStdoutReceived += (pid, line) =>
                 {
                     // Structured tool-activity events from the in-process (ApiEndpoint) runtime arrive as a
@@ -178,7 +253,7 @@ namespace Armada.Server
                                 bool? ok = root.TryGetProperty("ok", out JsonElement okv) && (okv.ValueKind == JsonValueKind.True || okv.ValueKind == JsonValueKind.False) ? okv.GetBoolean() : (bool?)null;
                                 double? elapsedMs = root.TryGetProperty("elapsedMs", out JsonElement elv) && elv.ValueKind == JsonValueKind.Number ? elv.GetDouble() : (double?)null;
                                 string? resultText = root.TryGetProperty("result", out JsonElement rv) && rv.ValueKind == JsonValueKind.String ? rv.GetString() : null;
-                                EmitTool(turnId, new { turnId, phase, id, name, arguments, ok, elapsedMs, result = resultText });
+                                emitTool(new CaptainToolActivity { Phase = phase ?? "started", Id = id, Name = name, Arguments = arguments, Ok = ok, ElapsedMs = elapsedMs, Result = resultText });
                             }
                         }
                         catch (JsonException) { }
@@ -226,10 +301,15 @@ namespace Armada.Server
                                             if (firstOutputUtc == null) firstOutputUtc = DateTime.UtcNow;
                                             if (output.Length < _MaxOutputChars) output.Append(deltaText);
                                         }
-                                        EmitChunk(turnId, deltaText!);
+                                        emitChunk(deltaText!);
                                     }
                                 }
-                                else if (eventType == "assistant"
+                                else if (eventType == "assistant" || eventType == "user")
+                                {
+                                    ObserveClaudeToolBlocks(line, toolCalls, emitTool);
+                                }
+
+                                if (eventType == "assistant"
                                     && root.TryGetProperty("message", out JsonElement assistantMessage)
                                     && assistantMessage.ValueKind == JsonValueKind.Object
                                     && assistantMessage.TryGetProperty("model", out JsonElement am) && am.ValueKind == JsonValueKind.String)
@@ -310,8 +390,8 @@ namespace Armada.Server
                                     }
                                 }
 
-                                if (!String.IsNullOrEmpty(deltaText)) EmitChunk(turnId, deltaText!);
-                                if (!String.IsNullOrEmpty(thinkingDelta)) EmitThinking(turnId, thinkingDelta!);
+                                if (!String.IsNullOrEmpty(deltaText)) emitChunk(deltaText!);
+                                if (!String.IsNullOrEmpty(thinkingDelta)) emitThinking(thinkingDelta!);
 
                                 // Surface tool activity to the chat UI: when a tool call is proposed and when
                                 // it completes (with success/failure, runtime, and result for inspection).
@@ -320,7 +400,7 @@ namespace Armada.Server
                                     string? toolId = proposed.TryGetProperty("id", out JsonElement propId) && propId.ValueKind == JsonValueKind.String ? propId.GetString() : null;
                                     string? toolName = proposed.TryGetProperty("name", out JsonElement pnm) && pnm.ValueKind == JsonValueKind.String ? pnm.GetString() : null;
                                     string? argsJson = proposed.TryGetProperty("arguments", out JsonElement parg) ? Truncate(parg.GetRawText(), 4000) : null;
-                                    EmitTool(turnId, new { turnId, phase = "started", id = toolId, name = toolName, arguments = argsJson });
+                                    emitTool(new CaptainToolActivity { Phase = "started", Id = toolId, Name = toolName, Arguments = argsJson });
                                 }
                                 else if (eventType == "tool_call_completed")
                                 {
@@ -336,7 +416,7 @@ namespace Armada.Server
                                         JsonElement resultBody = res.TryGetProperty("content", out JsonElement content) ? content : res;
                                         resultJson = Truncate(resultBody.GetRawText(), 16000);
                                     }
-                                    EmitTool(turnId, new { turnId, phase = "completed", id = toolId, name = toolName, ok, elapsedMs, result = resultJson });
+                                    emitTool(new CaptainToolActivity { Phase = "completed", Id = toolId, Name = toolName, Ok = ok, ElapsedMs = elapsedMs, Result = resultJson });
                                 }
                             }
                         }
@@ -367,7 +447,7 @@ namespace Armada.Server
                                             if (firstOutputUtc == null) firstOutputUtc = DateTime.UtcNow;
                                             if (output.Length < _MaxOutputChars) output.Append(deltaText);
                                         }
-                                        EmitChunk(turnId, deltaText);
+                                        emitChunk(deltaText);
                                     }
                                 }
                                 else if (ocType == "reasoning" && part.ValueKind == JsonValueKind.Object
@@ -376,13 +456,13 @@ namespace Armada.Server
                                     // OpenCode --thinking streams reasoning on a separate channel; surface it as
                                     // thinking (never as reply text).
                                     string thinkingDelta = rtxt.GetString() ?? String.Empty;
-                                    if (!String.IsNullOrEmpty(thinkingDelta) && request.ShowThinking)
+                                    if (!String.IsNullOrEmpty(thinkingDelta) && showThinking)
                                     {
                                         lock (outputLock)
                                         {
                                             if (thinking.Length < _MaxOutputChars) thinking.Append(thinkingDelta);
                                         }
-                                        EmitThinking(turnId, thinkingDelta);
+                                        emitThinking(thinkingDelta);
                                     }
                                 }
                                 else if (ocType == "tool_use" && part.ValueKind == JsonValueKind.Object)
@@ -403,7 +483,7 @@ namespace Armada.Server
                                             ok = ex.GetInt32() == 0;
                                     }
                                     string phase = String.Equals(status, "completed", StringComparison.OrdinalIgnoreCase) ? "completed" : "started";
-                                    EmitTool(turnId, new { turnId, phase, id = toolId, name = toolName, arguments = argsJson, ok, result = resultJson });
+                                    emitTool(new CaptainToolActivity { Phase = phase, Id = toolId, Name = toolName, Arguments = argsJson, Ok = ok, Result = resultJson });
                                 }
                             }
                         }
@@ -420,42 +500,32 @@ namespace Armada.Server
                             output.Append('\n');
                         }
                     }
-                    EmitChunk(turnId, line + "\n");
+                    emitChunk(line + "\n");
                 };
                 runtime.OnProcessExited += (pid, code) => exitSource.TrySetResult(code);
 
-                // In-process (ApiEndpoint) captains have no CLI harness and thus no MCP config of their own.
-                // To let an Ask Armada chat actually drive Armada's orchestration tools, mint a short-lived
-                // session token for the caller and hand the runtime the local MCP endpoint URL plus that
-                // token. The runtime connects to Armada's own MCP server, which authenticates the token and
-                // scopes every tool call to this caller -- exactly as a real per-user MCP client would.
+                // Bind the captain's Armada MCP connection to the supplied session token. ApiEndpoint captains read the
+                // endpoint and token from the environment; Claude Code gets a per-launch strict MCP config carrying the token
+                // as an X-Token header (only on scoped turns, so the direct chat endpoint's behavior is unchanged).
                 Dictionary<string, string>? environment = null;
-                if (captain.Runtime == AgentRuntimeEnum.ApiEndpoint
-                    && _SessionTokenService != null
-                    && _McpPort > 0
-                    && !String.IsNullOrEmpty(auth.TenantId)
-                    && !String.IsNullOrEmpty(auth.UserId))
+                bool isolateLaunch = false;
+                if (!String.IsNullOrEmpty(options.McpSessionToken) && _McpPort > 0)
                 {
-                    try
+                    if (captain.Runtime == AgentRuntimeEnum.ApiEndpoint)
                     {
-                        AuthenticateResult minted = _SessionTokenService.CreateToken(auth.TenantId!, auth.UserId!);
-                        if (!String.IsNullOrEmpty(minted.Token))
+                        // Use the same canonical MCP URL captains' generated configs target (http://localhost:<port>/mcp).
+                        // The MCP listener binds to the configured hostname (default "localhost"), and Windows HTTP.sys
+                        // rejects a request whose Host header does not match the registered prefix.
+                        environment = new Dictionary<string, string>
                         {
-                            // Use the same canonical MCP URL captains' generated configs target
-                            // (http://localhost:<port>/mcp). The MCP listener binds to the configured
-                            // hostname (default "localhost"), and Windows HTTP.sys rejects a request whose
-                            // Host header does not match the registered prefix -- so a hardcoded 127.0.0.1
-                            // is refused with "400 Invalid Hostname". Aligning with GetMcpUrl avoids that.
-                            environment = new Dictionary<string, string>
-                            {
-                                ["ARMADA_MCP_URL"] = Armada.Core.Services.ArmadaMcpConfigBuilder.GetMcpUrl(_McpPort),
-                                ["ARMADA_MCP_TOKEN"] = minted.Token!
-                            };
-                        }
+                            ["ARMADA_MCP_URL"] = Armada.Core.Services.ArmadaMcpConfigBuilder.GetMcpUrl(_McpPort),
+                            ["ARMADA_MCP_TOKEN"] = options.McpSessionToken!
+                        };
                     }
-                    catch (Exception mintEx)
+                    else if (scopedMcp && runtime is ClaudeCodeRuntime scopedClaude)
                     {
-                        _Logging.Warn(_Header + "could not mint MCP session token for chat: " + mintEx.Message);
+                        scopedClaude.McpSessionToken = options.McpSessionToken;
+                        isolateLaunch = true;
                     }
                 }
 
@@ -466,13 +536,14 @@ namespace Armada.Server
                     finalMessageFilePath: finalMessageFilePath,
                     model: captain.Model,
                     captain: captain,
+                    isolateLaunch: isolateLaunch,
                     mcpPort: _McpPort,
-                    showThinking: request.ShowThinking,
+                    showThinking: showThinking,
                     token: token).ConfigureAwait(false);
 
                 using (CancellationTokenSource timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(token))
                 {
-                    timeoutCts.CancelAfter(_DefaultTimeoutMs);
+                    timeoutCts.CancelAfter(options.TimeoutMs);
 
                     Task finished = await Task.WhenAny(
                         exitSource.Task,
@@ -484,7 +555,7 @@ namespace Armada.Server
                         catch { }
 
                         if (token.IsCancellationRequested) throw new OperationCanceledException(token);
-                        return Fail("The captain did not respond within the time limit.");
+                        return Failed("The captain did not respond within the time limit.");
                     }
                 }
 
@@ -511,14 +582,14 @@ namespace Armada.Server
 
                 if (String.IsNullOrWhiteSpace(reply))
                 {
-                    return Fail(exitCode.HasValue && exitCode.Value != 0
+                    return Failed(exitCode.HasValue && exitCode.Value != 0
                         ? "The captain exited with code " + exitCode.Value + " before producing a response."
                         : "The captain produced no response.");
                 }
 
                 // For non-Mux runtimes, lift the prompt-instructed <thinking> block out of the reply so it
                 // renders in the collapsible thinking section instead of inline with the final answer.
-                if (request.ShowThinking && !isMux)
+                if (showThinking && !isMux)
                 {
                     string extractedThinking = ExtractAndStripThinking(ref reply);
                     if (!String.IsNullOrEmpty(extractedThinking))
@@ -564,8 +635,8 @@ namespace Armada.Server
                     _Database, _Logging, "chat",
                     model: response.Model,
                     runtime: captain.Runtime.ToString(),
-                    tenantId: captain.TenantId,
-                    userId: null,
+                    tenantId: options.TenantId ?? captain.TenantId,
+                    userId: options.UserId,
                     vesselId: null,
                     captainId: captain.Id,
                     sourceId: captain.CurrentMissionId,
@@ -579,7 +650,7 @@ namespace Armada.Server
                 _Logging.Debug(_Header + "chat turn for captain " + captainId + " (" + captain.Runtime + "): " +
                     (response.Metrics.TotalMs?.ToString("F0") ?? "?") + "ms, exit " + (exitCode?.ToString() ?? "?"));
 
-                return response;
+                return new CaptainChatTurnResult { Response = response, ToolCalls = toolCalls.ToList() };
             }
             catch (OperationCanceledException)
             {
@@ -588,7 +659,7 @@ namespace Armada.Server
             catch (Exception e)
             {
                 _Logging.Warn(_Header + "chat turn failed for captain " + captainId + ": " + e.ToString());
-                return Fail(e.Message);
+                return Failed(e.Message);
             }
             finally
             {
@@ -597,9 +668,47 @@ namespace Armada.Server
             }
         }
 
-        #endregion
 
-        #region Private-Methods
+        private CaptainChatTurnResult Failed(string error)
+        {
+            return new CaptainChatTurnResult { Response = Fail(error) };
+        }
+
+        private static void ObserveClaudeToolBlocks(string line, ToolCallCollector collector, Action<CaptainToolActivity> emitTool)
+        {
+            ClaudeStreamLine? parsed = null;
+            try { parsed = JsonSerializer.Deserialize<ClaudeStreamLine>(line.Trim()); }
+            catch (JsonException) { return; }
+            if (parsed?.Message?.Content == null) return;
+
+            foreach (ClaudeStreamContentBlock block in parsed.Message.Content)
+            {
+                if (block == null) continue;
+                if (String.Equals(block.Type, "tool_use", StringComparison.Ordinal))
+                {
+                    emitTool(new CaptainToolActivity
+                    {
+                        Phase = "started",
+                        Id = block.Id,
+                        Name = block.Name,
+                        Arguments = Truncate(block.Input?.ToJsonString(), 4000)
+                    });
+                }
+                else if (String.Equals(block.Type, "tool_result", StringComparison.Ordinal))
+                {
+                    emitTool(new CaptainToolActivity
+                    {
+                        Phase = "completed",
+                        Id = block.ToolUseId,
+                        Name = collector.NameOf(block.ToolUseId),
+                        Ok = block.IsError.HasValue ? !block.IsError.Value : true,
+                        ElapsedMs = collector.ElapsedSince(block.ToolUseId),
+                        Result = Truncate(block.ContentText(), 16000)
+                    });
+                }
+            }
+        }
+
 
         private static string BuildPrompt(Captain captain, CaptainChatRequest request, string? systemPrompt)
         {
@@ -672,24 +781,13 @@ namespace Armada.Server
             return collected.ToString().Trim();
         }
 
-        private void EmitChunk(string? turnId, string delta)
-        {
-            if (String.IsNullOrEmpty(turnId) || _WebSocketHub == null || String.IsNullOrEmpty(delta)) return;
-            try { _WebSocketHub.BroadcastEvent("ask.chunk", String.Empty, new { turnId, delta }); }
-            catch { }
-        }
 
-        private void EmitTool(string? turnId, object payload)
-        {
-            if (String.IsNullOrEmpty(turnId) || _WebSocketHub == null) return;
-            try { _WebSocketHub.BroadcastEvent("ask.tool", String.Empty, payload); }
-            catch { }
-        }
 
-        private void EmitThinking(string? turnId, string delta)
+
+        private void SendToCaller(string tenantId, string userId, string eventType, object payload)
         {
-            if (String.IsNullOrEmpty(turnId) || _WebSocketHub == null || String.IsNullOrEmpty(delta)) return;
-            try { _WebSocketHub.BroadcastEvent("ask.thinking", String.Empty, new { turnId, delta }); }
+            if (_WebSocketHub == null) return;
+            try { _WebSocketHub.SendToUser(tenantId, userId, eventType, payload); }
             catch { }
         }
 

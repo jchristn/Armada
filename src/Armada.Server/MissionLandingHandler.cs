@@ -273,7 +273,7 @@ namespace Armada.Server
                         // Broadcast PullRequestOpen via WebSocket
                         if (_WebSocketHub != null)
                         {
-                            _WebSocketHub.BroadcastEvent("mission.pull_request_open", "Pull request opened: " + mission.Title, new
+                            _WebSocketHub.BroadcastToTenant(mission.TenantId, "mission.pull_request_open", "Pull request opened: " + mission.Title, new
                             {
                                 entityType = "mission",
                                 entityId = mission.Id,
@@ -282,7 +282,7 @@ namespace Armada.Server
                                 vesselId = mission.VesselId,
                                 voyageId = mission.VoyageId
                             });
-                            _WebSocketHub.BroadcastMissionChange(mission.Id, MissionStatusEnum.PullRequestOpen.ToString(), mission.Title);
+                            _WebSocketHub.BroadcastMissionChange(mission, MissionStatusEnum.PullRequestOpen.ToString());
                         }
 
                         // PR path handles its own status — skip the generic landing result block below
@@ -559,7 +559,7 @@ namespace Armada.Server
                         break;
                 }
 
-                _WebSocketHub.BroadcastEvent(eventType, eventMessage, new
+                _WebSocketHub.BroadcastToTenant(mission.TenantId, eventType, eventMessage, new
                 {
                     entityType = "mission",
                     entityId = mission.Id,
@@ -570,7 +570,7 @@ namespace Armada.Server
                 });
 
                 // Broadcast specific mission change for dashboard toast notifications
-                _WebSocketHub.BroadcastMissionChange(mission.Id, mission.Status.ToString(), mission.Title);
+                _WebSocketHub.BroadcastMissionChange(mission, mission.Status.ToString());
             }
 
             // NOTE: Dock reclaim is NOT done here. MissionService.HandleCompletionAsync
@@ -587,7 +587,7 @@ namespace Armada.Server
 
             if (_WebSocketHub != null)
             {
-                _WebSocketHub.BroadcastVoyageChange(voyage.Id, VoyageStatusEnum.Complete.ToString(), voyage.Title);
+                _WebSocketHub.BroadcastVoyageChange(voyage, VoyageStatusEnum.Complete.ToString());
             }
 
             return Task.CompletedTask;
@@ -698,7 +698,7 @@ namespace Armada.Server
                                 // Broadcast via WebSocket
                                 if (_WebSocketHub != null)
                                 {
-                                    _WebSocketHub.BroadcastEvent("mission.completed", "Mission completed (PR merged): " + mission.Title, new
+                                    _WebSocketHub.BroadcastToTenant(mission.TenantId, "mission.completed", "Mission completed (PR merged): " + mission.Title, new
                                     {
                                         entityType = "mission",
                                         entityId = mission.Id,
@@ -707,7 +707,7 @@ namespace Armada.Server
                                         vesselId = mission.VesselId,
                                         voyageId = mission.VoyageId
                                     });
-                                    _WebSocketHub.BroadcastMissionChange(mission.Id, MissionStatusEnum.Complete.ToString(), mission.Title);
+                                    _WebSocketHub.BroadcastMissionChange(mission, MissionStatusEnum.Complete.ToString());
                                 }
                             }
                         }

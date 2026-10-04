@@ -444,7 +444,9 @@ namespace Armada.Proxy
                     new RemoteTunnelWebSocketOpenRequest
                     {
                         ProxySocketId = proxySocketId,
-                        Path = "/ws"
+                        Path = "/ws",
+                        QueryString = GetRawQueryString(ctx.Request.Url.RawWithQuery),
+                        Subprotocols = ctx.Request.Headers.Get("Sec-WebSocket-Protocol")
                     },
                     ctx.Token,
                     ResolveRequesterIp(ctx)).ConfigureAwait(false);
