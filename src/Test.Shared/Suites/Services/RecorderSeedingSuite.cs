@@ -85,16 +85,16 @@ namespace Test.Shared.Suites.Services
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
 
-                // Simulate a deployment created before the recall guidance existed: a built-in persona template
-                // already present, without the note.
-                PromptTemplate legacy = new PromptTemplate("persona.worker", "You are a worker. Do the work.")
+                // Simulate a deployment created before the recall guidance existed: the shipped built-in persona
+                // template already present, without the note.
+                PromptTemplateService service = new PromptTemplateService(testDb.Driver, CreateLogging());
+                PromptTemplate legacy = new PromptTemplate("persona.worker", service.GetEmbeddedDefault("persona.worker")!)
                 {
                     Category = "persona",
                     IsBuiltIn = true
                 };
                 await testDb.Driver.PromptTemplates.CreateAsync(legacy).ConfigureAwait(false);
 
-                PromptTemplateService service = new PromptTemplateService(testDb.Driver, CreateLogging());
                 await service.SeedDefaultsAsync().ConfigureAwait(false);
                 await service.SeedDefaultsAsync().ConfigureAwait(false);
 
@@ -102,6 +102,24 @@ namespace Test.Shared.Suites.Services
                 AssertNotNull(worker, "Expected persona.worker to exist.");
                 int occurrences = worker!.Content.Split(new[] { "## Recall Existing Memory" }, StringSplitOptions.None).Length - 1;
                 AssertEqual(1, occurrences);
+            }));
+
+            cases.Add(CaseAsync("recall_note_skips_edited_template", "An operator-edited built-in persona template is left exactly as edited", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+
+                const string edited = "You are a worker (edited by the operator). Do the work.";
+                PromptTemplate custom = new PromptTemplate("persona.worker", edited)
+                {
+                    Category = "persona",
+                    IsBuiltIn = true
+                };
+                await testDb.Driver.PromptTemplates.CreateAsync(custom).ConfigureAwait(false);
+
+                await new PromptTemplateService(testDb.Driver, CreateLogging()).SeedDefaultsAsync().ConfigureAwait(false);
+
+                PromptTemplate? worker = await testDb.Driver.PromptTemplates.ReadByNameAsync("persona.worker").ConfigureAwait(false);
+                AssertEqual(edited, worker!.Content, "edited template untouched");
             }));
 
             return new TestSuiteDescriptor(

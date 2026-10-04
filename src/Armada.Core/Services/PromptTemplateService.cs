@@ -290,9 +290,9 @@ namespace Armada.Core.Services
         /// <summary>
         /// Bring existing built-in persona templates up to date with the memory-recall guidance. Seeding is
         /// existence-guarded, so a deployment created before the guidance was introduced would otherwise never
-        /// receive it. This appends the guidance (idempotently) to every built-in persona template that lacks
-        /// it, except the Recorder's own template. It never overwrites operator edits -- it only appends a
-        /// missing section -- so a local deployment picks up the latest guidance on the next startup.
+        /// receive it. This appends the guidance (idempotently) to every built-in persona template that lacks it
+        /// and still holds the content Armada shipped, except the Recorder's own template. Templates an operator
+        /// edited are left exactly as they are (resetting one to its default picks up the guidance).
         /// </summary>
         /// <param name="token">Cancellation token.</param>
         private async Task UpgradeBuiltInPersonaMemoryRecallAsync(CancellationToken token)
@@ -304,6 +304,15 @@ namespace Armada.Core.Services
                 if (!String.Equals(template.Category, "persona", StringComparison.OrdinalIgnoreCase)) continue;
                 if (String.Equals(template.Name, "persona.recorder", StringComparison.OrdinalIgnoreCase)) continue;
                 if (!String.IsNullOrEmpty(template.Content) && template.Content.Contains(_MemoryRecallMarker, StringComparison.Ordinal)) continue;
+
+                // Only upgrade content that is still exactly what Armada shipped. An operator who edited the template
+                // keeps their version untouched (they can reset it to pick up the guidance).
+                string? shipped = GetEmbeddedDefault(template.Name);
+                if (shipped == null || !String.Equals(NormalizeLineEndings(template.Content), NormalizeLineEndings(shipped), StringComparison.Ordinal))
+                {
+                    _Logging.Debug(_Header + "kept edited built-in template '" + template.Name + "' as is (memory-recall guidance not appended)");
+                    continue;
+                }
 
                 template.Content = (template.Content ?? String.Empty) + _MemoryRecallGuidance;
                 template.LastUpdateUtc = DateTime.UtcNow;
@@ -382,6 +391,18 @@ namespace Armada.Core.Services
             return null;
         }
 
+        /// <summary>
+        /// Names of every built-in template this build ships (the templates <see cref="SeedDefaultsAsync"/> ensures
+        /// exist), sorted ordinally.
+        /// </summary>
+        /// <returns>Built-in template names.</returns>
+        public List<string> GetEmbeddedDefaultNames()
+        {
+            List<string> names = _EmbeddedDefaults.Keys.ToList();
+            names.Sort(StringComparer.Ordinal);
+            return names;
+        }
+
         #endregion
 
         #region Private-Methods
@@ -407,6 +428,11 @@ namespace Armada.Core.Services
                 await _Database.PromptTemplates.UpdateAsync(template, token).ConfigureAwait(false);
                 _Logging.Debug(_Header + "updated built-in template references: '" + template.Name + "'");
             }
+        }
+
+        private static string NormalizeLineEndings(string? value)
+        {
+            return (value ?? String.Empty).Replace("\r\n", "\n").TrimEnd();
         }
 
         private Dictionary<string, EmbeddedTemplate> BuildEmbeddedDefaults()

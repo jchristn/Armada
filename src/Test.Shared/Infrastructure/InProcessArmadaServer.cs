@@ -174,11 +174,12 @@ namespace Test.Shared.Infrastructure
             try { Client?.Dispose(); } catch { }
         }
 
-        #endregion
-
-        #region Private-Methods
-
-        private static async Task<int> ReservePortAsync()
+        /// <summary>
+        /// Reserve a free loopback port in <see cref="PortRangeStart"/>..<see cref="PortRangeEnd"/> (round robin, so
+        /// back-to-back reservations differ even before the caller binds).
+        /// </summary>
+        /// <returns>A port that was free when checked.</returns>
+        public static async Task<int> ReservePortAsync()
         {
             await _PortGate.WaitAsync().ConfigureAwait(false);
             try
@@ -197,6 +198,10 @@ namespace Test.Shared.Infrastructure
 
             throw new InvalidOperationException("No free port in " + PortRangeStart + "-" + PortRangeEnd + ".");
         }
+
+        #endregion
+
+        #region Private-Methods
 
         private static bool IsFree(int port)
         {
