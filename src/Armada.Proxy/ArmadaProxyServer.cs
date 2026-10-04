@@ -152,7 +152,7 @@ namespace Armada.Proxy
                 DateTime startUtc = DateTime.UtcNow;
                 await next().ConfigureAwait(false);
                 double elapsedMs = (DateTime.UtcNow - startUtc).TotalMilliseconds;
-                _Logging.Debug(_Header + ctx.Request.Method + " " + ctx.Request.Url.RawWithQuery + " " + ctx.Response.StatusCode + " (" + elapsedMs.ToString("F2") + "ms)");
+                _Logging.Debug(_Header + ctx.Request.Method + " " + ctx.Request.Url.RawWithoutQuery + " " + ctx.Response.StatusCode + " (" + elapsedMs.ToString("F2") + "ms)");
             });
 
             server.UseOpenApi(api =>

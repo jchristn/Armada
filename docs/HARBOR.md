@@ -67,7 +67,7 @@ name. Edit that file to point the Harbor at your Admiral and to describe what th
 | `capabilities` | Runtimes and host tools advertised at handshake (e.g. `git`, `claude`). Drives capability-based routing. |
 | `maxConcurrentJobs` | Maximum concurrent jobs this Harbor will accept. Default 4. |
 | `heartbeatIntervalMs` | Heartbeat interval in milliseconds; `0` disables heartbeats. Default 15000. |
-| `accessKey` / `secret` | Credential material presented on the link. Leave empty for an unauthenticated local link; the secret is never logged. |
+| `accessKey` / `secret` | `accessKey` is an Armada credential (a bearer token from Server > Credentials, or the local API key); the Harbor registers under that credential's tenant and user. Leave it empty only for a Harbor on the same machine as a localhost-bound Admiral; a Harbor connecting from another host is refused without one. `secret` is not used for authentication today and is never logged. |
 
 A Harbor does not have to be pre-registered: it self-registers on its first handshake. Pre-registering is
 useful when you want to reserve a name and capacity, or set routing preferences, before the host connects.

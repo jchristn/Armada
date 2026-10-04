@@ -248,11 +248,11 @@ namespace Test.Shared.Suites.Services
 
             // --- Audit additions: default fallback and method-gated boundaries (confirmed against source) ---
 
-            cases.Add(Case("unmapped_path_falls_back_to_authenticated", "Unmapped path falls back to Authenticated", TestTags.Negative, () =>
+            cases.Add(Case("unmapped_path_fails_closed", "Unmapped path fails closed to AdminOnly", TestTags.Negative, () =>
             {
-                // No rule matches an unknown route, so the matrix defaults to Authenticated.
+                // No route declares an unknown path, so it requires a global admin (fail closed).
                 PermissionLevel level = AuthorizationConfig.GetPermissionLevel("GET", "/api/v1/unmapped-resource");
-                AssertEqual(PermissionLevel.Authenticated, level);
+                AssertEqual(PermissionLevel.AdminOnly, level);
             }));
 
             cases.Add(Case("tenant_detail_get_is_authenticated_not_admin", "Tenant detail GET is Authenticated not AdminOnly", TestTags.Negative, () =>

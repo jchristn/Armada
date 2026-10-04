@@ -13,7 +13,7 @@
       "port": 514
     }
   ],
-  "allowSelfRegistration": true,
+  "allowSelfRegistration": false,
   "requireAuthForShutdown": true,
   "rest": {
     "hostname": "0.0.0.0"

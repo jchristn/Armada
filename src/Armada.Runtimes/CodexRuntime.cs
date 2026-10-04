@@ -92,7 +92,13 @@ namespace Armada.Runtimes
 
             args.Add("exec");
 
-            if (String.Equals(ApprovalMode, "dangerous", StringComparison.OrdinalIgnoreCase))
+            if (!CaptainRuntimeOptions.GetAutoApprove(captain))
+            {
+                // No approval bypass: run sandboxed to the workspace (no network, no writes outside the worktree).
+                args.Add("--sandbox");
+                args.Add("workspace-write");
+            }
+            else if (String.Equals(ApprovalMode, "dangerous", StringComparison.OrdinalIgnoreCase))
             {
                 args.Add("--dangerously-bypass-approvals-and-sandbox");
             }

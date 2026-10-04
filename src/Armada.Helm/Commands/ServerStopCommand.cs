@@ -20,7 +20,7 @@ namespace Armada.Helm.Commands
         {
             try
             {
-                using HttpClient client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+                using HttpClient client = CreateAdminHttpClient(TimeSpan.FromSeconds(5));
                 await client.PostAsync(GetBaseUrl() + "/api/v1/server/stop", null, cancellationToken).ConfigureAwait(false);
                 AnsiConsole.MarkupLine("[green]Admiral server is shutting down...[/]");
             }

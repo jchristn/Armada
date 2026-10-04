@@ -74,7 +74,7 @@ import type {
   Memory,
   ModelEndpointProbeResult,
   ModelEndpointHealthSweepResponse,
-  AskResponse,
+  PasswordChangeRequest,
   CaptainChatRequest,
   CaptainChatResponse,
   InboxItem,
@@ -572,6 +572,9 @@ export const authenticate = (req: AuthenticateRequest) =>
 
 export const whoami = () => get<WhoAmIResult>('/api/v1/whoami');
 
+/** Change the signed-in user's password (required before a default-password session can use the API). */
+export const changePassword = (req: PasswordChangeRequest) => put<WhoAmIResult>('/api/v1/account/password', req);
+
 export async function getProxySessionContext(): Promise<ProxySessionContext | null> {
   try {
     return await proxyRequest<ProxySessionContext>('GET', '/proxy-api/v1/session/context');
@@ -982,7 +985,6 @@ export const updateMemory = (id: string, data: Partial<Memory>) =>
 export const deleteMemory = (id: string) => del<void>(`/api/v1/memories/${encodeURIComponent(id)}`);
 
 // Ask Armada
-export const askArmada = (message: string) => post<AskResponse>('/api/v1/ask', { message });
 export const chatWithCaptain = (captainId: string, body: CaptainChatRequest, opts?: { signal?: AbortSignal }) =>
   // A chat turn launches the captain's CLI runtime headlessly, which can take minutes for slower
   // agents (e.g. Codex). Allow more than the default 30s so the reply is not aborted client-side;

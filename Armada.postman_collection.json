@@ -10402,34 +10402,6 @@
       "description": "Conversational assistants: Ask Armada (read-only fleet Q&A) and direct captain chat.",
       "item": [
         {
-          "name": "Ask Armada",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"Message\": \"How many missions are currently in progress?\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/ask",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "ask"
-              ]
-            },
-            "description": "A lightweight conversational assistant that answers read-only questions about fleet state and returns suggested navigation links."
-          }
-        },
-        {
           "name": "Chat With Captain",
           "request": {
             "method": "POST",

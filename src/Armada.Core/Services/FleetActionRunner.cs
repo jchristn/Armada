@@ -688,6 +688,19 @@ namespace Armada.Core.Services
                 ? FleetActionShellCommandBuilder.BuildRemote(rendered, workingDirectory, timeoutMs, selection.HarborOsPlatform)
                 : FleetActionShellCommandBuilder.BuildLocal(rendered, workingDirectory, timeoutMs);
 
+            await CommandAudit.RecordAsync(_Database, new CommandAuditRecord
+            {
+                Source = "FleetAction",
+                Command = rendered,
+                WorkingDirectory = workingDirectory,
+                Host = selection.IsRemote ? ("Harbor " + vessel.PreferredHarborId) : "Admiral",
+                TenantId = run.TenantId,
+                UserId = run.UserId,
+                VesselId = vessel.Id,
+                EntityType = "FleetActionRun",
+                EntityId = run.Id
+            }, _Logging, token).ConfigureAwait(false);
+
             HostCommandResult result = await selection.Executor.RunAsync(request, token).ConfigureAwait(false);
 
             target.OutputText = TruncateTail(result.StandardOutput, maxBytes, out bool outputTruncated);

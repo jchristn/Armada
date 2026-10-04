@@ -13,6 +13,8 @@ interface AuthState {
   loading: boolean;
   login: (token: string) => Promise<void>;
   logout: () => void;
+  /** Re-read whoami (for example after a password change). */
+  refresh: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -75,12 +77,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const refresh = useCallback(async () => {
+    const me = await whoami();
+    setUser(me);
+  }, []);
+
   const isAuthenticated = !!sessionToken && !!user;
   const isAdmin = user?.user?.isAdmin ?? false;
   const isTenantAdmin = isAdmin || (user?.user?.isTenantAdmin ?? false);
 
   return (
-    <AuthContext.Provider value={{ sessionToken, user, isAuthenticated, isAdmin, isTenantAdmin, loading, login, logout }}>
+    <AuthContext.Provider value={{ sessionToken, user, isAuthenticated, isAdmin, isTenantAdmin, loading, login, logout, refresh }}>
       {children}
     </AuthContext.Provider>
   );

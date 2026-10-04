@@ -246,11 +246,6 @@ namespace Armada.Helm
                     .WithExample("inbox")
                     .WithExample("inbox", "--critical");
 
-                config.AddCommand<AskCommand>("ask")
-                    .WithDescription("Ask Armada about fleet state in plain language")
-                    .WithExample("ask", "\"any failures?\"")
-                    .WithExample("ask", "\"how many captains?\"");
-
                 config.AddCommand<HealthCommand>("health")
                     .WithDescription("Show vessel health (outdated dependencies, tests, branches, divergence)")
                     .WithExample("health")

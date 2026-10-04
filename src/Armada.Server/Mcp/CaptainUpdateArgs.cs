@@ -97,5 +97,11 @@ namespace Armada.Server.Mcp
         /// </summary>
         public string? MuxApprovalPolicy { get; set; }
 
+        /// <summary>
+        /// Whether the CLI captain runs with its runtime's auto-approve or permission-bypass flag. Null leaves the
+        /// current value (default true); false runs it without auto-approve where the runtime supports it.
+        /// </summary>
+        public bool? AutoApprove { get; set; }
+
     }
 }

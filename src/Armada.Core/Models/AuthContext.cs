@@ -55,6 +55,13 @@ namespace Armada.Core.Models
         /// </summary>
         public string? AskThreadId { get; set; } = null;
 
+        /// <summary>
+        /// True when this caller holds a dashboard session (session token) for a seeded admin user that still uses
+        /// the well-known default password. The Admiral then refuses every API call except whoami, status, and the
+        /// password change until the password is changed.
+        /// </summary>
+        public bool PasswordChangeRequired { get; set; } = false;
+
         #endregion
 
         #region Constructors-and-Factories

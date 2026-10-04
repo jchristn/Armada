@@ -7,6 +7,7 @@ namespace Armada.Server
     using WatsonWebserver.Core;
     using WatsonWebserver.Core.WebSockets;
     using Armada.Core.Harbor;
+    using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Core.Settings;
     using SyslogLogging;
@@ -24,6 +25,8 @@ namespace Armada.Server
         private readonly HarborConnectionManager _Manager;
         private readonly HarborServerSettings _Settings;
         private readonly LoggingModule _Logging;
+        private readonly Func<string?, string?, string?, Task<AuthContext>>? _Authenticate;
+        private readonly bool _ListenerIsLoopback;
 
         #endregion
 
@@ -35,11 +38,20 @@ namespace Armada.Server
         /// <param name="manager">Harbor connection manager.</param>
         /// <param name="settings">Harbor server settings.</param>
         /// <param name="logging">Logging module.</param>
-        public HarborLinkEndpoint(HarborConnectionManager manager, HarborServerSettings settings, LoggingModule logging)
+        /// <param name="authenticate">Credential validator (Authorization header, X-Token, X-Api-Key), as for REST.</param>
+        /// <param name="listenerIsLoopback">Whether the Admiral's listener is bound to a loopback hostname.</param>
+        public HarborLinkEndpoint(
+            HarborConnectionManager manager,
+            HarborServerSettings settings,
+            LoggingModule logging,
+            Func<string?, string?, string?, Task<AuthContext>>? authenticate = null,
+            bool listenerIsLoopback = true)
         {
             _Manager = manager ?? throw new ArgumentNullException(nameof(manager));
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
+            _Authenticate = authenticate;
+            _ListenerIsLoopback = listenerIsLoopback;
         }
 
         #endregion
@@ -82,16 +94,17 @@ namespace Armada.Server
                             break;
                         }
 
-                        string? denyReason = Authorize(ctx);
-                        if (denyReason != null)
+                        HarborLinkIdentity identity = await AuthorizeAsync(ctx, session.RemoteIp).ConfigureAwait(false);
+                        if (identity.DenyReason != null)
                         {
-                            await SendAsync(session, new HarborHandshakeAck { CorrelationId = handshake.CorrelationId, Accepted = false, Reason = denyReason }).ConfigureAwait(false);
+                            _Logging.Warn(_Header + "refused link from " + session.RemoteIp + ": " + identity.DenyReason);
+                            await SendAsync(session, new HarborHandshakeAck { CorrelationId = handshake.CorrelationId, Accepted = false, Reason = identity.DenyReason }).ConfigureAwait(false);
                             break;
                         }
 
                         harborId = handshake.HarborId;
                         HarborSendDelegate send = (outbound, token) => SendAsync(session, outbound);
-                        HarborHandshakeAck ack = await _Manager.OnHandshakeAsync(handshake, ResolveTenantId(ctx), ResolveUserId(ctx), send, ctx.Token).ConfigureAwait(false);
+                        HarborHandshakeAck ack = await _Manager.OnHandshakeAsync(handshake, identity.TenantId, identity.UserId, send, ctx.Token).ConfigureAwait(false);
                         await SendAsync(session, ack).ConfigureAwait(false);
                         if (!ack.Accepted) break;
                         continue;
@@ -125,26 +138,42 @@ namespace Armada.Server
             return session.SendTextAsync(HarborProtocol.Serialize(message));
         }
 
-        private string? Authorize(HttpContextBase ctx)
+        /// <summary>
+        /// Authenticate the Harbor on the link upgrade. A presented credential (x-access-key, or an Authorization
+        /// header) must be a valid Armada credential (bearer token, session token, or the local API key); the Harbor
+        /// then registers under that credential's tenant and user (a global admin may name a tenant with
+        /// x-tenant-guid). Without a credential the link is accepted only when Harbor.RequireAuth is off, the Admiral
+        /// listens on a loopback hostname, and the Harbor connects from loopback (the local Harbor app); it then keeps
+        /// the tenant it names.
+        /// </summary>
+        private async Task<HarborLinkIdentity> AuthorizeAsync(HttpContextBase ctx, string? remoteIp)
         {
-            if (!_Settings.RequireAuth) return null;
-
-            // Full credential/signed-request validation on the upgrade is a follow-up; for now require the
-            // presence of an access key when authentication is enabled.
             string? accessKey = ctx.Request.Headers.Get("x-access-key");
-            if (String.IsNullOrWhiteSpace(accessKey))
-                return "Authentication is required on this Admiral: present a Harbor credential (x-access-key).";
-            return null;
-        }
+            string? authorization = ctx.Request.Headers.Get("Authorization");
+            string? requestedTenant = ctx.Request.Headers.Get("x-tenant-guid");
+            bool presented = !String.IsNullOrWhiteSpace(accessKey) || !String.IsNullOrWhiteSpace(authorization);
 
-        private static string? ResolveTenantId(HttpContextBase ctx)
-        {
-            return ctx.Request.Headers.Get("x-tenant-guid");
-        }
+            if (presented)
+            {
+                if (_Authenticate == null) return HarborLinkIdentity.Deny("This Admiral cannot validate Harbor credentials.");
+                AuthContext auth = !String.IsNullOrWhiteSpace(authorization)
+                    ? await _Authenticate(authorization, null, null).ConfigureAwait(false)
+                    : await _Authenticate("Bearer " + accessKey!.Trim(), accessKey, accessKey).ConfigureAwait(false);
+                if (!auth.IsAuthenticated || String.IsNullOrEmpty(auth.UserId) || !String.IsNullOrEmpty(auth.AskThreadId))
+                    return HarborLinkIdentity.Deny("The Harbor credential (x-access-key) is not a valid Armada credential.");
 
-        private static string? ResolveUserId(HttpContextBase ctx)
-        {
-            return null;
+                string? tenantId = auth.IsAdmin && !String.IsNullOrWhiteSpace(requestedTenant) ? requestedTenant : auth.TenantId;
+                return HarborLinkIdentity.Allow(tenantId, auth.UserId);
+            }
+
+            if (_Settings.RequireAuth)
+                return HarborLinkIdentity.Deny("Authentication is required on this Admiral: present an Armada credential as x-access-key.");
+
+            bool remoteIsLoopback = System.Net.IPAddress.TryParse(remoteIp ?? String.Empty, out System.Net.IPAddress? address) && System.Net.IPAddress.IsLoopback(address);
+            if (!_ListenerIsLoopback || !remoteIsLoopback)
+                return HarborLinkIdentity.Deny("A Harbor connecting from another host must present an Armada credential as x-access-key.");
+
+            return HarborLinkIdentity.Allow(requestedTenant, null);
         }
 
         #endregion

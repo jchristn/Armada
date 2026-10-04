@@ -117,9 +117,16 @@ namespace Armada.Runtimes
                 args.Add(model);
             }
 
-            if (SkipPermissions)
+            if (SkipPermissions && CaptainRuntimeOptions.GetAutoApprove(captain))
             {
                 args.Add("--dangerously-skip-permissions");
+            }
+            else
+            {
+                // Without the bypass, file edits are accepted and every other tool (including shell commands) needs an
+                // allow rule in the project's Claude Code settings; anything else is refused in print mode.
+                args.Add("--permission-mode");
+                args.Add("acceptEdits");
             }
 
             // The prompt is delivered on stdin (see UsePromptStdin), not as a CLI argument. On Windows the

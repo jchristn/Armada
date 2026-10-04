@@ -7,8 +7,12 @@ services:
       - "7890:7890"
       - "7891:7891"
       - "9464:9464"
+    environment:
+      # The Admiral listens on 0.0.0.0 in the container and refuses to start while the default admin
+      # password is in use. Set this before the first start (for example in a .env file next to this file).
+      - ARMADA_INITIAL_ADMIN_PASSWORD=${ARMADA_INITIAL_ADMIN_PASSWORD:?Set ARMADA_INITIAL_ADMIN_PASSWORD (8+ characters) before the first start}
     volumes:
-      - ./armada.json:/app/data/armada.json
+      - ./armada.json:/app/data/settings.json
       - ./db:/app/data/db
       - ./logs:/app/data/logs
     healthcheck:
@@ -27,7 +31,7 @@ services:
       context: ../..
       dockerfile: src/Armada.Dashboard/Dockerfile
     ports:
-      - "3000:80"
+      - "3000:8080"
     environment:
       - ARMADA_SERVER_URL=http://armada-server:7890
     healthcheck:

@@ -30,7 +30,8 @@ namespace Armada.Server.Mcp.Tools
         /// <param name="database">Database driver for vessel data access.</param>
         /// <param name="dockService">Optional dock service for worktree cleanup during vessel deletion.</param>
         /// <param name="vesselService">Optional shared vessel creation service. Defaults to a new <see cref="VesselService"/>.</param>
-        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IDockService? dockService = null, IVesselService? vesselService = null)
+        /// <param name="settings">Settings (managed docks and repos directories for safe vessel cleanup).</param>
+        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IDockService? dockService = null, IVesselService? vesselService = null, Armada.Core.Settings.ArmadaSettings? settings = null)
         {
             IVesselService creator = vesselService ?? new VesselService(database);
 
@@ -203,7 +204,7 @@ namespace Armada.Server.Mcp.Tools
                     Vessel? vessel = await database.Vessels.ReadAsync(vesselId).ConfigureAwait(false);
                     if (vessel == null) return (object)new { Error = "Vessel not found" };
 
-                    List<string> warnings = await CleanupVesselResourcesAsync(vessel, database, dockService).ConfigureAwait(false);
+                    List<string> warnings = await CleanupVesselResourcesAsync(vessel, database, dockService, settings).ConfigureAwait(false);
 
                     await database.Vessels.DeleteAsync(vesselId).ConfigureAwait(false);
                     if (warnings.Count > 0)
@@ -244,7 +245,7 @@ namespace Armada.Server.Mcp.Tools
                             continue;
                         }
 
-                        await CleanupVesselResourcesAsync(vessel, database, dockService).ConfigureAwait(false);
+                        await CleanupVesselResourcesAsync(vessel, database, dockService, settings).ConfigureAwait(false);
                         await database.Vessels.DeleteAsync(id).ConfigureAwait(false);
                         result.Deleted++;
                     }
@@ -289,7 +290,7 @@ namespace Armada.Server.Mcp.Tools
         /// Cancels active missions, removes docks/worktrees, and deletes the bare repository.
         /// This method throws on failure -- vessel deletion should NOT proceed if cleanup fails.
         /// </summary>
-        private static async Task<List<string>> CleanupVesselResourcesAsync(Vessel vessel, DatabaseDriver database, IDockService? dockService)
+        private static async Task<List<string>> CleanupVesselResourcesAsync(Vessel vessel, DatabaseDriver database, IDockService? dockService, Armada.Core.Settings.ArmadaSettings? settings)
         {
             List<string> errors = new List<string>();
 
@@ -338,27 +339,37 @@ namespace Armada.Server.Mcp.Tools
                 catch (Exception ex) { errors.Add("Failed to purge dock " + dock.Id + ": " + ex.Message); }
             }
 
-            // Delete the vessel's dock directory (the parent containing all worktrees)
-            string vesselDockDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                ".armada", "docks", vessel.Name);
+            // Delete the vessel's dock directory and bare repo, but only inside the managed docks and repos roots
+            // (LocalPath and Name are caller-controlled).
+            string docksRoot = settings?.DocksDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".armada", "docks");
+            string reposRoot = settings?.ReposDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".armada", "repos");
+            string vesselDockDir = Path.Combine(docksRoot, vessel.Name);
             if (Directory.Exists(vesselDockDir))
             {
-                try { Directory.Delete(vesselDockDir, true); }
-                catch (Exception ex) { errors.Add("Failed to delete dock directory " + vesselDockDir + ": " + ex.Message); }
+                if (!ManagedPaths.IsStrictlyUnder(vesselDockDir, docksRoot))
+                    errors.Add("Dock directory left in place (outside the managed docks directory): " + vesselDockDir);
+                else
+                {
+                    try { Directory.Delete(vesselDockDir, true); }
+                    catch (Exception ex) { errors.Add("Failed to delete dock directory " + vesselDockDir + ": " + ex.Message); }
+                }
             }
 
-            // Delete the bare repo
             if (!String.IsNullOrEmpty(vessel.LocalPath) && Directory.Exists(vessel.LocalPath))
             {
-                try { Directory.Delete(vessel.LocalPath, true); }
-                catch (Exception ex) { errors.Add("Failed to delete bare repo " + vessel.LocalPath + ": " + ex.Message); }
-            }
+                if (!ManagedPaths.IsStrictlyUnder(vessel.LocalPath, reposRoot))
+                {
+                    errors.Add("Bare repo left in place (outside the managed repos directory): " + vessel.LocalPath);
+                }
+                else
+                {
+                    try { Directory.Delete(vessel.LocalPath, true); }
+                    catch (Exception ex) { errors.Add("Failed to delete bare repo " + vessel.LocalPath + ": " + ex.Message); }
 
-            // If the bare repo STILL exists after deletion attempt, that's a hard failure
-            if (!String.IsNullOrEmpty(vessel.LocalPath) && Directory.Exists(vessel.LocalPath))
-            {
-                errors.Add("Bare repo still exists after deletion: " + vessel.LocalPath);
+                    // If the bare repo STILL exists after deletion attempt, that's a hard failure
+                    if (Directory.Exists(vessel.LocalPath))
+                        errors.Add("Bare repo still exists after deletion: " + vessel.LocalPath);
+                }
             }
 
             return errors;

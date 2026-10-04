@@ -67,6 +67,14 @@ namespace Test.Shared.Infrastructure
         public string SessionTokenEncryptionKey { get; private set; } = "";
 
         /// <summary>
+        /// The in-process server (for suites that inspect its registered routes and MCP tools).
+        /// </summary>
+        public ArmadaServer Server
+        {
+            get { return _Server; }
+        }
+
+        /// <summary>
         /// Temp directory holding the server's database, logs, docks, and repos.
         /// </summary>
         public string TempDir { get; private set; } = "";
@@ -256,6 +264,9 @@ namespace Test.Shared.Infrastructure
             // falls back to 127.0.0.1 -- which massively inflates E2E time and pushes cases toward the
             // per-case timeout. Pinning to 127.0.0.1 on both ends keeps every connection pure IPv4.
             settings.Rest.Hostname = "127.0.0.1";
+            // Self-registration is off by default since v0.10; the onboarding suites exercise it, so the shared test
+            // server opts in explicitly.
+            settings.AllowSelfRegistration = true;
             // Vessel import tests create repositories under the system temp directory, which is outside the user
             // profile on macOS, so allow it explicitly; a low inline limit lets them exercise the background-job path.
             settings.Import.AllowedRoots = new List<string> { Path.GetTempPath() };

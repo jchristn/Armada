@@ -22,6 +22,7 @@ namespace Armada.Server.Routes
         private readonly DatabaseDriver _database;
         private readonly ArmadaSettings _settings;
         private readonly JsonSerializerOptions _jsonOptions;
+        private readonly Armada.Core.Services.DefaultCredentialService? _defaults;
 
         /// <summary>
         /// Instantiate.
@@ -31,13 +32,16 @@ namespace Armada.Server.Routes
         /// <param name="database">Database driver.</param>
         /// <param name="settings">Application settings.</param>
         /// <param name="jsonOptions">JSON serializer options.</param>
+        /// <param name="defaults">Default credential service (password change retires the seeded token; whoami reports defaults in use).</param>
         public AuthRoutes(
             ISessionTokenService sessionTokenService,
             IAuthenticationService authenticationService,
             DatabaseDriver database,
             ArmadaSettings settings,
-            JsonSerializerOptions jsonOptions)
+            JsonSerializerOptions jsonOptions,
+            Armada.Core.Services.DefaultCredentialService? defaults = null)
         {
+            _defaults = defaults;
             _sessionTokenService = sessionTokenService;
             _authenticationService = authenticationService;
             _database = database;
@@ -69,6 +73,8 @@ namespace Armada.Server.Routes
                 if (headerCtx.IsAuthenticated)
                 {
                     AuthenticateResult result = _sessionTokenService.CreateToken(headerCtx.TenantId!, headerCtx.UserId!);
+                    UserMaster? headerUser = await _database.Users.ReadByIdAsync(headerCtx.UserId!).ConfigureAwait(false);
+                    result.PasswordChangeRequired = headerUser != null && headerUser.UsesDefaultPassword();
                     return (object)result;
                 }
 
@@ -79,6 +85,7 @@ namespace Armada.Server.Routes
                     if (credCtx.IsAuthenticated)
                     {
                         AuthenticateResult result = _sessionTokenService.CreateToken(credCtx.TenantId!, credCtx.UserId!);
+                        result.PasswordChangeRequired = credCtx.PasswordChangeRequired;
                         return (object)result;
                     }
                 }
@@ -101,13 +108,84 @@ namespace Armada.Server.Routes
                 TenantMetadata? tenant = await _database.Tenants.ReadAsync(ctx.TenantId!).ConfigureAwait(false);
                 UserMaster? user = await _database.Users.ReadByIdAsync(ctx.UserId!).ConfigureAwait(false);
 
-                return (object)new WhoAmIResult
+                WhoAmIResult whoami = new WhoAmIResult
                 {
                     Tenant = tenant,
-                    User = user != null ? UserMaster.Redact(user) : null
+                    User = user != null ? UserMaster.Redact(user) : null,
+                    PasswordChangeRequired = user != null && user.UsesDefaultPassword()
                 };
+                if (_defaults != null && (ctx.IsAdmin || ctx.IsTenantAdmin))
+                {
+                    List<string> inUse = await _defaults.GetDefaultsInUseAsync().ConfigureAwait(false);
+                    whoami.DefaultCredentialsInUse = inUse.Count > 0;
+                }
+
+                return (object)whoami;
             },
             api => api.WithTag("Authentication").WithSummary("Get current identity"));
+
+            // Self-service password change (required for the seeded admin before its session can use the API)
+            app.Put<PasswordChangeRequest>("/api/v1/account/password", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
+                {
+                    req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                }
+
+                PasswordChangeRequest? change = null;
+                try { change = JsonSerializer.Deserialize<PasswordChangeRequest>(req.Http.Request.DataAsString, _jsonOptions); } catch (JsonException) { }
+                if (change == null || String.IsNullOrEmpty(change.CurrentPassword) || String.IsNullOrEmpty(change.NewPassword))
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "CurrentPassword and NewPassword are required" };
+                }
+
+                if (change.NewPassword!.Length < PasswordChangeRequest.MinimumLength || String.Equals(change.NewPassword, ArmadaConstants.DefaultUserPassword, StringComparison.Ordinal))
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "NewPassword must be at least " + PasswordChangeRequest.MinimumLength + " characters and must not be the default password" };
+                }
+
+                if (String.Equals(change.NewPassword, change.CurrentPassword, StringComparison.Ordinal))
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "NewPassword must differ from CurrentPassword" };
+                }
+
+                UserMaster? user = await _database.Users.ReadByIdAsync(ctx.UserId!).ConfigureAwait(false);
+                if (user == null || String.Equals(user.Id, ArmadaConstants.SystemUserId, StringComparison.Ordinal))
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "This identity has no password to change" };
+                }
+
+                if (!user.VerifyPassword(change.CurrentPassword!))
+                {
+                    req.Http.Response.StatusCode = 403;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "CurrentPassword is incorrect" };
+                }
+
+                user.PasswordSha256 = UserMaster.ComputePasswordHash(change.NewPassword);
+                user.LastUpdateUtc = DateTime.UtcNow;
+                await _database.Users.UpdateAsync(user).ConfigureAwait(false);
+                if (_defaults != null) await _defaults.RetireDefaultBearerTokenAsync().ConfigureAwait(false);
+
+                return (object)new WhoAmIResult
+                {
+                    Tenant = await _database.Tenants.ReadAsync(user.TenantId).ConfigureAwait(false),
+                    User = UserMaster.Redact(user),
+                    PasswordChangeRequired = false
+                };
+            },
+            api => api
+                .WithTag("Authentication")
+                .WithSummary("Change the caller's password")
+                .WithDescription("Changes the authenticated user's password after verifying the current one. Required before a dashboard session for the seeded admin@armada account (default password) can use the rest of the API. Changing the default admin's password also deactivates the seeded \"default\" bearer token.")
+                .WithRequestBody(OpenApiJson.BodyFor<PasswordChangeRequest>("Current and new password", true))
+                .WithResponse(200, OpenApiJson.For<WhoAmIResult>("Updated identity"))
+                .WithSecurity("ApiKey"));
 
             // Tenant Lookup
             app.Post("/api/v1/tenants/lookup", async (ApiRequest req) =>

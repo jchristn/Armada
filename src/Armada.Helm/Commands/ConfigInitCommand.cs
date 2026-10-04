@@ -51,6 +51,7 @@ namespace Armada.Helm.Commands
                     {
                         using HttpClient client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
                         ArmadaSettings tempSettings = await ArmadaSettings.LoadAsync().ConfigureAwait(false);
+                        if (!string.IsNullOrEmpty(tempSettings.ApiKey)) client.DefaultRequestHeaders.Add("X-Api-Key", tempSettings.ApiKey);
                         await client.PostAsync("http://localhost:" + tempSettings.AdmiralPort + "/api/v1/server/stop", null).ConfigureAwait(false);
                         AnsiConsole.MarkupLine("[dim]Stopped running Admiral server.[/]");
                         await Task.Delay(1000).ConfigureAwait(false);

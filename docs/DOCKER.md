@@ -15,8 +15,13 @@ This guide covers running the Armada server and dashboard using Docker container
 
 ```bash
 cd docker/armada
+export ARMADA_INITIAL_ADMIN_PASSWORD='choose-a-strong-password'   # or put it in docker/armada/.env
 docker compose up -d
 ```
+
+The Admiral listens on all interfaces inside the container, so it refuses to start while the default admin password
+is in use; `ARMADA_INITIAL_ADMIN_PASSWORD` (8+ characters) replaces it on first start and disables the `default`
+bearer token. Compose stops with an error if the variable is not set.
 
 This starts two containers:
 
@@ -25,7 +30,7 @@ This starts two containers:
 | `armada-server` | 7890 | REST API, built-in dashboard, and WebSocket at /ws |
 | `armada-server` | 7891 | MCP (agent communication) |
 | `armada-server` | 9464 | Prometheus scrape endpoint (`/metrics`) |
-| `armada-dashboard` | 3000 | Standalone React dashboard |
+| `armada-dashboard` | 3000 (container port 8080) | Standalone React dashboard |
 | `prometheus` | 9090 | Metrics store, scrapes the Admiral |
 | `loki` | 3100 | Log store |
 | `grafana` | 3001 | Dashboards (login `admin` / `admin`) |
@@ -36,18 +41,31 @@ The stack also brings up a Prometheus / Loki / Grafana observability stack (tele
 container config). Open Grafana at **http://localhost:3001** and see [TELEMETRY.md](TELEMETRY.md) for
 the full metric list and configuration reference.
 
-### Default Credentials
+### Credentials
 
-| Field | Value |
-|-------|-------|
-| Email | `admin@armada` |
-| Password | `password` |
-
-For API access from scripts or curl:
+Sign in as `admin@armada` with the password you set in `ARMADA_INITIAL_ADMIN_PASSWORD`. The `default` bearer token
+does not work in Docker installs (it is retired with the default password). For scripts, create a credential under
+Server > Credentials (the token is shown once) and send it as a bearer token:
 
 ```bash
-curl -H "Authorization: Bearer default" http://localhost:7890/api/v1/status
+curl -H "Authorization: Bearer <token>" http://localhost:7890/api/v1/status
 ```
+
+MCP clients on the host must also send a credential, because the MCP listener is not loopback-bound inside the
+container: `claude mcp add --transport http armada http://localhost:7891/mcp --header "Authorization: Bearer <token>"`.
+
+### Non-root containers and upgrades
+
+The images run as non-root users on pinned base images: the Admiral and proxy as UID 1654 (`app`), the dashboard as
+UID 101 on port 8080 (nginx-unprivileged). After upgrading an existing install, make the bind-mounted directories
+writable by the Admiral's user, for example:
+
+```bash
+sudo chown -R 1654:1654 docker/armada/db docker/armada/logs docker/armada/armada.json
+```
+
+The Admiral reads its settings from `/app/data/settings.json` (`ARMADA_DATA_DIR=/app/data`); compose mounts
+`docker/armada/armada.json` there.
 
 ---
 
@@ -98,7 +116,7 @@ services:
       context: ../..
       dockerfile: src/Armada.Dashboard/Dockerfile
     ports:
-      - "3000:80"
+      - "3000:8080"
     environment:
       - ARMADA_SERVER_URL=http://armada-server:7890
     depends_on:

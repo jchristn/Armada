@@ -117,6 +117,7 @@ namespace Armada.Server.Routes
                         ? await _database.Events.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
                         : await _database.Events.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (evt == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Event not found" }; }
+                if (!ctx.IsAdmin && Armada.Core.Services.CommandAudit.IsAuditEvent(evt.EventType)) { req.Http.Response.StatusCode = 403; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Audit events can be deleted only by a global admin" }; }
                 if (ctx.IsAdmin)
                     await _database.Events.DeleteAsync(id).ConfigureAwait(false);
                 else if (ctx.IsTenantAdmin)
@@ -165,6 +166,11 @@ namespace Armada.Server.Routes
                     if (evt == null)
                     {
                         result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
+                        continue;
+                    }
+                    if (!ctx.IsAdmin && Armada.Core.Services.CommandAudit.IsAuditEvent(evt.EventType))
+                    {
+                        result.Skipped.Add(new DeleteMultipleSkipped(id, "Audit events can be deleted only by a global admin"));
                         continue;
                     }
                     if (ctx.IsAdmin)

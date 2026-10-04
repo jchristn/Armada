@@ -648,7 +648,11 @@ namespace Armada.Server.Routes
 
             if (captain.Runtime != AgentRuntimeEnum.Mux)
             {
-                captain.RuntimeOptionsJson = null;
+                // Non-Mux captains keep only the runtime-independent autoApprove switch.
+                bool? autoApprove = CaptainRuntimeOptions.GetExplicitAutoApprove(captain.RuntimeOptionsJson);
+                if (autoApprove == null && String.IsNullOrWhiteSpace(captain.RuntimeOptionsJson) && existing != null)
+                    autoApprove = CaptainRuntimeOptions.GetExplicitAutoApprove(existing.RuntimeOptionsJson);
+                captain.RuntimeOptionsJson = CaptainRuntimeOptions.WithAutoApprove(null, autoApprove);
                 return;
             }
 

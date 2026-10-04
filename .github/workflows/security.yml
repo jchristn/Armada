@@ -1,0 +1,52 @@
+name: security
+
+# Dependency vulnerability scanning for NuGet and npm (V1_READINESS W1.7).
+# Fails when any NuGet package (direct or transitive) has a known vulnerability, or when the dashboard has an
+# npm advisory of severity high or critical. Runs on every push and pull request, and weekly so new advisories
+# against unchanged dependencies are caught.
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  nuget:
+    name: NuGet vulnerable packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: Restore
+        run: dotnet restore src/Armada.sln
+      - name: List vulnerable packages
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet list src/Armada.sln package --vulnerable --include-transitive 2>&1 | tee vulnerable.txt
+          if grep -q "has the following vulnerable packages" vulnerable.txt; then
+            echo "::error::Vulnerable NuGet packages found (see the list above)."
+            exit 1
+          fi
+
+  npm:
+    name: npm audit (dashboard)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/Armada.Dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Audit
+        run: npm audit --audit-level=high

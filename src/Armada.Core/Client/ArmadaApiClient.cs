@@ -1153,14 +1153,6 @@ namespace Armada.Core.Client
         #region Public-Methods-Assistant
 
         /// <summary>
-        /// Ask the Armada assistant a read-only question about fleet state.
-        /// </summary>
-        public async Task<AskResponse?> AskAsync(string message, CancellationToken token = default)
-        {
-            return await PostAsync<AskResponse, AskRequest>("/api/v1/ask", new AskRequest { Message = message }, token).ConfigureAwait(false);
-        }
-
-        /// <summary>
         /// Get the operator "needs you" inbox (most-urgent-first actionable items).
         /// </summary>
         public async Task<List<InboxItem>?> GetInboxAsync(CancellationToken token = default)

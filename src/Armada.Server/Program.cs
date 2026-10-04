@@ -83,6 +83,14 @@ namespace Armada.Server
                 try { _Server.Stop(); } catch { }
                 Environment.Exit(3);
             }
+            catch (InvalidOperationException ex) when (ex.Message.StartsWith("Refusing to listen", StringComparison.Ordinal))
+            {
+                // Safe-defaults guard: print the reason plainly and exit non-zero instead of a stack trace.
+                Console.Error.WriteLine(ex.Message);
+                Environment.ExitCode = 1;
+                try { _Server.Stop(); } catch { }
+                return;
+            }
 
             Console.WriteLine("Admiral running on port " + _Settings.AdmiralPort);
             Console.WriteLine("MCP server on port " + _Settings.McpPort);

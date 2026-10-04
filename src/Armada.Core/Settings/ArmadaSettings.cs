@@ -525,17 +525,24 @@ namespace Armada.Core.Settings
         public string? DashboardPath { get; set; } = null;
 
         /// <summary>
-        /// Whether self-registration via POST /api/v1/onboarding is enabled.
+        /// Whether self-registration via POST /api/v1/onboarding is enabled. Off by default: anyone who can reach the
+        /// Admiral could otherwise create a user in any tenant whose id they know.
         /// </summary>
-        public bool AllowSelfRegistration { get; set; } = true;
+        public bool AllowSelfRegistration { get; set; } = false;
 
         /// <summary>
-        /// Whether POST /api/v1/server/stop requires authentication.
-        /// When false (default), the shutdown endpoint is accessible without credentials,
-        /// suitable for local development. When true, requires an authenticated identity,
-        /// suitable for centralized or Docker deployments.
+        /// Deprecated and ignored. POST /api/v1/server/stop, restart, rebuild, and rollback always require an
+        /// authenticated global admin (the CLI sends the local API key). Kept so existing settings files still load.
         /// </summary>
         public bool RequireAuthForShutdown { get; set; } = false;
+
+        /// <summary>
+        /// When false (default), the Admiral refuses to start on a non-loopback REST/MCP hostname while default
+        /// credentials are in use (admin@armada with the default password, or the seeded "default" bearer token).
+        /// Change the password first (dashboard, PUT /api/v1/account/password, or ARMADA_INITIAL_ADMIN_PASSWORD on
+        /// first start). Set true only to accept that risk explicitly.
+        /// </summary>
+        public bool AllowDefaultCredentialsOnNetwork { get; set; } = false;
 
         /// <summary>
         /// When true, a mission is only assigned when an eligible Harbor owned by the requesting user (the
@@ -632,6 +639,15 @@ namespace Armada.Core.Settings
         /// REST API listener settings.
         /// </summary>
         public RestSettings Rest { get; set; } = new RestSettings();
+
+        /// <summary>
+        /// MCP server settings.
+        /// </summary>
+        public McpSettings Mcp
+        {
+            get => _Mcp;
+            set => _Mcp = value ?? new McpSettings();
+        }
 
         /// <summary>
         /// Message template settings for commit messages and PR descriptions.
@@ -788,6 +804,7 @@ namespace Armada.Core.Settings
         private int _MaxConcurrentMissions = Constants.DefaultMaxConcurrentMissions;
         private int _IdleCaptainTimeoutSeconds = Constants.DefaultIdleCaptainTimeoutSeconds;
         private RemoteControlSettings _RemoteControl = new RemoteControlSettings();
+        private McpSettings _Mcp = new McpSettings();
         private TelemetrySettings _Telemetry = new TelemetrySettings();
         private HarborServerSettings _Harbor = new HarborServerSettings();
         private VesselImportSettings _Import = new VesselImportSettings();

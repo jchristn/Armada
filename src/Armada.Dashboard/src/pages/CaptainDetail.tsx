@@ -26,6 +26,7 @@ import CopyButton from '../components/shared/CopyButton';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { buildMuxRuntimeOptionsJson, EMPTY_MUX_CAPTAIN_FORM, isMuxRuntime, muxFormFromCaptain, parseMuxCaptainOptions, type MuxCaptainFormFields } from '../lib/mux';
+import { applyAutoApprove, autoApproveFromCaptain, supportsAutoApproveSwitch } from '../lib/captainApproval';
 import { buildCaptainDuplicatePayload } from '../lib/duplicates';
 
 const RUNTIMES = ['ClaudeCode', 'Codex', 'Gemini', 'Cursor', 'Mux', 'OpenCode', 'Custom'];
@@ -38,6 +39,7 @@ type CaptainDetailFormState = {
   tier: string;
   allowedPersonas: string;
   preferredPersona: string;
+  autoApprove: boolean;
 } & MuxCaptainFormFields;
 
 export default function CaptainDetail() {
@@ -53,7 +55,7 @@ export default function CaptainDetail() {
 
   // Edit
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<CaptainDetailFormState>({ name: '', runtime: 'ClaudeCode', systemInstructions: '', model: '', reasoningEffort: '', tier: '', allowedPersonas: '', preferredPersona: '', ...EMPTY_MUX_CAPTAIN_FORM });
+  const [form, setForm] = useState<CaptainDetailFormState>({ name: '', runtime: 'ClaudeCode', systemInstructions: '', model: '', reasoningEffort: '', tier: '', allowedPersonas: '', preferredPersona: '', autoApprove: true, ...EMPTY_MUX_CAPTAIN_FORM });
 
   // Log viewer
   const [logText, setLogText] = useState<string | null>(null);
@@ -117,6 +119,7 @@ export default function CaptainDetail() {
       tier: captain.tier ?? '',
       allowedPersonas: captain.allowedPersonas ?? '',
       preferredPersona: captain.preferredPersona ?? '',
+      autoApprove: autoApproveFromCaptain(captain),
       ...muxFormFromCaptain(captain),
     });
     setShowForm(true);
@@ -138,7 +141,8 @@ export default function CaptainDetail() {
       payload.tier = form.tier ? form.tier : null;
       if (!payload.allowedPersonas) delete payload.allowedPersonas;
       if (!payload.preferredPersona) delete payload.preferredPersona;
-      payload.runtimeOptionsJson = buildMuxRuntimeOptionsJson(form.runtime, form);
+      payload.runtimeOptionsJson = applyAutoApprove(buildMuxRuntimeOptionsJson(form.runtime, form), form.autoApprove || !supportsAutoApproveSwitch(form.runtime));
+      delete payload.autoApprove;
       delete payload.muxConfigDirectory;
       delete payload.muxEndpoint;
       delete payload.muxBaseUrl;
@@ -359,6 +363,12 @@ export default function CaptainDetail() {
                 {t('Missions requiring a tier route to captains at or above it. Leave on Auto to classify from the model name.')}
               </span>
             </label>
+            {supportsAutoApproveSwitch(form.runtime) && (
+              <label className="captain-auto-approve-field" title={t('When off, the captain runs without its permission-bypass flag (Claude Code acceptEdits, Codex workspace-write sandbox, Gemini auto_edit, Cursor without --force, OpenCode without --auto, Mux deny). Shell commands the agent wants to run are then refused unless the runtime is configured to allow them.')}>
+                <input type="checkbox" checked={form.autoApprove} onChange={e => setForm({ ...form, autoApprove: e.target.checked })} />
+                {' '}{t('Auto-approve agent tool use (runs the CLI with its permission-bypass flag)')}
+              </label>
+            )}
             <MuxRuntimeFields
               runtime={form.runtime}
               form={form}

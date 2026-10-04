@@ -19,6 +19,7 @@ namespace Armada.Server.Routes
     {
         private readonly HarborService _Harbors;
         private readonly HarborConnectionManager _Connections;
+        private readonly Armada.Core.Database.DatabaseDriver? _Database;
         private static readonly JsonSerializerOptions _BodyJsonOptions = new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true,
@@ -31,10 +32,12 @@ namespace Armada.Server.Routes
         /// </summary>
         /// <param name="harbors">Harbor service.</param>
         /// <param name="connections">Harbor connection manager (for the connectivity probe).</param>
-        public HarborRoutes(HarborService harbors, HarborConnectionManager connections)
+        /// <param name="database">Database driver, for command audit records (optional).</param>
+        public HarborRoutes(HarborService harbors, HarborConnectionManager connections, Armada.Core.Database.DatabaseDriver? database = null)
         {
             _Harbors = harbors ?? throw new ArgumentNullException(nameof(harbors));
             _Connections = connections ?? throw new ArgumentNullException(nameof(connections));
+            _Database = database;
         }
 
         /// <summary>
@@ -227,6 +230,21 @@ namespace Armada.Server.Routes
                 {
                     req.Http.Response.StatusCode = 409;
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Harbor is not connected; no link to probe over." };
+                }
+
+                if (_Database != null)
+                {
+                    await CommandAudit.RecordAsync(_Database, new CommandAuditRecord
+                    {
+                        Source = "HarborProbe",
+                        Command = (String.IsNullOrWhiteSpace(probe.Executable) ? "git --version" : probe.Executable + (probe.Arguments != null && probe.Arguments.Count > 0 ? " " + String.Join(" ", probe.Arguments) : String.Empty)),
+                        WorkingDirectory = probe.WorkingDirectory,
+                        Host = "Harbor " + harbor.Id,
+                        TenantId = harbor.TenantId ?? ctx.TenantId,
+                        UserId = ctx.UserId,
+                        EntityType = "Harbor",
+                        EntityId = harbor.Id
+                    }).ConfigureAwait(false);
                 }
 
                 RemoteHostCommandExecutor executor = new RemoteHostCommandExecutor(_Connections, harbor.Id);

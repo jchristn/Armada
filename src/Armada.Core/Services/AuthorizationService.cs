@@ -25,9 +25,16 @@ namespace Armada.Core.Services
         /// <inheritdoc />
         public bool IsAuthorized(AuthContext ctx, string method, string path)
         {
-            PermissionLevel required = AuthorizationConfig.GetPermissionLevel(method, path);
+            return IsAuthorized(ctx, AuthorizationConfig.GetRequirement(method, path));
+        }
 
-            switch (required)
+        /// <inheritdoc />
+        public bool IsAuthorized(AuthContext ctx, AuthorizationRequirement requirement)
+        {
+            if (requirement == null) return false;
+            if (ctx == null) return requirement.Level == PermissionLevel.NoAuthRequired;
+
+            switch (requirement.Level)
             {
                 case PermissionLevel.NoAuthRequired:
                     return true;

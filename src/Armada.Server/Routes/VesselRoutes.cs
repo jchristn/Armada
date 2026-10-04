@@ -752,24 +752,36 @@ namespace Armada.Server.Routes
             }
 
             // Delete vessel dock directory
-            string vesselDockDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                ".armada", "docks", vessel.Name);
+            // Only directories inside the managed docks and repos roots are ever removed (LocalPath and Name are
+            // caller-controlled).
+            string docksRoot = _settings?.DocksDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".armada", "docks");
+            string reposRoot = _settings?.ReposDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".armada", "repos");
+            string vesselDockDir = Path.Combine(docksRoot, vessel.Name);
             if (Directory.Exists(vesselDockDir))
             {
-                try { Directory.Delete(vesselDockDir, true); }
-                catch (Exception ex) { errors.Add("Dock dir: " + ex.Message); }
+                if (!ManagedPaths.IsStrictlyUnder(vesselDockDir, docksRoot))
+                    errors.Add("Dock dir left in place (outside the managed docks directory): " + vesselDockDir);
+                else
+                {
+                    try { Directory.Delete(vesselDockDir, true); }
+                    catch (Exception ex) { errors.Add("Dock dir: " + ex.Message); }
+                }
             }
 
             // Delete bare repo
             if (!String.IsNullOrEmpty(vessel.LocalPath) && Directory.Exists(vessel.LocalPath))
             {
-                try { Directory.Delete(vessel.LocalPath, true); }
-                catch (Exception ex) { errors.Add("Bare repo: " + ex.Message); }
-            }
+                if (!ManagedPaths.IsStrictlyUnder(vessel.LocalPath, reposRoot))
+                    errors.Add("Bare repo left in place (outside the managed repos directory): " + vessel.LocalPath);
+                else
+                {
+                    try { Directory.Delete(vessel.LocalPath, true); }
+                    catch (Exception ex) { errors.Add("Bare repo: " + ex.Message); }
 
-            if (!String.IsNullOrEmpty(vessel.LocalPath) && Directory.Exists(vessel.LocalPath))
-                errors.Add("Bare repo still exists after deletion: " + vessel.LocalPath);
+                    if (Directory.Exists(vessel.LocalPath))
+                        errors.Add("Bare repo still exists after deletion: " + vessel.LocalPath);
+                }
+            }
 
             // Log warnings but don't block deletion -- orphan filesystem cleanup
             // can happen on next server restart. The vessel DB record must be deleted.

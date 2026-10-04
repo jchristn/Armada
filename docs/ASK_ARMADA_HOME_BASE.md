@@ -38,8 +38,8 @@ message whenever something meaningful happens (started, a mission failed, landed
   streams `ask.chunk`, `ask.thinking`, and `ask.tool` events over the WebSocket hub, and for ApiEndpoint
   captains mints a session token so the runtime reaches Armada's MCP server as the caller.
   `BaseAgentRuntime` can already give a launch its own scoped Armada MCP config (`CaptainLaunchIsolationPlanner`).
-- `src/Armada.Core/Services/AskArmadaService.cs` (`POST /api/v1/ask`) is a separate keyword-matching,
-  read-only responder. It stays as the fallback for `/status` when no captain is selected.
+- The former keyword-matching `POST /api/v1/ask` responder (`AskArmadaService`) was removed (V1_READINESS D3);
+  Ask threads replace it.
 - `src/Armada.Server/WebSocket/ArmadaWebSocketHub.cs` broadcasts every event (`mission.changed`,
   `voyage.changed`, `captain.changed`, `ask.*`, and others) to **every connected client**, with no tenant or
   user scoping, and `/ws` is registered with no authentication while `WebSocketCommandHandler` accepts
