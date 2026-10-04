@@ -712,6 +712,16 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
+        /// Retention for Ask threads, finished background jobs, and finished import batches, pruned on the
+        /// health-check loop's slow cadence. Never null; setting null restores the defaults.
+        /// </summary>
+        public RetentionSettings Retention
+        {
+            get => _Retention;
+            set => _Retention = value ?? new RetentionSettings();
+        }
+
+        /// <summary>
         /// The settings file these settings were loaded from or last saved to, used by <see cref="SaveAsync"/> when no
         /// path is given (and by backup and restore). Null means <see cref="DefaultSettingsPath"/>. Not persisted.
         /// </summary>
@@ -784,6 +794,7 @@ namespace Armada.Core.Settings
         private FleetActionSettings _FleetActions = new FleetActionSettings();
         private AskSettings _Ask = new AskSettings();
         private RepositoryHealthSettings _RepositoryHealth = new RepositoryHealthSettings();
+        private RetentionSettings _Retention = new RetentionSettings();
         private DatabaseSettings _Database = new DatabaseSettings();
         private bool _DatabasePathConfigured = false;
 

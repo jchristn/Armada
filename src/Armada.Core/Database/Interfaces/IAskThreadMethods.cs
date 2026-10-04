@@ -41,6 +41,17 @@ namespace Armada.Core.Database.Interfaces
         Task<AskThread?> ReadByIdAsync(string id, CancellationToken token = default);
 
         /// <summary>
+        /// List unpinned threads, across all tenants and users, whose last activity (the last message, or creation
+        /// when the thread has no messages) is before a cutoff, oldest first. Used by retention pruning.
+        /// </summary>
+        /// <param name="inactiveBeforeUtc">Activity cutoff (UTC).</param>
+        /// <param name="includeArchived">Whether archived threads are included.</param>
+        /// <param name="maxResults">Maximum rows to return; clamped to 1..1000.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Matching threads, oldest activity first.</returns>
+        Task<List<AskThread>> EnumerateInactiveAsync(DateTime inactiveBeforeUtc, bool includeArchived, int maxResults, CancellationToken token = default);
+
+        /// <summary>
         /// Update the user-editable fields of a thread (title, captain, auto-approve, summary, pinned, archived). Message
         /// and unread counters are maintained by message creation and <see cref="MarkReadAsync"/>, never by this method.
         /// </summary>

@@ -954,6 +954,12 @@ Returns current server settings including ports, agent configuration, system pat
     "DefaultTimeoutSeconds": 300,
     "MaxOutputBytes": 65536,
     "RunRetentionDays": 30
+  },
+  "Retention": {
+    "AskThreadArchiveAfterDays": 90,
+    "AskThreadDeleteAfterDays": 0,
+    "JobRetentionDays": 30,
+    "ImportBatchRetentionDays": 90
   }
 }
 ```
@@ -973,6 +979,15 @@ Self-rebuild fields (see [SERVER_REBUILD.md](SERVER_REBUILD.md)):
 | `RebuildSupervisorHarborId` | string | Optional on-box Harbor (`hbr_` prefix) that performs the health-gated cutover with rollback. Null uses the in-process baton. |
 
 Vessel health settings (see [VESSEL_HEALTH.md](VESSEL_HEALTH.md)): `GET /api/v1/settings` returns a `RepositoryHealth` object, and when `RepositoryHealth` is supplied on PUT it replaces the whole object. Out-of-range values are clamped, and every value applies live (the next scheduler tick or evaluation uses it).
+
+Retention settings (see [UPGRADING.md](UPGRADING.md#data-retention)): `GET /api/v1/settings` returns a `Retention` object, and when `Retention` is supplied on PUT it replaces the whole object (omitted fields take their defaults). Every field is a number of days from 0 to 3650, where 0 means never; values outside the range are clamped. Changes apply live; pruning runs on the health-check loop's slow cadence (every 100 health-check cycles).
+
+| Field | Default | Effect |
+|-------|---------|--------|
+| `AskThreadArchiveAfterDays` | 90 | Archive Ask threads with no activity (last message, or creation when empty) for this many days. Pinned threads are never archived. |
+| `AskThreadDeleteAfterDays` | 0 | Delete Ask threads (with messages, tool calls, proposals, and tracked work) inactive for this many days, archived or not. Pinned threads are never deleted. |
+| `JobRetentionDays` | 30 | Delete finished background jobs (Succeeded, Failed, Cancelled) older than this; the newest finished job of each kind and name per tenant is kept. |
+| `ImportBatchRetentionDays` | 90 | Delete finished vessel import batches (Completed, CompletedWithFailures, Failed) with their items and recommendations; imported vessels are not affected. |
 
 ```json
 {
