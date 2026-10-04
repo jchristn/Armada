@@ -317,8 +317,12 @@ namespace Armada.Server
                         landingFailureReason = "Error pushing/creating PR: " + ex.Message;
                     }
                 }
-                else if (vessel != null && !String.IsNullOrEmpty(vessel.WorkingDirectory) && !String.IsNullOrEmpty(vessel.LocalPath))
+                else if (!landingModeIsNone && !landingModeIsMergeQueue
+                    && vessel != null && !String.IsNullOrEmpty(vessel.WorkingDirectory) && !String.IsNullOrEmpty(vessel.LocalPath))
                 {
+                    // LocalMerge (explicit, or the legacy default when no landing mode is configured). MergeQueue and None
+                    // must not fall into this branch just because the vessel has a working directory.
+
                     // Check if the mission actually produced mergeable changes.
                     // Pipeline stages like Architect may complete without code changes (they output
                     // mission markers to stdout instead). Skip merge if no changes were made.
