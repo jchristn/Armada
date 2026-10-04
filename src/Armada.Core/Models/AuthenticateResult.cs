@@ -22,6 +22,11 @@ namespace Armada.Core.Models
         /// </summary>
         public DateTime? ExpiresUtc { get; set; } = null;
 
+        /// <summary>
+        /// True when the authenticated user must change the default password before using the API with this session.
+        /// </summary>
+        public bool PasswordChangeRequired { get; set; } = false;
+
         #endregion
     }
 }

@@ -173,7 +173,7 @@ namespace Armada.Runtimes
         {
             // Per-captain reasoning effort -> OpenCode provider variant (minimal/high).
             string? variant = ReasoningEffortTranslator.ToOpenCodeVariant(captain?.ReasoningEffort);
-            return OpenCodeCommandBuilder.BuildRunArguments(workingDirectory, prompt, model, variant, ShowThinking, AutoApprove);
+            return OpenCodeCommandBuilder.BuildRunArguments(workingDirectory, prompt, model, variant, ShowThinking, AutoApprove && CaptainRuntimeOptions.GetAutoApprove(captain));
         }
 
         /// <summary>

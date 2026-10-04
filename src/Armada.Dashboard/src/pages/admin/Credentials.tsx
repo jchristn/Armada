@@ -5,7 +5,7 @@ import Pagination from '../../components/shared/Pagination';
 import ActionMenu from '../../components/shared/ActionMenu';
 import ConfirmDialog from '../../components/shared/ConfirmDialog';
 import JsonViewer from '../../components/shared/JsonViewer';
-import CopyButton, { copyToClipboard } from '../../components/shared/CopyButton';
+import CopyButton from '../../components/shared/CopyButton';
 import RefreshButton from '../../components/shared/RefreshButton';
 import AutoRefreshSelect from '../../components/shared/AutoRefreshSelect';
 import { useAutoRefresh } from '../../lib/useAutoRefresh';
@@ -29,6 +29,7 @@ export default function Credentials() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [newToken, setNewToken] = useState<string | null>(null);
   const [editing, setEditing] = useState<Credential | null>(null);
   const [form, setForm] = useState({ userId: '', tenantId: '', name: '', active: true });
   const [selected, setSelected] = useState<string[]>([]);
@@ -145,14 +146,14 @@ export default function Credentials() {
           tenantId: editing.tenantId,
           name: form.name || null,
           active: form.active,
-          bearerToken: editing.bearerToken,
         });
       } else {
-        await createCredential({
+        const created = await createCredential({
           userId: form.userId,
           tenantId: form.tenantId,
           name: form.name || null,
         });
+        setNewToken(created.bearerToken);
       }
       setShowForm(false);
       setEditing(null);
@@ -225,6 +226,22 @@ export default function Credentials() {
             'This page is connected through Armada.Proxy for {{instanceId}}. Credential create, edit, and delete actions are blocked in remote mode.',
             { instanceId: proxyContext?.selectedInstanceId ?? t('the selected deployment') },
           )}
+        </div>
+      )}
+
+      {newToken && (
+        <div className="modal-overlay" onClick={() => setNewToken(null)}>
+          <div className="modal" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
+            <h3>{t('Credential created')}</h3>
+            <p>{t('Copy this bearer token now. It is shown only once; later reads show it masked.')}</p>
+            <div className="id-display mono">
+              <span className="url-value">{newToken}</span>
+              <CopyButton text={newToken} title={t('Copy token')} />
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-primary" onClick={() => setNewToken(null)}>{t('Done')}</button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -338,17 +355,13 @@ export default function Credentials() {
                     <td className="text-dim">{userName(c.userId)}</td>
                     <td className="text-dim">{tenantName(c.tenantId)}</td>
                      <td className="mono text-dim table-url-cell">
-                       <span className="id-display">
-                         <span className="url-value" title={c.bearerToken}>{c.bearerToken}</span>
-                         <CopyButton text={c.bearerToken} title="Copy token" onClick={e => e.stopPropagation()} />
-                       </span>
+                       <span className="url-value" title={t('Tokens are shown once, when the credential is created.')}>{c.bearerToken}</span>
                      </td>
                     <td>{c.active ? t('Yes') : t('No')}</td>
                     <td className="text-dim" title={formatDateTime(c.createdUtc)}>{formatRelativeTime(c.createdUtc)}</td>
                     <td className="text-right" onClick={e => e.stopPropagation()}>
                       <ActionMenu id={c.id} items={[
                         ...(remoteProxyMode ? [] : [{ label: 'Edit', onClick: () => openEdit(c) }]),
-                        { label: 'Copy Token', onClick: () => { copyToClipboard(c.bearerToken).catch(() => {}); } },
                         { label: 'View JSON', onClick: () => setJsonData({ open: true, title: `Credential: ${c.name || c.id}`, data: c }) },
                         ...(remoteProxyMode ? [] : [{ label: 'Delete', danger: true, onClick: () => handleDelete(c.id, c.name ?? '') }]),
                       ]} />

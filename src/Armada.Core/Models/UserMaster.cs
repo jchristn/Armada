@@ -159,7 +159,20 @@ namespace Armada.Core.Models
         public bool VerifyPassword(string plainText)
         {
             if (string.IsNullOrEmpty(plainText)) return false;
-            return ComputePasswordHash(plainText) == PasswordSha256;
+            byte[] computed = Encoding.ASCII.GetBytes(ComputePasswordHash(plainText));
+            byte[] stored = Encoding.ASCII.GetBytes((PasswordSha256 ?? String.Empty).ToLowerInvariant());
+            return CryptographicOperations.FixedTimeEquals(computed, stored);
+        }
+
+        /// <summary>
+        /// Whether this is a seeded admin account (email <see cref="Constants.DefaultUserEmail"/>) that still uses the
+        /// well-known default password <see cref="Constants.DefaultUserPassword"/>.
+        /// </summary>
+        /// <returns>True when the default password is still in use.</returns>
+        public bool UsesDefaultPassword()
+        {
+            if (!String.Equals(Email, Constants.DefaultUserEmail, StringComparison.OrdinalIgnoreCase)) return false;
+            return VerifyPassword(Constants.DefaultUserPassword);
         }
 
         /// <summary>

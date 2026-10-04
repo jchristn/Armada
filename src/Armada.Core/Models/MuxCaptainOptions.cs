@@ -76,6 +76,12 @@ namespace Armada.Core.Models
             set => _ApprovalPolicy = Normalize(value);
         }
 
+        /// <summary>
+        /// Runtime-independent auto-approve switch shared with <see cref="CaptainApprovalOptions"/>. When false and no
+        /// <see cref="ApprovalPolicy"/> is set, Mux runs with <c>--approval-policy deny</c> instead of <c>--yolo</c>.
+        /// </summary>
+        public bool? AutoApprove { get; set; } = null;
+
         #endregion
 
         #region Private-Members

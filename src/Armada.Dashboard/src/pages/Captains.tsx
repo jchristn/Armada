@@ -22,6 +22,7 @@ import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { canCaptainStartPlanning } from '../lib/captains';
 import { buildMuxRuntimeOptionsJson, EMPTY_MUX_CAPTAIN_FORM, isMuxRuntime, muxFormFromCaptain, type MuxCaptainFormFields } from '../lib/mux';
+import { applyAutoApprove, autoApproveFromCaptain, supportsAutoApproveSwitch } from '../lib/captainApproval';
 import { buildCaptainDuplicatePayload } from '../lib/duplicates';
 
 type SortDir = 'asc' | 'desc';
@@ -34,6 +35,7 @@ type CaptainFormState = {
   modelEndpointId: string;
   reasoningEffort: string;
   tier: string;
+  autoApprove: boolean;
 } & MuxCaptainFormFields;
 
 export default function Captains() {
@@ -47,7 +49,7 @@ export default function Captains() {
   // Modal state
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Captain | null>(null);
-  const [form, setForm] = useState<CaptainFormState>({ name: '', runtime: '', systemInstructions: '', model: '', modelEndpointId: '', reasoningEffort: '', tier: '', ...EMPTY_MUX_CAPTAIN_FORM });
+  const [form, setForm] = useState<CaptainFormState>({ name: '', runtime: '', systemInstructions: '', model: '', modelEndpointId: '', reasoningEffort: '', tier: '', autoApprove: true, ...EMPTY_MUX_CAPTAIN_FORM });
   const [saving, setSaving] = useState(false);
   const [inferenceEndpoints, setInferenceEndpoints] = useState<ModelEndpoint[]>([]);
 
@@ -158,7 +160,7 @@ export default function Captains() {
 
   // CRUD
   function openCreate() {
-    setForm({ name: '', runtime: '', systemInstructions: '', model: '', modelEndpointId: '', reasoningEffort: '', tier: '', ...EMPTY_MUX_CAPTAIN_FORM });
+    setForm({ name: '', runtime: '', systemInstructions: '', model: '', modelEndpointId: '', reasoningEffort: '', tier: '', autoApprove: true, ...EMPTY_MUX_CAPTAIN_FORM });
     setEditing(null);
     setShowForm(true);
   }
@@ -172,6 +174,7 @@ export default function Captains() {
       modelEndpointId: c.modelEndpointId ?? '',
       reasoningEffort: c.reasoningEffort ?? '',
       tier: c.tier ?? '',
+      autoApprove: autoApproveFromCaptain(c),
       ...muxFormFromCaptain(c),
     });
     setEditing(c);
@@ -199,7 +202,8 @@ export default function Captains() {
       payload.modelEndpointId = form.runtime === 'ApiEndpoint' ? (form.modelEndpointId || null) : null;
       payload.reasoningEffort = form.reasoningEffort ? form.reasoningEffort : null;
       payload.tier = form.tier ? form.tier : null;
-      payload.runtimeOptionsJson = buildMuxRuntimeOptionsJson(form.runtime, form);
+      payload.runtimeOptionsJson = applyAutoApprove(buildMuxRuntimeOptionsJson(form.runtime, form), form.autoApprove || !supportsAutoApproveSwitch(form.runtime));
+      delete payload.autoApprove;
       delete payload.muxConfigDirectory;
       delete payload.muxEndpoint;
       delete payload.muxBaseUrl;
@@ -459,6 +463,12 @@ export default function Captains() {
                 </select>
               </label>
             </div>
+            {supportsAutoApproveSwitch(form.runtime) && (
+              <label className="captain-auto-approve-field" title={t('When off, the captain runs without its permission-bypass flag (Claude Code acceptEdits, Codex workspace-write sandbox, Gemini auto_edit, Cursor without --force, OpenCode without --auto, Mux deny). Shell commands the agent wants to run are then refused unless the runtime is configured to allow them.')}>
+                <input type="checkbox" checked={form.autoApprove} onChange={e => setForm({ ...form, autoApprove: e.target.checked })} />
+                {' '}{t('Auto-approve agent tool use (runs the CLI with its permission-bypass flag)')}
+              </label>
+            )}
             <MuxRuntimeFields
               runtime={form.runtime}
               form={form}

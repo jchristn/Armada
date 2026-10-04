@@ -94,6 +94,20 @@ namespace Armada.Helm.Commands
         }
 
         /// <summary>
+        /// Create a short-lived HTTP client that carries the local API key (X-Api-Key) from settings, for the server
+        /// control endpoints (stop, restart), which always require an admin credential.
+        /// </summary>
+        /// <param name="timeout">Request timeout.</param>
+        /// <returns>HTTP client; the caller disposes it.</returns>
+        protected HttpClient CreateAdminHttpClient(TimeSpan timeout)
+        {
+            HttpClient client = new HttpClient { Timeout = timeout };
+            ArmadaSettings settings = GetSettings();
+            if (!string.IsNullOrEmpty(settings.ApiKey)) client.DefaultRequestHeaders.Add("X-Api-Key", settings.ApiKey);
+            return client;
+        }
+
+        /// <summary>
         /// Get cached settings, loading from disk on first access.
         /// Auto-initializes settings if no config file exists.
         /// </summary>

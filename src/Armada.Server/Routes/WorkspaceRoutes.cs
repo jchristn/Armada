@@ -202,6 +202,18 @@ namespace Armada.Server.Routes
                 WorkspaceExecRequest execRequest = JsonSerializer.Deserialize<WorkspaceExecRequest>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as WorkspaceExecRequest.");
 
+                await CommandAudit.RecordAsync(_database, new CommandAuditRecord
+                {
+                    Source = "WorkspaceExec",
+                    Command = execRequest.Command ?? String.Empty,
+                    WorkingDirectory = vessel.WorkingDirectory,
+                    TenantId = vessel.TenantId ?? ctx.TenantId,
+                    UserId = ctx.UserId,
+                    VesselId = vessel.Id,
+                    EntityType = "Vessel",
+                    EntityId = vessel.Id
+                }).ConfigureAwait(false);
+
                 try
                 {
                     return await _workspace.ExecAsync(vessel, execRequest).ConfigureAwait(false);

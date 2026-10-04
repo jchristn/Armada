@@ -72,6 +72,8 @@ namespace Armada.Core.Services
                 // (e.g. leftover from a failed clone/seed), remove it and re-clone.
                 if (Directory.Exists(repoPath) && !await _Git.IsRepositoryAsync(repoPath, token).ConfigureAwait(false))
                 {
+                    if (!ManagedPaths.IsStrictlyUnder(repoPath, _Settings.ReposDirectory))
+                        throw new InvalidOperationException("Vessel " + vessel.Name + " LocalPath " + repoPath + " exists but is not a git repository, and it is outside the managed repos directory, so Armada will not remove it.");
                     _Logging.Warn(_Header + "removing corrupt/incomplete repo directory: " + repoPath);
                     await ForceRemoveDirectoryAsync(repoPath, token).ConfigureAwait(false);
                 }

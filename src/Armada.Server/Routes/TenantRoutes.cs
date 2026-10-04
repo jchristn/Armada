@@ -256,6 +256,9 @@ namespace Armada.Server.Routes
                 if (existing == null) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
                 if (!ctx.IsAdmin && existing.TenantId != ctx.TenantId) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
                 if (!ctx.IsAdmin && !ctx.IsTenantAdmin && existing.Id != ctx.UserId) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
+                // A tenant admin may not change a global admin's account (password, email, activation): that would let
+                // a tenant admin take over a global admin that shares its tenant.
+                if (!ctx.IsAdmin && existing.IsAdmin && existing.Id != ctx.UserId) { req.Http.Response.StatusCode = 403; return (object)new { Error = "Only a global admin may modify a global admin account" }; }
                 UserMaster user = new UserMaster
                 {
                     Id = req.Parameters["id"],
@@ -297,6 +300,7 @@ namespace Armada.Server.Routes
                 UserMaster? user = await _database.Users.ReadByIdAsync(id).ConfigureAwait(false);
                 if (user == null) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
                 if (!ctx.IsAdmin && (!ctx.IsTenantAdmin || user.TenantId != ctx.TenantId)) { req.Http.Response.StatusCode = 403; return (object)new { Error = "Forbidden" }; }
+                if (!ctx.IsAdmin && user.IsAdmin) { req.Http.Response.StatusCode = 403; return (object)new { Error = "Only a global admin may delete a global admin account" }; }
                 if (user.IsProtected) { req.Http.Response.StatusCode = 403; return (object)new { Error = "Protected resources cannot be deleted directly" }; }
                 await DeleteUserCascadeAsync(user.TenantId, id).ConfigureAwait(false);
                 return (object)new { Success = true };
@@ -314,21 +318,16 @@ namespace Armada.Server.Routes
                 }
                 EnumerationQuery query = new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                // Bearer tokens are shown once, in the create response; reads return them redacted.
+                EnumerationResult<Credential> result;
                 if (ctx.IsAdmin)
-                {
-                    EnumerationResult<Credential> result = await _database.Credentials.EnumerateAsync(query).ConfigureAwait(false);
-                    return (object)result;
-                }
+                    result = await _database.Credentials.EnumerateAsync(query).ConfigureAwait(false);
                 else if (ctx.IsTenantAdmin)
-                {
-                    EnumerationResult<Credential> result = await _database.Credentials.EnumerateAsync(ctx.TenantId!, query).ConfigureAwait(false);
-                    return (object)result;
-                }
+                    result = await _database.Credentials.EnumerateAsync(ctx.TenantId!, query).ConfigureAwait(false);
                 else
-                {
-                    EnumerationResult<Credential> result = await _database.Credentials.EnumerateByUserAsync(ctx.TenantId!, ctx.UserId!, query).ConfigureAwait(false);
-                    return (object)result;
-                }
+                    result = await _database.Credentials.EnumerateByUserAsync(ctx.TenantId!, ctx.UserId!, query).ConfigureAwait(false);
+                result.Objects = result.Objects.Select(c => Credential.Redact(c)).ToList();
+                return (object)result;
             },
             api => api.WithTag("Credentials").WithSummary("List credentials"));
 
@@ -341,8 +340,14 @@ namespace Armada.Server.Routes
                     return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 string body = req.Http.Request.DataAsString;
-                Credential? cred = JsonSerializer.Deserialize<Credential>(body, _jsonOptions);
-                if (cred == null) { req.Http.Response.StatusCode = 400; return (object)new { Error = "Invalid request body" }; }
+                Credential? requested = JsonSerializer.Deserialize<Credential>(body, _jsonOptions);
+                if (requested == null) { req.Http.Response.StatusCode = 400; return (object)new { Error = "Invalid request body" }; }
+
+                // The server always generates the id and the bearer token; client-supplied values are ignored so a
+                // caller cannot choose a guessable or colliding token.
+                Credential cred = new Credential(requested.TenantId, requested.UserId);
+                cred.Name = requested.Name;
+                cred.Active = requested.Active;
                 cred.IsProtected = false;
                 if (!ctx.IsAdmin)
                 {
@@ -353,6 +358,7 @@ namespace Armada.Server.Routes
                 {
                     UserMaster? owner = await _database.Users.ReadAsync(ctx.TenantId!, cred.UserId).ConfigureAwait(false);
                     if (owner == null) { req.Http.Response.StatusCode = 400; return (object)new { Error = "User not found in tenant" }; }
+                    if (owner.IsAdmin && owner.Id != ctx.UserId) { req.Http.Response.StatusCode = 403; return (object)new { Error = "Only a global admin may create a credential for a global admin account" }; }
                 }
                 cred = await _database.Credentials.CreateAsync(cred).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 201;
@@ -371,7 +377,7 @@ namespace Armada.Server.Routes
                 string id = req.Parameters["id"];
                 Credential? cred = ctx.IsAdmin ? await _database.Credentials.ReadByIdAsync(id).ConfigureAwait(false) : await _database.Credentials.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false);
                 if (cred == null || (!ctx.IsAdmin && !ctx.IsTenantAdmin && cred.UserId != ctx.UserId)) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
-                return (object)cred;
+                return (object)Credential.Redact(cred);
             },
             api => api.WithTag("Credentials").WithSummary("Get credential by ID"));
 
@@ -390,13 +396,20 @@ namespace Armada.Server.Routes
                 if (existing == null) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
                 if (!ctx.IsAdmin && existing.TenantId != ctx.TenantId) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
                 if (!ctx.IsAdmin && !ctx.IsTenantAdmin && existing.UserId != ctx.UserId) { req.Http.Response.StatusCode = 404; return (object)new { Error = "Not found" }; }
+                if (!ctx.IsAdmin && existing.UserId != ctx.UserId)
+                {
+                    UserMaster? owner = await _database.Users.ReadByIdAsync(existing.UserId).ConfigureAwait(false);
+                    if (owner != null && owner.IsAdmin) { req.Http.Response.StatusCode = 403; return (object)new { Error = "Only a global admin may modify a global admin's credential" }; }
+                }
                 cred.Id = req.Parameters["id"];
                 cred.TenantId = existing.TenantId;
                 cred.UserId = existing.UserId;
                 cred.CreatedUtc = existing.CreatedUtc;
                 cred.IsProtected = existing.IsProtected;
+                // The token is never changed through update (it is redacted on reads); rotate by creating a new credential.
+                cred.BearerToken = existing.BearerToken;
                 cred = await _database.Credentials.UpdateAsync(cred).ConfigureAwait(false);
-                return (object)cred;
+                return (object)Credential.Redact(cred);
             },
             api => api.WithTag("Credentials").WithSummary("Update credential (admin only)"));
 

@@ -42,8 +42,10 @@ namespace Armada.Server.Mcp.Tools
                 {
                     EventIdArgs request = JsonSerializer.Deserialize<EventIdArgs>(args!.Value, _JsonOptions)!;
                     string eventId = request.EventId;
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     ArmadaEvent? evt = await database.Events.ReadAsync(eventId).ConfigureAwait(false);
-                    if (evt == null) return (object)new { Error = "Event not found" };
+                    if (evt == null || !CanSeeEvent(caller, evt)) return (object)new { Error = "Event not found" };
+                    if (!caller.IsAdmin && Armada.Core.Services.CommandAudit.IsAuditEvent(evt.EventType)) return (object)new { Error = "Audit events can be deleted only by a global admin" };
                     await database.Events.DeleteAsync(eventId).ConfigureAwait(false);
                     return (object)new { Status = "deleted", EventId = eventId };
                 });
@@ -66,6 +68,7 @@ namespace Armada.Server.Mcp.Tools
                     if (request.Ids == null || request.Ids.Count == 0)
                         return (object)new { Error = "ids is required and must not be empty" };
 
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     DeleteMultipleResult result = new DeleteMultipleResult();
                     foreach (string id in request.Ids)
                     {
@@ -75,9 +78,14 @@ namespace Armada.Server.Mcp.Tools
                             continue;
                         }
                         ArmadaEvent? evt = await database.Events.ReadAsync(id).ConfigureAwait(false);
-                        if (evt == null)
+                        if (evt == null || !CanSeeEvent(caller, evt))
                         {
                             result.Skipped.Add(new DeleteMultipleSkipped(id, "Not found"));
+                            continue;
+                        }
+                        if (!caller.IsAdmin && Armada.Core.Services.CommandAudit.IsAuditEvent(evt.EventType))
+                        {
+                            result.Skipped.Add(new DeleteMultipleSkipped(id, "Audit events can be deleted only by a global admin"));
                             continue;
                         }
                         await database.Events.DeleteAsync(id).ConfigureAwait(false);
@@ -86,6 +94,14 @@ namespace Armada.Server.Mcp.Tools
                     result.ResolveStatus();
                     return (object)result;
                 });
+        }
+
+        private static bool CanSeeEvent(AuthContext caller, ArmadaEvent evt)
+        {
+            if (caller.IsAdmin) return true;
+            if (!String.Equals(evt.TenantId ?? Armada.Core.Constants.DefaultTenantId, caller.TenantId, StringComparison.Ordinal)) return false;
+            if (caller.IsTenantAdmin) return true;
+            return String.Equals(evt.UserId, caller.UserId, StringComparison.Ordinal);
         }
     }
 }

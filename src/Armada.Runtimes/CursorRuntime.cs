@@ -1,6 +1,7 @@
 namespace Armada.Runtimes
 {
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using System.Diagnostics;
     using SyslogLogging;
 
@@ -96,7 +97,7 @@ namespace Armada.Runtimes
                 args.Add(model);
             }
 
-            args.Add("--force");
+            if (CaptainRuntimeOptions.GetAutoApprove(captain)) args.Add("--force");
             args.Add("--output-format");
             args.Add("text");
 

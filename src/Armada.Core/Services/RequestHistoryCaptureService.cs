@@ -6,6 +6,7 @@ namespace Armada.Core.Services
     using System.Text;
     using System.Text.Json;
     using System.Text.Json.Nodes;
+    using System.Text.RegularExpressions;
     using Armada.Core.Models;
     using Armada.Core.Settings;
 
@@ -23,6 +24,10 @@ namespace Armada.Core.Services
             "Set-Cookie",
             "X-Api-Key",
             "X-Token",
+            "X-Access-Key",
+            "X-Secret-Key",
+            "Sec-WebSocket-Protocol",
+            "Proxy-Authorization",
             Constants.ProxySessionTokenHeader
         };
 
@@ -42,6 +47,9 @@ namespace Armada.Core.Services
             "session",
             "sessionToken"
         };
+
+        private static readonly Regex _LooseJsonPair = new Regex("\"(?<k>[A-Za-z0-9_\\-]+)\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*\"", RegexOptions.Compiled);
+        private static readonly Regex _LooseAssignment = new Regex("(?<k>[A-Za-z0-9_\\-]+)=(?<v>[^&\\s\"]*)", RegexOptions.Compiled);
 
         private readonly ArmadaSettings _Settings;
         private readonly JsonSerializerOptions _JsonOptions = new JsonSerializerOptions
@@ -121,7 +129,7 @@ namespace Armada.Core.Services
                 Method = input.Method,
                 Route = input.Route,
                 RouteTemplate = input.RouteTemplate,
-                QueryString = input.QueryString,
+                QueryString = RedactQueryString(input.QueryString),
                 StatusCode = input.StatusCode,
                 DurationMs = Math.Round(input.DurationMs, 2),
                 RequestSizeBytes = input.RequestSizeBytes > 0 ? input.RequestSizeBytes : GetUtf8ByteCount(input.RequestBodyText),
@@ -163,7 +171,7 @@ namespace Armada.Core.Services
             Dictionary<string, string?> results = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
             foreach (KeyValuePair<string, string?> header in headers)
             {
-                if (_SensitiveHeaderNames.Contains(header.Key))
+                if (_SensitiveHeaderNames.Contains(header.Key) || IsSensitiveKey(header.Key))
                 {
                     results[header.Key] = "[REDACTED]";
                 }
@@ -180,7 +188,7 @@ namespace Armada.Core.Services
             Dictionary<string, string?> results = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
             foreach (KeyValuePair<string, string?> value in values)
             {
-                results[value.Key] = _SensitiveBodyKeys.Contains(value.Key) ? "[REDACTED]" : value.Value;
+                results[value.Key] = IsSensitiveKey(value.Key) ? "[REDACTED]" : value.Value;
             }
             return results;
         }
@@ -263,9 +271,15 @@ namespace Armada.Core.Services
             {
                 foreach (KeyValuePair<string, JsonNode?> kvp in obj.ToList())
                 {
-                    if (_SensitiveBodyKeys.Contains(kvp.Key))
+                    if (IsSensitiveKey(kvp.Key))
                     {
                         obj[kvp.Key] = "[REDACTED]";
+                    }
+                    else if (kvp.Value is JsonValue stringValue && stringValue.TryGetValue<string>(out string? text) && text != null)
+                    {
+                        // Secret-shaped values (ghp_..., sk-..., AKIA...) are scrubbed even under keys not known to hold secrets.
+                        string scrubbed = SecretRedactor.Redact(text);
+                        if (!String.Equals(scrubbed, text, StringComparison.Ordinal)) obj[kvp.Key] = scrubbed;
                     }
                     else if (kvp.Value != null)
                     {
@@ -287,7 +301,7 @@ namespace Armada.Core.Services
             Dictionary<string, string?> values = ParseQueryString(body);
             foreach (string key in values.Keys.ToList())
             {
-                if (_SensitiveBodyKeys.Contains(key))
+                if (IsSensitiveKey(key))
                 {
                     values[key] = "[REDACTED]";
                 }
@@ -298,16 +312,55 @@ namespace Armada.Core.Services
 
         private string RedactLooseText(string body)
         {
-            string sanitized = body;
-            foreach (string key in _SensitiveBodyKeys)
-            {
-                sanitized = sanitized.Replace($"{key}=", $"{key}=[REDACTED]", StringComparison.OrdinalIgnoreCase);
-                sanitized = sanitized.Replace($"\"{key}\":\"", $"\"{key}\":\"[REDACTED]", StringComparison.OrdinalIgnoreCase);
-            }
-            // Also scrub secret-shaped values by the shared definition, so a token that appears without a
-            // known key name is still redacted the same way the runtime-log formatter redacts it.
+            // Replace the values (not just mark them) of "key": "value" pairs and key=value pairs whose key names a
+            // secret, then scrub secret-shaped values by the shared definition so a token that appears without a known
+            // key name is still redacted the same way the runtime-log formatter redacts it.
+            string sanitized = _LooseJsonPair.Replace(body, m => IsSensitiveKey(m.Groups["k"].Value)
+                ? "\"" + m.Groups["k"].Value + "\":\"[REDACTED]\""
+                : m.Value);
+            sanitized = _LooseAssignment.Replace(sanitized, m => IsSensitiveKey(m.Groups["k"].Value)
+                ? m.Groups["k"].Value + "=[REDACTED]"
+                : m.Value);
             sanitized = SecretRedactor.Redact(sanitized);
             return sanitized;
+        }
+
+        /// <summary>
+        /// Whether a JSON property, form field, header, or query parameter name holds a secret: the explicit list, or a
+        /// name (ignoring case, '-' and '_') that contains "password" or "secret" or ends with token, apikey,
+        /// accesskey, secretkey, privatekey, or encryptionkey. Token counts ("tokens", "maxTokens") are not matched.
+        /// </summary>
+        /// <param name="key">Name.</param>
+        /// <returns>True when the value must be redacted.</returns>
+        public static bool IsSensitiveKey(string? key)
+        {
+            if (String.IsNullOrEmpty(key)) return false;
+            if (_SensitiveBodyKeys.Contains(key)) return true;
+            string normalized = key.Replace("-", String.Empty).Replace("_", String.Empty).ToLowerInvariant();
+            if (normalized.Contains("password") || normalized.Contains("secret")) return true;
+            return normalized.EndsWith("token", StringComparison.Ordinal)
+                || normalized.EndsWith("apikey", StringComparison.Ordinal)
+                || normalized.EndsWith("accesskey", StringComparison.Ordinal)
+                || normalized.EndsWith("secretkey", StringComparison.Ordinal)
+                || normalized.EndsWith("privatekey", StringComparison.Ordinal)
+                || normalized.EndsWith("encryptionkey", StringComparison.Ordinal);
+        }
+
+        private static string? RedactQueryString(string? queryString)
+        {
+            if (String.IsNullOrEmpty(queryString)) return queryString;
+            bool leading = queryString.StartsWith("?", StringComparison.Ordinal);
+            string working = leading ? queryString.Substring(1) : queryString;
+            string[] pairs = working.Split('&');
+            for (int i = 0; i < pairs.Length; i++)
+            {
+                int eq = pairs[i].IndexOf('=');
+                string name = eq >= 0 ? pairs[i].Substring(0, eq) : pairs[i];
+                if (eq >= 0 && IsSensitiveKey(Uri.UnescapeDataString(name))) pairs[i] = name + "=[REDACTED]";
+            }
+
+            string rebuilt = String.Join("&", pairs);
+            return SecretRedactor.Redact(leading ? "?" + rebuilt : rebuilt);
         }
 
         private static Dictionary<string, string?> ParseQueryString(string? queryString)

@@ -54,7 +54,9 @@ namespace Armada.Core.Services
                 args.Add(finalMessageFilePath!);
             }
 
-            AppendApprovalArguments(args, options?.ApprovalPolicy);
+            string? approvalPolicy = options?.ApprovalPolicy;
+            if (String.IsNullOrWhiteSpace(approvalPolicy) && options?.AutoApprove == false) approvalPolicy = "deny";
+            AppendApprovalArguments(args, approvalPolicy);
             AppendCommonOverrides(args, options, model);
 
             args.Add("--working-directory");

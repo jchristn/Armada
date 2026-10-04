@@ -303,7 +303,7 @@ namespace Armada.Server.Routes
 
             app.Post("/api/v1/server/stop", async (ApiRequest req) =>
             {
-                if (_settings.RequireAuthForShutdown)
+                // Always requires a global admin (the deprecated RequireAuthForShutdown setting is ignored).
                 {
                     AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
                     if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
@@ -328,7 +328,7 @@ namespace Armada.Server.Routes
 
             app.Post("/api/v1/server/restart", async (ApiRequest req) =>
             {
-                if (_settings.RequireAuthForShutdown)
+                // Always requires a global admin (the deprecated RequireAuthForShutdown setting is ignored).
                 {
                     AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
                     if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
@@ -363,7 +363,7 @@ namespace Armada.Server.Routes
 
             app.Post<ServerRebuildRequest>("/api/v1/server/rebuild", async (ApiRequest req) =>
             {
-                if (_settings.RequireAuthForShutdown)
+                // Always requires a global admin (the deprecated RequireAuthForShutdown setting is ignored).
                 {
                     AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
                     if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
@@ -418,7 +418,7 @@ namespace Armada.Server.Routes
 
             app.Post("/api/v1/server/rollback", async (ApiRequest req) =>
             {
-                if (_settings.RequireAuthForShutdown)
+                // Always requires a global admin (the deprecated RequireAuthForShutdown setting is ignored).
                 {
                     AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
                     if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
@@ -519,7 +519,15 @@ namespace Armada.Server.Routes
 
                 bool remoteControlChanged = body.RemoteControl != null;
                 if (remoteControlChanged)
-                    _settings.RemoteControl = body.RemoteControl!;
+                {
+                    // Secrets come back from GET redacted; a redacted (or omitted) value keeps the stored secret.
+                    RemoteControlSettings incoming = body.RemoteControl!;
+                    if (incoming.EnrollmentToken == _RedactedSecret)
+                        incoming.EnrollmentToken = _settings.RemoteControl.EnrollmentToken;
+                    if (incoming.Password == _RedactedSecret)
+                        incoming.Password = _settings.RemoteControl.Password;
+                    _settings.RemoteControl = incoming;
+                }
 
                 await _settings.SaveAsync().ConfigureAwait(false);
 
@@ -611,6 +619,16 @@ namespace Armada.Server.Routes
             return Environment.ProcessPath ?? String.Empty;
         }
 
+        private const string _RedactedSecret = "********";
+
+        private static RemoteControlSettings RedactRemoteControl(RemoteControlSettings source)
+        {
+            RemoteControlSettings copy = JsonSerializer.Deserialize<RemoteControlSettings>(JsonSerializer.Serialize(source)) ?? new RemoteControlSettings();
+            copy.Password = _RedactedSecret;
+            if (!String.IsNullOrEmpty(source.EnrollmentToken)) copy.EnrollmentToken = _RedactedSecret;
+            return copy;
+        }
+
         private object BuildSettingsResponse()
         {
             return new
@@ -632,7 +650,7 @@ namespace Armada.Server.Routes
                 ReposDirectory = _settings.ReposDirectory,
                 SelfVesselId = _settings.SelfVesselId,
                 RebuildSlotRetentionCount = _settings.RebuildSlotRetentionCount,
-                RemoteControl = _settings.RemoteControl,
+                RemoteControl = RedactRemoteControl(_settings.RemoteControl),
                 Import = _settings.Import,
                 FleetActions = _settings.FleetActions,
                 RepositoryHealth = _settings.RepositoryHealth

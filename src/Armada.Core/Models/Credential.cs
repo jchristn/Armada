@@ -122,6 +122,31 @@ namespace Armada.Core.Models
         #region Public-Methods
 
         /// <summary>
+        /// Return a copy of the credential with the bearer token masked (last four characters kept). Bearer tokens are
+        /// returned in full only once, when the credential is created.
+        /// </summary>
+        /// <param name="credential">Credential.</param>
+        /// <returns>Redacted copy.</returns>
+        public static Credential Redact(Credential credential)
+        {
+            if (credential == null) throw new ArgumentNullException(nameof(credential));
+            string token = credential.BearerToken ?? String.Empty;
+            string masked = token.Length > 8 ? "****" + token.Substring(token.Length - 4) : "****";
+            return new Credential
+            {
+                Id = credential.Id,
+                TenantId = credential.TenantId,
+                UserId = credential.UserId,
+                Name = credential.Name,
+                BearerToken = masked,
+                Active = credential.Active,
+                IsProtected = credential.IsProtected,
+                CreatedUtc = credential.CreatedUtc,
+                LastUpdateUtc = credential.LastUpdateUtc
+            };
+        }
+
+        /// <summary>
         /// Generate a cryptographically random 64-character alphanumeric bearer token.
         /// </summary>
         /// <returns>64-character token string.</returns>

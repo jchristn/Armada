@@ -63,11 +63,21 @@ export interface AuthenticateResult {
   success: boolean;
   token: string | null;
   expiresUtc: string | null;
+  passwordChangeRequired?: boolean;
 }
 
 export interface WhoAmIResult {
   tenant: TenantMetadata | null;
   user: UserMaster | null;
+  /** The signed-in seeded admin still uses the default password; the API is limited until it changes. */
+  passwordChangeRequired?: boolean;
+  /** Default credentials are still in use on this server (admins and tenant admins only). */
+  defaultCredentialsInUse?: boolean;
+}
+
+export interface PasswordChangeRequest {
+  CurrentPassword: string;
+  NewPassword: string;
 }
 
 export interface TenantLookupResult {
@@ -909,19 +919,6 @@ export interface Skill {
   active: boolean;
   createdUtc: string;
   lastUpdateUtc: string;
-}
-
-export interface AskLink {
-  label: string;
-  href: string;
-}
-
-export type AskResponseKind = 'Answer' | 'Help' | 'Unknown';
-
-export interface AskResponse {
-  reply: string;
-  kind: AskResponseKind;
-  links: AskLink[];
 }
 
 export interface CaptainChatMessage {

@@ -8927,3 +8927,15 @@ tr.row-muted td { opacity: 0.72; }
     .ask-live-dot { animation: none; }
     .ask-home-list, .ask-work-progress-done, .ask-work-progress-failed, .ask-chevron { transition: none; }
 }
+
+/* -- Security: default credentials banner and forced password change -- */
+.default-credentials-banner {
+    padding: 0.6rem 1rem;
+    margin: 0 0 0.75rem 0;
+    border: 1px solid color-mix(in srgb, var(--orange, #d98a00) 45%, var(--border));
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--orange, #d98a00) 12%, var(--bg-card));
+    font-size: 0.9rem;
+}
+.password-change-explainer { color: var(--text-dim); font-size: 13px; margin: -16px 0 18px; text-align: center; }
+.captain-auto-approve-field { display: flex; align-items: center; gap: 0.4rem; font-weight: 500; }

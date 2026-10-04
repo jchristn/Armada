@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import DefaultCredentialsBanner from './DefaultCredentialsBanner';
 import { useLocale } from '../context/LocaleContext';
 import { useTheme } from '../context/ThemeContext';
 import { useWebSocket } from '../context/WebSocketContext';
@@ -394,6 +395,7 @@ export default function Layout() {
           </div>
 
           <main className="main">
+            <DefaultCredentialsBanner />
             <div className="view">
               <Outlet />
             </div>

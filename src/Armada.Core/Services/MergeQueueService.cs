@@ -470,6 +470,17 @@ namespace Armada.Core.Services
                 string testCommand = entry.TestCommand ?? _Settings.MergeQueueTestCommand ?? "";
                 if (!String.IsNullOrEmpty(testCommand))
                 {
+                    await CommandAudit.RecordAsync(_Database, new CommandAuditRecord
+                    {
+                        Source = "MergeQueueTest",
+                        Command = testCommand,
+                        WorkingDirectory = integrationPath,
+                        TenantId = entry.TenantId,
+                        UserId = entry.UserId,
+                        VesselId = entry.VesselId,
+                        EntityType = "MergeEntry",
+                        EntityId = entry.Id
+                    }, _Logging, token).ConfigureAwait(false);
                     TestResult testResult = await RunTestsAsync(integrationPath, testCommand, token).ConfigureAwait(false);
                     if (testResult.ExitCode != 0)
                     {

@@ -289,7 +289,8 @@ namespace Armada.Server.WebSocket
                     catch { }
 
                     // Clean up bare repo
-                    if (!String.IsNullOrEmpty(delVessel.LocalPath) && System.IO.Directory.Exists(delVessel.LocalPath))
+                    if (!String.IsNullOrEmpty(delVessel.LocalPath) && System.IO.Directory.Exists(delVessel.LocalPath)
+                        && Armada.Core.Services.ManagedPaths.IsStrictlyUnder(delVessel.LocalPath, _Settings?.ReposDirectory))
                     {
                         try { System.IO.Directory.Delete(delVessel.LocalPath, true); }
                         catch { }

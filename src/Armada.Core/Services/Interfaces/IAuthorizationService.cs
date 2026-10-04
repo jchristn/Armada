@@ -1,5 +1,6 @@
 namespace Armada.Core.Services.Interfaces
 {
+    using Armada.Core.Authorization;
     using Armada.Core.Models;
 
     /// <summary>
@@ -15,6 +16,15 @@ namespace Armada.Core.Services.Interfaces
         /// <param name="path">Request path.</param>
         /// <returns>True if authorized.</returns>
         bool IsAuthorized(AuthContext ctx, string method, string path);
+
+        /// <summary>
+        /// Check if a caller satisfies an explicit requirement (as declared in
+        /// <see cref="RouteAuthorizationRegistry"/> or <see cref="McpToolAuthorizationRegistry"/>).
+        /// </summary>
+        /// <param name="ctx">Authentication context.</param>
+        /// <param name="requirement">Declared requirement.</param>
+        /// <returns>True if authorized.</returns>
+        bool IsAuthorized(AuthContext ctx, AuthorizationRequirement requirement);
 
         /// <summary>
         /// Require authentication. Throws if not authenticated.

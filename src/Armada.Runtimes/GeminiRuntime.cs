@@ -1,6 +1,7 @@
 namespace Armada.Runtimes
 {
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using System.Diagnostics;
     using SyslogLogging;
 
@@ -101,7 +102,7 @@ namespace Armada.Runtimes
             // is truncated at the first newline. Gemini reads the prompt from stdin when it is run
             // non-interactively (piped stdin) with no -p argument.
             args.Add("--approval-mode");
-            args.Add(ApprovalMode);
+            args.Add(CaptainRuntimeOptions.GetAutoApprove(captain) ? ApprovalMode : "auto_edit");
 
             return args;
         }

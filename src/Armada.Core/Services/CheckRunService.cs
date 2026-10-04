@@ -111,6 +111,18 @@ namespace Armada.Core.Services
             run = await _Database.CheckRuns.CreateAsync(run, token).ConfigureAwait(false);
             OnCheckRunChanged?.Invoke(run);
 
+            await CommandAudit.RecordAsync(_Database, new CommandAuditRecord
+            {
+                Source = "CheckRun",
+                Command = command,
+                WorkingDirectory = run.WorkingDirectory,
+                TenantId = run.TenantId,
+                UserId = run.UserId,
+                VesselId = run.VesselId,
+                EntityType = "CheckRun",
+                EntityId = run.Id
+            }, _Logging, token).ConfigureAwait(false);
+
             Stopwatch sw = Stopwatch.StartNew();
             CommandExecutionResult execution;
 

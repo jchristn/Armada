@@ -135,7 +135,8 @@ namespace Armada.Server.Mcp.Tools
                         muxTemperature = new { type = "number", description = "Optional Mux temperature override" },
                         muxMaxTokens = new { type = "integer", description = "Optional Mux max tokens override" },
                         muxSystemPromptPath = new { type = "string", description = "Optional Mux system prompt file path" },
-                        muxApprovalPolicy = new { type = "string", description = "Optional Mux approval policy override" }
+                        muxApprovalPolicy = new { type = "string", description = "Optional Mux approval policy override" },
+                        autoApprove = new { type = "boolean", description = "Whether the CLI captain runs with its auto-approve or permission-bypass flag (default true). False runs it without auto-approve where the runtime supports it (Claude Code acceptEdits, Codex workspace-write sandbox, Gemini auto_edit, Cursor without --force, OpenCode without --auto, Mux deny)." }
                     },
                     required = new[] { "name" }
                 },
@@ -156,6 +157,7 @@ namespace Armada.Server.Mcp.Tools
                     captain.ReasoningEffort = ParseReasoningEffort(request.ReasoningEffort);
                     captain.Tier = ParseTier(request.Tier);
                     ApplyMuxOptions(captain, request);
+                    captain.RuntimeOptionsJson = CaptainRuntimeOptions.WithAutoApprove(captain.RuntimeOptionsJson, request.AutoApprove);
 
                     if (agentLifecycle != null)
                     {
@@ -191,7 +193,8 @@ namespace Armada.Server.Mcp.Tools
                         muxTemperature = new { type = "number", description = "Optional Mux temperature override" },
                         muxMaxTokens = new { type = "integer", description = "Optional Mux max tokens override" },
                         muxSystemPromptPath = new { type = "string", description = "Optional Mux system prompt file path; empty string clears it" },
-                        muxApprovalPolicy = new { type = "string", description = "Optional Mux approval policy override; empty string clears it" }
+                        muxApprovalPolicy = new { type = "string", description = "Optional Mux approval policy override; empty string clears it" },
+                        autoApprove = new { type = "boolean", description = "Whether the CLI captain runs with its auto-approve or permission-bypass flag. Omit to keep the current value." }
                     },
                     required = new[] { "captainId" }
                 },
@@ -217,9 +220,11 @@ namespace Armada.Server.Mcp.Tools
                         captain.ReasoningEffort = ParseReasoningEffort(request.ReasoningEffort);
                     if (request.Tier != null)
                         captain.Tier = ParseTier(request.Tier);
+                    bool? existingAutoApprove = CaptainRuntimeOptions.GetExplicitAutoApprove(captain.RuntimeOptionsJson);
                     try
                     {
                         ApplyMuxOptions(captain, request, captain.Runtime == AgentRuntimeEnum.Mux ? captain : null);
+                        captain.RuntimeOptionsJson = CaptainRuntimeOptions.WithAutoApprove(captain.RuntimeOptionsJson, request.AutoApprove ?? existingAutoApprove);
                     }
                     catch (Exception ex)
                     {

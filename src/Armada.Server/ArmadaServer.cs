@@ -11,6 +11,7 @@ namespace Armada.Server
     using Voltaic.Core;
     using Voltaic.Mcp;
     using Armada.Core;
+    using Armada.Core.Authorization;
     using ArmadaConstants = Armada.Core.Constants;
     using Armada.Core.Database;
     using Armada.Core.Enums;
@@ -37,6 +38,15 @@ namespace Armada.Server
         /// Callback invoked when the server is stopping, allowing the host to unblock.
         /// </summary>
         public Action? OnStopping { get; set; }
+
+        /// <summary>
+        /// MCP tool names registered on the HTTP MCP server, in registration order (populated by <see cref="StartAsync"/>).
+        /// Used by the authorization coverage test to prove every tool has a declared requirement.
+        /// </summary>
+        public IReadOnlyList<string> RegisteredMcpTools
+        {
+            get { lock (_RegisteredMcpToolsLock) { return new List<string>(_RegisteredMcpTools); } }
+        }
 
         #endregion
 
@@ -117,6 +127,8 @@ namespace Armada.Server
         private int _HealthCheckCycles = 0;
         private DateTime _StartUtc = DateTime.UtcNow;
         private readonly ConditionalWeakTable<HttpContextBase, AuthContext> _RequestAuthContexts = new ConditionalWeakTable<HttpContextBase, AuthContext>();
+        private readonly List<string> _RegisteredMcpTools = new List<string>();
+        private readonly object _RegisteredMcpToolsLock = new object();
 
         private static readonly JsonSerializerOptions _JsonOptions = new JsonSerializerOptions
         {
@@ -162,6 +174,11 @@ namespace Armada.Server
             // Ensure a local API key exists so trusted local clients (the armada CLI) can authenticate
             // to the REST API. Generated once and persisted to settings.json, which the CLI also reads.
             await EnsureApiKeyAsync().ConfigureAwait(false);
+
+            // Safe defaults: apply an initial admin password from the environment (headless installs), retire the
+            // seeded "default" bearer token once the default password is gone, and refuse to listen on a non-loopback
+            // hostname while default credentials are still in use unless explicitly allowed.
+            await EnforceDefaultCredentialPolicyAsync().ConfigureAwait(false);
 
             // Initialize services
             _Git = new GitService(_Logging);
@@ -217,7 +234,12 @@ namespace Armada.Server
                 ? ArmadaMcpConfigBuilder.GetMcpUrl(_Settings.McpPort)
                 : _Settings.Harbor.AdvertisedMcpBaseUrl!;
             _HarborConnectionManager = new HarborConnectionManager(_HarborService, _Logging, harborMcpUrl);
-            _HarborLinkEndpoint = new HarborLinkEndpoint(_HarborConnectionManager, _Settings.Harbor, _Logging);
+            _HarborLinkEndpoint = new HarborLinkEndpoint(
+                _HarborConnectionManager,
+                _Settings.Harbor,
+                _Logging,
+                (authHeader, tokenHeader, apiKeyHeader) => _AuthenticationService.AuthenticateAsync(authHeader, tokenHeader, apiKeyHeader),
+                DefaultCredentialService.IsLoopbackHostname(_Settings.Rest.Hostname));
             _RemoteTunnel = new RemoteTunnelManager(_Logging, _Settings);
             _RemoteDashboardRelay = new RemoteDashboardRelayService(_Logging, _Settings, _RemoteTunnel.PublishEventAsync);
             admiralService.OnGetRemoteTunnelStatus = _RemoteTunnel.GetStatus;
@@ -373,6 +395,9 @@ namespace Armada.Server
             _App.Routes.PreRouting = async (HttpContextBase ctx) =>
             {
                 ctx.Timestamp.Start = DateTime.UtcNow;
+
+                // Watson may reuse context objects across requests: never let a previous request's identity carry over.
+                _RequestAuthContexts.Remove(ctx);
                 ctx.Response.ContentType = "application/json";
                 if (IsDashboardWebSocketUpgrade(ctx) && _WebSocketHub != null)
                 {
@@ -383,7 +408,12 @@ namespace Armada.Server
                         ctx.Response.ContentType = "application/json";
                         await ctx.Response.Send("{\"error\":\"Authentication required\",\"message\":\"Pass a token as ?token= or in Sec-WebSocket-Protocol, or the REST credential headers\"}").ConfigureAwait(false);
                     }
+                    return;
                 }
+
+                // Central authorization: every registered REST route has an explicit requirement in
+                // RouteAuthorizationRegistry, checked here before the route handler runs.
+                await AuthorizeRegisteredRouteAsync(ctx).ConfigureAwait(false);
             };
 
             // Log every API call and apply CORS on every response
@@ -393,12 +423,13 @@ namespace Armada.Server
                 _Logging.Debug(
                     _Header +
                     ctx.Request.Method + " " +
-                    ctx.Request.Url.RawWithQuery + " " +
+                    ctx.Request.Url.RawWithoutQuery + " " +
                     ctx.Response.StatusCode + " " +
                     "(" + (ctx.Timestamp.TotalMs.HasValue ? ctx.Timestamp.TotalMs.Value.ToString("F2") : "?") + "ms)");
 
                 ApplyCorsHeaders(ctx);
                 await CaptureRequestHistoryAsync(ctx).ConfigureAwait(false);
+                _RequestAuthContexts.Remove(ctx);
                 await Task.CompletedTask.ConfigureAwait(false);
             };
 
@@ -589,12 +620,115 @@ namespace Armada.Server
             OnStopping?.Invoke();
         }
 
+        /// <summary>
+        /// Every REST route registered on the Admiral's web server as "METHOD template" (static and parameter routes in
+        /// both routing groups). Used by the authorization coverage test to prove every route has a declared requirement.
+        /// </summary>
+        /// <returns>Registered route keys.</returns>
+        public List<string> GetRegisteredRestRoutes()
+        {
+            List<string> routes = new List<string>();
+            if (_App == null) return routes;
+            foreach (WatsonWebserver.Core.Routing.RoutingGroup group in new WatsonWebserver.Core.Routing.RoutingGroup[] { _App.Routes.PreAuthentication, _App.Routes.PostAuthentication })
+            {
+                foreach (WatsonWebserver.Core.Routing.StaticRoute route in group.Static.GetAll())
+                    routes.Add(route.Method.ToString().ToUpperInvariant() + " " + (route.Path.Length > 1 ? route.Path.TrimEnd('/') : route.Path));
+                foreach (WatsonWebserver.Core.Routing.ParameterRoute route in group.Parameter.GetAll())
+                    routes.Add(route.Method.ToString().ToUpperInvariant() + " " + route.Path);
+            }
+
+            return routes;
+        }
+
         #endregion
 
         #region Private-Methods
 
+        /// <summary>
+        /// Resolve the route template Watson will dispatch this request to (static routes first, then parameter routes,
+        /// mirroring Watson's own order), or null when the request falls through to the default route (dashboard files).
+        /// </summary>
+        private string? ResolveRegisteredRouteTemplate(HttpContextBase ctx)
+        {
+            string requestPath = ctx.Request.Url.RawWithoutQuery ?? "/";
+            string normalizedPath = ctx.Request.Url.NormalizedRawWithoutQuery ?? requestPath;
+            foreach (WatsonWebserver.Core.Routing.RoutingGroup group in new WatsonWebserver.Core.Routing.RoutingGroup[] { _App.Routes.PreAuthentication, _App.Routes.PostAuthentication })
+            {
+                if (group.Static.MatchNormalized(ctx.Request.Method, normalizedPath, out WatsonWebserver.Core.Routing.StaticRoute staticRoute) != null && staticRoute != null)
+                    return staticRoute.Path;
+                if (group.Parameter.Match(ctx.Request.Method, requestPath, out System.Collections.Specialized.NameValueCollection _, out WatsonWebserver.Core.Routing.ParameterRoute parameterRoute) != null && parameterRoute != null)
+                    return parameterRoute.Path;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Enforce the declared requirement of the route this request will reach. Undeclared routes fail closed to
+        /// AdminOnly. Sends 401/403 and ends the request when the caller is not authorized.
+        /// </summary>
+        private async Task AuthorizeRegisteredRouteAsync(HttpContextBase ctx)
+        {
+            if (ctx.Request.Method == WatsonWebserver.Core.HttpMethod.OPTIONS) return;
+            string? template = ResolveRegisteredRouteTemplate(ctx);
+            if (template == null) return;
+
+            string method = ctx.Request.Method.ToString().ToUpperInvariant();
+            AuthorizationRequirement requirement;
+            if (!RouteAuthorizationRegistry.TryGetByTemplate(method, template, out AuthorizationRequirement? declared) || declared == null)
+            {
+                _Logging.Warn(_Header + "route " + method + " " + template + " has no declared authorization requirement; treating it as AdminOnly");
+                requirement = new AuthorizationRequirement("Undeclared", ResourceOperationEnum.Admin, PermissionLevel.AdminOnly);
+            }
+            else
+            {
+                requirement = declared;
+            }
+
+            if (requirement.Level == PermissionLevel.NoAuthRequired) return;
+
+            AuthContext auth = await AuthenticateRequestAsync(ctx).ConfigureAwait(false);
+            if (!_AuthorizationService.IsAuthorized(auth, requirement))
+            {
+                ctx.Response.StatusCode = auth.IsAuthenticated ? 403 : 401;
+                ctx.Response.ContentType = "application/json";
+                ApiErrorResponse denied = new ApiErrorResponse
+                {
+                    Error = ApiResultEnum.BadRequest,
+                    Message = auth.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required"
+                };
+                await ctx.Response.Send(_App.Serializer.SerializeJson(denied, false)).ConfigureAwait(false);
+                return;
+            }
+
+            if (auth.PasswordChangeRequired && !IsAllowedDuringPasswordChange(method, template))
+            {
+                ctx.Response.StatusCode = 403;
+                ctx.Response.ContentType = "application/json";
+                ApiErrorResponse blocked = new ApiErrorResponse
+                {
+                    Error = ApiResultEnum.BadRequest,
+                    Message = "Password change required: change the default password with PUT /api/v1/account/password before using the API with this session"
+                };
+                await ctx.Response.Send(_App.Serializer.SerializeJson(blocked, false)).ConfigureAwait(false);
+            }
+        }
+
+        private static bool IsAllowedDuringPasswordChange(string method, string template)
+        {
+            if (String.Equals(template, "/api/v1/whoami", StringComparison.OrdinalIgnoreCase)) return true;
+            if (String.Equals(template, "/api/v1/account/password", StringComparison.OrdinalIgnoreCase)) return true;
+            if (String.Equals(template, "/api/v1/authenticate", StringComparison.OrdinalIgnoreCase)) return true;
+            if (String.Equals(template, "/api/v1/status/health", StringComparison.OrdinalIgnoreCase)) return true;
+            if (String.Equals(method, "GET", StringComparison.OrdinalIgnoreCase) && String.Equals(template, "/api/v1/status", StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
         private async Task<AuthContext> AuthenticateRequestAsync(WatsonWebserver.Core.HttpContextBase ctx)
         {
+            // The central authorization check in PreRouting authenticates once per request; route handlers reuse it.
+            if (_RequestAuthContexts.TryGetValue(ctx, out AuthContext? cached) && cached != null) return cached;
+
             string? authHeader = ctx.Request.Headers.Get("Authorization");
             string? tokenHeader = ctx.Request.Headers.Get("X-Token");
             string? apiKeyHeader = ctx.Request.Headers.Get("X-Api-Key");
@@ -617,45 +751,94 @@ namespace Armada.Server
 
         private async Task<AuthenticationResult> AuthenticateMcpRequestAsync(System.Net.HttpListenerRequest request)
         {
-            // Populate the caller's identity for the MCP tool handlers when a credential is presented.
-            // This is additive: unauthenticated local/stdio callers still succeed (IsAuthenticated = true with
-            // no claims), and the tool handlers fall back to the default tenant-admin context. When a valid
-            // credential is presented, the resolved tenant/user/role claims flow into the handlers via
-            // Voltaic's ambient RpcCallContext so MCP tools are scoped per-user, matching the REST API.
-            AuthenticationResult result = new AuthenticationResult { IsAuthenticated = true };
-            try
+            // MCP is authenticated by default (Decision D2). A presented credential must be valid; its tenant, user, and
+            // role claims flow into the tool handlers through Voltaic's ambient RpcCallContext so MCP tools are scoped
+            // per caller, matching the REST API. A request with no credential is accepted only when
+            // Mcp.AllowUnauthenticatedLoopback is on, the MCP listener is bound to a loopback hostname, and the caller
+            // connects from loopback; it then runs as the default tenant's tenant admin (the local Claude Code setup).
+            string? authHeader = request.Headers["Authorization"];
+            string? tokenHeader = request.Headers["X-Token"];
+            string? apiKeyHeader = request.Headers["X-Api-Key"];
+            bool presented = !String.IsNullOrEmpty(authHeader) || !String.IsNullOrEmpty(tokenHeader) || !String.IsNullOrEmpty(apiKeyHeader);
+
+            if (presented)
             {
-                string? authHeader = request.Headers["Authorization"];
-                string? tokenHeader = request.Headers["X-Token"];
-                string? apiKeyHeader = request.Headers["X-Api-Key"];
-                if (!String.IsNullOrEmpty(authHeader) || !String.IsNullOrEmpty(tokenHeader) || !String.IsNullOrEmpty(apiKeyHeader))
+                AuthContext? ctx = null;
+                try
                 {
-                    AuthContext ctx = await _AuthenticationService.AuthenticateAsync(authHeader, tokenHeader, apiKeyHeader).ConfigureAwait(false);
-                    if (ctx != null && ctx.IsAuthenticated && !String.IsNullOrEmpty(ctx.UserId))
-                    {
-                        result.Principal = ctx.UserId;
-                        result.Claims = new Dictionary<string, string>
-                        {
-                            ["tenantId"] = ctx.TenantId ?? String.Empty,
-                            ["userId"] = ctx.UserId ?? String.Empty,
-                            ["isAdmin"] = ctx.IsAdmin ? "true" : "false",
-                            ["isTenantAdmin"] = ctx.IsTenantAdmin ? "true" : "false",
-                            ["authMethod"] = ctx.AuthMethod ?? "Mcp"
-                        };
-
-                        // A thread-scoped token marks every tool call of this request as an Ask Armada thread call, which
-                        // the tool gate turns into a proposal unless the tool is read-only or the thread auto-approves.
-                        if (!String.IsNullOrEmpty(ctx.AskThreadId)) result.Claims["askThreadId"] = ctx.AskThreadId!;
-                    }
+                    ctx = await _AuthenticationService.AuthenticateAsync(authHeader, tokenHeader, apiKeyHeader).ConfigureAwait(false);
                 }
-            }
-            catch (Exception ex)
-            {
-                // Never fail the MCP request on an auth-resolution error; treat as an anonymous local caller.
-                _Logging.Debug(_Header + "MCP caller authentication skipped: " + ex.Message);
+                catch (Exception ex)
+                {
+                    _Logging.Warn(_Header + "MCP caller authentication error: " + ex.Message);
+                }
+
+                if (ctx == null || !ctx.IsAuthenticated || String.IsNullOrEmpty(ctx.UserId))
+                    return AuthenticationResult.BearerChallenge(null, "invalid_token", "Invalid or expired credential", "Invalid or expired credential.");
+
+                AuthenticationResult result = new AuthenticationResult { IsAuthenticated = true, Principal = ctx.UserId };
+                result.Claims = new Dictionary<string, string>
+                {
+                    ["tenantId"] = ctx.TenantId ?? String.Empty,
+                    ["userId"] = ctx.UserId ?? String.Empty,
+                    ["isAdmin"] = ctx.IsAdmin ? "true" : "false",
+                    ["isTenantAdmin"] = ctx.IsTenantAdmin ? "true" : "false",
+                    ["authMethod"] = ctx.AuthMethod ?? "Mcp"
+                };
+
+                // A thread-scoped token marks every tool call of this request as an Ask Armada thread call, which
+                // the tool gate turns into a proposal unless the tool is read-only or the thread auto-approves.
+                if (!String.IsNullOrEmpty(ctx.AskThreadId)) result.Claims["askThreadId"] = ctx.AskThreadId!;
+                return result;
             }
 
-            return result;
+            if (IsUnauthenticatedMcpAllowed(request.RemoteEndPoint?.Address))
+                return new AuthenticationResult { IsAuthenticated = true };
+
+            return AuthenticationResult.BearerChallenge(null, null, null, "Authentication required: present Authorization: Bearer <token>, X-Token, or X-Api-Key. Unauthenticated MCP is allowed only on a loopback-bound listener with Mcp.AllowUnauthenticatedLoopback enabled.");
+        }
+
+        /// <summary>
+        /// Whether an MCP request without credentials is accepted: Mcp.AllowUnauthenticatedLoopback is on, the listener
+        /// hostname is loopback, and the remote address is loopback.
+        /// </summary>
+        /// <param name="remoteAddress">Caller address.</param>
+        /// <returns>True when allowed.</returns>
+        internal bool IsUnauthenticatedMcpAllowed(System.Net.IPAddress? remoteAddress)
+        {
+            if (!_Settings.Mcp.AllowUnauthenticatedLoopback) return false;
+            if (!DefaultCredentialService.IsLoopbackHostname(_Settings.Rest.Hostname)) return false;
+            return remoteAddress != null && System.Net.IPAddress.IsLoopback(remoteAddress);
+        }
+
+        private async Task EnforceDefaultCredentialPolicyAsync()
+        {
+            DefaultCredentialService defaults = new DefaultCredentialService(_Database, _Logging);
+            await defaults.ApplyInitialAdminPasswordAsync(Environment.GetEnvironmentVariable(DefaultCredentialService.InitialAdminPasswordEnvironmentVariable)).ConfigureAwait(false);
+            await defaults.RetireDefaultBearerTokenAsync().ConfigureAwait(false);
+
+            List<string> inUse = await defaults.GetDefaultsInUseAsync().ConfigureAwait(false);
+            if (inUse.Count == 0) return;
+
+            string summary = String.Join("; ", inUse);
+            if (DefaultCredentialService.IsLoopbackHostname(_Settings.Rest.Hostname))
+            {
+                _Logging.Warn(_Header + "default credentials are in use (" + summary + "); change the admin password before exposing this Admiral beyond localhost");
+                return;
+            }
+
+            if (_Settings.AllowDefaultCredentialsOnNetwork)
+            {
+                _Logging.Warn(_Header + "listening on non-loopback hostname " + _Settings.Rest.Hostname + " with default credentials in use (" + summary + ") because AllowDefaultCredentialsOnNetwork is set");
+                return;
+            }
+
+            string message =
+                "Refusing to listen on non-loopback hostname '" + _Settings.Rest.Hostname + "' while default credentials are in use (" + summary + "). " +
+                "Set the " + DefaultCredentialService.InitialAdminPasswordEnvironmentVariable + " environment variable (first start), or start on localhost and change the admin password " +
+                "(dashboard or PUT /api/v1/account/password), or set AllowDefaultCredentialsOnNetwork to true to accept the risk.";
+            _Logging.Warn(_Header + message);
+            throw new InvalidOperationException(message);
         }
 
         private async Task EnsureApiKeyAsync()
@@ -698,7 +881,9 @@ namespace Armada.Server
                 systemUser.Id = ArmadaConstants.SystemUserId;
                 systemUser.TenantId = ArmadaConstants.SystemTenantId;
                 systemUser.Email = ArmadaConstants.SystemUserEmail;
-                systemUser.PasswordSha256 = UserMaster.ComputePasswordHash("system");
+                // The system identity backs the local API key only; password login is refused for it, and its stored
+                // password is a random value nobody knows.
+                systemUser.PasswordSha256 = UserMaster.ComputePasswordHash(Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"));
                 systemUser.IsAdmin = true;
                 systemUser.IsTenantAdmin = true;
                 systemUser.IsProtected = true;
@@ -713,7 +898,7 @@ namespace Armada.Server
             Func<WatsonWebserver.Core.HttpContextBase, Task<AuthContext>> authenticate = AuthenticateRequestAsync;
 
             // Authentication & identity
-            new AuthRoutes(_SessionTokenService, _AuthenticationService, _Database, _Settings, _JsonOptions)
+            new AuthRoutes(_SessionTokenService, _AuthenticationService, _Database, _Settings, _JsonOptions, new DefaultCredentialService(_Database, _Logging))
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Tenants, users, credentials
@@ -756,7 +941,7 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Ask Armada assistant
-            new AskRoutes(new AskArmadaService(_Database, _Admiral, _Logging), _CaptainChat, _JsonOptions, _AskThreads, _AskTurns, _AskActions)
+            new AskRoutes(_CaptainChat, _JsonOptions, _AskThreads, _AskTurns, _AskActions)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Needs-you inbox
@@ -782,7 +967,7 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Harbors (host runners)
-            new HarborRoutes(_HarborService, _HarborConnectionManager)
+            new HarborRoutes(_HarborService, _HarborConnectionManager, _Database)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Structured check runs
@@ -1192,7 +1377,9 @@ namespace Armada.Server
             // Every tool goes through the Ask Armada gate: calls made with a thread-scoped token become proposals unless
             // read-only or auto-approved; all other calls run unchanged. The original handler is kept for in-process
             // execution of approved proposals and quick actions.
+            handler = AuthorizeMcpTool(name, handler);
             handler = _AskActions.WrapTool(name, handler);
+            lock (_RegisteredMcpToolsLock) { _RegisteredMcpTools.Add(name); }
             _McpServer.RegisterTool(name, description, inputSchema, (RpcParameters? parameters) =>
             {
                 System.Text.Json.JsonElement? args = null;
@@ -1203,6 +1390,32 @@ namespace Armada.Server
                 }
                 return handler(args);
             });
+        }
+
+        /// <summary>
+        /// Wrap a tool handler with its declared requirement from <see cref="McpToolAuthorizationRegistry"/>, checked
+        /// against the caller of each call (the MCP request's credential, the loopback default context, or the Ask
+        /// Armada caller an approved proposal runs as). Undeclared tools fail closed to AdminOnly.
+        /// </summary>
+        private Func<System.Text.Json.JsonElement?, Task<object>> AuthorizeMcpTool(string name, Func<System.Text.Json.JsonElement?, Task<object>> handler)
+        {
+            if (!McpToolAuthorizationRegistry.TryGet(name, out AuthorizationRequirement? _))
+                _Logging.Warn(_Header + "MCP tool " + name + " has no declared authorization requirement; treating it as AdminOnly");
+            AuthorizationRequirement requirement = McpToolAuthorizationRegistry.GetOrDefault(name);
+
+            return async (System.Text.Json.JsonElement? args) =>
+            {
+                AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                if (!_AuthorizationService.IsAuthorized(caller, requirement))
+                {
+                    string needed = requirement.Level == PermissionLevel.AdminOnly
+                        ? "an admin credential"
+                        : requirement.Level == PermissionLevel.TenantAdmin ? "a tenant admin or admin credential" : "an authenticated caller";
+                    throw new UnauthorizedAccessException("Tool " + name + " requires " + needed + ".");
+                }
+
+                return await handler(args).ConfigureAwait(false);
+            };
         }
 
         private void RegisterMcpTools()

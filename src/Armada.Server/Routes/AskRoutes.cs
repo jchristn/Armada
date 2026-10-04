@@ -23,8 +23,6 @@ namespace Armada.Server.Routes
     public class AskRoutes
     {
         #region Private-Members
-
-        private readonly AskArmadaService _Ask;
         private readonly CaptainChatService _CaptainChat;
         private readonly AskThreadService? _Threads;
         private readonly AskTurnCoordinator? _Turns;
@@ -43,16 +41,14 @@ namespace Armada.Server.Routes
         /// <summary>
         /// Instantiate.
         /// </summary>
-        /// <param name="ask">Stateless assistant.</param>
         /// <param name="captainChat">Direct captain chat.</param>
         /// <param name="jsonOptions">JSON options.</param>
         /// <param name="threads">Thread service; null disables the thread routes.</param>
         /// <param name="turns">Turn coordinator; null disables the thread routes.</param>
         /// <param name="actions">Action service; null disables the thread routes.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required argument is null.</exception>
-        public AskRoutes(AskArmadaService ask, CaptainChatService captainChat, JsonSerializerOptions jsonOptions, AskThreadService? threads = null, AskTurnCoordinator? turns = null, AskActionService? actions = null)
+        public AskRoutes(CaptainChatService captainChat, JsonSerializerOptions jsonOptions, AskThreadService? threads = null, AskTurnCoordinator? turns = null, AskActionService? actions = null)
         {
-            _Ask = ask ?? throw new ArgumentNullException(nameof(ask));
             _CaptainChat = captainChat ?? throw new ArgumentNullException(nameof(captainChat));
             _JsonOptions = jsonOptions ?? throw new ArgumentNullException(nameof(jsonOptions));
             _Threads = threads;
@@ -75,24 +71,6 @@ namespace Armada.Server.Routes
             Func<HttpContextBase, Task<AuthContext>> authenticate,
             IAuthorizationService authz)
         {
-            app.Post("/api/v1/ask", async (ApiRequest req) =>
-            {
-                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
-                ApiErrorResponse? denied = Deny(req, ctx, authz);
-                if (denied != null) return denied;
-
-                AskRequest request = JsonSerializer.Deserialize<AskRequest>(req.Http.Request.DataAsString, _BodyJsonOptions) ?? new AskRequest();
-                AskResponse response = await _Ask.AskAsync(request.Message, ctx).ConfigureAwait(false);
-                return response;
-            },
-            api => api
-                .WithTag("Ask")
-                .WithSummary("Ask Armada a question")
-                .WithDescription("A lightweight conversational assistant that answers read-only questions about fleet state and returns suggested navigation links.")
-                .WithRequestBody(OpenApiJson.BodyFor<AskRequest>("The question", true))
-                .WithResponse(200, OpenApiJson.For<AskResponse>("The assistant response"))
-                .WithSecurity("ApiKey"));
-
             app.Post("/api/v1/captains/{id}/chat", async (ApiRequest req) =>
             {
                 AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
