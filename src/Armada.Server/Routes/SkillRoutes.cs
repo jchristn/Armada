@@ -157,7 +157,7 @@ namespace Armada.Server.Routes
                 if (!ScopedVisibility.CanEdit(ctx, existing.Scope, existing.TenantId, existing.UserId))
                 {
                     req.Http.Response.StatusCode = 403;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "You may only modify your own skills; a tenant-wide skill requires a tenant admin." };
+                    return new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = "You may only modify your own skills; a tenant-wide skill requires a tenant admin." };
                 }
 
                 Skill incoming = JsonSerializer.Deserialize<Skill>(req.Http.Request.DataAsString, _bodyJsonOptions)
@@ -196,7 +196,7 @@ namespace Armada.Server.Routes
                 if (!ScopedVisibility.CanEdit(ctx, existing.Scope, existing.TenantId, existing.UserId))
                 {
                     req.Http.Response.StatusCode = 403;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "You may only delete your own skills; a tenant-wide skill requires a tenant admin." };
+                    return new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = "You may only delete your own skills; a tenant-wide skill requires a tenant admin." };
                 }
 
                 await _database.Skills.DeleteAsync(existing.Id, BuildScopedReadQuery(ctx)).ConfigureAwait(false);
@@ -216,7 +216,7 @@ namespace Armada.Server.Routes
         {
             return new ApiErrorResponse
             {
-                Error = ApiResultEnum.BadRequest,
+                Error = req.Http.Response.StatusCode == 401 ? ApiResultEnum.NotAuthorized : ApiResultEnum.Forbidden,
                 Message = req.Http.Response.StatusCode == 401 ? "Authentication required" : "You do not have permission to perform this action"
             };
         }

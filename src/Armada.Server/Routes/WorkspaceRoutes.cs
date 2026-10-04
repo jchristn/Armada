@@ -189,7 +189,7 @@ namespace Armada.Server.Routes
                 if (!ctx.IsAdmin && !ctx.IsTenantAdmin)
                 {
                     req.Http.Response.StatusCode = 403;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Only tenant administrators can run workspace commands" };
+                    return new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = "Only tenant administrators can run workspace commands" };
                 }
 
                 Vessel? vessel = await ReadVesselForContextAsync(ctx, req.Parameters["vesselId"]).ConfigureAwait(false);
@@ -445,7 +445,7 @@ namespace Armada.Server.Routes
         {
             return new ApiErrorResponse
             {
-                Error = ApiResultEnum.BadRequest,
+                Error = req.Http.Response.StatusCode == 401 ? ApiResultEnum.NotAuthorized : ApiResultEnum.Forbidden,
                 Message = req.Http.Response.StatusCode == 401
                     ? "Authentication required"
                     : "You do not have permission to perform this action"

@@ -307,7 +307,7 @@ namespace Armada.Server.Routes
             {
                 req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                 if (ctx.IsAuthenticated) LogDenied(req, ctx, "path permission");
-                return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
             }
 
             try
@@ -318,7 +318,7 @@ namespace Armada.Server.Routes
             {
                 req.Http.Response.StatusCode = 403;
                 LogDenied(req, ctx, e.Message);
-                return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = e.Message };
+                return new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = e.Message };
             }
             catch (KeyNotFoundException e)
             {

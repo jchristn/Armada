@@ -107,7 +107,7 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 EnumerationQuery query = new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
@@ -129,7 +129,7 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 EnumerationQuery query = JsonSerializer.Deserialize<EnumerationQuery>(req.Http.Request.DataAsString, _jsonOptions) ?? new EnumerationQuery();
                 query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
@@ -151,7 +151,7 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 Captain captain = JsonSerializer.Deserialize<Captain>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Captain.");
@@ -182,7 +182,7 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 string id = req.Parameters["id"];
                 Captain? captain = ctx.IsAdmin
@@ -208,7 +208,7 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 string id = req.Parameters["id"];
                 Captain? captain = ctx.IsAdmin
@@ -234,7 +234,7 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 string id = req.Parameters["id"];
                 Captain? existing = ctx.IsAdmin
@@ -282,7 +282,7 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 string uqId = req.Parameters["id"];
                 Captain? uqCaptain = ctx.IsAdmin
@@ -314,7 +314,7 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 string id = req.Parameters["id"];
                 Captain? captain = ctx.IsAdmin
@@ -337,7 +337,7 @@ namespace Armada.Server.Routes
                     if (planningSession == null || _planningSessions == null)
                     {
                         req.Http.Response.StatusCode = 409;
-                        return (object)new { Error = "Conflict", Message = "Captain is currently reserved by a planning session, but Armada could not resolve that session for coordinated stop." };
+                        return (object)new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = "Captain is currently reserved by a planning session, but Armada could not resolve that session for coordinated stop." };
                     }
 
                     PlanningSession stopped = await _planningSessions.StopAsync(planningSession).ConfigureAwait(false);
@@ -356,7 +356,7 @@ namespace Armada.Server.Routes
                     if (refinementSession == null || _objectiveRefinementSessions == null)
                     {
                         req.Http.Response.StatusCode = 409;
-                        return (object)new { Error = "Conflict", Message = "Captain is currently reserved by an objective refinement session, but Armada could not resolve that session for coordinated stop." };
+                        return (object)new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = "Captain is currently reserved by an objective refinement session, but Armada could not resolve that session for coordinated stop." };
                     }
 
                     ObjectiveRefinementSession stopped = await _objectiveRefinementSessions.StopAsync(refinementSession).ConfigureAwait(false);
@@ -387,7 +387,7 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 await _admiral.RecallAllAsync().ConfigureAwait(false);
 
@@ -441,7 +441,7 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 string id = req.Parameters["id"];
                 Captain? captain = ctx.IsAdmin
@@ -523,7 +523,7 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 string id = req.Parameters["id"];
                 Captain? captain = ctx.IsAdmin
@@ -537,7 +537,7 @@ namespace Armada.Server.Routes
                 if (captain.State == CaptainStateEnum.Working || captain.State == CaptainStateEnum.Planning || captain.State == CaptainStateEnum.Refining || captain.State == CaptainStateEnum.Analyzing)
                 {
                     req.Http.Response.StatusCode = 409;
-                    return (object)new { Error = "Conflict", Message = "Cannot delete captain while state is Working, Planning, Refining, or Analyzing. Stop the captain first." };
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = "Cannot delete captain while state is Working, Planning, Refining, or Analyzing. Stop the captain first." };
                 }
 
                 // Block deletion if captain has active missions
@@ -548,7 +548,7 @@ namespace Armada.Server.Routes
                 if (activeCaptainMissions.Count > 0)
                 {
                     req.Http.Response.StatusCode = 409;
-                    return (object)new { Error = "Conflict", Message = "Cannot delete captain with " + activeCaptainMissions.Count + " active mission(s) in Assigned or InProgress status. Cancel or complete them first." };
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = "Cannot delete captain with " + activeCaptainMissions.Count + " active mission(s) in Assigned or InProgress status. Cancel or complete them first." };
                 }
 
                 if (ctx.IsAdmin)
@@ -580,11 +580,11 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 DeleteMultipleRequest? body = JsonSerializer.Deserialize<DeleteMultipleRequest>(req.Http.Request.DataAsString, _jsonOptions);
                 if (body == null || body.Ids == null || body.Ids.Count == 0)
-                    return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Ids is required and must not be empty" };
+                    { req.Http.Response.StatusCode = 400; return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Ids is required and must not be empty" }; }
 
                 DeleteMultipleResult result = new DeleteMultipleResult();
                 foreach (string id in body.Ids)

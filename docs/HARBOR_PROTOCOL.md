@@ -5,6 +5,9 @@ Admiral. The Admiral pushes host work down the link; the Harbor executes it and 
 This document is the contract both sides implement. It is versioned by `HarborProtocol.Version`
 (currently `1.0`); bump that constant on any breaking change to the message set.
 
+> **Experimental.** The Harbor link (split mode) is experimental for Armada 1.0 and excluded from the compatibility
+> promise in [COMPATIBILITY.md](COMPATIBILITY.md). The protocol version above still guards Harbor/Admiral pairing.
+
 ## Transport and framing
 
 The Harbor dials the Admiral at the configured link path (default `/v1.0/harbor/connect`) over WSS.

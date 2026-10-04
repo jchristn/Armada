@@ -6,6 +6,16 @@
 
 Machine-readable OpenAPI is available at `/openapi.json`, and the interactive Swagger UI is available at `/swagger`. When this document and the live server ever diverge, the OpenAPI output is the canonical route and schema source.
 
+The frozen 1.0 route list, with the authorization each route requires, is in [API_SURFACE_1.0.md](API_SURFACE_1.0.md);
+what the compatibility promise covers is in [COMPATIBILITY.md](COMPATIBILITY.md). Routes whose OpenAPI summary starts
+with `[Experimental]` (tag `Experimental`: the Harbor management routes and server rebuild/rollback) are outside that
+promise.
+
+**JSON casing.** REST request and response bodies use PascalCase property names (`PageNumber`, `VesselId`), enum values
+as strings, and omit null-valued properties. Request bodies are matched case-insensitively, so camelCase input is
+accepted. The WebSocket API and MCP tool results use camelCase instead (see [WEBSOCKET_API.md](WEBSOCKET_API.md)); each
+transport is consistent within itself, and the dashboard client camelizes REST responses.
+
 ---
 
 ## Table of Contents
@@ -334,7 +344,7 @@ without a declaration requires a global admin. The complete per-route list is th
 
 ## Pagination
 
-All list endpoints return paginated results wrapped in `EnumerationResult<T>`. There are two ways to query:
+Entity list endpoints return paginated results wrapped in `EnumerationResult<T>`. There are two ways to query:
 
 ### GET with Query String Parameters
 
@@ -363,7 +373,7 @@ Query string parameters **override** body values on POST enumerate endpoints, al
 | Parameter | Type | Default | Range | Description |
 |---|---|---|---|---|
 | `pageNumber` | int | 1 | >= 1 | Page number (1-based) |
-| `pageSize` | int | 100 | 1 - 1000 | Results per page |
+| `pageSize` | int | 10 | 1 - 1000 (clamped) | Results per page |
 | `order` | string | `CreatedDescending` | `CreatedAscending`, `CreatedDescending` | Sort order by creation date |
 | `createdAfter` | datetime | null | ISO 8601 | Filter: created after this timestamp |
 | `createdBefore` | datetime | null | ISO 8601 | Filter: created before this timestamp |
@@ -399,46 +409,71 @@ Query string parameters **override** body values on POST enumerate endpoints, al
 }
 ```
 
+A few list routes are not paged and return a plain array or a purpose-built wrapper; they are frozen as they are for
+1.0 (changing them would break clients) and are listed here so clients do not expect `EnumerationResult<T>`:
+
+| Route | Shape |
+|---|---|
+| `GET /api/v1/harbors` (experimental), `GET /api/v1/model-endpoints`, `GET /api/v1/inbox`, `GET /api/v1/signals/recent`, `GET /api/v1/signals/recipient/{captainId}`, `GET /api/v1/planning-sessions`, `GET /api/v1/objectives/{id}/refinement-sessions`, `GET /api/v1/backlog/{id}/refinement-sessions`, `GET /api/v1/ask/quick-actions`, `GET /api/v1/releases/{id}/github/pull-requests`, `GET /api/v1/doctor` | JSON array |
+| `GET /api/v1/jobs` | `{ Success, Objects, TotalRecords }` |
+| `POST /api/v1/ask/threads/{id}/messages/enumerate` | `AskMessagePage { Messages, HasMore }` (cursor style) |
+| `GET /api/v1/workspace/vessels/{id}/search` | `WorkspaceSearchResult { Query, TotalMatches, Truncated, Matches }` |
+| `GET /api/v1/captains/{id}/log`, `GET /api/v1/missions/{id}/log` | `{ Log, Lines, TotalLines, ... }` (line offsets, not pages) |
+
 ---
 
 ## Error Responses
 
-All error responses use a consistent JSON format with `Error`, `Description`, `Message`, and `Data` fields:
+Every REST error is an `ApiErrorResponse` with a stable `Error` code that matches the HTTP status code:
 
 ```json
 {
   "Error": "NotFound",
+  "StatusCode": 404,
   "Description": "The requested resource was not found.",
   "Message": "Mission not found",
-  "Data": {}
+  "Data": null
 }
 ```
 
 | Field | Type | Description |
 |---|---|---|
-| `Error` | string | Error code (see table below) |
-| `Description` | string | Standard description for the error code |
-| `Message` | string | Human-readable message with specific details |
-| `Data` | object | Additional context (usually empty) |
+| `Error` | string | Stable error code (see table below). Clients may branch on it. |
+| `StatusCode` | int | The HTTP status code of the error code (same as the response status for the codes below) |
+| `Description` | string | Standard description of the error code |
+| `Message` | string | Human-readable detail. Not stable: do not parse it. |
+| `Data` | object \| null | Optional structured detail (for example `VesselImportErrorDetail { Code, Path }` on vessel import errors) |
 
 ### Error Codes
 
 | Error Code | HTTP Status | When Used |
 |---|---|---|
-| `BadRequest` | 400 | Invalid input, missing required fields, malformed request body, invalid state transition |
-| `DeserializationError` | 400 | Request body could not be parsed as valid JSON or does not match the expected type |
-| `Unauthorized` | 401 | Missing or invalid API key / bearer token |
-| `Forbidden` | 403 | Authenticated but not authorized for this operation |
-| `NotFound` | 404 | Entity not found by the given ID |
-| `Conflict` | 409 | Operation conflicts with current state (e.g., deleting an active voyage, retry landing failed) |
+| `BadRequest` | 400 | Invalid input, missing required fields, invalid state transition |
+| `DeserializationError` | 400 | Request body could not be parsed as JSON or does not match the expected type |
+| `NotAuthorized` | 401 | Missing, invalid, or expired credentials |
+| `Forbidden` | 403 | Authenticated, but the caller's role does not allow the operation on a resource it can see (including the forced password change) |
+| `NotFound` | 404 | No such route or entity, or the entity belongs to another tenant (or, for user-scoped records, another user) |
+| `Conflict` | 409 | The operation conflicts with the current state (deleting an active voyage, purging a non-terminal merge entry) |
+| `RequestTimeout` | 408 | The request timed out |
+| `SlowDown` | 429 | Rate limited |
 | `InternalError` | 500 | Unexpected server error |
 
 ### Notes
 
-- The `Error` field always contains one of the error codes listed above.
-- The `Message` field provides a specific, actionable description of what went wrong.
-- HTTP status codes are set on the response and match the error code mapping above.
-- Clients should check the HTTP status code first, then parse the response body for details.
+- **Cross-tenant access is 404.** Reading, changing, or deleting an entity in another tenant returns `404 NotFound`,
+  never `403`, so a caller cannot learn that the id exists. `403 Forbidden` means the caller can see the resource but
+  its role cannot perform the operation (for example a non-admin deleting a tenant-wide persona).
+- A few statuses have no dedicated code and are sent with `Error: "BadRequest"` (and `StatusCode: 400` in the body):
+  `422` (vessel push or merge rejected), `501` (planning and refinement sessions on a runtime that does not support
+  them, model context building unavailable), `503` (git unavailable), and `504` (model context build timed out). Use
+  the HTTP status for these.
+- Unhandled exceptions become `500 InternalError` with the exception message in `Message`.
+- Exceptions to the shape, frozen for 1.0 and documented with their routes: `POST /api/v1/authenticate` returns
+  `AuthenticateResult { Success: false, ... }` with 401 on bad credentials, `POST /api/v1/onboarding` returns
+  `OnboardingResult { Success: false, ErrorMessage }` with 400/403/409, and the vessel git helpers
+  (`GET /api/v1/vessels/{id}/git-status`, `GET /api/v1/vessels/{id}/branches`) report a git failure in an `Error`
+  field of a `200` result.
+- Clients should check the HTTP status code first, then read `Error`.
 
 ---
 
@@ -1082,6 +1117,8 @@ Initiates a graceful shutdown of the Admiral server.
 
 #### POST /api/v1/server/rebuild
 
+**Experimental:** excluded from the 1.0 compatibility promise; the Harbor-supervised cutover is not yet live-verified (see [COMPATIBILITY.md](COMPATIBILITY.md)).
+
 Rebuilds the Admiral from source and cuts over to the new build. Publishes the configured Armada source (resolved from `SelfVesselId`, or an explicit `SourcePath`) into a fresh versioned slot from a detached `git worktree` at the requested ref, backs up the database, flips the active-slot pointer, and hands over to the new build. The build runs while the current instance keeps serving; only a successful server publish triggers a cutover. Returns immediately with the initial status; poll `GET /api/v1/server/rebuild/status` for progress. See [SERVER_REBUILD.md](SERVER_REBUILD.md).
 
 **Permission:** AdminOnly (global admin). The deprecated `RequireAuthForShutdown` setting is ignored.
@@ -1111,6 +1148,8 @@ Rebuilds the Admiral from source and cuts over to the new build. Publishes the c
 
 #### GET /api/v1/server/rebuild/status
 
+**Experimental:** excluded from the 1.0 compatibility promise; the Harbor-supervised cutover is not yet live-verified (see [COMPATIBILITY.md](COMPATIBILITY.md)).
+
 Returns the most recent rebuild status and its accumulated build log, or `{"status":"none"}` when no rebuild has run. Values for `Status`: `Building`, `CuttingOver`, `Succeeded`, `Failed`, `RolledBack`.
 
 **Permission:** AdminOnly.
@@ -1120,6 +1159,8 @@ Returns the most recent rebuild status and its accumulated build log, or `{"stat
 ---
 
 #### POST /api/v1/server/rollback
+
+**Experimental:** excluded from the 1.0 compatibility promise; the Harbor-supervised cutover is not yet live-verified (see [COMPATIBILITY.md](COMPATIBILITY.md)).
 
 Rolls the last rebuild back to the previous slot. When the rebuild migrated the database schema (the live schema version differs from the version recorded before the rebuild), the pre-rebuild backup is restored first, discarding any data written since the cutover; otherwise the previous slot is relaunched with no restore. Then this instance stops so the previous slot binds.
 
@@ -4048,7 +4089,7 @@ Skipped entries include the entry ID and the reason (e.g., "Not found" or "Not i
 
 ### Harbors
 
-Harbor records register host-side runners that let the Admiral run detached (in Docker or on another host) while agent CLIs, git, and worktrees execute on a developer machine over an authenticated client-to-server link. These routes manage the Harbor registrations only -- creating, reading, updating, enabling, disabling, and deleting them. Runtime state such as `ConnectionStatus`, `LastSeenUtc`, `ProtocolVersion`, `OsPlatform`, and `Architecture` is reported by the link and is not operator-editable; the operator-editable fields are `Name`, `MaxConcurrentJobs`, and `Enabled`. The live link transport that carries host work is still emerging (see [docs/HARBOR.md](HARBOR.md) and [docs/HARBOR_PROTOCOL.md](HARBOR_PROTOCOL.md)); these management routes exist today.
+Harbor records register host-side runners that let the Admiral run detached (in Docker or on another host) while agent CLIs, git, and worktrees execute on a developer machine over an authenticated client-to-server link. These routes manage the Harbor registrations only -- creating, reading, updating, enabling, disabling, and deleting them. Runtime state such as `ConnectionStatus`, `LastSeenUtc`, `ProtocolVersion`, `OsPlatform`, and `Architecture` is reported by the link and is not operator-editable; the operator-editable fields are `Name`, `MaxConcurrentJobs`, and `Enabled`. **Experimental:** the Harbor routes are excluded from the 1.0 compatibility promise (their OpenAPI summaries start with `[Experimental]`), because Harbor split mode and its link transport are experimental (see [docs/HARBOR.md](HARBOR.md), [docs/HARBOR_PROTOCOL.md](HARBOR_PROTOCOL.md), and [COMPATIBILITY.md](COMPATIBILITY.md)).
 
 #### GET /api/v1/harbors
 

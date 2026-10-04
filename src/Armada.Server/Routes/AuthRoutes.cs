@@ -102,7 +102,7 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
 
                 TenantMetadata? tenant = await _database.Tenants.ReadAsync(ctx.TenantId!).ConfigureAwait(false);
@@ -131,7 +131,7 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
 
                 PasswordChangeRequest? change = null;
@@ -164,7 +164,7 @@ namespace Armada.Server.Routes
                 if (!user.VerifyPassword(change.CurrentPassword!))
                 {
                     req.Http.Response.StatusCode = 403;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "CurrentPassword is incorrect" };
+                    return new ApiErrorResponse { Error = ApiResultEnum.Forbidden, Message = "CurrentPassword is incorrect" };
                 }
 
                 user.PasswordSha256 = UserMaster.ComputePasswordHash(change.NewPassword);
@@ -195,7 +195,7 @@ namespace Armada.Server.Routes
                 if (lookupReq == null || string.IsNullOrEmpty(lookupReq.Email))
                 {
                     req.Http.Response.StatusCode = 400;
-                    return (object)new { Error = "Email is required" };
+                    return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Email is required" };
                 }
 
                 List<UserMaster> users = await _database.Users.ReadByEmailAnyTenantAsync(lookupReq.Email.ToLowerInvariant()).ConfigureAwait(false);

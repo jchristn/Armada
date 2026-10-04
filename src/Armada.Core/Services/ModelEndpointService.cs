@@ -134,7 +134,7 @@ namespace Armada.Core.Services
             if (endpoint == null) throw new ArgumentNullException(nameof(endpoint));
 
             ModelEndpoint? existing = await _Database.ModelEndpoints.ReadAsync(endpoint.Id, token).ConfigureAwait(false);
-            if (existing == null) throw new KeyNotFoundException("Model endpoint not found: " + endpoint.Id);
+            if (existing == null || !IsVisible(auth, existing)) throw new KeyNotFoundException("Model endpoint not found: " + endpoint.Id);
             if (!ScopedVisibility.CanEdit(auth, existing.Scope, existing.TenantId, existing.UserId)) throw new UnauthorizedAccessException("Not permitted to modify endpoint " + endpoint.Id);
             // Preserve ownership/scope on update; only an admin may change the scope of an existing endpoint.
             endpoint.UserId = existing.UserId;
@@ -173,7 +173,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
 
             ModelEndpoint? existing = await _Database.ModelEndpoints.ReadAsync(id, token).ConfigureAwait(false);
-            if (existing == null) throw new KeyNotFoundException("Model endpoint not found: " + id);
+            if (existing == null || !IsVisible(auth, existing)) throw new KeyNotFoundException("Model endpoint not found: " + id);
             if (!ScopedVisibility.CanEdit(auth, existing.Scope, existing.TenantId, existing.UserId)) throw new UnauthorizedAccessException("Not permitted to delete endpoint " + id);
 
             // Guard: do not delete an endpoint a captain still references, which would orphan that captain and
@@ -233,8 +233,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
 
             ModelEndpoint? endpoint = await _Database.ModelEndpoints.ReadAsync(id, token).ConfigureAwait(false);
-            if (endpoint == null) throw new KeyNotFoundException("Model endpoint not found: " + id);
-            if (!IsVisible(auth, endpoint)) throw new UnauthorizedAccessException("Not permitted to validate endpoint " + id);
+            if (endpoint == null || !IsVisible(auth, endpoint)) throw new KeyNotFoundException("Model endpoint not found: " + id);
 
             ModelEndpointProbeResult result = await ValidateEndpointAsync(endpoint, token).ConfigureAwait(false);
             await PersistProbeAsync(endpoint, result, token).ConfigureAwait(false);

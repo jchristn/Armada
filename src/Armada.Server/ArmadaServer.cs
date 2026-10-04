@@ -423,7 +423,7 @@ namespace Armada.Server
                     {
                         ctx.Response.StatusCode = 401;
                         ctx.Response.ContentType = "application/json";
-                        await ctx.Response.Send("{\"error\":\"Authentication required\",\"message\":\"Pass a token as ?token= or in Sec-WebSocket-Protocol, or the REST credential headers\"}").ConfigureAwait(false);
+                        await ctx.Response.Send(_App.Serializer.SerializeJson(new ApiErrorResponse { Error = ApiResultEnum.NotAuthorized, Message = "Authentication required: pass a token as ?token= or in Sec-WebSocket-Protocol, or the REST credential headers" }, false)).ConfigureAwait(false);
                     }
                     return;
                 }
@@ -759,7 +759,7 @@ namespace Armada.Server
                 ctx.Response.ContentType = "application/json";
                 ApiErrorResponse denied = new ApiErrorResponse
                 {
-                    Error = ApiResultEnum.BadRequest,
+                    Error = auth.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized,
                     Message = auth.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required"
                 };
                 await ctx.Response.Send(_App.Serializer.SerializeJson(denied, false)).ConfigureAwait(false);
@@ -772,7 +772,7 @@ namespace Armada.Server
                 ctx.Response.ContentType = "application/json";
                 ApiErrorResponse blocked = new ApiErrorResponse
                 {
-                    Error = ApiResultEnum.BadRequest,
+                    Error = ApiResultEnum.Forbidden,
                     Message = "Password change required: change the default password with PUT /api/v1/account/password before using the API with this session"
                 };
                 await ctx.Response.Send(_App.Serializer.SerializeJson(blocked, false)).ConfigureAwait(false);
@@ -1430,7 +1430,7 @@ namespace Armada.Server
             // 404 for everything else
             ctx.Response.StatusCode = 404;
             ctx.Response.ContentType = "application/json";
-            await ctx.Response.Send("{\"error\":\"Not found\"}").ConfigureAwait(false);
+            await ctx.Response.Send(_App.Serializer.SerializeJson(new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }, false)).ConfigureAwait(false);
         }
 
         /// <summary>

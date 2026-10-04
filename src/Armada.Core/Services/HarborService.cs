@@ -112,8 +112,7 @@ namespace Armada.Core.Services
             if (harbor == null) throw new ArgumentNullException(nameof(harbor));
 
             Harbor? existing = await _Database.Harbors.ReadAsync(harbor.Id, token).ConfigureAwait(false);
-            if (existing == null) throw new KeyNotFoundException("Harbor not found: " + harbor.Id);
-            if (!IsVisible(auth, existing)) throw new UnauthorizedAccessException("Not permitted to modify harbor " + harbor.Id);
+            if (existing == null || !IsVisible(auth, existing)) throw new KeyNotFoundException("Harbor not found: " + harbor.Id);
             if (String.IsNullOrWhiteSpace(harbor.Name)) throw new ArgumentException("Harbor name is required.");
 
             existing.Name = harbor.Name;
@@ -139,8 +138,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
 
             Harbor? existing = await _Database.Harbors.ReadAsync(id, token).ConfigureAwait(false);
-            if (existing == null) throw new KeyNotFoundException("Harbor not found: " + id);
-            if (!IsVisible(auth, existing)) throw new UnauthorizedAccessException("Not permitted to modify harbor " + id);
+            if (existing == null || !IsVisible(auth, existing)) throw new KeyNotFoundException("Harbor not found: " + id);
 
             existing.Enabled = enabled;
             existing.LastUpdateUtc = DateTime.UtcNow;
@@ -159,8 +157,7 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));
 
             Harbor? existing = await _Database.Harbors.ReadAsync(id, token).ConfigureAwait(false);
-            if (existing == null) throw new KeyNotFoundException("Harbor not found: " + id);
-            if (!IsVisible(auth, existing)) throw new UnauthorizedAccessException("Not permitted to delete harbor " + id);
+            if (existing == null || !IsVisible(auth, existing)) throw new KeyNotFoundException("Harbor not found: " + id);
 
             _Logging.Info(_Header + "deleting harbor " + id);
             await _Database.Harbors.DeleteAsync(id, token).ConfigureAwait(false);

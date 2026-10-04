@@ -83,7 +83,7 @@ namespace Armada.Server.Routes
                 }
                 catch (VesselImportPathNotAllowedException ex)
                 {
-                    return Error(req, 403, ApiResultEnum.BadRequest, ex.Message, VesselImportCodes.PathNotAllowed, ex.RejectedPath);
+                    return Error(req, 403, ApiResultEnum.Forbidden, ex.Message, VesselImportCodes.PathNotAllowed, ex.RejectedPath);
                 }
                 catch (DirectoryNotFoundException ex)
                 {
@@ -91,7 +91,7 @@ namespace Armada.Server.Routes
                 }
                 catch (UnauthorizedAccessException ex)
                 {
-                    return Error(req, 403, ApiResultEnum.BadRequest, "Directory cannot be read: " + ex.Message, VesselImportCodes.PathNotAllowed, path);
+                    return Error(req, 403, ApiResultEnum.Forbidden, "Directory cannot be read: " + ex.Message, VesselImportCodes.PathNotAllowed, path);
                 }
                 catch (ArgumentException ex)
                 {
@@ -126,7 +126,7 @@ namespace Armada.Server.Routes
                 }
                 catch (VesselImportPathNotAllowedException ex)
                 {
-                    return Error(req, 403, ApiResultEnum.BadRequest, ex.Message, VesselImportCodes.PathNotAllowed, ex.RejectedPath);
+                    return Error(req, 403, ApiResultEnum.Forbidden, ex.Message, VesselImportCodes.PathNotAllowed, ex.RejectedPath);
                 }
                 catch (NotSupportedException ex)
                 {
@@ -398,7 +398,7 @@ namespace Armada.Server.Routes
 
             return new ApiErrorResponse
             {
-                Error = ApiResultEnum.BadRequest,
+                Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized,
                 Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required"
             };
         }

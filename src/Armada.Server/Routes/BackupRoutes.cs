@@ -56,7 +56,7 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 if (_settings.Database.Type != Armada.Core.Enums.DatabaseTypeEnum.Sqlite)
                 {
@@ -84,7 +84,7 @@ namespace Armada.Server.Routes
                 if (!authz.IsAuthorized(ctx, req.Http.Request.Method.ToString(), req.Http.Request.Url.RawWithoutQuery))
                 {
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
-                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.BadRequest : ApiResultEnum.BadRequest, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
+                    return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 if (_settings.Database.Type != Armada.Core.Enums.DatabaseTypeEnum.Sqlite)
                 {
@@ -93,7 +93,7 @@ namespace Armada.Server.Routes
                 }
                 byte[] body = req.Http.Request.DataAsBytes;
                 if (body == null || body.Length == 0)
-                    return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Request body must contain the ZIP file" };
+                    { req.Http.Response.StatusCode = 400; return (object)new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Request body must contain the ZIP file" }; }
 
                 string tempZipPath = Path.Combine(Path.GetTempPath(), "armada-upload-" + Guid.NewGuid().ToString("N") + ".zip");
                 try

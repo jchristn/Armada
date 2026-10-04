@@ -142,7 +142,20 @@ SSL applies to both the REST API and the WebSocket server.
 
 ## Message Format
 
-All messages are JSON text frames. The `Route` property in the client-to-server message envelope must be **PascalCase**. Server responses use **camelCase** property naming.
+All messages are JSON text frames.
+
+**Casing rule.** Everything the server sends over the WebSocket (event envelopes, payloads, command replies, and the
+entities inside them) uses **camelCase** property names with enum values as strings. Client message field names are
+matched **case-insensitively**: `Route`/`route`, `action`, `id`, `data`, and so on are all accepted (the examples use
+`Route` for the route and camelCase for everything else). This differs from the REST API, whose bodies are PascalCase
+(see [REST_API.md](REST_API.md)); each transport is consistent within itself, and neither will change casing within 1.0.
+
+**Contract.** The endpoints, routes, command actions, and event types in this document are frozen for 1.0 and listed in
+[API_SURFACE_1.0.md](API_SURFACE_1.0.md) (compatibility rules: [COMPATIBILITY.md](COMPATIBILITY.md)). New event types,
+payload fields, and command actions may be added in minor releases, so clients must ignore event types and fields they do
+not recognize. The Harbor link endpoint (`Harbor.LinkPath`, default `/v1.0/harbor/connect`) is a separate,
+**experimental** WebSocket used only by Harbor split mode ([HARBOR_PROTOCOL.md](HARBOR_PROTOCOL.md)) and is excluded from
+the promise.
 
 ### Client-to-Server
 
@@ -230,7 +243,7 @@ See [Command Actions](#command-actions) for the current operational action set. 
 
 ## Server-Pushed Events
 
-These events are delivered to the connected clients **entitled to them** (see [Authentication](#authentication): the entity's tenant, plus opted-in global admins) whenever state changes occur in the Armada system. Clients do not need to request these Ã¢â‚¬â€ they are pushed automatically after subscribing.
+These events are delivered to the connected clients **entitled to them** (see [Authentication](#authentication): the entity's tenant, plus opted-in global admins) whenever state changes occur in the Armada system. Clients do not need to request these -- they are pushed automatically after subscribing.
 
 ### status.snapshot
 
@@ -713,23 +726,43 @@ The direct captain chat endpoint (`POST /api/v1/captains/{id}/chat` with a `Turn
 
 ### Generic Events
 
-Broadcast for general system events (e.g., escalation triggers, merge queue updates, voyage completion).
+Broadcast when the Admiral records an entity event that has no dedicated payload (deletions, purges, review
+decisions, landing outcomes, captain launches, planning and refinement session lifecycle). Every generic event has the
+same payload; the full list of generic event types is in [API_SURFACE_1.0.md](API_SURFACE_1.0.md#events). New types may
+be added in minor releases.
 
 ```json
 {
-  "type": "voyage.completed",
-  "message": "Voyage 'Feature batch 1' completed successfully",
-  "data": { "voyageId": "vyg_abc123def456ghi789jk" },
+  "type": "mission.deleted",
+  "message": "Mission msn_abc123def456ghi789jk deleted",
+  "data": {
+    "entityType": "mission",
+    "entityId": "msn_abc123def456ghi789jk",
+    "captainId": null,
+    "missionId": "msn_abc123def456ghi789jk",
+    "vesselId": "vsl_abc123def456ghi789jk",
+    "voyageId": null
+  },
   "timestamp": "2026-03-07T12:35:00.000Z"
 }
 ```
 
 | Field | Type | Description |
 |---|---|---|
-| `type` | string | Event type string (e.g., `"voyage.completed"`, `"escalation.triggered"`) |
-| `message` | string | Human-readable event description |
-| `data` | object \| null | Optional additional event data |
+| `type` | string | Event type string (for example `"mission.deleted"`, `"mission.landing_failed"`, `"dock.purged"`) |
+| `message` | string | Human-readable event description (not stable) |
+| `data.entityType` | string \| null | Entity type (`mission`, `voyage`, `captain`, `dock`, ...) |
+| `data.entityId` | string \| null | Entity identifier |
+| `data.captainId` | string \| null | Related captain |
+| `data.missionId` | string \| null | Related mission |
+| `data.vesselId` | string \| null | Related vessel |
+| `data.voyageId` | string \| null | Related voyage |
 | `timestamp` | string | ISO 8601 UTC timestamp |
+
+Some planning and refinement session events (`planning-session.summary.created`, `planning-session.dispatch.created`,
+`planning-session.deleted`, `objective-refinement-session.summary.created`, `objective-refinement-session.applied`,
+`objective-refinement-session.deleted`) are delivered twice: once with their dedicated payload and once as a generic
+event with the same type. Tell them apart by the payload (`sessionId` versus `entityId`).
 
 ---
 
@@ -741,9 +774,9 @@ Commands are sent via the `command` route. Each command returns a `command.resul
 
 | Category | Action | Description | Required Fields |
 |---|---|---|---|
-| **Status & Control** | `status` | Get current ArmadaStatus | Ã¢â‚¬â€ |
+| **Status & Control** | `status` | Get current ArmadaStatus | - |
 | | `stop_captain` | Stop specific captain | `captainId` |
-| | `stop_all` | Emergency stop all captains | Ã¢â‚¬â€ |
+| | `stop_all` | Emergency stop all captains | - |
 | **Fleet** | `list_fleets` | List/enumerate fleets | optional `query` |
 | | `get_fleet` | Get fleet by ID | `id` |
 | | `create_fleet` | Create fleet | `data` |
@@ -782,7 +815,7 @@ Commands are sent via the `command` route. Each command returns a `command.resul
 | | `get_merge_entry` | Get merge entry by ID | `id` |
 | | `enqueue_merge` | Enqueue branch for merge | `data` |
 | | `cancel_merge` | Cancel merge entry | `id` |
-| | `process_merge_queue` | Process the merge queue | Ã¢â‚¬â€ |
+| | `process_merge_queue` | Process the merge queue | - |
 | **Persona** | `get_persona` | Get a persona by name | `id` (persona name) |
 | | `create_persona` | Create a persona | `data` (Persona object) |
 | | `update_persona` | Update persona properties | `id` (persona name), `data` (partial Persona) |
@@ -793,6 +826,15 @@ Commands are sent via the `command` route. Each command returns a `command.resul
 | | `delete_pipeline` | Delete a custom pipeline (blocked for built-in) | `id` (pipeline name) |
 | **Prompt Template** | `get_prompt_template` | Get a prompt template by name | `id` (template name) |
 | | `update_prompt_template` | Update template content | `id` (template name), `data` (partial PromptTemplate) |
+| **Logs and diffs** | `get_mission_diff` | Unified diff of a mission's changes | `id` |
+| | `get_mission_log` | Mission log lines | `id`, optional `lines`, `offset` |
+| | `get_captain_log` | Captain log lines | `id`, optional `lines`, `offset` |
+| **Enumerate** | `enumerate` | Paginated enumeration of any entity type | `entityType`, optional `query` |
+| **Backup** | `backup` | Create a backup ZIP | optional `outputPath` |
+| | `restore` | Restore from a backup ZIP | `filePath` |
+| **Status & Control** | `stop_server` | Stop the Admiral | - |
+
+Any other `action` is rejected with `command.error` `Unknown action: <action>`.
 
 ---
 
@@ -2549,7 +2591,7 @@ If a message is sent without a route:
 | `autoPush` | bool \| null | Override global auto-push setting |
 | `autoCreatePullRequests` | bool \| null | Override global auto-create PR setting |
 | `autoMergePullRequests` | bool \| null | Override global auto-merge PR setting |
-| `landingMode` | string \| null | [LandingModeEnum](#landingmodeenum) Ã¢â‚¬â€ per-voyage landing policy override |
+| `landingMode` | string \| null | [LandingModeEnum](#landingmodeenum) -- per-voyage landing policy override |
 
 #### Vessel
 
@@ -2564,8 +2606,8 @@ If a message is sent without a route:
 | `defaultBranch` | string | Default branch name (default `"main"`) |
 | `projectContext` | string \| null | Project context describing architecture, key files, and dependencies |
 | `styleGuide` | string \| null | Style guide describing naming conventions, patterns, and library preferences |
-| `landingMode` | string \| null | [LandingModeEnum](#landingmodeenum) Ã¢â‚¬â€ per-vessel landing policy override |
-| `branchCleanupPolicy` | string \| null | [BranchCleanupPolicyEnum](#branchcleanuppolicyenum) Ã¢â‚¬â€ per-vessel branch cleanup override |
+| `landingMode` | string \| null | [LandingModeEnum](#landingmodeenum) -- per-vessel landing policy override |
+| `branchCleanupPolicy` | string \| null | [BranchCleanupPolicyEnum](#branchcleanuppolicyenum) -- per-vessel branch cleanup override |
 | `active` | bool | Whether the vessel is active |
 | `createdUtc` | string | ISO 8601 creation timestamp |
 | `lastUpdateUtc` | string | ISO 8601 last update timestamp |
