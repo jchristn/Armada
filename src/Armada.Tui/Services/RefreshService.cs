@@ -62,6 +62,8 @@ namespace Armada.Tui.Services
 
         #region Private-Members
 
+        private readonly System.Collections.Generic.Dictionary<string, int> _Defaults = new System.Collections.Generic.Dictionary<string, int>(StringComparer.Ordinal);
+
         private readonly PreferencesService _Prefs;
         private readonly IUiDispatcher _Dispatcher;
         private readonly IClock _Clock;
@@ -109,8 +111,27 @@ namespace Armada.Tui.Services
         /// <param name="refresh">Refresh action, or null.</param>
         public void Attach(string? screenKey, Action? refresh)
         {
+            Attach(screenKey, refresh, DefaultInterval);
+        }
+
+        /// <summary>
+        /// Attach the active screen's refresh action with the screen's own default interval (used until the user picks
+        /// one). Live screens such as Ask Armada default to 0 (off) because the socket keeps them current.
+        /// </summary>
+        /// <param name="screenKey">Screen key, or null.</param>
+        /// <param name="refresh">Refresh action, or null.</param>
+        /// <param name="defaultSeconds">Default interval in seconds; snapped to <see cref="Intervals"/>.</param>
+        public void Attach(string? screenKey, Action? refresh, int defaultSeconds)
+        {
             ScreenKey = screenKey;
             _Refresh = refresh;
+            if (screenKey != null)
+            {
+                int snapped = Intervals[0];
+                foreach (int v in Intervals) if (Math.Abs(v - defaultSeconds) < Math.Abs(snapped - defaultSeconds)) snapped = v;
+                _Defaults[screenKey] = snapped;
+            }
+
             Schedule();
         }
 
@@ -121,7 +142,8 @@ namespace Armada.Tui.Services
         /// <returns>Seconds (0 is off).</returns>
         public int IntervalFor(string screenKey)
         {
-            return _Prefs.Current.RefreshIntervals.TryGetValue(screenKey, out int s) ? s : DefaultInterval;
+            if (_Prefs.Current.RefreshIntervals.TryGetValue(screenKey, out int s)) return s;
+            return _Defaults.TryGetValue(screenKey, out int d) ? d : DefaultInterval;
         }
 
         /// <summary>

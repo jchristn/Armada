@@ -90,6 +90,15 @@ namespace Armada.Tui.Screens
         }
 
         /// <summary>
+        /// Default auto-refresh interval in seconds until the user picks one (0 is off). Default 15.
+        /// </summary>
+        /// <returns>Seconds.</returns>
+        public virtual int DefaultRefreshSeconds()
+        {
+            return Armada.Tui.Services.RefreshService.DefaultInterval;
+        }
+
+        /// <summary>
         /// Called after the screen becomes current.
         /// </summary>
         public virtual void OnActivated()

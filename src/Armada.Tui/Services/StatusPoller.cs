@@ -40,6 +40,11 @@ namespace Armada.Tui.Services
         public List<InboxItem> Inbox { get; private set; } = new List<InboxItem>();
 
         /// <summary>
+        /// True once the inbox has been fetched since <see cref="Start"/> (or a manual poll).
+        /// </summary>
+        public bool InboxChecked { get; private set; } = false;
+
+        /// <summary>
         /// Critical inbox items.
         /// </summary>
         public int InboxCritical
@@ -92,6 +97,7 @@ namespace Armada.Tui.Services
             CancellationTokenSource cts = new CancellationTokenSource();
             _Cts = cts;
             _NextHealth = _NextJobs = _NextInbox = DateTime.MinValue;
+            InboxChecked = false;
             _ = Task.Run(() => LoopAsync(cts.Token));
         }
 
@@ -213,6 +219,7 @@ namespace Armada.Tui.Services
                 _Dispatcher.Post(() =>
                 {
                     Inbox = inbox ?? new List<InboxItem>();
+                    InboxChecked = true;
                     Changed?.Invoke(this, EventArgs.Empty);
                 });
             }

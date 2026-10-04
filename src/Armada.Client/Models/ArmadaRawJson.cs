@@ -2,11 +2,14 @@ namespace Armada.Client.Models
 {
     using System;
     using System.Text.Json;
+    using System.Text.Json.Serialization;
 
     /// <summary>
     /// A response whose shape the dashboard treats as untyped (<c>Record&lt;string, unknown&gt;</c> or <c>any</c>). The raw
-    /// JSON text is kept so callers can render it (View JSON) or deserialize it into a type they know.
+    /// JSON text is kept so callers can render it (View JSON) or deserialize it into a type they know. Serialized as the
+    /// raw JSON value itself (not as an object with a <c>Json</c> property), so it can be sent inside request bodies.
     /// </summary>
+    [JsonConverter(typeof(ArmadaRawJsonConverter))]
     public class ArmadaRawJson
     {
         #region Public-Members

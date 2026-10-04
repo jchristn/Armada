@@ -115,6 +115,11 @@ namespace Armada.Tui
         public ICredentialStore Credentials { get; }
 
         /// <summary>
+        /// The Ask Armada session (set once during composition by <see cref="ArmadaTuiApp"/>; null only before that).
+        /// </summary>
+        public Armada.Tui.Ask.AskController? Ask { get; private set; } = null;
+
+        /// <summary>
         /// The active client (shortcut for <c>Session.Client</c>).
         /// </summary>
         public ArmadaClient Client
@@ -193,6 +198,15 @@ namespace Armada.Tui
         #endregion
 
         #region Public-Methods
+
+        /// <summary>
+        /// Attach the Ask Armada session (composition only; later calls are ignored).
+        /// </summary>
+        /// <param name="ask">Ask controller.</param>
+        public void AttachAsk(Armada.Tui.Ask.AskController ask)
+        {
+            if (Ask == null) Ask = ask ?? throw new ArgumentNullException(nameof(ask));
+        }
 
         /// <summary>
         /// Navigate to a path.

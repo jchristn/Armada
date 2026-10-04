@@ -52,6 +52,36 @@ namespace Armada.Tui.Services
         /// </summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
 
+        /// <summary>
+        /// Parent id: the Ask thread of a proposal, or null.
+        /// </summary>
+        public string? ParentId { get; set; } = null;
+
+        /// <summary>
+        /// Tool name of an Ask proposal, or null.
+        /// </summary>
+        public string? ToolName { get; set; } = null;
+
+        /// <summary>
+        /// Exact arguments of an Ask proposal (JSON text), or null.
+        /// </summary>
+        public string? Arguments { get; set; } = null;
+
+        /// <summary>
+        /// Expiry of an Ask proposal, or null.
+        /// </summary>
+        public DateTime? ExpiresUtc { get; set; } = null;
+
+        /// <summary>
+        /// Display name of the entity (mission title, captain name, deployment title), or null.
+        /// </summary>
+        public string? EntityName { get; set; } = null;
+
+        /// <summary>
+        /// Source of the item (English): Ask Armada, Needs You, or Live.
+        /// </summary>
+        public string Source { get; set; } = "";
+
         #endregion
 
         #region Constructors-and-Factories

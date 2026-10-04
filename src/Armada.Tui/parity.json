@@ -67,17 +67,17 @@
       "kind": "route",
       "key": "/approvals",
       "status": "extension",
-      "tui": "",
-      "workstream": "",
-      "notes": "TUI-only route"
+      "tui": "ApprovalsScreen",
+      "workstream": "W3.3",
+      "notes": "TUI-only route: Approvals center (Ask proposals, reviews, deployments, landings, stalled captains)"
     },
     {
       "kind": "route",
       "key": "/ask/:threadId?",
-      "status": "planned",
-      "tui": "",
-      "workstream": "",
-      "notes": ""
+      "status": "implemented",
+      "tui": "AskScreen",
+      "workstream": "W2",
+      "notes": "thread list, conversation, confirm and work cards, composer with quick actions, dock"
     },
     {
       "kind": "route",
@@ -3554,66 +3554,66 @@
     {
       "kind": "event",
       "key": "ask.chunk",
-      "status": "planned",
-      "tui": "AskScreen",
+      "status": "implemented",
+      "tui": "AskController",
       "workstream": "W2.8",
-      "notes": ""
+      "notes": "Ask screen, dock, thread list badges, approvals queue"
     },
     {
       "kind": "event",
       "key": "ask.message",
-      "status": "planned",
-      "tui": "AskScreen",
+      "status": "implemented",
+      "tui": "AskController",
       "workstream": "W2.8",
-      "notes": ""
+      "notes": "Ask screen, dock, thread list badges, approvals queue"
     },
     {
       "kind": "event",
       "key": "ask.proposal",
-      "status": "planned",
-      "tui": "AskScreen",
+      "status": "implemented",
+      "tui": "AskController",
       "workstream": "W2.8",
-      "notes": ""
+      "notes": "Ask screen, dock, thread list badges, approvals queue"
     },
     {
       "kind": "event",
       "key": "ask.thinking",
-      "status": "planned",
-      "tui": "AskScreen",
+      "status": "implemented",
+      "tui": "AskController",
       "workstream": "W2.8",
-      "notes": ""
+      "notes": "Ask screen, dock, thread list badges, approvals queue"
     },
     {
       "kind": "event",
       "key": "ask.thread",
-      "status": "planned",
-      "tui": "AskScreen",
+      "status": "implemented",
+      "tui": "AskController",
       "workstream": "W2.8",
-      "notes": ""
+      "notes": "Ask screen, dock, thread list badges, approvals queue"
     },
     {
       "kind": "event",
       "key": "ask.tool",
-      "status": "planned",
-      "tui": "AskScreen",
+      "status": "implemented",
+      "tui": "AskController",
       "workstream": "W2.8",
-      "notes": ""
+      "notes": "Ask screen, dock, thread list badges, approvals queue"
     },
     {
       "kind": "event",
       "key": "ask.turn",
-      "status": "planned",
-      "tui": "AskScreen",
+      "status": "implemented",
+      "tui": "AskController",
       "workstream": "W2.8",
-      "notes": ""
+      "notes": "Ask screen, dock, thread list badges, approvals queue"
     },
     {
       "kind": "event",
       "key": "ask.work",
-      "status": "planned",
-      "tui": "AskScreen",
+      "status": "implemented",
+      "tui": "AskController",
       "workstream": "W2.8",
-      "notes": ""
+      "notes": "Ask screen, dock, thread list badges, approvals queue"
     },
     {
       "kind": "event",
@@ -3621,7 +3621,7 @@
       "status": "implemented",
       "tui": "NotificationService",
       "workstream": "W1.10",
-      "notes": "toast and notification history"
+      "notes": "toast and notification history; approvals queue (reviews, landings, stalls, deployment approvals)"
     },
     {
       "kind": "event",
@@ -3629,7 +3629,7 @@
       "status": "implemented",
       "tui": "NotificationService",
       "workstream": "W1.10",
-      "notes": "toast and notification history"
+      "notes": "toast and notification history; approvals queue (reviews, landings, stalls, deployment approvals)"
     },
     {
       "kind": "event",
@@ -3645,7 +3645,7 @@
       "status": "implemented",
       "tui": "NotificationService",
       "workstream": "W1.10",
-      "notes": "toast and notification history"
+      "notes": "toast and notification history; approvals queue (reviews, landings, stalls, deployment approvals)"
     },
     {
       "kind": "event",

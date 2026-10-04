@@ -49,7 +49,7 @@ namespace Armada.Tui.Shell
         /// <summary>
         /// Ask dock.
         /// </summary>
-        public AskDockView Dock { get; } = new AskDockView();
+        public AskDockView Dock { get; }
 
         /// <summary>
         /// Login view (while signed out).
@@ -107,6 +107,7 @@ namespace Armada.Tui.Shell
             Menu = new MenuBarView(context.Commands);
             Sidebar = new SidebarView(context);
             StatusBar = new StatusBarView(context);
+            Dock = new AskDockView(context);
             Login = new LoginView(context);
             foreach (ArmadaWidget w in new ArmadaWidget[] { Header, Menu, Sidebar, StatusBar, Dock, Login }) w.Localizer = context.Loc;
             Scope.Wrap = true;
@@ -260,10 +261,10 @@ namespace Armada.Tui.Shell
                 StatusBar.Hints = new List<KeyValuePair<string, string>>
                 {
                     new KeyValuePair<string, string>("Tab", "Next field"),
-                    new KeyValuePair<string, string>("Enter", "Continue"),
-                    new KeyValuePair<string, string>("F2", "Switch login mode"),
-                    new KeyValuePair<string, string>("Ctrl+Q", "Quit")
+                    new KeyValuePair<string, string>("Enter", "Continue")
                 };
+                if (Login.Step != LoginStepEnum.ChangePassword) StatusBar.Hints.Add(new KeyValuePair<string, string>("F2", "Switch login mode"));
+                StatusBar.Hints.Add(new KeyValuePair<string, string>("Ctrl+Q", "Quit"));
                 StatusBar.Render(new SurfaceView(surface, new Rect(0, size.Height - 1, size.Width, 1)));
                 ToastLayer.Render(surface, 1, _Context.Notifications.ActiveToasts(), Theme, _Context.Loc);
                 return;
@@ -331,7 +332,7 @@ namespace Armada.Tui.Shell
             screen.ApplyTheme(Theme);
             Screen = screen;
             _Context.Commands.SetScreenCommands(screen.ScreenKey, screen.Commands());
-            _Context.Refresh.Attach(screen.ScreenKey, screen.RefreshAction());
+            _Context.Refresh.Attach(screen.ScreenKey, screen.RefreshAction(), screen.DefaultRefreshSeconds());
             Sidebar.SyncToRoute();
             _Context.Prefs.Current.LastRoute = match.FullPath;
             _Context.Prefs.Save();
