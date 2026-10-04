@@ -70,7 +70,7 @@ namespace Test.Shared.Suites.Services
                 VesselImportBatchDetail? detail = await h.Import.ReadBatchAsync(Constants.DefaultTenantId, response.BatchId).ConfigureAwait(false);
                 AssertEqual(2, detail!.Items.Count);
 
-                Job? job = await testDb.Driver.Jobs.ReadAsync(response.JobId!).ConfigureAwait(false);
+                Job? job = await JobWait.ForTerminalAsync(testDb.Driver, response.JobId!).ConfigureAwait(false);
                 AssertEqual(JobKindEnum.VesselDiscovery, job!.Kind);
                 AssertEqual(JobStatusEnum.Succeeded, job.Status);
                 AssertContains("\"candidateCount\":2", job.ResultJson ?? "");
@@ -158,7 +158,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(2, detail.FleetRecommendations[0].VesselIds.Count);
                 AssertEqual("Developer Tooling", detail.FleetRecommendations[1].Name);
 
-                Job? job = await testDb.Driver.Jobs.ReadAsync(batch.CategorizationJobId!).ConfigureAwait(false);
+                Job? job = await JobWait.ForTerminalAsync(testDb.Driver, batch.CategorizationJobId!).ConfigureAwait(false);
                 AssertEqual(JobKindEnum.FleetCategorization, job!.Kind);
                 AssertEqual(JobStatusEnum.Succeeded, job.Status);
                 AssertContains("\"fleetCount\":2", job.ResultJson ?? "");
@@ -198,7 +198,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(VesselImportCategorizationStatusEnum.Failed, batch.CategorizationStatus);
                 AssertContains("without writing " + FleetCategorizationService.OutputFileName, batch.CategorizationError ?? "");
                 AssertContains("I could not decide.", batch.CategorizationError ?? "", "output tail included");
-                Job? job = await testDb.Driver.Jobs.ReadAsync(batch.CategorizationJobId!).ConfigureAwait(false);
+                Job? job = await JobWait.ForTerminalAsync(testDb.Driver, batch.CategorizationJobId!).ConfigureAwait(false);
                 AssertEqual(JobStatusEnum.Failed, job!.Status);
                 AssertEqual(CaptainStateEnum.Idle, (await testDb.Driver.Captains.ReadAsync(captain.Id).ConfigureAwait(false))!.State, "captain released");
                 AssertEqual(0, (await testDb.Driver.VesselImportFleetRecommendations.EnumerateByBatchAsync(Constants.DefaultTenantId, response.BatchId).ConfigureAwait(false)).Count);
@@ -263,7 +263,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(FleetCategorizationService.UncategorizedFleetName, recs[1].Name);
                 AssertEqual(1, recs[1].VesselIds.Count, "C was not assigned");
 
-                Job? job = await testDb.Driver.Jobs.ReadAsync(batch.CategorizationJobId!).ConfigureAwait(false);
+                Job? job = await JobWait.ForTerminalAsync(testDb.Driver, batch.CategorizationJobId!).ConfigureAwait(false);
                 string result = job!.ResultJson ?? "";
                 AssertContains("unknown vessel vsl_invented", result);
                 AssertContains("\"uncategorizedCount\":1", result);
@@ -375,7 +375,7 @@ namespace Test.Shared.Suites.Services
 
                 List<VesselImportFleetRecommendation> recs = await testDb.Driver.VesselImportFleetRecommendations.EnumerateByBatchAsync(Constants.DefaultTenantId, response.BatchId).ConfigureAwait(false);
                 AssertEqual(frontend.Id, recs.Single(r => r.Name == "Frontend").AppliedFleetId);
-                AssertContains("\"applied\":true", (await testDb.Driver.Jobs.ReadAsync(batch.CategorizationJobId!).ConfigureAwait(false))!.ResultJson ?? "");
+                AssertContains("\"applied\":true", (await JobWait.ForTerminalAsync(testDb.Driver, batch.CategorizationJobId!).ConfigureAwait(false)).ResultJson ?? "");
             }));
 
             cases.Add(CaseAsync("request_validation", "Categorization requires an existing captain in the caller's tenant", TestTags.Negative, async () =>
@@ -668,11 +668,16 @@ namespace Test.Shared.Suites.Services
             throw new AssertionException("Timed out waiting for batch " + batchId + " (status " + batch?.Status + ", categorization " + batch?.CategorizationStatus + ")");
         }
 
-        private static Task<VesselImportBatch> WaitForCategorizationAsync(DatabaseDriver db, string batchId)
+        private static async Task<VesselImportBatch> WaitForCategorizationAsync(DatabaseDriver db, string batchId)
         {
-            return WaitForBatchAsync(db, batchId, b =>
+            // The worker writes the batch (Completed, then Applied when auto-apply is on) before it finishes the job, so
+            // the batch leaving Running is not the end: wait for the categorization job to finish, then read the batch.
+            VesselImportBatch batch = await WaitForBatchAsync(db, batchId, b =>
                 b.CategorizationStatus != VesselImportCategorizationStatusEnum.Pending
-                && b.CategorizationStatus != VesselImportCategorizationStatusEnum.Running);
+                && b.CategorizationStatus != VesselImportCategorizationStatusEnum.Running).ConfigureAwait(false);
+            if (String.IsNullOrEmpty(batch.CategorizationJobId)) return batch;
+            await JobWait.ForTerminalAsync(db, batch.CategorizationJobId!).ConfigureAwait(false);
+            return (await db.VesselImportBatches.ReadAsync(batchId).ConfigureAwait(false)) ?? batch;
         }
 
         private static async Task WaitForCaptainStateAsync(DatabaseDriver db, string captainId, CaptainStateEnum state)

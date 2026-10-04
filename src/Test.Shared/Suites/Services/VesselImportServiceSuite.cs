@@ -231,7 +231,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(VesselImportBatchStatusEnum.Completed, batch!.Status);
                 AssertEqual(12, batch.CreatedCount);
                 AssertEqual(response.JobId, batch.JobId);
-                Job? job = await testDb.Driver.Jobs.ReadAsync(response.JobId!).ConfigureAwait(false);
+                Job? job = await JobWait.ForTerminalAsync(testDb.Driver, response.JobId!).ConfigureAwait(false);
                 AssertEqual(JobStatusEnum.Succeeded, job!.Status);
                 AssertContains("\"createdCount\":12", job.ResultJson ?? "");
                 AssertEqual(12, (await testDb.Driver.Vessels.EnumerateAsync(Constants.DefaultTenantId).ConfigureAwait(false)).Count);
@@ -270,7 +270,7 @@ namespace Test.Shared.Suites.Services
 
                 AssertEqual(VesselImportBatchStatusEnum.Failed, batch!.Status, "a cancelled import ends Failed");
                 AssertTrue(batch.CreatedCount > 0 && batch.CreatedCount < 25, "stopped part way, created " + batch.CreatedCount);
-                Job? after = await testDb.Driver.Jobs.ReadAsync(response.JobId!).ConfigureAwait(false);
+                Job? after = await JobWait.ForTerminalAsync(testDb.Driver, response.JobId!).ConfigureAwait(false);
                 AssertEqual(JobStatusEnum.Cancelled, after!.Status);
                 List<VesselImportItem> items = await testDb.Driver.VesselImportItems.EnumerateByBatchAsync(Constants.DefaultTenantId, discovered.BatchId).ConfigureAwait(false);
                 int cancelledItems = items.Count(i => i.OutcomeReason == VesselImportCodes.Cancelled);

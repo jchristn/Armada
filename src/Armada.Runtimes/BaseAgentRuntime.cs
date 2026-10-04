@@ -64,6 +64,17 @@ namespace Armada.Runtimes
         }
 
         /// <summary>
+        /// When an agent process exits, how long to wait for its redirected stdout and stderr to be read to the end before
+        /// raising <see cref="OnProcessExited"/> and disposing the process, in milliseconds. Default 5000, minimum 0,
+        /// maximum 60000. The bound only matters when a child the agent left behind still holds the pipes open.
+        /// </summary>
+        public static int OutputDrainTimeoutMs
+        {
+            get => _OutputDrainTimeoutMs;
+            set => _OutputDrainTimeoutMs = value < 0 ? 0 : (value > 60000 ? 60000 : value);
+        }
+
+        /// <summary>
         /// Optional session token for the scoped Armada MCP connection of an isolated launch (for example a thread-scoped
         /// Ask Armada token). When set and the launch is isolated, the scoped MCP configuration carries the token as an
         /// X-Token header and is written to a per-launch directory that is deleted when the process exits, so concurrent
@@ -78,6 +89,7 @@ namespace Armada.Runtimes
         private string _Header = "[BaseAgentRuntime] ";
         private LoggingModule _Logging;
         private static int _GracefulStopTimeoutMs = 10000;
+        private static int _OutputDrainTimeoutMs = 5000;
 
         #endregion
 
@@ -235,6 +247,12 @@ namespace Armada.Runtimes
 
             Process process = new Process { StartInfo = startInfo };
 
+            // Captured once after Start: the Exited handler disposes the Process, after which reading process.Id throws.
+            // Handlers used to read process.Id on every line, so a line delivered after the exit (common for the last
+            // lines of a short-lived process) threw inside the swallowed try and was silently dropped.
+            int launchedPid = 0;
+            TaskCompletionSource<bool> readersStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
             process.OutputDataReceived += (sender, e) =>
             {
                 if (!String.IsNullOrEmpty(e.Data))
@@ -243,11 +261,11 @@ namespace Armada.Runtimes
                     try { logWriter?.WriteLine(e.Data); }
                     catch (ObjectDisposedException) { }
 
-                    try { OnOutputReceived?.Invoke(process.Id, e.Data); }
+                    try { OnOutputReceived?.Invoke(launchedPid, e.Data); }
                     catch { }
 
                     // stdout-only consumers (chat, planning) rely on this to exclude stderr banners.
-                    try { OnStdoutReceived?.Invoke(process.Id, e.Data); }
+                    try { OnStdoutReceived?.Invoke(launchedPid, e.Data); }
                     catch { }
                 }
             };
@@ -262,16 +280,34 @@ namespace Armada.Runtimes
 
                     // Treat stderr as runtime output for heartbeat/progress/output capture.
                     // Some agent CLIs emit useful diagnostics or status lines on stderr.
-                    try { OnOutputReceived?.Invoke(process.Id, e.Data); }
+                    try { OnOutputReceived?.Invoke(launchedPid, e.Data); }
                     catch { }
                 }
             };
 
             process.Exited += (sender, e) =>
             {
+                // Let the async readers deliver the remaining stdout/stderr lines before subscribers learn of the exit and
+                // before the process (and its streams) is disposed. A process can exit before StartAsync has begun reading
+                // (it raced through its work while the prompt was being written), so first wait for the readers to start;
+                // then WaitForExitAsync completes when both redirected streams reach end of file.
+                readersStarted.Task.Wait(_OutputDrainTimeoutMs);
+                try
+                {
+                    using (CancellationTokenSource drain = new CancellationTokenSource(_OutputDrainTimeoutMs))
+                    {
+                        process.WaitForExitAsync(drain.Token).GetAwaiter().GetResult();
+                    }
+                }
+                catch (OperationCanceledException) { }
+                catch (InvalidOperationException) { }
+
                 int? code = null;
-                int processId = 0;
-                try { processId = process.Id; } catch { }
+                int processId = launchedPid;
+                if (processId == 0)
+                {
+                    try { processId = process.Id; } catch { }
+                }
                 try { code = ((Process?)sender)?.ExitCode; } catch { }
                 try { logWriter?.WriteLine("[" + DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss") + "] Agent exited with code " + (code?.ToString() ?? "unknown")); }
                 catch (ObjectDisposedException) { }
@@ -301,26 +337,44 @@ namespace Armada.Runtimes
             bool started = process.Start();
             if (!started)
                 throw new InvalidOperationException("Failed to start agent process: " + command);
+            launchedPid = process.Id;
 
-            try { OnProcessStarted?.Invoke(process.Id); }
-            catch (Exception ex) { _Logging.Warn(_Header + "error in OnProcessStarted handler for process " + process.Id + ": " + ex.ToString()); }
+            try { OnProcessStarted?.Invoke(launchedPid); }
+            catch (Exception ex) { _Logging.Warn(_Header + "error in OnProcessStarted handler for process " + launchedPid + ": " + ex.ToString()); }
 
-            if (UsePromptStdin)
+            // Start reading before writing the prompt: output is never missed, and a large prompt cannot deadlock against
+            // an agent blocked on a full stdout pipe.
+            try
             {
-                await process.StandardInput.WriteAsync(prompt).ConfigureAwait(false);
-                await process.StandardInput.FlushAsync().ConfigureAwait(false);
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
+            }
+            finally
+            {
+                readersStarted.TrySetResult(true);
             }
 
-            // Close stdin after writing any prompt content so the agent doesn't block
-            // waiting for piped input.
-            process.StandardInput.Close();
+            try
+            {
+                if (UsePromptStdin)
+                {
+                    await process.StandardInput.WriteAsync(prompt).ConfigureAwait(false);
+                    await process.StandardInput.FlushAsync().ConfigureAwait(false);
+                }
 
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
+                // Close stdin after writing any prompt content so the agent doesn't block
+                // waiting for piped input.
+                process.StandardInput.Close();
+            }
+            catch (Exception ex) when (ex is IOException || ex is ObjectDisposedException || ex is InvalidOperationException)
+            {
+                // The agent exited before reading its prompt (broken pipe, or already cleaned up by the exit handler). Its exit is reported through OnProcessExited.
+                _Logging.Warn(_Header + "process " + launchedPid + " closed stdin before the prompt was written: " + ex.Message);
+            }
 
-            _Logging.Info(_Header + "started process " + process.Id + " (" + command + ") in " + workingDirectory);
+            _Logging.Info(_Header + "started process " + launchedPid + " (" + command + ") in " + workingDirectory);
 
-            return process.Id;
+            return launchedPid;
         }
 
         /// <summary>
