@@ -49,6 +49,7 @@ namespace Armada.Harbor
                 _Window = new MainWindow(_Settings);
                 _Window.Show();
 
+                ApplyDockIcon();
                 InstallTray(desktop);
             }
 
@@ -88,6 +89,23 @@ namespace Armada.Harbor
 
             TrayIcons icons = new TrayIcons { _TrayIcon };
             TrayIcon.SetIcons(this, icons);
+        }
+
+        private static void ApplyDockIcon()
+        {
+            if (!OperatingSystem.IsMacOS()) return;
+
+            try
+            {
+                using (Stream stream = AssetLoader.Open(new Uri("avares://Armada.Harbor/Assets/logo-macos.png")))
+                {
+                    MacDockIcon.TryApply(stream);
+                }
+            }
+            catch (FileNotFoundException)
+            {
+                // Missing asset: keep the default Dock icon.
+            }
         }
 
         private static WindowIcon? LoadIcon()
