@@ -59,6 +59,15 @@ namespace Armada.Tui.Screens.Entities
         }
 
         /// <summary>
+        /// Preference and command scope key: the screen's type name, so tabs of one hub keep separate table
+        /// preferences and command ids.
+        /// </summary>
+        public override string ScreenKey
+        {
+            get { return GetType().Name; }
+        }
+
+        /// <summary>
         /// English singular entity name ("Deployment").
         /// </summary>
         public abstract string EntityLabel { get; }

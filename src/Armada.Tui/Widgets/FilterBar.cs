@@ -45,6 +45,7 @@ namespace Armada.Tui.Widgets
         private readonly List<FilterBarItem> _Items = new List<FilterBarItem>();
         private readonly IModalHost? _Modals;
         private bool _Suppress = false;
+        private readonly Dictionary<string, string> _Pending = new Dictionary<string, string>(StringComparer.Ordinal);
 
         #endregion
 
@@ -95,7 +96,11 @@ namespace Armada.Tui.Widgets
             field.Placeholder = allLabel;
             field.Options = BuildOptions(allLabel, options);
             field.SetValue("");
-            field.ValueChanged += (s, e) => Raise(key);
+            field.ValueChanged += (s, e) =>
+            {
+                _Pending.Remove(key);
+                Raise(key);
+            };
             Add(new FilterBarItem(key, "", field, width));
             return field;
         }
@@ -130,6 +135,12 @@ namespace Armada.Tui.Widgets
             _Suppress = true;
             try
             {
+                if (_Pending.TryGetValue(key, out string? pending) && select.Options.Any(o => String.Equals(o.Value, pending, StringComparison.OrdinalIgnoreCase)))
+                {
+                    current = select.Options.First(o => String.Equals(o.Value, pending, StringComparison.OrdinalIgnoreCase)).Value;
+                    _Pending.Remove(key);
+                }
+
                 select.SetValue(select.Options.Any(o => o.Value == current) ? current : "");
             }
             finally
@@ -149,7 +160,13 @@ namespace Armada.Tui.Widgets
             FilterBarItem? item = Find(key);
             if (item == null) return "";
             if (item.Field is TextInput input) return input.Value;
-            if (item.Field is SelectField<string> select) return select.Value ?? "";
+            if (item.Field is SelectField<string> select)
+            {
+                string v = select.Value ?? "";
+                if (v.Length == 0 && _Pending.TryGetValue(key, out string? pending)) return pending;
+                return v;
+            }
+
             if (item.Field is TriStateField tri) return tri.AsBoolean.HasValue ? (tri.AsBoolean.Value ? "true" : "false") : "";
             return "";
         }
@@ -172,6 +189,8 @@ namespace Armada.Tui.Widgets
                 {
                     SelectOption<string>? match = select.Options.FirstOrDefault(o => String.Equals(o.Value, v, StringComparison.OrdinalIgnoreCase));
                     select.SetValue(match != null ? match.Value : "");
+                    if (match == null && v.Length > 0) _Pending[key] = v;
+                    else _Pending.Remove(key);
                 }
                 else if (item.Field is TriStateField tri)
                 {

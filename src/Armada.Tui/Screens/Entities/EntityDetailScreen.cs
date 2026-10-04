@@ -64,6 +64,15 @@ namespace Armada.Tui.Screens.Entities
         public int LoadCount { get; private set; } = 0;
 
         /// <summary>
+        /// Preference and command scope key: the screen's type name, so tabs of one hub keep separate table
+        /// preferences and command ids.
+        /// </summary>
+        public override string ScreenKey
+        {
+            get { return GetType().Name; }
+        }
+
+        /// <summary>
         /// English singular entity name.
         /// </summary>
         public abstract string EntityLabel { get; }
@@ -293,6 +302,13 @@ namespace Armada.Tui.Screens.Entities
         public override bool HandleKey(KeyEvent key)
         {
             EnsureBuilt();
+            if ((key.Code == KeyCode.PageDown || key.Code == KeyCode.PageUp) && (key.Modifiers & KeyModifiers.Ctrl) != 0 && _Panels.Count > 1)
+            {
+                int index = Math.Max(0, _Panels.FindIndex(p => p.Key == PanelTabs.SelectedKey));
+                int next = key.Code == KeyCode.PageDown ? (index + 1) % _Panels.Count : (index - 1 + _Panels.Count) % _Panels.Count;
+                return ShowPanel(_Panels[next].Key);
+            }
+
             if (Scope.HandleKey(key)) return true;
             return PanelTabs.HandleGlobalKey(key);
         }
