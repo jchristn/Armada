@@ -175,6 +175,20 @@ namespace Armada.Tui.Routing
         }
 
         /// <summary>
+        /// Replace the current location without raising <see cref="Navigated"/>, for screens that mirror their own
+        /// state (filters, sort, page) into the query so Back, Forward, and deep links restore it. The screen is not
+        /// rebuilt and history is not pushed.
+        /// </summary>
+        /// <param name="target">Path and query.</param>
+        /// <returns>The new location.</returns>
+        public RouteMatch ReplaceQuietly(string? target)
+        {
+            RouteMatch match = Resolve(target);
+            Current = match;
+            return match;
+        }
+
+        /// <summary>
         /// Clear history and location (sign-out).
         /// </summary>
         public void Reset()

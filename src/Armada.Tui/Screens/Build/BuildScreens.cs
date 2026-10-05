@@ -24,6 +24,10 @@ namespace Armada.Tui.Screens.Build
             screens.Register("DockScreen", (m, c) => new DockScreen(m, c));
             screens.Register("CaptainsScreen", (m, c) => new CaptainsScreen(m, c));
             screens.Register("CaptainScreen", (m, c) => new CaptainScreen(m, c));
+            screens.Register("VesselsScreen", (m, c) => new VesselsScreen(m, c));
+            screens.Register("VesselHealthScreen", (m, c) => new VesselHealthScreen(m, c));
+            screens.Register("VesselScreen", (m, c) => new VesselScreen(m, c));
+            screens.Register("VesselOnboardingScreen", (m, c) => new VesselOnboardingScreen(m, c));
         }
 
         #endregion

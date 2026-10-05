@@ -53,7 +53,8 @@ namespace Armada.Client
         }
 
         /// <summary>
-        /// Dashboard <c>evaluateVesselHealth</c>: POST '/api/v1/vessel-health/evaluate'.
+        /// Dashboard <c>evaluateVesselHealth</c>: POST '/api/v1/vessel-health/evaluate'. A 409 (an evaluation is already
+        /// running) is returned like a success with <c>AlreadyRunning</c> set, as on the dashboard.
         /// </summary>
         /// <param name="body">body.</param>
         /// <param name="token">Cancellation token.</param>
@@ -61,7 +62,9 @@ namespace Armada.Client
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
         public Task<VesselHealthEvaluationStart?> EvaluateVesselHealthAsync(VesselHealthEvaluateRequest? body = null, CancellationToken token = default)
         {
-            return PostAsync<VesselHealthEvaluationStart>("/api/v1/vessel-health/evaluate", body, null, token);
+            ArmadaRequestOptions options = new ArmadaRequestOptions();
+            options.AcceptStatuses.Add(409);
+            return PostAsync<VesselHealthEvaluationStart>("/api/v1/vessel-health/evaluate", body, options, token);
         }
 
         /// <summary>
