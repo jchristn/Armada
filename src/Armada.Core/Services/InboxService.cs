@@ -170,8 +170,10 @@ namespace Armada.Core.Services
                     {
                         Kind = InboxItemKinds.DeploymentApproval,
                         Severity = InboxSeverityEnum.Warning,
-                        Title = "Deployment awaiting approval: " + (String.IsNullOrWhiteSpace(deployment.EnvironmentName) ? deployment.Id : deployment.EnvironmentName!),
+                        Title = DeploymentApprovalLabel.Format(deployment.EnvironmentName, deployment.Title, deployment.Id),
                         EntityName = String.IsNullOrWhiteSpace(deployment.EnvironmentName) ? deployment.Id : deployment.EnvironmentName!,
+                        EnvironmentName = String.IsNullOrWhiteSpace(deployment.EnvironmentName) ? null : deployment.EnvironmentName,
+                        DeploymentTitle = String.IsNullOrWhiteSpace(deployment.Title) ? null : deployment.Title,
                         Detail = "A deployment is waiting for your approval before it runs.",
                         EntityType = "deployment",
                         EntityId = deployment.Id,
@@ -187,6 +189,8 @@ namespace Armada.Core.Services
                         Severity = InboxSeverityEnum.Critical,
                         Title = "Deployment failed: " + (String.IsNullOrWhiteSpace(deployment.EnvironmentName) ? deployment.Id : deployment.EnvironmentName!),
                         EntityName = String.IsNullOrWhiteSpace(deployment.EnvironmentName) ? deployment.Id : deployment.EnvironmentName!,
+                        EnvironmentName = String.IsNullOrWhiteSpace(deployment.EnvironmentName) ? null : deployment.EnvironmentName,
+                        DeploymentTitle = String.IsNullOrWhiteSpace(deployment.Title) ? null : deployment.Title,
                         Detail = deployment.Status == DeploymentStatusEnum.VerificationFailed
                             ? "Deployment verification failed and needs attention."
                             : "A deployment failed and needs attention.",

@@ -5,6 +5,7 @@ namespace Armada.Tui.Screens.Operations
     using System.Linq;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Tui.Approvals;
     using Armada.Tui.Input;
     using Armada.Tui.Routing;
     using Armada.Tui.Services;
@@ -84,7 +85,7 @@ namespace Armada.Tui.Screens.Operations
             Items.EmptyText = "Loading...";
             Items.Dispatcher = context.Dispatcher;
             Items.AddColumn(new GridColumn<InboxItem>("severity", "Severity", i => SeverityLabel(i.Severity)) { Width = 12, Style = (i, t) => SeverityStyle(i.Severity, t) });
-            Items.AddColumn(new GridColumn<InboxItem>("title", "Title", i => i.Title) { Weight = 3 });
+            Items.AddColumn(new GridColumn<InboxItem>("title", "Title", i => TitleFor(Context.Loc, i)) { Weight = 3 });
             Items.AddColumn(new GridColumn<InboxItem>("detail", "Detail", i => i.Detail) { Weight = 3 });
             Items.Activated += (s, i) => Open(i);
 
@@ -109,6 +110,21 @@ namespace Armada.Tui.Screens.Operations
         #endregion
 
         #region Public-Methods
+
+        /// <summary>
+        /// Display title of an inbox item: a deployment approval reads "Deploy to {environment}: {title}" in the
+        /// active locale (the same label as the Approvals queue and the confirmation dialogs); other kinds show the
+        /// server's title.
+        /// </summary>
+        /// <param name="loc">Localizer, or null for English.</param>
+        /// <param name="item">Inbox item.</param>
+        /// <returns>Title.</returns>
+        public static string TitleFor(ITextLocalizer? loc, InboxItem item)
+        {
+            if (item == null) throw new ArgumentNullException(nameof(item));
+            if (item.Kind == InboxItemKinds.DeploymentApproval) return DeploymentApprovalText.ForInbox(loc, item);
+            return item.Title;
+        }
 
         /// <summary>
         /// The latest unread notifications (at most eight), as the dashboard shows.

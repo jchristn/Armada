@@ -2413,7 +2413,11 @@
         "Skip to main content": "Saltar al contenido principal",
         "Page number": "Número de página",
         "Items per page": "Elementos por página",
-        "Log lines to show": "Líneas de registro que mostrar"
+        "Log lines to show": "Líneas de registro que mostrar",
+        "Deploy to {{environment}}: {{title}}": "Desplegar en {{environment}}: {{title}}",
+        "Deploy to {{environment}}": "Desplegar en {{environment}}",
+        "Deploy: {{title}}": "Desplegar: {{title}}",
+        "Deployment": "Despliegue"
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -3727,7 +3731,11 @@
         "Skip to main content": "跳到主要内容",
         "Page number": "页码",
         "Items per page": "每页条目数",
-        "Log lines to show": "要显示的日志行数"
+        "Log lines to show": "要显示的日志行数",
+        "Deploy to {{environment}}: {{title}}": "部署到 {{environment}}：{{title}}",
+        "Deploy to {{environment}}": "部署到 {{environment}}",
+        "Deploy: {{title}}": "部署：{{title}}",
+        "Deployment": "部署"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -5004,7 +5012,11 @@
         "Skip to main content": "跳至主要內容",
         "Page number": "頁碼",
         "Items per page": "每頁項目數",
-        "Log lines to show": "要顯示的記錄行數"
+        "Log lines to show": "要顯示的記錄行數",
+        "Deploy to {{environment}}: {{title}}": "部署到 {{environment}}：{{title}}",
+        "Deploy to {{environment}}": "部署到 {{environment}}",
+        "Deploy: {{title}}": "部署：{{title}}",
+        "Deployment": "部署"
       },
       "sections": {}
     },
@@ -6240,7 +6252,11 @@
         "Skip to main content": "跳去主要內容",
         "Page number": "頁碼",
         "Items per page": "每頁項目數",
-        "Log lines to show": "要顯示嘅記錄行數"
+        "Log lines to show": "要顯示嘅記錄行數",
+        "Deploy to {{environment}}: {{title}}": "部署去 {{environment}}：{{title}}",
+        "Deploy to {{environment}}": "部署去 {{environment}}",
+        "Deploy: {{title}}": "部署：{{title}}",
+        "Deployment": "部署"
       },
       "sections": {}
     },
@@ -7494,7 +7510,11 @@
         "Skip to main content": "メインコンテンツへスキップ",
         "Page number": "ページ番号",
         "Items per page": "1ページあたりの件数",
-        "Log lines to show": "表示するログ行数"
+        "Log lines to show": "表示するログ行数",
+        "Deploy to {{environment}}: {{title}}": "{{environment}} へのデプロイ: {{title}}",
+        "Deploy to {{environment}}": "{{environment}} へのデプロイ",
+        "Deploy: {{title}}": "デプロイ: {{title}}",
+        "Deployment": "デプロイ"
       },
       "sections": {}
     },
@@ -8737,7 +8757,11 @@
         "Skip to main content": "Zum Hauptinhalt springen",
         "Page number": "Seitenzahl",
         "Items per page": "Einträge pro Seite",
-        "Log lines to show": "Anzuzeigende Protokollzeilen"
+        "Log lines to show": "Anzuzeigende Protokollzeilen",
+        "Deploy to {{environment}}: {{title}}": "In {{environment}} bereitstellen: {{title}}",
+        "Deploy to {{environment}}": "In {{environment}} bereitstellen",
+        "Deploy: {{title}}": "Bereitstellen: {{title}}",
+        "Deployment": "Bereitstellung"
       },
       "sections": {}
     },
@@ -9980,7 +10004,11 @@
         "Skip to main content": "Aller au contenu principal",
         "Page number": "Numéro de page",
         "Items per page": "Éléments par page",
-        "Log lines to show": "Lignes de journal à afficher"
+        "Log lines to show": "Lignes de journal à afficher",
+        "Deploy to {{environment}}: {{title}}": "Déployer en {{environment}} : {{title}}",
+        "Deploy to {{environment}}": "Déployer en {{environment}}",
+        "Deploy: {{title}}": "Déployer : {{title}}",
+        "Deployment": "Déploiement"
       },
       "sections": {}
     },
@@ -11223,7 +11251,11 @@
         "Skip to main content": "Vai al contenuto principale",
         "Page number": "Numero di pagina",
         "Items per page": "Elementi per pagina",
-        "Log lines to show": "Righe di log da mostrare"
+        "Log lines to show": "Righe di log da mostrare",
+        "Deploy to {{environment}}: {{title}}": "Distribuisci in {{environment}}: {{title}}",
+        "Deploy to {{environment}}": "Distribuisci in {{environment}}",
+        "Deploy: {{title}}": "Distribuisci: {{title}}",
+        "Deployment": "Distribuzione"
       },
       "sections": {}
     }

@@ -8,6 +8,7 @@ namespace Armada.Tui.Services
     using System.Text.Json.Serialization;
     using Armada.Client.Socket;
     using Armada.Core.Enums;
+    using Armada.Core.Models;
     using Armada.Tui.Widgets;
 
     /// <summary>
@@ -201,6 +202,8 @@ namespace Armada.Tui.Services
             NotificationSeverityEnum severity = SeverityFor(message.Type, data);
             if (asset == "Deployment" && !String.IsNullOrEmpty(data.VerificationStatus)) status += " / " + data.VerificationStatus;
             string name = asset == "Captain" ? (data.Name ?? data.Id ?? "") : (data.Title ?? data.Id ?? "");
+            if (asset == "Deployment" && data.DeploymentStatus == DeploymentStatusEnum.PendingApproval)
+                name = DeploymentApprovalLabel.Format(data.EnvironmentName, data.Title, data.Id, (template, args) => _Loc.T(template, args));
             return PushEntityChange(asset, data.Id ?? "", name, status!, severity);
         }
 

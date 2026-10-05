@@ -40,4 +40,17 @@ describe('NotificationProvider severity', () => {
     expect(latest[0].severity).toBe('error');
     expect(latest[0].message).toBe('Deployment "Fix: login" - Succeeded / Failed');
   });
+
+  it('a deployment waiting for approval is named environment first, then title', () => {
+    localStorage.clear();
+    latest = [];
+    render(<NotificationProvider><Probe /></NotificationProvider>);
+    act(() => {
+      for (const l of listeners) {
+        l({ type: 'deployment.changed', data: { id: 'dpl_9', title: 'Release 2.3 hotfix', environmentName: 'production', status: 'PendingApproval', verificationStatus: 'NotStarted' } } as unknown as WebSocketMessage);
+      }
+    });
+    expect(latest).toHaveLength(1);
+    expect(latest[0].message).toBe('Deployment "Deploy to production: Release 2.3 hotfix" - PendingApproval / NotStarted');
+  });
 });

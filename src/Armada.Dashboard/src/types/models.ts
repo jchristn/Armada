@@ -1312,6 +1312,10 @@ export interface InboxItem {
   entityId: string | null;
   /** Display name of the entity (mission title, captain name, deployment environment, merge target branch). */
   entityName?: string | null;
+  /** Deployment items: the environment name (builds the "Deploy to {environment}: {title}" approval label). */
+  environmentName?: string | null;
+  /** Deployment items: the deployment title. */
+  deploymentTitle?: string | null;
   href: string;
 }
 

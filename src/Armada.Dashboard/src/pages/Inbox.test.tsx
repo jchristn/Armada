@@ -6,7 +6,11 @@ import type { InboxItem } from '../types/models';
 
 vi.mock('../api/client', () => ({ getInbox: vi.fn() }));
 vi.mock('../context/LocaleContext', () => ({
-  useLocale: () => ({ t: (text: string) => text, formatRelativeTime: (v: string) => v, formatDateTime: (v: string) => v }),
+  useLocale: () => ({
+    t: (text: string, params?: Record<string, string>) =>
+      Object.entries(params ?? {}).reduce((acc, [k, v]) => acc.split(`{{${k}}}`).join(String(v)), text),
+    formatRelativeTime: (v: string) => v, formatDateTime: (v: string) => v,
+  }),
 }));
 vi.mock('../context/NotificationContext', () => ({
   useNotifications: () => ({ notifications: [], unreadCount: 0, markRead: vi.fn(), markAllRead: vi.fn() }),
@@ -26,7 +30,7 @@ describe('Needs You approvals (F15)', () => {
     vi.mocked(getInbox).mockResolvedValue([
       item('failed', 'Failed: Append line', '/missions/msn_1', 'Critical'),
       item('ask_proposal', 'Ask approval: Dispatch voyage Fix login to vessel gateway', '/ask/ath_1'),
-      item('deployment_approval', 'Deployment awaiting approval: Production', '/deployments/dpl_1'),
+      { ...item('deployment_approval', 'Deployment awaiting approval: Production', '/deployments/dpl_1'), entityName: 'Production', environmentName: 'Production', deploymentTitle: 'Release 2.3 hotfix' },
     ]);
 
     render(
@@ -39,7 +43,9 @@ describe('Needs You approvals (F15)', () => {
 
     const approvals = await screen.findByRole('region', { name: 'Waiting for your approval' });
     expect(within(approvals).getByText('Ask approval: Dispatch voyage Fix login to vessel gateway')).toBeInTheDocument();
-    expect(within(approvals).getByText('Deployment awaiting approval: Production')).toBeInTheDocument();
+    // Environment first, deployment title second: the same label as the TUI and the approval confirm dialog.
+    expect(within(approvals).getByText('Deploy to Production: Release 2.3 hotfix')).toBeInTheDocument();
+    expect(within(approvals).queryByText('Deployment awaiting approval: Production')).not.toBeInTheDocument();
     expect(within(approvals).queryByText('Failed: Append line')).not.toBeInTheDocument();
 
     const interventions = screen.getByRole('region', { name: 'Needs intervention' });

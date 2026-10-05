@@ -82,6 +82,18 @@ namespace Armada.Tui.Approvals
         /// <returns>Approval item or null.</returns>
         public static ApprovalItem? FromInbox(InboxItem inbox)
         {
+            return FromInbox(inbox, null);
+        }
+
+        /// <summary>
+        /// Map an inbox item to an approval item (null for kinds this source does not own), localizing the deployment
+        /// approval label ("Deploy to {environment}: {title}") through <paramref name="loc"/>.
+        /// </summary>
+        /// <param name="inbox">Inbox item.</param>
+        /// <param name="loc">Localizer, or null for English.</param>
+        /// <returns>Approval item or null.</returns>
+        public static ApprovalItem? FromInbox(InboxItem inbox, ITextLocalizer? loc)
+        {
             if (inbox == null || String.IsNullOrEmpty(inbox.EntityId)) return null;
             ApprovalItem item = new ApprovalItem();
             switch (inbox.Kind)
@@ -105,6 +117,13 @@ namespace Armada.Tui.Approvals
             item.EntityName = !String.IsNullOrEmpty(inbox.EntityName) ? inbox.EntityName! : inbox.Title;
             item.EntityId = inbox.EntityId!;
             item.Title = inbox.Title;
+            if (item.Kind == ApprovalKindEnum.DeploymentApproval)
+            {
+                string label = DeploymentApprovalText.ForInbox(loc, inbox);
+                item.Title = label;
+                item.EntityName = label;
+            }
+
             item.Detail = inbox.Detail;
             item.Route = String.IsNullOrEmpty(inbox.Href) ? null : inbox.Href;
             item.Urgency = inbox.Severity == InboxSeverityEnum.Critical ? 2 : 1;
@@ -123,7 +142,7 @@ namespace Armada.Tui.Approvals
             if (hash == _LastInboxHash && !_FirstSync && _Live.Count == 0) return;
             _LastInboxHash = hash;
             DateTime now = _Context.Clock.UtcNow;
-            List<ApprovalItem> items = inbox.Select(FromInbox).Where(i => i != null).Select(i => i!).ToList();
+            List<ApprovalItem> items = inbox.Select(i => FromInbox(i, _Context.Loc)).Where(i => i != null).Select(i => i!).ToList();
             foreach (string key in _Live.Keys.ToList())
             {
                 KeyValuePair<DateTime, ApprovalItem> live = _Live[key];
@@ -162,8 +181,8 @@ namespace Armada.Tui.Approvals
             {
                 DeploymentStatusEnum? status = data.DeploymentStatus;
                 if (status == null) return;
-                string name = DeploymentEntityName(id, data.EnvironmentName);
-                Apply(ApprovalKindEnum.DeploymentApproval, id, status == DeploymentStatusEnum.PendingApproval, "Deployment awaiting approval: " + name, name, "/deployments/" + id, 1);
+                string label = DeploymentApprovalText.Label(_Context.Loc, data.EnvironmentName, data.Title, id);
+                Apply(ApprovalKindEnum.DeploymentApproval, id, status == DeploymentStatusEnum.PendingApproval, label, label, "/deployments/" + id, 1);
             }
         }
 
@@ -198,17 +217,6 @@ namespace Armada.Tui.Approvals
 
             _Live[key] = new KeyValuePair<DateTime, ApprovalItem>(_Context.Clock.UtcNow, item);
             _Context.Approvals.Upsert(item, existing == null);
-        }
-
-        /// <summary>
-        /// The name a deployment approval item carries: the server inbox's rule (the environment name, or the
-        /// deployment id when it has none). An item from a <c>deployment.changed</c> event and the same deployment
-        /// from the next inbox poll must read the same, or the row and its confirmation text change under the user
-        /// depending on which source reported it last.
-        /// </summary>
-        private static string DeploymentEntityName(string id, string? environmentName)
-        {
-            return String.IsNullOrWhiteSpace(environmentName) ? id : environmentName!;
         }
 
         private static int Hash(List<InboxItem> inbox)

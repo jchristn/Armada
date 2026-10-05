@@ -3,6 +3,7 @@ import { useWebSocket } from './WebSocketContext';
 import { useLocale } from './LocaleContext';
 import type { WebSocketMessage } from '../types/models';
 import { entityStatusSeverity, type NotificationEntityKind, type Severity } from '../lib/notificationSeverity';
+import { deploymentApprovalLabel } from '../lib/deploymentApprovalLabel';
 
 // ── Types ──
 
@@ -175,10 +176,19 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       }
 
       if (msg.type === 'deployment.changed' && data.status) {
+        // A deployment waiting for approval reads like every other approval surface: environment first.
+        const deploymentName = data.status === 'PendingApproval'
+          ? deploymentApprovalLabel(
+            t,
+            typeof data.environmentName === 'string' ? data.environmentName : null,
+            typeof data.title === 'string' ? data.title : null,
+            typeof data.id === 'string' ? data.id : null,
+          )
+          : String(data.title || data.id || '');
         pushNotification(
           'Deployment',
           String(data.id || ''),
-          String(data.title || data.id || ''),
+          deploymentName,
           String(data.status),
           typeof data.verificationStatus === 'string' ? data.verificationStatus : null,
         );
@@ -203,7 +213,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       }
     });
     return unsubscribe;
-  }, [subscribe, pushNotification]);
+  }, [subscribe, pushNotification, t]);
 
   // ── Actions ──
 

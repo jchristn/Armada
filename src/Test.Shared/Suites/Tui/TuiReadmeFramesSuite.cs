@@ -115,7 +115,7 @@ namespace Test.Shared.Suites.Tui
                 "{\"Kind\":\"review\",\"Severity\":\"Warning\",\"Title\":\"Review: Add retry to webhook sender\",\"Detail\":\"Waiting 12m\",\"EntityType\":\"mission\",\"EntityId\":\"msn_r\",\"Href\":\"/missions/msn_r\"}," +
                 "{\"Kind\":\"landing_failed\",\"Severity\":\"Critical\",\"Title\":\"Landing failed: Broken\",\"Detail\":\"Merge conflict in src/app.cs\",\"EntityType\":\"mission\",\"EntityId\":\"msn_x\",\"Href\":\"/missions/msn_x\"}," +
                 "{\"Kind\":\"stalled_captain\",\"Severity\":\"Warning\",\"Title\":\"Stalled captain: codex-2\",\"Detail\":\"No heartbeat for 6m\",\"EntityType\":\"captain\",\"EntityId\":\"cpt_s\",\"Href\":\"/captains/cpt_s\"}," +
-                "{\"Kind\":\"deployment_approval\",\"Severity\":\"Warning\",\"Title\":\"Deployment awaiting approval: Staging\",\"Detail\":\"v1.0.0-rc1\",\"EntityType\":\"deployment\",\"EntityId\":\"dpl_1\",\"Href\":\"/deployments/dpl_1\"}]");
+                "{\"Kind\":\"deployment_approval\",\"Severity\":\"Warning\",\"Title\":\"Deploy to Staging: Release v1.0.0-rc1\",\"EntityName\":\"Staging\",\"EnvironmentName\":\"Staging\",\"DeploymentTitle\":\"Release v1.0.0-rc1\",\"Detail\":\"v1.0.0-rc1\",\"EntityType\":\"deployment\",\"EntityId\":\"dpl_1\",\"Href\":\"/deployments/dpl_1\"}]");
             return fx;
         }
 

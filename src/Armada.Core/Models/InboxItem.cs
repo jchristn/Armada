@@ -40,6 +40,17 @@ namespace Armada.Core.Models
         public string? EntityName { get; set; } = null;
 
         /// <summary>
+        /// For deployment items: the deployment's environment name, or null. Clients build the localized deployment
+        /// approval label ("Deploy to {environment}: {title}") from this and <see cref="DeploymentTitle"/>.
+        /// </summary>
+        public string? EnvironmentName { get; set; } = null;
+
+        /// <summary>
+        /// For deployment items: the deployment's title, or null.
+        /// </summary>
+        public string? DeploymentTitle { get; set; } = null;
+
+        /// <summary>
         /// The referenced entity id.
         /// </summary>
         public string? EntityId { get; set; } = null;
