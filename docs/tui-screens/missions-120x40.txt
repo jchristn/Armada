@@ -1,0 +1,40 @@
+ Armada  [Default Tenant] admin@armada  [Global Admin]                                             o Offline  [bell 0]
+ File  Go  View  Actions  Ask  Help                                                                            F10 Menu
+  Dashboard             |[Missions]  Voyages   Merge Queue
+  Ask Armada            |
+- OPERATIONS            |Missions  Individual work units assigned to captains
+   Needs You            |[ + Mission n ]                                                          [auto 15s]  F5 Refresh
+   Planning             |Status: All Statuses   v  User: All users            v  Title: Search...
+   Dispatch             |Status text: Search...     Branch: Search...
+   Fleet Actions        |[ ] Title       ID                       Status           Priority Vessel Cap... Voyage Branch
+>  Missions             |[ ] Fix colu... msn_f                    ~ InProgress          100 Alpha  cla... -      -
+- DELIVERY              |[ ] Broken      msn_x                    x Failed              100 Alpha  -      -      -
+   Delivery             |[ ] Update g... msn_d                    + Complete            100 Alpha  -      -      -
+- BUILD                 |[ ] Add retr... msn_r                    ! Review               50 Beta   -      -      -
+   Vessels              |
+   Captains             |
+- CONFIGURATION         |
+   Configuration        |
+- ACTIVITY              |
+   Activity             |
+   Jobs                 |
+- SYSTEM                |
+   API Explorer         |
+   Settings             |
+                        |
+                        |
+                        |
+                        |
+                        |
+                        |
+                        |
+                        |
+                        |
+                        |
+                        |
+                        |
+                        |
+                        |
+                        |
+                        |Showing 1-4 of 4. Page 1 of 1.                                          Page size 25  < >  z  c
+ Enter Open  . Actions  / Filter  n + Mission  ? Help  Ctrl+K Palette  F10 Menu  Tab Next pane  F5 Refresh     auto 15s
