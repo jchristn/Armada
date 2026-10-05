@@ -92,6 +92,8 @@ namespace Test.Shared.Suites.E2E
                 AssertFalse(response.StatusCode == System.Net.HttpStatusCode.NotFound,
                     "The advertised /mcp endpoint must be served (got 404).");
                 AssertEqual(System.Net.HttpStatusCode.NotAcceptable, response.StatusCode);
+                // The 406 status is the decision. Voltaic writes this refusal as plain text (no JSON error body or code),
+                // so naming the Accept header can only be checked in the text.
                 AssertContains("Accept", body);
             }));
 
@@ -369,14 +371,9 @@ namespace Test.Shared.Suites.E2E
 
         private static bool EnumerateContainsId(string enumerateText, string id)
         {
-            EnumerationResult<JsonElement> data = JsonHelper.Deserialize<EnumerationResult<JsonElement>>(enumerateText);
+            EnumerationResult<McpLengthHints> data = JsonHelper.Deserialize<EnumerationResult<McpLengthHints>>(enumerateText);
             if (data.Objects == null) return false;
-            foreach (JsonElement obj in data.Objects)
-            {
-                if (obj.TryGetProperty("Id", out JsonElement idElement) && String.Equals(idElement.GetString(), id, StringComparison.Ordinal))
-                    return true;
-            }
-            return false;
+            return data.Objects.Any(o => String.Equals(o.Id, id, StringComparison.Ordinal));
         }
 
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)
