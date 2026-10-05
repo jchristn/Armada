@@ -72,12 +72,13 @@ namespace Test.Shared.Suites.Services
                         Model = "bad-model"
                     };
 
-                    string? error = await handler.ValidateCaptainModelAsync(captain).ConfigureAwait(false);
+                    CaptainModelValidationFailure? failure = await handler.ValidateCaptainModelDetailedAsync(captain).ConfigureAwait(false);
                     string args = await WaitForRecordedArgsAsync(shim.ArgsFile, "bad-model").ConfigureAwait(false);
 
-                    AssertNotNull(error, "Invalid model should return an error");
-                    AssertContains("bad-model", error!, "Error should include invalid model");
-                    AssertContains("unknown model 'bad-model'", error!, "Error should include runtime output");
+                    AssertNotNull(failure, "Invalid model should return a failure");
+                    AssertEqual(CaptainModelValidationFailureEnum.ModelRejected, failure!.Reason, "typed reason for a rejected model");
+                    // The message forwards the runtime's own diagnostic line to the operator.
+                    AssertContains("unknown model 'bad-model'", failure.Message, "Message should include runtime output");
                     AssertModelArgument(args, "bad-model", "Captain validation should launch runtime with --model bad-model");
                 }
             }));
@@ -93,12 +94,11 @@ namespace Test.Shared.Suites.Services
                         Model = "hang-model"
                     };
 
-                    string? error = await handler.ValidateCaptainModelAsync(captain).ConfigureAwait(false);
+                    CaptainModelValidationFailure? failure = await handler.ValidateCaptainModelDetailedAsync(captain).ConfigureAwait(false);
                     string args = await WaitForRecordedArgsAsync(shim.ArgsFile, "hang-model").ConfigureAwait(false);
 
-                    AssertNotNull(error, "Timed-out validation should return an error");
-                    AssertContains("hang-model", error!, "Error should include requested model");
-                    AssertContains("timed out", error!, "Error should report validation timeout");
+                    AssertNotNull(failure, "Timed-out validation should return a failure");
+                    AssertEqual(CaptainModelValidationFailureEnum.TimedOut, failure!.Reason, "typed reason for a validation timeout");
                     AssertModelArgument(args, "hang-model", "Timed-out validation should still launch runtime with --model hang-model");
                 }
             }));
@@ -113,10 +113,10 @@ namespace Test.Shared.Suites.Services
                         RuntimeOptionsJson = CaptainRuntimeOptions.Serialize(new MuxCaptainOptions())
                     };
 
-                    string? error = await handler.ValidateCaptainModelAsync(captain).ConfigureAwait(false);
+                    CaptainModelValidationFailure? failure = await handler.ValidateCaptainModelDetailedAsync(captain).ConfigureAwait(false);
 
-                    AssertNotNull(error, "Mux validation should fail without an endpoint");
-                    AssertContains("named endpoint", error!, "Mux validation should explain the missing endpoint requirement");
+                    AssertNotNull(failure, "Mux validation should fail without an endpoint");
+                    AssertEqual(CaptainModelValidationFailureEnum.NamedEndpointRequired, failure!.Reason, "typed reason for a missing Mux endpoint");
                 }
             }));
 
@@ -130,10 +130,11 @@ namespace Test.Shared.Suites.Services
                         RuntimeOptionsJson = "{not valid json}"
                     };
 
-                    string? error = await handler.ValidateCaptainModelAsync(captain).ConfigureAwait(false);
+                    CaptainModelValidationFailure? failure = await handler.ValidateCaptainModelDetailedAsync(captain).ConfigureAwait(false);
 
-                    AssertNotNull(error, "Mux validation should fail when runtime options JSON is invalid");
-                    AssertContains("invalid JSON", error!, "Mux validation should report invalid JSON");
+                    AssertNotNull(failure, "Mux validation should fail when runtime options JSON is invalid");
+                    AssertEqual(CaptainModelValidationFailureEnum.InvalidRuntimeOptions, failure!.Reason, "typed reason for invalid Mux options");
+                    AssertEqual(failure.Message, await handler.ValidateCaptainModelAsync(captain).ConfigureAwait(false), "the string API returns the same message");
                 }
             }));
 

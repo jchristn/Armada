@@ -158,11 +158,11 @@ namespace Armada.Server.Routes
                 captain.TenantId = ctx.TenantId;
                 captain.UserId = ctx.UserId;
                 NormalizeCaptainRuntimeOptions(captain);
-                string? createValidationError = await _agentLifecycle.ValidateCaptainModelAsync(captain).ConfigureAwait(false);
+                CaptainModelValidationFailure? createValidationError = await _agentLifecycle.ValidateCaptainModelDetailedAsync(captain).ConfigureAwait(false);
                 if (createValidationError != null)
                 {
                     req.Http.Response.StatusCode = 400;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = createValidationError };
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = createValidationError.Message, Data = createValidationError };
                 }
                 captain = await _database.Captains.CreateAsync(captain).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 201;
@@ -257,11 +257,11 @@ namespace Armada.Server.Routes
                 updated.CreatedUtc = existing.CreatedUtc;
                 updated.LastUpdateUtc = DateTime.UtcNow;
                 NormalizeCaptainRuntimeOptions(updated, existing);
-                string? updateValidationError = await _agentLifecycle.ValidateCaptainModelAsync(updated).ConfigureAwait(false);
+                CaptainModelValidationFailure? updateValidationError = await _agentLifecycle.ValidateCaptainModelDetailedAsync(updated).ConfigureAwait(false);
                 if (updateValidationError != null)
                 {
                     req.Http.Response.StatusCode = 400;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = updateValidationError };
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = updateValidationError.Message, Data = updateValidationError };
                 }
                 updated = await _database.Captains.UpdateAsync(updated).ConfigureAwait(false);
                 return (object)updated;
