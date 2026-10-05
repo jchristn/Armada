@@ -3,11 +3,11 @@
 > **Type:** implementation plan (work-tracking). Annotate task status and the progress log as you go; keep this
 > document in sync with what actually shipped.
 >
-> **Status:** In progress (W0, W1, W2 Ask Armada, W3 Operations, W4 Build, W5 Delivery, W6 Configuration, and W7 Activity and System done; Milestones A, B, and C complete; every dashboard route and tab is implemented; W8 quality and W9 distribution remain)
+> **Status:** In progress (W0, W1, W2 Ask Armada, W3 Operations, W4 Build, W5 Delivery, W6 Configuration, and W7 Activity and System done; Milestones A, B, and C complete; every dashboard route and tab is implemented; W8.1-W8.3, W8.5, W8.6, and W9 done; left: hands-on terminal checks in W8.4 and the simulated user session W8.7)
 > **Built on:** TUIKit 1.2.1 (`TUIKit` on NuGet; source at `~/Code/Tuikit`)
 > **Parity baseline:** the web dashboard at `src/Armada.Dashboard` as of 2026-10-04 (52 page routes, 37 hub tabs,
 > about 45 modals and drawers, 317 server-calling API client functions, 29 WebSocket event types)
-> **Last updated:** 2026-10-04
+> **Last updated:** 2026-10-05
 
 Status values: `[ ]` not started, `[~]` in progress, `[x]` done, `[!]` blocked.
 
@@ -634,25 +634,36 @@ REST_API.md.
 
 ### W8. Quality
 
-- [~] **W8.1** Parity enforcement (below). Manifest generated (`scripts/tui/generate-parity-manifest.py`) and the
-  coverage checks run in Tui.Parity; no entry is planned any more (W4 flipped the last ones), but the "no planned
-  entries in release builds" check is not enforced yet.
-- [~] **W8.2** Headless test suites: one keyboard-flow test per screen (open, filter, select, row action, modal,
+- [x] **W8.1** Parity enforcement (below). Manifest generated (`scripts/tui/generate-parity-manifest.py`) and the
+  coverage checks run in Tui.Parity. Release gate: `generate-parity-manifest.py --check` (the `tui-parity` job in
+  `.github/workflows/ci.yml`) fails when `parity.json` differs from what the generator would write, when any entry is
+  `planned`, or when a `not-applicable` or `extension` entry has no notes; Tui.Parity enforces the same rules on every
+  OS (`no_planned_entries`, `release_gate_rejects`), fails on entries for surfaces the dashboard no longer has
+  (`no_stale_entries`), and checks that the generator and the suite skip the same non-server `client.ts` exports
+  (`generator_in_sync`; the generator was missing `isApiStatus`). The release workflow itself does not run the check;
+  CI on the tagged commit does.
+- [x] **W8.2** Headless test suites: one keyboard-flow test per screen (open, filter, select, row action, modal,
   confirm) with `HeadlessBackend` and `WidgetTester`; Ask streaming and approval tests with a scripted event source.
   Done for the built screens: Tui.KeyboardFlows (Delivery and Configuration) and Tui.KeyboardFlows.Ops (Operations,
   Activity, System lists) run one table-driven flow per screen (open, filter, select, row menu, create form or page,
   open the row, back); Ask, Approvals, Login, Shell, Setup, Settings, API Explorer, Token Usage, Home, Planning, and
-  Dispatch keep their own suites. Open: the Build screens (Vessels, Import, Health, Workspace, Captains, Docks,
-  Fleets) once they land. Note: on editor pages that open in a text field (Create Voyage, backlog item) Alt+Left
-  moves by word and Esc goes back.
-- [~] **W8.3** End-to-end suite against `E2EServerFixture`: login, Ask dispatch with approval through landing (stub
+  Dispatch keep their own suites. Build: Tui.KeyboardFlows.Build runs the same flow for Vessels, Vessel Health
+  (server-side filter), Fleets, Workspace, Captains, and Docks through `TuiFlowRunner` (new `TuiFlowSpec` hooks: stub
+  factory, request checks, server-filter wait, terminal size), and by hand for the import wizard (I from Vessels,
+  paths, discover, review search and selection, options, import, open a result, back) and the vessel page with
+  onboarding (tabs, action menu, edit form, `g` onboarding, next step, back); requests are checked with
+  `RequestsFor`, `BodiesFor`, `LastBody<T>`, and `QueryValue`, never by text. Note: on editor pages that open in a
+  text field (Create Voyage, backlog item) Alt+Left moves by word and Esc goes back.
+- [x] **W8.3** End-to-end suite against `E2EServerFixture`: login, Ask dispatch with approval through landing (stub
   captain), Fleet Action run, import, health evaluation, settings save.
   Done (Tui.EndToEnd, Tui.EndToEnd.Flows): API key and password login; a captain-proposed Ask dispatch approved with
   `a` that lands on the vessel's bare origin through the real completion and LocalMerge pipeline; Approvals center
   approve/reject of live Ask proposals and a deployment approval; notifications from live WebSocket events and the
-  notification center; a Fleet Action run followed to completion; a server settings save. Open: import and health
-  evaluation through their TUI screens (Build screens, in progress elsewhere; their API calls are covered live by
-  Client.Contract.Vessels).
+  notification center; a Fleet Action run followed to completion; a server settings save. Tui.EndToEnd.Build: the
+  import wizard imports two local git repositories (paste, discover, review, default fleet, import, results, View
+  vessels) and the vessels are checked on the server (fleet, working directory); Vessel Health filters to a vessel on
+  the server, re-evaluates it, follows the job until the server has an evaluation, and opens the inspector and the
+  vessel. Both run with the stub captain runtime installed; no agent CLI runs.
 - [~] **W8.4** Accessibility and display: HighContrast theme, ASCII icon mode, no color-only states, 80x24 minimum,
   tmux/SSH validation, Windows Terminal, iTerm2, Terminal.app, GNOME Terminal, conhost (degraded). Done: High contrast
   uses reverse video and underline for every selected state and is picked by Auto under `NO_COLOR`; Icons
@@ -660,8 +671,28 @@ REST_API.md.
   the terminal transliterated in ASCII mode; status, tab, sidebar, and wizard states carry text or a symbol; every route
   and hub tab checked at 80x24 (sidebar hidden, `? Help` always shown, header keeps approvals and the bell); a localized
   terminal-too-small screen; tables give the title column room and shrink, elide, then drop ID columns first (checked at
-  80, 100, 120, and 160 columns). Tests: Tui.Display. Left: hands-on checks in tmux, SSH, Windows Terminal, iTerm2,
-  Terminal.app, GNOME Terminal, and conhost (only a macOS pseudo-terminal run was done, ASCII under `LANG=C`).
+  80, 100, 120, and 160 columns). Tests: Tui.Display.
+  Scripted terminal checks (2026-10-05): `scripts/tui/terminal-check.sh` runs the real `armada tui` in a
+  pseudo-terminal through a VT100 emulator (pyte) against a throwaway Admiral, and with Docker repeats it in a Linux
+  container (`mcr.microsoft.com/dotnet/aspnet:10.0`) with its own Admiral plus tmux. Result: macOS 52 of 52 checks,
+  Linux 76 of 76. Covered: `TERM=xterm-256color` UTF-8 (Unicode borders, `g v`, `Ctrl+K` palette running a
+  destination, `?` help and Esc, resize 120x40 to 80x24 to 70x20 "Terminal too small" and back, `Ctrl+Q` exit 0,
+  cursor shown and alternate screen left on exit); `TERM=xterm LANG=C`, `TERM=dumb`, and (Linux) `TERM=linux
+  LANG=POSIX` render ASCII only with ASCII borders; `NO_COLOR=1` gives high contrast with reverse-video selection;
+  an SSH-like session (`SSH_CONNECTION`, `SSH_TTY`, no locale variables) renders Unicode and handles keys; 80x24 from
+  the start; `TERM=linux LANG=C.UTF-8`; tmux with `TERM=screen-256color` (render, `g v`, palette, Esc, Alt+Left back,
+  `resize-window` to 80x24, `Ctrl+Q` exit 0). Frames are written for review. Found and fixed on the way: Esc in the
+  import wizard's last text field did nothing; the picker cut off its own key hints; the Ask header said `[c]` for
+  the captain while `c` types a letter in the composer (now `[Esc c]`). Found, not fixed: `Ctrl+Q` does not quit while
+  a dialog or picker is open (TUIKit gives modals every key before `KeyFilter`; documented in Troubleshooting); on the
+  Vessels table at 120 columns the fixed-width Landing Mode, Sync, and Branches columns leave Fleet and Repository at
+  6 to 7 cells (the grid layout keeps fixed widths and squeezes proportional columns to their minimum; needs a layout
+  rule, not a one-screen tweak).
+  Left for a person (visual and real-terminal checks the emulator cannot make): Windows Terminal and conhost on
+  Windows (Auto icons, colors, Alt keys, mouse, resize), iTerm2 and Terminal.app on macOS (colors and the focus
+  border, mouse and F12, OSC 52 copy, Option as Alt), GNOME Terminal on Linux, a real SSH session from another machine
+  (locked keychain falls back to the file store, locale forwarding), and tmux by hand (OSC 52 with `set-clipboard`,
+  mouse).
 - [x] **W8.5** Performance: 10,000-row grids stay responsive (virtualization, server paging), Ask transcripts of 5,000
   lines, idle CPU under 2 percent (lower `TargetFps` when idle), memory caps for scrollback. Frame governor and Armada
   run loop (idle about 4 frames per second, 1 percent of a core), Ask block cache (streaming chunk 51 ms to 4 ms at
@@ -676,10 +707,13 @@ REST_API.md.
 
 ### W9. Docs and distribution
 
-- [~] **W9.1** `docs/TUI.md`: install, start, profiles, key map, screens, approvals, notifications, troubleshooting.
+- [x] **W9.1** `docs/TUI.md`: install, start, profiles, key map, screens, approvals, notifications, troubleshooting.
   Install, start, profiles, login (including the localhost prefill and server editing), navigation, notifications, Ask Armada,
-  the Approvals center, the key map, and every screen section (Operations, Build, Delivery, Configuration, Activity
-  and System) are written; troubleshooting remains.
+  the Approvals center, the key map, every screen section (Operations, Build, Delivery, Configuration, Activity
+  and System), and Troubleshooting (cannot connect and wrong port, Ask not connected over MCP and the MCP host
+  mismatch, login messages, terminal too small, glyphs and ASCII mode, colors and `NO_COLOR`, SSH and tmux, keychain
+  and `ARMADA_TUI_CREDENTIAL_STORE=file`, where files live, resetting preferences, performance, `Ctrl+Q` with a dialog
+  open, and bug reports with Help, Save screen snapshot...).
 - [x] **W9.2** README section and screenshots (text captures from `Snapshot`). Captures in `docs/tui-screens`,
   regenerated with `ARMADA_TUI_README_DIR=docs/tui-screens ARMADA_TEST_SUITES=Tui.ReadmeFrames`.
 - [x] **W9.3** Ships with Helm (`armada tui`) in every channel Helm ships in; CHANGELOG entry. Helm ships in the NuGet
@@ -723,7 +757,9 @@ command id. A `Tui.Parity` test suite parses the dashboard source and the manife
 
 - a dashboard route, tab, API function, event, or settings field has no manifest entry,
 - an entry marked `implemented` points to a screen or command that does not exist,
-- a release build has any entry still `planned`.
+- a release build has any entry still `planned` (enforced: `no_planned_entries` in Tui.Parity and
+  `generate-parity-manifest.py --check` in CI, which also fails when the committed manifest is out of date or a
+  `not-applicable` or `extension` entry has no notes).
 
 This turns "parity" into a build check: when someone adds a page or API function to the dashboard, the TUI build tells
 them what is missing.
@@ -781,3 +817,4 @@ before Milestone B; U5, U6 before Milestone E).
 | 2026-10-04 | Claude (tui-build) | W4.1-W4.8, W8.1, W9.1 | BUILD screens in `Screens/Build`: Vessels (grid with background sync and branch counts, the full vessel form, Manage Branches with push and merge, Build/Refine Context, bulk Run action), the import wizard (paste or browse sources, background discovery, review with chips, selection, defaults, and the fleet recommendation opt-in, background import with progress, recommendation editing and apply, import history, `?batch=`), Vessel Health (summary chips, server filters, sort, and paging round-tripping through the route query, column chooser, health inspector with findings, dependencies, and overrides, evaluation tracking), the vessel page and onboarding, Fleets and the fleet page, the Workspace and its vessel picker (tree, tabbed editor with hash-checked save and `$EDITOR`, previews, terminal, diff, context with Append Selection, search, Plan and Dispatch handoffs), Captains and the captain page (Mux fields with discovery, tools viewer, readable captain log, quarantine), Docks and the dock page. Parity: the last 11 routes and 6 tabs flipped to implemented (no planned entries remain). Client: `VesselUpsertRequest` (token override), `evaluateVesselHealth` accepts 409. Shell: `Router.ReplaceQuietly`, pending go-to prefixes complete before the screen. Tests: Tui.Build.* (FleetsDocks, Captains, Vessels, Health, Workspace, Import; 18 cases). Real run against a throwaway Admiral on 33010/33011: vessel create, import of temp git repos (twice, with the leave-review guard), health evaluation and inspector, a Workspace edit with diff and terminal, captain create with the tools viewer, and a dock view. |
 | 2026-10-04 | Claude (tui-a11y-perf) | W8.4, W8.5 | Display: Icons Auto/Unicode/ASCII (`GlyphModeEnum`, `TuiPreferences.Glyphs`, View menu `view.icons.*`), `TerminalEncoding` for Auto, `AsciiGlyphs` width-preserving map applied by `TerminalBackendAdapter` to everything written to the terminal and by `TuiSnapshot`; high contrast with reverse video for selection and Auto picking it under `NO_COLOR`; localized terminal-too-small screen; status bar keeps `? Help`; header gives approvals and the bell priority; `ArmadaGrid` column layout gives the primary (title or name) column room and shrinks with middle elision, then drops, ID columns first (`GridColumn.Identifier`, `GridColumn.Primary`, `TextCells.ElideMiddle`); wizard steps marked `+`. Performance: `FrameGovernor` plus `TuiRunLoop` (compose on input, posted work, resize, theme change, or a 250 ms idle tick; 25 ms idle input polling), `TuiContext.Quit`, `AskTranscriptBuilder` per-message block cache, `AskConversation.MaxMessages`. Measured idle CPU 10.2 to 1.1 percent of a core (Ask, 5,000 messages) and 4.1 to 0.6 (Jobs); streaming chunk at 5,000 messages 51 ms to 4.4 ms. Tests: Tui.Display (10), Tui.Performance (8). TUIKit gaps: `RunAsync` has no frame-skip hook and no public stop flag (U8; Armada runs its own loop and routes Ctrl+Q through `TuiContext.Quit`); the terminal-too-small screen is not localizable; no post-compose hook, so ASCII mode transliterates at the backend. |
 | 2026-10-05 | Claude (tui-e2e) | W0.4, W8.2, W8.3 | Client contract: Client.Contract.Config/Delivery/Work/AskPlanning/Vessels exercise 314 of 320 client methods live; Client.Destructive covers the other six against a recording stub; Client.Coverage and Client.RouteSurface (client vs. `docs/api-surface-1.0.json`) keep it that way. `StubCaptainRuntime` (installed through the new `AgentRuntimeFactory.Override` and `ArmadaServer.RuntimeFactory`; `BaseAgentRuntime` gains protected raise helpers) answers Ask turns through MCP with the turn's session token, commits a file for missions, and replies to planning, refinement, context, chat, and categorization prompts. Client fixes: `DispatchMissionAsync` returns `MissionDispatchResult` (Mission and Warning) and `CreateMissionAsync` unwraps the `{ Mission, Warning }` reply (the setup wizard's raw-call workaround is gone); `ProcessAllMergeQueueAsync`, `CancelMergeEntryAsync`, `RecallCaptainAsync`, and `GetVoyageStatusAsync` called routes the server does not have (copied from api/client.ts) and now call the real ones; `GetVoyageAsync` unwraps `{ Voyage, Missions }`; `UnquarantineCaptainAsync` no longer returns a made-up captain for `{ Status: "not_quarantined" }`. Server: new `GET /api/v1/events/{id}` (the TUI and dashboard event detail pages called it); the vessel landing preview unescapes `sourceBranch`. Tests: Tui.EndToEnd.Flows (5), Tui.KeyboardFlows (16), Tui.KeyboardFlows.Ops (13), Client.* (8 new suites), approvals and setup wizard cases. Not done: TUI flows for the Build screens and the import/health end-to-end flows (Build screens in progress). |
+| 2026-10-05 | Claude (tui-final) | W8.1, W8.2, W8.3, W8.4, W9.1 | Parity release gate: `generate-parity-manifest.py --check` and a `tui-parity` CI job; Tui.Parity `no_planned_entries`, `release_gate_rejects`, `no_stale_entries`, `generator_in_sync` (the generator now skips `isApiStatus` like the suite). Tui.KeyboardFlows.Build (8 flows: Vessels, Vessel Health, Fleets, Workspace, Captains, Docks, import wizard, vessel page and onboarding) with structured request checks. Tui.EndToEnd.Build (import wizard to imported vessels, health evaluation and inspector; live server, stub runtimes). `scripts/tui/terminal-check.sh` (pty and VT emulator matrix on macOS, plus tmux and Linux console settings in a Linux container; 52 + 76 checks pass). Fixes: Esc in the import wizard's last text field; picker key hints cut off; Ask captain hint `[Esc c]` while typing; new Help, Save screen snapshot... command. Docs: Troubleshooting in `docs/TUI.md`; README frames regenerated. Not fixed: `Ctrl+Q` with a dialog open (TUIKit routes every key to the modal first); Vessels table column squeeze at 120 columns (grid layout rule). |

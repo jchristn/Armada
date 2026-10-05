@@ -84,6 +84,10 @@ All notable changes to Armada are documented in this file.
 
 ### Terminal UI: Operations, Delivery, Configuration, Activity, and System screens
 
+- TUI parity is a release gate: `scripts/tui/generate-parity-manifest.py --check` (new `tui-parity` CI job) and the Tui.Parity suite fail when `parity.json` is out of date, has a `planned` entry, or has a `not-applicable` or `extension` entry without notes.
+- Help, Save screen snapshot... writes the screen as plain text to a file for bug reports. `docs/TUI.md` has a Troubleshooting section (connection and ports, MCP host mismatch, login, terminal size, glyphs and ASCII mode, colors, SSH and tmux, credential store, files, reset, performance, bug reports).
+- Fixed: Esc in the import wizard's last text field did nothing; pickers cut off their key hints; the Ask header said `[c]` for the captain while typing in the message box, where `c` types the letter (now `[Esc c]`).
+- Tests: keyboard flows for every Build screen (Tui.KeyboardFlows.Build), end-to-end import and vessel health flows against a live server with stub runtimes (Tui.EndToEnd.Build), and `scripts/tui/terminal-check.sh` for scripted pseudo-terminal, tmux, and Linux console checks.
 - Display: the focused pane has a visible border. The sidebar, main screen, and Ask dock each sit in a reserved one-cell border; the pane with keyboard focus draws it in the theme's new focus color with heavy lines (ASCII `+ - |` in ASCII mode, reverse video in High contrast), the others a dim light line, and a focused part of a screen (grid, filter row, tab strip, Ask composer or transcript, workspace tree or editor) lights the stretch of the main border beside it. Nothing moves when focus does; works at 80x24. The README text captures are written as ASCII.
 - Tables: the footer spells out the page size keys (`z/Z Page size: 25 (10/25/50/100/250)  < > Page  c Columns`); `Z` opens a picker to choose a page size directly; `z` still cycles. Sizes are remembered per table.
 - Fixed: with a hub's tab strip focused, Left/Right switched tabs only once (the rebuilt hub moved focus into the new tab's content); focus now stays on the tab strip.
