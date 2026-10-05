@@ -691,17 +691,22 @@ REST_API.md.
 
 Each item lands in TUIKit with its own tests, then Armada switches to it and deletes its local copy.
 
-- [ ] **U1** Key and mouse forwarding into `TabView`, `SplitView`, `ScrollView` children; hierarchical focus scopes.
-- [ ] **U2** Change events on `ListView`, `DataTable`, `TextField`, `TextEditor`, `Checkbox`, `RadioGroup`.
-- [ ] **U3** `DataTable` improvements: column sizing, typed sort with indicators and header click, multi-select, per-cell
+Status (2026-10-05): U1-U10 and the TUIKit-side gaps reported by the screen workstreams are implemented on branch
+`work/armada-upstream` in `~/Code/Tuikit` (commit `ce362e6`, 681 tests passing, additive APIs, version unchanged).
+Not released: Armada moves to them after a TUIKit release, then removes its workarounds (closed-modal cleanup,
+per-chunk Markdown re-render, local FocusScope/ValueChanged/ButtonRow copies).
+
+- [~] **U1** Key and mouse forwarding into `TabView`, `SplitView`, `ScrollView` children; hierarchical focus scopes.
+- [~] **U2** Change events on `ListView`, `DataTable`, `TextField`, `TextEditor`, `Checkbox`, `RadioGroup`.
+- [~] **U3** `DataTable` improvements: column sizing, typed sort with indicators and header click, multi-select, per-cell
   styles, paging hooks, CJK-safe widths.
-- [ ] **U4** `Dropdown`/`ComboBox`, `Button`, `ContextMenu`, `Tooltip`, `Badge`.
-- [ ] **U5** Theme-aware widgets (read `app.Theme` roles), theme-driven Markdown and toast colors.
-- [ ] **U6** Notification center history, actions, dismiss, wider toasts.
-- [ ] **U7** Incremental Markdown rendering for `StreamingTranscript` while a block streams.
-- [ ] **U8** `Pane` wrap cache and render cost reduction; idle frame throttling.
-- [ ] **U9** `TextWidth`-based width math across all widgets.
-- [ ] **U10** Built-in command palette modal and key-help overlay.
+- [~] **U4** `Dropdown`/`ComboBox`, `Button`, `ContextMenu`, `Tooltip`, `Badge`.
+- [~] **U5** Theme-aware widgets (read `app.Theme` roles), theme-driven Markdown and toast colors.
+- [~] **U6** Notification center history, actions, dismiss, wider toasts.
+- [~] **U7** Incremental Markdown rendering for `StreamingTranscript` while a block streams.
+- [~] **U8** `Pane` wrap cache and render cost reduction; idle frame throttling.
+- [~] **U9** `TextWidth`-based width math across all widgets.
+- [~] **U10** Built-in command palette modal and key-help overlay.
 
 ## Parity enforcement
 
