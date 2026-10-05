@@ -133,6 +133,67 @@ namespace Test.Shared.Suites.Services
                 AssertContains("administrative", message ?? String.Empty, "Credential writes should be blocked for remote access");
             }));
 
+            cases.Add(Case("try_authorize_denies_non_canonical_spellings_of_blocked_routes", "TryAuthorize DeniesNonCanonicalSpellingsOfBlockedRoutes", TestTags.Negative, () =>
+            {
+                ProxyRoutePolicyService service = new ProxyRoutePolicyService();
+                string[] blockedSpellings = new string[]
+                {
+                    "/api/v1/server/stop/",
+                    "/api/v1/server//stop",
+                    "//api/v1/settings",
+                    "/api/v1/./status/factory-reset",
+                    "/api/v1/status/../status/shutdown",
+                    "/api/v1/%73ettings",
+                    "/api/v1/%2e/status/shutdown",
+                    "/api/v1/status%2fshutdown",
+                    "/api/v1/status%2Fshutdown",
+                    "/api/v1/status%5cshutdown",
+                    "/api/v1/status\\shutdown",
+                    "/api/v1/%2573ettings",
+                    "/API/V1/RESTORE",
+                    "/api/v1/restore;x=1",
+                    "/api/v1/restore%00"
+                };
+
+                foreach (string path in blockedSpellings)
+                {
+                    bool allowed = service.TryAuthorize(new RemoteTunnelHttpRelayRequest
+                    {
+                        Method = "PUT",
+                        Path = path
+                    }, out int statusCode, out string? message);
+                    AssertFalse(allowed, "non-canonical spelling '" + path + "' must not be allowed");
+                    AssertTrue(statusCode == 400 || statusCode == 403, "'" + path + "' should be 400 or 403, was " + statusCode);
+                }
+            }));
+
+            cases.Add(Case("try_authorize_rewrites_request_path_to_canonical_form", "TryAuthorize RewritesRequestPathToCanonicalForm", TestTags.Positive, () =>
+            {
+                ProxyRoutePolicyService service = new ProxyRoutePolicyService();
+                RemoteTunnelHttpRelayRequest request = new RemoteTunnelHttpRelayRequest
+                {
+                    Method = "GET",
+                    Path = "/api/v1//fleets/flt_abc/"
+                };
+
+                bool allowed = service.TryAuthorize(request, out int statusCode, out string? message);
+                AssertTrue(allowed, message ?? "Collapsed fleet read should be allowed");
+                AssertEqual(200, statusCode);
+                AssertEqual("/api/v1/fleets/flt_abc", request.Path, "the relayed path must be the canonical path the policy evaluated");
+            }));
+
+            cases.Add(Case("try_authorize_segment_boundary_does_not_block_lookalike_routes", "TryAuthorize SegmentBoundaryOnAdministrativePrefixes", TestTags.Positive, () =>
+            {
+                ProxyRoutePolicyService service = new ProxyRoutePolicyService();
+                bool allowed = service.TryAuthorize(new RemoteTunnelHttpRelayRequest
+                {
+                    Method = "GET",
+                    Path = "/api/v1/settings"
+                }, out int statusCode, out string? message);
+                AssertTrue(allowed, message ?? "Settings read should be allowed");
+                AssertEqual(200, statusCode);
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: "Services.ProxyRoutePolicyService",
                 displayName: "Proxy Route Policy",

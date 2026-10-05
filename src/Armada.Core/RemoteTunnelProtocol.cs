@@ -1,6 +1,7 @@
 namespace Armada.Core
 {
     using System.Text.Json;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
 
     /// <summary>
@@ -24,13 +25,42 @@ namespace Armada.Core
         #region Public-Methods
 
         /// <summary>
+        /// Wire value of an envelope type (the lowercase name, for example "request").
+        /// </summary>
+        /// <param name="type">Envelope type.</param>
+        /// <returns>Wire value.</returns>
+        public static string ToWireType(RemoteTunnelEnvelopeTypeEnum type)
+        {
+            if (type == RemoteTunnelEnvelopeTypeEnum.Unknown) throw new ArgumentOutOfRangeException(nameof(type), "Unknown has no wire value.");
+            return type.ToString().ToLowerInvariant();
+        }
+
+        /// <summary>
+        /// Parse a wire envelope type. Matching is case-insensitive and exact; anything else is
+        /// <see cref="RemoteTunnelEnvelopeTypeEnum.Unknown"/>.
+        /// </summary>
+        /// <param name="wireType">Value of <see cref="RemoteTunnelEnvelope.Type"/>.</param>
+        /// <returns>Envelope type.</returns>
+        public static RemoteTunnelEnvelopeTypeEnum ParseEnvelopeType(string? wireType)
+        {
+            if (String.IsNullOrEmpty(wireType)) return RemoteTunnelEnvelopeTypeEnum.Unknown;
+            foreach (RemoteTunnelEnvelopeTypeEnum candidate in Enum.GetValues<RemoteTunnelEnvelopeTypeEnum>())
+            {
+                if (candidate == RemoteTunnelEnvelopeTypeEnum.Unknown) continue;
+                if (String.Equals(wireType, ToWireType(candidate), StringComparison.OrdinalIgnoreCase)) return candidate;
+            }
+
+            return RemoteTunnelEnvelopeTypeEnum.Unknown;
+        }
+
+        /// <summary>
         /// Build a request envelope.
         /// </summary>
         public static RemoteTunnelEnvelope CreateRequest(string method, object? payload, string? correlationId = null, string? requesterIp = null)
         {
             return new RemoteTunnelEnvelope
             {
-                Type = "request",
+                Type = ToWireType(RemoteTunnelEnvelopeTypeEnum.Request),
                 CorrelationId = correlationId ?? Guid.NewGuid().ToString("N"),
                 Method = method,
                 TimestampUtc = DateTime.UtcNow,
@@ -48,7 +78,7 @@ namespace Armada.Core
 
             return new RemoteTunnelEnvelope
             {
-                Type = "response",
+                Type = ToWireType(RemoteTunnelEnvelopeTypeEnum.Response),
                 CorrelationId = correlationId,
                 TimestampUtc = DateTime.UtcNow,
                 StatusCode = result.StatusCode,
@@ -66,7 +96,7 @@ namespace Armada.Core
         {
             return new RemoteTunnelEnvelope
             {
-                Type = "event",
+                Type = ToWireType(RemoteTunnelEnvelopeTypeEnum.Event),
                 CorrelationId = Guid.NewGuid().ToString("N"),
                 Method = method,
                 TimestampUtc = DateTime.UtcNow,
@@ -81,7 +111,7 @@ namespace Armada.Core
         {
             return new RemoteTunnelEnvelope
             {
-                Type = "ping",
+                Type = ToWireType(RemoteTunnelEnvelopeTypeEnum.Ping),
                 CorrelationId = correlationId ?? Guid.NewGuid().ToString("N"),
                 TimestampUtc = DateTime.UtcNow
             };
@@ -94,7 +124,7 @@ namespace Armada.Core
         {
             return new RemoteTunnelEnvelope
             {
-                Type = "pong",
+                Type = ToWireType(RemoteTunnelEnvelopeTypeEnum.Pong),
                 CorrelationId = correlationId,
                 TimestampUtc = DateTime.UtcNow
             };
@@ -107,7 +137,7 @@ namespace Armada.Core
         {
             return new RemoteTunnelEnvelope
             {
-                Type = "error",
+                Type = ToWireType(RemoteTunnelEnvelopeTypeEnum.Error),
                 CorrelationId = correlationId,
                 TimestampUtc = DateTime.UtcNow,
                 StatusCode = statusCode,

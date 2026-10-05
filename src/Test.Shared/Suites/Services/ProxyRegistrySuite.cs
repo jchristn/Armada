@@ -7,6 +7,7 @@ namespace Test.Shared.Suites.Services
     using System.Threading.Tasks;
     using Armada.Core;
     using Armada.Core.Models;
+    using Armada.Proxy.Enums;
     using Armada.Proxy.Models;
     using Armada.Proxy.Services;
     using Armada.Proxy.Settings;
@@ -98,17 +99,17 @@ namespace Test.Shared.Suites.Services
                     session);
 
                 RemoteInstanceSummary connected = registry.ListSummaries().Single();
-                AssertEqual("connected", connected.State);
+                AssertEqual(RemoteInstanceStateEnum.Connected, connected.State);
                 AssertEqual("armada-123", connected.InstanceId);
                 AssertEqual(Constants.ProductVersion, connected.ArmadaVersion);
 
                 nowUtc = nowUtc.AddSeconds(45);
                 RemoteInstanceSummary stale = registry.ListSummaries().Single();
-                AssertEqual("stale", stale.State);
+                AssertEqual(RemoteInstanceStateEnum.Stale, stale.State);
 
                 registry.MarkDisconnected("armada-123");
                 RemoteInstanceSummary offline = registry.ListSummaries().Single();
-                AssertEqual("offline", offline.State);
+                AssertEqual(RemoteInstanceStateEnum.Offline, offline.State);
             }));
 
             cases.Add(CaseAsync("send_request_async_completes_matching_responses", "SendRequestAsync CompletesMatchingResponses", TestTags.Positive, async () =>

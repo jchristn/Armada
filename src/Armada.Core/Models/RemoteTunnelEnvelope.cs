@@ -1,6 +1,8 @@
 namespace Armada.Core.Models
 {
     using System.Text.Json;
+    using System.Text.Json.Serialization;
+    using Armada.Core.Enums;
 
     /// <summary>
     /// Generic tunnel envelope shared by Armada instances and the proxy.
@@ -13,6 +15,16 @@ namespace Armada.Core.Models
         /// Envelope type: request, response, event, ping, pong, error, subscribe, unsubscribe.
         /// </summary>
         public string Type { get; set; } = String.Empty;
+
+        /// <summary>
+        /// Parsed <see cref="Type"/>; <see cref="RemoteTunnelEnvelopeTypeEnum.Unknown"/> when missing or unrecognized.
+        /// Not serialized.
+        /// </summary>
+        [JsonIgnore]
+        public RemoteTunnelEnvelopeTypeEnum Kind
+        {
+            get => RemoteTunnelProtocol.ParseEnvelopeType(Type);
+        }
 
         /// <summary>
         /// Correlation identifier for request/response pairing.

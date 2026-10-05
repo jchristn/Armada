@@ -1,5 +1,7 @@
 namespace Armada.Proxy.Models
 {
+    using Armada.Proxy.Enums;
+
     /// <summary>
     /// API-friendly summary of a connected or recently seen Armada instance.
     /// </summary>
@@ -13,9 +15,9 @@ namespace Armada.Proxy.Models
         public string InstanceId { get; set; } = String.Empty;
 
         /// <summary>
-        /// Current instance state: connected, stale, or offline.
+        /// Current instance state.
         /// </summary>
-        public string State { get; set; } = "offline";
+        public RemoteInstanceStateEnum State { get; set; } = RemoteInstanceStateEnum.Offline;
 
         /// <summary>
         /// Armada release version reported by the instance.

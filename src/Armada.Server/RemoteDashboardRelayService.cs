@@ -149,18 +149,18 @@ namespace Armada.Server
                 };
             }
 
-            string path = NormalizePath(request.Path);
-            if (!path.StartsWith("/api/v1/", StringComparison.OrdinalIgnoreCase))
+            UrlPathCanonicalizationResult canonicalPath = UrlPathCanonicalizer.Canonicalize(request.Path);
+            if (!canonicalPath.Success || canonicalPath.Segments.Count < 3 || !canonicalPath.StartsWithSegments("api", "v1"))
             {
                 return new RemoteTunnelRequestResult
                 {
                     StatusCode = 400,
                     ErrorCode = "invalid_path",
-                    Message = "HTTP relay path must target /api/v1/*."
+                    Message = "HTTP relay path must be a canonical path under /api/v1/*."
                 };
             }
 
-            Uri requestUri = BuildLocalHttpUri(path, request.QueryString);
+            Uri requestUri = BuildLocalHttpUri(canonicalPath.Path, request.QueryString);
             using HttpRequestMessage relayRequest = new HttpRequestMessage(new HttpMethod((request.Method ?? "GET").Trim().ToUpperInvariant()), requestUri);
 
             foreach (KeyValuePair<string, string> header in request.Headers ?? new Dictionary<string, string>())

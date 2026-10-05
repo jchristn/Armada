@@ -186,6 +186,75 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("malformed_login_body_is_400_and_counts_toward_lockout", "A malformed login body is 400 and counts as a failed login", TestTags.Negative, async () =>
+            {
+                ProxySettings settings = CreateSettings(TestPassword);
+                settings.LoginMaxFailures = 2;
+                settings.LoginLockoutSeconds = 120;
+                await using (RunningProxy running = await RunningProxy.StartAsync(settings).ConfigureAwait(false))
+                {
+                    string[] malformedBodies = new string[] { "{not json", "{\"nonce\": 42, \"proofSha256\": []}" };
+                    foreach (string malformed in malformedBodies)
+                    {
+                        HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, "/proxy-api/v1/auth/login");
+                        request.Content = new StringContent(malformed, Encoding.UTF8, "application/json");
+                        HttpResponseMessage response = await running.Client.SendAsync(request).ConfigureAwait(false);
+                        AssertEqual(HttpStatusCode.BadRequest, response.StatusCode, "malformed body '" + malformed + "' should be 400");
+                    }
+
+                    HttpResponseMessage locked = await running.LoginAsync(TestPassword).ConfigureAwait(false);
+                    AssertEqual((HttpStatusCode)429, locked.StatusCode, "malformed bodies must count toward the lockout");
+                }
+            }));
+
+            cases.Add(Case("settings_file_loads_typed_values_and_rejects_wrong_types", "proxysettings.json is read into typed values; a wrong type fails loudly", TestTags.Negative, () =>
+            {
+                string directory = Path.Combine(Path.GetTempPath(), "armada-proxy-settings-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(directory);
+                try
+                {
+                    string good = Path.Combine(directory, "good.json");
+                    File.WriteAllText(good, "{ \"ArmadaProxy\": { \"Port\": \"8123\", \"TrustForwardedHeaders\": \"true\", \"SecureCookie\": true, " +
+                        "\"LoginMaxFailures\": 4, \"Password\": \"typed-secret\", \"EnrollmentTokens\": [\" a \", \"a\", \"\", \"b\"] } }");
+                    ProxySettings loaded = ProxySettings.LoadFromFile(good);
+                    AssertEqual(8123, loaded.Port);
+                    AssertTrue(loaded.TrustForwardedHeaders, "string boolean accepted");
+                    AssertTrue(loaded.SecureCookie, "boolean accepted");
+                    AssertEqual(4, loaded.LoginMaxFailures);
+                    AssertEqual("typed-secret", loaded.Password);
+                    AssertEqual(2, loaded.EnrollmentTokens.Count, "tokens trimmed, blank dropped, distinct");
+
+                    string[] badFiles = new string[]
+                    {
+                        "{ \"TrustForwardedHeaders\": \"yes\" }",
+                        "{ \"LoginMaxFailures\": true }",
+                        "{ \"Password\": 12345 }",
+                        "{ \"EnrollmentTokens\": \"single\" }",
+                        "[ 1, 2 ]"
+                    };
+                    foreach (string badJson in badFiles)
+                    {
+                        string bad = Path.Combine(directory, "bad.json");
+                        File.WriteAllText(bad, badJson);
+                        bool threw = false;
+                        try
+                        {
+                            ProxySettings.LoadFromFile(bad);
+                        }
+                        catch (InvalidDataException)
+                        {
+                            threw = true;
+                        }
+
+                        AssertTrue(threw, "settings '" + badJson + "' should fail to load");
+                    }
+                }
+                finally
+                {
+                    TryDelete(directory);
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Proxy Security",

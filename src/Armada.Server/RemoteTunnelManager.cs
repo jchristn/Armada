@@ -484,7 +484,7 @@ namespace Armada.Server
 
             RemoteTunnelEnvelope envelope = JsonSerializer.Deserialize<RemoteTunnelEnvelope>(message, RemoteTunnelProtocol.JsonOptions)
                 ?? new RemoteTunnelEnvelope();
-            string type = envelope.Type ?? String.Empty;
+            RemoteTunnelEnvelopeTypeEnum type = envelope.Kind;
             string? correlationId = envelope.CorrelationId;
 
             DateTime nowUtc = DateTime.UtcNow;
@@ -494,13 +494,13 @@ namespace Armada.Server
                 return status;
             });
 
-            if (String.Equals(type, "ping", StringComparison.OrdinalIgnoreCase))
+            if (type == RemoteTunnelEnvelopeTypeEnum.Ping)
             {
                 await SendEnvelopeAsync(socket, RemoteTunnelProtocol.CreatePong(correlationId), token).ConfigureAwait(false);
                 return;
             }
 
-            if (String.Equals(type, "pong", StringComparison.OrdinalIgnoreCase) &&
+            if (type == RemoteTunnelEnvelopeTypeEnum.Pong &&
                 !String.IsNullOrEmpty(correlationId) &&
                 _OutstandingPings.TryRemove(correlationId, out DateTime sentUtc))
             {
@@ -512,13 +512,13 @@ namespace Armada.Server
                 return;
             }
 
-            if (String.Equals(type, "request", StringComparison.OrdinalIgnoreCase))
+            if (type == RemoteTunnelEnvelopeTypeEnum.Request)
             {
                 await HandleRequestEnvelopeAsync(socket, envelope, token).ConfigureAwait(false);
                 return;
             }
 
-            if (String.Equals(type, "response", StringComparison.OrdinalIgnoreCase))
+            if (type == RemoteTunnelEnvelopeTypeEnum.Response)
             {
                 if (envelope.Success.HasValue && !envelope.Success.Value && !String.IsNullOrWhiteSpace(envelope.Message))
                 {
@@ -532,8 +532,8 @@ namespace Armada.Server
                 return;
             }
 
-            if ((String.Equals(type, "error", StringComparison.OrdinalIgnoreCase) ||
-                 (String.Equals(type, "response", StringComparison.OrdinalIgnoreCase) && envelope.Success == false)) &&
+            if ((type == RemoteTunnelEnvelopeTypeEnum.Error ||
+                 (type == RemoteTunnelEnvelopeTypeEnum.Response && envelope.Success == false)) &&
                 !String.IsNullOrWhiteSpace(envelope.Message))
             {
                 UpdateStatus(status =>
