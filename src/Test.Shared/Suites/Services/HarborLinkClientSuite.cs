@@ -68,6 +68,20 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("job-1", error!.JobId);
             }));
 
+            cases.Add(CaseAsync("log_lines_never_end_with_period", "Harbor log entries never end with a period (ellipsis kept)", TestTags.Positive, () =>
+            {
+                AssertEqual("Disconnected by operator", new HarborLogEntry(HarborLogDirection.Info, "Disconnected by operator.").Message);
+                AssertEqual("Connect failed: No such host is known", new HarborLogEntry(HarborLogDirection.Info, "Connect failed: No such host is known.  ").Message, "exception text with a trailing period");
+                AssertEqual("Odd", new HarborLogEntry(HarborLogDirection.Info, "Odd. .").Message, "repeated periods");
+                AssertEqual("Dialing ...", new HarborLogEntry(HarborLogDirection.Info, "Dialing ...").Message, "ellipsis kept");
+                AssertEqual("Handshake accepted by Admiral. MCP=x", new HarborLogEntry(HarborLogDirection.In, "Handshake accepted by Admiral. MCP=x").Message, "inner period kept");
+                AssertEqual("", new HarborLogEntry(HarborLogDirection.Info, null!).Message, "null becomes empty");
+                HarborLogEntry set = new HarborLogEntry();
+                set.Message = "Set later.";
+                AssertEqual("Set later", set.Message, "setter normalizes too");
+                return Task.CompletedTask;
+            }));
+
             cases.Add(CaseAsync("null_transport_throws", "RunSessionAsync rejects a null transport", TestTags.Negative, async () =>
             {
                 StubExecutor executor = new StubExecutor(new HostCommandResult());

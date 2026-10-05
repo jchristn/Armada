@@ -126,7 +126,7 @@ namespace Armada.Harbor
             _RunCts = new CancellationTokenSource();
             ConnectButton.IsEnabled = false;
             DisconnectButton.IsEnabled = true;
-            AppendInfo(automatic ? "Auto-connecting on startup." : "Connect requested.");
+            AppendInfo(automatic ? "Auto-connecting on startup" : "Connect requested");
             _ = RunLoopAsync(_RunCts.Token);
         }
 
@@ -138,7 +138,7 @@ namespace Armada.Harbor
             DisconnectButton.IsEnabled = false;
             SetStatus("Idle", _Gray);
             SetDetail("Disconnected by operator.");
-            AppendInfo("Disconnected by operator.");
+            AppendInfo("Disconnected by operator");
         }
 
         private void OnOpenDashboardClick(object? sender, RoutedEventArgs e)
@@ -206,7 +206,7 @@ namespace Armada.Harbor
 
                         SetStatus("Disconnected", _Red);
                         SetDetail("The link closed. Retrying in 3 seconds...");
-                        AppendInfo("Link closed; retrying in 3s.");
+                        AppendInfo("Link closed; retrying in 3s");
                     }
                     catch (OperationCanceledException)
                     {

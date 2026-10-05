@@ -22,9 +22,21 @@ namespace Armada.Core.Services
         public HarborLogDirection Direction { get; set; } = HarborLogDirection.Info;
 
         /// <summary>
-        /// The message. Never contains secrets.
+        /// The message. Never contains secrets. Never null (null becomes empty). Harbor log lines never end with a
+        /// period: surrounding whitespace and a trailing period are removed on set (an ellipsis is kept), which also
+        /// covers messages that end with an exception's own text.
         /// </summary>
-        public string Message { get; set; } = string.Empty;
+        public string Message
+        {
+            get => _Message;
+            set => _Message = Normalize(value);
+        }
+
+        #endregion
+
+        #region Private-Members
+
+        private string _Message = string.Empty;
 
         #endregion
 
@@ -45,7 +57,7 @@ namespace Armada.Core.Services
         public HarborLogEntry(HarborLogDirection direction, string message)
         {
             Direction = direction;
-            Message = message ?? string.Empty;
+            Message = message;
         }
 
         #endregion
@@ -60,6 +72,21 @@ namespace Armada.Core.Services
         {
             string arrow = Direction == HarborLogDirection.In ? "<-" : Direction == HarborLogDirection.Out ? "->" : "  ";
             return TimestampUtc.ToLocalTime().ToString("HH:mm:ss") + " " + arrow + " " + Message;
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private static string Normalize(string? message)
+        {
+            string text = (message ?? string.Empty).Trim();
+            while (text.EndsWith(".", StringComparison.Ordinal) && !text.EndsWith("...", StringComparison.Ordinal))
+            {
+                text = text.Substring(0, text.Length - 1).TrimEnd();
+            }
+
+            return text;
         }
 
         #endregion
