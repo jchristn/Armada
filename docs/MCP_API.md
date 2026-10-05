@@ -469,7 +469,7 @@ Return the operator's inbox: everything across the fleet that requires a human's
 
 **What qualifies.** Two kinds of item appear:
 
-- **Awaiting your decision (human-in-the-loop):** a mission in `Review` (approve or reject), or a deployment in `PendingApproval`.
+- **Awaiting your decision (human-in-the-loop):** a mission in `Review` (approve or reject), a deployment in `PendingApproval`, or a pending, unexpired Ask Armada action proposal in one of your own conversations.
 - **Failed and needs intervention (human-out-of-the-loop):** a failed mission, a mission whose work could not be merged (landing failed), a failed merge, a failed or verification-failed deployment, or a stalled captain.
 
 Purely informational events (completions, normal progress) are deliberately excluded -- the inbox answers *"what needs me?"*, not *"what happened?"* (use `enumerate` or the Activity log for history). An empty `items` list means nothing currently needs the operator.
@@ -485,6 +485,7 @@ Purely informational events (completions, normal progress) are deliberately excl
 | `deployment_approval` | Deployment waiting for your approval before it runs | `Warning` |
 | `deployment_failed` | Deployment failed or failed verification | `Critical` |
 | `stalled_captain` | Captain is stalled and may need recovery or a dock reclaim | `Warning` |
+| `ask_proposal` | Ask Armada action proposal waiting for your approval (`href` is the conversation, `/ask/<threadId>`) | `Warning` |
 
 **Input Schema:**
 

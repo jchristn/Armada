@@ -14,6 +14,7 @@ namespace Armada.Tui.Screens.Admin
     using Armada.Tui.Modals;
     using Armada.Tui.Routing;
     using Armada.Tui.Screens.Kit;
+    using Armada.Tui.Screens.Operations;
     using Armada.Tui.Services;
     using Armada.Tui.Text;
     using Armada.Tui.Widgets;
@@ -296,6 +297,22 @@ namespace Armada.Tui.Screens.Admin
         public Mission? DispatchedMission { get; private set; } = null;
 
         /// <summary>
+        /// Rescue missions Armada's recovery started for the dispatched mission when it failed. Never null.
+        /// </summary>
+        public IReadOnlyList<Mission> RescueMissions
+        {
+            get { return _RescueMissions; }
+        }
+
+        /// <summary>
+        /// Mission statuses for which the handoff explains the failure (reason, log, rescues).
+        /// </summary>
+        public static IReadOnlyList<MissionStatusEnum> FailedStatuses { get; } = new List<MissionStatusEnum>
+        {
+            MissionStatusEnum.Failed, MissionStatusEnum.LandingFailed,
+        };
+
+        /// <summary>
         /// Dispatch warning (no captain could take the mission yet), or empty.
         /// </summary>
         public string DispatchWarning { get; private set; } = "";
@@ -368,6 +385,8 @@ namespace Armada.Tui.Screens.Admin
 
         private readonly List<SetupWizardPanel> _Panels = new List<SetupWizardPanel>();
         private readonly SetupWizardTextView _HandoffText = new SetupWizardTextView();
+        private List<Mission> _RescueMissions = new List<Mission>();
+        private bool _RescueLoading = false;
         private readonly Button _Skip;
         private readonly Button _Back;
         private readonly Button _Next;
@@ -783,6 +802,7 @@ namespace Armada.Tui.Screens.Admin
                 if (loaded == null) return;
                 DispatchedMission = loaded;
                 RebuildHandoff();
+                LoadRescuesIfFailed();
                 SetResult(SetupWizardResultKindEnum.Success, Context.Loc.T("Mission status refreshed: {{status}}.", LocalizationArgs.Of("status", L(loaded.Status.ToString()))));
             }, message => Context.Loc.T("Mission refresh failed: {{message}}", LocalizationArgs.Of("message", message)));
         }
@@ -1505,7 +1525,75 @@ namespace Armada.Tui.Screens.Admin
         {
             RebuildHandoff();
             if (ActiveVesselId.Length > 0) LoadNextSetupState();
+            LoadRescuesIfFailed();
             StartPolling();
+        }
+
+        private bool DispatchedMissionFailed()
+        {
+            Mission? mission = DispatchedMission;
+            return mission != null && FailedStatuses.Contains(mission.Status);
+        }
+
+        /// <summary>
+        /// Recovery opens an incident for a failed mission and dispatches "[Rescue]" missions shortly after the
+        /// failure; load them through the incidents linked to the mission so the handoff can mention them.
+        /// </summary>
+        private void LoadRescuesIfFailed()
+        {
+            Mission? mission = DispatchedMission;
+            if (mission == null || !DispatchedMissionFailed() || _RescueLoading) return;
+            string missionId = mission.Id;
+            _RescueLoading = true;
+            Task.Run(async () =>
+            {
+                List<Mission> rescues = new List<Mission>();
+                try
+                {
+                    IncidentQuery query = new IncidentQuery();
+                    query.MissionId = missionId;
+                    query.PageSize = 50;
+                    EnumerationResult<Incident>? incidents = await Context.Client.ListIncidentsAsync(query).ConfigureAwait(false);
+                    List<string> ids = (incidents?.Objects ?? new List<Incident>())
+                        .SelectMany(i => i.RescueMissionIds ?? new List<string>())
+                        .Distinct(StringComparer.Ordinal)
+                        .ToList();
+                    foreach (string id in ids)
+                    {
+                        Mission? rescue = await Context.Client.GetMissionAsync(id).ConfigureAwait(false);
+                        if (rescue != null) rescues.Add(rescue);
+                    }
+                }
+                catch (Exception)
+                {
+                    rescues = new List<Mission>();
+                }
+
+                Context.Dispatcher.Post(() =>
+                {
+                    _RescueLoading = false;
+                    if (DispatchedMission == null || DispatchedMission.Id != missionId) return;
+                    if (rescues.Count == 0 && _RescueMissions.Count > 0) return;
+                    _RescueMissions = rescues;
+                    RebuildHandoff();
+                });
+            });
+        }
+
+        private void ViewMissionLog()
+        {
+            Mission? mission = DispatchedMission;
+            if (mission == null) return;
+            string id = mission.Id;
+            OpsLogModal modal = new OpsLogModal(
+                Context.Loc.T("Log: {{title}}", LocalizationArgs.Of("title", mission.Title)),
+                (lines, token) => Context.Client.GetMissionLogAsync(id, lines, token),
+                () => true,
+                Context.Dispatcher,
+                text => Context.Clipboard.Copy(text, "Log"),
+                Context.Loc,
+                Context.Theme.Current);
+            Context.Modals.Show(modal, r => modal.Dispose());
         }
 
         private void LoadNextSetupState()
@@ -1571,12 +1659,20 @@ namespace Armada.Tui.Screens.Admin
         {
             if (generation != _PollGeneration || Current != StepTitles.Count - 1) return;
             Mission? mission = DispatchedMission;
+            if (mission != null && DispatchedMissionFailed())
+            {
+                bool rescuesSettled = _RescueMissions.Count > 0 && _RescueMissions.All(r => SettledStatuses.Contains(r.Status) && r.Status != MissionStatusEnum.WorkProduced && r.Status != MissionStatusEnum.PullRequestOpen);
+                if (!rescuesSettled) LoadRescuesIfFailed();
+                return;
+            }
+
             if (mission == null || SettledStatuses.Contains(mission.Status)) return;
             ScreenOps.Quiet(Context, () => Context.Client.GetMissionAsync(mission.Id), loaded =>
             {
                 if (loaded == null || generation != _PollGeneration) return;
                 DispatchedMission = loaded;
                 RebuildHandoff();
+                LoadRescuesIfFailed();
             });
         }
 
@@ -1603,11 +1699,32 @@ namespace Armada.Tui.Screens.Admin
             if (mission != null)
             {
                 lines.Add(new SetupWizardLine(L("Mission") + ": " + mission.Title));
-                lines.Add(new SetupWizardLine(L("Mission ID") + ": " + IdShort(mission.Id)));
+                lines.Add(new SetupWizardLine(L("Mission ID") + ": " + mission.Id));
                 lines.Add(new SetupWizardLine(L("Status") + ": " + L(mission.Status.ToString()), t => StatusBadge.Style(mission.Status, t)));
                 lines.Add(new SetupWizardLine(L("Captain ID") + ": " + IdShort(mission.CaptainId)));
                 lines.Add(new SetupWizardLine(L("Vessel ID") + ": " + IdShort(mission.VesselId)));
                 lines.Add(new SetupWizardLine(L("Branch") + ": " + (String.IsNullOrEmpty(mission.BranchName) ? "-" : mission.BranchName)));
+                if (FailedStatuses.Contains(mission.Status))
+                {
+                    lines.Add(new SetupWizardLine(""));
+                    lines.Add(new SetupWizardLine(mission.Status == MissionStatusEnum.LandingFailed ? L("The mission ran, but its work could not land.") : L("The mission failed."), t => t.Error));
+                    string reason = String.IsNullOrWhiteSpace(mission.FailureReason) ? L("No reason was recorded. The mission log usually shows what went wrong.") : mission.FailureReason!;
+                    lines.Add(new SetupWizardLine(L("Reason") + ": " + reason, t => t.Error, 2));
+                    if (_RescueMissions.Count > 0)
+                    {
+                        lines.Add(new SetupWizardLine(_RescueMissions.Count == 1
+                            ? L("Armada started a rescue mission to retry this work:")
+                            : Context.Loc.T("Armada started {{count}} rescue missions to retry this work:", LocalizationArgs.Of("count", _RescueMissions.Count.ToString(System.Globalization.CultureInfo.InvariantCulture))), t => t.Info, 2));
+                        foreach (Mission rescue in _RescueMissions)
+                            lines.Add(new SetupWizardLine(rescue.Title + " (" + L(rescue.Status.ToString()) + ") " + rescue.Id, t => t.Text, 4));
+                    }
+                    else
+                    {
+                        lines.Add(new SetupWizardLine(L("Armada may start a rescue mission for this failure automatically; it will appear here."), t => t.Muted, 2));
+                    }
+
+                    lines.Add(new SetupWizardLine(L("Use View Mission Log below to see what happened."), t => t.Muted, 2));
+                }
             }
             else
             {
@@ -1666,6 +1783,7 @@ namespace Armada.Tui.Screens.Admin
             _RefreshMission = panel.Actions.Add("Refresh Mission Status", RefreshMission);
             Mission? mission = DispatchedMission;
             Vessel? vessel = ActiveVessel();
+            if (mission != null && FailedStatuses.Contains(mission.Status)) panel.Actions.Add("View Mission Log", ViewMissionLog);
             if (mission != null) panel.Actions.Add("Open Mission", () => FinishAndNavigate("/missions/" + mission.Id));
             if (vessel != null)
             {

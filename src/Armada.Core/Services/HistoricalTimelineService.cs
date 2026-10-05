@@ -620,6 +620,9 @@ namespace Armada.Core.Services
             };
 
             List<RequestHistoryEntry> entries = await _Database.RequestHistory.EnumerateForSummaryAsync(requestQuery, token).ConfigureAwait(false);
+            if (timelineQuery.ExcludeReadRequests)
+                entries = entries.Where(entry => !IsReadOnlyMethod(entry.Method)).ToList();
+
             return entries.Select(entry => new HistoricalTimelineEntry
             {
                 Id = "timeline-request-" + entry.Id,
@@ -997,6 +1000,13 @@ namespace Armada.Core.Services
             if (objective.Status == ObjectiveStatusEnum.Cancelled)
                 return "warning";
             return "info";
+        }
+
+        private static bool IsReadOnlyMethod(string? method)
+        {
+            return String.Equals(method, "GET", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(method, "HEAD", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(method, "OPTIONS", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool ContainsIgnoreCase(string? value, string? search)

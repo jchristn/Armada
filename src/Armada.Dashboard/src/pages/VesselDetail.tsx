@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { listVessels, listFleets, listMissionSummaries, listPipelines, createVessel, updateVessel, deleteVessel, getVesselReadiness, getVesselLandingPreview } from '../api/client';
+import { listVessels, listFleets, listMissionSummaries, listPipelines, createVessel, deleteVessel, getVesselReadiness, getVesselLandingPreview } from '../api/client';
 import type { Fleet, Vessel, MissionSummary, Pipeline, VesselReadinessResult, LandingPreviewResult } from '../types/models';
 import ActionMenu from '../components/shared/ActionMenu';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
@@ -14,31 +14,7 @@ import VesselHealthButton from '../components/vessels/health/VesselHealthButton'
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { buildVesselDuplicatePayload } from '../lib/duplicates';
-
-interface VesselForm {
-  name: string;
-  fleetId: string;
-  repoUrl: string;
-  defaultBranch: string;
-  localPath: string;
-  workingDirectory: string;
-  projectContext: string;
-  styleGuide: string;
-  enableModelContext: boolean;
-  modelContext: string;
-  gitHubTokenOverride: string;
-  clearGitHubTokenOverride: boolean;
-  requirePassingChecksToLand: boolean;
-  protectedBranchPatterns: string;
-  secretScanEnabled: boolean;
-  protectedPathPatterns: string;
-  privateIdentifierDenylist: string;
-  releaseBranchPrefix: string;
-  hotfixBranchPrefix: string;
-  requirePullRequestForProtectedBranches: boolean;
-  requireMergeQueueForReleaseBranches: boolean;
-  defaultPipelineId: string;
-}
+import VesselFormModal from '../components/vessels/VesselFormModal';
 
 export default function VesselDetail() {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
@@ -59,7 +35,6 @@ export default function VesselDetail() {
 
   // Edit modal
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<VesselForm>({ name: '', fleetId: '', repoUrl: '', defaultBranch: 'main', localPath: '', workingDirectory: '', projectContext: '', styleGuide: '', enableModelContext: true, modelContext: '', gitHubTokenOverride: '', clearGitHubTokenOverride: false, requirePassingChecksToLand: false, protectedBranchPatterns: '', secretScanEnabled: false, protectedPathPatterns: '', privateIdentifierDenylist: '', releaseBranchPrefix: 'release/', hotfixBranchPrefix: 'hotfix/', requirePullRequestForProtectedBranches: false, requireMergeQueueForReleaseBranches: false, defaultPipelineId: '' });
 
   // JSON viewer
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
@@ -112,30 +87,6 @@ export default function VesselDetail() {
 
   function openEdit() {
     if (!vessel) return;
-    setForm({
-      name: vessel.name,
-      fleetId: vessel.fleetId ?? '',
-      repoUrl: vessel.repoUrl ?? '',
-      defaultBranch: vessel.defaultBranch || 'main',
-      localPath: vessel.localPath ?? '',
-      workingDirectory: vessel.workingDirectory ?? '',
-      projectContext: vessel.projectContext ?? '',
-      styleGuide: vessel.styleGuide ?? '',
-      enableModelContext: vessel.enableModelContext,
-      modelContext: vessel.modelContext ?? '',
-      gitHubTokenOverride: '',
-      clearGitHubTokenOverride: false,
-      requirePassingChecksToLand: vessel.requirePassingChecksToLand,
-      protectedBranchPatterns: (vessel.protectedBranchPatterns || []).join('\n'),
-      secretScanEnabled: vessel.secretScanEnabled ?? false,
-      protectedPathPatterns: (vessel.protectedPathPatterns || []).join('\n'),
-      privateIdentifierDenylist: (vessel.privateIdentifierDenylist || []).join('\n'),
-      releaseBranchPrefix: vessel.releaseBranchPrefix || 'release/',
-      hotfixBranchPrefix: vessel.hotfixBranchPrefix || 'hotfix/',
-      requirePullRequestForProtectedBranches: vessel.requirePullRequestForProtectedBranches,
-      requireMergeQueueForReleaseBranches: vessel.requireMergeQueueForReleaseBranches,
-      defaultPipelineId: vessel.defaultPipelineId ?? '',
-    });
     setShowForm(true);
   }
 
@@ -149,43 +100,6 @@ export default function VesselDetail() {
       return next;
     }, { replace: true });
   }, [searchParams, setSearchParams, vessel]);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!vessel) return;
-    try {
-      const payload: Record<string, unknown> = { ...form };
-      if (!payload.localPath) delete payload.localPath;
-      if (!payload.workingDirectory) delete payload.workingDirectory;
-      if (!payload.projectContext) delete payload.projectContext;
-      if (!payload.styleGuide) delete payload.styleGuide;
-      if (!payload.modelContext) delete payload.modelContext;
-      if (!payload.defaultPipelineId) delete payload.defaultPipelineId;
-      delete payload.clearGitHubTokenOverride;
-      if (form.clearGitHubTokenOverride)
-        payload.gitHubTokenOverride = '';
-      else if (!form.gitHubTokenOverride.trim())
-        delete payload.gitHubTokenOverride;
-      else
-        payload.gitHubTokenOverride = form.gitHubTokenOverride.trim();
-      payload.protectedBranchPatterns = form.protectedBranchPatterns
-        .split(/\r?\n/)
-        .map((item) => item.trim())
-        .filter((item) => item.length > 0);
-      payload.protectedPathPatterns = form.protectedPathPatterns
-        .split(/\r?\n/)
-        .map((item) => item.trim())
-        .filter((item) => item.length > 0);
-      payload.privateIdentifierDenylist = form.privateIdentifierDenylist
-        .split(/\r?\n/)
-        .map((item) => item.trim())
-        .filter((item) => item.length > 0);
-      await updateVessel(vessel.id, payload);
-      setShowForm(false);
-      pushToast('success', t('Vessel "{{name}}" saved.', { name: form.name }));
-      load();
-    } catch { setError(t('Save failed.')); }
-  }
 
   function handleDelete() {
     if (!vessel) return;
@@ -275,119 +189,20 @@ export default function VesselDetail() {
 
       <ErrorModal error={error} onClose={() => setError('')} />
 
-      {/* Edit Modal */}
+      {/* Edit Modal (the same form as Vessels > Edit) */}
       {showForm && (
-        <div className="modal-overlay" onClick={() => setShowForm(false)}>
-          <form className="modal modal-lg" onClick={e => e.stopPropagation()} onSubmit={handleSubmit}>
-            <h3>{t('Edit Vessel')}</h3>
-            <label>{t('Name')}<input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required /></label>
-            <label>{t('Fleet')}
-              <select value={form.fleetId} onChange={e => setForm({ ...form, fleetId: e.target.value })} required>
-                <option value="">{t('Select a fleet...')}</option>
-                {fleets.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-              </select>
-            </label>
-            <label>{t('Repository URL')}<input value={form.repoUrl} onChange={e => setForm({ ...form, repoUrl: e.target.value })} required placeholder={t('https://github.com/org/repo.git')} /></label>
-            <label>{t('Default Branch')}<input value={form.defaultBranch} onChange={e => setForm({ ...form, defaultBranch: e.target.value })} /></label>
-            <label>{t('Release Branch Prefix')}<input value={form.releaseBranchPrefix} onChange={e => setForm({ ...form, releaseBranchPrefix: e.target.value })} /></label>
-            <label>{t('Hotfix Branch Prefix')}<input value={form.hotfixBranchPrefix} onChange={e => setForm({ ...form, hotfixBranchPrefix: e.target.value })} /></label>
-            <label>{t('Local Path')}<input value={form.localPath} onChange={e => setForm({ ...form, localPath: e.target.value })} /></label>
-            <label>{t('Working Directory')}<input value={form.workingDirectory} onChange={e => setForm({ ...form, workingDirectory: e.target.value })} /></label>
-            <label>
-              GitHub Token Override
-              <input
-                type="password"
-                value={form.gitHubTokenOverride}
-                onChange={e => setForm({ ...form, gitHubTokenOverride: e.target.value, clearGitHubTokenOverride: false })}
-                placeholder={vessel.hasGitHubTokenOverride ? 'Leave blank to keep existing override' : 'Optional per-vessel GitHub token'}
-                autoComplete="new-password"
-              />
-              <span className="text-dim" style={{ fontSize: '0.8em' }}>
-                {vessel.hasGitHubTokenOverride
-                  ? 'This vessel already has an override. Leave blank to keep it, enter a new token to replace it, or clear it below.'
-                  : 'No vessel override is stored. Armada will use the global GitHub token if one is configured.'}
-              </span>
-            </label>
-            {vessel.hasGitHubTokenOverride && (
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={form.clearGitHubTokenOverride}
-                  onChange={e => setForm({ ...form, clearGitHubTokenOverride: e.target.checked, gitHubTokenOverride: e.target.checked ? '' : form.gitHubTokenOverride })}
-                  style={{ width: 'auto' }}
-                />
-                Clear existing GitHub token override
-              </label>
-            )}
-            <label>
-              {t('Protected Branch Patterns')}
-              <textarea value={form.protectedBranchPatterns} onChange={e => setForm({ ...form, protectedBranchPatterns: e.target.value })} rows={4} placeholder={t('One pattern per line, e.g. main or release/*')} />
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input type="checkbox" checked={form.secretScanEnabled} onChange={e => setForm({ ...form, secretScanEnabled: e.target.checked })} style={{ width: 'auto' }} />
-              {t('Scan Mission Diffs for Secrets')}
-            </label>
-            <label>
-              {t('Protected Path Patterns')}
-              <textarea value={form.protectedPathPatterns} onChange={e => setForm({ ...form, protectedPathPatterns: e.target.value })} rows={3} placeholder={t('One glob per line, e.g. .env* or infra/**')} />
-              <span className="text-dim" style={{ fontSize: '0.72rem' }}>
-                {t('A mission that adds or modifies a matching path is flagged as a boundary violation.')}
-              </span>
-            </label>
-            <label>
-              {t('Private Identifier Denylist')}
-              <textarea value={form.privateIdentifierDenylist} onChange={e => setForm({ ...form, privateIdentifierDenylist: e.target.value })} rows={3} placeholder={t('One value per line, e.g. an internal hostname or account ID')} />
-              <span className="text-dim" style={{ fontSize: '0.72rem' }}>
-                {t('Added diff lines containing any of these literals are flagged. Do not list actual secrets here.')}
-              </span>
-            </label>
-            <label>
-              {t('Project Context')}
-              <textarea value={form.projectContext} onChange={e => setForm({ ...form, projectContext: e.target.value })} rows={4} />
-              <span className="text-dim" style={{ fontSize: '0.8em' }}>{form.projectContext.length} {t('characters')}</span>
-            </label>
-            <label>
-              {t('Style Guide')}
-              <textarea value={form.styleGuide} onChange={e => setForm({ ...form, styleGuide: e.target.value })} rows={4} />
-              <span className="text-dim" style={{ fontSize: '0.8em' }}>{form.styleGuide.length} {t('characters')}</span>
-            </label>
-            <label>{t('Default Pipeline')}
-              <select value={form.defaultPipelineId} onChange={e => setForm({ ...form, defaultPipelineId: e.target.value })}>
-                <option value="">{t('None (WorkerOnly)')}</option>
-                {pipelines.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input type="checkbox" checked={form.enableModelContext} onChange={e => setForm({ ...form, enableModelContext: e.target.checked })} style={{ width: 'auto' }} />
-              {t('Enable Model Context')}
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input type="checkbox" checked={form.requirePassingChecksToLand} onChange={e => setForm({ ...form, requirePassingChecksToLand: e.target.checked })} style={{ width: 'auto' }} />
-              {t('Require Passing Checks To Land')}
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input type="checkbox" checked={form.requirePullRequestForProtectedBranches} onChange={e => setForm({ ...form, requirePullRequestForProtectedBranches: e.target.checked })} style={{ width: 'auto' }} />
-              {t('Require PR For Protected Branches')}
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input type="checkbox" checked={form.requireMergeQueueForReleaseBranches} onChange={e => setForm({ ...form, requireMergeQueueForReleaseBranches: e.target.checked })} style={{ width: 'auto' }} />
-              {t('Require Merge Queue For Release Branches')}
-            </label>
-            {form.enableModelContext && (
-              <label>
-                {t('Model Context')}
-                <textarea value={form.modelContext} onChange={e => setForm({ ...form, modelContext: e.target.value })} rows={4} placeholder={t('Agent-accumulated context will appear here after missions run with model context enabled...')} />
-                <span className="text-dim" style={{ fontSize: '0.8em' }}>{form.modelContext.length} {t('characters')}</span>
-              </label>
-            )}
-            <div className="modal-actions">
-              <button type="submit" className="btn btn-primary">{t('Save')}</button>
-              <button type="button" className="btn" onClick={() => setShowForm(false)}>{t('Cancel')}</button>
-            </div>
-          </form>
-        </div>
+        <VesselFormModal
+          vessel={vessel}
+          fleets={fleets}
+          pipelines={pipelines}
+          onClose={() => setShowForm(false)}
+          onError={setError}
+          onSaved={(name) => {
+            setShowForm(false);
+            pushToast('success', t('Vessel "{{name}}" saved.', { name }));
+            load();
+          }}
+        />
       )}
 
       <JsonViewer open={jsonData.open} title={jsonData.title} data={jsonData.data} onClose={() => setJsonData({ open: false, title: '', data: null })} />

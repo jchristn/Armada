@@ -198,4 +198,26 @@ describe('History', () => {
       postmortemOnly: true,
     });
   });
+  it('hides GET requests by default and shows them when the toggle is on (F17)', async () => {
+    render(
+      <MemoryRouter initialEntries={['/history']}>
+        <Routes>
+          <Route path="/history" element={<History />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Deploy finished')).toBeInTheDocument();
+    expect(enumerateHistoryTimeline).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(enumerateHistoryTimeline).mock.calls[0][0]).toMatchObject({ excludeReadRequests: true });
+
+    const toggle = screen.getByLabelText('Show GET requests');
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(toggle);
+
+    await waitFor(() => {
+      expect(enumerateHistoryTimeline).toHaveBeenCalledTimes(2);
+    });
+    expect(vi.mocked(enumerateHistoryTimeline).mock.calls[1][0]).toMatchObject({ excludeReadRequests: false });
+  });
 });

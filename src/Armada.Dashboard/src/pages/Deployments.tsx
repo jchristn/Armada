@@ -32,6 +32,8 @@ import RefreshButton from '../components/shared/RefreshButton';
 import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import StatusBadge from '../components/shared/StatusBadge';
+import { buildEnvironmentOptions } from '../lib/deploymentEnvironments';
+import { sortByName } from '../lib/sortByName';
 
 const DEPLOYMENT_STATUSES: DeploymentStatus[] = [
   'PendingApproval',
@@ -112,7 +114,7 @@ export default function Deployments() {
         listWorkflowProfiles({ pageSize: 9999 }),
       ]);
       setDeployments(deploymentResult.objects || []);
-      setVessels(vesselResult.objects || []);
+      setVessels(sortByName(vesselResult.objects));
       setEnvironments(environmentResult.objects || []);
       setReleases(releaseResult.objects || []);
       setProfiles(profileResult.objects || []);
@@ -162,6 +164,18 @@ export default function Deployments() {
       environmentName: selected ? selected.name : current.environmentName,
       vesselId: !current.vesselId && selected?.vesselId ? selected.vesselId : current.vesselId,
     }));
+  }
+
+  function handleVesselChange(vesselId: string) {
+    setCreateForm((current) => {
+      const environment = environments.find((item) => item.id === current.environmentId);
+      const keepEnvironment = !vesselId || !environment || environment.vesselId === vesselId;
+      return {
+        ...current,
+        vesselId,
+        environmentId: keepEnvironment ? current.environmentId : '',
+      };
+    });
   }
 
   function handleReleaseChange(releaseId: string) {
@@ -220,6 +234,12 @@ export default function Deployments() {
 
   const vesselMap = useMemo(() => new Map(vessels.map((vessel) => [vessel.id, vessel.name])), [vessels]);
   const environmentMap = useMemo(() => new Map(environments.map((environment) => [environment.id, environment.name])), [environments]);
+  // Every vessel gets a default "Development" environment, so without a chosen vessel the names alone are
+  // indistinguishable; label them "vessel / environment" and sort by that label.
+  const environmentOptions = useMemo(
+    () => buildEnvironmentOptions(filteredEnvironments, vesselMap, !!createForm.vesselId, t('No vessel')),
+    [filteredEnvironments, vesselMap, createForm.vesselId, t],
+  );
   const releaseMap = useMemo(() => new Map(releases.map((release) => [release.id, release.title])), [releases]);
 
   const filtered = useMemo(() => deployments.filter((deployment) => {
@@ -295,7 +315,7 @@ export default function Deployments() {
           <form className="modal modal-large" onClick={(event) => event.stopPropagation()} onSubmit={handleCreate}>
             <h3>{editing ? t('Edit Deployment') : t('Create Deployment')}</h3>
             <label>{t('Vessel')}
-              <select value={createForm.vesselId} onChange={(event) => setCreateForm((current) => ({ ...current, vesselId: event.target.value }))}>
+              <select value={createForm.vesselId} onChange={(event) => handleVesselChange(event.target.value)}>
                 <option value="">{t('Select a vessel')}</option>
                 {vessels.map((vessel) => (
                   <option key={vessel.id} value={vessel.id}>{vessel.name}</option>
@@ -313,8 +333,8 @@ export default function Deployments() {
             <label>{t('Environment')}
               <select value={createForm.environmentId} onChange={(event) => handleEnvironmentChange(event.target.value)}>
                 <option value="">{t('Resolve by environment name')}</option>
-                {filteredEnvironments.map((environment) => (
-                  <option key={environment.id} value={environment.id}>{environment.name}</option>
+                {environmentOptions.map((option) => (
+                  <option key={option.id} value={option.id}>{option.label}</option>
                 ))}
               </select>
             </label>

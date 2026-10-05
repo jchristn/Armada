@@ -1,0 +1,1 @@
+function e(e){return(e||[]).slice().sort((e,t)=>(e.name||``).localeCompare(t.name||``,void 0,{sensitivity:`base`,numeric:!0}))}export{e as t};

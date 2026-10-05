@@ -17,6 +17,8 @@ import MuxRuntimeFields from './captains/MuxRuntimeFields';
 import { buildMuxRuntimeOptionsJson, EMPTY_MUX_CAPTAIN_FORM, isMuxRuntime, type MuxCaptainFormFields } from '../lib/mux';
 import type { Captain, DeploymentEnvironment, Fleet, Mission, Vessel, VesselReadinessResult, WorkflowProfile } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
+import MissionFailureDetails, { FAILED_MISSION_STATUSES } from './shared/MissionFailureDetails';
+import CopyButton from './shared/CopyButton';
 
 const STORAGE_KEY = 'armada_setup_completed';
 
@@ -1076,7 +1078,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
       {dispatchedMission ? (
         <div className="wizard-summary-grid wizard-summary-grid-wide">
           <SummaryItem label={t('Mission')} value={dispatchedMission.title} />
-          <SummaryItem label={t('Mission ID')} value={<code>{idShort(dispatchedMission.id)}</code>} />
+          <SummaryItem label={t('Mission ID')} value={<span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}><code>{dispatchedMission.id}</code><CopyButton text={dispatchedMission.id} /></span>} />
           <SummaryItem label={t('Status')} value={t(dispatchedMission.status)} />
           <SummaryItem label={t('Captain ID')} value={<code>{idShort(dispatchedMission.captainId)}</code>} />
           <SummaryItem label={t('Vessel ID')} value={<code>{idShort(dispatchedMission.vesselId)}</code>} />
@@ -1084,6 +1086,13 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
         </div>
       ) : (
         <p className="text-dim">{t('No mission has been dispatched yet.')}</p>
+      )}
+
+      {dispatchedMission && FAILED_MISSION_STATUSES.has(String(dispatchedMission.status)) && (
+        <MissionFailureDetails
+          mission={dispatchedMission}
+          onOpenMission={(missionId) => finishAndNavigate(`/missions/${missionId}`)}
+        />
       )}
 
       <div className="wizard-summary-grid" style={{ marginTop: '1rem' }}>

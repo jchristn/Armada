@@ -173,10 +173,14 @@ open finding; this branch only changed files outside the areas other workstreams
 - Suggested fix: for None, replace Land with "Merge in Manage Branches"; reconcile WorkProduced missions whose branch
   is merged into the target.
 
-#### F13 (S3) The vessel page's Edit Vessel lacks landing settings
+#### F13 (S3, fixed) The vessel page's Edit Vessel lacks landing settings
 - Owner: dashboard. Vessels > a vessel > More > Edit has no Landing Mode, Branch Cleanup, Agent Auto-Approve,
   concurrency, or auto-land fields; the Edit from the Vessels list (and Create) has them. Users looking on the vessel
   page cannot change how work lands. Suggested fix: one vessel form for both.
+- Fix: one shared form, `components/vessels/VesselFormModal.tsx` with `lib/vesselForm.ts`, for Vessels Create/Edit and
+  the vessel page Edit. The vessel PUT replaces the whole record, so each old form also reset the other's fields (the
+  vessel page Edit cleared Landing Mode, auto-land, and auto-approve); the payload now starts from the stored vessel.
+  Test: `pages/VesselDetail.test.tsx`.
 
 #### F14 (S3) A voyage is Complete before its merge-queue mission lands
 - Owner: server (voyage completion). T2.4/T2.8: a dispatch to a Merge Queue vessel showed voyage Complete while its
@@ -184,46 +188,66 @@ open finding; this branch only changed files outside the areas other workstreams
   landed 10 s later here; with a slow or manual queue the voyage would claim completion for much longer.
 - Suggested fix: keep the voyage InProgress (or "Awaiting merge queue") until its entries land or fail.
 
-#### F15 (S3) The dashboard has no place to see pending Ask approvals
+#### F15 (S3, fixed) The dashboard has no place to see pending Ask approvals
 - Owner: dashboard. Needs You lists failures and alerts but not Ask proposals waiting for approval; the only way is to
   open each conversation. The TUI has an Approvals center (`Ctrl+A`) that worked well.
 - Suggested fix: list pending Ask proposals (and other approvals) in Needs You.
+- Fix: the inbox (`InboxService`, `GET /api/v1/inbox`, MCP `inbox`) lists the caller's pending, unexpired Ask
+  proposals as kind `ask_proposal` linking to `/ask/<threadId>`; Needs You groups mission reviews, deployment
+  approvals, and Ask proposals under "Waiting for your approval" with an action button. Tests:
+  `Services.Inbox/pending_ask_proposals_for_caller_are_listed`, `pages/Inbox.test.tsx`.
 
-#### F16 (S3) Fast captain replies in Planning and Refinement are not shown until a reload
+#### F16 (S3, fixed) Fast captain replies in Planning and Refinement are not shown until a reload
 - Owner: dashboard. Steps: planning session (or backlog refinement), send a message to a captain that answers within
   a few milliseconds. Actual: the reply exists on the server, but the page keeps the thinking placeholder and a Stop
   button indefinitely; reload shows it.
 - Cause: the page applies the send POST's response (status Responding, empty reply) after the WebSocket updates that
   completed the turn, overwriting them. Real CLI captains are slower, so this mostly affects very fast endpoints.
 - Suggested fix: refetch the session after the POST, or merge by `lastUpdateUtc`.
+- Fix: `lib/liveMerge.ts` merges the send response by `lastUpdateUtc` (sub-millisecond aware) on Planning and the
+  backlog item's refinement panel. Tests: `pages/Planning.test.tsx`, `lib/liveMerge.test.ts`.
 
-#### F17 (S3) All Activity is the dashboard's own polling
+#### F17 (S3, fixed) All Activity is the dashboard's own polling
 - Owner: dashboard / request history. All 250 visible entries were GET requests from the open dashboard
   (`/api/v1/inbox`, `/status/health`, `/jobs`, ...); missions, approvals, and admin actions were not visible without
   filtering. Events showed the real history. Suggested fix: hide GET requests in All Activity by default.
+- Fix: additive `HistoricalTimelineQuery.ExcludeReadRequests` (also `excludeReadRequests` on `GET /api/v1/history`)
+  drops GET, HEAD, and OPTIONS request entries; All Activity sets it unless "Show GET requests" is checked. Tests:
+  `Services.HistoricalTimelineService/enumerate_exclude_read_requests_hides_get_polling`, `pages/History.test.tsx`.
 
-#### F18 (S3) Mission logs lose their line breaks in the dashboard
+#### F18 (S3, fixed) Mission logs lose their line breaks in the dashboard
 - Owner: dashboard. The log viewer renders mission logs as Markdown, so a six-line log becomes one paragraph. The TUI
   shows it line by line. Evidence: `t13-02-Log.png`. Suggested fix: keep single newlines (remark-breaks or
   `white-space: pre-wrap` in the log viewer).
+- Fix: the log viewer's Markdown keeps single newlines (`lib/remarkLineBreaks.ts`). Test:
+  `components/shared/LogViewer.test.tsx`.
 
-#### F19 (S3) Deployment form lists 12 identical "Development" environments
+#### F19 (S3, fixed) Deployment form lists 12 identical "Development" environments
 - Owner: dashboard. Every vessel gets a default Development environment; Create Deployment's Environment picker lists
   them all by name only before a vessel is chosen. Suggested fix: filter by the chosen vessel, or show "vessel /
   environment".
+- Fix: without a vessel the picker shows "vessel / environment" sorted by that label; with a vessel it lists only
+  that vessel's environments, and changing the vessel clears an environment of another vessel. Test:
+  `pages/Deployments.test.tsx`.
 
-#### F37 (S3) The wizard handoff shows Failed with no reason
+#### F37 (S3, fixed) The wizard handoff shows Failed with no reason
 - Owner: dashboard and TUI. When the first mission fails, the handoff shows "Status: Failed" with no failure reason
   or log link, and Armada starts "[Rescue]" missions on its own that the handoff does not mention.
 - Suggested fix: show the failure reason and a log link on the handoff, and mention rescue attempts.
+- Fix: dashboard and TUI handoffs show the failure reason, a View Mission Log action, and the rescue missions found
+  through the mission's incidents (rechecked until they settle); the full mission id is shown (also F21). Tests:
+  `components/shared/MissionFailureDetails.test.tsx`, `Tui.System.Setup/handoff_explains_failed_mission`.
 
-#### F20 (S4) Ask proposal cards show the vessel id, not its name
+#### F20 (S4, fixed) Ask proposal cards show the vessel id, not its name
 - Dashboard and TUI: "Dispatch voyage ... to vessel vsl_muuvmsev_bkdC3DJiinp with 1 mission(s)". The summary comes
   from the server; show the vessel name.
+- Fix: proposal summaries name the vessel (`dispatch`, `create_mission`); unknown ids still show the id. Test:
+  `Services.AskApprovalGate/proposal_summary_names_the_vessel`.
 
-#### F21 (S4) Wizard handoff ids are shortened
+#### F21 (S4, fixed) Wizard handoff ids are shortened
 - "MISSION ID msn_muuv6go5" is not an id; pasting it into the URL gives "Mission not found". Show the full id or a
   copy button (the Open Mission button works).
+- Fix: the dashboard and TUI handoffs show the full mission id (dashboard with a copy button).
 
 #### F22 (S4) "Ready To Land" on a Complete (already landed) mission
 - Both surfaces; the server's landing preview ignores the mission status.
@@ -240,8 +264,10 @@ open finding; this branch only changed files outside the areas other workstreams
 - "Higher priority missions are assigned first (default 100)" does not say that a lower number is higher priority
   (the wizard says so).
 
-#### F26 (S4) Vessel pickers are ordered newest first
+#### F26 (S4, fixed) Vessel pickers are ordered newest first
 - Create Voyage, Dispatch, Planning, and Backlog list 12 vessels in creation order, not alphabetically.
+- Fix: Create Voyage, Dispatch, Planning, Backlog, the backlog item page, and Deployments sort vessels by name
+  (`lib/sortByName.ts`, test `lib/sortByName.test.ts`).
 
 #### F27 (S4) Credentials: odd defaults
 - Create Credential preselects the first user in the list (here a deactivated user) instead of the signed-in user.

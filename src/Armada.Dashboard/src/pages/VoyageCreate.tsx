@@ -6,6 +6,7 @@ import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import PlaybookSelector from '../components/shared/PlaybookSelector';
+import { sortByName } from '../lib/sortByName';
 
 interface MissionRow {
   title: string;
@@ -39,7 +40,7 @@ export default function VoyageCreate() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    listVessels({ pageSize: 1000 }).then(r => setVessels(r.objects || [])).catch(() => {});
+    listVessels({ pageSize: 1000 }).then(r => setVessels(sortByName(r.objects))).catch(() => {});
     listPipelines({ pageSize: 1000 }).then(r => setPipelines(r.objects || [])).catch(() => {});
   }, []);
 

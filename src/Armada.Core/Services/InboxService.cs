@@ -14,7 +14,8 @@ namespace Armada.Core.Services
     /// Builds the operator's inbox: a single consolidated list of items across the fleet that require a
     /// human's attention or action, ordered most-urgent first. Two kinds of item qualify:
     ///
-    /// - Awaiting your decision (human-in-the-loop): a mission in Review, or a deployment pending approval.
+    /// - Awaiting your decision (human-in-the-loop): a mission in Review, a deployment pending approval, or an
+    ///   Ask Armada action proposal pending approval in one of your conversations.
     /// - Failed and needs intervention (autonomous work that could not finish on its own): a failed
     ///   mission, a mission whose work could not land, a failed merge, a failed or verification-failed
     ///   deployment, or a stalled captain.
@@ -24,12 +25,27 @@ namespace Armada.Core.Services
     /// </summary>
     public class InboxService
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Age in minutes after which a still-Pending Ask proposal is treated as expired and left out (the
+        /// Ask settings' ProposalExpiryMinutes). 0 disables the age check. Clamped to [0, 1440].
+        /// </summary>
+        public int AskProposalExpiryMinutes
+        {
+            get => _AskProposalExpiryMinutes;
+            set => _AskProposalExpiryMinutes = value < 0 ? 0 : (value > 1440 ? 1440 : value);
+        }
+
+        #endregion
+
         #region Private-Members
 
         private readonly string _Header = "[InboxService] ";
         private readonly DatabaseDriver _Database;
         private readonly LoggingModule _Logging;
         private const int _MaxPerCategory = 100;
+        private int _AskProposalExpiryMinutes = 0;
 
         #endregion
 
@@ -179,6 +195,22 @@ namespace Armada.Core.Services
                         Href = "/deployments/" + deployment.Id
                     });
                 }
+
+                foreach (AskActionProposal proposal in (await PendingAskProposalsAsync(auth, token).ConfigureAwait(false)).Take(_MaxPerCategory))
+                {
+                    string summary = String.IsNullOrWhiteSpace(proposal.SummaryText) ? proposal.ToolName : proposal.SummaryText;
+                    items.Add(new InboxItem
+                    {
+                        Kind = InboxItemKinds.AskProposal,
+                        Severity = InboxSeverityEnum.Warning,
+                        Title = "Ask approval: " + summary,
+                        EntityName = summary,
+                        Detail = "Armada proposed an action in an Ask conversation and is waiting for you to approve or reject it.",
+                        EntityType = "ask_proposal",
+                        EntityId = proposal.Id,
+                        Href = "/ask/" + proposal.ThreadId
+                    });
+                }
             }
             catch (Exception ex)
             {
@@ -214,6 +246,24 @@ namespace Armada.Core.Services
             if (auth.IsAdmin) return await _Database.MergeEntries.EnumerateByStatusAsync(status, token).ConfigureAwait(false);
             List<MergeEntry> list = await _Database.MergeEntries.EnumerateByStatusAsync(auth.TenantId!, status, token).ConfigureAwait(false);
             return auth.IsTenantAdmin ? list : list.Where(e => String.Equals(e.UserId, auth.UserId, StringComparison.Ordinal)).ToList();
+        }
+
+        /// <summary>
+        /// Pending, unexpired Ask proposals in the caller's own conversations. Ask threads belong to one user, and only
+        /// the thread owner can approve, so admins are not shown other users' proposals.
+        /// </summary>
+        private async Task<List<AskActionProposal>> PendingAskProposalsAsync(AuthContext auth, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(auth.UserId)) return new List<AskActionProposal>();
+            DateTime now = DateTime.UtcNow;
+            List<AskActionProposal> pending = await _Database.AskActionProposals.EnumeratePendingBeforeAsync(now.AddDays(1), token).ConfigureAwait(false);
+            return pending
+                .Where(p => String.Equals(p.TenantId, auth.TenantId, StringComparison.Ordinal)
+                    && String.Equals(p.UserId, auth.UserId, StringComparison.Ordinal)
+                    && (!p.ExpiresUtc.HasValue || p.ExpiresUtc.Value > now)
+                    && (_AskProposalExpiryMinutes == 0 || p.CreatedUtc.AddMinutes(_AskProposalExpiryMinutes) >= now))
+                .OrderBy(p => p.CreatedUtc)
+                .ToList();
         }
 
         /// <summary>

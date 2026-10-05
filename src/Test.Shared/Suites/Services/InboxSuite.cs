@@ -5,6 +5,7 @@ namespace Test.Shared.Suites.Services
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core;
     using Armada.Core.Database;
     using Armada.Core.Database.Sqlite;
     using Armada.Core.Enums;
@@ -109,6 +110,40 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("pending_ask_proposals_for_caller_are_listed", "Inbox lists the caller's pending, unexpired Ask proposals with a link to the conversation", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    string tenantId = Constants.DefaultTenantId;
+                    AskThread mine = await db.AskThreads.CreateAsync(new AskThread { TenantId = tenantId, UserId = "usr_ask_me" });
+                    AskThread theirs = await db.AskThreads.CreateAsync(new AskThread { TenantId = tenantId, UserId = "usr_ask_other" });
+
+                    AskActionProposal pending = await db.AskActionProposals.CreateAsync(NewProposal(mine, "dispatch", "Dispatch voyage Fix login to vessel gateway"));
+                    AskActionProposal expired = NewProposal(mine, "cancel_voyage", "Cancel voyage");
+                    expired.CreatedUtc = DateTime.UtcNow.AddMinutes(-90);
+                    await db.AskActionProposals.CreateAsync(expired);
+                    AskActionProposal rejected = NewProposal(mine, "delete_vessel", "Delete vessel");
+                    rejected.Status = AskProposalStatusEnum.Rejected;
+                    await db.AskActionProposals.CreateAsync(rejected);
+                    await db.AskActionProposals.CreateAsync(NewProposal(theirs, "dispatch", "Someone else's dispatch"));
+
+                    InboxService inbox = new InboxService(db, CreateLogging()) { AskProposalExpiryMinutes = 60 };
+                    List<InboxItem> items = await inbox.GetInboxAsync(AuthContext.Authenticated(tenantId, "usr_ask_me", false, true, "Test"));
+
+                    List<InboxItem> asks = items.Where(i => i.Kind == InboxItemKinds.AskProposal).ToList();
+                    AssertEqual(1, asks.Count, "only the caller's pending, unexpired proposal");
+                    AssertEqual(pending.Id, asks[0].EntityId);
+                    AssertEqual("ask_proposal", asks[0].EntityType);
+                    AssertEqual("/ask/" + mine.Id, asks[0].Href);
+                    AssertEqual(InboxSeverityEnum.Warning, asks[0].Severity);
+                    AssertTrue(asks[0].Title.Contains("Dispatch voyage Fix login to vessel gateway", StringComparison.Ordinal), "title carries the proposal summary");
+
+                    List<InboxItem> noUser = await inbox.GetInboxAsync(AuthContext.Authenticated(tenantId, null!, true, true, "Test"));
+                    AssertFalse(noUser.Any(i => i.Kind == InboxItemKinds.AskProposal), "an identity without a user has no Ask conversations");
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Inbox",
@@ -118,6 +153,17 @@ namespace Test.Shared.Suites.Services
         #endregion
 
         #region Private-Methods
+
+        private static AskActionProposal NewProposal(AskThread thread, string toolName, string summary)
+        {
+            AskActionProposal proposal = new AskActionProposal();
+            proposal.TenantId = thread.TenantId;
+            proposal.UserId = thread.UserId;
+            proposal.ThreadId = thread.Id;
+            proposal.ToolName = toolName;
+            proposal.SummaryText = summary;
+            return proposal;
+        }
 
         private static LoggingModule CreateLogging()
         {

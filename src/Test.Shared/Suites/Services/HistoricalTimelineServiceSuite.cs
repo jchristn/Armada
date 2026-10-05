@@ -153,6 +153,58 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("enumerate_exclude_read_requests_hides_get_polling", "EnumerateAsync with ExcludeReadRequests leaves out GET, HEAD, and OPTIONS request entries", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+
+                string tenantId = "ten_history_reads";
+                string userId = "usr_history_reads";
+                await EnsureTenantAndUserAsync(testDb, tenantId, userId).ConfigureAwait(false);
+
+                Dictionary<string, string> idsByMethod = new Dictionary<string, string>();
+                foreach (string method in new[] { "GET", "head", "OPTIONS", "POST", "PUT", "DELETE" })
+                {
+                    RequestHistoryEntry entry = new RequestHistoryEntry
+                    {
+                        TenantId = tenantId,
+                        UserId = userId,
+                        Method = method,
+                        Route = "/api/v1/missions",
+                        RouteTemplate = "/api/v1/missions",
+                        StatusCode = 200,
+                        IsSuccess = true,
+                        CreatedUtc = DateTime.UtcNow
+                    };
+                    await testDb.Driver.RequestHistory.CreateAsync(entry, new RequestHistoryDetail { RequestHistoryId = entry.Id }).ConfigureAwait(false);
+                    idsByMethod[method] = entry.Id;
+                }
+
+                HistoricalTimelineService service = new HistoricalTimelineService(testDb.Driver);
+                AuthContext auth = AuthContext.Authenticated(tenantId, userId, false, true, "UnitTest");
+
+                EnumerationResult<HistoricalTimelineEntry> all = await service.EnumerateAsync(auth, new HistoricalTimelineQuery
+                {
+                    PageNumber = 1,
+                    PageSize = 100
+                }).ConfigureAwait(false);
+                foreach (string id in idsByMethod.Values)
+                    AssertTrue(all.Objects.Exists(entry => entry.SourceType == "Request" && entry.SourceId == id), "Default query should include every request entry.");
+
+                EnumerationResult<HistoricalTimelineEntry> writesOnly = await service.EnumerateAsync(auth, new HistoricalTimelineQuery
+                {
+                    PageNumber = 1,
+                    PageSize = 100,
+                    ExcludeReadRequests = true
+                }).ConfigureAwait(false);
+                AssertFalse(writesOnly.Objects.Exists(entry => entry.SourceId == idsByMethod["GET"]), "GET entries should be excluded.");
+                AssertFalse(writesOnly.Objects.Exists(entry => entry.SourceId == idsByMethod["head"]), "HEAD entries should be excluded regardless of case.");
+                AssertFalse(writesOnly.Objects.Exists(entry => entry.SourceId == idsByMethod["OPTIONS"]), "OPTIONS entries should be excluded.");
+                AssertTrue(writesOnly.Objects.Exists(entry => entry.SourceId == idsByMethod["POST"]), "POST entries should remain.");
+                AssertTrue(writesOnly.Objects.Exists(entry => entry.SourceId == idsByMethod["PUT"]), "PUT entries should remain.");
+                AssertTrue(writesOnly.Objects.Exists(entry => entry.SourceId == idsByMethod["DELETE"]), "DELETE entries should remain.");
+                AssertEqual(all.TotalRecords - 3, writesOnly.TotalRecords, "TotalRecords should drop by the three read requests.");
+            }));
+
             cases.Add(CaseAsync("enumerate_filters_by_vessel_actor_source_type_and_text", "EnumerateAsync filters by vessel, actor, source type, and text", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

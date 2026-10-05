@@ -10,6 +10,7 @@ import ReadinessPanel from '../components/shared/ReadinessPanel';
 import PageHeader from '../components/shared/PageHeader';
 import CaptainPicker from '../components/shared/CaptainPicker';
 import FallbackTierSelect from '../components/shared/FallbackTierSelect';
+import { sortByName } from '../lib/sortByName';
 
 interface StepAssignment {
   captainId: string | null;
@@ -61,7 +62,7 @@ export default function Dispatch() {
       listCaptains({ pageSize: 9999 }).catch(() => null),
       listPersonas({ pageSize: 9999 }).catch(() => null),
     ]).then(([vRes, pRes, cRes, prRes]) => {
-      if (vRes) setVessels(vRes.objects);
+      if (vRes) setVessels(sortByName(vRes.objects));
       if (pRes) setPipelines(pRes.objects);
       if (cRes) setCaptains(cRes.objects);
       if (prRes) setPersonas(prRes.objects);

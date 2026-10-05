@@ -71,6 +71,8 @@ import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
 import { buildObjectiveDuplicatePayload } from '../lib/duplicates';
 import { refinementSummaryFromEvent } from '../lib/refinementSummary';
+import { mergeSessionDetail, newerOf } from '../lib/liveMerge';
+import { sortByName } from '../lib/sortByName';
 
 function toDateTimeLocalValue(value: string | null | undefined): string {
   if (!value) return '';
@@ -489,7 +491,7 @@ export default function ObjectiveDetail() {
     ]).then(([fleetResult, vesselResult, captainResult, pipelineResult, objectiveResult]) => {
       if (cancelled) return;
       setFleets(fleetResult.objects || []);
-      setVessels(vesselResult.objects || []);
+      setVessels(sortByName(vesselResult.objects));
       setCaptains(captainResult.objects || []);
       setPipelines(pipelineResult.objects || []);
       setAvailableObjectives(objectiveResult.objects || []);
@@ -767,8 +769,12 @@ export default function ObjectiveDetail() {
       setSendingRefinement(true);
       const detail = await sendObjectiveRefinementMessage(refinementDetail.session.id, { content: refinementComposer.trim() });
       setRefinementComposer('');
-      setRefinementDetail(detail);
-      setRefinementSessions((current) => upsertRefinementSession(current, detail.session));
+      // A fast captain can finish the turn (over the WebSocket) before this response arrives; keep the newer state.
+      setRefinementDetail((current) => mergeSessionDetail(current, detail));
+      setRefinementSessions((current) => {
+        const existing = current.find((item) => item.id === detail.session.id);
+        return upsertRefinementSession(current, existing ? newerOf(existing, detail.session) : detail.session);
+      });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t('Failed to send refinement message.'));
     } finally {
