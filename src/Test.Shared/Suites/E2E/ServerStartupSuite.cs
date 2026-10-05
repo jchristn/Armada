@@ -50,18 +50,20 @@ namespace Test.Shared.Suites.E2E
                 ArmadaServer server = CreateServer(FreePort(), mcpPort, out string tempDir);
                 try
                 {
-                    InvalidOperationException? caught = null;
+                    ListenerBindException? caught = null;
                     try
                     {
                         await server.StartAsync().ConfigureAwait(false);
                     }
-                    catch (InvalidOperationException ex)
+                    catch (ListenerBindException ex)
                     {
                         caught = ex;
                     }
 
-                    AssertNotNull(caught, "StartAsync must throw when the MCP port is taken");
-                    AssertContains("MCP server could not listen on 127.0.0.1:" + mcpPort, caught!.Message);
+                    AssertNotNull(caught, "StartAsync must throw a typed ListenerBindException when the MCP port is taken");
+                    AssertEqual("MCP", caught!.Listener, "the MCP listener failed");
+                    AssertEqual(mcpPort, caught.Port, "the taken port");
+                    AssertEqual("127.0.0.1", caught.Hostname, "the configured host");
                 }
                 finally
                 {

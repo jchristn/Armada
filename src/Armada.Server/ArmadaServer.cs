@@ -727,13 +727,13 @@ namespace Armada.Server
             }
             catch (Exception ex) when (ex is System.Net.HttpListenerException || ex is System.Net.Sockets.SocketException || ex is InvalidOperationException)
             {
-                throw new InvalidOperationException("MCP server could not listen on " + _Settings.Rest.Hostname + ":" + _Settings.McpPort + ": " + ex.Message, ex);
+                throw new ListenerBindException("MCP", _Settings.Rest.Hostname, _Settings.McpPort, "MCP server could not listen on " + _Settings.Rest.Hostname + ":" + _Settings.McpPort + ": " + ex.Message, ex);
             }
 
             if (listen.IsCompleted)
             {
                 Exception? cause = listen.Exception?.GetBaseException();
-                throw new InvalidOperationException("MCP server could not listen on " + _Settings.Rest.Hostname + ":" + _Settings.McpPort + ": "
+                throw new ListenerBindException("MCP", _Settings.Rest.Hostname, _Settings.McpPort, "MCP server could not listen on " + _Settings.Rest.Hostname + ":" + _Settings.McpPort + ": "
                     + (cause != null ? cause.Message : "the listener stopped immediately"), cause);
             }
 

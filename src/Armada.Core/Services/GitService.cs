@@ -1014,20 +1014,20 @@ namespace Armada.Core.Services
 
         private async Task EnsureTrackedFilesCleanAsync(string worktreePath, CancellationToken token)
         {
+            // Keep the leading status columns (" M path"): only trailing whitespace is trimmed.
             string status = (await RunGitAsync(
                 worktreePath,
                 token,
                 "status",
                 "--porcelain",
-                "--untracked-files=no").ConfigureAwait(false)).Trim();
+                "--untracked-files=no").ConfigureAwait(false)).TrimEnd();
 
             if (String.IsNullOrWhiteSpace(status))
             {
                 return;
             }
 
-            throw new InvalidOperationException(
-                "Git checkout " + worktreePath + " contains tracked modifications: " + status);
+            throw new GitDirtyCheckoutException(worktreePath, status);
         }
 
         private static void AddChangedPaths(string gitOutput, HashSet<string> changedFiles)
