@@ -131,9 +131,9 @@ namespace Armada.Tui.Ask
         public bool LoadingOlder { get; private set; } = false;
 
         /// <summary>
-        /// Proposal whose approve or reject call is in flight, or null.
+        /// Changes whenever a proposal's approve or reject call starts or finishes (render cache key).
         /// </summary>
-        public string? BusyProposalId { get; private set; } = null;
+        public int BusyProposalsVersion { get; private set; } = 0;
 
         /// <summary>
         /// A quick action is running.
@@ -269,6 +269,7 @@ namespace Armada.Tui.Ask
         private const string ArmadaSocketEventsCaptain = "captain.changed";
         private readonly Dictionary<string, CaptainToolAccessResult> _ToolsCache = new Dictionary<string, CaptainToolAccessResult>(StringComparer.Ordinal);
         private string? _ToolsRequestedFor = null;
+        private readonly HashSet<string> _BusyProposals = new HashSet<string>(StringComparer.Ordinal);
         private bool _Stopping = false;
         private int _ForceEndMs = 8000;
         private int _SearchDebounceMs = 300;
@@ -785,8 +786,8 @@ namespace Armada.Tui.Ask
         /// <param name="done">Called on the UI loop with the updated proposal (null on failure), or null.</param>
         public void Decide(string threadId, string proposalId, bool approve, Action<AskActionProposal?>? done = null)
         {
-            if (String.IsNullOrEmpty(threadId) || String.IsNullOrEmpty(proposalId) || BusyProposalId != null) return;
-            BusyProposalId = proposalId;
+            if (String.IsNullOrEmpty(threadId) || String.IsNullOrEmpty(proposalId) || !_BusyProposals.Add(proposalId)) return;
+            BusyProposalsVersion++;
             ApprovalItem? pending = Context.Approvals.Find(ApprovalKindEnum.AskProposal, proposalId);
             TuiTelemetry.RecordApproval(ApprovalKindEnum.AskProposal, approve ? "approve" : "reject", pending?.CreatedUtc, Context.Clock.UtcNow);
             ArmadaClient client = Context.Client;
@@ -799,7 +800,7 @@ namespace Armada.Tui.Ask
                         : await client.RejectAskProposalAsync(threadId, proposalId).ConfigureAwait(false);
                     Context.Dispatcher.Post(() =>
                     {
-                        BusyProposalId = null;
+                        ReleaseProposal(proposalId);
                         if (updated != null)
                         {
                             if (Conversation.ThreadId == threadId) Conversation.ApplyProposal(updated);
@@ -819,12 +820,32 @@ namespace Armada.Tui.Ask
                 {
                     Context.Dispatcher.Post(() =>
                     {
-                        BusyProposalId = null;
+                        ReleaseProposal(proposalId);
                         Fail(approve ? "The action could not be approved." : "The action could not be rejected.", ex);
                         done?.Invoke(null);
                     });
                 }
+                catch (Exception)
+                {
+                    Context.Dispatcher.Post(() =>
+                    {
+                        ReleaseProposal(proposalId);
+                        Context.Notifications.Toast(NotificationSeverityEnum.Error, approve ? Context.Loc.T("The action could not be approved.") : Context.Loc.T("The action could not be rejected."));
+                        done?.Invoke(null);
+                    });
+                }
             });
+        }
+
+        /// <summary>
+        /// Whether an approve or reject call for this proposal is in flight. Decisions on other proposals are not
+        /// blocked by it.
+        /// </summary>
+        /// <param name="proposalId">Proposal id.</param>
+        /// <returns>True while the call is in flight.</returns>
+        public bool IsProposalBusy(string proposalId)
+        {
+            return !String.IsNullOrEmpty(proposalId) && _BusyProposals.Contains(proposalId);
         }
 
         /// <summary>
@@ -1421,6 +1442,11 @@ namespace Armada.Tui.Ask
                 }
             });
             return tcs.Task;
+        }
+
+        private void ReleaseProposal(string proposalId)
+        {
+            if (_BusyProposals.Remove(proposalId)) BusyProposalsVersion++;
         }
 
         private void Fail(string message, ArmadaApiException ex)

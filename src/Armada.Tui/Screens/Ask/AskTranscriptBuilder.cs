@@ -341,14 +341,14 @@ namespace Armada.Tui.Screens.Ask
             if (message.Kind == AskMessageKindEnum.ActionProposal)
             {
                 if (text.Length > 0 && (proposal == null || String.IsNullOrEmpty(proposal.SummaryText))) lines.AddRange(AskCardRenderer.Para(text, theme.Muted, w));
-                if (proposal != null) lines.AddRange(AskCardRenderer.ConfirmCard(proposal, false, view.ExpandedArguments.Contains(proposal.Id), ask.BusyProposalId == proposal.Id, theme, loc, nowUtc, w));
+                if (proposal != null) lines.AddRange(AskCardRenderer.ConfirmCard(proposal, false, view.ExpandedArguments.Contains(proposal.Id), ask.IsProposalBusy(proposal.Id), theme, loc, nowUtc, w));
                 else lines.AddRange(Markdown(text.Length > 0 ? text : loc.T("A proposed action is loading..."), w));
             }
             else if (message.Kind == AskMessageKindEnum.ActionResult)
             {
                 lines.Add(Header(StyledText.From("* " + loc.T("Action result"), theme.Accent.WithAttribute(CellAttributes.Bold, true)), when, theme, w));
                 lines.AddRange(Markdown(text, w));
-                if (proposal != null) lines.AddRange(AskCardRenderer.ConfirmCard(proposal, true, view.ExpandedArguments.Contains(proposal.Id), ask.BusyProposalId == proposal.Id, theme, loc, nowUtc, w));
+                if (proposal != null) lines.AddRange(AskCardRenderer.ConfirmCard(proposal, true, view.ExpandedArguments.Contains(proposal.Id), ask.IsProposalBusy(proposal.Id), theme, loc, nowUtc, w));
             }
             else if (message.Kind == AskMessageKindEnum.WorkUpdate)
             {
@@ -392,7 +392,7 @@ namespace Armada.Tui.Screens.Ask
                 if (conv.Metrics.TryGetValue(message.Id, out AskTurnMetrics? metrics))
                     lines.Add(StyledText.From("  " + metrics.Describe(loc.T("first token"), loc.T("tok/s"), loc.T("tokens"), loc.T("total")), theme.Muted));
                 if (!String.IsNullOrWhiteSpace(message.ThinkingText)) lines.AddRange(Thinking(message.ThinkingText!, view.ExpandedThinking.Contains(block.Key), false, theme, loc, w));
-                if (proposal != null) lines.AddRange(AskCardRenderer.ConfirmCard(proposal, false, view.ExpandedArguments.Contains(proposal.Id), ask.BusyProposalId == proposal.Id, theme, loc, nowUtc, w));
+                if (proposal != null) lines.AddRange(AskCardRenderer.ConfirmCard(proposal, false, view.ExpandedArguments.Contains(proposal.Id), ask.IsProposalBusy(proposal.Id), theme, loc, nowUtc, w));
                 lines.AddRange(Markdown(text, w));
             }
 

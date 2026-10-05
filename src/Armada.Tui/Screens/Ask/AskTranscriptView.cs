@@ -153,7 +153,7 @@ namespace Armada.Tui.Screens.Ask
         {
             int contentWidth = Math.Max(20, width - 2);
             DateTime now = _Context.Clock.UtcNow;
-            string key = _Ask.Conversation.Version + "|" + contentWidth + "|" + ViewState.Version + "|" + (_Ask.BusyProposalId ?? "") + "|" + _Ask.LoadingOlder
+            string key = _Ask.Conversation.Version + "|" + contentWidth + "|" + ViewState.Version + "|" + _Ask.BusyProposalsVersion + "|" + _Ask.LoadingOlder
                 + "|" + (now.Ticks / TimeSpan.TicksPerSecond) + "|" + Theme.Name + "|" + _Ask.Stopping + "|" + _Ask.QuickActions.Count + "|" + _Ask.Captains.Count
                 + "|" + _Ask.ActiveCaptainId + "|" + _Context.Loc.Locale + "|" + (_Ask.Conversation.Thread?.Id ?? "");
             if (key == _LayoutKey) return;

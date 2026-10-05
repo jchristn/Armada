@@ -4,6 +4,8 @@ namespace Test.Shared.Suites.Tui
     using System.Collections.Generic;
     using System.Linq;
     using System.Net;
+    using System.Threading;
+    using Armada.Client;
     using Armada.Client.Models;
     using Armada.Client.Socket;
     using Armada.Core.Enums;
@@ -238,6 +240,46 @@ namespace Test.Shared.Suites.Tui
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "decisions_do_not_block_each_other", "Rejecting one proposal while another proposal's approve call is still in flight sends the reject (no keypress is dropped)", () =>
+            {
+                AskFixtures fx = new AskFixtures();
+                fx.AddThread(AskFixtures.Thread("ath_4", "Two changes"));
+                AskActionProposal first = AskFixtures.Proposal("aap_h", "ath_4", "dispatch", AskProposalStatusEnum.Pending);
+                AskActionProposal second = AskFixtures.Proposal("aap_j", "ath_4", "dispatch", AskProposalStatusEnum.Pending);
+                fx.Decisions(first).Decisions(second);
+                using (ManualResetEventSlim releaseApprove = new ManualResetEventSlim(false))
+                {
+                    fx.Stub.On("POST", "/api/v1/ask/threads/ath_4/proposals/aap_h/approve", body =>
+                    {
+                        releaseApprove.Wait(TimeSpan.FromSeconds(30));
+                        AskActionProposal executed = AskFixtures.Proposal("aap_h", "ath_4", "dispatch", AskProposalStatusEnum.Executed);
+                        return StubHttpHandler.Response(HttpStatusCode.OK, ArmadaJson.Serialize(executed));
+                    });
+
+                    using (TuiTestHost host = TuiCase.SignedIn(140, 45, "/approvals", fx.Stub))
+                    {
+                        host.PumpUntil(() => host.Tui.Ask.Threads.Count == 1);
+                        host.Tui.Context.Events.Inject(AskFixtures.Event("ask.proposal", new AskProposalEvent { ThreadId = "ath_4", Proposal = first }));
+                        host.Tui.Context.Events.Inject(AskFixtures.Event("ask.proposal", new AskProposalEvent { ThreadId = "ath_4", Proposal = second }));
+                        host.Pump();
+                        ApprovalsScreen screen = SelectProposal(host, "aap_h");
+                        host.Press("a");
+                        AssertTrue(host.PumpUntil(() => fx.Stub.CountFor("POST", "/api/v1/ask/threads/ath_4/proposals/aap_h/approve") == 1), "approve call started and is held");
+                        AssertTrue(host.Tui.Ask.IsProposalBusy("aap_h"), "the approved proposal is busy");
+
+                        SelectProposal(host, "aap_j");
+                        host.Press("r");
+                        AssertTrue(host.PumpUntil(() => fx.Stub.CountFor("POST", "/api/v1/ask/threads/ath_4/proposals/aap_j/reject") == 1, 10000), "reject call sent while the approve is in flight");
+                        AssertTrue(host.Tui.Ask.IsProposalBusy("aap_h"), "the approve is still in flight");
+
+                        releaseApprove.Set();
+                        AssertTrue(host.PumpUntil(() => !host.Tui.Ask.IsProposalBusy("aap_h") && !host.Tui.Ask.IsProposalBusy("aap_j")), "both calls finish");
+                        AssertTrue(host.PumpUntil(() => host.Tui.Context.Approvals.Count == 0), "both proposals left the queue");
+                        AssertEqual(screen, (ApprovalsScreen)host.Tui.Shell.Screen!, "still on the center");
+                    }
+                }
+            }));
+
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI approvals center", cases: cases);
         }
 
@@ -280,6 +322,21 @@ namespace Test.Shared.Suites.Tui
             }
 
             host.Pump();
+        }
+
+        private static ApprovalsScreen SelectProposal(TuiTestHost host, string proposalId)
+        {
+            ApprovalsScreen screen = (ApprovalsScreen)host.Tui.Shell.Screen!;
+            host.Pump();
+            host.Press("home");
+            for (int i = 0; i < 20; i++)
+            {
+                ApprovalItem? current = screen.Current();
+                if (current != null && current.Kind == ApprovalKindEnum.AskProposal && current.EntityId == proposalId) return screen;
+                host.Press("down");
+            }
+
+            throw new AssertionException("could not select proposal " + proposalId + "\n" + host.Screen());
         }
 
         private static ApprovalsScreen Select(TuiTestHost host, ApprovalKindEnum kind)
