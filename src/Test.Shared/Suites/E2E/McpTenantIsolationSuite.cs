@@ -116,7 +116,7 @@ namespace Test.Shared.Suites.E2E
                         string? args = BuildArguments(tool, out List<string> unmapped, out bool usesId);
                         if (args == null || !usesId) continue;
                         string text = await CallAsync(client, tool.Name, args).ConfigureAwait(false);
-                        if (_NotFoundPattern.IsMatch(text) || text.StartsWith("EXCEPTION", StringComparison.Ordinal))
+                        if (IsOwnReadFailure(tool.Name, text))
                             failures.Add(tool.Name + ": " + Truncate(text));
                     }
                 }
@@ -680,5 +680,18 @@ namespace Test.Shared.Suites.E2E
         }
 
         #endregion
+
+        /// <summary>
+        /// True when an owner's by-id read failed. get_captain_tools reports the host's own runtime tool sources (for
+        /// example the local Claude Code MCP servers), whose status text can legitimately say "not found", so for it
+        /// only the tool's own not-found error counts.
+        /// </summary>
+        private static bool IsOwnReadFailure(string toolName, string text)
+        {
+            if (text.StartsWith("EXCEPTION", StringComparison.Ordinal)) return true;
+            if (String.Equals(toolName, "get_captain_tools", StringComparison.Ordinal))
+                return Regex.IsMatch(text, "\"Error\"\\s*:\\s*\"Captain not found\"", RegexOptions.IgnoreCase);
+            return _NotFoundPattern.IsMatch(text);
+        }
     }
 }
