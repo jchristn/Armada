@@ -8,6 +8,7 @@ namespace Armada.Tui.Widgets
     using TUIKit;
     using TUIKit.Input;
     using TUIKit.Unicode;
+    using TUIKit.Widgets;
 
     /// <summary>
     /// Single-line text field with grapheme-aware editing and cell-width scrolling (CJK-safe, TUIKit gap U9), optional

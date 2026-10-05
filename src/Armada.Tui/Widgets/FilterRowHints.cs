@@ -1,5 +1,7 @@
 namespace Armada.Tui.Widgets
 {
+    using System.Collections.Generic;
+    using TUIKit.Input;
     using TUIKit.Widgets;
 
     /// <summary>
@@ -17,18 +19,20 @@ namespace Armada.Tui.Widgets
         /// <param name="focused">Focused field, or null.</param>
         /// <param name="exitLabel">English description of where <c>Esc</c> goes (for example "Back to the list").</param>
         /// <returns>Hints.</returns>
-        public static FocusHints For(IWidget? focused, string exitLabel)
+        public static List<KeyHint> For(IWidget? focused, string exitLabel)
         {
+            List<KeyHint> hints = new List<KeyHint>();
             if (focused is ITextEntry entry && entry.AcceptsText)
             {
-                return FocusHints.Typing("Esc", exitLabel).Add("Tab", "Next filter");
+                hints.Add(new KeyHint("Esc", exitLabel));
+                hints.Add(new KeyHint("Tab", "Next filter"));
+                return hints;
             }
 
-            FocusHints hints = new FocusHints();
-            if (focused is SelectField<string>) hints.Add("Enter", "Choose");
-            else if (focused is TriStateField || focused is CheckField) hints.Add("Space", "Change");
-            hints.Add("Esc", exitLabel);
-            hints.Add("Tab", "Next filter");
+            if (focused is SelectField<string>) hints.Add(new KeyHint("Enter", "Choose"));
+            else if (focused is TriStateField || focused is CheckField) hints.Add(new KeyHint("Space", "Change"));
+            hints.Add(new KeyHint("Esc", exitLabel));
+            hints.Add(new KeyHint("Tab", "Next filter"));
             return hints;
         }
 

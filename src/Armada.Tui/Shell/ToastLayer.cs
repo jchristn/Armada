@@ -2,7 +2,6 @@ namespace Armada.Tui.Shell
 {
     using System;
     using System.Collections.Generic;
-    using System.Globalization;
     using System.Linq;
     using Armada.Tui.Services;
     using Armada.Tui.Text;
@@ -10,9 +9,11 @@ namespace Armada.Tui.Shell
     using TUIKit;
 
     /// <summary>
-    /// Draws toasts at the top right below the header (TUIKit gap U6: its toasts are one line, 40 columns, with no
-    /// actions). Each toast is up to 60 cells wide, wraps to two lines, shows its severity in text, and shows its action
-    /// key (<c>Ctrl+O</c>) when it has one. Thread-safe (stateless).
+    /// Draws the active toasts of <see cref="NotificationService.Toasts"/> (a TUIKit <c>NotificationCenter</c>, which
+    /// keeps, expires, and coalesces them) at the top right below the menu bar. Armada draws them rather than TUIKit's
+    /// renderer because its look has no TUIKit equivalent: the severity spelled as a text label (<c>[!]</c>), half the
+    /// screen up to 60 cells, two wrapped lines, the newest four, and the action as a key line (<c>[Ctrl+O] Open</c>)
+    /// rather than a clickable button. Thread-safe (stateless).
     /// </summary>
     public static class ToastLayer
     {
@@ -57,8 +58,7 @@ namespace Armada.Tui.Shell
                     NotificationSeverityEnum.Error => "[x] ",
                     _ => "[i] "
                 };
-                string repeat = toast.Repeat > 1 ? " (x" + toast.Repeat.ToString(CultureInfo.InvariantCulture) + ")" : "";
-                List<string> lines = TextCells.Wrap(label + toast.Text.Trim() + repeat, boxWidth - 2).Take(2).ToList();
+                List<string> lines = TextCells.Wrap(label + toast.Text.Trim() + toast.RepeatSuffix, boxWidth - 2).Take(2).ToList();
                 if (toast.ActionLabel != null) lines.Add("[" + ActionKey + "] " + loc.T(toast.ActionLabel));
                 int x = Math.Max(0, width - boxWidth - 1);
                 for (int i = 0; i < lines.Count && y < surface.Size.Height; i++)

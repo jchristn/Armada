@@ -17,6 +17,7 @@ namespace Armada.Tui.Screens.Build
     using TUIKit;
     using TUIKit.Input;
     using TUIKit.Widgets;
+    using Button = Armada.Tui.Widgets.Button;
 
     /// <summary>
     /// Workspace (W4.6, <c>/workspace/:vesselId</c>), the dashboard's Workspace page for one vessel: the status line
@@ -387,26 +388,27 @@ namespace Armada.Tui.Screens.Build
         }
 
         /// <inheritdoc />
-        public override FocusHints ResolveHints(FocusHints? inner, bool textEntry)
+        public override IReadOnlyList<KeyHint> ComposeHints(IReadOnlyList<KeyHint>? inner, bool typing)
         {
             if (ReferenceEquals(Scope.Focused, Editor))
             {
                 // The editor takes typed text: Space and D type there, so the first hint is the way back to the tree.
-                return FocusHints.Typing("Esc", "Back to the file tree (then Space select, D dispatch)").Add("Ctrl+S", "Save").Add("Tab", "Next pane");
+                return HintList.Of("Esc", "Back to the file tree (then Space select, D dispatch)").Add("Ctrl+S", "Save").Add("Tab", "Next pane");
             }
 
             if (ReferenceEquals(Scope.Focused, Preview))
             {
-                if (inner != null) return inner;
-                return new FocusHints().Add("Esc", "Back to the file tree").Add("Up/Down", "Scroll").Add("Tab", "Next pane");
+                // While the preview searches, its own keys are the whole answer.
+                if (inner != null) return new List<KeyHint>();
+                return HintList.Of("Esc", "Back to the file tree").Add("Up/Down", "Scroll").Add("Tab", "Next pane");
             }
 
             if (ReferenceEquals(Scope.Focused, Tree))
             {
-                return FocusHints.Of(Hints);
+                return KeyHints.Of(Hints);
             }
 
-            return base.ResolveHints(inner, textEntry);
+            return base.ComposeHints(inner, typing);
         }
 
         /// <inheritdoc />

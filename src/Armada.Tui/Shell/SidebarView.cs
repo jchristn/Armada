@@ -10,6 +10,7 @@ namespace Armada.Tui.Shell
     using Armada.Tui.Widgets;
     using TUIKit;
     using TUIKit.Input;
+    using TUIKit.Widgets;
 
     /// <summary>
     /// The sidebar: Dashboard, Ask Armada, then the dashboard's sections and items with the same labels, collapsible
@@ -17,7 +18,7 @@ namespace Armada.Tui.Shell
     /// Needs You badge (Critical or Warning marker, capped at 99+). In compact mode it shows one-letter icons. Not
     /// thread-safe.
     /// </summary>
-    public class SidebarView : ArmadaWidget
+    public class SidebarView : ArmadaWidget, IKeyHintSource
     {
         #region Public-Members
 
@@ -59,6 +60,12 @@ namespace Armada.Tui.Shell
         #endregion
 
         #region Public-Methods
+
+        /// <inheritdoc />
+        public IReadOnlyList<KeyHint>? GetKeyHints()
+        {
+            return new List<KeyHint> { new KeyHint("Enter", "Open"), new KeyHint("Left/Right", "Collapse/expand") };
+        }
 
         /// <summary>
         /// Visible rows (collapsed sections hide their items).

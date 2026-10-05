@@ -5,6 +5,7 @@ namespace Armada.Tui.Screens.Kit
     using Armada.Tui.Widgets;
     using TUIKit;
     using TUIKit.Input;
+    using TUIKit.Widgets;
 
     /// <summary>
     /// A two-state checkbox for forms ("[x] Enabled"). <c>Space</c> or <c>Enter</c> toggles; the mouse toggles on

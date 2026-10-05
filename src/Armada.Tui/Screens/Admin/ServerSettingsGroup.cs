@@ -5,6 +5,8 @@ namespace Armada.Tui.Screens.Admin
     using System.Linq;
     using Armada.Tui.Widgets;
     using TUIKit.Widgets;
+    using Button = Armada.Tui.Widgets.Button;
+    using ButtonRow = Armada.Tui.Widgets.ButtonRow;
 
     /// <summary>
     /// One saveable group of the Server settings page (Server Configuration, Agent Settings, Vessel Import, ...): its

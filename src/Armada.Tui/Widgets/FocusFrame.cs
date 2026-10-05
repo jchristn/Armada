@@ -5,6 +5,7 @@ namespace Armada.Tui.Widgets
     using Armada.Tui.Text;
     using Armada.Tui.Theming;
     using TUIKit;
+    using TUIKit.Widgets;
 
     /// <summary>
     /// The one focus treatment of the TUI: every focusable pane (a shell pane such as the sidebar or the Ask dock, and
@@ -14,7 +15,10 @@ namespace Armada.Tui.Widgets
     /// focused pane reads by shape as well as by color; every other box is a light line (<c>&#x250C; &#x2500; &#x2502;</c>
     /// or <c>+ - |</c>) in <see cref="ArmadaTheme.Border"/>, joined with tees where boxes share an edge. Box cells are
     /// always reserved, focused or not, so the layout never moves when focus does. Below three rows or columns a box
-    /// falls back to a one-column left gutter bar. Stateless and thread-safe.
+    /// falls back to a one-column left gutter bar. The drawing is TUIKit's: <see cref="TUIKit.Widgets.FocusFrame"/> with
+    /// <see cref="FocusFrameOptions"/> for a box or gutter, and <c>SurfaceExtensions.DrawJoinedBox</c> for the shared
+    /// light lines and their tees; this class adds Armada's palette, box geometry (<see cref="Inner"/>, <see cref="Outer"/>),
+    /// left-aligned titles, and the plain-cornered focused box over joined neighbours. Stateless and thread-safe.
     /// </summary>
     public static class FocusFrame
     {
@@ -50,10 +54,7 @@ namespace Armada.Tui.Widgets
 
         #region Private-Members
 
-        private const int Up = 1;
-        private const int Down = 2;
-        private const int Left = 4;
-        private const int Right = 8;
+        private static readonly FocusFrameOptions _Options = CreateOptions();
 
         #endregion
 
@@ -142,13 +143,17 @@ namespace Armada.Tui.Widgets
             if (kind == FocusFrameKindEnum.None) return;
             if (kind == FocusFrameKindEnum.Gutter)
             {
-                string bar = focused ? GlyphsFor(theme, true).Substring(1, 1) : " ";
-                CellStyle style = focused ? theme.FocusBorder : theme.Text;
-                for (int y = outer.Y; y < outer.Bottom; y++) surface.DrawText(outer.X, y, bar, style);
+                // The gutter column is cleared whatever the state. TUIKit draws its ASCII gutter as "|", the same glyph as
+                // a plain ASCII line, so the focused ASCII gutter keeps the focused vertical glyph instead.
+                Rect gutter = new Rect(outer.X, outer.Y, 1, outer.Height);
+                surface.Fill(gutter, Cell.Blank(theme.Text));
+                if (!focused) return;
+                if (IsAscii(theme)) surface.Fill(gutter, Cell.Glyph(AsciiFocusedGlyphs.Substring(1, 1), theme.FocusBorder, 1));
+                else TUIKit.Widgets.FocusFrame.Draw(surface, outer, true, theme.FocusBorder, theme.Border, false, _Options);
                 return;
             }
 
-            DrawBox(surface, outer, theme, focused);
+            TUIKit.Widgets.FocusFrame.Draw(surface, outer, focused, theme.FocusBorder, theme.Border, IsAscii(theme), _Options);
         }
 
         /// <summary>
@@ -172,19 +177,13 @@ namespace Armada.Tui.Widgets
                 return;
             }
 
-            Dictionary<long, int> arms = new Dictionary<long, int>();
-            AddBox(arms, pane, pane);
-            foreach (Rect box in boxes) AddBox(arms, box.Intersect(pane), pane);
-            bool ascii = theme.AsciiBorders || theme.AsciiGlyphs;
-            foreach (KeyValuePair<long, int> kvp in arms)
-            {
-                int x = (int)(kvp.Key >> 32);
-                int y = (int)(kvp.Key & 0xFFFFFFFF);
-                surface.DrawText(x, y, LightGlyph(kvp.Value, ascii), theme.Border);
-            }
-
+            // Plain boxes join the lines already drawn (tees and crosses where they meet); the focused box is drawn
+            // last and unjoined, so it reads whole with plain heavy corners over the shared lines.
+            BorderStyle plain = IsAscii(theme) ? BorderStyle.Ascii : BorderStyle.Line;
+            surface.DrawJoinedBox(pane, theme.Border, plain);
+            foreach (Rect box in boxes) surface.DrawJoinedBox(box.Intersect(pane), theme.Border, plain);
             Rect focused = focusedBox.Intersect(pane);
-            if (!focused.IsEmpty && KindFor(focused) == FocusFrameKindEnum.Box) DrawBox(surface, focused, theme, true);
+            if (!focused.IsEmpty && KindFor(focused) == FocusFrameKindEnum.Box) Draw(surface, focused, theme, true);
         }
 
         /// <summary>
@@ -211,76 +210,21 @@ namespace Armada.Tui.Widgets
 
         #region Private-Methods
 
-        private static void DrawBox(ISurface surface, Rect outer, ArmadaTheme theme, bool focused)
+        private static bool IsAscii(ArmadaTheme theme)
         {
-            string glyphs = GlyphsFor(theme, focused);
-            CellStyle style = focused ? theme.FocusBorder : theme.Border;
-            for (int x = outer.X + 1; x < outer.Right - 1; x++)
-            {
-                surface.DrawText(x, outer.Y, glyphs.Substring(0, 1), style);
-                surface.DrawText(x, outer.Bottom - 1, glyphs.Substring(0, 1), style);
-            }
-
-            for (int y = outer.Y + 1; y < outer.Bottom - 1; y++)
-            {
-                surface.DrawText(outer.X, y, glyphs.Substring(1, 1), style);
-                surface.DrawText(outer.Right - 1, y, glyphs.Substring(1, 1), style);
-            }
-
-            surface.DrawText(outer.X, outer.Y, glyphs.Substring(2, 1), style);
-            surface.DrawText(outer.Right - 1, outer.Y, glyphs.Substring(3, 1), style);
-            surface.DrawText(outer.X, outer.Bottom - 1, glyphs.Substring(4, 1), style);
-            surface.DrawText(outer.Right - 1, outer.Bottom - 1, glyphs.Substring(5, 1), style);
+            return theme.AsciiBorders || theme.AsciiGlyphs;
         }
 
-        private static void AddBox(Dictionary<long, int> arms, Rect box, Rect pane)
+        private static FocusFrameOptions CreateOptions()
         {
-            if (box.Width < 2 || box.Height < 2) return;
-            int right = box.Right - 1;
-            int bottom = box.Bottom - 1;
-            for (int x = box.X; x <= right; x++)
-            {
-                int horizontal = (x > box.X ? Left : 0) | (x < right ? Right : 0);
-                Arm(arms, x, box.Y, horizontal | (x == box.X || x == right ? Down : 0), pane);
-                Arm(arms, x, bottom, horizontal | (x == box.X || x == right ? Up : 0), pane);
-            }
-
-            for (int y = box.Y + 1; y < bottom; y++)
-            {
-                Arm(arms, box.X, y, Up | Down, pane);
-                Arm(arms, right, y, Up | Down, pane);
-            }
-        }
-
-        private static void Arm(Dictionary<long, int> arms, int x, int y, int bits, Rect pane)
-        {
-            if (!pane.Contains(new Point(x, y))) return;
-            long key = ((long)x << 32) | (uint)y;
-            arms.TryGetValue(key, out int existing);
-            arms[key] = existing | bits;
-        }
-
-        private static string LightGlyph(int arms, bool ascii)
-        {
-            bool up = (arms & Up) != 0;
-            bool down = (arms & Down) != 0;
-            bool left = (arms & Left) != 0;
-            bool right = (arms & Right) != 0;
-            bool vertical = up || down;
-            bool horizontal = left || right;
-            if (ascii)
-            {
-                if (vertical && horizontal) return "+";
-                return vertical ? "|" : "-";
-            }
-
-            if (!horizontal) return "\u2502";
-            if (!vertical) return "\u2500";
-            if (up && down && left && right) return "\u253C";
-            if (up && down) return right ? "\u251C" : "\u2524";
-            if (left && right) return down ? "\u252C" : "\u2534";
-            if (down) return right ? "\u250C" : "\u2510";
-            return right ? "\u2514" : "\u2518";
+            FocusFrameOptions options = new FocusFrameOptions();
+            options.FocusedBorder = BorderStyle.Thick;
+            options.UnfocusedBorder = BorderStyle.Line;
+            options.TitleMarker = "";
+            options.MinimumBoxSize = 3;
+            options.GutterGlyph = HeavyGlyphs.Substring(1, 1);
+            options.JoinBorders = false;
+            return options;
         }
 
         #endregion

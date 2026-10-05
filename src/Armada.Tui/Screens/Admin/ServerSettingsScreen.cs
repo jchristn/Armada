@@ -20,6 +20,8 @@ namespace Armada.Tui.Screens.Admin
     using Armada.Tui.Widgets;
     using TUIKit.Input;
     using TUIKit.Widgets;
+    using Button = Armada.Tui.Widgets.Button;
+    using ButtonRow = Armada.Tui.Widgets.ButtonRow;
 
     /// <summary>
     /// Settings, Server tab (dashboard <c>Server.tsx</c> with <c>RepositoryHealthSettingsSection</c>,

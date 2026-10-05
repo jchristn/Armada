@@ -13,6 +13,8 @@ namespace Armada.Tui.Screens.Operations
     using TUIKit;
     using TUIKit.Input;
     using TUIKit.Widgets;
+    using Button = Armada.Tui.Widgets.Button;
+    using ButtonRow = Armada.Tui.Widgets.ButtonRow;
 
     /// <summary>
     /// The standard OPERATIONS list: a heading and subtitle, a toolbar of screen and bulk actions, the filter row,

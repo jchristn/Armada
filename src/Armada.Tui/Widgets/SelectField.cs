@@ -8,6 +8,7 @@ namespace Armada.Tui.Widgets
     using Armada.Tui.Text;
     using TUIKit;
     using TUIKit.Input;
+    using TUIKit.Widgets;
 
     /// <summary>
     /// Dropdown field (vessel, captain, pipeline, status enums, language, theme, ...): shows the chosen label; Enter,

@@ -65,7 +65,7 @@ namespace Test.Shared.Suites.Tui
                         if (!lines[0].Contains("bell", StringComparison.Ordinal)) failures.Add(path + ": notification bell cut off");
                         string status = lines.Length >= 24 ? lines[23] : "";
                         // Help is ? outside text fields and F1 while one has focus (? would be typed there).
-                        string help = host.Tui.Shell.CurrentFocusHints().TextEntry ? "F1 Help" : "? Help";
+                        string help = KeyHints.Typing(host.Tui.Shell.BuildFocusPath()) ? "F1 Help" : "? Help";
                         if (!status.Contains(help, StringComparison.Ordinal)) failures.Add(path + ": help hint (" + help + ") cut off: " + status.TrimEnd());
                         foreach (string line in lines)
                         {

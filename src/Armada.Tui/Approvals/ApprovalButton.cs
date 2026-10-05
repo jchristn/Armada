@@ -1,20 +1,14 @@
 namespace Armada.Tui.Approvals
 {
-    using TUIKit;
-
     /// <summary>
-    /// A clickable decision button drawn on an Approvals center row (<c>[Approve]</c>, <c>[Reject]</c>, <c>[Deny]</c>,
-    /// ...): where it was drawn and which decision key it stands for, so a click runs the same confirmation and call as
-    /// the key.
+    /// What a clickable decision button on an Approvals center row (<c>[Approve] a</c>, <c>[Reject] r</c>,
+    /// <c>[Deny] d</c>, ...) does: the item it belongs to and the decision key it stands for, so a click runs the same
+    /// confirmation and call as the key. It is the action of a TUIKit <c>ClickRegion</c>, which holds where the button
+    /// was drawn.
     /// </summary>
     public class ApprovalButton
     {
         #region Public-Members
-
-        /// <summary>
-        /// Where the button was drawn, in screen coordinates.
-        /// </summary>
-        public Rect Area { get; set; } = Rect.Empty;
 
         /// <summary>
         /// Key of the approval item the button belongs to.

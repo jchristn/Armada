@@ -5,6 +5,7 @@ namespace Armada.Tui.Widgets
     using Armada.Tui.Text;
     using TUIKit;
     using TUIKit.Input;
+    using TUIKit.Widgets;
 
     /// <summary>
     /// A row of tabs (hub tabs, login modes). Left/Right or <c>[</c>/<c>]</c> move between tabs, <c>Alt+1</c>..<c>Alt+9</c>

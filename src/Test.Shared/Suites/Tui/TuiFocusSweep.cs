@@ -11,6 +11,8 @@ namespace Test.Shared.Suites.Tui
     using TUIKit;
     using TUIKit.Testing;
     using TUIKit.Widgets;
+    using FocusFrame = Armada.Tui.Widgets.FocusFrame;
+    using FocusScope = Armada.Tui.Widgets.FocusScope;
 
     /// <summary>
     /// Typed render inspection for the focus treatment (see <see cref="TuiFocusSweepSuite"/>): renders the shell into a
@@ -104,6 +106,15 @@ namespace Test.Shared.Suites.Tui
                 return problems;
             }
 
+            // TUIKit's focus path follows Armada's scopes to the same leaf, and focus never rests on a widget that reports
+            // itself hidden or empty (TUIKit's IHideable, the check behind FocusAudit's InvisibleStop).
+            FocusPath path = shell.BuildFocusPath();
+            if (!ReferenceEquals(path.Leaf, shell.FocusedLeaf())) problems.Add(label + ": focus path leaf " + path.Leaf + " is not the focused leaf " + Describe(shell.FocusedLeaf()));
+            foreach (object node in path.Nodes)
+            {
+                if (node is IHideable hideable && !hideable.IsVisible) problems.Add(label + ": focus rests on hidden " + node.GetType().Name);
+            }
+
             Rect focusedBox = shell.LastFocusedBox;
             if (focusedBox.IsEmpty)
             {
@@ -141,7 +152,7 @@ namespace Test.Shared.Suites.Tui
             {
                 IReadOnlyList<RegionFrame> regions = shell.LastRegions;
                 RegionFrame? focused = RegionFrames.FocusedOf(regions);
-                List<IWidget> chain = shell.Scope.FocusedChain();
+                List<IWidget> chain = shell.BuildFocusPath().Nodes.Skip(1).OfType<IWidget>().ToList();
                 IWidget? leaf = chain.Count > 0 ? chain[chain.Count - 1] : null;
                 bool leafPlaced = leaf != null && !ReferenceEquals(leaf, shell.Screen);
                 if (focused == null)
@@ -232,7 +243,7 @@ namespace Test.Shared.Suites.Tui
                 return problems;
             }
 
-            Rect box = dialog.LastBox;
+            Rect box = dialog.FrameBounds;
             if (box.IsEmpty)
             {
                 problems.Add(label + ": dialog box not measured");

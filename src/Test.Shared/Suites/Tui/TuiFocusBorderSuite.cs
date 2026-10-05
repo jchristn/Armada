@@ -12,6 +12,7 @@ namespace Test.Shared.Suites.Tui
     using TUIKit;
     using TUIKit.Testing;
     using TUIKit.Widgets;
+    using FocusFrame = Armada.Tui.Widgets.FocusFrame;
     using static Test.Shared.Infrastructure.Asserts;
 
     /// <summary>

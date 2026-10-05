@@ -16,7 +16,7 @@ namespace Armada.Tui.Widgets
     /// (<see cref="Escaped"/>), and every change raises <see cref="Changed"/>. Select filters use an empty string for
     /// "all". Not thread-safe.
     /// </summary>
-    public class FilterBar : ContainerWidget, IFocusHintSource
+    public class FilterBar : ContainerWidget, IKeyHintSource
     {
         #region Public-Members
 
@@ -260,8 +260,10 @@ namespace Armada.Tui.Widgets
         }
 
         /// <inheritdoc />
-        public FocusHints? GetFocusHints()
+        public IReadOnlyList<KeyHint>? GetKeyHints()
         {
+            // A control below that describes its own keys speaks for itself.
+            if (KeyHints.Deeper(this) != null) return null;
             return FilterRowHints.For(Scope.Focused, ExitLabel);
         }
 

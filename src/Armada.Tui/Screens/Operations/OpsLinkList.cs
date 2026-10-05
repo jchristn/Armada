@@ -27,11 +27,12 @@ namespace Armada.Tui.Screens.Operations
         /// </summary>
         public int Cursor { get; private set; } = 0;
 
-        /// <inheritdoc />
-        public override bool CanFocus
+        /// <summary>
+        /// Not a focus stop while there is nothing to act on (see <see cref="TUIKit.Widgets.IHideable"/>).
+        /// </summary>
+        public override bool IsVisible
         {
-            get { return Visible && Items.Any(i => i.Action != null); }
-            set { }
+            get { return base.IsVisible && Items.Any(i => i.Action != null); }
         }
 
         #endregion

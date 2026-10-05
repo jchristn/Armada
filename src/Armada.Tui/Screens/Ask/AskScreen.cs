@@ -26,7 +26,7 @@ namespace Armada.Tui.Screens.Ask
     /// <c>Alt+Down</c> from anywhere on the screen focuses the oldest pending card. While a proposal or a CLI tool
     /// permission request in the open conversation awaits a decision, a strip above the composer says how many and how
     /// to decide (one line per kind), worded for where focus is, and the status bar hints follow the focused control
-    /// (<see cref="ResolveHints"/>). The header's CLI tools line shows the conversation's CLI tool permission policy and
+    /// (<see cref="ComposeHints"/>). The header's CLI tools line shows the conversation's CLI tool permission policy and
     /// its effective value; <c>p</c> (or a click on it) changes it, with Bypass offered only to admins and only after
     /// the strong warning.
     /// Not thread-safe.
@@ -115,7 +115,7 @@ namespace Armada.Tui.Screens.Ask
         /// <inheritdoc />
         public override IReadOnlyList<KeyValuePair<string, string>> Hints
         {
-            get { return ResolveHints(null, false).Keys; }
+            get { return KeyHints.Pairs(ComposeHints(null, false)); }
         }
 
         #endregion
@@ -251,14 +251,14 @@ namespace Armada.Tui.Screens.Ask
         }
 
         /// <inheritdoc />
-        public override FocusHints ResolveHints(FocusHints? inner, bool textEntry)
+        public override IReadOnlyList<KeyHint> ComposeHints(IReadOnlyList<KeyHint>? inner, bool typing)
         {
             IWidget? focused = Scope.Focused;
             int pending = PendingApprovals;
             int requests = PendingPermissionRequests;
             if (EditingTitle)
             {
-                return FocusHints.Typing("Esc", "Cancel rename").Add("Enter", "Save");
+                return HintList.Of("Esc", "Cancel rename").Add("Enter", "Save");
             }
 
             if (ReferenceEquals(focused, Composer))
@@ -266,7 +266,7 @@ namespace Armada.Tui.Screens.Ask
                 string leave = pending > 0 && requests == 0 ? "Leave the message box (then a approve, r reject)"
                     : requests > 0 && pending == 0 ? "Leave the message box (then a allow, d deny)"
                     : "Leave the message box";
-                FocusHints hints = FocusHints.Typing("Esc", leave);
+                HintList hints = HintList.Of("Esc", leave);
                 if (pending + requests > 0) hints.Add("Alt+Down", "Go to approval");
                 hints.Add("Enter", "Send");
                 hints.Add("Ctrl+J", "Newline");
@@ -277,8 +277,8 @@ namespace Armada.Tui.Screens.Ask
 
             if (ReferenceEquals(focused, Transcript))
             {
-                if (Transcript.Searching) return FocusHints.Typing("Esc", "Cancel search").Add("Enter", "Find");
-                FocusHints hints = new FocusHints();
+                if (Transcript.Searching) return HintList.Of("Esc", "Cancel search").Add("Enter", "Find");
+                HintList hints = new HintList();
                 AskBlock? block = Transcript.Selected();
                 AskActionProposal? proposal = block?.Proposal;
                 List<AskPendingDecision> decisions = Transcript.SelectedDecisions();
@@ -315,20 +315,20 @@ namespace Armada.Tui.Screens.Ask
 
             if (ReferenceEquals(focused, ThreadList))
             {
-                if (ThreadList.RenamingId != null) return FocusHints.Typing("Esc", "Cancel rename").Add("Enter", "Save");
-                if (ThreadList.SearchFocused) return FocusHints.Typing("Esc", "Back to the list").Add("Enter", "Search");
-                return new FocusHints().Add("Enter", "Open").Add("n", "New").Add("/", "Search").Add(".", "Actions");
+                if (ThreadList.RenamingId != null) return HintList.Of("Esc", "Cancel rename").Add("Enter", "Save");
+                if (ThreadList.SearchFocused) return HintList.Of("Esc", "Back to the list").Add("Enter", "Search");
+                return HintList.Of("Enter", "Open").Add("n", "New").Add("/", "Search").Add(".", "Actions");
             }
 
             if (Form != null && ReferenceEquals(focused, Form))
             {
-                FocusHints hints = new FocusHints(textEntry).Add("Esc", "Cancel").Add("Ctrl+S", "Submit");
-                if (inner != null) hints.AddRange(inner.Keys);
-                else hints.Add("Tab", "Next field");
+                // A control inside the form that describes its own keys is listed first (the resolver goes leaf first).
+                HintList hints = HintList.Of("Esc", "Cancel").Add("Ctrl+S", "Submit");
+                if (inner == null) hints.Add("Tab", "Next field");
                 return hints;
             }
 
-            return new FocusHints(textEntry);
+            return new List<KeyHint>();
         }
 
         /// <summary>

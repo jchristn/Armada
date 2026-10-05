@@ -62,6 +62,8 @@ namespace Test.Shared.Infrastructure
 
         #region Private-Members
 
+        private bool _Started = false;
+
         private static readonly Dictionary<string, string> _Keys = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["enter"] = "\r", ["tab"] = "\t", ["shift+tab"] = "\u001b[Z", ["esc"] = "\u001b", ["up"] = "\u001b[A",
@@ -178,10 +180,25 @@ namespace Test.Shared.Infrastructure
         }
 
         /// <summary>
-        /// Click the left mouse button at a cell (zero-based): a press and a release delivered to the shell the way
-        /// TUIKit routes them to the widget bound to the full-screen "shell" region (whose origin is the terminal's,
-        /// so the coordinates are unchanged). The headless host never composes through TUIKit's renderer, so its
-        /// hit-test map is empty and raw SGR input would not be routed.
+        /// Start the TUIKit application on the headless backend (once), so it composes real frames through
+        /// <see cref="TuiApplication.RenderOnce"/>, keeps a hit map, and can be audited (<c>FocusAudit</c>). Only one
+        /// started application may exist at a time; <see cref="Dispose"/> stops it.
+        /// </summary>
+        public void StartApp()
+        {
+            if (_Started) return;
+            App.Start();
+            _Started = true;
+        }
+
+        /// <summary>
+        /// Click the left mouse button at a cell (zero-based) through TUIKit's real input path: the headless backend
+        /// receives the SGR press and release (<see cref="HeadlessBackend.FeedClick"/>), and the application parses
+        /// them, hit-tests its last frame, focuses the region, synthesizes the click, and routes it to the widget
+        /// under the pointer (the shell, bound to the full-screen region), the way a terminal's click arrives. The
+        /// first click starts the application (TUIKit composes and keeps a hit map only once started) and every click
+        /// renders a frame first, so the hit map matches the screen. Only one started application may exist at a
+        /// time; <see cref="Dispose"/> stops it.
         /// </summary>
         /// <param name="x">Column.</param>
         /// <param name="y">Row.</param>
@@ -189,10 +206,9 @@ namespace Test.Shared.Infrastructure
         public TuiTestHost Click(int x, int y)
         {
             Pump();
-            TuiSnapshot.Render(Tui.Shell, App, Width, Height);
-            Tui.Shell.HandleMouse(new MouseEvent(MouseEventKind.Press, MouseButton.Left, x, y, KeyModifiers.None, 1));
-            Pump();
-            Tui.Shell.HandleMouse(new MouseEvent(MouseEventKind.Release, MouseButton.Left, x, y, KeyModifiers.None, 0));
+            StartApp();
+            App.RenderOnce();
+            Backend.FeedClick(x, y);
             Pump();
             return this;
         }

@@ -12,6 +12,7 @@ namespace Armada.Tui.Shell
     using Armada.Tui.Widgets;
     using TUIKit;
     using TUIKit.Input;
+    using TUIKit.Widgets;
 
     /// <summary>
     /// The Ask dock (W2.7, <c>Ctrl+J</c>): a bottom panel that shows the active Ask conversation's live tail (the same
@@ -21,7 +22,7 @@ namespace Armada.Tui.Shell
     /// <c>Ctrl+A</c> opens the Approvals center. The tail always shows the newest lines (the dock has no scroll position,
     /// so it always follows). While focused, the heading shows a "[typing]" marker. Not thread-safe.
     /// </summary>
-    public class AskDockView : ArmadaWidget, IPasteTarget, ITextEntry, IFocusHintSource
+    public class AskDockView : ArmadaWidget, IPasteTarget, ITextEntry, IKeyHintSource
     {
         #region Public-Members
 
@@ -94,14 +95,13 @@ namespace Armada.Tui.Shell
         }
 
         /// <inheritdoc />
-        public FocusHints? GetFocusHints()
+        public IReadOnlyList<KeyHint>? GetKeyHints()
         {
             AskController? ask = _Context?.Ask;
-            FocusHints hints = FocusHints.Typing("Tab", "Leave the dock");
-            hints.Add("Enter", "Send");
-            if (_Context != null && _Context.Approvals.Count > 0) hints.Add("Ctrl+A", "Approvals");
-            if (ask != null && ask.Conversation.TurnActive) hints.Add("Ctrl+C", "Stop");
-            hints.Add("Ctrl+J", "Hide dock");
+            List<KeyHint> hints = new List<KeyHint> { new KeyHint("Tab", "Leave the dock"), new KeyHint("Enter", "Send") };
+            if (_Context != null && _Context.Approvals.Count > 0) hints.Add(new KeyHint("Ctrl+A", "Approvals"));
+            if (ask != null && ask.Conversation.TurnActive) hints.Add(new KeyHint("Ctrl+C", "Stop"));
+            hints.Add(new KeyHint("Ctrl+J", "Hide dock"));
             return hints;
         }
 

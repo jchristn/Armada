@@ -11,6 +11,10 @@ namespace Test.Shared.Suites.Tui
     using TUIKit.Input;
     using TUIKit.Testing;
     using TUIKit.Widgets;
+    using Button = Armada.Tui.Widgets.Button;
+    using ButtonRow = Armada.Tui.Widgets.ButtonRow;
+    using ChartSeries = Armada.Tui.Widgets.ChartSeries;
+    using FocusScope = Armada.Tui.Widgets.FocusScope;
     using static Test.Shared.Infrastructure.Asserts;
 
     /// <summary>
@@ -206,16 +210,47 @@ namespace Test.Shared.Suites.Tui
                 AssertTrue(ReferenceEquals(b, outer.FocusedLeaf()), "leaf");
             }));
 
-            cases.Add(TuiCase.Sync(Suite, "binding_adapter", "ObservedWidget raises change events for TUIKit widgets", () =>
+            cases.Add(TuiCase.Sync(Suite, "focus_path_hideable", "TUIKit's FocusPath follows Armada scopes; hidden widgets and emptied containers are not stops (IHideable)", () =>
+            {
+                FormView form = new FormView();
+                form.ShowButtons = false;
+                InputField a = form.AddField("A", new InputField());
+                InputField b = form.AddField("B", new InputField());
+                ButtonRow row = new ButtonRow();
+                Button only = row.Add(new Button("Only"));
+                FocusScope outer = new FocusScope();
+                outer.Add(form);
+                outer.Add(row);
+                outer.SetActive(true);
+                FocusPath path = FocusPath.Build("r", form);
+                AssertEqual(2, path.Depth, "form then its focused field");
+                AssertTrue(ReferenceEquals(a, path.Leaf) && path.Contains(form), "leaf is the first field");
+                form.HandleKey(KeyEvent.Special(KeyCode.Tab));
+                AssertTrue(ReferenceEquals(b, FocusPath.Build("r", form).Leaf), "the path follows Tab inside the scope");
+
+                AssertTrue(row.IsVisible && FocusScope.IsFocusStop(row), "a row with a visible button is a stop");
+                only.Visible = false;
+                AssertFalse(((IHideable)row).IsVisible, "a row whose buttons are all hidden reports hidden");
+                AssertFalse(FocusScope.IsFocusStop(row) || TUIKit.Widgets.FocusScope.IsFocusable(row), "and is not a stop for Armada or TUIKit");
+                b.Visible = false;
+                AssertFalse(TUIKit.Widgets.FocusScope.IsFocusable(b), "a hidden field is not focusable by TUIKit's rule");
+                AssertTrue(form.IsVisible, "the form still has a field to focus");
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "binding_adapter", "TUIKit widgets raise their own change events (the binding layer needs no adapter)", () =>
             {
                 TUIKit.Widgets.Checkbox box = new TUIKit.Widgets.Checkbox("Active");
-                ObservedWidget<bool> observed = new ObservedWidget<bool>(box, () => box.Checked);
                 int changes = 0;
-                observed.Changed += (s, e) => changes++;
-                observed.HandleKey(KeyEvent.Char(' '));
-                AssertTrue(box.Checked, "toggled");
+                bool last = false;
+                box.CheckedChanged += (s, e) =>
+                {
+                    changes++;
+                    last = e.NewValue;
+                };
+                box.HandleKey(KeyEvent.Char(' '));
+                AssertTrue(box.Checked && last, "toggled, and the event carries the new value");
                 AssertEqual(1, changes, "change raised");
-                observed.HandleKey(KeyEvent.Special(KeyCode.Up));
+                box.HandleKey(KeyEvent.Special(KeyCode.Up));
                 AssertEqual(1, changes, "no change no event");
             }));
 

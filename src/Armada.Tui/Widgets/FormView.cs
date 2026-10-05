@@ -13,7 +13,7 @@ namespace Armada.Tui.Widgets
     /// snapshot, Save and Discard buttons, <c>Ctrl+S</c> to save, <c>Esc</c> to discard, Tab and Up/Down between fields,
     /// and vertical scrolling that keeps the focused field visible. Not thread-safe.
     /// </summary>
-    public class FormView : ContainerWidget, IFocusHintSource
+    public class FormView : ContainerWidget, IKeyHintSource
     {
         #region Public-Members
 
@@ -174,25 +174,22 @@ namespace Armada.Tui.Widgets
         }
 
         /// <inheritdoc />
-        public FocusHints? GetFocusHints()
+        public IReadOnlyList<KeyHint>? GetKeyHints()
         {
+            // A control below that describes its own keys speaks for itself.
+            if (KeyHints.Deeper(this) != null) return null;
             IWidget? focused = Scope.Focused;
-            FocusHints hints;
-            if (focused is ITextEntry entry && entry.AcceptsText)
+            List<KeyHint> hints = new List<KeyHint>();
+            if (!(focused is ITextEntry entry && entry.AcceptsText))
             {
-                hints = FocusHints.Typing("Tab", "Next field");
-            }
-            else
-            {
-                hints = new FocusHints();
-                if (focused is SelectField<string>) hints.Add("Enter", "Choose");
-                else if (focused is TriStateField || focused is CheckField) hints.Add("Space", "Change");
-                else if (focused is ButtonRow || focused is Button) hints.Add("Enter", "Press");
-                hints.Add("Tab", "Next field");
+                if (focused is SelectField<string>) hints.Add(new KeyHint("Enter", "Choose"));
+                else if (focused is TriStateField || focused is CheckField) hints.Add(new KeyHint("Space", "Change"));
+                else if (focused is ButtonRow || focused is Button) hints.Add(new KeyHint("Enter", "Press"));
             }
 
-            if (SaveRequested != null) hints.Add("Ctrl+S", "Save");
-            if (DiscardRequested != null) hints.Add("Esc", "Discard");
+            hints.Add(new KeyHint("Tab", "Next field"));
+            if (SaveRequested != null) hints.Add(new KeyHint("Ctrl+S", "Save"));
+            if (DiscardRequested != null) hints.Add(new KeyHint("Esc", "Discard"));
             return hints;
         }
 
