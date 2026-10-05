@@ -55,7 +55,7 @@ namespace Test.Shared.Suites.Tui.Build
                     host.Press("R");
                     TuiCase.Contains(host.Screen(), "will be recalled from its current", "recall text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/captains/cpt_2/recall") == 1), "recall call");
+                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/captains/cpt_2/stop") == 2), "recall calls the stop route (the server has no recall route)");
                     host.Press("X");
                     TuiCase.Contains(host.Screen(), "Stop ALL captains?", "stop all text");
                     host.Press("y");
@@ -151,7 +151,6 @@ namespace Test.Shared.Suites.Tui.Build
         {
             StubHttpHandler stub = BuildStubs.Server();
             stub.On("POST", "/api/v1/captains/cpt_2/stop", b => BuildStubs.NoContent());
-            stub.On("POST", "/api/v1/captains/cpt_2/recall", b => BuildStubs.NoContent());
             stub.On("POST", "/api/v1/captains/stop-all", b => BuildStubs.NoContent());
             stub.Json("GET", "/api/v1/runtimes/mux/endpoints", "{\"Success\":true,\"Endpoints\":[{\"Name\":\"local-llm\",\"AdapterType\":\"openai\",\"Model\":\"qwen\"}]}");
             stub.Json("GET", "/api/v1/captains/cpt_2/tools", "{\"CaptainId\":\"cpt_2\",\"CaptainName\":\"mux-1\",\"Runtime\":\"Mux\",\"ToolsAccessible\":true,\"AvailabilityVerified\":true,\"Summary\":\"Armada tools reachable.\",\"ConfiguredServerCount\":1,\"ReachableServerCount\":1," +
