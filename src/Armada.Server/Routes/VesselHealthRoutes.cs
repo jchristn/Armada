@@ -80,6 +80,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Filtered, sorted, paged vessel health rows for the caller's tenant. Every active vessel appears, including never-evaluated vessels (null id, Unknown statuses). Status columns are effective (override-aware). Response uses the standard EnumerationResult shape (objects, pageNumber, pageSize, totalPages, totalRecords, totalMs).")
                 .WithRequestBody(OpenApiJson.BodyFor<VesselHealthEnumerateRequest>("Filter, sort, and paging request", false))
                 .WithResponse(200, OpenApiJson.For<EnumerationResult<VesselHealth>>("Vessel health rows"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/vessel-health/summary", async (ApiRequest req) =>
@@ -127,6 +128,7 @@ namespace Armada.Server.Routes
                 .WithResponse(202, OpenApiJson.For<VesselHealthEvaluationStart>("Evaluation started"))
                 .WithResponse(409, OpenApiJson.For<VesselHealthEvaluationStart>("An evaluation is already running"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/vessels/{id}/health", async (ApiRequest req) =>

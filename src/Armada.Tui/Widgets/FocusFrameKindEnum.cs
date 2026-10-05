@@ -1,9 +1,12 @@
 namespace Armada.Tui.Widgets
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// How a focus region marks itself (see <see cref="FocusFrame"/>). Chosen from the region's size only, never from
     /// its focus state, so moving focus never changes the layout.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum FocusFrameKindEnum
     {
         /// <summary>

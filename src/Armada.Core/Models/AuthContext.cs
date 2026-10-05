@@ -69,8 +69,9 @@ namespace Armada.Core.Models
 
         /// <summary>
         /// True when this caller holds a dashboard session (session token) for a seeded admin user that still uses
-        /// the well-known default password. The Admiral then refuses every API call except whoami, status, and the
-        /// password change until the password is changed.
+        /// the well-known default password. Advisory only: authenticate and whoami report it so the dashboard can show
+        /// its password change screen and the TUI a header warning, but the Admiral does not refuse other calls (the
+        /// server-side block was removed so the TUI and API work on a fresh local install; see docs/SECURITY_REVIEW.md).
         /// </summary>
         public bool PasswordChangeRequired { get; set; } = false;
 

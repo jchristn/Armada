@@ -265,7 +265,7 @@ The legacy `/rpc` + `/events` (separate SSE) endpoints remain served for older c
 
 ### Stdio Transport
 
-Armada also supports an MCP stdio transport for direct process-based communication. The same tools registered via `McpToolRegistrar` are available on both transports. Use stdio when running Armada as a child process of an MCP client.
+Armada also supports an MCP stdio transport (`armada mcp stdio`) for direct process-based communication. Both transports register the same tool names via `McpToolRegistrar`. The stdio server runs standalone against the database (no Admiral process), so the tools that need the Admiral answer `ErrorCode` `Unavailable` over stdio: `stop_server`, and the fleet action tools (`create_fleet_action`, `update_fleet_action`, `delete_fleet_action`, `run_fleet_action`, `fleet_action_run_status`, `cancel_fleet_action_run`), whose runs are executed and tracked by the Admiral's runner. Use stdio when running Armada as a child process of an MCP client.
 
 ### Port Configuration
 
@@ -404,7 +404,9 @@ The stdio transport has no network attack surface -- the only caller is the pare
 
 ### status
 
-Get aggregate status of all active work in Armada.
+Get aggregate status of active work in Armada: captain counts by state, mission counts by status, active voyages with
+progress, and recent signals. A global administrator sees every tenant; any other caller sees only its own tenant (the
+same scoping as `GET /api/v1/status`).
 
 **Input Schema:**
 
@@ -479,7 +481,7 @@ Return the operator's inbox: everything across the fleet that requires a human's
 - **Awaiting your decision (human-in-the-loop):** a mission in `Review` (approve or reject), a deployment in `PendingApproval`, or a pending Ask Armada action proposal in one of your own conversations.
 - **Failed and needs intervention (human-out-of-the-loop):** a failed mission, a mission whose work could not be merged (landing failed), a failed merge, a failed or verification-failed deployment, or a stalled captain.
 
-Purely informational events (completions, normal progress) are deliberately excluded -- the inbox answers *"what needs me?"*, not *"what happened?"* (use `enumerate` or the Activity log for history). An empty `items` list means nothing currently needs the operator. Operational items are scoped like other reads (global admin: everything; tenant admin: the tenant; regular user: own items); Ask proposals are always limited to the caller's own threads. Each category is capped at 100 items, and items are ordered by severity (`Critical` first), then title.
+Purely informational events (completions, normal progress) are deliberately excluded -- the inbox answers *"what needs me?"*, not *"what happened?"* (use `enumerate` or the Activity log for history). An empty `items` list means nothing currently needs the operator. Operational items are scoped like other reads (global admin: everything; tenant admin: the tenant; regular user: own items); Ask proposals are always limited to the caller's own threads, and proposals older than `Ask.ProposalExpiryMinutes` are left out (the same rule as `GET /api/v1/inbox`). Each category is capped at 100 items, and items are ordered by severity (`Critical` first), then title.
 
 **Item kinds and severity:**
 
@@ -671,7 +673,7 @@ No parameters required.
 { "Status": "shutting_down" }
 ```
 
-> **Note:** Only available when the server provides a stop callback (HTTP transport, not stdio). Requires an admin credential (for example `X-Api-Key`), even on loopback.
+> **Note:** Over stdio (`armada mcp stdio`) the tool is listed but answers `ErrorCode` `Unavailable`: there is no Admiral process to stop (use `armada server stop`). Over HTTP it requires an admin credential (for example `X-Api-Key`), even on loopback.
 
 ---
 
@@ -720,9 +722,9 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 | `objectives` (aliases `backlog`, `backlog_item`, `backlog_items`) | `status`, `vesselId`, `voyageId`, `missionId`, `search` |
 | `fleets` | `createdAfter`, `createdBefore` |
 | `vessels` | `fleetId`, `createdAfter`, `createdBefore` |
-| `captains` | `status` (Idle/Working/Stalled), `createdAfter`, `createdBefore` |
+| `captains` | `status` (Idle/Working/Planning/Refining/Stalled/Stopping/Quarantined/Analyzing), `createdAfter`, `createdBefore` |
 | `missions` | `status`, `vesselId`, `captainId`, `voyageId`, `createdAfter`, `createdBefore` |
-| `voyages` | `status` (Active/Complete/Cancelled), `createdAfter`, `createdBefore` |
+| `voyages` | `status` (Open/InProgress/Complete/Failed/Cancelled), `createdAfter`, `createdBefore` |
 | `docks` | `vesselId`, `createdAfter`, `createdBefore` |
 | `signals` | `signalType`, `captainId`, `toCaptainId`, `unreadOnly`, `createdAfter`, `createdBefore` |
 | `events` | `eventType`, `captainId`, `missionId`, `vesselId`, `voyageId`, `createdAfter`, `createdBefore` |
@@ -744,7 +746,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 | `memories` | `search` (plus paginated browse) |
 | `jobs` | (paginated browse only) |
 | `model_endpoints` | `createdAfter`, `createdBefore` (current MCP enumeration is primarily paginated browse) |
-| `vessel_import_batch` (aliases `vessel_import_batches`, `vessel-import-batch`, `import_batches`) | `status` (Discovered/Importing/Completed/CompletedWithFailures/Failed), `createdAfter`, `createdBefore`, `order`. Scoped to the caller's tenant. Items are not included; read a batch with items through `GET /api/v1/vessels/import/batches/{id}`. |
+| `vessel_import_batch` (aliases `vessel_import_batches`, `vessel-import-batch`, `import_batches`) | `status` (Discovered/Importing/Completed/CompletedWithFailures/Failed/Discovering), `createdAfter`, `createdBefore`, `order`. Scoped to the caller's tenant. Items are not included; read a batch with items through `GET /api/v1/vessels/import/batches/{id}`. |
 | `fleet_action` | `includeInactive`, `createdAfter`, `createdBefore` |
 | `fleet_action_run` | `status` (Pending/Running/Completed/CompletedWithFailures/Cancelled/Failed), `createdAfter`, `createdBefore` |
 | `fleet_action_run_target` | `runId` (required), `status` (Pending/Skipped/Running/Succeeded/Failed/Cancelled/TimedOut) |
@@ -2449,7 +2451,9 @@ Returns `{ "Error": "ids is required and must not be empty", "ErrorCode": "Inval
 
 ### transition_mission_status
 
-Transition a mission to a new status with validation.
+Transition a mission to a new status with validation. The rules are `MissionStateMachine`'s, shared with
+`PUT /api/v1/missions/{id}/status` and the WebSocket `transition_mission_status` command; the tool description lists them
+generated from the same source.
 
 **Valid transitions:**
 
@@ -2552,7 +2556,7 @@ Register a new captain (AI agent).
   "type": "object",
   "properties": {
     "name": { "type": "string", "description": "Captain display name" },
-    "runtime": { "type": "string", "description": "Agent runtime: ClaudeCode, Codex, Gemini, Cursor, Mux, OpenCode, or Custom" },
+    "runtime": { "type": "string", "description": "Agent runtime: ClaudeCode, Codex, Gemini, Cursor, Mux, OpenCode, ApiEndpoint, Custom" },
     "model": { "type": "string", "description": "Optional model override for this captain. When omitted, the runtime chooses automatically" },
     "reasoningEffort": { "type": "string", "description": "Reasoning effort: Off, Minimal, Low, Medium, or High. Translated per runtime (Claude thinking budget, Codex reasoning effort, Mux --effort). Ignored by runtimes without a control." },
     "tier": { "type": "string", "description": "Capability tier for dispatch routing: Economy, Standard, or Premium. Empty auto-classifies from the model name." },
@@ -2649,7 +2653,7 @@ Update a captain's properties (name, runtime, model, tier, personas, Mux options
   "properties": {
     "captainId": { "type": "string", "description": "Captain ID (cpt_ prefix)" },
     "name": { "type": "string", "description": "New display name" },
-    "runtime": { "type": "string", "description": "New agent runtime: ClaudeCode, Codex, Gemini, Cursor, Mux, OpenCode, or Custom" },
+    "runtime": { "type": "string", "description": "New agent runtime: ClaudeCode, Codex, Gemini, Cursor, Mux, OpenCode, ApiEndpoint, Custom" },
     "model": { "type": "string", "description": "New optional model override for this captain" },
     "reasoningEffort": { "type": "string", "description": "Reasoning effort: Off, Minimal, Low, Medium, or High. Empty string clears it. Translated per runtime (Claude thinking budget, Codex reasoning effort, Mux --effort)." },
     "tier": { "type": "string", "description": "Capability tier: Economy, Standard, or Premium. Empty string clears it (auto-classify from model)." },
@@ -4168,7 +4172,9 @@ Create a custom pipeline with stages.
         "properties": {
           "personaName": { "type": "string", "description": "Persona name for this stage" },
           "isOptional": { "type": "boolean", "description": "Whether this stage is optional (default false)" },
-          "description": { "type": "string", "description": "Stage description" }
+          "description": { "type": "string", "description": "Stage description" },
+          "requiresReview": { "type": "boolean", "description": "Whether the stage's mission waits for human review before the pipeline advances (default false)" },
+          "reviewDenyAction": { "type": "string", "description": "What a review denial does: RetryStage, FailPipeline (default RetryStage)" }
         },
         "required": ["personaName"]
       },
@@ -4183,7 +4189,7 @@ Create a custom pipeline with stages.
 |---|---|---|---|
 | `name` | string | Yes | Pipeline name |
 | `description` | string | No | Pipeline description |
-| `stages` | array | Yes | Ordered list of pipeline stages, each with `personaName` (required), `isOptional` (optional, default false), and `description` (optional) |
+| `stages` | array | Yes | Ordered list of pipeline stages, each with `personaName` (required), `isOptional` (optional, default false), `description` (optional), `requiresReview` (optional, default false), and `reviewDenyAction` (optional, `RetryStage` or `FailPipeline`, default `RetryStage`; any other value is `InvalidArgument`) |
 
 **Example Input:**
 
@@ -4246,7 +4252,9 @@ Update pipeline properties and stages. If `stages` is provided, it replaces all 
         "properties": {
           "personaName": { "type": "string", "description": "Persona name for this stage" },
           "isOptional": { "type": "boolean", "description": "Whether this stage is optional (default false)" },
-          "description": { "type": "string", "description": "Stage description" }
+          "description": { "type": "string", "description": "Stage description" },
+          "requiresReview": { "type": "boolean", "description": "Whether the stage's mission waits for human review before the pipeline advances (default false)" },
+          "reviewDenyAction": { "type": "string", "description": "What a review denial does: RetryStage, FailPipeline (default RetryStage)" }
         },
         "required": ["personaName"]
       },
@@ -4261,7 +4269,7 @@ Update pipeline properties and stages. If `stages` is provided, it replaces all 
 |---|---|---|---|
 | `name` | string | Yes | Pipeline name |
 | `description` | string | No | New pipeline description |
-| `stages` | array | No | New ordered list of pipeline stages (replaces all existing stages if provided) |
+| `stages` | array | No | New ordered list of pipeline stages (replaces all existing stages if provided); each stage takes the same fields as in `create_pipeline`, including `requiresReview` and `reviewDenyAction` |
 
 **Response:** Updated [Pipeline](#pipeline) object with stages, or `{ "Error": "Pipeline not found: <name>", "ErrorCode": "NotFound" }`.
 

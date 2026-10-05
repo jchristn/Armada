@@ -1,9 +1,12 @@
 namespace Armada.Core.Enums
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// What kind of friction a captain reported. The category decides where a promoted papercut
     /// lands: platform categories belong to Armada itself, repository categories belong to the vessel.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum PapercutCategoryEnum
     {
         /// <summary>

@@ -1,8 +1,11 @@
 namespace Armada.Tui.Widgets
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Load state of an <see cref="ArmadaGrid{T}"/>.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum GridStateEnum
     {
         /// <summary>

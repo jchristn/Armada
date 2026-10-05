@@ -520,16 +520,19 @@ Every REST error is an `ApiErrorResponse` with a stable `Error` code that matche
 | `RequestTimeout` | 408 | The request timed out |
 | `SlowDown` | 429 | Rate limited |
 | `InternalError` | 500 | Unexpected server error |
+| `UnprocessableEntity` | 422 | Vessel branch push or merge rejected |
+| `NotImplemented` | 501 | Planning or refinement session on a runtime that does not support it; model context building unavailable on this server |
+| `ServiceUnavailable` | 503 | Git service unavailable on this server |
+| `GatewayTimeout` | 504 | Model context build timed out |
 
 ### Notes
 
 - **Cross-tenant access is 404.** Reading, changing, or deleting an entity in another tenant returns `404 NotFound`,
   never `403`, so a caller cannot learn that the id exists. `403 Forbidden` means the caller can see the resource but
   its role cannot perform the operation (for example a non-admin deleting a tenant-wide persona).
-- A few statuses have no dedicated code and are sent with `Error: "BadRequest"` (and `StatusCode: 400` in the body):
-  `422` (vessel push or merge rejected), `501` (planning and refinement sessions on a runtime that does not support
-  them, model context building unavailable), `503` (git unavailable), and `504` (model context build timed out). Use
-  the HTTP status for these.
+- `422`, `501`, `503`, and `504` responses use the same body shape with the codes `UnprocessableEntity`,
+  `NotImplemented`, `ServiceUnavailable`, and `GatewayTimeout` (and the matching `StatusCode`). Earlier builds sent these
+  as `BadRequest` (or `NotFound` for `503`); treat an unrecognized `Error` by its HTTP status.
 - Routes choose the status by the service exception's type, never by its message: a missing or invisible entity is
   `404 NotFound`, including an id referenced in a request body (for example `VesselId`, `EnvironmentId`, or
   `ObjectiveIds` when creating a deployment, release, or incident; a captain, vessel, or dock when starting a
@@ -999,8 +1002,9 @@ If the credential is protected, the server returns `403 Forbidden`.
 
 #### GET /api/v1/status
 
-Returns aggregate status including captain counts, mission breakdown, active voyages, and recent signals. The aggregate
-is server-wide, not scoped to the caller's tenant (open item O-03 in [SECURITY_REVIEW.md](SECURITY_REVIEW.md)).
+Returns aggregate status including captain counts, mission breakdown, active voyages, and recent signals. A global
+administrator sees every tenant; any other caller (tenant admin or user) sees only its own tenant's captains, missions,
+voyages, and signals. The same scoping applies to the MCP `status` tool and the WebSocket `status.snapshot`.
 
 **Permission:** Authenticated
 
@@ -1433,7 +1437,9 @@ Update an existing fleet.
 |---|---|
 | `id` | Fleet ID (`flt_` prefix) |
 
-**Request Body:** [Fleet](#fleet) (fields to update)
+**Request Body:** [Fleet](#fleet). The editable fields (`name`, `description`, `defaultPipelineId`, `active`) are
+replaced, so send every field you want to keep. `id`, `tenantId`, `userId`, and `createdUtc` are server-owned and always
+kept from the stored record (values in the body are ignored).
 
 **Response:** `200 OK` - [Fleet](#fleet)
 **Error:** `404` - Fleet not found
@@ -3449,7 +3455,8 @@ Describe the Armada MCP tools available through a specific captain, including ru
 
 #### PUT /api/v1/captains/{id}
 
-Update a captain's name, runtime, or model. Operational fields (state, process, mission) are preserved.
+Update a captain's name, runtime, or model. `tenantId`, `userId`, `createdUtc`, and the operational fields (state,
+current mission and dock, process, recovery attempts, quarantine, heartbeats) are preserved.
 
 **Permission:** TenantAdmin
 

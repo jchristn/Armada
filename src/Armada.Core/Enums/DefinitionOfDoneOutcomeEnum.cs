@@ -1,9 +1,12 @@
 namespace Armada.Core.Enums
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Outcome of the in-dock Definition-of-Done gate: the build + unit-test run performed inside a
     /// mission's own checkout before acceptance.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum DefinitionOfDoneOutcomeEnum
     {
         /// <summary>

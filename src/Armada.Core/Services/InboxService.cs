@@ -8,6 +8,7 @@ namespace Armada.Core.Services
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Settings;
     using SyslogLogging;
 
     /// <summary>
@@ -29,12 +30,18 @@ namespace Armada.Core.Services
 
         /// <summary>
         /// Age in minutes after which a still-Pending Ask proposal is treated as expired and left out (the
-        /// Ask settings' ProposalExpiryMinutes). 0 disables the age check. Clamped to [0, 1440].
+        /// Ask settings' ProposalExpiryMinutes). 0 disables the age check. Clamped to [0, 1440]. When the service was
+        /// built with settings, this reads the current <see cref="AskSettings.ProposalExpiryMinutes"/> on every call;
+        /// assigning a value replaces that binding with the fixed value.
         /// </summary>
         public int AskProposalExpiryMinutes
         {
-            get => _AskProposalExpiryMinutes;
-            set => _AskProposalExpiryMinutes = value < 0 ? 0 : (value > 1440 ? 1440 : value);
+            get => _Settings != null ? Clamp(_Settings.Ask.ProposalExpiryMinutes) : _AskProposalExpiryMinutes;
+            set
+            {
+                _Settings = null;
+                _AskProposalExpiryMinutes = Clamp(value);
+            }
         }
 
         #endregion
@@ -46,6 +53,7 @@ namespace Armada.Core.Services
         private readonly LoggingModule _Logging;
         private const int _MaxPerCategory = 100;
         private int _AskProposalExpiryMinutes = 0;
+        private ArmadaSettings? _Settings = null;
 
         #endregion
 
@@ -60,6 +68,20 @@ namespace Armada.Core.Services
         {
             _Database = database ?? throw new ArgumentNullException(nameof(database));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
+        }
+
+        /// <summary>
+        /// Instantiate with the Admiral settings, so Ask proposals older than the configured
+        /// <see cref="AskSettings.ProposalExpiryMinutes"/> are left out. Every surface that serves the inbox (REST and
+        /// MCP) builds the service this way so they apply the same expiry.
+        /// </summary>
+        /// <param name="database">Database driver. Required.</param>
+        /// <param name="logging">Logging module. Required.</param>
+        /// <param name="settings">Admiral settings; null leaves the age check disabled.</param>
+        public InboxService(DatabaseDriver database, LoggingModule logging, ArmadaSettings? settings)
+            : this(database, logging)
+        {
+            _Settings = settings;
         }
 
         #endregion
@@ -260,14 +282,20 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrEmpty(auth.UserId)) return new List<AskActionProposal>();
             DateTime now = DateTime.UtcNow;
+            int expiryMinutes = AskProposalExpiryMinutes;
             List<AskActionProposal> pending = await _Database.AskActionProposals.EnumeratePendingBeforeAsync(now.AddDays(1), token).ConfigureAwait(false);
             return pending
                 .Where(p => String.Equals(p.TenantId, auth.TenantId, StringComparison.Ordinal)
                     && String.Equals(p.UserId, auth.UserId, StringComparison.Ordinal)
                     && (!p.ExpiresUtc.HasValue || p.ExpiresUtc.Value > now)
-                    && (_AskProposalExpiryMinutes == 0 || p.CreatedUtc.AddMinutes(_AskProposalExpiryMinutes) >= now))
+                    && (expiryMinutes == 0 || p.CreatedUtc.AddMinutes(expiryMinutes) >= now))
                 .OrderBy(p => p.CreatedUtc)
                 .ToList();
+        }
+
+        private static int Clamp(int minutes)
+        {
+            return minutes < 0 ? 0 : (minutes > 1440 ? 1440 : minutes);
         }
 
         /// <summary>

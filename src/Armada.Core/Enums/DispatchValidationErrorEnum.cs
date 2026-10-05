@@ -1,10 +1,13 @@
 namespace Armada.Core.Enums
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Reason a voyage-dispatch request failed shared validation. Both the REST and MCP dispatch surfaces
     /// map these to their own error shapes (HTTP status codes vs. structured error objects), but they agree
     /// on what is valid.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum DispatchValidationErrorEnum
     {
         /// <summary>

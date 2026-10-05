@@ -44,27 +44,6 @@ namespace Armada.Helm.Commands
             DatabaseDriver database = DatabaseDriverFactory.Create(armadaSettings.Database, logging);
             await database.InitializeAsync().ConfigureAwait(false);
 
-            // Initialize services
-            IGitService git = new GitService(logging);
-            IDockService dockService = new DockService(logging, database, armadaSettings, git);
-            ICaptainService captainService = new CaptainService(logging, database, armadaSettings, git, dockService);
-            IPromptTemplateService promptTemplateService = new PromptTemplateService(database, logging);
-            IMessageTemplateService messageTemplateService = new MessageTemplateService(logging, promptTemplateService);
-            IMissionService missionService = new MissionService(logging, database, armadaSettings, dockService, captainService, promptTemplateService, git);
-            IVoyageService voyageService = new VoyageService(logging, database);
-            IAdmiralService admiral = new AdmiralService(logging, database, armadaSettings, captainService, missionService, voyageService, dockService);
-            AgentRuntimeFactory runtimeFactory = new AgentRuntimeFactory(logging);
-            AgentLifecycleHandler agentLifecycle = new AgentLifecycleHandler(
-                logging,
-                database,
-                armadaSettings,
-                runtimeFactory,
-                admiral,
-                messageTemplateService,
-                promptTemplateService,
-                null,
-                (_, _, _, _, _, _, _, _) => Task.CompletedTask);
-
             // Create stdio MCP server
             McpServer mcpServer = new McpServer();
             mcpServer.ServerName = Constants.ProductName;
@@ -73,47 +52,6 @@ namespace Armada.Helm.Commands
             // exception messages (e.g. "captain not found") so agents can react to them, as before.
             mcpServer.IncludeToolExceptionMessages = true;
 
-            // Register all Armada tools
-            IGitService gitService = git;
-            IMergeQueueService mergeQueueService = new MergeQueueService(logging, database, armadaSettings, git);
-            LandingService landingService = new LandingService(logging, database, armadaSettings, git);
-            WorkflowProfileService workflowProfileService = new WorkflowProfileService(database, logging);
-            VesselReadinessService vesselReadinessService = new VesselReadinessService(database, workflowProfileService, logging);
-            CheckRunService checkRunService = new CheckRunService(database, workflowProfileService, vesselReadinessService, logging);
-            ObjectiveService objectiveService = new ObjectiveService(database);
-            Func<string, string, string?, string?, string?, string?, string?, string?, Task> emitNoopAsync =
-                (_, _, _, _, _, _, _, _) => Task.CompletedTask;
-            PlanningSessionCoordinator planningSessionCoordinator = new PlanningSessionCoordinator(
-                logging,
-                database,
-                armadaSettings,
-                dockService,
-                admiral,
-                runtimeFactory,
-                emitNoopAsync);
-            ObjectiveRefinementCoordinator objectiveRefinementCoordinator = new ObjectiveRefinementCoordinator(
-                logging,
-                database,
-                armadaSettings,
-                runtimeFactory,
-                emitNoopAsync);
-            ReleaseService releaseService = new ReleaseService(database, workflowProfileService, logging);
-            DeploymentEnvironmentService environmentService = new DeploymentEnvironmentService(database, workflowProfileService, logging);
-            DeploymentService deploymentService = new DeploymentService(database, workflowProfileService, environmentService, checkRunService, logging);
-            RunbookService runbookService = new RunbookService(database, logging);
-            ModelEndpointService modelEndpointService = new ModelEndpointService(database, logging);
-            HarborService harborService = new HarborService(database, logging);
-            IVesselService vesselService = new VesselService(database);
-            IVesselImportService vesselImportService = new VesselImportService(
-                database, armadaSettings, new VesselDiscoveryService(database, armadaSettings), vesselService, new JobService(database, logging), logging);
-            Armada.Core.Services.Health.VesselHealthEvaluator vesselHealthEvaluator = new Armada.Core.Services.Health.VesselHealthEvaluator(
-                database, git, armadaSettings,
-                Armada.Core.Services.Health.VesselHealthEvaluator.CreateDefaultCriteria(
-                    database, vesselReadinessService,
-                    new Armada.Core.Services.Health.DependencyScanner(new Armada.Core.Services.Health.DependencyToolRunner(new LocalHostCommandExecutor()))),
-                logging);
-            using Armada.Core.Services.Health.VesselHealthService vesselHealthService = new Armada.Core.Services.Health.VesselHealthService(
-                database, armadaSettings, vesselHealthEvaluator, new JobService(database, logging), logging);
             // Adapt Armada's JsonElement-based tool handlers to Voltaic's RpcParameters API.
             void RegisterAdapted(string name, string description, object inputSchema, Func<JsonElement?, Task<object>> handler)
             {
@@ -129,29 +67,10 @@ namespace Armada.Helm.Commands
                 });
             }
 
-            McpToolRegistrar.RegisterAll(
-                RegisterAdapted,
-                database,
-                admiral,
-                armadaSettings,
-                gitService,
-                mergeQueueService,
-                dockService,
-                landingService,
-                checkRunService,
-                objectiveService,
-                planningSessionCoordinator,
-                objectiveRefinementCoordinator,
-                releaseService,
-                deploymentService,
-                runbookService,
-                agentLifecycle: agentLifecycle,
-                templateService: promptTemplateService,
-                modelEndpointService: modelEndpointService,
-                harborService: harborService,
-                vesselService: vesselService,
-                vesselImportService: vesselImportService,
-                vesselHealthService: vesselHealthService);
+            // Register the same tool names as the Admiral's HTTP MCP server (see McpStdioToolSet for the tools that
+            // answer Unavailable without the Admiral process).
+            using McpStdioToolSet toolSet = new McpStdioToolSet(armadaSettings, logging, database);
+            toolSet.Register(RegisterAdapted);
 
             // Run until stdin closes or process is killed
             using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

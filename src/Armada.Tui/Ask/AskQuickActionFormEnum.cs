@@ -1,8 +1,11 @@
 namespace Armada.Tui.Ask
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// The inline form a quick action opens above the composer.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum AskQuickActionFormEnum
     {
         /// <summary>

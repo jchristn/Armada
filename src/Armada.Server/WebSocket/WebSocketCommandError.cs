@@ -2,6 +2,7 @@ namespace Armada.Server.WebSocket
 {
     using System;
     using System.Collections.Generic;
+    using System.Text.Json;
     using Armada.Core.Enums;
 
     /// <summary>
@@ -77,6 +78,8 @@ namespace Armada.Server.WebSocket
         {
             if (ex is KeyNotFoundException) return WebSocketCommandErrorCodeEnum.NotFound;
             if (ex is ArgumentException) return WebSocketCommandErrorCodeEnum.InvalidArgument;
+            // A command body that is not valid JSON or does not match the target model is bad input, not a server fault.
+            if (ex is JsonException) return WebSocketCommandErrorCodeEnum.InvalidArgument;
             if (ex is UnauthorizedAccessException) return WebSocketCommandErrorCodeEnum.Forbidden;
             if (ex is NotSupportedException) return WebSocketCommandErrorCodeEnum.Unavailable;
             if (ex is InvalidOperationException) return WebSocketCommandErrorCodeEnum.Conflict;

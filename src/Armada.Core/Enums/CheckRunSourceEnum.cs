@@ -1,8 +1,11 @@
 namespace Armada.Core.Enums
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Origin of a structured check run.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum CheckRunSourceEnum
     {
         /// <summary>

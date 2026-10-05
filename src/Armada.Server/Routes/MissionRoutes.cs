@@ -178,44 +178,7 @@ namespace Armada.Server.Routes
 
         private bool IsValidTransition(MissionStatusEnum current, MissionStatusEnum target)
         {
-            if (current == MissionStatusEnum.Pending)
-                return target == MissionStatusEnum.Assigned || target == MissionStatusEnum.Cancelled;
-            if (current == MissionStatusEnum.Assigned)
-                return target == MissionStatusEnum.InProgress || target == MissionStatusEnum.Cancelled;
-            if (current == MissionStatusEnum.InProgress)
-            {
-                return target == MissionStatusEnum.WorkProduced
-                    || target == MissionStatusEnum.Testing
-                    || target == MissionStatusEnum.Review
-                    || target == MissionStatusEnum.Complete
-                    || target == MissionStatusEnum.Failed
-                    || target == MissionStatusEnum.Cancelled;
-            }
-            if (current == MissionStatusEnum.WorkProduced)
-            {
-                return target == MissionStatusEnum.PullRequestOpen
-                    || target == MissionStatusEnum.Complete
-                    || target == MissionStatusEnum.LandingFailed
-                    || target == MissionStatusEnum.Cancelled;
-            }
-            if (current == MissionStatusEnum.PullRequestOpen)
-            {
-                return target == MissionStatusEnum.Complete
-                    || target == MissionStatusEnum.LandingFailed
-                    || target == MissionStatusEnum.Cancelled;
-            }
-            if (current == MissionStatusEnum.Testing)
-            {
-                return target == MissionStatusEnum.Review
-                    || target == MissionStatusEnum.InProgress
-                    || target == MissionStatusEnum.Complete
-                    || target == MissionStatusEnum.Failed;
-            }
-            if (current == MissionStatusEnum.Review)
-                return target == MissionStatusEnum.Complete || target == MissionStatusEnum.InProgress || target == MissionStatusEnum.Failed;
-            if (current == MissionStatusEnum.LandingFailed)
-                return target == MissionStatusEnum.WorkProduced || target == MissionStatusEnum.Failed || target == MissionStatusEnum.Cancelled;
-            return false;
+            return MissionStateMachine.IsValidTransition(current, target);
         }
 
         /// <summary>
@@ -600,20 +563,9 @@ namespace Armada.Server.Routes
                 Mission incoming = JsonSerializer.Deserialize<Mission>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Mission.");
 
-                // Merge only metadata fields onto the existing record
-                existing.Title = incoming.Title;
-                existing.Description = incoming.Description;
-                existing.Priority = incoming.Priority;
-                existing.VesselId = incoming.VesselId;
-                existing.VoyageId = incoming.VoyageId;
-                existing.BranchName = incoming.BranchName;
-                existing.PrUrl = incoming.PrUrl;
-                existing.ParentMissionId = incoming.ParentMissionId;
-                existing.LastUpdateUtc = DateTime.UtcNow;
-
-                // Preserve operational/timestamp fields: CreatedUtc, StartedUtc, CompletedUtc,
-                // Status, CaptainId, DockId, ProcessId, CommitHash, DiffSnapshot
-
+                // Merge only metadata fields onto the existing record; operational, ownership, and timestamp fields
+                // are preserved (shared with the WebSocket update_mission command).
+                existing = EntityUpdateMerger.MergeMission(existing, incoming);
                 existing = await _database.Missions.UpdateAsync(existing).ConfigureAwait(false);
                 return (object)existing;
             },
@@ -983,6 +935,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Permanently deletes multiple missions from the database by ID. Returns a summary of deleted and skipped entries. This cannot be undone.")
                 .WithRequestBody(OpenApiJson.BodyFor<DeleteMultipleRequest>("List of mission IDs to delete"))
                 .WithResponse(200, OpenApiJson.For<DeleteMultipleResult>("Delete result summary"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Post<MissionRestartRequest>("/api/v1/missions/{id}/restart", async (ApiRequest req) =>
@@ -1130,6 +1083,7 @@ namespace Armada.Server.Routes
                 .WithResponse(200, OpenApiJson.For<object>("Landing result"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Conflicts with the current state"))
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/missions/{id}/diff", async (ApiRequest req) =>
@@ -1212,6 +1166,7 @@ namespace Armada.Server.Routes
                 return (object)new { MissionId = id, Branch = dock.BranchName ?? "", Diff = diff };
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Missions")
                 .WithSummary("Get diff for a mission")
                 .WithDescription("Returns the git diff of changes made by a captain in the mission's worktree.")
@@ -1270,6 +1225,7 @@ namespace Armada.Server.Routes
                 }
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Missions")
                 .WithSummary("Get log for a mission")
                 .WithDescription("Returns the session log for a mission. Supports pagination via ?lines=N (default 200) and ?offset=N query parameters.")
@@ -1333,6 +1289,7 @@ namespace Armada.Server.Routes
                 }
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Missions")
                 .WithSummary("Get mission instructions")
                 .WithDescription("Returns the runtime-specific instruction file generated for a mission, such as CLAUDE.md, CODEX.md, CURSOR.md, AGENTS.md, GEMINI.md, or MUX.md.")

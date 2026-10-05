@@ -1,8 +1,11 @@
 namespace Armada.Core.Enums
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Lifecycle state for a release record.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum ReleaseStatusEnum
     {
         /// <summary>

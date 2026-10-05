@@ -55,6 +55,12 @@ namespace Armada.Server
         /// </summary>
         public bool Deprecated { get; set; } = false;
 
+        /// <summary>
+        /// Declared OpenAPI parameters as "in:name" (for example "path:id", "query:pageSize"), in declaration order.
+        /// Used by the API contract test to find duplicate or missing parameter metadata; not part of the surface file.
+        /// </summary>
+        public List<string> Parameters { get; set; } = new List<string>();
+
         #endregion
 
         #region Public-Methods
@@ -76,6 +82,14 @@ namespace Armada.Server
             descriptor.Summary = metadata.Summary;
             descriptor.Deprecated = metadata.Deprecated;
             if (metadata.Tags != null) descriptor.Tags = metadata.Tags.ToList();
+            if (metadata.Parameters != null)
+            {
+                foreach (OpenApiParameterMetadata parameter in metadata.Parameters)
+                {
+                    if (parameter == null) continue;
+                    descriptor.Parameters.Add(parameter.In.ToString().ToLowerInvariant() + ":" + (parameter.Name ?? ""));
+                }
+            }
 
             if (metadata.RequestBody != null)
             {

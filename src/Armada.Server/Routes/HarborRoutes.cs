@@ -151,6 +151,7 @@ namespace Armada.Server.Routes
                 .WithRequestBody(OpenApiJson.BodyFor<Harbor>("Harbor update request", true))
                 .WithResponse(200, OpenApiJson.For<Harbor>("Updated Harbor"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Delete("/api/v1/harbors/{id}", async (ApiRequest req) =>
@@ -264,6 +265,7 @@ namespace Armada.Server.Routes
                 .WithRequestBody(OpenApiJson.BodyFor<HarborProbeRequest>("Optional command to run", false))
                 .WithResponse(200, OpenApiJson.For<HostCommandResult>("Command result"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Conflicts with the current state"))
                 .WithSecurity("ApiKey"));
         }
 

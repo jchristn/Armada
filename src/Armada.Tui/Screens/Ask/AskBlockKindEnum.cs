@@ -1,8 +1,11 @@
 namespace Armada.Tui.Screens.Ask
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Kind of a block in the Ask transcript.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum AskBlockKindEnum
     {
         /// <summary>

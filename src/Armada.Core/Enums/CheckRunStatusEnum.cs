@@ -1,8 +1,11 @@
 namespace Armada.Core.Enums
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Current lifecycle state for a check run.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum CheckRunStatusEnum
     {
         /// <summary>

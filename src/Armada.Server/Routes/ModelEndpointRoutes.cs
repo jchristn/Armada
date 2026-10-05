@@ -148,6 +148,7 @@ namespace Armada.Server.Routes
                 .WithRequestBody(OpenApiJson.BodyFor<ModelEndpoint>("Model endpoint update request", true))
                 .WithResponse(200, OpenApiJson.For<ModelEndpoint>("Updated model endpoint"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Delete("/api/v1/model-endpoints/{id}", async (ApiRequest req) =>
@@ -185,6 +186,7 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Model endpoint ID (mep_ prefix)"))
                 .WithResponse(204, OpenApiResponseMetadata.NoContent())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Conflicts with the current state"))
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/model-endpoints/{id}/validate", async (ApiRequest req) =>

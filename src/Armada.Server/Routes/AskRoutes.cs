@@ -85,6 +85,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Ask")
                 .WithSummary("Chat with a captain")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Captain ID (cpt_ prefix)"))
                 .WithDescription("Send a chat turn directly to a captain's configured model (Mux/Ollama endpoints) and return the reply plus per-turn timing and token metrics.")
                 .WithRequestBody(OpenApiJson.BodyFor<CaptainChatRequest>("The message and prior conversation", true))
                 .WithResponse(200, OpenApiJson.For<CaptainChatResponse>("The captain reply and metrics"))
@@ -138,6 +139,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Creates a private conversation owned by the caller. The title defaults to \"New conversation\" and is replaced by the first message.")
                 .WithRequestBody(OpenApiJson.BodyFor<AskThreadCreateRequest>("Optional title, captain, auto-approve", false))
                 .WithResponse(201, OpenApiJson.For<AskThread>("The created thread"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/ask/threads/{id}", async (ApiRequest req) =>
@@ -155,6 +157,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Returns the thread, its tracked work (each with its latest snapshot), and its pending proposals.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Thread ID (ath_ prefix)"))
                 .WithResponse(200, OpenApiJson.For<AskThreadDetail>("The thread detail"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
             app.Put("/api/v1/ask/threads/{id}", async (ApiRequest req) =>
@@ -181,6 +184,8 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Thread ID (ath_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<AskThreadUpdateRequest>("Fields to change", true))
                 .WithResponse(200, OpenApiJson.For<AskThread>("The updated thread"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
             app.Delete("/api/v1/ask/threads/{id}", async (ApiRequest req) =>
@@ -201,6 +206,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Deletes the thread with its messages, tool calls, proposals, and tracked-work rows. The work itself is untouched.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Thread ID (ath_ prefix)"))
                 .WithResponse(204, OpenApiResponseMetadata.NoContent())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/ask/threads/{id}/messages/enumerate", async (ApiRequest req) =>
@@ -220,6 +226,7 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Thread ID (ath_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<AskMessageEnumerateRequest>("Paging", false))
                 .WithResponse(200, OpenApiJson.For<AskMessagePage>("A page of messages"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/ask/threads/{id}/messages", async (ApiRequest req) =>
@@ -253,10 +260,13 @@ namespace Armada.Server.Routes
                 return new { Cancelled = true };
             },
             api => api
+                .WithResponse(200, OpenApiResponseMetadata.Create("Successful response"))
                 .WithTag("Ask")
                 .WithSummary("Stop the running turn")
                 .WithDescription("Stops the captain turn running in the thread. 409 when no turn is running.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Thread ID (ath_ prefix)"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Conflicts with the current state"))
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/ask/threads/{id}/summarize", async (ApiRequest req) =>
@@ -274,6 +284,7 @@ namespace Armada.Server.Routes
                 .WithSummary("Summarize a thread")
                 .WithDescription("Writes a summary in the background (202): by the captain when the thread has one, otherwise deterministically. Posts a Summary message and sets SummaryText.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Thread ID (ath_ prefix)"))
+                .WithResponse(202, OpenApiJson.For<AskMessageSendResponse>("Summary started"))
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/ask/threads/{id}/read", async (ApiRequest req) =>
@@ -291,6 +302,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Resets UnreadCount to 0 and returns the thread.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Thread ID (ath_ prefix)"))
                 .WithResponse(200, OpenApiJson.For<AskThread>("The thread"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/ask/threads/{id}/actions", async (ApiRequest req) =>
@@ -312,6 +324,7 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Thread ID (ath_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<AskActionRequest>("Tool name and arguments", true))
                 .WithResponse(200, OpenApiJson.For<AskActionProposal>("The executed proposal"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/ask/threads/{id}/proposals/{pid}/approve", async (ApiRequest req) =>
@@ -366,6 +379,7 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Thread ID (ath_ prefix)"))
                 .WithParameter(OpenApiParameterMetadata.Path("workId", "Tracked work ID (atw_ prefix)"))
                 .WithResponse(200, OpenApiJson.For<AskWorkSnapshot>("The snapshot"))
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/ask/quick-actions", async (ApiRequest req) =>

@@ -4,6 +4,7 @@ namespace Armada.Server.Mcp.Tools
     using System.Text.Json;
     using System.Text.Json.Serialization;
     using Armada.Core.Database;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
 
@@ -58,7 +59,7 @@ namespace Armada.Server.Mcp.Tools
                         workflowProfileId = new { type = "string", description = "Optional workflow profile override (wfp_ prefix)" },
                         missionId = new { type = "string", description = "Optional linked mission ID (msn_ prefix)" },
                         voyageId = new { type = "string", description = "Optional linked voyage ID (vyg_ prefix)" },
-                        type = new { type = "string", description = "Check type such as Build, UnitTest, IntegrationTest, Deploy, SmokeTest, HealthCheck, or ReleaseVersioning" },
+                        type = new { type = "string", description = "Check type: " + McpToolHelpers.EnumNames<CheckRunTypeEnum>() },
                         environmentName = new { type = "string", description = "Optional workflow-profile environment name for deploy/rollback/verification checks" },
                         label = new { type = "string", description = "Optional display label override" },
                         branchName = new { type = "string", description = "Optional branch association" },

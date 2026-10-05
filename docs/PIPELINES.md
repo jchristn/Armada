@@ -556,7 +556,7 @@ All migrations are implemented for SQLite, MySQL, PostgreSQL, and SQL Server. St
 | `dispatch` | Now accepts `pipelineId` and `pipeline` params |
 | `enumerate` | Now supports `personas`, `prompt_templates`, `pipelines` entity types |
 
-The MCP `create_pipeline` and `update_pipeline` stage objects accept `personaName`, `isOptional`, and `description` only; set `requiresReview` and `reviewDenyAction` through the REST API, the dashboard, or the TUI.
+The MCP `create_pipeline` and `update_pipeline` stage objects accept `personaName`, `isOptional`, `description`, `requiresReview`, and `reviewDenyAction` (`RetryStage` or `FailPipeline`), the same stage fields as the REST API, the dashboard, and the TUI.
 
 ### REST Endpoints
 

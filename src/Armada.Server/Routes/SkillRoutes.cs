@@ -120,6 +120,7 @@ namespace Armada.Server.Routes
                 .WithSummary("Create a skill")
                 .WithRequestBody(OpenApiJson.BodyFor<Skill>("Skill", true))
                 .WithResponse(201, OpenApiJson.For<Skill>("Created skill"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/skills/{id}", async (ApiRequest req) =>

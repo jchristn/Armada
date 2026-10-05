@@ -121,6 +121,91 @@ namespace Test.Shared.Suites.E2E
                 }
             }));
 
+            cases.Add(CaseAsync("stdio_tool_list_matches_http_tool_list", "armada mcp stdio registers the same tools as the HTTP MCP server", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                SortedSet<string> httpNames = new SortedSet<string>(StringComparer.Ordinal);
+                Dictionary<string, string> headers = new Dictionary<string, string> { ["X-Api-Key"] = fx.ApiKey };
+                using (Armada.Runtimes.Mcp.McpToolClient client = new Armada.Runtimes.Mcp.McpToolClient("http://127.0.0.1:" + fx.McpPort + "/mcp", null, headers, null, 60))
+                {
+                    // tools/list is paginated; the client follows nextCursor.
+                    await client.InitializeAsync().ConfigureAwait(false);
+                    foreach (Armada.Runtimes.Mcp.McpRemoteTool tool in await client.ListToolsAsync().ConfigureAwait(false))
+                        httpNames.Add(tool.Name);
+                }
+
+                Dictionary<string, Func<JsonElement?, Task<object>>> stdioTools = new Dictionary<string, Func<JsonElement?, Task<object>>>(StringComparer.Ordinal);
+                string dataDir = TestTemp.NewDirectory("mcp-stdio-tools");
+                Armada.Core.Settings.ArmadaSettings settings = new Armada.Core.Settings.ArmadaSettings();
+                settings.DataDirectory = dataDir;
+                settings.LogDirectory = Path.Combine(dataDir, "logs");
+                settings.DocksDirectory = Path.Combine(dataDir, "docks");
+                settings.ReposDirectory = Path.Combine(dataDir, "repos");
+                SyslogLogging.LoggingModule logging = new SyslogLogging.LoggingModule();
+                logging.Settings.EnableConsole = false;
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                using (Armada.Helm.Commands.McpStdioToolSet toolSet = new Armada.Helm.Commands.McpStdioToolSet(settings, logging, testDb.Driver))
+                {
+                    toolSet.Register((name, description, schema, handler) => stdioTools[name] = handler);
+
+                    SortedSet<string> stdioNames = new SortedSet<string>(stdioTools.Keys, StringComparer.Ordinal);
+                    List<string> missingOverStdio = httpNames.Except(stdioNames).ToList();
+                    List<string> extraOverStdio = stdioNames.Except(httpNames).ToList();
+                    AssertTrue(missingOverStdio.Count == 0, "tools missing over stdio: " + String.Join(", ", missingOverStdio));
+                    AssertTrue(extraOverStdio.Count == 0, "tools only over stdio: " + String.Join(", ", extraOverStdio));
+
+                    // Tools that need the Admiral process answer a typed Unavailable error over stdio.
+                    McpToolError stop = (McpToolError)await stdioTools["stop_server"](null).ConfigureAwait(false);
+                    AssertEqual(McpToolErrorCodeEnum.Unavailable, stop.ErrorCode);
+                    McpToolError run = (McpToolError)await stdioTools["run_fleet_action"](JsonDocument.Parse("{\"actionId\":\"fla_x\"}").RootElement.Clone()).ConfigureAwait(false);
+                    AssertEqual(McpToolErrorCodeEnum.Unavailable, run.ErrorCode);
+                }
+            }));
+
+            cases.Add(CaseAsync("pipeline_tools_set_stage_review_fields", "create_pipeline and update_pipeline set requiresReview and reviewDenyAction on stages", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                Dictionary<string, string> headers = new Dictionary<string, string> { ["X-Api-Key"] = fx.ApiKey };
+                string name = "ReviewedMcp" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                using (Armada.Runtimes.Mcp.McpToolClient client = new Armada.Runtimes.Mcp.McpToolClient("http://127.0.0.1:" + fx.McpPort + "/mcp", null, headers, null, 60))
+                {
+                    await client.InitializeAsync().ConfigureAwait(false);
+                    Armada.Runtimes.Mcp.McpToolCallResult created = await client.CallToolResultAsync("create_pipeline", JsonHelper.Serialize(new
+                    {
+                        name = name,
+                        stages = new object[]
+                        {
+                            new { personaName = "Worker" },
+                            new { personaName = "Judge", requiresReview = true, reviewDenyAction = "FailPipeline" }
+                        }
+                    })).ConfigureAwait(false);
+                    AssertFalse(created.IsError, created.Text);
+                    Pipeline pipeline = JsonHelper.Deserialize<Pipeline>(created.Text);
+                    AssertFalse(pipeline.Stages[0].RequiresReview, "stage 1 keeps the default");
+                    AssertTrue(pipeline.Stages[1].RequiresReview, "stage 2 requires review");
+                    AssertEqual(ReviewDenyActionEnum.FailPipeline, pipeline.Stages[1].ReviewDenyAction);
+
+                    Armada.Runtimes.Mcp.McpToolCallResult updated = await client.CallToolResultAsync("update_pipeline", JsonHelper.Serialize(new
+                    {
+                        name = name,
+                        stages = new object[] { new { personaName = "Worker", requiresReview = true, reviewDenyAction = "retrystage" } }
+                    })).ConfigureAwait(false);
+                    AssertFalse(updated.IsError, updated.Text);
+                    Pipeline after = JsonHelper.Deserialize<Pipeline>(updated.Text);
+                    AssertTrue(after.Stages[0].RequiresReview, "updated stage requires review");
+                    AssertEqual(ReviewDenyActionEnum.RetryStage, after.Stages[0].ReviewDenyAction);
+
+                    Armada.Runtimes.Mcp.McpToolCallResult invalid = await client.CallToolResultAsync("update_pipeline", JsonHelper.Serialize(new
+                    {
+                        name = name,
+                        stages = new object[] { new { personaName = "Worker", reviewDenyAction = "Explode" } }
+                    })).ConfigureAwait(false);
+                    AssertEqual(McpToolErrorCodeEnum.InvalidArgument, McpToolResultProbe.From(invalid).ErrorCode);
+
+                    await client.CallToolResultAsync("delete_pipeline", JsonHelper.Serialize(new { name = name })).ConfigureAwait(false);
+                }
+            }));
+
             cases.Add(CaseAsync("tools_list_each_tool_has_description", "ToolsList_EachToolHasDescription", TestTags.Positive, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);

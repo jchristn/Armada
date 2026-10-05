@@ -249,6 +249,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Returns the import.fleet_categorization prompt template text (editable under Configuration > Prompts) that pre-fills the categorization instructions, plus the run time limit. Requires TenantAdmin.")
                 .WithResponse(200, OpenApiJson.For<FleetCategorizationDefaultPrompt>("Default prompt"))
                 .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Not a tenant admin"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Post<VesselImportCategorizationRequest>("/api/v1/vessels/import/batches/{id}/categorize", async (ApiRequest req) =>

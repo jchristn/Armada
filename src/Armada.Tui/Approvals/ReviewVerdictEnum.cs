@@ -1,8 +1,11 @@
 namespace Armada.Tui.Approvals
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// How a mission review gate is resolved (the dashboard's Resolve Review choices).
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum ReviewVerdictEnum
     {
         /// <summary>

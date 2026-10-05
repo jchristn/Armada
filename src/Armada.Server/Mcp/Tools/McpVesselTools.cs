@@ -75,7 +75,7 @@ namespace Armada.Server.Mcp.Tools
                         gitHubTokenOverride = new { type = "string", description = "Optional per-vessel GitHub token override. Leave unset to use the global configured token." },
                         allowConcurrentMissions = new { type = "boolean", description = "Allow multiple concurrent missions on this vessel (default false)" },
                         autoApprove = new { type = "boolean", description = "Per-vessel auto-approve override for missions on this vessel: true or false wins over the captain's setting; omit to use the captain's setting" },
-                        enableModelContext = new { type = "boolean", description = "Enable model context accumulation -- agents will update context with key information discovered during missions (default false)" },
+                        enableModelContext = new { type = "boolean", description = "Enable model context accumulation -- agents will update context with key information discovered during missions (default true)" },
                         defaultPipelineId = new { type = "string", description = "Default pipeline ID for dispatches to this vessel (ppl_ prefix)" }
                     },
                     required = new[] { "name", "repoUrl", "fleetId" }

@@ -196,7 +196,7 @@ namespace Armada.Server.Mcp.Tools
 
         private static object Unavailable()
         {
-            return McpToolError.Unavailable("Fleet actions are not available on this server.");
+            return McpToolError.Unavailable("Fleet actions are not available on this server: runs are executed and tracked by the Admiral process. Use the Admiral's HTTP MCP endpoint (armada mcp stdio runs standalone).");
         }
 
         private static async Task<object> InvokeAsync(Func<Task<object>> action)

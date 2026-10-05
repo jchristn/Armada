@@ -103,7 +103,8 @@ namespace Armada.Server.Routes
                 .WithTag("Tenants")
                 .WithSummary("Create tenant (admin only)")
                 .WithDescription("Creates a tenant and seeds its tenant admin admin@armada. Pass AdminPassword to set that account's password; otherwise a random password is generated and returned once as AdminPassword in the response.")
-                .WithResponse(201, OpenApiJson.For<TenantCreateResult>("Created tenant with the seeded admin's sign-in")));
+                .WithResponse(201, OpenApiJson.For<TenantCreateResult>("Created tenant with the seeded admin's sign-in"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest()));
 
             app.Get("/api/v1/tenants/{id}", async (ApiRequest req) =>
             {
@@ -119,7 +120,7 @@ namespace Armada.Server.Routes
                 if (tenant == null) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
                 return (object)tenant;
             },
-            api => api.WithTag("Tenants").WithSummary("Get tenant by ID"));
+            api => api.WithResponse(200, OpenApiResponseMetadata.Create("Successful response")).WithParameter(OpenApiParameterMetadata.Path("id", "Tenant ID (ten_ prefix)")).WithTag("Tenants").WithSummary("Get tenant by ID").WithResponse(404, OpenApiResponseMetadata.NotFound()));
 
             app.Put("/api/v1/tenants/{id}", async (ApiRequest req) =>
             {
@@ -140,7 +141,7 @@ namespace Armada.Server.Routes
                 tenant = await _database.Tenants.UpdateAsync(tenant).ConfigureAwait(false);
                 return (object)tenant;
             },
-            api => api.WithTag("Tenants").WithSummary("Update tenant (admin only)"));
+            api => api.WithResponse(200, OpenApiResponseMetadata.Create("Successful response")).WithParameter(OpenApiParameterMetadata.Path("id", "Tenant ID (ten_ prefix)")).WithTag("Tenants").WithSummary("Update tenant (admin only)").WithResponse(400, OpenApiResponseMetadata.BadRequest()).WithResponse(404, OpenApiResponseMetadata.NotFound()));
 
             app.Delete("/api/v1/tenants/{id}", async (ApiRequest req) =>
             {
@@ -157,7 +158,7 @@ namespace Armada.Server.Routes
                 await DeleteTenantCascadeAsync(id).ConfigureAwait(false);
                 return (object)new { Success = true };
             },
-            api => api.WithTag("Tenants").WithSummary("Delete tenant (admin only)"));
+            api => api.WithResponse(200, OpenApiResponseMetadata.Create("Successful response")).WithParameter(OpenApiParameterMetadata.Path("id", "Tenant ID (ten_ prefix)")).WithTag("Tenants").WithSummary("Delete tenant (admin only)").WithResponse(404, OpenApiResponseMetadata.NotFound()));
 
             // User CRUD
             app.Get("/api/v1/users", async (ApiRequest req) =>
@@ -242,7 +243,7 @@ namespace Armada.Server.Routes
                 req.Http.Response.StatusCode = 201;
                 return (object)UserMaster.Redact(user);
             },
-            api => api.WithTag("Users").WithSummary("Create user (admin only)"));
+            api => api.WithTag("Users").WithSummary("Create user (admin only)").WithResponse(201, OpenApiJson.For<UserMaster>("Created user (password hash redacted)")).WithResponse(400, OpenApiResponseMetadata.BadRequest()));
 
             app.Get("/api/v1/users/{id}", async (ApiRequest req) =>
             {
@@ -261,7 +262,7 @@ namespace Armada.Server.Routes
                 if (user == null) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
                 return (object)UserMaster.Redact(user);
             },
-            api => api.WithTag("Users").WithSummary("Get user by ID"));
+            api => api.WithResponse(200, OpenApiResponseMetadata.Create("Successful response")).WithParameter(OpenApiParameterMetadata.Path("id", "User ID (usr_ prefix)")).WithTag("Users").WithSummary("Get user by ID").WithResponse(404, OpenApiResponseMetadata.NotFound()));
 
             app.Put("/api/v1/users/{id}", async (ApiRequest req) =>
             {
@@ -331,7 +332,7 @@ namespace Armada.Server.Routes
                 user = await _database.Users.UpdateAsync(user).ConfigureAwait(false);
                 return (object)UserMaster.Redact(user);
             },
-            api => api.WithTag("Users").WithSummary("Update user (admin only)"));
+            api => api.WithResponse(200, OpenApiResponseMetadata.Create("Successful response")).WithParameter(OpenApiParameterMetadata.Path("id", "User ID (usr_ prefix)")).WithTag("Users").WithSummary("Update user (admin only)").WithResponse(400, OpenApiResponseMetadata.BadRequest()).WithResponse(404, OpenApiResponseMetadata.NotFound()));
 
             app.Delete("/api/v1/users/{id}", async (ApiRequest req) =>
             {
@@ -353,7 +354,7 @@ namespace Armada.Server.Routes
                 await DeleteUserCascadeAsync(user.TenantId, id).ConfigureAwait(false);
                 return (object)new { Success = true };
             },
-            api => api.WithTag("Users").WithSummary("Delete user (admin only)"));
+            api => api.WithResponse(200, OpenApiResponseMetadata.Create("Successful response")).WithParameter(OpenApiParameterMetadata.Path("id", "User ID (usr_ prefix)")).WithTag("Users").WithSummary("Delete user (admin only)").WithResponse(404, OpenApiResponseMetadata.NotFound()));
 
             // Credential CRUD
             app.Get("/api/v1/credentials", async (ApiRequest req) =>
@@ -412,7 +413,7 @@ namespace Armada.Server.Routes
                 req.Http.Response.StatusCode = 201;
                 return (object)cred;
             },
-            api => api.WithTag("Credentials").WithSummary("Create credential"));
+            api => api.WithTag("Credentials").WithSummary("Create credential").WithResponse(201, OpenApiJson.For<Credential>("Created credential")).WithResponse(400, OpenApiResponseMetadata.BadRequest()));
 
             app.Get("/api/v1/credentials/{id}", async (ApiRequest req) =>
             {
@@ -427,7 +428,7 @@ namespace Armada.Server.Routes
                 if (cred == null || (!ctx.IsAdmin && !ctx.IsTenantAdmin && cred.UserId != ctx.UserId)) { req.Http.Response.StatusCode = 404; return (object)new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Not found" }; }
                 return (object)Credential.Redact(cred);
             },
-            api => api.WithTag("Credentials").WithSummary("Get credential by ID"));
+            api => api.WithResponse(200, OpenApiResponseMetadata.Create("Successful response")).WithParameter(OpenApiParameterMetadata.Path("id", "Credential ID (crd_ prefix)")).WithTag("Credentials").WithSummary("Get credential by ID").WithResponse(404, OpenApiResponseMetadata.NotFound()));
 
             app.Put("/api/v1/credentials/{id}", async (ApiRequest req) =>
             {
@@ -459,7 +460,7 @@ namespace Armada.Server.Routes
                 cred = await _database.Credentials.UpdateAsync(cred).ConfigureAwait(false);
                 return (object)Credential.Redact(cred);
             },
-            api => api.WithTag("Credentials").WithSummary("Update credential (admin only)"));
+            api => api.WithResponse(200, OpenApiResponseMetadata.Create("Successful response")).WithParameter(OpenApiParameterMetadata.Path("id", "Credential ID (crd_ prefix)")).WithTag("Credentials").WithSummary("Update credential (admin only)").WithResponse(400, OpenApiResponseMetadata.BadRequest()).WithResponse(404, OpenApiResponseMetadata.NotFound()));
 
             app.Delete("/api/v1/credentials/{id}", async (ApiRequest req) =>
             {
@@ -476,7 +477,7 @@ namespace Armada.Server.Routes
                 await _database.Credentials.DeleteAsync(cred.TenantId, id).ConfigureAwait(false);
                 return (object)new { Success = true };
             },
-            api => api.WithTag("Credentials").WithSummary("Delete credential"));
+            api => api.WithResponse(200, OpenApiResponseMetadata.Create("Successful response")).WithParameter(OpenApiParameterMetadata.Path("id", "Credential ID (crd_ prefix)")).WithTag("Credentials").WithSummary("Delete credential").WithResponse(404, OpenApiResponseMetadata.NotFound()));
         }
 
         private static string GenerateTenantAdminPassword()

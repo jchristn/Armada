@@ -467,7 +467,7 @@ namespace Armada.Server.WebSocket
                 if (string.Equals(route, "subscribe", StringComparison.OrdinalIgnoreCase))
                 {
                     client.AllTenants = routeMessage != null && routeMessage.AllTenants;
-                    ArmadaStatus status = await _Admiral.GetStatusAsync().ConfigureAwait(false);
+                    ArmadaStatus status = await _Admiral.GetStatusAsync(client.Auth).ConfigureAwait(false);
                     object initial = new
                     {
                         type = "status.snapshot",

@@ -1,8 +1,11 @@
 namespace Armada.Core.Enums
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Provider types supported for workflow input references.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum WorkflowInputReferenceProviderEnum
     {
         /// <summary>

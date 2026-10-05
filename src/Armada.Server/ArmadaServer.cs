@@ -1114,7 +1114,7 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Needs-you inbox
-            new InboxRoutes(new InboxService(_Database, _Logging) { AskProposalExpiryMinutes = _Settings.Ask.ProposalExpiryMinutes }, _JsonOptions)
+            new InboxRoutes(new InboxService(_Database, _Logging, _Settings), _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Objectives

@@ -263,7 +263,8 @@ has sent `subscribe`.
 ### status.snapshot
 
 Sent in reply to the `subscribe` route. Contains a snapshot of the current Armada state. The snapshot is the same
-server-wide aggregate that `GET /api/v1/status` returns; it is not filtered by the socket's tenant.
+aggregate that `GET /api/v1/status` returns for the socket's identity: a global administrator sees every tenant (whatever
+`allTenants` is set to); any other identity sees only its own tenant.
 
 ```json
 {
@@ -1281,7 +1282,7 @@ Update an existing fleet.
 |---|---|---|---|
 | `action` | string | Yes | `"update_fleet"` |
 | `id` | string | Yes | Fleet ID (prefix `flt_`) |
-| `data` | object | Yes | The full fleet: the stored record is replaced, so send the object as returned by `get_fleet` (including `tenantId` and `userId`) with your changes |
+| `data` | object | Yes | The full fleet: the editable fields (`name`, `description`, `defaultPipelineId`, `active`) are replaced, so send every field you want to keep. `id`, `tenantId`, `userId`, and `createdUtc` are server-owned and always kept from the stored record (same rules as `PUT /api/v1/fleets/{id}`) |
 
 **Response:**
 
@@ -1446,7 +1447,7 @@ Update an existing vessel.
 |---|---|---|---|
 | `action` | string | Yes | `"update_vessel"` |
 | `id` | string | Yes | Vessel ID (prefix `vsl_`) |
-| `data` | object | Yes | The full vessel: the record is replaced (send every field you want to keep). `TenantId`, `UserId`, and the stored GitHub token override are preserved unless `GitHubTokenOverride` is sent |
+| `data` | object | Yes | The full vessel: the record is replaced (send every field you want to keep). `id`, `tenantId`, and `userId` are always kept from the stored record, and the stored GitHub token override is preserved unless `GitHubTokenOverride` is sent (same rules as `PUT /api/v1/vessels/{id}`) |
 
 ---
 
@@ -1843,7 +1844,7 @@ Update an existing mission.
 |---|---|---|---|
 | `action` | string | Yes | `"update_mission"` |
 | `id` | string | Yes | Mission ID (prefix `msn_`) |
-| `data` | object | Yes | The full mission: the stored record is replaced, so send the object as returned by `get_mission` (including `tenantId` and `userId`) with your changes |
+| `data` | object | Yes | Mission metadata. Only `title`, `description`, `priority`, `vesselId`, `voyageId`, `branchName`, `prUrl`, and `parentMissionId` are applied (each is set to the value sent, so omitting one clears it); status, captain, dock, process, commit, diff, tenant, owner, and timestamps are kept (same rules as `PUT /api/v1/missions/{id}`). Use `transition_mission_status` to change status |
 
 ---
 
@@ -2139,9 +2140,11 @@ Create a new captain.
 
 #### update_captain
 
-Update an existing captain. The stored record is replaced by `data`, except that the operational fields (`state`,
-`currentMissionId`, `currentDockId`, `processId`, `recoveryAttempts`, `lastHeartbeatUtc`) and `createdUtc` are kept;
-send the object as returned by `get_captain` (including `tenantId` and `userId`) with your changes.
+Update an existing captain. The configuration fields are replaced by `data` (send every field you want to keep);
+`tenantId`, `userId`, the operational fields (`state`, `currentMissionId`, `currentDockId`, `processId`,
+`recoveryAttempts`, `quarantineUntilUtc`, `quarantineReason`, `lastHeartbeatUtc`, `lastProcessAliveUtc`), and
+`createdUtc` are always kept from the stored record, and runtime options are normalized for the runtime (same rules as
+`PUT /api/v1/captains/{id}`).
 
 **Request:**
 
@@ -2670,16 +2673,17 @@ All `list_*` actions return a paginated response:
 
 ## Mission Status Transitions
 
-`transition_mission_status` accepts only the transitions below; any other target (including any transition out of
-`PullRequestOpen`, `Complete`, `Failed`, or `Cancelled`) is rejected. The landing pipeline moves missions into and out of
-`PullRequestOpen` itself.
+`transition_mission_status` accepts only the transitions below (the same `MissionStateMachine` rules as
+`PUT /api/v1/missions/{id}/status` and the MCP `transition_mission_status` tool); any other target, including any
+transition out of `Complete`, `Failed`, or `Cancelled`, is rejected.
 
 | From | Allowed To |
 |---|---|
 | `Pending` | `Assigned`, `Cancelled` |
 | `Assigned` | `InProgress`, `Cancelled` |
 | `InProgress` | `WorkProduced`, `Testing`, `Review`, `Complete`, `Failed`, `Cancelled` |
-| `WorkProduced` | `Complete`, `LandingFailed`, `Cancelled` |
+| `WorkProduced` | `PullRequestOpen`, `Complete`, `LandingFailed`, `Cancelled` |
+| `PullRequestOpen` | `Complete`, `LandingFailed`, `Cancelled` |
 | `Testing` | `Review`, `InProgress`, `Complete`, `Failed` |
 | `Review` | `Complete`, `InProgress`, `Failed` |
 | `LandingFailed` | `WorkProduced`, `Failed`, `Cancelled` |
@@ -2705,9 +2709,9 @@ it, never on the English `error` text (which is not stable).
 ```
 
 If a command throws (for example a `data` object that cannot be deserialized into the target model), `action` is null
-and `code` comes from the exception type: `NotFound` for a missing key, `InvalidArgument` for an invalid argument,
-`Forbidden`, `Unavailable` for an unsupported operation (such as backup on a non-SQLite database), `Conflict` for an
-invalid operation, and `InternalError` otherwise (a JSON deserialization error currently maps to `InternalError`):
+and `code` comes from the exception type: `NotFound` for a missing key, `InvalidArgument` for an invalid argument or a
+`data` object that cannot be deserialized, `Forbidden`, `Unavailable` for an unsupported operation (such as backup on a
+non-SQLite database), `Conflict` for an invalid operation, and `InternalError` otherwise:
 
 ```json
 {

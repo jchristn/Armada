@@ -14,6 +14,7 @@ namespace Test.Shared.Suites.E2E
     using Armada.Core.ApiSurface;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Server;
     using Armada.Server.WebSocket;
     using Test.Shared.Infrastructure;
     using Test.Shared.Infrastructure.ApiSurface;
@@ -176,6 +177,105 @@ namespace Test.Shared.Suites.E2E
 
                 AssertTrue(found > 30, "expected to find the server's event literals, found " + found);
                 AssertTrue(undeclared.Count == 0, "event types broadcast but not declared in WebSocketSurface (declare them, then regenerate the surface): " + String.Join(", ", undeclared));
+            }));
+
+            cases.Add(CaseAsync("openapi_route_parameters_are_consistent", "Every route declares each parameter once and exactly the path parameters in its template", TestTags.Negative, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
+                List<RestRouteDescriptor> routes = fx.Server.GetRestRouteDescriptors();
+                AssertTrue(routes.Count > 300, "expected the full route table, got " + routes.Count);
+                List<string> failures = new List<string>();
+                foreach (RestRouteDescriptor route in routes)
+                {
+                    string label = route.Method + " " + route.Template;
+                    foreach (IGrouping<string, string> group in route.Parameters.GroupBy(p => p, StringComparer.Ordinal))
+                    {
+                        if (group.Count() > 1) failures.Add(label + ": parameter " + group.Key + " declared " + group.Count() + " times");
+                    }
+
+                    HashSet<string> templateParams = new HashSet<string>(
+                        route.Template.Split('/').Where(s => s.Length > 2 && s[0] == '{' && s[s.Length - 1] == '}').Select(s => "path:" + s.Substring(1, s.Length - 2)),
+                        StringComparer.Ordinal);
+                    HashSet<string> declaredPath = new HashSet<string>(route.Parameters.Where(p => p.StartsWith("path:", StringComparison.Ordinal)), StringComparer.Ordinal);
+                    foreach (string missing in templateParams.Except(declaredPath))
+                        failures.Add(label + ": template parameter " + missing + " is not declared");
+                    foreach (string extra in declaredPath.Except(templateParams))
+                        failures.Add(label + ": declared " + extra + " is not in the template");
+                    if (route.Responses.Count > 0 && !route.Responses.Keys.Any(k => k.Length == 3 && (k[0] == '2' || k[0] == '3')))
+                        failures.Add(label + ": declares only error responses (no 2xx or 3xx)");
+                }
+
+                RestRouteDescriptor history = routes.Single(r => r.Method == "GET" && r.Template == "/api/v1/history");
+                AssertTrue(history.Parameters.Contains("query:excludeReadRequests"), "GET /api/v1/history declares the excludeReadRequests filter it reads");
+                RestRouteDescriptor deleteMemory = routes.Single(r => r.Method == "DELETE" && r.Template == "/api/v1/memories/{id}");
+                AssertTrue(deleteMemory.Responses.ContainsKey("204") && !deleteMemory.Responses.ContainsKey("200"), "DELETE /api/v1/memories/{id} declares 204, which it returns");
+                AssertTrue(failures.Count == 0, "OpenAPI parameter metadata problems:\n" + String.Join("\n", failures));
+            }));
+
+            cases.Add(CaseAsync("status_specific_errors_use_matching_code", "422, 501, 503, and 504 responses carry an Error code that names their status", TestTags.Negative, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
+                List<string> failures = new List<string>();
+                int checkedResponses = 0;
+                foreach (RestRouteDescriptor route in fx.Server.GetRestRouteDescriptors())
+                {
+                    foreach (KeyValuePair<string, string> response in route.Responses)
+                    {
+                        if (response.Key != "422" && response.Key != "501" && response.Key != "503" && response.Key != "504") continue;
+                        checkedResponses++;
+                        if (response.Value != nameof(ApiStatusErrorResponse))
+                            failures.Add(route.Method + " " + route.Template + " " + response.Key + ": " + response.Value);
+                    }
+                }
+
+                AssertTrue(checkedResponses >= 20, "expected the planning, refinement, and vessel routes to declare these statuses, got " + checkedResponses);
+                AssertTrue(failures.Count == 0, "responses whose body type cannot carry a matching Error code:\n" + String.Join("\n", failures));
+
+                foreach (ApiStatusErrorCodeEnum code in Enum.GetValues<ApiStatusErrorCodeEnum>())
+                {
+                    ApiStatusErrorResponse body = new ApiStatusErrorResponse(code, "x");
+                    E2eStatusErrorBody parsed = JsonHelper.Deserialize<E2eStatusErrorBody>(JsonSerializer.Serialize(body));
+                    AssertEqual(code.ToString(), parsed.Error, "Error serializes as the code name");
+                    AssertEqual(ApiStatusErrorResponse.StatusCodeFor(code), parsed.StatusCode, "StatusCode for " + code);
+                }
+
+                AssertEqual(501, ApiStatusErrorResponse.StatusCodeFor(ApiStatusErrorCodeEnum.NotImplemented));
+                AssertEqual(503, ApiStatusErrorResponse.StatusCodeFor(ApiStatusErrorCodeEnum.ServiceUnavailable));
+                AssertEqual(422, ApiStatusErrorResponse.StatusCodeFor(ApiStatusErrorCodeEnum.UnprocessableEntity));
+                AssertEqual(504, ApiStatusErrorResponse.StatusCodeFor(ApiStatusErrorCodeEnum.GatewayTimeout));
+            }));
+
+            cases.Add(Case("enums_serialize_as_strings", "Every Armada enum declares JsonStringEnumConverter, so MCP, REST, and WebSocket output names instead of numbers", TestTags.Positive, () =>
+            {
+                System.Reflection.Assembly[] assemblies = new System.Reflection.Assembly[]
+                {
+                    typeof(MissionStatusEnum).Assembly,
+                    typeof(Armada.Server.ArmadaServer).Assembly,
+                    typeof(Armada.Runtimes.AgentRuntimeFactory).Assembly,
+                    typeof(Armada.Helm.Commands.McpStdioToolSet).Assembly,
+                    typeof(Armada.Client.ArmadaApiException).Assembly,
+                    typeof(Armada.Tui.Widgets.TriStateEnum).Assembly
+                };
+                List<string> missing = new List<string>();
+                int checkedEnums = 0;
+                foreach (System.Reflection.Assembly assembly in assemblies)
+                {
+                    foreach (Type type in assembly.GetTypes().Where(t => t.IsEnum && t.Namespace != null && t.Namespace.StartsWith("Armada", StringComparison.Ordinal)))
+                    {
+                        if (type.IsDefined(typeof(System.Runtime.CompilerServices.CompilerGeneratedAttribute), false)) continue;
+                        checkedEnums++;
+                        System.Text.Json.Serialization.JsonConverterAttribute? converter = (System.Text.Json.Serialization.JsonConverterAttribute?)Attribute.GetCustomAttribute(type, typeof(System.Text.Json.Serialization.JsonConverterAttribute));
+                        if (converter == null || converter.ConverterType != typeof(System.Text.Json.Serialization.JsonStringEnumConverter))
+                            missing.Add(type.FullName!);
+                    }
+                }
+
+                AssertTrue(checkedEnums > 100, "expected the Armada enums, found " + checkedEnums);
+                AssertTrue(missing.Count == 0, "enums without [JsonConverter(typeof(JsonStringEnumConverter))]:\n" + String.Join("\n", missing.OrderBy(m => m, StringComparer.Ordinal)));
+
+                // Values persisted or sent as numbers before the attribute still read back.
+                AssertEqual(CheckRunStatusEnum.Passed, JsonSerializer.Deserialize<CheckRunStatusEnum>(((int)CheckRunStatusEnum.Passed).ToString()));
+                AssertEqual("\"Passed\"", JsonSerializer.Serialize(CheckRunStatusEnum.Passed));
             }));
 
             cases.Add(CaseAsync("error_codes_match_status", "REST errors are ApiErrorResponse bodies whose Error code matches the status", TestTags.Negative, async () =>

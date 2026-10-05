@@ -1,9 +1,12 @@
 namespace Armada.Helm.Commands
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// MCP client whose configuration <c>armada mcp install</c> and <c>armada mcp remove</c> manage. Decisions use this
     /// kind, never the display name.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     internal enum McpClientKindEnum
     {
         /// <summary>

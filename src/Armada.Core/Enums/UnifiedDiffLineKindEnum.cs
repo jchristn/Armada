@@ -1,9 +1,12 @@
 namespace Armada.Core.Enums
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Structural role of one line of git unified diff text, as determined by <c>UnifiedDiffParser</c> from the
     /// headers and hunk line counts (so a content line that looks like a header is still content).
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum UnifiedDiffLineKindEnum
     {
         /// <summary>

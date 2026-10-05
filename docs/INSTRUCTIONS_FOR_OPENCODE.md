@@ -43,7 +43,7 @@ opencode run --format json --auto --dir . "what is the status of the fleet?"
 
 ### Option C -- stdio bridge (fallback)
 
-Armada's **stdio bridge** (`armada mcp stdio`) runs Armada's MCP tools in a subprocess that opens the local Armada database directly, so it needs no MCP port and no credential. It works only on the Admiral host, missions still run only while the Admiral server is running, and it does not register every tool (for example `inbox`, `stop_server`, and the fleet action, playbook, and memory tools are HTTP-only). Configure it as a local server so OpenCode launches Armada as a subprocess:
+Armada's **stdio bridge** (`armada mcp stdio`) runs Armada's MCP tools in a subprocess that opens the local Armada database directly, so it needs no MCP port and no credential. It works only on the Admiral host, missions still run only while the Admiral server is running, and it lists the same tools as the HTTP MCP server, but `stop_server` and the fleet action tools (`create_fleet_action`, `update_fleet_action`, `delete_fleet_action`, `run_fleet_action`, `fleet_action_run_status`, `cancel_fleet_action_run`) need the Admiral process and answer an `Unavailable` error over stdio; use the HTTP endpoint for them. Configure it as a local server so OpenCode launches Armada as a subprocess:
 
 ```json
 {

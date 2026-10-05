@@ -3,6 +3,7 @@ namespace Test.Shared.Suites.Services
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.Linq;
     using System.Net;
     using System.Net.Http;
     using System.Threading;
@@ -159,6 +160,100 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("mcp_descriptions_list_complete_enum_values", "MCP tool and argument descriptions that list an enum's values list all of them", TestTags.Positive, async () =>
+            {
+                List<string> texts = new List<string>();
+                string dataDir = TestTemp.NewDirectory("mcp-descriptions");
+                Armada.Core.Settings.ArmadaSettings settings = new Armada.Core.Settings.ArmadaSettings();
+                settings.DataDirectory = dataDir;
+                settings.LogDirectory = Path.Combine(dataDir, "logs");
+                settings.DocksDirectory = Path.Combine(dataDir, "docks");
+                settings.ReposDirectory = Path.Combine(dataDir, "repos");
+                SyslogLogging.LoggingModule logging = new SyslogLogging.LoggingModule();
+                logging.Settings.EnableConsole = false;
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                using (McpStdioToolSet toolSet = new McpStdioToolSet(settings, logging, testDb.Driver))
+                {
+                    toolSet.Register((name, description, schema, handler) =>
+                    {
+                        texts.Add(name + ": " + description);
+                        McpSchemaNode node = JsonHelper.Deserialize<McpSchemaNode>(System.Text.Json.JsonSerializer.Serialize(schema));
+                        node.CollectDescriptions(name, texts);
+                    });
+                }
+
+                AssertTrue(texts.Count > 500, "expected tool and argument descriptions, got " + texts.Count);
+
+                // Arguments that take an enum value: each description must name every value of its enum (the
+                // descriptions are generated from the enums so they cannot go stale).
+                Dictionary<string, Type> enumArguments = new Dictionary<string, Type>(StringComparer.Ordinal)
+                {
+                    ["create_captain.runtime"] = typeof(AgentRuntimeEnum),
+                    ["update_captain.runtime"] = typeof(AgentRuntimeEnum),
+                    ["create_captain.reasoningEffort"] = typeof(ReasoningEffortEnum),
+                    ["update_captain.reasoningEffort"] = typeof(ReasoningEffortEnum),
+                    ["create_captain.tier"] = typeof(CaptainTierEnum),
+                    ["update_captain.tier"] = typeof(CaptainTierEnum),
+                    ["transition_mission_status.status"] = typeof(MissionStatusEnum),
+                    ["create_model_endpoint.kind"] = typeof(ModelEndpointKindEnum),
+                    ["create_model_endpoint.provider"] = typeof(ModelProviderEnum),
+                    ["update_model_endpoint.kind"] = typeof(ModelEndpointKindEnum),
+                    ["update_model_endpoint.provider"] = typeof(ModelProviderEnum),
+                    ["create_pipeline.stages[].reviewDenyAction"] = typeof(ReviewDenyActionEnum),
+                    ["update_pipeline.stages[].reviewDenyAction"] = typeof(ReviewDenyActionEnum),
+                    ["create_objective.status"] = typeof(ObjectiveStatusEnum),
+                    ["create_objective.kind"] = typeof(ObjectiveKindEnum),
+                    ["create_objective.priority"] = typeof(ObjectivePriorityEnum),
+                    ["create_objective.backlogState"] = typeof(ObjectiveBacklogStateEnum),
+                    ["create_objective.effort"] = typeof(ObjectiveEffortEnum),
+                    ["update_backlog_item.status"] = typeof(ObjectiveStatusEnum),
+                    ["list_backlog.kind"] = typeof(ObjectiveKindEnum),
+                    ["papercut_summary.minSeverity"] = typeof(PapercutSeverityEnum),
+                    ["create_release.status"] = typeof(ReleaseStatusEnum),
+                    ["run_check.type"] = typeof(CheckRunTypeEnum),
+                    ["create_mission.mode"] = typeof(MissionModeEnum)
+                };
+
+                List<string> problems = new List<string>();
+                foreach (KeyValuePair<string, Type> argument in enumArguments)
+                {
+                    string? text = texts.FirstOrDefault(t => t.StartsWith(argument.Key + ": ", StringComparison.Ordinal));
+                    if (text == null)
+                    {
+                        problems.Add(argument.Key + ": no such argument description");
+                        continue;
+                    }
+
+                    HashSet<string> words = new HashSet<string>(System.Text.RegularExpressions.Regex.Split(text, "[^A-Za-z0-9_]+"), StringComparer.Ordinal);
+                    List<string> missing = Enum.GetNames(argument.Value).Where(n => !words.Contains(n)).ToList();
+                    if (missing.Count > 0) problems.Add(argument.Key + " is missing " + argument.Value.Name + " values: " + String.Join(", ", missing));
+                }
+
+                // Known stale statements from the pre-1.0 audit.
+                AssertFalse(texts.Any(t => t.StartsWith("enumerate.status: ", StringComparison.Ordinal) && t.Contains("Active/Complete/Cancelled", StringComparison.Ordinal)), "voyage statuses are not Active/Complete/Cancelled");
+                AssertTrue(texts.Any(t => t.StartsWith("add_vessel.enableModelContext: ", StringComparison.Ordinal) && t.Contains("(default true)", StringComparison.Ordinal)), "add_vessel enables model context by default");
+
+                AssertTrue(problems.Count == 0, "descriptions with incomplete enum lists:\n" + String.Join("\n", problems));
+            }));
+
+            cases.Add(Case("claude_agent_definition_uses_subagent_tools_field", "The generated Claude Code agent restricts tools with the subagent 'tools' field", TestTags.Positive, () =>
+            {
+                // McpConfigHelper is internal to Helm; read the generated definition through reflection.
+                Type? helper = typeof(McpStdioToolSet).Assembly.GetType("Armada.Helm.Commands.McpConfigHelper");
+                AssertNotNull(helper, "McpConfigHelper type");
+                System.Reflection.MethodInfo? generate = helper!.GetMethod("GenerateAgentDefinition", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
+                AssertNotNull(generate, "GenerateAgentDefinition method");
+                string definition = (string)generate!.Invoke(null, null)!;
+
+                Dictionary<string, string> frontmatter = ParseFrontmatter(definition);
+                HashSet<string> supported = new HashSet<string>(StringComparer.Ordinal) { "name", "description", "tools", "disallowedTools", "model", "permissionMode", "maxTurns", "skills", "mcpServers", "hooks", "memory", "background", "effort", "isolation", "color" };
+                foreach (string key in frontmatter.Keys)
+                    AssertTrue(supported.Contains(key), "unsupported Claude Code subagent frontmatter field: " + key);
+                AssertEqual("armada", frontmatter["name"]);
+                AssertTrue(frontmatter.ContainsKey("tools"), "the agent must restrict its tools with 'tools'");
+                AssertEqual("mcp__armada", frontmatter["tools"], "server-level MCP entry grants every Armada tool");
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Helm Input",
@@ -168,6 +263,23 @@ namespace Test.Shared.Suites.Services
         #endregion
 
         #region Private-Methods
+
+        private static Dictionary<string, string> ParseFrontmatter(string markdown)
+        {
+            Dictionary<string, string> fields = new Dictionary<string, string>(StringComparer.Ordinal);
+            string[] lines = markdown.Replace("\r\n", "\n").Split('\n');
+            AssertTrue(lines.Length > 0 && lines[0].Trim() == "---", "definition starts with a frontmatter fence");
+            for (int i = 1; i < lines.Length; i++)
+            {
+                string line = lines[i];
+                if (line.Trim() == "---") return fields;
+                int colon = line.IndexOf(':');
+                if (colon <= 0) continue;
+                fields[line.Substring(0, colon).Trim()] = line.Substring(colon + 1).Trim();
+            }
+
+            throw new AssertionException("frontmatter is not closed");
+        }
 
         private static TestCaseDescriptor Case(string caseId, string displayName, string tag, Action body)
         {

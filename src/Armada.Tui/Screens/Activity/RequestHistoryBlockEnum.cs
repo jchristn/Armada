@@ -1,8 +1,11 @@
 namespace Armada.Tui.Screens.Activity
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Copyable detail blocks of a request-history entry.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum RequestHistoryBlockEnum
     {
         /// <summary>

@@ -272,6 +272,33 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual(fleetId, updated.Id);
             }));
 
+            cases.Add(CaseAsync("update_fleet_preserves_tenant_owner_and_created_utc", "Update Fleet Preserves Tenant Owner And CreatedUtc", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient authClient = fx.AuthClient;
+                List<string> createdFleetIds = new List<string>();
+
+                Fleet created = await CreateFleetAsync(authClient, createdFleetIds, "OwnerPreserveFleet");
+                AssertFalse(String.IsNullOrEmpty(created.TenantId), "precondition: created fleet has a tenant");
+                AssertFalse(String.IsNullOrEmpty(created.UserId), "precondition: created fleet has an owner");
+
+                // A body that omits the server-owned fields must not clear them, and one that carries other values
+                // must not move the fleet to another tenant or owner.
+                HttpResponseMessage omitted = await authClient.PutAsync("/api/v1/fleets/" + created.Id,
+                    JsonHelper.ToJsonContent(new { Name = created.Name + "-a" }));
+                AssertEqual(HttpStatusCode.OK, omitted.StatusCode);
+                HttpResponseMessage spoofed = await authClient.PutAsync("/api/v1/fleets/" + created.Id,
+                    JsonHelper.ToJsonContent(new { Name = created.Name + "-b", TenantId = "ten_spoofed", UserId = "usr_spoofed", CreatedUtc = new DateTime(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc) }));
+                AssertEqual(HttpStatusCode.OK, spoofed.StatusCode);
+
+                HttpResponseMessage getResp = await authClient.GetAsync("/api/v1/fleets/" + created.Id);
+                FleetDetailResponse detail = await JsonHelper.DeserializeAsync<FleetDetailResponse>(getResp);
+                AssertEqual(created.Name + "-b", detail.Fleet.Name);
+                AssertEqual(created.TenantId, detail.Fleet.TenantId);
+                AssertEqual(created.UserId, detail.Fleet.UserId);
+                Assert(Math.Abs((detail.Fleet.CreatedUtc - created.CreatedUtc).TotalSeconds) < 1, "CreatedUtc should be preserved");
+            }));
+
             cases.Add(CaseAsync("update_fleet_verify_via_get", "Update Fleet Verify Via Get", TestTags.Positive, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);

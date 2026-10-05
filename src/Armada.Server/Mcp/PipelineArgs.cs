@@ -42,5 +42,15 @@ namespace Armada.Server.Mcp
         /// Description of what this stage does.
         /// </summary>
         public string? Description { get; set; }
+
+        /// <summary>
+        /// Whether the stage's mission waits for human review before the pipeline advances.
+        /// </summary>
+        public bool? RequiresReview { get; set; }
+
+        /// <summary>
+        /// What a review denial does: RetryStage or FailPipeline (ReviewDenyActionEnum names, case-insensitive).
+        /// </summary>
+        public string? ReviewDenyAction { get; set; }
     }
 }

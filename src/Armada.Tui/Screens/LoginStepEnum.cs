@@ -1,8 +1,11 @@
 namespace Armada.Tui.Screens
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Step of the email login flow.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum LoginStepEnum
     {
         /// <summary>

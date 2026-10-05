@@ -1,8 +1,11 @@
 namespace Armada.Tui.Shell
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Responsive breakpoint of the shell.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum LayoutModeEnum
     {
         /// <summary>

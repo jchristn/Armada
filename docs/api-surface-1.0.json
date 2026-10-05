@@ -10,7 +10,8 @@
       "requestType": "PasswordChangeRequest",
       "requestRequired": true,
       "responses": {
-        "200": "WhoAmIResult"
+        "200": "WhoAmIResult",
+        "400": ""
       },
       "tags": [
         "Authentication"
@@ -42,7 +43,8 @@
       "requestType": "AskThreadCreateRequest",
       "requestRequired": false,
       "responses": {
-        "201": "AskThread"
+        "201": "AskThread",
+        "400": ""
       },
       "tags": [
         "Ask"
@@ -74,7 +76,8 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
-        "204": ""
+        "204": "",
+        "404": ""
       },
       "tags": [
         "Ask"
@@ -90,7 +93,8 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
-        "200": "AskThreadDetail"
+        "200": "AskThreadDetail",
+        "404": ""
       },
       "tags": [
         "Ask"
@@ -106,7 +110,9 @@
       "requestType": "AskThreadUpdateRequest",
       "requestRequired": true,
       "responses": {
-        "200": "AskThread"
+        "200": "AskThread",
+        "400": "",
+        "404": ""
       },
       "tags": [
         "Ask"
@@ -122,7 +128,8 @@
       "requestType": "AskActionRequest",
       "requestRequired": true,
       "responses": {
-        "200": "AskActionProposal"
+        "200": "AskActionProposal",
+        "400": ""
       },
       "tags": [
         "Ask"
@@ -137,7 +144,11 @@
       "resource": "AskThread:Execute",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "404": "",
+        "409": "ApiErrorResponse"
+      },
       "tags": [
         "Ask"
       ],
@@ -168,7 +179,8 @@
       "requestType": "AskMessageEnumerateRequest",
       "requestRequired": false,
       "responses": {
-        "200": "AskMessagePage"
+        "200": "AskMessagePage",
+        "404": ""
       },
       "tags": [
         "Ask"
@@ -216,7 +228,8 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
-        "200": "AskThread"
+        "200": "AskThread",
+        "404": ""
       },
       "tags": [
         "Ask"
@@ -231,7 +244,9 @@
       "resource": "AskThread:Execute",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "202": "AskMessageSendResponse"
+      },
       "tags": [
         "Ask"
       ],
@@ -246,7 +261,8 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
-        "200": "AskWorkSnapshot"
+        "200": "AskWorkSnapshot",
+        "404": ""
       },
       "tags": [
         "Ask"
@@ -391,7 +407,8 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
-        "200": "List<ObjectiveRefinementSession>"
+        "200": "List<ObjectiveRefinementSession>",
+        "404": ""
       },
       "tags": [
         "Objectives"
@@ -407,7 +424,10 @@
       "requestType": "ObjectiveRefinementSessionCreateRequest",
       "requestRequired": true,
       "responses": {
-        "201": "ObjectiveRefinementSessionDetail"
+        "201": "ObjectiveRefinementSessionDetail",
+        "400": "",
+        "404": "",
+        "501": "ApiStatusErrorResponse"
       },
       "tags": [
         "Objectives"
@@ -422,7 +442,10 @@
       "resource": "Backup:Admin",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "400": ""
+      },
       "tags": [
         "Backup"
       ],
@@ -453,7 +476,8 @@
       "requestType": "Captain",
       "requestRequired": true,
       "responses": {
-        "201": "Captain"
+        "201": "Captain",
+        "400": ""
       },
       "tags": [
         "Captains"
@@ -469,7 +493,8 @@
       "requestType": "DeleteMultipleRequest",
       "requestRequired": true,
       "responses": {
-        "200": "DeleteMultipleResult"
+        "200": "DeleteMultipleResult",
+        "400": ""
       },
       "tags": [
         "Captains"
@@ -549,6 +574,7 @@
       "requestRequired": true,
       "responses": {
         "200": "Captain",
+        "400": "",
         "404": ""
       },
       "tags": [
@@ -581,6 +607,7 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
+        "200": "",
         "404": ""
       },
       "tags": [
@@ -597,7 +624,9 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
-        "404": ""
+        "200": "",
+        "404": "",
+        "409": "ApiErrorResponse"
       },
       "tags": [
         "Captains"
@@ -630,6 +659,7 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
+        "200": "",
         "404": ""
       },
       "tags": [
@@ -790,7 +820,10 @@
       "resource": "Credential:Create",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "201": "Credential",
+        "400": ""
+      },
       "tags": [
         "Credentials"
       ],
@@ -804,7 +837,10 @@
       "resource": "Credential:Delete",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "404": ""
+      },
       "tags": [
         "Credentials"
       ],
@@ -818,7 +854,10 @@
       "resource": "Credential:Read",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "404": ""
+      },
       "tags": [
         "Credentials"
       ],
@@ -832,7 +871,11 @@
       "resource": "Credential:Update",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "400": "",
+        "404": ""
+      },
       "tags": [
         "Credentials"
       ],
@@ -1030,7 +1073,8 @@
       "requestType": "DeleteMultipleRequest",
       "requestRequired": true,
       "responses": {
-        "200": "DeleteMultipleResult"
+        "200": "DeleteMultipleResult",
+        "400": ""
       },
       "tags": [
         "Docks"
@@ -1275,7 +1319,8 @@
       "requestType": "DeleteMultipleRequest",
       "requestRequired": true,
       "responses": {
-        "200": "DeleteMultipleResult"
+        "200": "DeleteMultipleResult",
+        "400": ""
       },
       "tags": [
         "Events"
@@ -1471,6 +1516,7 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
+        "204": "",
         "404": ""
       },
       "tags": [
@@ -1570,7 +1616,8 @@
       "requestType": "DeleteMultipleRequest",
       "requestRequired": true,
       "responses": {
-        "200": "DeleteMultipleResult"
+        "200": "DeleteMultipleResult",
+        "400": ""
       },
       "tags": [
         "Fleets"
@@ -1600,7 +1647,8 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
-        "204": ""
+        "204": "",
+        "404": ""
       },
       "tags": [
         "Fleets"
@@ -1722,6 +1770,7 @@
       "requestRequired": true,
       "responses": {
         "200": "Harbor",
+        "400": "",
         "404": ""
       },
       "tags": [
@@ -1776,7 +1825,8 @@
       "requestRequired": false,
       "responses": {
         "200": "HostCommandResult",
-        "404": ""
+        "404": "",
+        "409": "ApiErrorResponse"
       },
       "tags": [
         "Experimental",
@@ -1940,6 +1990,7 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
+        "200": "",
         "400": ""
       },
       "tags": [
@@ -1956,6 +2007,7 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
+        "200": "",
         "404": ""
       },
       "tags": [
@@ -1972,7 +2024,9 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
-        "404": ""
+        "200": "",
+        "404": "",
+        "409": "ApiErrorResponse"
       },
       "tags": [
         "Jobs"
@@ -2056,6 +2110,7 @@
       "requestRequired": true,
       "responses": {
         "200": "Memory",
+        "400": "",
         "404": ""
       },
       "tags": [
@@ -2132,7 +2187,8 @@
       "requestType": "PurgeMergeEntriesRequest",
       "requestRequired": true,
       "responses": {
-        "200": "MergeQueuePurgeResult"
+        "200": "MergeQueuePurgeResult",
+        "400": ""
       },
       "tags": [
         "MergeQueue"
@@ -2148,7 +2204,8 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
-        "204": ""
+        "204": "",
+        "404": ""
       },
       "tags": [
         "MergeQueue"
@@ -2248,7 +2305,8 @@
       "requestType": "DeleteMultipleRequest",
       "requestRequired": true,
       "responses": {
-        "200": "DeleteMultipleResult"
+        "200": "DeleteMultipleResult",
+        "400": ""
       },
       "tags": [
         "Missions"
@@ -2377,6 +2435,7 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
+        "200": "",
         "404": ""
       },
       "tags": [
@@ -2428,6 +2487,7 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
+        "200": "",
         "404": ""
       },
       "tags": [
@@ -2462,6 +2522,7 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
+        "200": "",
         "404": ""
       },
       "tags": [
@@ -2515,7 +2576,8 @@
       "responses": {
         "200": "Object",
         "400": "",
-        "404": ""
+        "404": "",
+        "409": "ApiErrorResponse"
       },
       "tags": [
         "Missions"
@@ -2635,7 +2697,8 @@
       "requestRequired": false,
       "responses": {
         "204": "",
-        "404": ""
+        "404": "",
+        "409": "ApiErrorResponse"
       },
       "tags": [
         "Model Endpoints"
@@ -2669,6 +2732,7 @@
       "requestRequired": true,
       "responses": {
         "200": "ModelEndpoint",
+        "400": "",
         "404": ""
       },
       "tags": [
@@ -2702,7 +2766,9 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
-        "204": ""
+        "204": "",
+        "404": "",
+        "501": "ApiStatusErrorResponse"
       },
       "tags": [
         "Objectives"
@@ -2718,7 +2784,9 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
-        "200": "ObjectiveRefinementSessionDetail"
+        "200": "ObjectiveRefinementSessionDetail",
+        "404": "",
+        "501": "ApiStatusErrorResponse"
       },
       "tags": [
         "Objectives"
@@ -2734,7 +2802,9 @@
       "requestType": "ObjectiveRefinementApplyRequest",
       "requestRequired": false,
       "responses": {
-        "200": "ObjectiveRefinementApplyResponse"
+        "200": "ObjectiveRefinementApplyResponse",
+        "404": "",
+        "501": "ApiStatusErrorResponse"
       },
       "tags": [
         "Objectives"
@@ -2750,7 +2820,10 @@
       "requestType": "ObjectiveRefinementMessageRequest",
       "requestRequired": true,
       "responses": {
-        "200": "ObjectiveRefinementSessionDetail"
+        "200": "ObjectiveRefinementSessionDetail",
+        "400": "",
+        "404": "",
+        "501": "ApiStatusErrorResponse"
       },
       "tags": [
         "Objectives"
@@ -2766,7 +2839,9 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
-        "200": "ObjectiveRefinementSessionDetail"
+        "200": "ObjectiveRefinementSessionDetail",
+        "404": "",
+        "501": "ApiStatusErrorResponse"
       },
       "tags": [
         "Objectives"
@@ -2782,7 +2857,9 @@
       "requestType": "ObjectiveRefinementSummaryRequest",
       "requestRequired": false,
       "responses": {
-        "200": "ObjectiveRefinementSummaryResponse"
+        "200": "ObjectiveRefinementSummaryResponse",
+        "404": "",
+        "501": "ApiStatusErrorResponse"
       },
       "tags": [
         "Objectives"
@@ -2930,7 +3007,8 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
-        "200": "List<ObjectiveRefinementSession>"
+        "200": "List<ObjectiveRefinementSession>",
+        "404": ""
       },
       "tags": [
         "Objectives"
@@ -2946,7 +3024,10 @@
       "requestType": "ObjectiveRefinementSessionCreateRequest",
       "requestRequired": true,
       "responses": {
-        "201": "ObjectiveRefinementSessionDetail"
+        "201": "ObjectiveRefinementSessionDetail",
+        "400": "",
+        "404": "",
+        "501": "ApiStatusErrorResponse"
       },
       "tags": [
         "Objectives"
@@ -2961,7 +3042,11 @@
       "resource": "User:Execute",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "400": "",
+        "409": "ApiErrorResponse"
+      },
       "tags": [
         "Authentication"
       ],
@@ -2992,7 +3077,8 @@
       "requestType": "Persona",
       "requestRequired": true,
       "responses": {
-        "201": "Persona"
+        "201": "Persona",
+        "400": ""
       },
       "tags": [
         "Personas"
@@ -3058,6 +3144,7 @@
       "requestRequired": true,
       "responses": {
         "200": "Persona",
+        "400": "",
         "404": ""
       },
       "tags": [
@@ -3172,7 +3259,8 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
-        "200": "List<PlanningSession>"
+        "200": "List<PlanningSession>",
+        "501": "ApiStatusErrorResponse"
       },
       "tags": [
         "Planning"
@@ -3187,7 +3275,12 @@
       "resource": "PlanningSession:Create",
       "requestType": "PlanningSessionCreateRequest",
       "requestRequired": true,
-      "responses": {},
+      "responses": {
+        "201": "Object",
+        "400": "",
+        "404": "",
+        "501": "ApiStatusErrorResponse"
+      },
       "tags": [
         "Planning"
       ],
@@ -3201,7 +3294,11 @@
       "resource": "PlanningSession:Delete",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "204": "",
+        "404": "",
+        "501": "ApiStatusErrorResponse"
+      },
       "tags": [
         "Planning"
       ],
@@ -3215,7 +3312,11 @@
       "resource": "PlanningSession:Read",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "404": "",
+        "501": "ApiStatusErrorResponse"
+      },
       "tags": [
         "Planning"
       ],
@@ -3229,7 +3330,11 @@
       "resource": "PlanningSession:Execute",
       "requestType": "PlanningSessionDispatchRequest",
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "404": "",
+        "501": "ApiStatusErrorResponse"
+      },
       "tags": [
         "Planning"
       ],
@@ -3243,7 +3348,12 @@
       "resource": "PlanningSession:Execute",
       "requestType": "PlanningSessionMessageRequest",
       "requestRequired": true,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "400": "",
+        "404": "",
+        "501": "ApiStatusErrorResponse"
+      },
       "tags": [
         "Planning"
       ],
@@ -3257,7 +3367,11 @@
       "resource": "PlanningSession:Execute",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "404": "",
+        "501": "ApiStatusErrorResponse"
+      },
       "tags": [
         "Planning"
       ],
@@ -3271,7 +3385,11 @@
       "resource": "PlanningSession:Execute",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "404": "",
+        "501": "ApiStatusErrorResponse"
+      },
       "tags": [
         "Planning"
       ],
@@ -3285,7 +3403,11 @@
       "resource": "PlanningSession:Execute",
       "requestType": "PlanningSessionSummaryRequest",
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "404": "",
+        "501": "ApiStatusErrorResponse"
+      },
       "tags": [
         "Planning"
       ],
@@ -3316,7 +3438,8 @@
       "requestType": "Playbook",
       "requestRequired": true,
       "responses": {
-        "201": "Playbook"
+        "201": "Playbook",
+        "409": "ApiErrorResponse"
       },
       "tags": [
         "Playbooks"
@@ -3381,7 +3504,8 @@
       "requestRequired": true,
       "responses": {
         "200": "Playbook",
-        "404": ""
+        "404": "",
+        "409": "ApiErrorResponse"
       },
       "tags": [
         "Playbooks"
@@ -3413,7 +3537,8 @@
       "requestType": "ProjectProfile",
       "requestRequired": true,
       "responses": {
-        "201": "ProjectProfile"
+        "201": "ProjectProfile",
+        "400": ""
       },
       "tags": [
         "ProjectProfiles"
@@ -3513,6 +3638,7 @@
       "requestRequired": true,
       "responses": {
         "200": "ProjectProfile",
+        "400": "",
         "404": ""
       },
       "tags": [
@@ -3562,7 +3688,9 @@
       "requestType": "PromptTemplate",
       "requestRequired": true,
       "responses": {
-        "201": "PromptTemplate"
+        "201": "PromptTemplate",
+        "400": "",
+        "409": "ApiErrorResponse"
       },
       "tags": [
         "Prompt Templates"
@@ -3808,7 +3936,8 @@
       "requestType": "DeleteMultipleRequest",
       "requestRequired": true,
       "responses": {
-        "200": "DeleteMultipleResult"
+        "200": "DeleteMultipleResult",
+        "400": ""
       },
       "tags": [
         "RequestHistory"
@@ -3873,7 +4002,10 @@
       "resource": "Backup:Admin",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "400": ""
+      },
       "tags": [
         "Backup"
       ],
@@ -4087,7 +4219,8 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
-        "200": "MuxEndpointListResult"
+        "200": "MuxEndpointListResult",
+        "400": ""
       },
       "tags": [
         "Runtimes"
@@ -4104,6 +4237,7 @@
       "requestRequired": false,
       "responses": {
         "200": "MuxEndpointShowResult",
+        "400": "",
         "404": ""
       },
       "tags": [
@@ -4119,7 +4253,10 @@
       "resource": "Server:Admin",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "409": "ApiErrorResponse"
+      },
       "tags": [
         "Experimental",
         "Status"
@@ -4177,7 +4314,10 @@
       "resource": "Server:Admin",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "400": ""
+      },
       "tags": [
         "Experimental",
         "Status"
@@ -4267,7 +4407,8 @@
       "requestType": "DeleteMultipleRequest",
       "requestRequired": true,
       "responses": {
-        "200": "DeleteMultipleResult"
+        "200": "DeleteMultipleResult",
+        "400": ""
       },
       "tags": [
         "Signals"
@@ -4396,7 +4537,8 @@
       "requestType": "Skill",
       "requestRequired": true,
       "responses": {
-        "201": "Skill"
+        "201": "Skill",
+        "400": ""
       },
       "tags": [
         "Skills"
@@ -4523,7 +4665,8 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
-        "201": "TenantCreateResult"
+        "201": "TenantCreateResult",
+        "400": ""
       },
       "tags": [
         "Tenants"
@@ -4538,7 +4681,10 @@
       "resource": "Session:Read",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "400": ""
+      },
       "tags": [
         "Authentication"
       ],
@@ -4552,7 +4698,10 @@
       "resource": "Tenant:Delete",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "404": ""
+      },
       "tags": [
         "Tenants"
       ],
@@ -4566,7 +4715,10 @@
       "resource": "Tenant:Read",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "404": ""
+      },
       "tags": [
         "Tenants"
       ],
@@ -4580,7 +4732,11 @@
       "resource": "Tenant:Update",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "400": "",
+        "404": ""
+      },
       "tags": [
         "Tenants"
       ],
@@ -4656,7 +4812,10 @@
       "resource": "User:Create",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "201": "UserMaster",
+        "400": ""
+      },
       "tags": [
         "Users"
       ],
@@ -4670,7 +4829,10 @@
       "resource": "User:Delete",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "404": ""
+      },
       "tags": [
         "Users"
       ],
@@ -4684,7 +4846,10 @@
       "resource": "User:Read",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "404": ""
+      },
       "tags": [
         "Users"
       ],
@@ -4698,7 +4863,11 @@
       "resource": "User:Update",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "400": "",
+        "404": ""
+      },
       "tags": [
         "Users"
       ],
@@ -4713,7 +4882,8 @@
       "requestType": "VesselHealthEnumerateRequest",
       "requestRequired": false,
       "responses": {
-        "200": "EnumerationResult<VesselHealth>"
+        "200": "EnumerationResult<VesselHealth>",
+        "400": ""
       },
       "tags": [
         "Vessels"
@@ -4730,6 +4900,7 @@
       "requestRequired": false,
       "responses": {
         "202": "VesselHealthEvaluationStart",
+        "400": "",
         "404": "",
         "409": "VesselHealthEvaluationStart"
       },
@@ -4779,7 +4950,8 @@
       "requestType": "Vessel",
       "requestRequired": true,
       "responses": {
-        "201": "Vessel"
+        "201": "Vessel",
+        "400": ""
       },
       "tags": [
         "Vessels"
@@ -4795,7 +4967,8 @@
       "requestType": "DeleteMultipleRequest",
       "requestRequired": true,
       "responses": {
-        "200": "DeleteMultipleResult"
+        "200": "DeleteMultipleResult",
+        "400": ""
       },
       "tags": [
         "Vessels"
@@ -4939,6 +5112,7 @@
       "requestRequired": false,
       "responses": {
         "200": "FleetCategorizationDefaultPrompt",
+        "400": "",
         "403": "ApiErrorResponse"
       },
       "tags": [
@@ -4974,7 +5148,8 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
-        "204": ""
+        "204": "",
+        "404": ""
       },
       "tags": [
         "Vessels"
@@ -5023,7 +5198,11 @@
       "resource": "Vessel:Read",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "404": "",
+        "503": "ApiStatusErrorResponse"
+      },
       "tags": [
         "Vessels"
       ],
@@ -5037,7 +5216,13 @@
       "resource": "Vessel:Execute",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "400": "",
+        "404": "",
+        "422": "ApiStatusErrorResponse",
+        "503": "ApiStatusErrorResponse"
+      },
       "tags": [
         "Vessels"
       ],
@@ -5051,7 +5236,13 @@
       "resource": "Vessel:Execute",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "400": "",
+        "404": "",
+        "422": "ApiStatusErrorResponse",
+        "503": "ApiStatusErrorResponse"
+      },
       "tags": [
         "Vessels"
       ],
@@ -5067,7 +5258,10 @@
       "requestRequired": true,
       "responses": {
         "200": "Vessel",
-        "404": ""
+        "400": "",
+        "404": "",
+        "501": "ApiStatusErrorResponse",
+        "504": "ApiStatusErrorResponse"
       },
       "tags": [
         "Vessels"
@@ -5099,7 +5293,10 @@
       "resource": "Vessel:Read",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "404": ""
+      },
       "tags": [
         "Vessels"
       ],
@@ -5183,6 +5380,7 @@
       "requestRequired": false,
       "responses": {
         "200": "VesselReadinessResult",
+        "400": "",
         "404": ""
       },
       "tags": [
@@ -5215,7 +5413,9 @@
       "requestType": "VoyageRequest",
       "requestRequired": true,
       "responses": {
-        "201": "Voyage"
+        "201": "Voyage",
+        "400": "",
+        "404": ""
       },
       "tags": [
         "Voyages"
@@ -5231,7 +5431,8 @@
       "requestType": "DeleteMultipleRequest",
       "requestRequired": true,
       "responses": {
-        "200": "DeleteMultipleResult"
+        "200": "DeleteMultipleResult",
+        "400": ""
       },
       "tags": [
         "Voyages"
@@ -5261,6 +5462,7 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
+        "200": "",
         "404": ""
       },
       "tags": [
@@ -5277,6 +5479,7 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
+        "200": "",
         "404": ""
       },
       "tags": [
@@ -5341,7 +5544,8 @@
       "requestType": "WorkflowProfile",
       "requestRequired": true,
       "responses": {
-        "201": "WorkflowProfile"
+        "201": "WorkflowProfile",
+        "400": ""
       },
       "tags": [
         "WorkflowProfiles"
@@ -5458,6 +5662,7 @@
       "requestRequired": true,
       "responses": {
         "200": "WorkflowProfile",
+        "400": "",
         "404": ""
       },
       "tags": [
@@ -5474,7 +5679,8 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
-        "200": "WorkspaceChangesResult"
+        "200": "WorkspaceChangesResult",
+        "404": ""
       },
       "tags": [
         "Workspace"
@@ -5490,7 +5696,8 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
-        "200": "WorkspaceDiffResult"
+        "200": "WorkspaceDiffResult",
+        "404": ""
       },
       "tags": [
         "Workspace"
@@ -5506,7 +5713,8 @@
       "requestType": "WorkspaceCreateDirectoryRequest",
       "requestRequired": true,
       "responses": {
-        "201": "WorkspaceOperationResult"
+        "201": "WorkspaceOperationResult",
+        "404": ""
       },
       "tags": [
         "Workspace"
@@ -5522,7 +5730,9 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
-        "200": "WorkspaceOperationResult"
+        "200": "WorkspaceOperationResult",
+        "400": "",
+        "404": ""
       },
       "tags": [
         "Workspace"
@@ -5538,7 +5748,8 @@
       "requestType": "WorkspaceExecRequest",
       "requestRequired": true,
       "responses": {
-        "200": "WorkspaceExecResult"
+        "200": "WorkspaceExecResult",
+        "404": ""
       },
       "tags": [
         "Workspace"
@@ -5554,7 +5765,9 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
-        "200": "WorkspaceFileResponse"
+        "200": "WorkspaceFileResponse",
+        "400": "",
+        "404": ""
       },
       "tags": [
         "Workspace"
@@ -5570,7 +5783,8 @@
       "requestType": "WorkspaceSaveRequest",
       "requestRequired": true,
       "responses": {
-        "200": "WorkspaceSaveResult"
+        "200": "WorkspaceSaveResult",
+        "404": ""
       },
       "tags": [
         "Workspace"
@@ -5586,7 +5800,8 @@
       "requestType": "WorkspaceRenameRequest",
       "requestRequired": true,
       "responses": {
-        "200": "WorkspaceOperationResult"
+        "200": "WorkspaceOperationResult",
+        "404": ""
       },
       "tags": [
         "Workspace"
@@ -5602,7 +5817,9 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
-        "200": "WorkspaceSearchResult"
+        "200": "WorkspaceSearchResult",
+        "400": "",
+        "404": ""
       },
       "tags": [
         "Workspace"
@@ -5618,7 +5835,8 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
-        "200": "WorkspaceStatusResult"
+        "200": "WorkspaceStatusResult",
+        "404": ""
       },
       "tags": [
         "Workspace"
@@ -5634,7 +5852,8 @@
       "requestType": null,
       "requestRequired": false,
       "responses": {
-        "200": "WorkspaceTreeResult"
+        "200": "WorkspaceTreeResult",
+        "404": ""
       },
       "tags": [
         "Workspace"
@@ -6599,7 +6818,7 @@
           "required": false
         }
       ],
-      "description": "Create a managed model endpoint. Kind must be Embedding or Inference; Provider is one of Ollama, OpenAI, OpenAICompatible, Anthropic, Gemini, VoyageAI. Anthropic cannot be used for Embedding and VoyageAI cannot be used for Inference.",
+      "description": "Create a managed model endpoint. Kind must be one of Embedding, Inference; Provider is one of Ollama, OpenAI, OpenAICompatible, Anthropic, Gemini, VoyageAI, AzureOpenAI, VertexAI, Bedrock. Anthropic cannot be used for Embedding and VoyageAI cannot be used for Inference.",
       "experimental": false
     },
     {
@@ -8892,7 +9111,7 @@
       "auth": "Authenticated",
       "resource": "Status:Read",
       "arguments": [],
-      "description": "Get aggregate status of all active work in Armada",
+      "description": "Get aggregate status of active work in Armada: captain counts by state, mission counts by status, active voyages with progress, and recent signals. A global administrator sees every tenant; any other caller sees only its own tenant.",
       "experimental": false
     },
     {
@@ -9028,7 +9247,7 @@
           "required": true
         }
       ],
-      "description": "Transition a mission to a new status with validation. Valid transitions: Pending->Assigned, Assigned->InProgress, InProgress->Testing/Review/Complete/Failed, Testing->Review/InProgress/Complete/Failed, Review->Complete/InProgress/Failed. Most states allow ->Cancelled.",
+      "description": "Transition a mission to a new status with validation (the same rules as PUT /api/v1/missions/{id}/status). Valid transitions: Pending->Assigned/Cancelled, Assigned->InProgress/Cancelled, InProgress->WorkProduced/Testing/Review/Complete/Failed/Cancelled, WorkProduced->PullRequestOpen/Complete/LandingFailed/Cancelled, PullRequestOpen->Complete/LandingFailed/Cancelled, Testing->InProgress/Review/Complete/Failed, Review->InProgress/Complete/Failed, LandingFailed->WorkProduced/Failed/Cancelled. Complete, Failed, and Cancelled are terminal.",
       "experimental": false
     },
     {

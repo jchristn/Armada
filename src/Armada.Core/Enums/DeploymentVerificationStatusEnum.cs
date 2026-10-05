@@ -1,8 +1,11 @@
 namespace Armada.Core.Enums
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Post-deploy verification state for a deployment.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum DeploymentVerificationStatusEnum
     {
         /// <summary>

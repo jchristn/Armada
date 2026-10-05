@@ -465,14 +465,14 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "transition_mission_status",
-                "Transition a mission to a new status with validation. Valid transitions: Pending->Assigned, Assigned->InProgress, InProgress->Testing/Review/Complete/Failed, Testing->Review/InProgress/Complete/Failed, Review->Complete/InProgress/Failed. Most states allow ->Cancelled.",
+                "Transition a mission to a new status with validation (the same rules as PUT /api/v1/missions/{id}/status). Valid transitions: " + McpToolHelpers.DescribeMissionTransitions() + ". Complete, Failed, and Cancelled are terminal.",
                 new
                 {
                     type = "object",
                     properties = new
                     {
                         missionId = new { type = "string", description = "Mission ID (msn_ prefix)" },
-                        status = new { type = "string", description = "Target status: Pending, Assigned, InProgress, WorkProduced, Testing, Review, Complete, Failed, LandingFailed, Cancelled" }
+                        status = new { type = "string", description = "Target status: " + McpToolHelpers.EnumNames<MissionStatusEnum>() }
                     },
                     required = new[] { "missionId", "status" }
                 },

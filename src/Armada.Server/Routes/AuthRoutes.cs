@@ -204,6 +204,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Changes the authenticated user's password after verifying the current one. Required before a dashboard session for the seeded admin@armada account (default password) can use the rest of the API. Changing the default admin's password also deactivates the seeded \"default\" bearer token.")
                 .WithRequestBody(OpenApiJson.BodyFor<PasswordChangeRequest>("Current and new password", true))
                 .WithResponse(200, OpenApiJson.For<WhoAmIResult>("Updated identity"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             // Tenant Lookup
@@ -232,7 +233,7 @@ namespace Armada.Server.Routes
                 }
                 return (object)result;
             },
-            api => api.WithTag("Authentication").WithSummary("Look up tenants by email"));
+            api => api.WithResponse(200, OpenApiResponseMetadata.Create("Successful response")).WithTag("Authentication").WithSummary("Look up tenants by email").WithResponse(400, OpenApiResponseMetadata.BadRequest()));
 
             // Onboarding
             app.Post("/api/v1/onboarding", async (ApiRequest req) =>
@@ -286,7 +287,7 @@ namespace Armada.Server.Routes
                     Credential = newCred
                 };
             },
-            api => api.WithTag("Authentication").WithSummary("Self-register a new user"));
+            api => api.WithResponse(200, OpenApiResponseMetadata.Create("Successful response")).WithTag("Authentication").WithSummary("Self-register a new user").WithResponse(400, OpenApiResponseMetadata.BadRequest()).WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Conflicts with the current state")));
         }
 
         /// <summary>
