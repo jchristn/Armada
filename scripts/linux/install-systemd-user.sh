@@ -15,7 +15,7 @@ fi
 
 echo
 echo "[install-systemd-user] Publishing Armada.Server..."
-"${SCRIPT_DIR}/publish-server.sh"
+"${SCRIPT_DIR}/publish-server.sh" "$@"
 
 mkdir -p "${UNIT_DIR}"
 

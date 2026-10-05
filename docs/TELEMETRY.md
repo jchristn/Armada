@@ -15,6 +15,8 @@ opts in.
   - an **OTLP collector** (optional push, e.g. an OpenTelemetry Collector),
   - an **in-process Prometheus scrape endpoint** (`/metrics`, default port `9464`), and/or
   - **Loki** (optional direct log push).
+- When a Loki or OTLP endpoint is set, the Admiral's own log stream (Info and above) is also exported as logs, so
+  exception traces land in Loki next to the metrics.
 
 ## Settings
 
@@ -71,7 +73,8 @@ vessel IDs, paths, and commands never appear in metric labels. Health evaluation
 `Armada` activity source, one root span per evaluation job with a `stage:<Criterion>` child per
 criterion.
 
-Standard .NET runtime, ASP.NET Core hosting, and HTTP client metrics are exported alongside these.
+The pipeline also subscribes to the `Watson` (web server), `Microsoft.AspNetCore.Hosting`, and `System.Net.Http`
+meters, so whichever of those emit are exported alongside these.
 
 ## Docker stack
 
@@ -88,6 +91,7 @@ push already pointed at the stack. Bring everything up with:
 
 ```bash
 cd docker/armada
+export ARMADA_INITIAL_ADMIN_PASSWORD='choose-a-password'   # 8+ characters; compose refuses to start without it
 docker compose up --build
 ```
 

@@ -40,8 +40,8 @@ whose repository is a host checkout mounted into the container needs that path t
 your host user, not the container's UID 1654); [DOCKER.md](DOCKER.md#vessels-from-repositories-mounted-into-the-container)
 shows the `GIT_CONFIG_GLOBAL` setup. The
 standalone dashboard on port 3000 proxies the API and WebSocket to the Admiral, so it needs no extra configuration. [DOCKER.md](DOCKER.md) covers volumes, building images, and factory reset;
-`docker/update.sh` (or `docker/update.bat`) pulls the latest images and recreates the stack without touching
-volumes.
+`docker/update.sh` (or `docker/update.bat`) pulls the observability images, rebuilds the Admiral and dashboard from
+the checkout, and recreates the stack without touching volumes.
 
 ### Split mode with a Harbor (experimental)
 
@@ -55,9 +55,11 @@ back. Captains it launches call home to the MCP URL the Admiral advertises in `h
 split profile sets `deploymentMode: "Split"` and `requireHarborForLaunch: true`, so a mission waits until an eligible
 Harbor owned by the requesting user is connected rather than running inside the container.
 
-Two operational details matter here. Harbor link authentication is off by default (`harbor.requireAuth` is
-`false`), so a split Admiral should not be reachable from untrusted networks. And the advertised MCP URL must be
-reachable from the Harbor host, not from inside the container. [HARBOR.md](HARBOR.md) explains the model and
+Two operational details matter here. A Harbor that presents an Armada credential (`x-access-key` or an
+`Authorization` header) registers under that credential's tenant and user. A Harbor without one is accepted only when
+the Admiral listens on a loopback hostname and the Harbor connects from loopback; set `harbor.requireAuth: true` to
+require a credential in every case. The Docker split profile binds `0.0.0.0`, so its Harbors must present a
+credential. And the advertised MCP URL must be reachable from the Harbor host, not from inside the container. [HARBOR.md](HARBOR.md) explains the model and
 [HARBOR_PROTOCOL.md](HARBOR_PROTOCOL.md) the wire contract.
 
 ### Remote access through Armada.Proxy
@@ -184,7 +186,7 @@ Everything the Admiral writes lives under the log directory, `~/.armada/logs` by
 | `diffs/` | Diffs captured at landing |
 | `instructions/` | Snapshots of the instruction files a mission was launched with |
 | `docks/` | Dock start metadata |
-| `playbooks/`, `objective-refinement-sessions/` | Per-run material for playbooks and objective refinement |
+| `playbooks/`, `planning-sessions/`, `objective-refinement-sessions/` | Per-run material for playbooks, planning sessions, and objective refinement |
 
 The Admiral also sends its log stream to the syslog targets in `syslogServers` (by default `127.0.0.1:514`) and, with
 telemetry on, to Loki. In Docker, `docker compose logs armada-server` shows the console output. Armada.Proxy logs to
@@ -208,7 +210,8 @@ single box, `~/.armada/dashboard`). Re-run `scripts/common/deploy-dashboard.sh`,
 **Missions sit in Pending forever in split mode.** With `requireHarborForLaunch: true`, a mission waits for a
 connected Harbor owned by the same user that advertises the requested runtime. Check the Harbors page; if the Harbor
 shows Degraded or Disconnected, its heartbeats stopped arriving within `harbor.heartbeatTimeoutSeconds` (45 seconds by
-default).
+default). Missions that were already running on a Harbor when it disconnected are not moved immediately; the stall
+watchdog (`stallThresholdMinutes`) recovers them like any other stalled captain.
 
 **A captain launched from a Harbor cannot reach MCP.** The Harbor hands captains the URL in
 `harbor.advertisedMcpBaseUrl`. From the Harbor host, `curl` that URL. In the split compose file it is

@@ -36,8 +36,9 @@ Data is covered by the upgrade promise rather than this document: a 1.x Admiral 
 ## What is not covered
 
 - **Experimental items** (see [Experimental surfaces](#experimental-surfaces)). At 1.0 these are Harbor split mode (the
-  Harbor link WebSocket and its protocol, the `/api/v1/harbors` routes, the `*_harbor` MCP tools, and the `harbor.*`,
-  `deploymentMode`, and `requireHarborForLaunch` settings) and self-rebuild (`/api/v1/server/rebuild`,
+  Harbor link WebSocket and its protocol, the `/api/v1/harbors` routes, the `get_harbor`, `create_harbor`, `update_harbor`,
+  `delete_harbor`, and `set_harbor_enabled` MCP tools, and the `harbor.*`, `deploymentMode`, and `requireHarborForLaunch`
+  settings) and self-rebuild (`/api/v1/server/rebuild`,
   `/api/v1/server/rebuild/status`, `/api/v1/server/rollback`, and the `selfVesselId`, `rebuildSlotRetentionCount`, and
   `rebuildSupervisorHarborId` settings).
 - **Human-readable text**: `Message` and `Description` fields of errors, OpenAPI summaries and descriptions, MCP tool

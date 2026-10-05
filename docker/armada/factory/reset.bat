@@ -1,4 +1,6 @@
 @echo off
+rem Work relative to this script (docker\armada\factory) so it is safe to run from any directory.
+pushd "%~dp0" >nul
 echo ========================================
 echo  Armada Factory Reset
 echo ========================================
@@ -11,6 +13,7 @@ echo.
 set /p confirm="Type 'RESET' to confirm: "
 if /i not "%confirm%"=="RESET" (
     echo Cancelled.
+    popd >nul
     exit /b 1
 )
 echo.
@@ -37,5 +40,6 @@ if exist "..\logs" (
 echo.
 echo ========================================
 echo  Factory reset complete.
-echo  Run 'cd docker\armada && docker compose up -d' to restart.
+echo  Run 'cd docker\armada ^&^& docker compose up -d' to restart.
 echo ========================================
+popd >nul

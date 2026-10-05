@@ -3,13 +3,14 @@
 > **Type:** implementation plan (work-tracking). Annotate task status and the
 > progress log as you go; keep this doc in sync with what actually shipped.
 >
-> **Status:** Phase 1 + Phase 2 implemented (compiles; Harbor cutover path needs live verification)
+> **Status:** Phase 1 + Phase 2 shipped in 1.0.0 (the Harbor-supervised cutover path has protocol tests but has not
+> been exercised against a live Harbor)
 > **Owner:** _unassigned_
 > **Target deployment:** native single-box Windows (self-contained Admiral + on-box Harbor)
 > **API status:** experimental for 1.0. `POST /api/v1/server/rebuild`, `GET /api/v1/server/rebuild/status`,
 > `POST /api/v1/server/rollback`, and the `selfVesselId`, `rebuildSlotRetentionCount`, and `rebuildSupervisorHarborId`
 > settings are excluded from the compatibility promise ([COMPATIBILITY.md](COMPATIBILITY.md)).
-> **Last updated:** 2026-09-11
+> **Last updated:** 2026-10-05
 
 ### Implementation notes / deviations from the original plan
 
@@ -30,7 +31,16 @@
   (launch + health poll + rollback) compiles and has protocol round-trip tests, but the live cutover path has
   not been exercised against a running Harbor.
 - Launcher slot-awareness needed only `start-armada-server.ps1` (the HKCU Run key already invokes it);
-  `install-windows-task.bat` was left unchanged.
+  `install-windows-task.bat` was left unchanged. The Linux and macOS startup scripts
+  (`install-systemd-user.sh`, `install-launchd-agent.sh`) are not slot-aware: their unit and agent still launch
+  `~/.armada/bin/Armada.Server`, so after a reboot they start the classic publish rather than the slot named by
+  `current`.
+- The source tree is the self vessel's `WorkingDirectory` when it has one (a vessel added from a local path or
+  `file://` URL), else its `LocalPath`; `SourcePath` in the request overrides both.
+- Slot names are `<yyyy-MM-dd_HHmmss>_<short-sha>` (UTC), so two builds of the same commit on one day get
+  distinct slots.
+- The replacement launch lives in `ReplacementProcessLauncher` (`src/Armada.Server/ReplacementProcessLauncher.cs`),
+  shared by `server/restart`, rebuild, and rollback.
 
 Status values used throughout: `[ ]` not started, `[~]` in progress, `[x]` done,
 `[!]` blocked. Put a one-line note under any task you touch, and add a dated row
@@ -63,11 +73,11 @@ never made a supervisor or a parent of the Admiral; it stays a peer.
 The only hard part of a process restarting itself is that whatever relaunches the
 server cannot be the server -- it is gone by then. Armada already solves this for
 the same-bits case. `POST /api/v1/server/restart`
-(`src/Armada.Server/Routes/StatusRoutes.cs:320`) calls `LaunchReplacementProcess()`
-(`StatusRoutes.cs:483`), which starts a detached child from `Environment.ProcessPath`,
+(`src/Armada.Server/Routes/StatusRoutes.cs`) calls `ReplacementProcessLauncher`
+(`src/Armada.Server/ReplacementProcessLauncher.cs`), which starts a detached child,
 sets `ARMADA_RESTART_WAIT_PID = Environment.ProcessId`, then stops the current
 instance. The child blocks in `Program.WaitForPredecessorExitAsync()`
-(`src/Armada.Server/Program.cs:66,112`) until the old PID exits and the port frees,
+(`src/Armada.Server/Program.cs`) until the old PID exits and the port frees,
 then binds.
 
 That baton -- a detached child that outlives its parent, gated on the old PID -- is
@@ -85,14 +95,14 @@ slot** while the old server keeps running instead:
 ```
 %USERPROFILE%\.armada\bin\
    slots\
-      2026-09-11_a1b2c3d\      <- new publish target (no lock conflict)
+      2026-09-11_143005_a1b2c3d\   <- new publish target (no lock conflict)
          Armada.Server.exe
          wwwroot\ (dashboard)
-      2026-09-08_f9e8d7c\      <- previous slot, retained for rollback
+      2026-09-08_091500_f9e8d7c\   <- previous slot, retained for rollback
    current                     <- pointer file: contains the active slot name
 ```
 
-Slot names are `<yyyy-MM-dd>_<short-git-sha>` of the built source HEAD. `current`
+Slot names are `<yyyy-MM-dd_HHmmss>_<short-git-sha>` (UTC build time and the built commit). `current`
 is a plain text file (not a junction, to avoid privilege and reparse-point
 quirks); both the launcher and the rebuild flow read and write it. Retain the last
 N slots (default 3, configurable) and prune older ones only after a successful
@@ -156,7 +166,7 @@ POST /api/v1/server/rebuild   (returns immediately with a rebuild id)
         v
 Harbor executes the armed instruction:
         |-- launch slots\<new>\Armada.Server.exe with ARMADA_RESTART_WAIT_PID=<old pid>
-        |-- poll GET /api/v1/status/health (pattern: ServerRestartCommand.cs:40-55)
+        |-- poll GET /api/v1/status/health (same pattern as Helm's ServerRestartCommand)
         |-- healthy within timeout   -> done; prune slots beyond retention.
         |-- NOT healthy within timeout:
               |-- rewrite `current` -> previous slot
@@ -238,7 +248,7 @@ slot until Phase 2 lands.
   _Notes:_
 
 - [x] **T5 -- Slot-aware baton.**
-  Generalize `LaunchReplacementProcess()` (`StatusRoutes.cs:483`) to launch a
+  Generalize `LaunchReplacementProcess()` (now `ReplacementProcessLauncher`) to launch a
   caller-supplied slot exe (default: `current`) instead of only
   `Environment.ProcessPath`. `server/restart` now targets `current`.
   _Acceptance:_ restart still works with a single slot; rebuild launches the new slot.
@@ -324,7 +334,7 @@ slot until Phase 2 lands.
   an `MCP_API.md` update (see Compliance). REST-only for now.
   _Notes:_ Deliberately skipped; the feature is REST + dashboard only.
 
-## Compliance checklist (per c:\code\agents\requirements)
+## Compliance checklist
 
 - [x] **REST_API.md** updated for `POST /api/v1/server/rebuild`,
   `GET /api/v1/server/rebuild/status`, and `POST /api/v1/server/rollback`, plus the
@@ -348,7 +358,7 @@ slot until Phase 2 lands.
 - [x] **i18n / dashboard style** for T8: all new strings route through `t()`, no
   hard-coded copy; typechecks clean (`tsc --noEmit`).
 - [x] **README/CHANGELOG** -- README "Rebuilding Armada from the Dashboard" section
-  and a CHANGELOG "Self-rebuild" entry under Unreleased.
+  and a CHANGELOG "Self-rebuild" entry.
 
 ## Decisions (resolved 2026-09-11)
 
@@ -376,3 +386,4 @@ Append a dated row whenever you advance a task. Keep newest at the bottom.
 | 2026-09-11 | (design) | T2,T3,T8,T13,T14 | Resolved the three open questions: source = Armada vessel LocalPath via SelfVesselId; operator-picked ref built from a detached worktree; auto-restore DB backup on post-migration rollback. Added T13, T14. |
 | 2026-09-11 | (impl) | T8 | Branch dropdown (getVesselBranches) added to the rebuild ref control; Postman collection updated with the 3 server endpoints + settings fields; ran the new suites with the server stopped -- 6/6 passing; server relaunched. |
 | 2026-09-11 | (impl) | T1-T14 | Implemented Phase 1 + Phase 2 end to end. Backend (SlotManager, ServerRebuildService, ReplacementProcessLauncher, rebuild/status/rollback routes, SelfVesselId + slot settings), Harbor deferred-launch protocol + handler + admiral delegation, slot-aware start script, dashboard button/ref input/LogViewer/rollback + self-vessel settings, SlotManager + Harbor-protocol test suites, REST_API.md + HARBOR_PROTOCOL.md. Core/Server/Harbor/Test.Shared build clean (0 warnings); dashboard tsc clean. Harbor cutover path not yet live-verified; T12 (MCP tool) skipped; Postman + build-failure/rollback E2E tests pending. |
+| 2026-10-05 | (docs) | -- | Doc pass for 1.0.0: status updated (shipped, experimental), stale line references replaced with symbol names, slot name format corrected, Linux/macOS startup scripts noted as not slot-aware. Postman requests exist; build-failure and live Harbor-rollback E2E tests are still not written. |

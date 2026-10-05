@@ -25,12 +25,17 @@ If the release changes the database schema, confirm that the migration is regist
 
 `.github/workflows/ci.yml` runs on every push and pull request. For the release commit, every job must be green:
 
-- `dotnet build src/Armada.sln -warnaserror` on Windows, macOS, and Linux. A new compiler warning fails the build.
+- `dotnet build src/Armada.sln -c Release -warnaserror` on Windows, macOS, and Linux (NuGet vulnerability-audit
+  warnings `NU1900`-`NU1904` are left as warnings). A new compiler warning fails the build.
 - `Test.Automated` for both `net8.0` and `net10.0` on all three operating systems, with results uploaded as
   artifacts.
 - The dashboard: `npm ci`, `npm run build`, and `npm run test:run` in `src/Armada.Dashboard`.
 - The dist drift check, which fails when `src/Armada.Dashboard/dist` does not match a fresh build. The `dist/`
   folder is committed on purpose, so a forgotten rebuild ships a stale dashboard to anyone installing without Node.
+- The TUI parity gate: `python3 scripts/tui/generate-parity-manifest.py --check` (the manifest matches the dashboard
+  source and has no planned entries).
+- The compose check: every file in `docker/` renders with `docker compose config`, and each still refuses to render
+  without its required secret (`ARMADA_INITIAL_ADMIN_PASSWORD`, `ARMADA_PROXY_PASSWORD`).
 
 A rerun that turns a red job green is not a pass until you know why it was red. Intermittent end-to-end failures are
 tracked under W4.2 in [V1_READINESS.md](../V1_READINESS.md); note any you saw in the release notes.
@@ -42,22 +47,27 @@ PostgreSQL, MySQL, and SQL Server on an Ubuntu runner. The most recent nightly r
 manual dispatch of the workflow on it) must report `RESULT: PARITY OK`. To run it locally:
 
 ```bash
-scripts/common/run-db-parity-tests.sh
+scripts/common/run-db-parity-tests.sh                                # all four providers
+scripts/common/run-db-parity-tests.sh --providers sqlite,postgresql   # a subset
 ```
 
-Docker must be running. On Apple Silicon, SQL Server runs under emulation and can time out; trust the CI run on
+The script also takes `--framework` (default `net10.0`) and `--no-build`. Docker must be running for the server
+providers. On Apple Silicon, SQL Server runs under emulation and can time out; trust the CI run on
 native amd64 over a local one.
 
 ## 4. The upgrade test passes
 
-Install the previous release, seed it with representative data (fleets, vessels, missions in every status, voyages,
-merge queue entries, edited personas, pipelines, and prompt templates, Ask threads, fleet actions, health findings,
-import batches), then upgrade to the candidate and confirm the data and the template edits survive. Do this on every
-provider. The procedure and the automated job are described in [UPGRADING.md](UPGRADING.md) (W3.1).
+`scripts/common/run-upgrade-test.sh --providers all` (Windows: `scripts\windows\run-upgrade-test.bat`, through Git
+Bash) builds the previous release (default the `v0.9.0` tag), seeds it with representative data (fleets, vessels, a
+captain, missions in every status, voyages, merge queue entries, edited personas, pipelines, and prompt templates,
+signals, a backlog objective, and a second tenant), upgrades the database with the candidate, and runs the
+`Upgrade.FromBaseline` suite on SQLite, PostgreSQL, MySQL, and SQL Server. It must pass on every provider. Use
+`--from-ref <ref>` for another baseline. Details are in [UPGRADING.md](UPGRADING.md#testing-an-upgrade) (W3.1).
 
 ## 5. Simulated user testing
 
-Run a full session per `SIMULATED_USER_TESTING.md` from the shared requirements against the candidate. Use an
+Run a full session per [SIMULATED_USER_TESTING.md](../SIMULATED_USER_TESTING.md) against the candidate (the 1.0
+results are in [SIMULATED_USER_TESTING_RESULTS_1.0.md](SIMULATED_USER_TESTING_RESULTS_1.0.md)). Use an
 isolated `armada-usertest` stack with its own data directory and ports so it cannot touch a real install or a
 developer's `~/.armada`. Triage every finding: S1 and S2 findings block the release; lower severities are either fixed
 or recorded in [BACKLOG.md](BACKLOG.md) with a reason. Release candidates (`-rc.N`) also get at least a week of real
@@ -69,7 +79,7 @@ Packaging is driven by `publisher.json` and `src/Armada.Publisher`. The 1.0 inst
 
 | Platform | Channel | Artifact |
 |----------|---------|----------|
-| Any | Docker images (`scripts/<os>/build-all`) | Admiral, dashboard, proxy |
+| Any | Docker images (`scripts/<os>/build-all`, run by hand) | Admiral, dashboard, proxy |
 | Any | NuGet global tool (`nuget-cli`) | CLI (`armada`) |
 | Windows | Inno Setup (`inno-harbor`) | Harbor `.exe` installer |
 | Windows | WiX (`wix-server`) | Admiral `.msi` |
@@ -94,7 +104,9 @@ Installers land in `installers/<version>/`. Each OS builds only its own formats;
 [BUILDING_INSTALLERS.md](../BUILDING_INSTALLERS.md) for the toolchain per platform. Docker images are built and
 pushed with `scripts/macos/build-all.sh <tag>` (or the `linux` / `windows` equivalent) to `jchristn77/armada-server`,
 `jchristn77/armada-dashboard`, and `jchristn77/armada-proxy`; the repository-root `build-all.sh <tag>` builds the
-Admiral and proxy images only (see [DOCKER.md](DOCKER.md#building-images-from-source)).
+Admiral and proxy images only (see [DOCKER.md](DOCKER.md#building-images-from-source)). The release workflow does not
+build or push Docker images, so run one of these for every release. The `scripts/` proxy build is `linux/amd64`
+only; use the repository-root `build-proxy.sh` for a multi-architecture proxy image.
 
 On macOS, `scripts/macos/build-harbor-app.sh` builds the Harbor `.app` and `.dmg` for both architectures and checks
 the result: the image verifies, the drag-to-install layout, every required `Info.plist` key (bundle id, version,
@@ -183,8 +195,9 @@ the Developer ID identity from the imported certificate (or `APPLE_SIGNING_IDENT
 and submitted for notarization and stapling when the `APPLE_CERT_*`
 and `APPLE_NOTARY_*` secrets are set. The certificates, App Store Connect key, environment variables, and
 `publisher.json` keys are listed in [BUILDING_INSTALLERS.md](../BUILDING_INSTALLERS.md#macos-signing-and-notarization). Without them, the macOS app is ad-hoc signed (Apple Silicon will not run a
-completely unsigned binary) and is not notarized. Linux packages are not signed individually; the apt and yum
-repository metadata is signed with the GPG key in `GPG_PRIVATE_KEY`.
+completely unsigned binary) and is not notarized. Linux `.deb` and `.rpm` packages are not signed in 1.0, and there
+is no apt or yum repository: `publisher.json` reserves `GPG_PRIVATE_KEY` and `REPO_SYNC_CREDENTIALS` (the release
+workflow passes both to the Linux job) for repository signing that is not implemented yet.
 
 When a release ships unsigned on any platform, the release notes must carry the unsigned-software notice: Windows
 users click **More info**, then **Run anyway** on the SmartScreen dialog; macOS users open **System Settings**,
@@ -226,6 +239,8 @@ end; a release with one failed OS job is a partial release and should be fixed o
 ## 10. After the release
 
 Confirm the GitHub Release lists every expected artifact and `SHA256SUMS`, that the NuGet package is live
-(`dotnet tool install -g Armada.Helm --version <version>`), and that `docker/update.sh` against the published images
-brings up a healthy stack. Then add a dated row for the release to the Progress Log in
+(`dotnet tool install -g Armada.Helm --version <version>`), that the Docker Hub tags `v<version>` and `latest` exist
+for `jchristn77/armada-server`, `jchristn77/armada-dashboard`, and `jchristn77/armada-proxy`, and that `docker/update.sh`
+from the tagged checkout brings up a healthy stack (the compose files build from source, so this checks the tagged
+code rather than the pushed images). Then add a dated row for the release to the Progress Log in
 [V1_READINESS.md](../V1_READINESS.md) while that plan is active, and tell users about any manual upgrade steps.

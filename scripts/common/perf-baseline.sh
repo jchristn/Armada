@@ -41,7 +41,7 @@ while [ $# -gt 0 ]; do
     --keep) KEEP=1; shift ;;
     --no-build) DO_BUILD=0; shift ;;
     --) shift; SEED_ARGS=("$@"); break ;;
-    -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) grep '^#' "$0" | grep -v '^#!' | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done

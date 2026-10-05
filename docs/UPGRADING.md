@@ -12,6 +12,43 @@ Releases before 0.9.0 are not covered by the test. Their schemas are older versi
 
 Downgrades are not supported. If you start an older Admiral against a database that a newer one already migrated, it logs a warning naming both schema versions and does not try to migrate. Restore the backup you took before the upgrade instead (the steps are below).
 
+## Upgrading an install
+
+Back up first (see [Backups during normal operation](#backups-during-normal-operation), or dump a server database),
+then replace the binaries the way you installed them. The new Admiral migrates the database on its first start.
+
+| Install type | How to upgrade |
+|--------------|----------------|
+| Source checkout with the `armada` global tool | `git pull`, then `scripts/linux/update.sh`, `scripts/macos/update.sh`, or `scripts\windows\update.bat`. The script stops repo-backed MCP stdio hosts and the server, reinstalls the `Armada.Helm` tool, redeploys the dashboard, and starts the server again. |
+| Startup scripts ([RUN_ON_STARTUP.md](RUN_ON_STARTUP.md)) | `git pull`, then `update-systemd-user.sh`, `update-launchd-agent.sh`, or `update-windows-task.bat`. These republish `~/.armada/bin` and restart the registered server. |
+| Docker ([DOCKER.md](DOCKER.md)) | `git pull`, then `docker/update.sh` (or `docker\update.bat`), optionally with the compose file, for example `docker/update.sh armada/compose.split.yaml`. The compose files build the Admiral and dashboard from the checkout, so the script pulls the observability images, recreates the stack with `--build`, and keeps `db/`, `logs/`, and the named volumes. |
+| Packages (`.msi`, Inno, `.pkg`, Deb/Rpm) | Install the new package over the old one. The package re-registers the service (see "Service and startup registration" in [OPERATIONS.md](OPERATIONS.md)). |
+
+Use the update script that matches how you installed; they are not interchangeable (for example `update.bat`
+updates the global-tool install and does not touch the `ArmadaAdmiral` startup entry).
+
+### Changes to act on when coming from 0.9.x
+
+1.0.0 tightened several defaults. Check these before you start the new version (the CHANGELOG has the full list):
+
+- **Default credentials.** The first sign-in as `admin@armada` with the default password must set a new password,
+  which also disables the `default` bearer token. The Admiral refuses to start on a non-loopback `rest.hostname`
+  while default credentials are in use unless `allowDefaultCredentialsOnNetwork` is `true`; set
+  `ARMADA_INITIAL_ADMIN_PASSWORD` (8+ characters) on the first start of a headless or Docker install. Docker compose
+  requires it.
+- **MCP and WebSocket authentication.** MCP calls need a credential unless the listener is bound to loopback and
+  `mcp.allowUnauthenticatedLoopback` is `true` (the default). `/ws` requires authentication; custom clients pass
+  `?token=<token>`.
+- **Server control.** `POST /api/v1/server/stop`, `restart`, `rebuild`, and `rollback` always require an admin;
+  `requireAuthForShutdown` is deprecated and ignored.
+- **Docker.** The images run as non-root (Admiral and proxy UID 1654, dashboard UID 101 on port 8080); make the
+  bind-mounted directories writable with `sudo chown -R 1654:1654 docker/armada/db docker/armada/logs`.
+- **Armada.Proxy.** The proxy refuses to start with a blank or default password; set `ARMADA_PROXY_PASSWORD` (or
+  `password` in `proxysettings.json`) and the same value as `remoteControl.password` on each instance.
+- **Passwords.** Stored hashes are upgraded automatically (see [Password hashes](#password-hashes)); an upgraded
+  database cannot be used for password login by an older Admiral.
+- **Removed.** The keyword `POST /api/v1/ask` responder and the `armada ask` command are gone; use Ask Armada threads.
+
 ## How an upgrade runs
 
 The schema version lives in the `schema_migrations` table: one row per applied migration. At startup the Admiral compares the highest recorded version with the newest migration it ships. Before it applies anything, it protects the existing data:
@@ -129,7 +166,7 @@ Migration version numbers increase but are not contiguous, and they differ per p
 
 ## Data retention
 
-Long-running installs accumulate conversations, job records, and import history. Retention runs in the background on the health-check loop's slow cadence (every 100 health-check cycles, about once an hour with the default heartbeat), works on every provider, and applies setting changes immediately. Set any value to 0 to keep that data forever.
+Long-running installs accumulate conversations, job records, and import history. Retention runs in the background on the health-check loop's slow cadence (every 100 health-check cycles, about every 17 minutes with the default 10-second `heartbeatIntervalSeconds`), works on every provider, and applies setting changes immediately. Set any value to 0 to keep that data forever.
 
 | Setting (`retention` in `settings.json`, the Server page, or `PUT /api/v1/settings`) | Default | Range | Effect |
 |---|---|---|---|

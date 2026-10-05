@@ -2,7 +2,7 @@
 
 **Version:** 1.0.0
 
-This guide covers the shipped remote-control tunnel and proxy MVP surfaces in Armada `v0.9.0`.
+This guide covers the remote-control tunnel and the `Armada.Proxy` service shipped in Armada 1.0.0.
 
 For a step-by-step operator setup path, see [REMOTE_MGMT.md](REMOTE_MGMT.md).
 
@@ -10,16 +10,13 @@ For a step-by-step operator setup path, see [REMOTE_MGMT.md](REMOTE_MGMT.md).
 
 ## Scope
 
-`v0.9.0` now includes:
+Armada 1.0.0 includes:
 
 - the Armada-side outbound websocket tunnel client
-- remote tunnel configuration in Armada settings and dashboards
-- a minimal `Armada.Proxy` service with websocket termination and instance registry APIs
-- a proxy-hosted remote operations shell served at `/`
-- live forwarded status/health requests from the proxy into a connected Armada instance
-- focused remote inspection requests for recent activity, missions, voyages, captains, logs, and diffs
-- bounded remote management requests for fleets, vessels, playbooks, backlog/objectives, refinement sessions, planning sessions, workflow profiles, checks, environments, releases, deployments, incidents, runbooks, runbook executions, and captain control
-- shell workflows for fleet and vessel editing, voyage dispatch and cancellation, mission create/update/cancel/restart, backlog/planning handoff, delivery operations, diagnostics, and read-only reference inspection
+- remote tunnel configuration in Armada settings and the dashboard's Server page
+- `Armada.Proxy`, which terminates tunnels at `/tunnel` and keeps an in-memory instance registry
+- a proxy portal at `/` with a password login, instance selection, and the shared dashboard
+- generic relay of dashboard REST (`/api/v1/*`) and live updates (`/ws`) from the proxy into the selected instance
 
 Still not included:
 
@@ -27,8 +24,7 @@ Still not included:
 - delegated identity or local-session brokerage
 - notification delivery
 - persistent proxy storage
-- server-side remote action policy evaluation beyond current shell confirmation prompts
-- secret-bearing admin editing such as credentials or token overrides
+- chunked or streamed relay bodies (a relayed request or response body is capped at 8 MiB)
 
 Treat the current proxy as an implementation-stage operator service, not a hardened public SaaS surface.
 
@@ -42,7 +38,7 @@ Armada stores remote tunnel configuration in `settings.json`:
 {
   "remoteControl": {
     "enabled": false,
-    "tunnelUrl": null,
+    "tunnelUrl": "http://proxy.armadago.ai:7893/tunnel",
     "instanceId": null,
     "enrollmentToken": null,
     "password": "replace-with-a-strong-shared-secret",
@@ -58,6 +54,8 @@ Armada stores remote tunnel configuration in `settings.json`:
 ### Recommendations
 
 - Leave `enabled` off unless you are actively testing the tunnel.
+- An empty or null `tunnelUrl` falls back to the default `http://proxy.armadago.ai:7893/tunnel`; set it to your own
+  proxy. `http`/`https` URLs are converted to `ws`/`wss`, and a URL with no path gets `/tunnel`.
 - Prefer `wss://` endpoints outside local development.
 - Leave `instanceId` empty unless you want an operator-friendly override.
 - Keep `remoteControl.password` aligned with `ArmadaProxy.password`. The built-in default (`armadaadmin`) is refused by
@@ -198,17 +196,16 @@ Proxy instance states:
 
 ## Common Failure Modes
 
-### Armada enabled but no tunnel URL
+### Armada pointed at the default proxy
 
 Symptoms:
 
-- Armada tunnel state becomes `Error`
-- `lastError` says no tunnel URL is configured
+- Armada tunnel state cycles between `Connecting` and `Error` although you never set a tunnel URL
 
 Fix:
 
-- set `remoteControl.tunnelUrl`
-- or disable `remoteControl.enabled`
+- an empty `remoteControl.tunnelUrl` falls back to `http://proxy.armadago.ai:7893/tunnel`; set it to your proxy's
+  `/tunnel` URL, or disable `remoteControl.enabled`
 
 ### Invalid tunnel scheme
 
@@ -231,7 +228,8 @@ Symptoms:
 
 Fix:
 
-- check `instanceId` presence
+- verify `remoteControl.password` matches `ArmadaProxy.password` (a mismatch fails the password proof)
+- verify the Admiral clock is close to the proxy clock (the password proof is timestamped)
 - verify `ArmadaProxy.requireEnrollmentToken`
 - verify the instance `remoteControl.enrollmentToken`
 - verify the token exists in `ArmadaProxy.enrollmentTokens`
@@ -287,14 +285,3 @@ The Admiral serves only the generic relay methods over the tunnel:
 The older feature-specific methods (`armada.instance.*`, `armada.fleets.list`, `armada.mission.create`, and the rest)
 were removed; any other method returns `404` with error code `unsupported_method`. See
 [TUNNEL_PROTOCOL.md](TUNNEL_PROTOCOL.md#unsupported-methods).
-
----
-
-## Release Notes
-
-The `v0.7.0 -> v0.9.0` release adds Armada backlog/objective normalization schema changes on the server side.
-
-`Armada.Server` applies those schema migrations automatically on first startup after upgrade. If you need a controlled DBA-managed rollout, the versioned handoff scripts in `migrations/` emit the backend-specific SQL and precheck guidance:
-
-- `migrations/migrate_v0.7.0_to_v0.8.0.sh`
-- `migrations/migrate_v0.7.0_to_v0.8.0.bat`

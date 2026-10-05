@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Work relative to this script (docker/armada/factory) so it is safe to run from any directory.
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
 echo "========================================"
 echo " Armada Factory Reset"
 echo "========================================"

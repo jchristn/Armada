@@ -27,7 +27,7 @@ bootstrap_agent() {
 
 echo
 echo "[install-launchd-agent] Publishing Armada.Server..."
-"${SCRIPT_DIR}/publish-server.sh"
+"${SCRIPT_DIR}/publish-server.sh" "$@"
 
 mkdir -p "${PLIST_DIR}" "${LOG_DIR}"
 

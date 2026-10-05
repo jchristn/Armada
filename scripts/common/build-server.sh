@@ -13,7 +13,7 @@ if [ -z "$TAG" ]; then
         -f src/Armada.Server/Dockerfile \
         -t jchristn77/armada-server:latest \
         --push \
-        .
+        . || exit 1
 else
     echo "Building jchristn77/armada-server:latest and jchristn77/armada-server:${TAG}"
     docker buildx build \
@@ -22,14 +22,14 @@ else
         -t jchristn77/armada-server:latest \
         -t "jchristn77/armada-server:${TAG}" \
         --push \
-        .
+        . || exit 1
 fi
 
 # Pull the pushed image back into the local registry (from Docker Hub, not the
 # builder) so the same tags are available locally as well.
 echo "Pulling jchristn77/armada-server:latest into local registry"
-docker pull jchristn77/armada-server:latest
+docker pull jchristn77/armada-server:latest || exit 1
 if [ -n "$TAG" ]; then
     echo "Pulling jchristn77/armada-server:${TAG} into local registry"
-    docker pull "jchristn77/armada-server:${TAG}"
+    docker pull "jchristn77/armada-server:${TAG}" || exit 1
 fi
