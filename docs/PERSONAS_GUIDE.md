@@ -34,11 +34,11 @@ agent. Changing the persona changes the instructions, which changes the behavior
 
 ```
 Fleet
-  └── Vessel (repository)
-        └── Voyage (batch of work)
-              └── Mission (single task)
-                    └── Persona (agent role for this mission)
-                          └── Prompt Template (instructions text)
+  +-- Vessel (repository)
+        +-- Voyage (batch of work)
+              +-- Mission (single task)
+                    +-- Persona (agent role for this mission)
+                          +-- Prompt Template (instructions text)
 ```
 
 A persona is a property of the **mission**, not the captain. Any captain can fill any

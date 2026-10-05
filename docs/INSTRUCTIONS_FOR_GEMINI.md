@@ -312,5 +312,5 @@ If you were launched by Armada as a worker agent (not the orchestrator), these r
 - Make **focused, minimal changes** -- only what the mission asks
 - **Commit your work** with clear messages -- the admiral tracks your progress via commits
 - Do NOT push, create PRs, switch branches, or modify git config -- Armada handles all of that
-- You run with `--sandbox none` by default -- full filesystem access. This is configurable via the captain's `SandboxMode` property. Stay within your worktree.
+- You run with `--approval-mode yolo` by default -- all tool calls are auto-approved. The captain's `autoApprove` switch changes this to `auto_edit`. Stay within your worktree.
 - If you hit a blocking error, describe it clearly in your output and exit -- the orchestrator will see the failure and can redispatch

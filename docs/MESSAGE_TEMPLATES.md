@@ -6,7 +6,7 @@ Armada supports configurable message templates for git commit messages, pull req
 
 | Surface | Mechanism | Deterministic? |
 |---------|-----------|----------------|
-| Agent commits | Template rendered into agent prompt as instructions | No — agent may not always comply |
+| Agent commits | Template rendered into agent prompt as instructions | No - agent may not always comply |
 | PR descriptions | Server appends rendered template to PR body | Yes |
 | Merge commits | Server passes rendered message to `git merge` | Yes |
 
@@ -148,7 +148,7 @@ Edit `~/.armada/settings.json`:
 
 ## Examples
 
-### Minimal — mission ID only
+### Minimal: mission ID only
 
 ```json
 {
@@ -160,7 +160,7 @@ Edit `~/.armada/settings.json`:
 }
 ```
 
-### Verbose — all IDs with names
+### Verbose: all IDs with names
 
 ```json
 {
@@ -171,7 +171,7 @@ Edit `~/.armada/settings.json`:
 }
 ```
 
-### Disabled — no metadata
+### Disabled: no metadata
 
 ```json
 {

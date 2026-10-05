@@ -177,26 +177,16 @@ Key fields:
 
 ### On The Proxy
 
-- `GET /api/v1/status/health`
-- `GET /api/v1/instances`
-- `GET /api/v1/instances/{instanceId}`
-- `GET /api/v1/instances/{instanceId}/status/snapshot`
-- `GET /api/v1/instances/{instanceId}/health`
-- `GET /api/v1/instances/{instanceId}/fleets`
-- `GET /api/v1/instances/{instanceId}/vessels`
-- `GET /api/v1/instances/{instanceId}/voyages`
-- `GET /api/v1/instances/{instanceId}/missions`
-- `POST /api/v1/instances/{instanceId}/fleets`
-- `PUT /api/v1/instances/{instanceId}/fleets/{fleetId}`
-- `POST /api/v1/instances/{instanceId}/vessels`
-- `PUT /api/v1/instances/{instanceId}/vessels/{vesselId}`
-- `POST /api/v1/instances/{instanceId}/voyages/dispatch`
-- `DELETE /api/v1/instances/{instanceId}/voyages/{voyageId}`
-- `POST /api/v1/instances/{instanceId}/missions`
-- `PUT /api/v1/instances/{instanceId}/missions/{missionId}`
-- `DELETE /api/v1/instances/{instanceId}/missions/{missionId}`
-- `POST /api/v1/instances/{instanceId}/missions/{missionId}/restart`
-- `POST /api/v1/instances/{instanceId}/captains/{captainId}/stop`
+- `GET /proxy-api/v1/status/health`
+- `GET /proxy-api/v1/instances` (requires a proxy session)
+- `GET /proxy-api/v1/session/context`
+- `POST /proxy-api/v1/session/instance`
+- `POST /proxy-api/v1/session/logout-instance`
+- `ALL /api/v1/*` and the `/ws` WebSocket: relayed to the selected deployment over the tunnel (`401` without a proxy
+  session, `409` without a selected deployment)
+
+The older per-instance routes (`/api/v1/instances/{instanceId}/...`) were removed with the feature-specific tunnel
+methods; see [PROXY_API.md](PROXY_API.md) and [TUNNEL_PROTOCOL.md](TUNNEL_PROTOCOL.md).
 
 Proxy instance states:
 
@@ -289,136 +279,14 @@ Fix:
 
 ## Live Request Notes
 
-The proxy currently supports live requests for:
+The Admiral serves only the generic relay methods over the tunnel:
 
-- `armada.instance.summary`
-- `armada.instance.status`
-- `armada.instance.health`
-- `armada.fleets.list`
-- `armada.fleet.detail`
-- `armada.fleet.create`
-- `armada.fleet.update`
-- `armada.vessels.list`
-- `armada.vessel.detail`
-- `armada.vessel.create`
-- `armada.vessel.update`
-- `armada.activity.recent`
-- `armada.missions.list`
-- `armada.missions.recent`
-- `armada.mission.create`
-- `armada.mission.update`
-- `armada.mission.cancel`
-- `armada.mission.restart`
-- `armada.voyages.list`
-- `armada.voyages.recent`
-- `armada.voyage.dispatch`
-- `armada.voyage.detail`
-- `armada.voyage.cancel`
-- `armada.captain.detail`
-- `armada.captain.stop`
-- `armada.playbooks.list`
-- `armada.playbook.detail`
-- `armada.playbook.create`
-- `armada.playbook.update`
-- `armada.playbook.delete`
-- `armada.backlog.list`
-- `armada.backlog.detail`
-- `armada.backlog.create`
-- `armada.backlog.update`
-- `armada.backlog.delete`
-- `armada.objective-refinement-sessions.list`
-- `armada.objective-refinement-sessions.create`
-- `armada.objective-refinement-session.detail`
-- `armada.objective-refinement-session.message`
-- `armada.objective-refinement-session.summarize`
-- `armada.objective-refinement-session.apply`
-- `armada.objective-refinement-session.stop`
-- `armada.objective-refinement-session.delete`
-- `armada.planning-sessions.list`
-- `armada.planning-session.detail`
-- `armada.planning-session.create`
-- `armada.planning-session.message`
-- `armada.planning-session.summarize`
-- `armada.planning-session.dispatch`
-- `armada.planning-session.stop`
-- `armada.planning-session.delete`
-- `armada.workflow-profiles.list`
-- `armada.workflow-profile.detail`
-- `armada.workflow-profile.create`
-- `armada.workflow-profile.update`
-- `armada.workflow-profile.delete`
-- `armada.check-runs.list`
-- `armada.check-run.detail`
-- `armada.check-run.create`
-- `armada.check-run.retry`
-- `armada.check-run.delete`
-- `armada.environments.list`
-- `armada.environment.detail`
-- `armada.environment.create`
-- `armada.environment.update`
-- `armada.environment.delete`
-- `armada.releases.list`
-- `armada.release.detail`
-- `armada.release.create`
-- `armada.release.update`
-- `armada.release.refresh`
-- `armada.release.delete`
-- `armada.deployments.list`
-- `armada.deployment.detail`
-- `armada.deployment.create`
-- `armada.deployment.update`
-- `armada.deployment.approve`
-- `armada.deployment.deny`
-- `armada.deployment.verify`
-- `armada.deployment.rollback`
-- `armada.deployment.delete`
-- `armada.incidents.list`
-- `armada.incident.detail`
-- `armada.incident.create`
-- `armada.incident.update`
-- `armada.incident.delete`
-- `armada.runbooks.list`
-- `armada.runbook.detail`
-- `armada.runbook.create`
-- `armada.runbook.update`
-- `armada.runbook.delete`
-- `armada.runbook-executions.list`
-- `armada.runbook-execution.detail`
-- `armada.runbook-execution.create`
-- `armada.runbook-execution.update`
-- `armada.runbook-execution.delete`
-- `armada.captain.tools`
-- `armada.request-history.list`
-- `armada.request-history.detail`
-- `armada.request-history.summary`
-- `armada.workspace.status`
-- `armada.workspace.tree`
-- `armada.workspace.file`
-- `armada.workspace.search`
-- `armada.workspace.changes`
-- `armada.pipelines.list`
-- `armada.pipeline.detail`
-- `armada.personas.list`
-- `armada.persona.detail`
-- `armada.prompt-templates.list`
-- `armada.prompt-template.detail`
-- `armada.voyage.cancel`
-- `armada.captains.recent`
-- `armada.captain.stop`
-- `armada.mission.detail`
-- `armada.mission.log`
-- `armada.mission.diff`
-- `armada.voyage.detail`
-- `armada.captain.detail`
-- `armada.captain.log`
-- `armada.status.snapshot`
-- `armada.status.health`
+- `armada.http.request` (dashboard REST traffic for `/api/v1/*`)
+- `armada.ws.open`, `armada.ws.message`, `armada.ws.close` (the dashboard `/ws` WebSocket)
 
-The remote shell uses simple browser confirmation prompts before destructive actions such as mission cancellation, voyage cancellation, mission restart, and captain stop. These are operator safety rails, not a substitute for the future delegated identity and policy model.
-
-If the instance is offline, those endpoints return an error instead of cached data.
-
-Recent forwarded events are retained in memory only and are bounded by `maxRecentEvents`.
+The older feature-specific methods (`armada.instance.*`, `armada.fleets.list`, `armada.mission.create`, and the rest)
+were removed; any other method returns `404` with error code `unsupported_method`. See
+[TUNNEL_PROTOCOL.md](TUNNEL_PROTOCOL.md#unsupported-methods).
 
 ---
 

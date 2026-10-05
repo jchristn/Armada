@@ -4,7 +4,7 @@ Connect [OpenCode](https://opencode.ai) to Armada's MCP server and use natural l
 
 ## Prerequisites
 
-1. **Armada installed** -- `dotnet tool install -g armada`
+1. **Armada installed** -- `dotnet tool install -g Armada.Helm`
 2. **OpenCode installed** -- install the `opencode` CLI and confirm it is on your PATH with `opencode --version`. Authenticate at least one provider with `opencode providers login` so runs can reach a model.
 3. **At least one vessel registered** -- a git repository for agents to work in.
 
@@ -49,7 +49,7 @@ With the config loaded, OpenCode can call all of Armada's `armada` MCP tools (`s
 
 ## Default Permission Mode
 
-Armada runs OpenCode captains headless with `opencode run --auto` by default, so permissions that are not explicitly denied are auto-approved without prompts. Keep destructive operations inside the worktree.
+Armada runs OpenCode captains headless with `opencode run --auto` by default, so permissions that are not explicitly denied are auto-approved without prompts. Keep destructive operations inside the worktree. To run a captain without it, untick **Auto-approve agent tool use** when editing the captain in the dashboard (or pass `autoApprove: false` to the `create_captain` / `update_captain` MCP tools); the captain then runs without `--auto`.
 
 ## Verify It Works
 

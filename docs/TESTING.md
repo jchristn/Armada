@@ -17,145 +17,132 @@ dotnet test src/Test.Nunit --framework net10.0
 # Run a targeted subset by suite-id prefix
 ARMADA_TEST_SUITES="Database,Services.MergeQueue" dotnet run --project src/Test.Automated --framework net10.0
 
-# React dashboard build and smoke tests
+# React dashboard build and smoke tests (node_modules is not committed)
 cd src/Armada.Dashboard
+npm ci
 npm run build
 npm run test:run
 cd ../..
 ```
 
-Database-driver coverage runs against SQLite in-process by default. The PostgreSQL, MySQL, and SQL
-Server drivers are exercised by the same descriptors when those backends are available.
+Database-backed tests run against SQLite in-process by default. The PostgreSQL, MySQL, and SQL Server
+drivers are exercised by the same descriptors through `--db-*` (see [Multi-Database Testing](#multi-database-testing)).
 
 ## Test Projects
 
 | Project | What It Covers |
 |---------|----------------|
-| `src/Test.Shared` | The shared descriptor library: all ~2,200 test cases (models, database drivers, services, runtimes, and end-to-end REST/MCP/WebSocket lifecycle), plus the test infrastructure (fixtures, stubs, `TestDatabaseHelper`). Depends only on `Touchstone.Core`. |
-| `src/Test.Automated` | Console/CLI runner (Touchstone.Cli) that executes every suite and prints per-test results; the primary way to run the full suite. |
+| `src/Test.Shared` | The shared descriptor library: every test case (about 2,950: models, database drivers, services, runtimes, the client contract, the terminal UI, the upgrade path, and end-to-end REST/MCP/WebSocket lifecycle), plus the test infrastructure (fixtures, stubs, `TestDatabaseHelper`, `TestTemp`). Depends on `Touchstone.Core`. |
+| `src/Test.Automated` | Console runner (`Touchstone.Cli`) that executes every discovered suite and prints per-test results; the primary way to run the full suite. |
 | `src/Test.Xunit` | Runs the shared descriptors through the xUnit adapter (VSTest / IDE integration). |
 | `src/Test.Nunit` | Runs the shared descriptors through the NUnit adapter (VSTest / IDE integration). |
-| `Armada.Dashboard` Vitest suite | React component and page smoke tests. |
+| `Armada.Dashboard` Vitest suite | React component and page smoke tests (`npm run test:run`). |
 
 ## How It Works
 
-No test framework (xUnit, NUnit, MSTest) is used. Each test project is a console app that runs tests sequentially and reports results.
+Tests are written once as runner-agnostic [Touchstone](https://www.nuget.org/packages/Touchstone.Core) descriptors
+and run unchanged by the console runner and the xUnit and NUnit adapters. The React dashboard is the exception: it
+uses `vitest` plus Testing Library for browser-surface smoke and interaction tests.
 
-The React dashboard is the exception: it uses `vitest` plus Testing Library for browser-surface smoke tests and interaction tests.
+- **Suites are discovered by reflection.** `ArmadaTestSuites` finds every non-abstract class in `Test.Shared` that
+  implements `IArmadaTestSuite`, constructs it through its public parameterless constructor, and calls `Build()`.
+  There is no manual registry, so a new suite cannot be left out of a run.
+- **`Build()` returns a `TestSuiteDescriptor`** (a suite id, a display name, the cases, and optional before/after
+  hooks). Each case is a `TestCaseDescriptor` with the suite id, a case id, a display name, and an async body; a case
+  fails by throwing (use the helpers in `Asserts`).
+- **Suites run in suite-id order.**
 
-- `TestSuite` — abstract base class in `Test.Shared`. Each suite groups related tests, provides assertion helpers, and cleans up its own test data.
-- `TestRunner` — orchestrates suites, prints colored results, generates summary with failed test details.
-- `RunTest(name, action)` — wraps each test with a Stopwatch. Prints PASS/FAIL with elapsed milliseconds. Catches exceptions and records failure details.
+### Suite ids
 
-## Output
+A suite id is a dotted name whose first segment is the area and whose folder under `src/Test.Shared/Suites/` matches:
+`Client.*`, `Database.*`, `E2E.*`, `Models.*`, `Runtimes.*`, `Services.*`, `Tui.*`, and `Upgrade.*` (for example
+`Database.VesselDatabase`, `Services.MergeQueue`, `E2E.ApiContract`, `Models.DashboardCodeList`). Keep ids unique and
+name new suites after the class they cover, so a prefix filter selects a meaningful group.
 
-```
-================================================================================
-ARMADA AUTOMATED TEST SUITE
-================================================================================
+### Selecting suites
 
---- Fleet API Tests ---
-  PASS  Create Fleet (12ms)
-  PASS  Read Fleet (8ms)
-  PASS  Update Fleet (15ms)
-  PASS  Delete Fleet (6ms)
-  ...
+`ARMADA_TEST_SUITES` takes a comma-separated list of suite-id prefixes (case-insensitive) and limits the run to the
+suites whose id starts with one of them. It is read when the suites are built, so it works the same for the console
+runner and the xUnit and NUnit adapters. The console runner's `--suites <prefixes>` sets the same variable.
 
---- Captain API Tests ---
-  PASS  Create Captain (14ms)
-  ...
-
-================================================================================
-TEST SUMMARY
-================================================================================
-Total: 781  Passed: 781  Failed: 0  Runtime: 42150ms
-
-================================================================================
-RESULT: PASS
-================================================================================
+```bash
+ARMADA_TEST_SUITES=E2E dotnet run --project src/Test.Automated --framework net10.0
+dotnet run --project src/Test.Automated --framework net10.0 -- --suites Database,Services.MergeQueue
 ```
 
 ## Command-Line Options
 
+`Test.Automated` accepts these arguments after `--`:
+
+| Argument | Description |
+|----------|-------------|
+| `--suites <prefixes>` | Comma-separated suite-id prefixes; sets `ARMADA_TEST_SUITES` |
+| `--results <path>` | Write the run results to a file |
+| `--db-type <type>` | Database provider: `sqlite` (default), `postgresql`, `mysql`, or `sqlserver`; sets `ARMADA_TEST_DB_TYPE` |
+| `--db-host <host>` | Server hostname (default `127.0.0.1`); sets `ARMADA_TEST_DB_HOST` |
+| `--db-port <port>` | Server port (default: the provider's); sets `ARMADA_TEST_DB_PORT` |
+| `--db-user <user>` | Server username; sets `ARMADA_TEST_DB_USER` |
+| `--db-pass <password>` | Server password; sets `ARMADA_TEST_DB_PASS` |
+| `--db-name <name>` | Base database name (default `armada_test`); each test derives a uniquely suffixed database from it; sets `ARMADA_TEST_DB_NAME` |
+| `--generate-api-surface <dir>` | Run no tests: boot a throwaway Admiral and rewrite `api-surface-1.0.json` and `API_SURFACE_1.0.md` in `<dir>` (used by `scripts/common/generate-api-surface.sh`) |
+
+The xUnit and NUnit adapters take no arguments; set the `ARMADA_TEST_*` environment variables instead.
+
 ```bash
-# Run with default settings (temporary SQLite database, cleaned up after execution)
+# Default: SQLite, no connection arguments needed
 dotnet run --project src/Test.Automated --framework net10.0
 
-# Keep test database after run (for debugging)
-dotnet run --project src/Test.Automated --framework net10.0 -- --no-cleanup
-
-# Run only one automated suite by name fragment
-dotnet run --project src/Test.Automated --framework net10.0 -- --suite "Request History"
-
-# Focus on delivery and real-time surfaces
-dotnet run --project src/Test.Automated --framework net10.0 -- --suite "MCP"
-dotnet run --project src/Test.Automated --framework net10.0 -- --suite "WebSocket"
-dotnet run --project src/Test.Automated --framework net10.0 -- --suite "Release"
-dotnet run --project src/Test.Automated --framework net10.0 -- --suite "Objectives"
-dotnet run --project src/Test.Automated --framework net10.0 -- --suite "GitHub Integration"
-dotnet run --project src/Test.Automated --framework net10.0 -- --suite "Environment"
-dotnet run --project src/Test.Automated --framework net10.0 -- --suite "Deployment"
-dotnet run --project src/Test.Automated --framework net10.0 -- --suite "Checks"
-
-# Test against PostgreSQL instead of default temp SQLite
-dotnet run --project src/Test.Automated --framework net10.0 -- --type postgresql -h localhost -u postgres -w secret -d armada_test
-
-# Test against SQL Server
-dotnet run --project src/Test.Automated --framework net10.0 -- --type sqlserver -h localhost --port 1433 -u sa -w secret -d armada_test
-
-# Test against MySQL
-dotnet run --project src/Test.Automated --framework net10.0 -- --type mysql -h localhost --port 3306 -u root -w secret -d armada_test
+# The Database suites against PostgreSQL
+dotnet run --project src/Test.Automated --framework net10.0 -- --suites Database \
+  --db-type postgresql --db-host localhost --db-port 5432 --db-user postgres --db-pass secret --db-name armada_test
 ```
-
-### Database Arguments
-
-| Argument | Short | Description | Default |
-|----------|-------|-------------|---------|
-| `--type` | | Database backend: `sqlite`, `postgresql`, `sqlserver`, `mysql` | Temporary SQLite |
-| `--filename` | | SQLite database file path | Temp file (auto-cleaned) |
-| `--hostname` | `-h` | Database server hostname | `localhost` |
-| `--port` | | Database server port | Backend default |
-| `--username` | `-u` | Database username | — |
-| `--password` | `-w` | Database password | — |
-| `--database` | `-d` | Database name | — |
-| `--schema` | | Database schema | Backend default |
-
-If no `--type` is provided, both Test.Automated and Test.Database default to a temporary SQLite database that is automatically cleaned up after execution.
-
-`Test.Automated` also supports `--suite <name>` to run only suites whose display name or type name contains the supplied text.
 
 ## Multi-Database Testing
 
-Armada supports four database backends: SQLite, PostgreSQL, SQL Server, and MySQL. The testing strategy covers databases at two layers:
+Armada supports four database backends: SQLite, PostgreSQL, SQL Server, and MySQL. Every DB-backed test reads its
+provider from `TestDatabaseConfig` (the `ARMADA_TEST_DB_*` variables), so the same descriptors run against any of
+them. `scripts/common/run-db-parity-tests.sh` runs the `Database` suites against all four: SQLite in process and
+each server provider in a throwaway Docker container on a random host port that is removed afterward.
 
-- **Test.Database** exhaustively tests the database driver layer directly, running CRUD operations for core orchestration entities plus newer delivery entities such as workflow profiles, check runs, objectives, environments, deployments, and releases against each backend.
-- **Test.Automated** tests the full stack (REST API, MCP tools, WebSocket) and can now target any database backend via the `--type` argument.
-- **Dashboard Vitest** now includes first-class delivery/tooling smoke coverage for Workspace, Planning, History, Request History, API Explorer, Checks, Objectives, and Releases.
-- **Incident coverage** now exercises rollback-linked incident context through both unit and automated REST suites.
+```bash
+scripts/common/run-db-parity-tests.sh                       # all four providers
+scripts/common/run-db-parity-tests.sh --providers sqlite,postgresql
+```
 
-### CI Recommendations
-
-- Run **Test.Database** against all 4 backends to ensure driver correctness across SQLite, PostgreSQL, SQL Server, and MySQL.
-- Run **Test.Automated** at minimum against SQLite (fast, no external dependencies) plus one server-based backend (e.g., PostgreSQL) to verify full-stack behavior with a real database server.
-
-### Connection Pooling
-
-Test runs create and dispose many database connections rapidly. When testing against server-based backends, be aware that connection pooling settings affect test behavior. The default pool sizes are generally sufficient for test runs, but if you see connection timeouts or failures under heavy parallel test execution, consider increasing the pool size or running test suites sequentially.
+Run the full suite at least against SQLite, and run the parity script for any change that touches the schema or a
+database driver.
 
 ## Test Data Isolation
 
-Each test suite creates its own data, asserts only on that data, and cleans up after itself. Suites track created entity IDs and delete them at the end. This pattern is followed by all test projects, including Test.Database. This means:
+Each suite creates its own data, asserts only on that data, and cleans up after itself:
 - Suites never assume the database is empty
 - Suites never assert exact total counts across entity types
 - Suites can run in any order without affecting each other
-- Use `--no-cleanup` to preserve test data after a run for debugging
+
+### TestTemp sandbox
+
+`TestTemp` owns every temp file and directory the tests create. All of them live under the system temp directory with
+the `armada_` prefix. When the test assembly loads (a module initializer, so it applies to all three runners) it:
+
+- sweeps `armada_*` entries older than two hours left by earlier runs that were killed before cleanup (fresher
+  entries are kept, so a concurrent run is not disturbed);
+- arms a process-exit hook that deletes everything created through `TestTemp.NewDirectory`, `TestTemp.NewFile`, or
+  registered with `TestTemp.Track`;
+- sandboxes the user profile: `ARMADA_DATA_DIR`, `ARMADA_TUI_PREFERENCES`, and `ARMADA_TUI_CREDENTIALS` point into a
+  per-run directory and `ARMADA_TUI_CREDENTIAL_STORE` is `file`, so tests never read or write the real `~/.armada`
+  or the OS keychain (the run fails fast if the profile default was already resolved);
+- pins the git line-ending settings for every git process the run starts (see below).
+
+Create temp paths only through `TestTemp`, never with `Path.GetTempPath()` directly.
 
 ## Host Independence
 
 Results must not depend on the machine running the tests:
-- The in-process test servers (`E2EServerFixture`, `SecurityTestServer`, `InProcessArmadaServer`) replace every CLI agent runtime (Claude Code, Codex, Gemini, Cursor, Mux, OpenCode) with `StubAgentProcesses`, which launches a long-running `sleep` (`ping` on Windows) the test owns. Dispatch behaves the same whether or not an agent CLI is installed, and tests never start a real agent.
+- No real agent CLIs. The in-process test servers (`E2EServerFixture`, `SecurityTestServer`, `InProcessArmadaServer`) replace every CLI agent runtime (Claude Code, Codex, Gemini, Cursor, Mux, OpenCode) with `StubAgentProcesses`, which launches a long-running `sleep` (`ping` on Windows) the test owns. Dispatch behaves the same whether or not an agent CLI is installed, no model is called, and tests never start a real agent. Other stubs (`StubCaptainRuntime`, `StubAskTurnRunner`, `StubGitService`, `StubHostCommandExecutor`, `StubHttpHandler`) stand in for model calls, git, host commands, and outbound HTTP where a suite needs them.
+- No user configuration and no desktop side effects. The profile sandbox above keeps tests away from `~/.armada`, the keychain, and the real settings; tests do not open browsers, notifications, or other desktop surfaces.
 - Every git process the run starts (test helpers and product code) gets `core.autocrlf=false` and `core.eol=lf` through `GIT_CONFIG_COUNT` (`TestGitEnvironment`), so a host or runner setting such as `core.autocrlf=true` cannot change checked-out file contents.
-- Wait for conditions, not durations: poll for the state the test needs (a job finished, a request recorded) with a deadline, or wait on a signal from the stub (for example `FakeHealthCriterion.FirstEvaluationStarted`).
+- Wait for conditions, not durations: poll for the state the test needs (a job finished, a request recorded) with a deadline (`MonotonicDeadline`, `JobWait`), or wait on a signal from the stub (for example `FakeHealthCriterion.FirstEvaluationStarted`). No fixed sleeps and no absolute performance thresholds.
+- Ports come from `TestPorts` (random loopback ports in 20000-31999, never reused within a process, with 21000-21099 and 25000-25099 left for manually started servers), never hard-coded, so parallel runs and a running Admiral do not collide.
 
 ## API Contract Test
 
@@ -172,8 +159,10 @@ See [COMPATIBILITY.md](COMPATIBILITY.md).
 
 ## Adding Tests
 
-1. Find or create the appropriate suite in `Suites/`
-2. Add a call to `RunTest("Test Name", async () => { ... })` inside the suite's `RunTestsAsync()` method
-3. Use assertion helpers: `Assert()`, `AssertEqual()`, `AssertNotNull()`, `AssertTrue()`, `AssertStatusCode()`
-4. Track any created entity IDs and delete them in the suite's cleanup section
-5. Register new suites in `Program.cs` via `runner.AddSuite(new YourTests(...))`
+1. Find the suite for the area in `src/Test.Shared/Suites/<Area>/`, or add a class that implements `IArmadaTestSuite`
+   with a public parameterless constructor and a suite id that starts with the area (for example `Services.MyFeature`).
+   Reflection discovery picks it up; there is nothing to register.
+2. Add a `TestCaseDescriptor` to the list `Build()` returns. Fail by throwing; use the helpers in `Asserts`.
+3. Track any created entities and temp paths (`TestTemp`) and clean them up in the case or the suite's after hook.
+4. Run just your suite with `ARMADA_TEST_SUITES=<suite id> dotnet run --project src/Test.Automated --framework net10.0`,
+   then the full suite.

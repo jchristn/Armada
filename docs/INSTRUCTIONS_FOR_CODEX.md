@@ -312,5 +312,5 @@ If you were launched by Armada as a worker agent (not the orchestrator), these r
 - Make **focused, minimal changes** -- only what the mission asks
 - **Commit your work** with clear messages -- the admiral tracks your progress via commits
 - Do NOT push, create PRs, switch branches, or modify git config -- Armada handles all of that
-- You run with `--approval-mode full-auto` by default -- all commands auto-approved. This is configurable via the captain's `ApprovalMode` property. Avoid destructive operations outside your worktree.
+- You run non-interactively (`codex exec`) with `--sandbox workspace-write` by default (`--dangerously-bypass-approvals-and-sandbox` on Windows) -- commands run without approval prompts. The captain's `autoApprove` switch keeps you in the workspace sandbox. Avoid destructive operations outside your worktree.
 - If you hit a blocking error, describe it clearly in your output and exit -- the orchestrator will see the failure and can redispatch
