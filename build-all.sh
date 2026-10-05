@@ -3,7 +3,7 @@ set -euo pipefail
 
 if [ -z "${1:-}" ]; then
     echo "Usage: build-all.sh <tag>"
-    echo "Example: build-all.sh v0.9.0"
+    echo "Example: build-all.sh v1.0.0"
     exit 1
 fi
 

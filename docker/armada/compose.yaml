@@ -11,10 +11,16 @@ services:
       # The Admiral listens on 0.0.0.0 in the container and refuses to start while the default admin
       # password is in use. Set this before the first start (for example in a .env file next to this file).
       - ARMADA_INITIAL_ADMIN_PASSWORD=${ARMADA_INITIAL_ADMIN_PASSWORD:?Set ARMADA_INITIAL_ADMIN_PASSWORD (8+ characters) before the first start}
+      # - GIT_CONFIG_GLOBAL=/app/data/gitconfig
     volumes:
       - ./armada.json:/app/data/settings.json
       - ./db:/app/data/db
       - ./logs:/app/data/logs
+      # To use a host checkout as a vessel, mount it and trust its container path in a gitconfig named by
+      # GIT_CONFIG_GLOBAL (it is owned by your host user, not the container's UID 1654, and git refuses it
+      # otherwise). See docs/DOCKER.md, "Vessels from repositories mounted into the container".
+      # - ./gitconfig:/app/data/gitconfig:ro
+      # - /path/to/myproject:/repos/myproject
     healthcheck:
       test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:7890/api/v1/status/health"]
       interval: 5s

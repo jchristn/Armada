@@ -94,6 +94,10 @@ jobs:
         run: |
           dotnet run --project src/Armada.Publisher -c Release -- --channel dmg-harbor  --version ${{ needs.version.outputs.version }}
           dotnet run --project src/Armada.Publisher -c Release -- --channel pkg-server  --version ${{ needs.version.outputs.version }}
+      # Layout, Info.plist (LSUIElement, version), icon, signature, and --install-startup --dry-run of the built app.
+      # Reports whether the images are notarized; add --require-notarized once the Apple secrets are configured.
+      - name: Verify the Harbor .app and .dmg
+        run: bash scripts/macos/build-harbor-app.sh --no-build --version ${{ needs.version.outputs.version }} --output artifacts/packages/dmg-harbor
       - uses: actions/upload-artifact@v4
         with:
           name: macos

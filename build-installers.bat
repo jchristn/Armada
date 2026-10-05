@@ -8,7 +8,7 @@ rem  on Windows; run build-installers.sh on those platforms, or push a tag to le
 rem  the CI matrix build all three operating systems at once.
 rem
 rem  Usage: build-installers.bat <version>
-rem  Example: build-installers.bat 0.9.0
+rem  Example: build-installers.bat 1.0.0
 rem ============================================================================
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
@@ -16,7 +16,7 @@ cd /d "%~dp0"
 set "VERSION=%~1"
 if "%VERSION%"=="" (
   echo Usage: build-installers.bat ^<version^>
-  echo Example: build-installers.bat 0.9.0
+  echo Example: build-installers.bat 1.0.0
   exit /b 1
 )
 

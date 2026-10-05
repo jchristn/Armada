@@ -7,7 +7,7 @@ or [DOCKER.md](DOCKER.md); for moving between versions, read [UPGRADING.md](UPGR
 
 Most settings named below live in the Admiral's settings file. On a single box that is `~/.armada/settings.json`
 (the data directory can be moved with the `ARMADA_DATA_DIR` environment variable). In the Docker stack it is
-`docker/armada/armada.json`, mounted into the container at `/app/data/armada.json`. Changes to the settings file
+`docker/armada/armada.json`, mounted into the container at `/app/data/settings.json`. Changes to the settings file
 take effect on the next server start.
 
 ## Deployment topologies
@@ -35,7 +35,10 @@ binds `0.0.0.0`, so the published ports are reachable from other hosts on the ne
 
 Be clear about what the container can do: the server image includes `git` but no agent CLIs, so a containerized
 Admiral in Local mode can run missions on API-endpoint captains (the tool loop runs inside the Admiral) but not on
-Claude Code, Codex, or the other CLI runtimes. For CLI captains from a container, use split mode below. The
+Claude Code, Codex, or the other CLI runtimes. For CLI captains from a container, use split mode below. A vessel
+whose repository is a host checkout mounted into the container needs that path trusted for git (the files belong to
+your host user, not the container's UID 1654); [DOCKER.md](DOCKER.md#vessels-from-repositories-mounted-into-the-container)
+shows the `GIT_CONFIG_GLOBAL` setup. The
 standalone dashboard on port 3000 proxies the API and WebSocket to the Admiral, so it needs no extra configuration. [DOCKER.md](DOCKER.md) covers volumes, building images, and factory reset;
 `docker/update.sh` (or `docker/update.bat`) pulls the latest images and recreates the stack without touching
 volumes.
@@ -145,10 +148,15 @@ fills a disk.
 | Fleet action runs | `fleetActions.runRetentionDays` (1 to 3650) | 30 days |
 | Server rebuild slots | `rebuildSlotRetentionCount` | 3 |
 | Captain log files | `maxLogFileSizeBytes`, `maxLogFileCount` (rotation) | 10 MB, 5 files |
+| Inactive Ask threads (pinned threads are kept) | `retention.askThreadArchiveAfterDays`, `retention.askThreadDeleteAfterDays` (0 disables each) | archive after 90 days; never delete |
+| Finished background jobs (the newest of each kind is kept) | `retention.jobRetentionDays` (0 disables) | 30 days |
+| Finished vessel import batches | `retention.importBatchRetentionDays` (0 disables) | 90 days |
+| Pre-migration database backups | `database.migrationBackupRetentionCount` | 5 |
 
-Ask threads and messages, vessel health findings history, and vessel import batches are not pruned today and grow
-without bound; settings for them are tracked as W3.4 in [V1_READINESS.md](../V1_READINESS.md). On a busy install,
-check the size of the database and of `~/.armada/logs` monthly. Request history capture can be turned off entirely
+Vessel health findings history is not pruned today and grows with the evaluation schedule. Completed voyages,
+missions, signals, and events expire on SQLite only (`dataRetentionDays`); on PostgreSQL, MySQL, and SQL Server prune
+them with your own database jobs. On a busy install, check the size of the database and of `~/.armada/logs` monthly.
+Request history capture can be turned off entirely
 with `requestHistoryEnabled: false`.
 
 ## Telemetry
@@ -211,9 +219,14 @@ default).
 `missions/<missionId>.log` for the last thing the agent printed; an expired agent login or a usage limit is the most
 common cause, and the captain is quarantined for `captainQuarantineMinutes` after one.
 
-**The Docker container exits with database permission errors.** The container user must be able to write
-`docker/armada/db` and `docker/armada/logs`. Fix the ownership on the host rather than loosening permissions to world
-writable.
+**The Docker container exits with database permission errors.** The container user (UID 1654) must be able to
+write `docker/armada/db` and `docker/armada/logs`. Fix the ownership on the host (`sudo chown -R 1654:1654
+docker/armada/db docker/armada/logs`) rather than loosening permissions to world writable.
+
+**Docker missions stay Pending and `admiral.log` shows `detected dubious ownership`.** The vessel's repository is a
+path mounted from the host, so it is owned by another user than the container's, and git refuses it. Trust the path
+as described in [DOCKER.md](DOCKER.md#vessels-from-repositories-mounted-into-the-container). Setting
+`safe.directory` through `GIT_CONFIG_COUNT` / `GIT_CONFIG_KEY_0` or `git -c` does not work for this case.
 
 **The instance does not appear in the proxy.** Work through the failure modes in
 [TUNNEL_OPERATIONS.md](TUNNEL_OPERATIONS.md#common-failure-modes): a wrong scheme in `tunnelUrl`, a password mismatch,
@@ -305,7 +318,7 @@ already running.
 | Platform | Login item |
 |----------|------------|
 | Windows | Value `Armada Harbor` under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. The Inno installer runs `--install-startup` as the user who started Setup |
-| macOS | `~/Library/LaunchAgents/com.joelchristner.armada.harbor.plist` with `RunAtLoad` and no `KeepAlive`, so quitting from the tray keeps it closed. The `.dmg` has no installer step; run `"/Applications/Armada Harbor.app/Contents/MacOS/Armada.Harbor" --install-startup` once |
+| macOS | `~/Library/LaunchAgents/com.joelchristner.armada.harbor.plist` with `RunAtLoad` and no `KeepAlive`, so quitting from the menu bar keeps it closed. It runs the binary inside the bundle with `--minimized`, so Harbor starts as a menu bar icon only (the bundle sets `LSUIElement`). The `.dmg` has no installer step; run `"/Applications/Armada Harbor.app/Contents/MacOS/Armada.Harbor" --install-startup` once after copying the app to Applications (the item records the path it was run from) |
 | Linux | `~/.config/autostart/armada-harbor.desktop` (honors `XDG_CONFIG_HOME`). The Deb/Rpm package does not register it for you; run `armada-harbor --install-startup` as yourself |
 
 The Windows paths of both programs (the service host, `sc.exe`, and `reg.exe`) are covered by tests of the exact

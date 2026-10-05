@@ -10,7 +10,8 @@ name: install-verify
 #   dotnet-tool     the Armada.Helm NuGet global tool on Linux and macOS ("armada server start")
 #   macos-pkg       the pkg-server .pkg payload installed into a temp root, plus --install-service --dry-run
 #   windows         the NuGet global tool and Armada.Server.exe --install-service --dry-run
-#                   (written without a Windows machine; the first green run is the real check)
+#   onboarding      W6.7: the first-run path (tool install, fresh data dir, server start, login, fleet, vessel from
+#                   a local checkout, one mission landed with LocalMerge), timed against the ten-minute goal
 on:
   workflow_dispatch:
   schedule:
@@ -90,6 +91,24 @@ jobs:
             10.0.x
       - name: NuGet global tool install
         run: bash scripts/common/install-verify/verify-dotnet-tool.sh
+
+  onboarding:
+    name: onboarding (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: First-run path, timed
+        run: bash scripts/common/install-verify/verify-onboarding.sh
 
   macos-pkg:
     runs-on: macos-latest

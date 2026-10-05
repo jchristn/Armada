@@ -51,11 +51,13 @@ namespace Armada.Harbor
                 _Window = new MainWindow(_Settings);
                 if (Program.StartMinimized)
                 {
-                    // Started by the login item: stay in the tray, but connect as if the window had opened.
+                    // Started by the login item: stay in the menu bar / tray, but connect as if the window had opened.
+                    MacActivationPolicy.HideFromDock();
                     _Window.StartAutoConnect();
                 }
                 else
                 {
+                    MacActivationPolicy.ShowInDock();
                     _Window.Show();
                 }
 
@@ -114,7 +116,9 @@ namespace Armada.Harbor
 
         private static void ApplyDockIcon()
         {
-            if (!OperatingSystem.IsMacOS()) return;
+            // Inside the .app bundle the Dock uses Contents/Resources/AppIcon.icns; the runtime icon is only the
+            // fallback for dotnet run and the bare executable, which macOS would otherwise show as "exec".
+            if (!OperatingSystem.IsMacOS() || MacActivationPolicy.IsRunningFromBundle()) return;
 
             try
             {
@@ -147,6 +151,7 @@ namespace Armada.Harbor
         private void ShowWindow()
         {
             if (_Window == null) return;
+            MacActivationPolicy.ShowInDock();
             _Window.Show();
             _Window.WindowState = WindowState.Normal;
             _Window.Activate();

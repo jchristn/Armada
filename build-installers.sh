@@ -10,7 +10,7 @@
 #  all three operating systems at once.
 #
 #  Usage:   ./build-installers.sh <version>
-#  Example: ./build-installers.sh 0.9.0
+#  Example: ./build-installers.sh 1.0.0
 # =============================================================================
 set -u
 cd "$(dirname "$0")"
@@ -18,7 +18,7 @@ cd "$(dirname "$0")"
 VERSION="${1:-}"
 if [ -z "$VERSION" ]; then
   echo "Usage: ./build-installers.sh <version>"
-  echo "Example: ./build-installers.sh 0.9.0"
+  echo "Example: ./build-installers.sh 1.0.0"
   exit 1
 fi
 

@@ -42,8 +42,11 @@ namespace Armada.Harbor
         /// <returns>The configured application builder.</returns>
         public static AppBuilder BuildAvaloniaApp()
         {
+            // ShowInDock is applied when Avalonia starts on macOS; a login-item start (--minimized) begins as a
+            // menu-bar-only app, matching LSUIElement in the bundle. App switches the policy as the window opens and closes.
             return AppBuilder.Configure<App>()
                 .UsePlatformDetect()
+                .With(new MacOSPlatformOptions { ShowInDock = !StartMinimized })
                 .LogToTrace();
         }
 

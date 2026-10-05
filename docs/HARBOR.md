@@ -47,12 +47,22 @@ side of the link or debugging a connection.
 
 ## Installing and running the Harbor app
 
-The host runner ships as `src/Armada.Harbor`, an Avalonia desktop app. Build and run it on the machine where
-your repositories and agent logins live:
+The host runner is `src/Armada.Harbor`, an Avalonia tray (menu bar) app. Install it on the machine where your
+repositories and agent logins live:
 
-```bash
-dotnet run --project src/Armada.Harbor
-```
+| Platform | Package | Start at login |
+|---|---|---|
+| macOS | `armada-harbor-<version>-osx-arm64.dmg` (or `-osx-x64`): drag **Armada Harbor** to Applications | `"/Applications/Armada Harbor.app/Contents/MacOS/Armada.Harbor" --install-startup` (once) |
+| Windows | `armada-harbor-<version>-win-x64.exe` (Inno Setup) | Registered by the installer |
+| Linux | `armada-harbor` `.deb` / `.rpm` | `armada-harbor --install-startup` (as yourself) |
+| Any, from source | `dotnet run --project src/Armada.Harbor` | -- |
+
+On macOS, Harbor is a menu bar app (`LSUIElement`): started from the login item it shows only its menu bar icon;
+opening its window (click the icon, or launch it from Applications) adds a Dock icon and app menu, and closing the
+window removes them again while the runner keeps working. Quit it from the menu bar icon. Until the release is signed
+with a Developer ID and notarized, Gatekeeper blocks the first open; see "Signing" in
+[BUILDING_INSTALLERS.md](../BUILDING_INSTALLERS.md). `--install-startup`, `--uninstall-startup`, and `--dry-run` are
+described in [OPERATIONS.md](OPERATIONS.md#harbor---install-startup---uninstall-startup).
 
 On first run the app writes a settings file to `~/.armada-harbor/settings.json` (on Windows,
 `%USERPROFILE%\.armada-harbor\settings.json`), generating a Harbor id and defaulting the name to the machine
@@ -66,7 +76,9 @@ with the default when Harbor saves.
 | `DashboardUrl` | Dashboard URL opened by the app's "Open Dashboard" action. Default `http://127.0.0.1:7890/dashboard`. |
 | `HarborId` | Harbor identifier (`hbr_` prefix). Generated on first run when empty. |
 | `Name` | Human-facing Harbor name. Defaults to the machine name. |
-| `Capabilities` | Runtimes and host tools advertised at handshake (e.g. `git`, `claude`). Drives capability-based routing. |
+| `UserId` / `TenantId` | Owner sent at connect (`x-user-guid`, `x-tenant-guid`). Empty registers no owner. With an `AccessKey`, the credential's tenant and user apply. |
+| `Capabilities` | Runtimes and host tools advertised at handshake (e.g. `git`, `claude`). Default `["git"]`. Drives capability-based routing. |
+| `Appearance` | Window color scheme: `System` (default), `Light`, or `Dark`. |
 | `MaxConcurrentJobs` | Maximum concurrent jobs this Harbor will accept. Default 4. |
 | `HeartbeatIntervalMs` | Heartbeat interval in milliseconds; `0` disables heartbeats. Default 15000. |
 | `AccessKey` / `Secret` | `AccessKey` is an Armada credential (a bearer token from Server > Credentials, or the local API key); the Harbor registers under that credential's tenant and user. Leave it empty only for a Harbor on the same machine as a localhost-bound Admiral; a Harbor connecting from another host is refused without one. `Secret` is not used for authentication today and is never logged. |
