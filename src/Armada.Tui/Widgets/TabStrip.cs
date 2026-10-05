@@ -141,7 +141,10 @@ namespace Armada.Tui.Widgets
                 bool active = i == _Selected;
                 CellStyle style = active ? (IsFocused ? Theme.Selection : Theme.TabActive) : Theme.TabInactive;
                 _Starts.Add(x);
-                x += SurfaceText.Draw(surface, x, 0, active ? "[" + label.Trim() + "]" : label, style, surface.Size.Width - x);
+                // The selected tab is bracketed; while the tab bar itself has focus its brackets become arrows, so the
+                // focused tab reads without color (and the bar's box is drawn focused, see RegionFrames).
+                string shown = active ? (IsFocused ? ">" + label.Trim() + "<" : "[" + label.Trim() + "]") : label;
+                x += SurfaceText.Draw(surface, x, 0, shown, style, surface.Size.Width - x);
                 x += 1;
                 if (x >= surface.Size.Width) break;
             }

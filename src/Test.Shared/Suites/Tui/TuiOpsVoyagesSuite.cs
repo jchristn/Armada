@@ -147,7 +147,7 @@ namespace Test.Shared.Suites.Tui
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI voyages", cases: cases);
         }
 
-        private static StubHttpHandler Stub()
+        internal static StubHttpHandler Stub()
         {
             StubHttpHandler stub = TuiFixtures.SignedInServer();
             stub.Json("GET", "/api/v1/voyages", "{\"Success\":true,\"PageNumber\":1,\"PageSize\":25,\"TotalPages\":1,\"TotalRecords\":2,\"Objects\":[" +

@@ -226,16 +226,21 @@ namespace Armada.Tui.Screens.Operations
 
             List<NotificationEntry> alerts = UnreadAlerts();
             int alertRows = alerts.Count > 0 ? Math.Min(alerts.Count + 2, Math.Max(3, (height - y) / 3)) : 0;
-            int itemsHeight = Math.Max(2, height - y - (alertRows > 0 ? alertRows + 1 : 0));
+            // Both lists are focus regions with a box line above and below (see RegionFrames); the alert list is only
+            // a Tab stop while there are alerts.
+            Alerts.Visible = alertRows > 0;
+            int itemsHeight = Math.Max(2, height - y - (alertRows > 0 ? alertRows + 2 : 0));
+            Rect items = new Rect(0, y, width, itemsHeight);
             if (!Loading && Loaded.Count == 0 && Items.State != GridStateEnum.Error)
             {
+                // Nothing to list: the list's box holds the all-clear message.
                 SurfaceText.Draw(surface, 0, y, Tr("You are all caught up."), Theme.Success.WithAttribute(CellAttributes.Bold, true), width);
                 SurfaceText.Draw(surface, 0, y + 1, Tr("Nothing needs your attention right now."), Theme.Muted, width);
-                Scope.Place(Items, Rect.Empty);
+                Scope.Place(Items, items);
             }
             else
             {
-                Scope.RenderChild(surface, Items, new Rect(0, y, width, itemsHeight));
+                Scope.RenderChild(surface, Items, items);
             }
 
             y += itemsHeight + 1;
@@ -244,8 +249,8 @@ namespace Armada.Tui.Screens.Operations
                 SurfaceText.Draw(surface, 0, y, Tr("Recent alerts"), Theme.Accent, width);
                 string mark = "m " + Tr("Mark all read");
                 SurfaceText.Draw(surface, Math.Max(0, width - TextCells.Width(mark)), y, mark, Theme.Muted, width);
-                y++;
-                if (y < height) Scope.RenderChild(surface, Alerts, new Rect(0, y, width, Math.Min(alertRows - 1, height - y)));
+                y += 2;
+                if (y < height) Scope.RenderChild(surface, Alerts, new Rect(0, y, width, height - y));
             }
         }
 

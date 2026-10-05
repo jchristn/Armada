@@ -113,7 +113,7 @@ namespace Test.Shared.Suites.Tui
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI home and needs you", cases: cases);
         }
 
-        private static StubHttpHandler Stub()
+        internal static StubHttpHandler Stub()
         {
             StubHttpHandler stub = TuiFixtures.SignedInServer();
             stub.Json("GET", "/api/v1/vessels", "{\"Success\":true,\"Objects\":[{\"Id\":\"vsl_demo\",\"Name\":\"DemoRepo\",\"FleetId\":\"flt_1\",\"DefaultBranch\":\"main\"}],\"TotalRecords\":1}");

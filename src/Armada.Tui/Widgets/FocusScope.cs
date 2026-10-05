@@ -149,6 +149,54 @@ namespace Armada.Tui.Widgets
         }
 
         /// <summary>
+        /// Forget where children were placed, here and in every nested <see cref="RegionHost"/> scope, so the next
+        /// render records only what it draws (the shell calls it before each frame; a child that is not drawn then has
+        /// no rectangle, takes no clicks, and gets no focus box).
+        /// </summary>
+        public void ResetPlacements()
+        {
+            foreach (IWidget child in _Children)
+            {
+                if (child is IFocusScopeOwner owner && owner.Scope.RegionHost && !ReferenceEquals(owner.Scope, this)) owner.Scope.ResetPlacements();
+            }
+
+            _Rects.Clear();
+        }
+
+        /// <summary>
+        /// Move focus off a child that can no longer take it (hidden, disabled, or a container left with nothing to
+        /// focus) to the first child that can, here and down the focus path, so focus never rests on something that is
+        /// not drawn. The shell calls it on every frame after the screen has laid itself out.
+        /// </summary>
+        /// <returns>True when focus moved.</returns>
+        public bool RepairFocus()
+        {
+            bool moved = false;
+            FocusScope scope = this;
+            for (int depth = 0; depth < 16; depth++)
+            {
+                IWidget? focused = scope.Focused;
+                if (focused != null && !CanTakeFocus(focused)) moved |= scope.FocusFirst();
+                focused = scope.Focused;
+                if (!(focused is IFocusScopeOwner owner) || ReferenceEquals(owner.Scope, scope)) break;
+                scope = owner.Scope;
+            }
+
+            return moved;
+        }
+
+        /// <summary>
+        /// True when a widget can take focus now: it is focusable and, for Armada widgets, visible and enabled for
+        /// focus. Tab stops and focus regions (<see cref="RegionFrames"/>) use the same test.
+        /// </summary>
+        /// <param name="child">Widget.</param>
+        /// <returns>True for a focus stop.</returns>
+        public static bool IsFocusStop(IWidget? child)
+        {
+            return child != null && CanTakeFocus(child);
+        }
+
+        /// <summary>
         /// The rectangle a child was last placed in, or an empty rectangle.
         /// </summary>
         /// <param name="child">Child.</param>
@@ -296,8 +344,7 @@ namespace Armada.Tui.Widgets
         /// <summary>
         /// The rectangle of the focused sub-region in the owner's coordinates: the focused child's last placement,
         /// descending through children whose scope is a <see cref="RegionHost"/> (a hub's content screen), so the result
-        /// is the deepest region that holds focus. Used to draw the pane border alongside it (see
-        /// <see cref="FocusFrame"/>).
+        /// is the deepest region that holds focus (the region <see cref="RegionFrames"/> draws focused).
         /// </summary>
         /// <returns>The rectangle, or <see cref="Rect.Empty"/> when no focused child has been placed.</returns>
         public Rect FocusedRegion()
@@ -390,8 +437,26 @@ namespace Armada.Tui.Widgets
 
         private static bool CanTakeFocus(IWidget child)
         {
+            return CanTakeFocus(child, 0);
+        }
+
+        private static bool CanTakeFocus(IWidget child, int depth)
+        {
             if (!(child is IFocusable)) return false;
-            if (child is ArmadaWidget aw) return aw.Visible && aw.CanFocus;
+            if (child is ArmadaWidget aw && (!aw.Visible || !aw.CanFocus)) return false;
+            // A plain container (a button row, an action bar) whose children are all hidden or disabled has nothing to
+            // focus, so it is not a Tab stop either (focus would land on nothing visible). Screens and other region
+            // hosts stay focusable; so does a container without children, which handles keys itself.
+            if (child is IFocusScopeOwner owner && !owner.Scope.RegionHost && owner.Scope.Children.Count > 0 && depth < 16)
+            {
+                foreach (IWidget inner in owner.Scope.Children)
+                {
+                    if (CanTakeFocus(inner, depth + 1)) return true;
+                }
+
+                return false;
+            }
+
             return true;
         }
 

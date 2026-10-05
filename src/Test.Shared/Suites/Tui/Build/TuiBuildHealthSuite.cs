@@ -106,7 +106,7 @@ namespace Test.Shared.Suites.Tui.Build
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI vessel health", cases: cases);
         }
 
-        private static StubHttpHandler Stub()
+        internal static StubHttpHandler Stub()
         {
             StubHttpHandler stub = BuildStubs.Server();
             stub.Json("POST", "/api/v1/vessel-health/enumerate", "{\"Success\":true,\"PageNumber\":1,\"PageSize\":25,\"TotalPages\":1,\"TotalRecords\":2,\"Objects\":[" +

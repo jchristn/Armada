@@ -257,7 +257,9 @@ namespace Armada.Tui.Screens.Operations
             SurfaceText.FillRect(surface, new Rect(0, 0, width, height), Theme.Text);
             if (width < 10 || height < 4) return;
             BuildActionBar();
-            int y = 0;
+            // Each focus region (action bar, panel tabs, panel) gets a box line above and below it (see RegionStack).
+            RegionStack stack = new RegionStack(width, height);
+            int y = stack.Content(1);
             string heading = Heading ?? (LoadError != null ? Tr(Title) : Tr("Loading..."));
             int x = SurfaceText.Draw(surface, 0, y, heading, Theme.Accent.WithAttribute(CellAttributes.Bold, true), width - 20);
             if (!String.IsNullOrEmpty(Status))
@@ -269,12 +271,12 @@ namespace Armada.Tui.Screens.Operations
             string refresh = Context.Refresh.StatusText;
             string right = refresh.Length > 0 ? "[" + Tr(refresh) + "]" : "";
             if (right.Length > 0 && x + TextCells.Width(right) + 2 < width) SurfaceText.Draw(surface, width - TextCells.Width(right), y, right, Theme.Muted, width);
-            y++;
+            y = stack.Content(1);
             if (!String.IsNullOrEmpty(SubtitleText)) SurfaceText.Draw(surface, 0, y, SubtitleText, Theme.Muted, width);
-            y++;
             if (LoadError != null)
             {
-                SurfaceText.Draw(surface, 0, y++, "! " + LoadError + "  (F5 " + Tr("Retry") + ")", Theme.Error, width);
+                y = stack.Content(1);
+                SurfaceText.Draw(surface, 0, y, "! " + LoadError + "  (F5 " + Tr("Retry") + ")", Theme.Error, width);
             }
 
             foreach (Button b in ActionBar.Buttons)
@@ -290,24 +292,22 @@ namespace Armada.Tui.Screens.Operations
             if (ActionBar.Buttons.Any(b => b.Visible))
             {
                 string more = ". " + Tr("More");
-                Scope.RenderChild(surface, ActionBar, new Rect(0, y, Math.Max(1, width - TextCells.Width(more) - 2), 1));
-                SurfaceText.Draw(surface, Math.Max(0, width - TextCells.Width(more)), y, more, Theme.Muted, width);
-                y++;
+                Rect bar = stack.Place(ActionBar, 1);
+                Scope.RenderChild(surface, ActionBar, new Rect(0, bar.Y, Math.Max(1, width - TextCells.Width(more) - 2), 1));
+                Scope.Place(ActionBar, bar);
+                SurfaceText.Draw(surface, Math.Max(0, width - TextCells.Width(more)), bar.Y, more, Theme.Muted, width);
             }
 
             if (_Panels.Count > 1)
             {
-                Scope.RenderChild(surface, Tabs, new Rect(0, y, width, 1));
-                y++;
+                Scope.RenderChild(surface, Tabs, stack.Place(Tabs, 1));
             }
 
-            int top = y;
             IWidget? panel = CurrentPanel;
-            if (panel != null && top < height)
+            if (panel != null)
             {
-                if (_Panels.Count > 1) SurfaceText.Draw(surface, 0, top, new string('-', width), Theme.Border, width);
-                int start = _Panels.Count > 1 ? top + 1 : top;
-                if (start < height) Scope.RenderChild(surface, panel, new Rect(0, start, width, height - start));
+                Rect area = stack.Fill(panel);
+                if (!area.IsEmpty) Scope.RenderChild(surface, panel, area);
             }
         }
 

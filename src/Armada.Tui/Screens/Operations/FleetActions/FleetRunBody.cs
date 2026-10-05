@@ -54,6 +54,8 @@ namespace Armada.Tui.Screens.Operations
         /// </summary>
         public FleetRunBody()
         {
+            // The summary, the status filter, and the target grid are separate focus regions, each in its own box.
+            Scope.RegionHost = true;
             AddChild(Summary);
             AddChild(Filter);
             AddChild(Grid);
@@ -84,15 +86,16 @@ namespace Armada.Tui.Screens.Operations
             int width = surface.Size.Width;
             int height = surface.Size.Height;
             SurfaceText.FillRect(surface, new Rect(0, 0, width, height), Theme.Text);
+            // Rows: summary, line, "Targets  Status: [filter]", line, grid (the lines are box edges, see RegionFrames).
             int summary = Math.Max(3, Math.Min(SummaryRows, height / 2));
             Scope.RenderChild(surface, Summary, new Rect(0, 0, width, summary));
-            int y = summary;
+            int y = summary + 1;
             if (y >= height) return;
             string heading = T("Targets");
             int x = SurfaceText.Draw(surface, 0, y, heading, Theme.Accent.WithAttribute(CellAttributes.Bold, true), width);
             x += SurfaceText.Draw(surface, x + 2, y, T("Status") + ":", Theme.Muted, width - x - 2) + 3;
-            Scope.RenderChild(surface, Filter, new Rect(x, y, Math.Min(22, Math.Max(4, width - x)), 1));
-            y++;
+            Scope.RenderChild(surface, Filter, new Rect(x, y, Math.Min(22, Math.Max(4, width - x - 1)), 1));
+            y += 2;
             if (y < height) Scope.RenderChild(surface, Grid, new Rect(0, y, width, height - y));
         }
 

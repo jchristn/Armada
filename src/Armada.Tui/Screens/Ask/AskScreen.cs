@@ -544,11 +544,10 @@ namespace Armada.Tui.Screens.Ask
             int listWidth = narrow ? 0 : Math.Clamp(width / 4, 26, 36);
             int x0 = narrow ? 0 : listWidth + 1;
             int cw = width - x0;
-            if (!narrow)
-            {
-                Scope.RenderChild(surface, ThreadList, new Rect(0, 0, listWidth, height));
-                for (int y = 0; y < height; y++) surface.DrawText(listWidth, y, "|", Theme.Border);
-            }
+            // The conversation list, the transcript, the quick action form, and the composer are focus regions: each
+            // sits in a box (see RegionFrames), so the column after the list and the rows between the regions stay
+            // free for the box lines.
+            if (!narrow) Scope.RenderChild(surface, ThreadList, new Rect(0, 0, listWidth, height));
 
             int top = RenderHeader(surface, x0, cw);
             int composerHeight = Math.Min(Composer.PreferredHeight(cw), Math.Max(3, height / 3));
@@ -557,7 +556,8 @@ namespace Armada.Tui.Screens.Ask
             List<string> stripLines = new List<string>();
             foreach (string strip in PendingStripLines()) stripLines.AddRange(TextCells.Wrap("! " + strip, Math.Max(10, cw - 2)).Take(2));
             int stripHeight = stripLines.Count;
-            int transcriptHeight = Math.Max(1, height - top - composerHeight - formHeight - stripHeight - 1);
+            int lines = 1 + (stripHeight > 0 ? 1 : 0) + (Form != null ? 1 : 0);
+            int transcriptHeight = Math.Max(1, height - top - composerHeight - formHeight - stripHeight - lines);
             if (Ask.ConvError != null)
             {
                 RenderConvError(surface, x0, top, cw, transcriptHeight);
@@ -574,9 +574,9 @@ namespace Armada.Tui.Screens.Ask
 
             int y2 = top + transcriptHeight;
             SurfaceText.FillRow(surface, x0, y2, cw, Theme.Text);
-            string sep = new string('-', cw);
-            if (_EscapeHint != null && Ask.Conversation.TurnActive) sep = "-- " + T(_EscapeHint) + " " + new string('-', cw);
-            SurfaceText.Draw(surface, x0, y2, sep, Theme.Border, cw);
+            // The row under the transcript is the line between its box and the composer's; the stop hint is the
+            // composer box's title.
+            Composer.BoxTitle = _EscapeHint != null && Ask.Conversation.TurnActive ? T(_EscapeHint) : null;
             y2++;
             foreach (string stripLine in stripLines)
             {
@@ -588,19 +588,22 @@ namespace Armada.Tui.Screens.Ask
                 y2++;
             }
 
+            if (stripHeight > 0) y2++;
             if (Form != null)
             {
                 Scope.RenderChild(surface, Form, new Rect(x0, y2, cw, formHeight));
-                y2 += formHeight;
+                y2 += formHeight + 1;
             }
 
             Scope.RenderChild(surface, Composer, new Rect(x0, y2, cw, Math.Max(2, height - y2)));
             if (narrow && ListOverlayOpen)
             {
+                // The list opens over the conversation: only its box is drawn, so the conversation's regions are
+                // not placed while it is open.
                 int ow = Math.Min(width - 4, 40);
                 SurfaceText.FillRect(surface, new Rect(0, 0, ow + 1, height), Theme.Text);
+                foreach (IWidget child in Scope.Children) Scope.Place(child, Rect.Empty);
                 Scope.RenderChild(surface, ThreadList, new Rect(0, 0, ow, height));
-                for (int y = 0; y < height; y++) surface.DrawText(ow, y, "|", Theme.Border);
             }
         }
 
@@ -663,6 +666,8 @@ namespace Armada.Tui.Screens.Ask
             CellStyle rightStyle = thread != null && thread.AutoApprove ? Theme.Header.WithForeground(Theme.Warning.Foreground) : Theme.Header;
             SurfaceText.Draw(surface, x0 + cw - rw, y, right, rightStyle, rw);
             y++;
+            // While the title is edited its field is a focus region; the row under it is its box's bottom line.
+            if (EditingTitle) y++;
             if (thread != null && thread.AutoApprove)
             {
                 SurfaceText.FillRow(surface, x0, y, cw, Theme.Warning.WithAttribute(CellAttributes.Reverse, true));
@@ -721,7 +726,8 @@ namespace Armada.Tui.Screens.Ask
                 y++;
             }
 
-            SurfaceText.Draw(surface, x0, y++, new string('-', cw), Theme.Border, cw);
+            // A blank row, not a rule: it is the top line of the transcript's box.
+            y++;
             return y;
         }
 

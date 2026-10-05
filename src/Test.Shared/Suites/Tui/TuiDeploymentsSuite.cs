@@ -181,7 +181,7 @@ namespace Test.Shared.Suites.Tui
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI deployments", cases: cases);
         }
 
-        private static StubHttpHandler Server()
+        internal static StubHttpHandler Server()
         {
             StubHttpHandler stub = TuiEntityFixtures.Server();
             AddDeployments(stub);

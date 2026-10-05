@@ -49,6 +49,12 @@ namespace Armada.Tui.Widgets
         public bool Visible { get; set; } = true;
 
         /// <summary>
+        /// Text drawn on the top line of this widget's box when it is a focus region of a screen (already translated),
+        /// or null for none (see <see cref="RegionFrames"/>). Default null.
+        /// </summary>
+        public string? BoxTitle { get; set; } = null;
+
+        /// <summary>
         /// Raised after focus enters (true) or leaves (false).
         /// </summary>
         public event EventHandler<bool>? FocusChanged;

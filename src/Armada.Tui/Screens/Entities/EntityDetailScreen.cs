@@ -168,8 +168,17 @@ namespace Armada.Tui.Screens.Entities
                         }
 
                         LoadError = null;
+                        bool first = Entity == null;
                         Entity = entity;
                         Populate(entity);
+                        // While the record loaded, its actions were hidden and focus moved to the panel; on the first
+                        // load put it where the panel wants it (the action bar for editors), as when it opened.
+                        if (first)
+                        {
+                            SyncActionVisibility();
+                            DetailPanel? active = _Panels.FirstOrDefault(p => p.Key == PanelTabs.SelectedKey) ?? _Panels.FirstOrDefault();
+                            if (active != null && Scope.Children.Contains(active.Content)) FocusPanel(active.Content);
+                        }
                     });
                 }
                 catch (ArmadaApiException ex)
@@ -332,13 +341,12 @@ namespace Armada.Tui.Screens.Entities
             int height = surface.Size.Height;
             SurfaceText.FillRect(surface, new Rect(0, 0, width, height), Theme.Text);
             if (width < 10 || height < 4) return;
-            foreach (Button b in Actions.Buttons)
-            {
-                DetailAction? def = _ActionDefs.FirstOrDefault(a => ReferenceEquals(a.Button, b));
-                if (def != null) b.Visible = Entity != null || IsCreateMode ? def.IsVisible() : false;
-            }
+            SyncActionVisibility();
 
-            int y = 0;
+            // The action bar and the active panel are focus regions, each with a box line above and below (see
+            // RegionStack). While the record loads or failed to load, the panel's box holds the message.
+            RegionStack stack = new RegionStack(width, height);
+            int y = stack.Content(1);
             string title = Entity != null ? HeaderTitle(Entity) : IsCreateMode ? T(CreateTitle) : EntityId;
             int x = SurfaceText.Draw(surface, 0, y, title, Theme.Accent, width);
             if (Entity != null)
@@ -351,35 +359,39 @@ namespace Armada.Tui.Screens.Entities
                 }
             }
 
-            y++;
             int actionLines = Math.Min(4, Actions.LinesFor(width));
-            if (actionLines > 0)
-            {
-                Scope.RenderChild(surface, Actions, new Rect(0, y, width, actionLines));
-                y += actionLines;
-            }
-
-            y++;
-            if (LoadError != null && Entity == null)
-            {
-                SurfaceText.Draw(surface, 0, y, "! " + LoadError + "  (F5 " + T("Retry") + ")", Theme.Error, width);
-                return;
-            }
-
-            if (Entity == null && !IsCreateMode)
-            {
-                SurfaceText.Draw(surface, 0, y, T("Loading..."), Theme.Muted, width);
-                return;
-            }
-
-            if (_Panels.Count > 1)
-            {
-                PanelTabs.Render(new SurfaceView(surface, new Rect(0, y, width, 1)));
-                y += 2;
-            }
+            if (actionLines > 0) Scope.RenderChild(surface, Actions, stack.Place(Actions, actionLines));
 
             DetailPanel? active = _Panels.FirstOrDefault(p => p.Key == PanelTabs.SelectedKey) ?? _Panels.FirstOrDefault();
-            if (active != null && height - y > 0) Scope.RenderChild(surface, active.Content, new Rect(0, y, width, height - y));
+            string? message = null;
+            CellStyle messageStyle = Theme.Muted;
+            if (LoadError != null && Entity == null)
+            {
+                message = "! " + LoadError + "  (F5 " + T("Retry") + ")";
+                messageStyle = Theme.Error;
+            }
+            else if (Entity == null && !IsCreateMode)
+            {
+                message = T("Loading...");
+            }
+
+            if (message == null && _Panels.Count > 1)
+            {
+                y = stack.Content(1);
+                PanelTabs.Render(new SurfaceView(surface, new Rect(0, y, width, 1)));
+            }
+
+            if (active == null) return;
+            Rect area = stack.Fill(active.Content);
+            if (area.IsEmpty) return;
+            if (message != null)
+            {
+                SurfaceText.Draw(surface, 0, area.Y, message, messageStyle, width);
+                Scope.Place(active.Content, area);
+                return;
+            }
+
+            Scope.RenderChild(surface, active.Content, area);
         }
 
         #endregion
@@ -525,6 +537,15 @@ namespace Armada.Tui.Screens.Entities
         #endregion
 
         #region Private-Methods
+
+        private void SyncActionVisibility()
+        {
+            foreach (Button b in Actions.Buttons)
+            {
+                DetailAction? def = _ActionDefs.FirstOrDefault(a => ReferenceEquals(a.Button, b));
+                if (def != null) b.Visible = Entity != null || IsCreateMode ? def.IsVisible() : false;
+            }
+        }
 
         private void FocusPanel(IWidget content)
         {

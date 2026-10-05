@@ -376,7 +376,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
             return stub;
         }
 
-        private static StubHttpHandler PopulatedServer()
+        internal static StubHttpHandler PopulatedServer()
         {
             StubHttpHandler stub = TuiFixtures.SignedInServer();
             stub.Json("GET", "/api/v1/fleets", "{\"Objects\":[{\"Id\":\"flt_main\",\"Name\":\"Main\"}],\"TotalRecords\":1}");

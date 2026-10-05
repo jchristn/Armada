@@ -180,7 +180,7 @@ namespace Test.Shared.Suites.Tui
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI pipelines", cases: cases);
         }
 
-        private static StubHttpHandler Server()
+        internal static StubHttpHandler Server()
         {
             StubHttpHandler stub = TuiEntityFixtures.Server();
             stub.Json("GET", "/api/v1/pipelines", TuiEntityFixtures.Page(Pipeline("ppl_1", "Default", true, 1), Pipeline("ppl_2", "Reviewed", false, 2)));

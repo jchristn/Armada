@@ -562,7 +562,11 @@ namespace Armada.Tui.Screens.Operations
                 if (y < 0) continue;
                 int h = Math.Min(block.Height, height - y);
                 if (block.Draw != null) block.Draw(new SurfaceView(surface, new Rect(0, y, width, h)));
-                if (block.Widget != null) Scope.RenderChild(surface, block.Widget, new Rect(block.Left, y, Math.Max(1, (block.Width > 0 ? block.Width : width) - block.Left), h));
+                if (block.Widget != null)
+                {
+                    Scope.RenderChild(surface, block.Widget, new Rect(block.Left, y, Math.Max(1, (block.Width > 0 ? block.Width : width) - block.Left), h));
+                    if (block.RegionRight > 0) Scope.Place(block.Widget, new Rect(block.Left, y, Math.Max(1, block.RegionRight - block.Left), h));
+                }
             }
 
             foreach (IWidget child in Scope.Children)
@@ -749,56 +753,68 @@ namespace Armada.Tui.Screens.Operations
         private List<HomeBlock> Layout(int width)
         {
             List<HomeBlock> blocks = new List<HomeBlock>();
-            int y = 0;
+            // A section that is not shown is not a Tab stop either, so focus never rests on something off the page.
+            Alerts.Visible = Alerts.Items.Count > 0;
+            Voyages.Visible = Status?.Voyages != null && Status.Voyages.Count > 0;
+            Signals.Visible = Signals.Items.Count > 0;
+            // Every focus region gets a box line above and below it (see RegionStack); blank rows between sections
+            // double as those lines.
+            RegionStack st = new RegionStack(width, Int32.MaxValue / 2);
+            int y = st.Content(1);
             blocks.Add(HomeBlock.Drawn(y, 1, s =>
             {
                 int x = SurfaceText.Draw(s, 0, 0, Tr("System Status"), Theme.Accent.WithAttribute(CellAttributes.Bold, true), width);
                 SurfaceText.Draw(s, x + 2, 0, Tr("Overview of fleet health, active missions, and recent activity."), Theme.Muted, width - x - 2);
             }));
-            y++;
             string refresh = Context.Refresh.StatusText;
             string right = (refresh.Length > 0 ? "[" + Tr(refresh) + "]  " : "") + "F5 " + Tr("Refresh");
+            y = st.Place(HeaderButtons, 1).Y;
+            HomeBlock header = HomeBlock.For(HeaderButtons, y, 1, 0, Math.Max(10, width - TextCells.Width(right) - 2));
+            header.RegionRight = width;
+            blocks.Add(header);
             blocks.Add(HomeBlock.Drawn(y, 1, s => SurfaceText.Draw(s, Math.Max(0, width - TextCells.Width(right)), 0, right, Theme.Muted, width)));
-            blocks.Add(HomeBlock.For(HeaderButtons, y, 1, 0, Math.Max(10, width - TextCells.Width(right) - 2)));
-            y += 2;
+            st.Spacer();
             if (Loading)
             {
+                y = st.Content(1);
                 blocks.Add(HomeBlock.Drawn(y, 1, s => SurfaceText.Draw(s, 0, 0, Tr("Loading dashboard..."), Theme.Muted, width)));
-                y += 2;
+                st.Spacer();
             }
 
+            y = st.Content(1);
             blocks.Add(HomeBlock.Drawn(y, 1, s =>
             {
                 int x = SurfaceText.Draw(s, 0, 0, Tr("Ask Armada"), Theme.Accent.WithAttribute(CellAttributes.Bold, true), width);
                 SurfaceText.Draw(s, x + 2, 0, Tr("Ask about fleet state in plain language and dispatch work straight from the conversation."), Theme.Muted, width - x - 2);
             }));
-            y++;
-            blocks.Add(HomeBlock.For(AskButtons, y, 1));
-            y += 2;
+            int askTop = y;
+            blocks.Add(HomeBlock.For(AskButtons, st.Place(AskButtons, 1).Y, 1, 0, 0, askTop));
+            st.Spacer();
             if (Alerts.Items.Count > 0)
             {
-                blocks.Add(HomeBlock.For(Alerts, y, Alerts.Items.Count));
-                y += Alerts.Items.Count + 1;
+                blocks.Add(HomeBlock.For(Alerts, st.Place(Alerts, Alerts.Items.Count).Y, Alerts.Items.Count));
+                st.Spacer();
             }
 
-            blocks.Add(HomeBlock.For(Kpis, y, 3));
-            y += 4;
+            blocks.Add(HomeBlock.For(Kpis, st.Place(Kpis, 3).Y, 3));
+            st.Spacer();
             if (Shortcuts.Visible)
             {
-                blocks.Add(HomeBlock.For(Shortcuts, y, 3));
-                y += 4;
+                blocks.Add(HomeBlock.For(Shortcuts, st.Place(Shortcuts, 3).Y, 3));
+                st.Spacer();
             }
 
             if (Health.Visible)
             {
-                blocks.Add(HomeBlock.Drawn(y, 1, s => SurfaceText.Draw(s, 0, 0, Tr("Vessel health"), Theme.Accent, width)));
-                blocks.Add(HomeBlock.For(Health, y + 1, 4, 0, 0, y));
-                y += 6;
+                int ht = st.Content(1);
+                blocks.Add(HomeBlock.Drawn(ht, 1, s => SurfaceText.Draw(s, 0, 0, Tr("Vessel health"), Theme.Accent, width)));
+                blocks.Add(HomeBlock.For(Health, st.Place(Health, 4).Y, 4, 0, 0, ht));
+                st.Spacer();
             }
 
             MissionHistorySummaryResult? h = History;
-            int historyTop = y;
-            blocks.Add(HomeBlock.Drawn(y, 1, s =>
+            int historyTop = st.Content(1);
+            blocks.Add(HomeBlock.Drawn(historyTop, 1, s =>
             {
                 int x = SurfaceText.Draw(s, 0, 0, Tr("Mission History"), Theme.Accent, width) + 3;
                 x += SurfaceText.Draw(s, x, 0, (h?.TotalCount ?? 0) + " " + Tr("Total"), Theme.Text, width - x) + 3;
@@ -806,47 +822,45 @@ namespace Armada.Tui.Screens.Operations
                 x += SurfaceText.Draw(s, x, 0, (h?.FailedCount ?? 0) + " " + Tr("Failed"), Theme.Error, width - x) + 3;
                 if ((h?.OtherCount ?? 0) > 0) SurfaceText.Draw(s, x, 0, h!.OtherCount + " " + Tr("Other"), Theme.Muted, width - x);
             }));
-            y++;
             int fh = HistoryFilters.PreferredHeight(width);
-            blocks.Add(HomeBlock.For(HistoryFilters, y, fh, 0, 0, historyTop));
-            y += fh;
-            blocks.Add(HomeBlock.For(Chart, y, 8));
-            y += 8;
+            blocks.Add(HomeBlock.For(HistoryFilters, st.Place(HistoryFilters, fh).Y, fh, 0, 0, historyTop));
+            blocks.Add(HomeBlock.For(Chart, st.Content(8), 8));
+            y = st.Content(1);
             blocks.Add(HomeBlock.Drawn(y, 1, s =>
             {
                 int x = SurfaceText.Draw(s, 0, 0, "# " + Tr("Complete"), Theme.Success, width) + 3;
                 x += SurfaceText.Draw(s, x, 0, "x " + Tr("Failed"), Theme.Error, width - x) + 3;
                 SurfaceText.Draw(s, x, 0, ". " + Tr("Other"), Theme.Muted, width - x);
             }));
-            y += 2;
+            st.Spacer();
 
             if (Status?.Voyages != null && Status.Voyages.Count > 0)
             {
-                int vt = y;
-                blocks.Add(HomeBlock.Drawn(y, 1, s => SurfaceText.Draw(s, 0, 0, Tr("Voyage Progress"), Theme.Accent, width)));
-                y++;
+                int vt = st.Content(1);
+                blocks.Add(HomeBlock.Drawn(vt, 1, s => SurfaceText.Draw(s, 0, 0, Tr("Voyage Progress"), Theme.Accent, width)));
                 int rows = Math.Min(Status.Voyages.Count, 8) + 1;
-                blocks.Add(HomeBlock.For(Voyages, y, rows, 0, 0, vt));
-                y += rows + 1;
+                blocks.Add(HomeBlock.For(Voyages, st.Place(Voyages, rows).Y, rows, 0, 0, vt));
+                st.Spacer();
             }
 
-            int mt = y;
-            blocks.Add(HomeBlock.Drawn(y, 1, s => SurfaceText.Draw(s, 0, 0, Tr("Recent Missions"), Theme.Accent, width)));
-            y++;
-            int mfh = MissionFilters.PreferredHeight(Math.Max(10, width - 20));
-            blocks.Add(HomeBlock.For(MissionFilters, y, mfh, 0, Math.Max(10, width - 20), mt));
-            blocks.Add(HomeBlock.For(_ViewAll, y, 1, Math.Max(0, width - 18), width, mt));
-            y += mfh;
+            int mt = st.Content(1);
+            blocks.Add(HomeBlock.Drawn(mt, 1, s => SurfaceText.Draw(s, 0, 0, Tr("Recent Missions"), Theme.Accent, width)));
+            // The filters and the View all button share their rows, side by side, each in its own box (one column
+            // between them is the shared edge).
+            int split = Math.Max(10, width - 20);
+            int mfh = MissionFilters.PreferredHeight(split);
+            y = st.Place(MissionFilters, mfh).Y;
+            blocks.Add(HomeBlock.For(MissionFilters, y, mfh, 0, split, mt));
+            blocks.Add(HomeBlock.For(_ViewAll, y, 1, Math.Min(width - 1, split + 1), width, mt));
             int mrows = Math.Max(2, Math.Min(Missions.Rows.Count, 10) + 1);
-            blocks.Add(HomeBlock.For(Missions, y, mrows, 0, 0, mt));
-            y += mrows + 1;
+            blocks.Add(HomeBlock.For(Missions, st.Place(Missions, mrows).Y, mrows, 0, 0, mt));
+            st.Spacer();
 
             if (Signals.Items.Count > 0)
             {
-                blocks.Add(HomeBlock.Drawn(y, 1, s => SurfaceText.Draw(s, 0, 0, Tr("Recent Signals"), Theme.Accent, width)));
-                y++;
-                blocks.Add(HomeBlock.For(Signals, y, Signals.Items.Count));
-                y += Signals.Items.Count;
+                int sy = st.Content(1);
+                blocks.Add(HomeBlock.Drawn(sy, 1, s => SurfaceText.Draw(s, 0, 0, Tr("Recent Signals"), Theme.Accent, width)));
+                blocks.Add(HomeBlock.For(Signals, st.Place(Signals, Signals.Items.Count).Y, Signals.Items.Count, 0, 0, sy));
             }
 
             return blocks;

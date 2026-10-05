@@ -628,7 +628,7 @@ armada tui --profile work --route /missions
 
 The status bar hints follow whatever has keyboard focus: in a text field (the Ask message box, a filter row, a form field) the first hint says how to leave it and what that unlocks, and on a list or card they show that item's keys. Ask shows a strip above the message box while an action waits for approval, and confirm cards and Approvals center rows have clickable `[Approve]` / `[Reject]` (and `[Deny]`) buttons.
 
-**Display.** Dark, Light, High contrast, and Auto themes (Auto picks High contrast when `NO_COLOR` is set); Icons: Auto, Unicode, or ASCII (ASCII is picked automatically on non-UTF-8 terminals); no state is shown by color alone; works from 80x24 up; the dashboard's nine languages.
+**Display.** Dark, Light, High contrast, and Auto themes (Auto picks High contrast when `NO_COLOR` is set); Icons: Auto, Unicode, or ASCII (ASCII is picked automatically on non-UTF-8 terminals); no state is shown by color alone; works from 80x24 up; the dashboard's nine languages. Every pane and every focus region of a screen (tab bar, filter row, grid, form, the Ask conversation list, transcript, and message box) sits in its own box, and the one that has keyboard focus is drawn whole with heavy lines in the focus color (`#` and `=` in ASCII), the same way on every screen.
 
 See [docs/TUI.md](docs/TUI.md) for profiles, every screen, and the full key map.
 

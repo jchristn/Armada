@@ -94,7 +94,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI Events, Jobs, Diagnostics", cases: cases);
         }
 
-        private static StubHttpHandler Stub()
+        internal static StubHttpHandler Stub()
         {
             StubHttpHandler stub = TuiFixtures.SignedInServer();
             stub.Json("GET", "/api/v1/events", "{\"Objects\":["

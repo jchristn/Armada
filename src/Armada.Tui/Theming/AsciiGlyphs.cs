@@ -76,8 +76,11 @@ namespace Armada.Tui.Theming
         private static Dictionary<char, char> BuildMap()
         {
             Dictionary<char, char> m = new Dictionary<char, char>();
-            Add(m, "\u2500\u2501\u2504\u2505\u2508\u2509\u254C\u254D\u2550\u2574\u2576\u2578\u257A\u257C\u257E\u23AF", '-');
-            Add(m, "\u2502\u2503\u2506\u2507\u250A\u250B\u254E\u254F\u2551\u2575\u2577\u2579\u257B\u257D\u257F", '|');
+            Add(m, "\u2500\u2504\u2505\u2508\u2509\u254C\u254D\u2550\u2574\u2576\u2578\u257A\u257C\u257E\u23AF", '-');
+            Add(m, "\u2502\u2506\u2507\u250A\u250B\u254E\u254F\u2551\u2575\u2577\u2579\u257B\u257D\u257F", '|');
+            // The focused box (heavy lines, see FocusFrame) keeps a shape of its own in ASCII: = and #.
+            Add(m, "\u2501", '=');
+            Add(m, "\u2503\u250F\u2513\u2517\u251B", '#');
             Add(m, "\u2571", '/');
             Add(m, "\u2572", '\\');
             Add(m, "\u2573", 'X');

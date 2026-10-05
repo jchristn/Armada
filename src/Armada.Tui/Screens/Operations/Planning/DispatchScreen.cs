@@ -399,7 +399,11 @@ namespace Armada.Tui.Screens.Operations
             Form.SaveButton.Label = Dispatching ? "Dispatching..." : "Dispatch";
             Form.SaveButton.Enabled = !Dispatching;
             Form.MarkClean();
-            if (y < height) Scope.RenderChild(surface, Form, new Rect(0, y, width, height - y));
+            // The form is a focus region with a box line above it (see RegionStack).
+            RegionStack stack = new RegionStack(width, height);
+            stack.Content(y);
+            Rect form = stack.Fill(Form);
+            if (!form.IsEmpty) Scope.RenderChild(surface, Form, form);
         }
 
         #endregion

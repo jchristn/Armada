@@ -50,6 +50,8 @@ namespace Armada.Tui.Screens.Operations
             AddChild(Transcript);
             AddChild(Composer);
             Scope.Wrap = true;
+            // The transcript and the composer are separate focus regions, each in its own box.
+            Scope.RegionHost = true;
             Scope.Focus(Composer);
         }
 
@@ -84,14 +86,17 @@ namespace Armada.Tui.Screens.Operations
             SurfaceText.FillRect(surface, new Rect(0, 0, width, height), Theme.Text);
             if (width < 10 || height < 4) return;
             PlanningSessionDetailView detail = _Owner.CurrentDetail();
+            Transcript.Visible = detail.HasSession;
             if (!detail.HasSession)
             {
+                // No session yet: the composer's box holds the explanation (the transcript is not a Tab stop).
                 SurfaceText.Draw(surface, 0, 0, T("Current Session"), Theme.Accent.WithAttribute(CellAttributes.Bold, true), width);
                 string text = _Owner.SessionId == null
                     ? T("Choose an existing planning session from the table above, or start a new one to begin chatting with a captain.")
                     : _Owner.LoadingDetail ? T("Loading planning session...") : T("Planning session not found.");
-                int y0 = 1;
+                int y0 = 2;
                 foreach (string line in TextCells.Wrap(text, width)) SurfaceText.Draw(surface, 0, y0++, line, Theme.Muted, width);
+                Scope.Place(Composer, new Rect(0, 2, width, Math.Max(1, height - 2)));
                 return;
             }
 
@@ -105,14 +110,14 @@ namespace Armada.Tui.Screens.Operations
             if (!String.IsNullOrEmpty(detail.FailureReason)) doc.Text("! " + detail.FailureReason, Theme.Error);
             int headerRows = OpsDraw.Lines(surface, 0, 0, doc.Lines, width, Math.Max(1, height / 3), Theme.Text);
 
+            // Rows: header, line, transcript, line, composer, line, footer (the lines are box edges, see RegionFrames).
             int composerRows = Math.Clamp(Composer.Editor.VisualLineCount(Math.Max(10, width)), 2, 6);
             int footerY = height - 1;
-            int composerY = footerY - composerRows;
-            int transcriptTop = headerRows;
-            if (composerY - transcriptTop >= 1)
+            int composerY = footerY - 1 - composerRows;
+            int transcriptTop = headerRows + 1;
+            if (composerY - 1 - transcriptTop >= 1)
             {
-                SurfaceText.Draw(surface, 0, transcriptTop, new string('-', width), Theme.Border, width);
-                Scope.RenderChild(surface, Transcript, new Rect(0, transcriptTop + 1, width, Math.Max(1, composerY - transcriptTop - 1)));
+                Scope.RenderChild(surface, Transcript, new Rect(0, transcriptTop, width, composerY - 1 - transcriptTop));
             }
 
             Composer.Placeholder = _Owner.ComposerEnabled ? "Describe the problem, ask for a plan, or negotiate the next steps with the captain." : "Message the captain...";

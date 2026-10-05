@@ -792,7 +792,8 @@ namespace Armada.Tui.Screens.Build
                 }
             }
 
-            SurfaceText.Draw(surface, 0, y++, new string('-', width), Theme.Border, width);
+            // A blank row, not a rule: the boxes of the fields below use it as their top line (see RegionFrames).
+            y++;
             Rect body = new Rect(0, y, width, Math.Max(1, height - y));
             switch (Step)
             {
@@ -1398,18 +1399,21 @@ namespace Armada.Tui.Screens.Build
             {
                 int treeHeight = Math.Max(3, bottom - y - 6);
                 SurfaceText.Draw(surface, 0, y++, Tr("Folders on the Admiral host") + "  (Space " + Tr("Select") + ", Enter/Right " + Tr("Expand") + ")", Theme.Muted, rect.Width);
+                y++;
                 Scope.RenderChild(surface, Browse, new Rect(0, y, rect.Width, treeHeight));
-                y += treeHeight;
+                y += treeHeight + 1;
                 if (y < bottom) Scope.RenderChild(surface, AllowWorktrees, new Rect(0, y++, Math.Min(40, rect.Width), 1));
+                y++;
                 if (y < bottom && Browse.Selected.Count > 0)
                     SurfaceText.Draw(surface, 0, y++, Context.Loc.T("{count, plural, one {# folder selected} other {# folders selected}}", LocalizationArgs.Of("count", Browse.Selected.Count)) + ": " + String.Join(", ", Browse.Selected), Theme.Info, rect.Width);
             }
             else
             {
                 SurfaceText.Draw(surface, 0, y++, Tr("Folders on the Admiral host, one per line"), Theme.Muted, rect.Width);
-                int areaHeight = Math.Max(3, Math.Min(10, bottom - y - 5));
+                y++;
+                int areaHeight = Math.Max(3, Math.Min(10, bottom - y - 6));
                 Scope.RenderChild(surface, PasteArea, new Rect(0, y, rect.Width, areaHeight));
-                y += areaHeight;
+                y += areaHeight + 1;
                 if (y < bottom) SurfaceText.Draw(surface, 0, y++, Context.Loc.T("{count, plural, one {# path} other {# paths}}", LocalizationArgs.Of("count", paths.Count)) + " - " + Tr("A repository folder becomes one candidate; any other folder is scanned for repositories below it."), Theme.Muted, rect.Width);
             }
 
@@ -1418,7 +1422,7 @@ namespace Armada.Tui.Screens.Build
             {
                 SurfaceText.Draw(surface, 0, y, Tr("Max depth"), Theme.Muted, labelWidth);
                 Scope.RenderChild(surface, MaxDepth, new Rect(labelWidth, y, Math.Min(18, rect.Width - labelWidth), 1));
-                y++;
+                y += 2;
             }
 
             string? depthError = DepthError(MaxDepth.Value);
@@ -1467,6 +1471,7 @@ namespace Armada.Tui.Screens.Build
 
             if (Panel == "options")
             {
+                y++;
                 Scope.RenderChild(surface, Options, new Rect(0, y, rect.Width, Math.Max(1, bottom - y)));
                 return;
             }
@@ -1491,13 +1496,13 @@ namespace Armada.Tui.Screens.Build
             }
 
             if (x < rect.Width) SurfaceText.Draw(surface, x, y, "  (f)", Theme.Muted, rect.Width - x);
-            y++;
+            y += 2;
             string selectedText = Context.Loc.T("{count, plural, one {# selected} other {# selected}}", LocalizationArgs.Of("count", CandidateGrid.Marked.Count));
             int sx = SurfaceText.Draw(surface, 0, y, Tr("Search") + " ", Theme.Muted, rect.Width);
             Scope.RenderChild(surface, CandidateSearch, new Rect(sx, y, Math.Min(30, Math.Max(1, rect.Width - sx)), 1));
             string tail = "  a " + Tr("Select all new") + "  C " + Tr("Clear selection") + "  Space " + Tr("Select") + "  Ctrl+A " + Tr("All") + "   " + selectedText;
             SurfaceText.Draw(surface, Math.Min(rect.Width, sx + 31), y, tail, Theme.Muted, Math.Max(0, rect.Width - sx - 31));
-            y++;
+            y += 2;
             if (y < bottom) Scope.RenderChild(surface, CandidateGrid, new Rect(0, y, rect.Width, Math.Max(1, bottom - y)));
         }
 
@@ -1559,7 +1564,7 @@ namespace Armada.Tui.Screens.Build
             }
 
             if (cx < rect.Width) SurfaceText.Draw(surface, cx, y, "  (f)  Enter " + Tr("Open vessel"), Theme.Muted, rect.Width - cx);
-            y++;
+            y += 2;
             if (y < bottom) Scope.RenderChild(surface, ResultGrid, new Rect(0, y, rect.Width, Math.Max(1, bottom - y)));
         }
 
@@ -1606,6 +1611,7 @@ namespace Armada.Tui.Screens.Build
                 SurfaceText.Draw(surface, 0, y++, footer, Theme.Accent, rect.Width);
             }
 
+            y++;
             if (y < bottom) Scope.RenderChild(surface, Fleets, new Rect(0, y, rect.Width, Math.Max(1, bottom - y)));
         }
 

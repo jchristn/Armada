@@ -350,11 +350,12 @@ namespace Armada.Tui.Screens.Operations
             int height = surface.Size.Height;
             SurfaceText.FillRect(surface, new Rect(0, 0, width, height), Theme.Text);
             if (width < 10 || height < 4) return;
-            int y = 0;
+            // Each focus region (toolbar, filters, grid) gets a box line above and below it (see RegionStack).
+            RegionStack stack = new RegionStack(width, height);
+            int y = stack.Content(1);
             string heading = Tr(Title);
             int x = SurfaceText.Draw(surface, 0, y, heading, Theme.Accent.WithAttribute(CellAttributes.Bold, true), width);
             if (Subtitle != null) SurfaceText.Draw(surface, x + 2, y, Tr(Subtitle), Theme.Muted, width - x - 2);
-            y++;
 
             SyncToolbar();
             string refresh = Context.Refresh.StatusText;
@@ -362,27 +363,33 @@ namespace Armada.Tui.Screens.Operations
             int rw = TextCells.Width(right);
             if (Toolbar.Buttons.Any(b => b.Visible))
             {
+                Rect bar = stack.Place(Toolbar, 1);
+                y = bar.Y;
                 Scope.RenderChild(surface, Toolbar, new Rect(0, y, Math.Max(1, width - rw - 2), 1));
+                Scope.Place(Toolbar, bar);
+            }
+            else
+            {
+                y = stack.Content(1);
             }
 
             SurfaceText.Draw(surface, Math.Max(0, width - rw), y, right, Theme.Muted, rw);
-            y++;
 
             if (!Filters.IsEmpty)
             {
                 int fh = Filters.PreferredHeight(width);
-                Scope.RenderChild(surface, Filters, new Rect(0, y, width, fh));
-                y += fh;
+                Scope.RenderChild(surface, Filters, stack.Place(Filters, fh));
             }
 
-            int above = Math.Min(AboveHeight(width), Math.Max(0, height - y - 4));
+            int above = Math.Min(AboveHeight(width), Math.Max(0, stack.Remaining - 5));
             if (above > 0)
             {
-                RenderAbove(new SurfaceView(surface, new Rect(0, y, width, above)), width);
-                y += above;
+                int top = stack.Content(above);
+                RenderAbove(new SurfaceView(surface, new Rect(0, top, width, above)), width);
             }
 
-            if (y < height) Scope.RenderChild(surface, Grid, new Rect(0, y, width, height - y));
+            Rect grid = stack.Fill(Grid);
+            if (!grid.IsEmpty) Scope.RenderChild(surface, Grid, grid);
         }
 
         #endregion

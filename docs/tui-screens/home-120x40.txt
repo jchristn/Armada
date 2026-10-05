@@ -2,39 +2,39 @@
  File  Go  View  Actions  Ask  Help                                                                            F10 Menu
 +----------------------++----------------------------------------------------------------------------------------------+
 |> Dashboard           ||System Status  Overview of fleet health, active missions, and recent activity.                |
-|  Ask Armada          ||[ Setup Wizard w ]  [ + Dispatch D ]  [ + Voyage V ]                    [auto 15s]  F5 Refresh|
-|- OPERATIONS          ||                                                                                              |
-|   Needs You       !4 ||Ask Armada  Ask about fleet state in plain language and dispatch work straight from the con...|
-|   Planning           ||[ Ask Armada -> a ]  [ Needs You i ]  [ Dispatch ]  [ Diagnostics G ]                         |
-|   Dispatch           ||                                                                                              |
-|   Fleet Actions      ||  x 1 captain(s) stalled -- recovery attempts exhausted.  Stop and restart stalled c... [View]|
-|   Missions           ||  ! 1 mission(s) failed.  Review and restart failed missions.                           [View]|
-|- DELIVERY            ||                                                                                              |
-|   Delivery           ||  Captains                Active Voyages          Missions                Active fleet acti...|
-|- BUILD               ||  3                       1                       7                       -                   |
-|   Vessels            ||  1 idle  1 working  1                            1 Failed  5 Complete                        |
-|   Captains           ||                                                                                              |
-|- CONFIGURATION       ||  Import repositories  (I)                        Run fleet action  (F)                       |
-|   Configuration      ||  Discover local git repositories and onboard     Run a command or a captain mission across   |
-|- ACTIVITY            ||  them as vessels in bulk.                        many vessels at once.                       |
-|   Activity           ||                                                                                              |
-|   Jobs               ||Vessel health                                                                                 |
-|- SYSTEM              ||  Vessels failing health          Outdated majors                 High/critical vulnerabili...|
-|   API Explorer       ||  0                               0                               0                           |
-|   Settings           ||  1 warn, 0 not evaluated         Vessels with a dependency a     Vessels with a high or      |
+|  Ask Armada          |+----------------------------------------------------------------------------------------------+
+|- OPERATIONS          ||[ Setup Wizard w ]  [ + Dispatch D ]  [ + Voyage V ]                    [auto 15s]  F5 Refresh|
+|   Needs You       !4 |+----------------------------------------------------------------------------------------------+
+|   Planning           ||Ask Armada  Ask about fleet state in plain language and dispatch work straight from the con...|
+|   Dispatch           |#==============================================================================================#
+|   Fleet Actions      |#[ Ask Armada -> a ]  [ Needs You i ]  [ Dispatch ]  [ Diagnostics G ]                         #
+|   Missions           |#==============================================================================================#
+|- DELIVERY            ||  x 1 captain(s) stalled -- recovery attempts exhausted.  Stop and restart stalled c... [View]|
+|   Delivery           ||  ! 1 mission(s) failed.  Review and restart failed missions.                           [View]|
+|- BUILD               |+----------------------------------------------------------------------------------------------+
+|   Vessels            ||  Captains                Active Voyages          Missions                Active fleet acti...|
+|   Captains           ||  3                       1                       7                       -                   |
+|- CONFIGURATION       ||  1 idle  1 working  1                            1 Failed  5 Complete                        |
+|   Configuration      |+----------------------------------------------------------------------------------------------+
+|- ACTIVITY            ||  Import repositories  (I)                        Run fleet action  (F)                       |
+|   Activity           ||  Discover local git repositories and onboard     Run a command or a captain mission across   |
+|   Jobs               ||  them as vessels in bulk.                        many vessels at once.                       |
+|- SYSTEM              |+----------------------------------------------------------------------------------------------+
+|   CLI Tool Permiss...||Vessel health                                                                                 |
+|   API Explorer       |+----------------------------------------------------------------------------------------------+
+|   Settings           ||  Vessels failing health          Outdated majors                 High/critical vulnerabili...|
+|                      ||  0                               0                               0                           |
+|                      ||  1 warn, 0 not evaluated         Vessels with a dependency a     Vessels with a high or      |
 |                      ||                                  major version behind            critical advisory           |
-|                      ||                                                                                              |
+|                      |+----------------------------------------------------------------------------------------------+
 |                      ||Mission History   7 Total   5 Complete   1 Failed   1 Other                                   |
+|                      |+----------------------------------------------------------------------------------------------+
 |                      ||Fleet: All Fleets       v  Vessel: All Vessels      v  Range: Last Week    v                  |
+|                      |+----------------------------------------------------------------------------------------------+
 |                      || 4|                                             ............................................  |
-|                      ||  |                                             xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx  |
 |                      || 3|############################################ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx  |
-|                      || 2|############################################ ############################################  |
 |                      || 1|############################################ ############################################  |
-|                      ||  |############################################ ############################################  |
 |                      || 0|############################################ ############################################  |
 |                      ||   Oct 4 01:00                                  Oct 4 02:00                                   |
-|                      ||# Complete   x Failed   . Other                                                               |
-|                      ||                                                                                              |
 +----------------------++----------------------------------------------------------------------------------------------+
  Tab Next section  D Dispatch  a Ask Armada  i Needs You  ? Help  Ctrl+K Palette  F10 Menu     auto 15s  [approvals: 4]

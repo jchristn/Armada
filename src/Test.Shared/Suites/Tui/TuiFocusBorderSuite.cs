@@ -11,15 +11,16 @@ namespace Test.Shared.Suites.Tui
     using Touchstone.Core;
     using TUIKit;
     using TUIKit.Testing;
+    using TUIKit.Widgets;
     using static Test.Shared.Infrastructure.Asserts;
 
     /// <summary>
-    /// Focus borders: the shell pane that holds keyboard focus (sidebar, main screen, Ask dock) draws its border in the
-    /// theme's <see cref="ArmadaTheme.FocusBorder"/> with heavy glyphs, the others a light <see cref="ArmadaTheme.Border"/>
-    /// line, and a focused sub-region of the main screen (grid, filter row, Ask composer or transcript) lights only the
-    /// stretch of the main border alongside it. Checked cell by cell (glyph and style) while Tab, Shift+Tab, Ctrl+J, and
-    /// Esc move focus, in Unicode and ASCII glyph modes, in the high-contrast theme (reverse video, not color alone), and
-    /// at the 80x24 minimum, and the content never moves when focus does.
+    /// Focus borders: the shell pane or screen region that holds keyboard focus (sidebar, Ask dock, or a region of the
+    /// main screen such as the grid, the filter row, the tab bar, the Ask composer or transcript) is boxed whole in the
+    /// theme's <see cref="ArmadaTheme.FocusBorder"/> with heavy glyphs; every other box is a light
+    /// <see cref="ArmadaTheme.Border"/> line, joined with tees where boxes share an edge. Checked cell by cell (glyph and
+    /// style) while Tab, Shift+Tab, Ctrl+J, and Esc move focus, in Unicode and ASCII glyph modes, in the high-contrast
+    /// theme (reverse video, not color alone), and at the 80x24 minimum, and the content never moves when focus does.
     /// </summary>
     public sealed class TuiFocusBorderSuite : IArmadaTestSuite
     {
@@ -58,13 +59,12 @@ namespace Test.Shared.Suites.Tui
                 }
             }));
 
-            cases.Add(TuiCase.Sync(Suite, "sub_region_stretch", "Inside the main screen only the border alongside the focused sub-region is lit, and it follows Tab", () =>
+            cases.Add(TuiCase.Sync(Suite, "region_box_follows_tab", "Inside the main screen the focused region's whole box is lit (never just a stretch of the pane border), and it follows Tab", () =>
             {
                 using (TuiTestHost host = TuiCase.SignedIn(120, 40, "/missions"))
                 {
                     host.WaitForText("Missions");
                     ShellView shell = host.Tui.Shell;
-                    ShellLayout layout = shell.LastLayout!;
                     AssertTrue(PressUntil(host, "shift+tab", () => ReferenceEquals(shell.Scope.Focused, shell.Sidebar)), "start from the sidebar");
                     HashSet<string> seen = new HashSet<string>();
                     for (int step = 0; step < 12; step++)
@@ -72,24 +72,21 @@ namespace Test.Shared.Suites.Tui
                         host.Press("tab");
                         if (!ReferenceEquals(shell.Scope.Focused, shell.Screen)) break;
                         CellBuffer frame = Render(host);
-                        Rect region = shell.Screen!.Scope.FocusedRegion();
-                        AssertFalse(region.IsEmpty, "focused sub-region placed");
-                        Rect inner = layout.MainInner;
-                        bool whole = region.X <= 0 && region.Y <= 0 && region.Right >= inner.Width && region.Bottom >= inner.Height;
-                        AssertTrue(region.X <= 0 || region.Right >= inner.Width, "list screens stretch regions to a pane edge");
-                        int x = region.X <= 0 ? layout.Main.X : layout.Main.Right - 1;
-                        for (int r = 0; r < inner.Height; r++)
+                        RegionFrame? region = RegionFrames.FocusedOf(shell.LastRegions);
+                        AssertNotNull(region, "a focused region at step " + step);
+                        AssertTrue(Perimeter(frame, region!.Box, shell.Theme).All(c => c.Focused), "whole box of " + region.Widget.GetType().Name + " lit at step " + step);
+                        foreach (RegionFrame other in shell.LastRegions.Where(r => !r.Focused))
                         {
-                            TuiBorderCell cell = Classify(frame, x, inner.Y + r, shell.Theme);
-                            bool expected = whole || (r >= region.Y && r < region.Bottom);
-                            AssertEqual(expected, cell.Focused, "side border row " + r + " at step " + step);
+                            List<TuiBorderCell> cells = Perimeter(frame, other.Box, shell.Theme);
+                            HashSet<Point> lit = new HashSet<Point>(TuiFocusSweep.Perimeter(region.Box));
+                            AssertTrue(cells.Where(c => !lit.Contains(new Point(c.X, c.Y))).All(c => !c.Focused), other.Widget.GetType().Name + " box dim at step " + step);
                         }
 
-                        seen.Add(region.Y + ":" + region.Height);
-                        AssertTrue(Perimeter(frame, layout.Sidebar, shell.Theme).All(c => !c.Focused), "sidebar dim at step " + step);
+                        seen.Add(region.Region.ToString());
+                        AssertTrue(Perimeter(frame, shell.LastLayout!.Sidebar, shell.Theme).All(c => !c.Focused), "sidebar dim at step " + step);
                     }
 
-                    AssertTrue(seen.Count >= 2, "Tab visited at least two sub-regions (tab strip, filters, grid)");
+                    AssertTrue(seen.Count >= 3, "Tab visited at least three regions (tab strip, filters, grid): " + seen.Count);
                 }
             }));
 
@@ -121,27 +118,22 @@ namespace Test.Shared.Suites.Tui
                     ShellLayout layout = shell.LastLayout!;
                     AssertTrue(ReferenceEquals(screen.Scope.Focused, screen.Composer), "composer focused");
                     CellBuffer frame = Render(host);
-                    Rect composer = screen.Scope.RectOf(screen.Composer);
-                    Rect transcript = screen.Scope.RectOf(screen.Transcript);
-                    int right = layout.Main.Right - 1;
-                    int top = layout.MainInner.Y;
-                    AssertTrue(RowsLit(frame, right, top + composer.Y, composer.Height, shell.Theme), "composer stretch lit");
-                    AssertTrue(RowsDim(frame, right, top + transcript.Y, transcript.Height, shell.Theme), "transcript stretch dim");
-                    AssertTrue(Classify(frame, layout.Main.X + 1 + composer.X, layout.Main.Bottom - 1, shell.Theme).Focused, "bottom edge under the composer lit");
-                    AssertFalse(Classify(frame, layout.Main.X + 1, layout.Main.Y, shell.Theme).Focused, "top edge dim");
+                    Rect composer = BoxOf(shell, screen.Composer);
+                    Rect transcript = BoxOf(shell, screen.Transcript);
+                    AssertTrue(Perimeter(frame, composer, shell.Theme).All(c => c.Focused), "whole composer box lit");
+                    AssertEqual(composer.Y, transcript.Bottom - 1, "transcript and composer share the line between them");
+                    AssertTrue(Perimeter(frame, transcript, shell.Theme).Where(c => c.Y != composer.Y).All(c => !c.Focused), "transcript box dim");
 
                     host.Press("esc");
                     AssertTrue(ReferenceEquals(screen.Scope.Focused, screen.Transcript), "Esc focuses the transcript");
                     frame = Render(host);
-                    transcript = screen.Scope.RectOf(screen.Transcript);
-                    AssertTrue(RowsLit(frame, right, top + transcript.Y, transcript.Height, shell.Theme), "transcript stretch lit");
-                    AssertTrue(RowsDim(frame, right, top + composer.Y, composer.Height, shell.Theme), "composer stretch dim");
-                    AssertFalse(Classify(frame, layout.Main.X + 1 + composer.X, layout.Main.Bottom - 1, shell.Theme).Focused, "bottom edge dim");
+                    AssertTrue(Perimeter(frame, transcript, shell.Theme).All(c => c.Focused), "whole transcript box lit");
+                    AssertTrue(Perimeter(frame, composer, shell.Theme).Where(c => c.Y != composer.Y).All(c => !c.Focused), "composer box dim");
 
                     host.Press("esc");
                     AssertTrue(ReferenceEquals(screen.Scope.Focused, screen.Composer), "Esc returns to the composer");
                     frame = Render(host);
-                    AssertTrue(RowsLit(frame, right, top + composer.Y, composer.Height, shell.Theme), "composer stretch lit again");
+                    AssertTrue(Perimeter(frame, composer, shell.Theme).All(c => c.Focused), "composer box lit again");
                 }
             }));
 
@@ -161,10 +153,11 @@ namespace Test.Shared.Suites.Tui
                     List<TuiBorderCell> main = Perimeter(frame, layout.Main, shell.Theme);
                     AssertTrue(side.All(c => c.Focused), "sidebar lit");
                     AssertTrue(main.All(c => !c.Focused), "main dim");
-                    AssertTrue(side.Concat(main).All(c => c.Glyph == "+" || c.Glyph == "-" || c.Glyph == "|"), "ASCII border glyphs only");
+                    AssertTrue(side.All(c => c.Glyph == "#" || c.Glyph == "="), "focused box in # and =");
+                    AssertTrue(main.All(c => c.Glyph == "+" || c.Glyph == "-" || c.Glyph == "|"), "plain boxes in + - |");
                     string text = host.Screen();
                     string[] lines = text.Split('\n');
-                    AssertTrue(lines[layout.Sidebar.Y].StartsWith("+" + new string('-', layout.Sidebar.Width - 2) + "++", StringComparison.Ordinal), "ASCII boxes in the snapshot: " + lines[layout.Sidebar.Y]);
+                    AssertTrue(lines[layout.Sidebar.Y].StartsWith("#" + new string('=', layout.Sidebar.Width - 2) + "#+", StringComparison.Ordinal), "ASCII boxes in the snapshot: " + lines[layout.Sidebar.Y]);
                     AssertFalse(text.Any(c => c > 0x7F), "snapshot is ASCII");
 
                     host.Press("tab");
@@ -258,23 +251,37 @@ namespace Test.Shared.Suites.Tui
                 ArmadaTheme theme = ThemePalettes.Dark();
 
                 CellBuffer gutter = new CellBuffer(20, 2);
-                FocusFrame.Draw(new BufferSurface(gutter), new Rect(0, 0, 20, 2), theme, true, Rect.Empty);
+                FocusFrame.Draw(new BufferSurface(gutter), new Rect(0, 0, 20, 2), theme, true);
                 AssertEqual("\u2503", gutter.Get(0, 0).Grapheme, "focused gutter bar");
                 AssertEqual(theme.FocusBorder, gutter.Get(0, 1).Style, "gutter style");
-                FocusFrame.Draw(new BufferSurface(gutter), new Rect(0, 0, 20, 2), theme, false, Rect.Empty);
+                FocusFrame.Draw(new BufferSurface(gutter), new Rect(0, 0, 20, 2), theme, false);
                 AssertEqual(" ", gutter.Get(0, 0).Grapheme, "unfocused gutter blank");
 
+                // A pane with two regions stacked inside it: the plain boxes share edges (tees where they meet the pane
+                // border), and the focused region's box is whole and heavy on top.
                 CellBuffer box = new CellBuffer(12, 8);
-                FocusFrame.Draw(new BufferSurface(box), new Rect(0, 0, 12, 8), theme, true, new Rect(3, 2, 4, 2));
-                AssertTrue(Perimeter(box, new Rect(0, 0, 12, 8), theme).All(c => c.Focused), "sub-region touching no edge lights the whole box");
-                FocusFrame.Draw(new BufferSurface(box), new Rect(0, 0, 12, 8), theme, true, new Rect(0, 2, 8, 2));
-                AssertTrue(Classify(box, 0, 3, theme).Focused, "left edge beside the sub-region lit");
-                AssertFalse(Classify(box, 0, 1, theme).Focused, "left edge above it dim");
-                AssertFalse(Classify(box, 11, 3, theme).Focused, "right edge dim (not touched)");
-                AssertFalse(Classify(box, 0, 0, theme).Focused, "corner dim");
+                Rect pane = new Rect(0, 0, 12, 8);
+                Rect upper = FocusFrame.Outer(new Rect(1, 1, 10, 2));
+                Rect lower = FocusFrame.Outer(new Rect(1, 4, 10, 3));
+                FocusFrame.DrawNested(new BufferSurface(box), pane, theme, new List<Rect> { upper, lower }, Rect.Empty);
+                AssertEqual("\u251C", box.Get(0, 3).Grapheme, "tee where the shared line meets the left border");
+                AssertEqual("\u2524", box.Get(11, 3).Grapheme, "tee on the right border");
+                AssertTrue(Perimeter(box, pane, theme).All(c => !c.Focused), "nothing lit without focus");
+                FocusFrame.DrawNested(new BufferSurface(box), pane, theme, new List<Rect> { upper, lower }, lower);
+                AssertTrue(Perimeter(box, lower, theme).All(c => c.Focused), "the focused region's whole box lit");
+                AssertEqual("\u250F", box.Get(0, 3).Grapheme, "heavy corner where the focused box starts");
+                AssertFalse(Classify(box, 0, 1, theme).Focused, "the box above stays plain");
+                AssertFalse(Classify(box, 5, 0, theme).Focused, "the pane's top stays plain");
             }));
 
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI focus borders", cases: cases);
+        }
+
+        private static Rect BoxOf(ShellView shell, IWidget widget)
+        {
+            RegionFrame? region = shell.LastRegions.FirstOrDefault(r => ReferenceEquals(r.Widget, widget));
+            if (region == null) throw new AssertionException("no region for " + widget.GetType().Name);
+            return region.Box;
         }
 
         private static CellBuffer Render(TuiTestHost host)
@@ -298,10 +305,12 @@ namespace Test.Shared.Suites.Tui
         {
             CellBuffer frame = Render(host);
             ShellLayout layout = host.Tui.Shell.LastLayout!;
-            foreach (Rect pane in new Rect[] { layout.Sidebar, layout.Main, layout.Dock })
+            List<Rect> boxes = new List<Rect> { layout.Sidebar, layout.Main, layout.Dock };
+            boxes.AddRange(host.Tui.Shell.LastRegions.Select(r => r.Box));
+            foreach (Rect pane in boxes)
             {
                 if (pane.IsEmpty) continue;
-                foreach (TuiBorderCell c in Perimeter(frame, pane, host.Tui.Shell.Theme)) frame.Set(c.X, c.Y, Cell.Blank(CellStyle.Default));
+                foreach (Point p in TuiFocusSweep.Perimeter(pane)) frame.Set(p.X, p.Y, Cell.Blank(CellStyle.Default));
             }
 
             string[] lines = Snapshot.ToText(frame).Split('\n');
@@ -312,26 +321,6 @@ namespace Test.Shared.Suites.Tui
         {
             for (int i = 0; i < 12 && !condition(); i++) host.Press(key);
             return condition();
-        }
-
-        private static bool RowsLit(CellBuffer frame, int x, int y, int count, ArmadaTheme theme)
-        {
-            for (int r = 0; r < count; r++)
-            {
-                if (!Classify(frame, x, y + r, theme).Focused) return false;
-            }
-
-            return count > 0;
-        }
-
-        private static bool RowsDim(CellBuffer frame, int x, int y, int count, ArmadaTheme theme)
-        {
-            for (int r = 0; r < count; r++)
-            {
-                if (Classify(frame, x, y + r, theme).Focused) return false;
-            }
-
-            return count > 0;
         }
 
         private static List<TuiBorderCell> Perimeter(CellBuffer frame, Rect outer, ArmadaTheme theme)
@@ -361,7 +350,7 @@ namespace Test.Shared.Suites.Tui
             Cell cell = frame.Get(x, y);
             TuiBorderCell result = new TuiBorderCell { X = x, Y = y, Glyph = cell.Grapheme, Style = cell.Style };
             string focusedGlyphs = FocusFrame.GlyphsFor(theme, true);
-            string plainGlyphs = FocusFrame.GlyphsFor(theme, false);
+            string plainGlyphs = FocusFrame.UnfocusedGlyphsFor(theme);
             if (cell.Style == theme.FocusBorder && cell.Grapheme.Length == 1 && focusedGlyphs.Contains(cell.Grapheme, StringComparison.Ordinal))
             {
                 result.Focused = true;

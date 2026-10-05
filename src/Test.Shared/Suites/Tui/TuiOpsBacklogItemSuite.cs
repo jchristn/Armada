@@ -227,7 +227,7 @@ namespace Test.Shared.Suites.Tui
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI backlog item", cases: cases);
         }
 
-        private static StubHttpHandler Stub()
+        internal static StubHttpHandler Stub()
         {
             StubHttpHandler stub = TuiOpsBacklogSuite.Stub();
             string item = TuiOpsBacklogSuite.Objective("obj_a", "Fix login", 1, "Draft", "Inbox", "",

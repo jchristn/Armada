@@ -154,7 +154,7 @@ namespace Test.Shared.Suites.Tui.Build
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI captains", cases: cases);
         }
 
-        private static StubHttpHandler Stub()
+        internal static StubHttpHandler Stub()
         {
             StubHttpHandler stub = BuildStubs.Server();
             stub.On("POST", "/api/v1/captains/cpt_2/stop", b => BuildStubs.NoContent());

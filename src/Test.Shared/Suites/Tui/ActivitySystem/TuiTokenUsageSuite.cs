@@ -87,7 +87,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI Token Usage", cases: cases);
         }
 
-        private static StubHttpHandler Stub()
+        internal static StubHttpHandler Stub()
         {
             StubHttpHandler stub = TuiFixtures.SignedInServer();
             stub.Json("GET", "/api/v1/token-usage/summary", "{\"RecordCount\":10,\"EstimatedCount\":2,\"InputTokens\":1000,\"OutputTokens\":400,\"CachedTokens\":100,\"TotalTokens\":1500,"

@@ -27,9 +27,18 @@ namespace Armada.Tui.Screens.Activity
     /// detail drawer (summary, parameters, headers, bodies with truncation notes; Replay, Delete, Copy). Not
     /// thread-safe.
     /// </summary>
-    public class RequestHistoryScreen : GridScreen<RequestHistoryEntry>
+    public class RequestHistoryScreen : GridScreen<RequestHistoryEntry>, IRegionOverlayHost
     {
         #region Public-Members
+
+        /// <inheritdoc />
+        public IWidget? RegionOverlay
+        {
+            get { return DetailDrawer.IsOpen ? DetailDrawer : null; }
+        }
+
+        /// <inheritdoc />
+        public Rect RegionOverlayRect { get; private set; } = Rect.Empty;
 
         /// <summary>
         /// Summary cards.
@@ -378,9 +387,12 @@ namespace Armada.Tui.Screens.Activity
         public override void Render(ISurface surface)
         {
             base.Render(surface);
+            RegionOverlayRect = Rect.Empty;
             if (!DetailDrawer.IsOpen) return;
             Rect rect = DetailDrawer.RectIn(surface.Size);
             DetailDrawer.Render(new SurfaceView(surface, rect));
+            // The drawer's left rule is its box's left edge (see RegionFrames).
+            RegionOverlayRect = new Rect(rect.X + 1, rect.Y, Math.Max(1, rect.Width - 1), rect.Height);
         }
 
         #endregion

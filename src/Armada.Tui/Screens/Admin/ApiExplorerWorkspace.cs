@@ -47,6 +47,9 @@ namespace Armada.Tui.Screens.Admin
         {
             _Builder = builder ?? throw new ArgumentNullException(nameof(builder));
             ResponsePane = response ?? throw new ArgumentNullException(nameof(response));
+            // The request builder and the response are separate focus regions, each in its own box; the column or row
+            // between them is the shared box edge.
+            Scope.RegionHost = true;
             AddChild(_Builder);
             AddChild(ResponsePane);
         }
@@ -106,15 +109,12 @@ namespace Armada.Tui.Screens.Admin
             {
                 int left = width / 2;
                 Scope.RenderChild(surface, _Builder, new Rect(0, 0, left - 1, height));
-                for (int y = 0; y < height; y++) surface.DrawText(left - 1, y, "|", Theme.Border);
-                Scope.RenderChild(surface, ResponsePane, new Rect(left + 1, 0, width - left - 1, height));
+                Scope.RenderChild(surface, ResponsePane, new Rect(left, 0, width - left, height));
                 return;
             }
 
             int top = Math.Max(3, (height * 55) / 100);
             Scope.RenderChild(surface, _Builder, new Rect(0, 0, width, top));
-            SurfaceText.FillRow(surface, 0, top, width, Theme.Border);
-            SurfaceText.Draw(surface, 0, top, new string('-', width), Theme.Border, width);
             if (height - top - 1 > 0) Scope.RenderChild(surface, ResponsePane, new Rect(0, top + 1, width, height - top - 1));
         }
 

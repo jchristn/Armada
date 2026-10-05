@@ -172,7 +172,7 @@ namespace Test.Shared.Suites.Tui
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI mission detail", cases: cases);
         }
 
-        private static StubHttpHandler Stub()
+        internal static StubHttpHandler Stub()
         {
             StubHttpHandler stub = TuiFixtures.SignedInServer();
             stub.Json("GET", "/api/v1/missions/msn_r", "{\"Id\":\"msn_r\",\"Title\":\"Fix tables\",\"Description\":\"# Heading one\\n\\nSome *text*.\",\"Status\":\"Review\",\"RequiresReview\":true,\"Priority\":100,\"VesselId\":\"vsl_demo\",\"CaptainId\":\"cpt_1\",\"VoyageId\":\"vyg_1\",\"BranchName\":\"armada/fix-tables\",\"PrUrl\":\"https://github.com/acme/demo/pull/7\",\"CreatedUtc\":\"2026-10-04T10:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T10:00:00Z\"," +
