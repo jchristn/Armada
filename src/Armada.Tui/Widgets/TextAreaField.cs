@@ -15,7 +15,7 @@ namespace Armada.Tui.Widgets
     /// <c>Enter</c> inserts a newline. A character count and an editor hint are drawn on the last row. Not thread-safe;
     /// the editor result is posted back through <see cref="Dispatcher"/>.
     /// </summary>
-    public class TextAreaField : ArmadaWidget, IFormField, IPasteTarget
+    public class TextAreaField : ArmadaWidget, IFormField, IPasteTarget, ITextEntry
     {
         #region Public-Members
 
@@ -47,6 +47,12 @@ namespace Armada.Tui.Widgets
         /// Read-only fields can be scrolled and copied but not edited.
         /// </summary>
         public bool ReadOnly { get; set; } = false;
+
+        /// <inheritdoc />
+        public bool AcceptsText
+        {
+            get { return !ReadOnly; }
+        }
 
         /// <summary>
         /// Opens the external editor with the current text and returns the edited text (normally

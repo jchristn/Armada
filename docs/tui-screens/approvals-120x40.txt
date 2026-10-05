@@ -4,13 +4,13 @@
 |  Dashboard           || Approvals  (4 waiting)                                                F5 Refresh  Enter Open |
 |  Ask Armada          ||                                                                                              |
 |- OPERATIONS          || !  Failed landing       Landing failed: Broken                                      just now |
-|   Needs You       !4 ||    Merge conflict in src/app.cs   [l Retry Landing]                                          |
+|   Needs You       !4 ||    Merge conflict in src/app.cs   [Retry Landing] l                                          |
 |   Planning           ||    Mission review       Review: Add retry to webhook sender                         just now |
-|   Dispatch           ||    Waiting 12m   [a Approve  c Conditionally Approve  m More Work Required  d Deny]          |
+|   Dispatch           ||    Waiting 12m   [Approve] a  [Conditionally Approve] c  [More Work Required] m  [Deny] d    |
 |   Fleet Actions      ||    Stalled captain      Stalled captain: codex-2                                    just now |
-|   Missions           ||    No heartbeat for 6m   [s Stop  R Recall  t Restart]                                       |
+|   Missions           ||    No heartbeat for 6m   [Stop] s  [Recall] R  [Restart] t                                   |
 |- DELIVERY            ||    Deployment approval  Deploy to Staging: Release v1.0.0-rc1                       just now |
-|   Delivery           ||    v1.0.0-rc1   [a Approve  d Deny]                                                          |
+|   Delivery           ||    v1.0.0-rc1   [Approve] a  [Deny] d                                                        |
 |- BUILD               ||                                                                                              |
 |   Vessels            ||                                                                                              |
 |   Captains           ||                                                                                              |

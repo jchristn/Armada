@@ -119,6 +119,12 @@ namespace Armada.Tui.Screens.Operations
         public override bool CanFocus { get; set; } = true;
 
         /// <inheritdoc />
+        public override IReadOnlyList<KeyValuePair<string, string>> TypingHints
+        {
+            get { return Hints; }
+        }
+
+        /// <inheritdoc />
         public override IReadOnlyList<KeyValuePair<string, string>> Hints
         {
             get

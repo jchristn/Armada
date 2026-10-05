@@ -39,6 +39,24 @@ namespace Armada.Tui.Screens.Ask
         /// <returns>Lines.</returns>
         public static List<StyledText> ConfirmCard(AskActionProposal proposal, bool compact, bool expanded, bool busy, ArmadaTheme theme, LocalizationService loc, DateTime nowUtc, int width)
         {
+            return ConfirmCard(proposal, compact, expanded, busy, theme, loc, nowUtc, width, null);
+        }
+
+        /// <summary>
+        /// Lines of a confirm card, also reporting where its clickable buttons were drawn.
+        /// </summary>
+        /// <param name="proposal">Proposal.</param>
+        /// <param name="compact">Compact (on an ActionResult): "Action" label only.</param>
+        /// <param name="expanded">Arguments and result expanded.</param>
+        /// <param name="busy">An approve or reject call is in flight.</param>
+        /// <param name="theme">Theme.</param>
+        /// <param name="loc">Localization.</param>
+        /// <param name="nowUtc">Now.</param>
+        /// <param name="width">Width in cells.</param>
+        /// <param name="buttons">Receives the buttons (line within the returned lines, cell range, action), or null.</param>
+        /// <returns>Lines.</returns>
+        public static List<StyledText> ConfirmCard(AskActionProposal proposal, bool compact, bool expanded, bool busy, ArmadaTheme theme, LocalizationService loc, DateTime nowUtc, int width, List<AskCardButton>? buttons)
+        {
             bool pending = proposal.Status == AskProposalStatusEnum.Pending;
             int inner = Math.Max(10, width - 4);
             CellStyle statusStyle = ProposalStyle(proposal.Status, theme);
@@ -47,6 +65,9 @@ namespace Armada.Tui.Screens.Ask
                 .Append(StyledText.From(proposal.Source == AskProposalSourceEnum.QuickAction ? loc.T("Quick action") : loc.T("Proposed by the captain"), theme.Muted));
             StyledText right = StyledText.From(ProposalMarker(proposal.Status) + " " + loc.T(proposal.Status.ToString()), statusStyle);
             List<StyledText> body = new List<StyledText>();
+            int decisionIndex = -1;
+            int[] decisionStarts = new int[0];
+            int[] decisionWidths = new int[0];
             if (!String.IsNullOrWhiteSpace(proposal.SummaryText)) body.AddRange(Para(proposal.SummaryText, theme.Text, inner));
             string args = ApprovalActions.Pretty(proposal.ArgumentsText);
             if (args.Length > 0)
@@ -61,10 +82,28 @@ namespace Armada.Tui.Screens.Ask
                     ? loc.T("Nothing runs until you approve. Expires {{time}}.", LocalizationArgs.Of("time", ExpiryText(proposal.ExpiresUtc.Value, loc, nowUtc)))
                     : loc.T("Nothing runs until you approve.");
                 body.AddRange(Para(note, theme.Muted, inner));
-                if (busy) body.Add(StyledText.From(loc.T("Working..."), theme.Info));
-                else body.Add(StyledText.From("[a] " + loc.T("Approve"), theme.Success.WithAttribute(CellAttributes.Bold, true))
-                    .Append(StyledText.From("   [r] " + loc.T("Reject"), theme.Error))
-                    .Append(StyledText.From("   [x] " + loc.T("Arguments"), theme.Muted)));
+                if (busy)
+                {
+                    body.Add(StyledText.From(loc.T("Working..."), theme.Info));
+                }
+                else
+                {
+                    // Buttons work with the mouse whatever has keyboard focus; the key in parentheses works once the
+                    // card has focus.
+                    string approve = "[" + loc.T("Approve") + "]";
+                    string reject = "[" + loc.T("Reject") + "]";
+                    string arguments = "[" + loc.T("Arguments") + "]";
+                    StyledText line = StyledText.From(approve, theme.Success.WithAttribute(CellAttributes.Bold, true))
+                        .Append(StyledText.From(" (a)   ", theme.Muted))
+                        .Append(StyledText.From(reject, theme.Error.WithAttribute(CellAttributes.Bold, true)))
+                        .Append(StyledText.From(" (r)   ", theme.Muted))
+                        .Append(StyledText.From(arguments, theme.Muted))
+                        .Append(StyledText.From(" (x)", theme.Muted));
+                    decisionIndex = body.Count;
+                    decisionStarts = new int[] { 0, TextCells.Width(approve) + 7, TextCells.Width(approve) + 7 + TextCells.Width(reject) + 7 };
+                    decisionWidths = new int[] { TextCells.Width(approve), TextCells.Width(reject), TextCells.Width(arguments) };
+                    body.Add(line);
+                }
             }
             else if (proposal.Status == AskProposalStatusEnum.Approved)
             {
@@ -94,6 +133,18 @@ namespace Armada.Tui.Screens.Ask
             else if (proposal.Status == AskProposalStatusEnum.Failed)
             {
                 body.AddRange(Para(!String.IsNullOrEmpty(proposal.ErrorText) ? proposal.ErrorText! : loc.T("The action failed."), theme.Error, inner));
+            }
+
+            if (buttons != null && decisionIndex >= 0 && body[decisionIndex].Width <= inner)
+            {
+                // The box draws a top edge, then each body line (wrapped when wider than the box), each prefixed "| ".
+                int line = 1;
+                for (int i = 0; i < decisionIndex; i++) line += body[i].Width <= inner ? 1 : TextWrapper.Wrap(body[i], inner).Count;
+                AskCardActionEnum[] actions = new AskCardActionEnum[] { AskCardActionEnum.Approve, AskCardActionEnum.Reject, AskCardActionEnum.Arguments };
+                for (int b = 0; b < actions.Length; b++)
+                {
+                    buttons.Add(new AskCardButton { Line = line, X = 2 + decisionStarts[b], Width = decisionWidths[b], Action = actions[b], ProposalId = proposal.Id });
+                }
             }
 
             return Box(title, right, body, pending ? theme.Warning : theme.Border, width);

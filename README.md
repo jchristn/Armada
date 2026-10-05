@@ -623,7 +623,10 @@ armada tui --profile work --route /missions
 | `Alt+A` | Ask about this: a new conversation about the current screen's subject |
 | `z` / `Z` | Tables: cycle the page size / choose it (10, 25, 50, 100, 250) |
 | `Left` / `Right`, `[` / `]` | Hub tabs (`Left`/`Right` with the tab strip focused); `[` / `]` also switch detail panels |
-| `F10`, `?`, `Ctrl+N` | Menu bar, help for the current screen, notification center |
+| `Esc`, `Alt+Down` | In Ask: leave the message box for the conversation (then `a` approve, `r` reject on a card); go straight to the oldest card waiting for approval |
+| `F10`, `?`, `Ctrl+N` | Menu bar, help for the current screen (`F1` while typing), notification center |
+
+The status bar hints follow whatever has keyboard focus: in a text field (the Ask message box, a filter row, a form field) the first hint says how to leave it and what that unlocks, and on a list or card they show that item's keys. Ask shows a strip above the message box while an action waits for approval, and confirm cards and Approvals center rows have clickable `[Approve]` / `[Reject]` (and `[Deny]`) buttons.
 
 **Display.** Dark, Light, High contrast, and Auto themes (Auto picks High contrast when `NO_COLOR` is set); Icons: Auto, Unicode, or ASCII (ASCII is picked automatically on non-UTF-8 terminals); no state is shown by color alone; works from 80x24 up; the dashboard's nine languages.
 
@@ -672,9 +675,9 @@ Ask Armada:
 |                      ||                                                                                              |
 |                      ||----------------------------------------------------------------------------------------------|
 |                      ||>  Message the captain, or type / for quick actions                                           |
-|                      ||[ ] Show thinking (Alt+T)   / Quick actions   Ctrl+E Editor   AI can make mistak... Enter Send|
+|                      ||[typing]  [ ] Show thinking (Alt+T)   / Quick actions   Ctrl+E Editor   AI can m... Enter Send|
 +----------------------++----------------------------------------------------------------------------------------------+
- Enter Send  Ctrl+J Newline  / Quick actions  Esc Messages  ? Help  Ctrl+K Palette  F10 Menu  Tab Next pane      manual
+ Esc Leave the message box  Enter Send  Ctrl+J Newline  / Quick actions  F1 Help  Ctrl+K Palette  F10 Menu       manual
 ```
 
 More captures from the headless renderer: [login](docs/tui-screens/login-120x40.txt), [Home](docs/tui-screens/home-120x40.txt), [Missions](docs/tui-screens/missions-120x40.txt), [Approvals](docs/tui-screens/approvals-120x40.txt). They are rendered from stub data by the `Tui.ReadmeFrames` test suite (`ARMADA_TUI_README_DIR=docs/tui-screens`), so the header shows Offline.

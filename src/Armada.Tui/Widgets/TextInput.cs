@@ -16,9 +16,15 @@ namespace Armada.Tui.Widgets
     /// word, Enter submits. A value set with <see cref="Prefill"/> is shown selected: the first typed character or paste
     /// replaces it, Backspace/Delete/Ctrl+U clear it, and a caret movement keeps it for editing. Not thread-safe.
     /// </summary>
-    public class TextInput : ArmadaWidget, IPasteTarget
+    public class TextInput : ArmadaWidget, IPasteTarget, ITextEntry
     {
         #region Public-Members
+
+        /// <inheritdoc />
+        public virtual bool AcceptsText
+        {
+            get { return true; }
+        }
 
         /// <summary>
         /// Current text. Setting it moves the caret to the end and raises <see cref="ValueChanged"/> when it differs.

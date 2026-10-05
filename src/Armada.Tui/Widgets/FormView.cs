@@ -13,7 +13,7 @@ namespace Armada.Tui.Widgets
     /// snapshot, Save and Discard buttons, <c>Ctrl+S</c> to save, <c>Esc</c> to discard, Tab and Up/Down between fields,
     /// and vertical scrolling that keeps the focused field visible. Not thread-safe.
     /// </summary>
-    public class FormView : ContainerWidget
+    public class FormView : ContainerWidget, IFocusHintSource
     {
         #region Public-Members
 
@@ -171,6 +171,29 @@ namespace Armada.Tui.Widgets
         {
             EventHandler? handler = DiscardRequested;
             if (handler != null) handler(this, EventArgs.Empty);
+        }
+
+        /// <inheritdoc />
+        public FocusHints? GetFocusHints()
+        {
+            IWidget? focused = Scope.Focused;
+            FocusHints hints;
+            if (focused is ITextEntry entry && entry.AcceptsText)
+            {
+                hints = FocusHints.Typing("Tab", "Next field");
+            }
+            else
+            {
+                hints = new FocusHints();
+                if (focused is SelectField<string>) hints.Add("Enter", "Choose");
+                else if (focused is TriStateField || focused is CheckField) hints.Add("Space", "Change");
+                else if (focused is ButtonRow || focused is Button) hints.Add("Enter", "Press");
+                hints.Add("Tab", "Next field");
+            }
+
+            if (SaveRequested != null) hints.Add("Ctrl+S", "Save");
+            if (DiscardRequested != null) hints.Add("Esc", "Discard");
+            return hints;
         }
 
         /// <inheritdoc />

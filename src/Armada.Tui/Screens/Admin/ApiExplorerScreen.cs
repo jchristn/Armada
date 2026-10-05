@@ -116,6 +116,20 @@ namespace Armada.Tui.Screens.Admin
         public bool Loading { get; private set; } = true;
 
         /// <inheritdoc />
+        public override IReadOnlyList<KeyValuePair<string, string>> TypingHints
+        {
+            get
+            {
+                return new List<KeyValuePair<string, string>>
+                {
+                    new KeyValuePair<string, string>("F9", "Send Request"),
+                    new KeyValuePair<string, string>("F8", "Abort"),
+                    new KeyValuePair<string, string>("Ctrl+E", "Edit body")
+                };
+            }
+        }
+
+        /// <inheritdoc />
         public override IReadOnlyList<KeyValuePair<string, string>> Hints
         {
             get

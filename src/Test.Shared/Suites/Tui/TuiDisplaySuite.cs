@@ -64,7 +64,9 @@ namespace Test.Shared.Suites.Tui
                         if (!lines[0].Contains("Armada", StringComparison.Ordinal)) failures.Add(path + ": header missing");
                         if (!lines[0].Contains("bell", StringComparison.Ordinal)) failures.Add(path + ": notification bell cut off");
                         string status = lines.Length >= 24 ? lines[23] : "";
-                        if (!status.Contains("? Help", StringComparison.Ordinal)) failures.Add(path + ": help hint cut off: " + status.TrimEnd());
+                        // Help is ? outside text fields and F1 while one has focus (? would be typed there).
+                        string help = host.Tui.Shell.CurrentFocusHints().TextEntry ? "F1 Help" : "? Help";
+                        if (!status.Contains(help, StringComparison.Ordinal)) failures.Add(path + ": help hint (" + help + ") cut off: " + status.TrimEnd());
                         foreach (string line in lines)
                         {
                             if (TextCells.Width(line.TrimEnd()) > 80) failures.Add(path + ": line wider than the terminal");

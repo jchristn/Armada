@@ -14,9 +14,14 @@ namespace Armada.Tui.Screens.Operations
     /// toggles laid out left to right and wrapped. <c>/</c> on a list focuses it, <c>Tab</c> moves between fields, and
     /// <c>Esc</c> or <c>Enter</c> in a text field returns to the list (<see cref="Exited"/>). Not thread-safe.
     /// </summary>
-    public class OpsFilterBar : ContainerWidget
+    public class OpsFilterBar : ContainerWidget, IFocusHintSource
     {
         #region Public-Members
+
+        /// <summary>
+        /// English status bar description of where <c>Esc</c> takes focus. Default "Back to the list".
+        /// </summary>
+        public string ExitLabel { get; set; } = "Back to the list";
 
         /// <summary>
         /// Raised when the user leaves the bar (Esc, or Enter in a text field).
@@ -73,6 +78,12 @@ namespace Armada.Tui.Screens.Operations
         }
 
         /// <inheritdoc />
+        public FocusHints? GetFocusHints()
+        {
+            return FilterRowHints.For(Scope.Focused, ExitLabel);
+        }
+
+        /// <inheritdoc />
         public override bool HandleKey(KeyEvent key)
         {
             if (key.Code == KeyCode.Escape)
@@ -98,7 +109,9 @@ namespace Armada.Tui.Screens.Operations
                 if (r.Y >= height) break;
                 string label = T(item.Label) + ":";
                 bool focused = IsFocused && ReferenceEquals(Scope.Focused, item.Widget);
-                int lw = SurfaceText.Draw(surface, r.X, r.Y, label, focused ? Theme.Accent : Theme.Muted, width - r.X);
+                // The focused field's label is bold and underlined as well as colored, so focus does not rely on color.
+                CellStyle labelStyle = focused ? Theme.Accent.WithAttribute(CellAttributes.Bold, true).WithAttribute(CellAttributes.Underline, true) : Theme.Muted;
+                int lw = SurfaceText.Draw(surface, r.X, r.Y, label, labelStyle, width - r.X);
                 Scope.RenderChild(surface, item.Widget, new Rect(r.X + lw + 1, r.Y, Math.Max(1, Math.Min(item.Width, width - r.X - lw - 1)), 1));
             }
         }

@@ -15,7 +15,7 @@ namespace Armada.Tui.Screens.Kit
     /// <c>$EDITOR</c> when an editor callback is set, and other <c>Ctrl</c> chords fall through to the host (so
     /// <c>Ctrl+S</c> still saves a form). Not thread-safe.
     /// </summary>
-    public class MultilineField : ArmadaWidget, IFormField, IPasteTarget
+    public class MultilineField : ArmadaWidget, IFormField, IPasteTarget, ITextEntry
     {
         #region Public-Members
 
@@ -61,6 +61,12 @@ namespace Armada.Tui.Screens.Kit
         /// When true the field ignores edits. Default false.
         /// </summary>
         public bool ReadOnly { get; set; } = false;
+
+        /// <inheritdoc />
+        public bool AcceptsText
+        {
+            get { return !ReadOnly; }
+        }
 
         /// <inheritdoc />
         public object? FieldValue

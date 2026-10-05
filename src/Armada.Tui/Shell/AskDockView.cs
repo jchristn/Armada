@@ -18,11 +18,18 @@ namespace Armada.Tui.Shell
     /// rendering as the transcript, including the streaming reply and cards), the turn state, and pending approvals
     /// while another screen is open, with a one-line composer: typing goes to it, <c>Enter</c> sends to the open
     /// conversation (or starts one with the remembered captain), <c>Ctrl+C</c> stops a running turn, and
-    /// <c>Ctrl+A</c> opens the Approvals center. Not thread-safe.
+    /// <c>Ctrl+A</c> opens the Approvals center. The tail always shows the newest lines (the dock has no scroll position,
+    /// so it always follows). While focused, the heading shows a "[typing]" marker. Not thread-safe.
     /// </summary>
-    public class AskDockView : ArmadaWidget, IPasteTarget
+    public class AskDockView : ArmadaWidget, IPasteTarget, ITextEntry, IFocusHintSource
     {
         #region Public-Members
+
+        /// <inheritdoc />
+        public virtual bool AcceptsText
+        {
+            get { return true; }
+        }
 
         /// <summary>
         /// Height in rows when visible. Default 9; clamped to 4..20.
@@ -87,6 +94,18 @@ namespace Armada.Tui.Shell
         }
 
         /// <inheritdoc />
+        public FocusHints? GetFocusHints()
+        {
+            AskController? ask = _Context?.Ask;
+            FocusHints hints = FocusHints.Typing("Tab", "Leave the dock");
+            hints.Add("Enter", "Send");
+            if (_Context != null && _Context.Approvals.Count > 0) hints.Add("Ctrl+A", "Approvals");
+            if (ask != null && ask.Conversation.TurnActive) hints.Add("Ctrl+C", "Stop");
+            hints.Add("Ctrl+J", "Hide dock");
+            return hints;
+        }
+
+        /// <inheritdoc />
         public bool HandlePaste(string text)
         {
             return Input.HandlePaste(text);
@@ -129,6 +148,14 @@ namespace Armada.Tui.Shell
             int pending = _Context.Approvals.Count;
             string head = "-- " + T("Ask Armada") + ": " + title + (state.Length > 0 ? "  [" + state + "]" : "") + " ";
             SurfaceText.Draw(surface, 0, 0, head + new string('-', Math.Max(0, width)), rule, width);
+            if (IsFocused)
+            {
+                // Not color alone: the focused dock says in words that keys type into its input.
+                string marker = TypingMarker.Text(Localizer);
+                head += marker + " ";
+                SurfaceText.Draw(surface, TextCells.Width(head) - TextCells.Width(marker) - 1, 0, marker, TypingMarker.Style(Theme), width);
+            }
+
             string keys = (pending > 0 ? "[!" + pending.ToString(CultureInfo.InvariantCulture) + " " + T("approvals") + ": Ctrl+A] " : "") + "Ctrl+J " + T("Hide dock") + " ";
             int kw = TextCells.Width(keys);
             if (kw + TextCells.Width(head) < width) SurfaceText.Draw(surface, width - kw, 0, keys, pending > 0 ? Theme.Warning : rule, kw);

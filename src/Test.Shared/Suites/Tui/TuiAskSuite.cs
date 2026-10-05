@@ -199,7 +199,7 @@ namespace Test.Shared.Suites.Tui
                     TuiCase.Contains(text, "Approval needed  dispatch  Proposed by the captain", "pending card heading");
                     TuiCase.Contains(text, "Dispatch voyage \"Fix tables\" to Alpha (1 mission)", "summary");
                     TuiCase.Contains(text, "Nothing runs until you approve. Expires", "expiry");
-                    TuiCase.Contains(text, "[a] Approve   [r] Reject   [x] Arguments", "decision keys");
+                    TuiCase.Contains(text, "[Approve] (a)   [Reject] (r)   [Arguments] (x)", "decision buttons and keys");
                     TuiCase.Contains(text, "* Action result", "action result");
                     TuiCase.Contains(text, "Quick action", "quick action source");
                     TuiCase.Contains(text, "Ran successfully.", "executed outcome");

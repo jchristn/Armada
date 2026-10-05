@@ -18,9 +18,13 @@ namespace Armada.Tui.Screens.Ask
 
     /// <summary>
     /// The Ask transcript (W2.3, W2.4, W2.5): a scrolling view over the blocks laid out by
-    /// <see cref="AskTranscriptBuilder"/>, with a focused block (and focused work card row), smart scroll lock (it follows
-    /// new content only while at the bottom and otherwise shows "N new below"), keeping the reader's place when older
-    /// pages load, and search. Keys: <c>Up</c>/<c>Down</c> focus messages and card rows, <c>PgUp</c>/<c>PgDn</c> scroll,
+    /// <see cref="AskTranscriptBuilder"/>, with a focused block (and focused work card row), smart scroll lock, keeping
+    /// the reader's place when older pages load, and search. Follow rules: the view follows new content whenever the
+    /// viewport is at the bottom, whether or not a block is selected; selecting a block that is on screen at the tail
+    /// does not detach, only scrolling the viewport up does (PgUp, Home, the wheel, search, or a selection that moves
+    /// the viewport); while detached it shows "N new below"; End, a decision on a card, and a sent message return to
+    /// the tail (keeping the selection only while it is still on screen). Confirm cards carry clickable [Approve],
+    /// [Reject], and [Arguments] buttons that work whatever has keyboard focus. Keys: <c>Up</c>/<c>Down</c> focus messages and card rows, <c>PgUp</c>/<c>PgDn</c> scroll,
     /// <c>Home</c> top (loads earlier messages), <c>End</c> live tail, <c>Enter</c> acts on the focused item,
     /// <c>a</c>/<c>r</c> approve or reject the focused confirm card, <c>x</c> arguments, <c>t</c> thinking,
     /// <c>y</c> copy (arguments on a card, otherwise the message as Markdown), <c>Y</c> copy the conversation,
@@ -211,6 +215,51 @@ namespace Armada.Tui.Screens.Ask
         }
 
         /// <summary>
+        /// Return to the live tail and follow it (after a decision or a send, and on <c>End</c>), keeping the selected
+        /// block only while it is still on screen at the tail.
+        /// </summary>
+        public void ReturnToTail()
+        {
+            Following = true;
+            _Scroll = MaxScroll();
+            AskBlock? block = Selected();
+            if (block != null && !VisibleAt(block, _Scroll))
+            {
+                SelectedKey = null;
+                SelectedRow = -1;
+            }
+        }
+
+        /// <summary>
+        /// Approve or reject a pending proposal (the <c>a</c> and <c>r</c> keys and the card buttons), then return to
+        /// the live tail so the outcome and anything that follows stay in view.
+        /// </summary>
+        /// <param name="proposal">Proposal.</param>
+        /// <param name="approve">Approve (true) or reject (false).</param>
+        /// <returns>True when the decision was sent.</returns>
+        public bool Decide(AskActionProposal proposal, bool approve)
+        {
+            if (proposal == null || proposal.Status != AskProposalStatusEnum.Pending || _Ask.Conversation.ThreadId == null) return false;
+            _Ask.Decide(_Ask.Conversation.ThreadId, proposal.Id, approve);
+            ReturnToTail();
+            return true;
+        }
+
+        /// <summary>
+        /// Focus the oldest pending confirm card (if any).
+        /// </summary>
+        /// <returns>True when one was focused.</returns>
+        public bool SelectOldestPending()
+        {
+            Layout(LastWidth());
+            AskBlock? block = _Blocks.FirstOrDefault(b => b.Proposal != null && b.Proposal.Status == AskProposalStatusEnum.Pending && b.Buttons.Count > 0);
+            if (block == null) block = _Blocks.FirstOrDefault(b => b.Proposal != null && b.Proposal.Status == AskProposalStatusEnum.Pending);
+            if (block == null) return false;
+            Select(block.Key, -1);
+            return true;
+        }
+
+        /// <summary>
         /// Focus the newest pending confirm card (if any).
         /// </summary>
         /// <returns>True when one was focused.</returns>
@@ -237,6 +286,7 @@ namespace Armada.Tui.Screens.Ask
             Select(block.Key, -1);
             int cardTop = block.Top + (block.RowLines.Count > 0 ? Math.Max(0, block.RowLines[0] - 3) : 0);
             _Scroll = Math.Max(0, Math.Min(cardTop, Math.Max(0, _Flat.Count - _Height)));
+            SyncFollow();
             return true;
         }
 
@@ -293,13 +343,12 @@ namespace Armada.Tui.Screens.Ask
                     ScrollBy(Math.Max(1, _Height - 1));
                     return true;
                 case KeyCode.Home:
-                    Following = false;
-                    _DetachedTotal = _Flat.Count;
+                    Detach();
                     _Scroll = 0;
                     if (_Ask.Conversation.HasMore) _Ask.LoadOlder();
                     return true;
                 case KeyCode.End:
-                    FollowTail();
+                    ReturnToTail();
                     return true;
                 case KeyCode.Enter:
                     if (alt || ctrl) return false;
@@ -335,13 +384,21 @@ namespace Armada.Tui.Screens.Ask
                 if (line >= 0 && line < _FlatBlock.Count)
                 {
                     AskBlock block = _Blocks[_FlatBlock[line]];
+                    AskCardButton? button = mouse.Button == MouseButton.Left ? ButtonAt(block, line - block.Top, mouse.X - 2) : null;
+                    if (button != null)
+                    {
+                        // A click on a card button selects the card and acts at once, whatever had keyboard focus.
+                        SelectedKey = block.Key;
+                        SelectedRow = -1;
+                        Press(block, button);
+                        return true;
+                    }
+
                     if (block.Focusable)
                     {
-                        int row = RowAt(block, line - block.Top);
+                        // Selecting with the mouse does not move the viewport, so it does not stop following the tail.
                         SelectedKey = block.Key;
-                        SelectedRow = row;
-                        Following = false;
-                        _DetachedTotal = _Flat.Count;
+                        SelectedRow = RowAt(block, line - block.Top);
                         if (mouse.ClickCount >= 2) Activate();
                     }
                 }
@@ -367,7 +424,7 @@ namespace Armada.Tui.Screens.Ask
             int max = Math.Max(0, _Flat.Count - _Height);
             if (Following) _Scroll = max;
             _Scroll = Math.Clamp(_Scroll, 0, max);
-            if (!Following && _Scroll >= max && SelectedKey == null) Following = true;
+            if (!Following && _Scroll >= max) Following = true;
 
             AskBlock? selected = Selected();
             for (int row = 0; row < _Height; row++)
@@ -422,9 +479,61 @@ namespace Armada.Tui.Screens.Ask
         {
             SelectedKey = key;
             SelectedRow = row;
+            if (Following) _Scroll = MaxScroll();
+            EnsureVisible();
+            SyncFollow();
+        }
+
+        /// <summary>
+        /// Follow the tail exactly when the viewport is at the bottom: a selection on screen in the tail keeps
+        /// following; one that moved the viewport up detaches (and starts counting new lines below).
+        /// </summary>
+        private void SyncFollow()
+        {
+            if (_Scroll >= MaxScroll()) Following = true;
+            else Detach();
+        }
+
+        private void Detach()
+        {
+            if (!Following) return;
             Following = false;
             _DetachedTotal = _Flat.Count;
-            EnsureVisible();
+        }
+
+        private int MaxScroll()
+        {
+            return Math.Max(0, _Flat.Count - _Height);
+        }
+
+        private bool VisibleAt(AskBlock block, int scroll)
+        {
+            int top = block.Top;
+            int bottom = block.Top + block.Lines.Count;
+            return bottom > scroll && top < scroll + _Height;
+        }
+
+        private static AskCardButton? ButtonAt(AskBlock block, int within, int x)
+        {
+            foreach (AskCardButton b in block.Buttons)
+            {
+                if (b.Line == within && x >= b.X && x < b.X + b.Width) return b;
+            }
+
+            return null;
+        }
+
+        private bool Press(AskBlock block, AskCardButton button)
+        {
+            AskActionProposal? proposal = block.Proposal;
+            if (proposal == null || proposal.Id != button.ProposalId) return false;
+            if (button.Action == AskCardActionEnum.Arguments)
+            {
+                ViewState.Toggle(ViewState.ExpandedArguments, proposal.Id);
+                return true;
+            }
+
+            return Decide(proposal, button.Action == AskCardActionEnum.Approve);
         }
 
         private void MoveSelection(int delta)
@@ -452,7 +561,9 @@ namespace Armada.Tui.Screens.Ask
                 if (next >= -1 && next < current.RowLines.Count)
                 {
                     SelectedRow = next;
+                    if (Following) _Scroll = MaxScroll();
                     EnsureVisible();
+                    SyncFollow();
                     return;
                 }
             }
@@ -498,7 +609,7 @@ namespace Armada.Tui.Screens.Ask
             _Scroll = Math.Max(0, _Scroll + delta);
             int max = Math.Max(0, _Flat.Count - _Height);
             if (delta < 0) Following = false;
-            if (_Scroll >= max && delta > 0 && SelectedKey == null) Following = true;
+            if (_Scroll >= max && delta > 0) Following = true;
             if (_Scroll == 0 && delta < 0 && _Ask.Conversation.HasMore) _Ask.LoadOlder();
         }
 
@@ -584,9 +695,8 @@ namespace Armada.Tui.Screens.Ask
                     return true;
                 case 'a':
                 case 'r':
-                    if (block?.Proposal == null || block.Proposal.Status != AskProposalStatusEnum.Pending || _Ask.Conversation.ThreadId == null) return false;
-                    _Ask.Decide(_Ask.Conversation.ThreadId, block.Proposal.Id, c == 'a');
-                    return true;
+                    if (block?.Proposal == null) return false;
+                    return Decide(block.Proposal, c == 'a');
                 case 'x':
                     if (block?.Proposal == null) return false;
                     ViewState.Toggle(ViewState.ExpandedArguments, block.Proposal.Id);
@@ -728,8 +838,7 @@ namespace Armada.Tui.Screens.Ask
                 if (_Flat[idx].ToPlainString().IndexOf(_Search, StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     _Match = idx;
-                    Following = false;
-                    _DetachedTotal = _Flat.Count;
+                    Detach();
                     _Scroll = Math.Max(0, idx - _Height / 2);
                     return;
                 }

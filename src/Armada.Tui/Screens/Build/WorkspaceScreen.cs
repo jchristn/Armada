@@ -124,10 +124,11 @@ namespace Armada.Tui.Screens.Build
             get
             {
                 List<KeyValuePair<string, string>> hints = new List<KeyValuePair<string, string>>();
-                hints.Add(new KeyValuePair<string, string>("Tab", "Tree/Editor"));
-                hints.Add(new KeyValuePair<string, string>("Ctrl+S", "Save"));
+                hints.Add(new KeyValuePair<string, string>("Enter", "Open"));
                 hints.Add(new KeyValuePair<string, string>("Space", "Select"));
                 hints.Add(new KeyValuePair<string, string>("D", "Dispatch"));
+                hints.Add(new KeyValuePair<string, string>("Tab", "Tree/Editor"));
+                hints.Add(new KeyValuePair<string, string>("Ctrl+S", "Save"));
                 return hints;
             }
         }
@@ -383,6 +384,29 @@ namespace Armada.Tui.Screens.Build
             }
 
             return list;
+        }
+
+        /// <inheritdoc />
+        public override FocusHints ResolveHints(FocusHints? inner, bool textEntry)
+        {
+            if (ReferenceEquals(Scope.Focused, Editor))
+            {
+                // The editor takes typed text: Space and D type there, so the first hint is the way back to the tree.
+                return FocusHints.Typing("Esc", "Back to the file tree (then Space select, D dispatch)").Add("Ctrl+S", "Save").Add("Tab", "Next pane");
+            }
+
+            if (ReferenceEquals(Scope.Focused, Preview))
+            {
+                if (inner != null) return inner;
+                return new FocusHints().Add("Esc", "Back to the file tree").Add("Up/Down", "Scroll").Add("Tab", "Next pane");
+            }
+
+            if (ReferenceEquals(Scope.Focused, Tree))
+            {
+                return FocusHints.Of(Hints);
+            }
+
+            return base.ResolveHints(inner, textEntry);
         }
 
         /// <inheritdoc />

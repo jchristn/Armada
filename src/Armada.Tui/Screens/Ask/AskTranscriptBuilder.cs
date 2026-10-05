@@ -341,14 +341,14 @@ namespace Armada.Tui.Screens.Ask
             if (message.Kind == AskMessageKindEnum.ActionProposal)
             {
                 if (text.Length > 0 && (proposal == null || String.IsNullOrEmpty(proposal.SummaryText))) lines.AddRange(AskCardRenderer.Para(text, theme.Muted, w));
-                if (proposal != null) lines.AddRange(AskCardRenderer.ConfirmCard(proposal, false, view.ExpandedArguments.Contains(proposal.Id), ask.IsProposalBusy(proposal.Id), theme, loc, nowUtc, w));
+                if (proposal != null) AddConfirmCard(block, lines, proposal, false, view, ask, theme, loc, nowUtc, w);
                 else lines.AddRange(Markdown(text.Length > 0 ? text : loc.T("A proposed action is loading..."), w));
             }
             else if (message.Kind == AskMessageKindEnum.ActionResult)
             {
                 lines.Add(Header(StyledText.From("* " + loc.T("Action result"), theme.Accent.WithAttribute(CellAttributes.Bold, true)), when, theme, w));
                 lines.AddRange(Markdown(text, w));
-                if (proposal != null) lines.AddRange(AskCardRenderer.ConfirmCard(proposal, true, view.ExpandedArguments.Contains(proposal.Id), ask.IsProposalBusy(proposal.Id), theme, loc, nowUtc, w));
+                if (proposal != null) AddConfirmCard(block, lines, proposal, true, view, ask, theme, loc, nowUtc, w);
             }
             else if (message.Kind == AskMessageKindEnum.WorkUpdate)
             {
@@ -392,7 +392,7 @@ namespace Armada.Tui.Screens.Ask
                 if (conv.Metrics.TryGetValue(message.Id, out AskTurnMetrics? metrics))
                     lines.Add(StyledText.From("  " + metrics.Describe(loc.T("first token"), loc.T("tok/s"), loc.T("tokens"), loc.T("total")), theme.Muted));
                 if (!String.IsNullOrWhiteSpace(message.ThinkingText)) lines.AddRange(Thinking(message.ThinkingText!, view.ExpandedThinking.Contains(block.Key), false, theme, loc, w));
-                if (proposal != null) lines.AddRange(AskCardRenderer.ConfirmCard(proposal, false, view.ExpandedArguments.Contains(proposal.Id), ask.IsProposalBusy(proposal.Id), theme, loc, nowUtc, w));
+                if (proposal != null) AddConfirmCard(block, lines, proposal, false, view, ask, theme, loc, nowUtc, w);
                 lines.AddRange(Markdown(text, w));
             }
 
@@ -434,6 +434,18 @@ namespace Armada.Tui.Screens.Ask
             lines.Add(StyledText.From((expanded ? "v " : "> ") + label + (expanded ? "" : "  (t " + loc.T("show") + ")"), theme.Muted.WithAttribute(CellAttributes.Italic, true)));
             if (expanded) lines.AddRange(AskCardRenderer.Para(thinking.Trim(), theme.Muted, w, "  "));
             return lines;
+        }
+
+        private static void AddConfirmCard(AskBlock block, List<StyledText> lines, AskActionProposal proposal, bool compact, AskViewState view, AskController ask, ArmadaTheme theme, LocalizationService loc, DateTime nowUtc, int w)
+        {
+            List<AskCardButton> buttons = new List<AskCardButton>();
+            int offset = lines.Count;
+            lines.AddRange(AskCardRenderer.ConfirmCard(proposal, compact, view.ExpandedArguments.Contains(proposal.Id), ask.IsProposalBusy(proposal.Id), theme, loc, nowUtc, w, buttons));
+            foreach (AskCardButton button in buttons)
+            {
+                button.Line += offset;
+                block.Buttons.Add(button);
+            }
         }
 
         private static StyledText Header(StyledText left, string right, ArmadaTheme theme, int w)
