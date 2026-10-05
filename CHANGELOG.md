@@ -6,6 +6,10 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Test runs no longer raise desktop notifications
+
+- `NotificationService` (used by `armada watch`) runs its platform command through `INotificationCommandRunner`; the test suite records the command instead of running it. Before, every full test run sent four real "Test Title" notifications through `osascript`, which macOS shows as coming from Script Editor. The tests now check the exact command and escaping for macOS, Linux, and Windows.
+
 ### Structured MCP tool errors
 
 - Every MCP tool error now carries a machine-readable `ErrorCode` (`NotFound`, `InvalidArgument`, `Conflict`, `Forbidden`, `Unavailable`, `Failed`) next to the English `Error`; existing `Code` and `StatusCode` fields are kept. Exceptions map to codes by type, never by message.
