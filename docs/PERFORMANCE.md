@@ -90,8 +90,8 @@ after columns for endpoints that did not change are load, not improvement.
 ## What changed
 
 The background-activity indicator polled `GET /api/v1/jobs`, which returned every job in scope, every 30 seconds
-while idle and every 5 seconds while something ran, from every open dashboard tab. Jobs are never pruned (retention is
-tracked as W3.4), so the poll grew without bound: 861 KB per poll at 2,000 jobs and 8.6 MB taking 129 ms at 20,000.
+while idle and every 5 seconds while something ran, from every open dashboard tab. Jobs were not pruned when this was
+measured (finished jobs are now pruned after `retention.jobRetentionDays`, default 30), so the poll grew without bound: 861 KB per poll at 2,000 jobs and 8.6 MB taking 129 ms at 20,000.
 `GET /api/v1/jobs` now accepts `status`, `kind`, `pageNumber`, and `pageSize` and returns one page when any of them is
 present, backed by a paged, filtered query on all four database providers. The indicator asks for
 `status=Queued,Running`, which is 102 bytes when nothing runs. The unparameterized call is unchanged, so existing
@@ -99,7 +99,8 @@ clients keep working; the Jobs page still uses it.
 
 The same full-table read happened server side. `JobService.MaintainAsync` (every health-loop pass) and the vessel
 health service's orphan and last-scheduled lookups loaded the whole jobs table to find a few rows. They now query only
-the status or kind they need.
+the status or kind they need. The MCP `enumerate` tool's `jobs` entity, which loaded every job and paged in memory
+without a tenant scope, now uses the same paged query and caller scope as `GET /api/v1/jobs`.
 
 ## Not egregious yet, worth doing
 
@@ -110,8 +111,8 @@ slow.
   none on `created_utc`, so every list sorts the matching rows and deep pages scan past the offset (74 ms p95 at
   50,000 missions). An index on `(tenant_id, created_utc)` and one on `created_utc` would fix both. The `jobs` table
   has the same gap on SQLite, MySQL, and SQL Server (only PostgreSQL has a status index), which is why the active-jobs
-  poll still costs 10 ms at 20,000 jobs. Both need a schema migration on all four providers; they were left out of this
-  change so as not to collide with the migration work in W3.
+  poll still costs 10 ms at 20,000 jobs. Both need a schema migration on all four providers and are still open in
+  1.0.0.
 - **`GET /api/v1/status` is N+1 over active voyages.** For each Open or InProgress voyage it reads the voyage again
   and then its mission summaries, and it returns all of them: 276 KB and 44 ms with 500 active voyages. It is also not
   tenant-scoped. A single grouped query, and a cap on the voyages it embeds, would flatten it.
@@ -120,12 +121,10 @@ slow.
   most of it.
 - **Ask thread enumeration decorates each thread with a query** for its tracked work (an N+1 bounded by the page size
   of 25). Cheap today; one grouped count would remove it.
-- **The MCP `enumerate` tool's `jobs` entity pages in memory** after loading every job, unscoped by tenant. It should use
-  the new paged query and the caller's scope (noted for the W1 security review).
 
 ## Not measured here
 
-W4.5 also asks for vessel health evaluation throughput and Ask turn latency. Both are dominated by external work (git
-and dependency tooling against real repositories for health, an agent CLI or model endpoint for Ask) rather than by
-Armada's own code paths, so a seeded database cannot measure them meaningfully. They need a run against real
+Vessel health evaluation throughput and Ask turn latency are not part of this baseline. Both are dominated by
+external work (git and dependency tooling against real repositories for health, an agent CLI or model endpoint for Ask)
+rather than by Armada's own code paths, so a seeded database cannot measure them meaningfully. They need a run against real
 repositories and a real model, recorded with the hardware and model used.

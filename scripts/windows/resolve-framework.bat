@@ -2,6 +2,11 @@
 set "FRAMEWORK=%ARMADA_TARGET_FRAMEWORK%"
 if "%FRAMEWORK%"=="" set "FRAMEWORK=net10.0"
 
+REM Only a leading "net*" token counts as a bare framework (matching resolve-framework.sh), so a first
+REM argument such as --insecure is not mistaken for the framework.
+set "ARMADA_FW_ARG1=%~1"
+if not defined ARMADA_FW_ARG1 set "ARMADA_FW_ARG1=-"
+
 if /I "%~1"=="-f" (
     if "%~2"=="" (
         echo ERROR: Missing framework value after -f.
@@ -16,9 +21,10 @@ if /I "%~1"=="-f" (
     )
 
     set "FRAMEWORK=%~2"
-) else if not "%~1"=="" (
+) else if /I "%ARMADA_FW_ARG1:~0,3%"=="net" (
     set "FRAMEWORK=%~1"
 )
+set "ARMADA_FW_ARG1="
 
 set "FORWARD_ARGS=--framework %FRAMEWORK%"
 set "DOTNET_FRAMEWORK_ARGS=--framework %FRAMEWORK% -p:TargetFramework=%FRAMEWORK% -p:TargetFrameworks=%FRAMEWORK%"

@@ -15,7 +15,7 @@
 #    ARMADA_DATA_DIR and HOME in the temp directory and runs the REST
 #    smoke test (login, dashboard, fleet, vessel, one mission).
 #
-# Usage: verify-macos-pkg.sh [--pkg <file>] [--version 0.9.0] [--keep]
+# Usage: verify-macos-pkg.sh [--pkg <file>] [--version X.Y.Z] [--keep]
 # Env:   IV_PORT_BASE (default 34000), IV_ADMIN_PASSWORD
 # =====================================================================
 set -uo pipefail
@@ -29,7 +29,7 @@ while [ $# -gt 0 ]; do
     --pkg) PKG="$2"; shift 2 ;;
     --version) VERSION="$2"; shift 2 ;;
     --keep) KEEP=1; shift ;;
-    -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) grep '^#' "$0" | grep -v '^#!' | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done

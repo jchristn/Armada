@@ -16,6 +16,8 @@
 # Usage:
 #   e2e-split-mode.sh            # build image, boot ephemeral container, health-check, tear down
 #   ARMADA_E2E_KEEP=1 e2e-split-mode.sh   # leave the container running for manual Harbor attach
+# The container listens on 0.0.0.0, so the Admiral refuses to start with the default admin password; the
+# script passes ARMADA_INITIAL_ADMIN_PASSWORD (yours when set, otherwise a generated throwaway value).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,6 +27,7 @@ IMAGE_TAG="armada-server:e2e-split"
 CONTAINER_NAME="armada-e2e-split"
 HEALTH_URL="http://127.0.0.1:7890/api/v1/status/health"
 MCP_URL="http://127.0.0.1:7891/mcp"
+ADMIN_PASSWORD="${ARMADA_INITIAL_ADMIN_PASSWORD:-E2e-Split-${RANDOM}${RANDOM}-Pw1}"
 
 if ! command -v docker >/dev/null 2>&1; then
     echo "[e2e-split] ERROR: docker is not installed or not on PATH." >&2
@@ -51,7 +54,8 @@ echo "[e2e-split] Booting ephemeral Admiral (split mode)..."
 docker run -d --rm \
     --name "${CONTAINER_NAME}" \
     -p 7890:7890 -p 7891:7891 -p 9464:9464 \
-    -v "${REPO_ROOT}/docker/armada/armada.split.json:/app/data/armada.json:ro" \
+    -e "ARMADA_INITIAL_ADMIN_PASSWORD=${ADMIN_PASSWORD}" \
+    -v "${REPO_ROOT}/docker/armada/armada.split.json:/app/data/settings.json:ro" \
     "${IMAGE_TAG}" >/dev/null
 
 echo "[e2e-split] Waiting for Admiral health at ${HEALTH_URL}..."
@@ -87,6 +91,6 @@ else
 fi
 
 echo "[e2e-split] Split-mode ephemeral smoke test complete."
-echo "[e2e-split] Next (manual): start the Harbor app on the host, point it at http://127.0.0.1:7890,"
-echo "[e2e-split] mint a credential, and dispatch a captain. Re-run with ARMADA_E2E_KEEP=1 to keep the"
-echo "[e2e-split] Admiral up for that step."
+echo "[e2e-split] Next (manual): mint a credential, start the Harbor app on the host with its link URL set to"
+echo "[e2e-split] ws://127.0.0.1:7890/v1.0/harbor/connect and that credential as its AccessKey, and dispatch a"
+echo "[e2e-split] captain. Re-run with ARMADA_E2E_KEEP=1 to keep the Admiral up for that step."

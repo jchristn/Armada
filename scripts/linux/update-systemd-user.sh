@@ -17,4 +17,4 @@ if command -v systemctl >/dev/null 2>&1; then
     systemctl --user stop "${UNIT_NAME}" >/dev/null 2>&1 || true
 fi
 
-"${SCRIPT_DIR}/install-systemd-user.sh"
+"${SCRIPT_DIR}/install-systemd-user.sh" "$@"

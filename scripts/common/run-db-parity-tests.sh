@@ -31,7 +31,7 @@ while [ $# -gt 0 ]; do
     --providers) PROVIDERS="$2"; shift 2 ;;
     --framework) FRAMEWORK="$2"; shift 2 ;;
     --no-build) DO_BUILD=0; shift ;;
-    -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) grep '^#' "$0" | grep -v '^#!' | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done

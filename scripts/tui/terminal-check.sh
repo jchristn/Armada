@@ -22,13 +22,14 @@ while [ $# -gt 0 ]; do
     --port) PORT="$2"; shift 2 ;;
     --no-docker) DOCKER=0; shift ;;
     --no-build) BUILD=0; shift ;;
+    -h|--help) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
 done
 MCP_PORT=$((PORT + 1))
-[ -n "$OUT" ] || OUT="$(mktemp -d -t armada-tui-terminal-check)"
+[ -n "$OUT" ] || OUT="$(mktemp -d "${TMPDIR:-/tmp}/armada-tui-terminal-check.XXXXXX")"
 mkdir -p "$OUT"
-DATA_DIR="$(mktemp -d -t armada-tui-terminal-data)"
+DATA_DIR="$(mktemp -d "${TMPDIR:-/tmp}/armada-tui-terminal-data.XXXXXX")"
 TOKEN="tui-terminal-check-$(date +%s)"
 CONTAINER="armada-tui-terminal-check-$$"
 SERVER_PID=""

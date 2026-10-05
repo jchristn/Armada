@@ -16,6 +16,8 @@ for %%I in ("%SCRIPT_DIR%\..\..") do set "REPO_ROOT=%%~fI"
 set "IMAGE_TAG=armada-server:e2e-split"
 set "CONTAINER_NAME=armada-e2e-split"
 set "HEALTH_URL=http://127.0.0.1:7890/api/v1/status/health"
+REM The container listens on 0.0.0.0, so the Admiral refuses to start with the default admin password.
+if defined ARMADA_INITIAL_ADMIN_PASSWORD (set "ADMIN_PASSWORD=%ARMADA_INITIAL_ADMIN_PASSWORD%") else (set "ADMIN_PASSWORD=E2e-Split-%RANDOM%%RANDOM%-Pw1")
 
 where docker >nul 2>&1
 if errorlevel 1 (
@@ -30,7 +32,7 @@ if errorlevel 1 exit /b 1
 docker rm -f "%CONTAINER_NAME%" >nul 2>&1
 
 echo [e2e-split] Booting ephemeral Admiral (split mode)...
-docker run -d --rm --name "%CONTAINER_NAME%" -p 7890:7890 -p 7891:7891 -p 9464:9464 -v "%REPO_ROOT%\docker\armada\armada.split.json:/app/data/armada.json:ro" "%IMAGE_TAG%" >nul
+docker run -d --rm --name "%CONTAINER_NAME%" -p 7890:7890 -p 7891:7891 -p 9464:9464 -e "ARMADA_INITIAL_ADMIN_PASSWORD=%ADMIN_PASSWORD%" -v "%REPO_ROOT%\docker\armada\armada.split.json:/app/data/settings.json:ro" "%IMAGE_TAG%" >nul
 if errorlevel 1 exit /b 1
 
 echo [e2e-split] Waiting for Admiral health at %HEALTH_URL% ...

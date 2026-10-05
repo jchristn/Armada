@@ -26,11 +26,13 @@ run_helm() {
 
 echo
 echo "[update] Stopping repo-backed Armada MCP stdio hosts if they are running..."
-mapfile -t MCP_PIDS < <(pgrep -af "Armada\\.Helm\\.dll mcp stdio" | awk -v repo="$REPO_ROOT" 'index($0, repo) > 0 { print $1 }' || true)
-if [ "${#MCP_PIDS[@]}" -eq 0 ]; then
+# ps -eo pid=,args= works on both Linux and macOS (pgrep -a means "list the full command" on Linux but
+# "include ancestors" on macOS), and a plain string avoids mapfile, which the macOS system bash 3.2 lacks.
+MCP_PIDS="$(ps -eo pid=,args= | awk -v repo="$REPO_ROOT" '/Armada\.Helm\.dll mcp stdio/ && index($0, repo) > 0 { print $1 }' || true)"
+if [ -z "$MCP_PIDS" ]; then
   echo "[update] No repo-backed MCP stdio hosts found."
 else
-  for pid in "${MCP_PIDS[@]}"; do
+  for pid in $MCP_PIDS; do
     [ -n "$pid" ] || continue
     echo "[update] Stopping MCP stdio host PID $pid..."
     kill -9 "$pid"

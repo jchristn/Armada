@@ -36,10 +36,10 @@ lets a single containerized Admiral drive agents across several developer machin
 The Harbor is the client. It dials the Admiral at a configured WebSocket path (default
 `/v1.0/harbor/connect`) over WSS and keeps that connection open. Every frame is a single JSON message; the
 Admiral pushes host work down the link and the Harbor streams output, exit codes, and git results back up.
-The connection is authenticated on the upgrade with the Harbor's credential, re-validated for the life of
-the link, and torn down if that credential, user, tenant, or session is disabled. If the link drops while
-jobs are running the captain processes keep running on the host, and the Harbor's next handshake and
-heartbeat let the Admiral rebind them rather than orphaning the work.
+The Harbor's credential is checked when its handshake arrives; a refused Harbor gets a `handshakeAck` with
+`accepted: false` and a reason, and the link closes. The credential is not re-checked for the life of an
+accepted link. If the link drops, the Harbor app retries every few seconds and the captain processes keep
+running on the host. See [Harbor disconnects](#harbor-disconnects) for what happens to their missions.
 
 The full contract -- message types, framing, authentication, and the connect/run/delegate sequences -- is
 specified in [HARBOR_PROTOCOL.md](HARBOR_PROTOCOL.md). Read that document if you are implementing either
@@ -76,22 +76,42 @@ with the default when Harbor saves.
 | `DashboardUrl` | Dashboard URL opened by the app's "Open Dashboard" action. Default `http://127.0.0.1:7890/dashboard`. |
 | `HarborId` | Harbor identifier (`hbr_` prefix). Generated on first run when empty. |
 | `Name` | Human-facing Harbor name. Defaults to the machine name. |
-| `UserId` / `TenantId` | Owner sent at connect (`x-user-guid`, `x-tenant-guid`). Empty registers no owner. With an `AccessKey`, the credential's tenant and user apply. |
+| `UserId` / `TenantId` | Sent at connect as `x-user-guid` and `x-tenant-guid`. The Admiral does not read `x-user-guid`: the owning user always comes from the `AccessKey` credential (none without one). `TenantId` applies only to a credential-less loopback Harbor or when the credential is a global admin; otherwise the credential's tenant applies. |
 | `Capabilities` | Runtimes and host tools advertised at handshake (e.g. `git`, `claude`). Default `["git"]`. Drives capability-based routing. |
 | `Appearance` | Window color scheme: `System` (default), `Light`, or `Dark`. |
 | `MaxConcurrentJobs` | Maximum concurrent jobs this Harbor will accept. Default 4. |
 | `HeartbeatIntervalMs` | Heartbeat interval in milliseconds; `0` disables heartbeats. Default 15000. |
-| `AccessKey` / `Secret` | `AccessKey` is an Armada credential (a bearer token from Server > Credentials, or the local API key); the Harbor registers under that credential's tenant and user. Leave it empty only for a Harbor on the same machine as a localhost-bound Admiral; a Harbor connecting from another host is refused without one. `Secret` is not used for authentication today and is never logged. |
+| `AccessKey` / `Secret` | `AccessKey` is an Armada credential (a bearer token from Server > Credentials, or the local API key); the Harbor registers under that credential's tenant and user. Leave it empty only for a Harbor on the same machine as a localhost-bound Admiral; a Harbor connecting from another host is refused without one. `Secret` is sent as `x-secret-key` but not used for authentication today, and is never logged. |
 
 A Harbor does not have to be pre-registered: it self-registers on its first handshake. Pre-registering is
-useful when you want to reserve a name and capacity, or set routing preferences, before the host connects.
+useful when you want to reserve a name and capacity, or set routing preferences, before the host connects. A Harbor id
+that is already registered to a different tenant or user is refused.
+
+### Admiral settings
+
+The Admiral side is configured in `settings.json`. The Harbor link endpoint is always registered; there is no switch
+that turns split mode on or off. Whenever at least one Harbor is connected, each captain launch is routed to an eligible Harbor when there is one (see
+[Dock affinity and routing](#dock-affinity-and-routing)).
+
+| Key | Default | Description |
+|---|---|---|
+| `harbor.linkPath` | `/v1.0/harbor/connect` | WebSocket path Harbors connect to, on the REST port. Restart required. |
+| `harbor.requireAuth` | `false` | When true, every Harbor must present a credential. When false, a Harbor without a credential is still accepted only if the Admiral listens on a loopback hostname and the Harbor connects from loopback. |
+| `harbor.advertisedMcpBaseUrl` | `null` | MCP URL sent to Harbors in `handshakeAck` so captains can call home. Null advertises the Admiral's own MCP URL, which is right in Local mode; in split mode set a URL the Harbor host can reach. |
+| `requireHarborForLaunch` | `false` | When true, a mission is assigned only while an eligible Harbor owned by the mission's user is connected; it stays Pending otherwise and never runs on the Admiral host or another user's Harbor. |
+| `deploymentMode` | `Local` | `Local` or `Split`. Informational in 1.0: routing does not read it. |
+
+`harbor.heartbeatIntervalSeconds` (15), `harbor.heartbeatTimeoutSeconds` (45), and `harbor.defaultMaxJobsPerHarbor` (4)
+are accepted and validated but not enforced in 1.0: a Harbor is marked disconnected when its link closes, not on a
+missed heartbeat, and each Harbor's capacity comes from its handshake or its registration.
 
 ## Managing Harbors
 
 Harbor registrations are managed through the same REST and MCP surfaces as the rest of Armada.
 
-Over REST, the routes live under `/api/v1/harbors` -- list, register, read, update, delete, and
-enable/disable -- and are documented with request and response shapes in
+Over REST, the routes live under `/api/v1/harbors` -- list, register, read, update, delete,
+enable/disable, and `POST /api/v1/harbors/{id}/probe`, which runs a one-off host command (default `git --version`) on a
+connected Harbor over its link -- and are documented with request and response shapes in
 [REST_API.md](REST_API.md#harbors). Only `name`, `maxConcurrentJobs`, and `enabled` are operator-editable;
 everything else (`connectionStatus`, `lastSeenUtc`, `protocolVersion`, `osPlatform`, `architecture`) is
 reported by the link and preserved server-side.
@@ -108,30 +128,58 @@ sending it new missions. Deleting a Harbor removes the registration entirely.
 A dock is a git worktree, and a worktree exists on exactly one host's filesystem. That single fact drives
 how the router assigns work. When a mission first needs a dock, the router picks a Harbor for it; from that
 point on the mission is pinned to that Harbor, because its checkout, its branch, and its later git
-operations all live there. A mission cannot hop hosts mid-flight. If its owning Harbor goes offline, the
-mission's host operations queue and resume when the Harbor reconnects rather than being re-routed elsewhere.
+operations all live there. A mission cannot hop hosts mid-flight: the router never re-routes it to another Harbor.
 
 For a mission that does not yet own a dock, the router chooses among the registered Harbors in a fixed
 order:
 
-1. **Affinity.** If the mission already owns a dock, it goes to the Harbor that provisioned it -- no other
-   Harbor is considered.
+1. **Affinity.** If the mission's dock is already pinned to a Harbor, it goes to that Harbor -- no other
+   Harbor is considered. If that Harbor is offline or no longer registered, no Harbor is chosen.
 2. **Preference.** An eligible Harbor named by `vessel.preferredHarborId` wins.
 3. **Capability.** A Harbor is eligible only if it is enabled, connected, under its `maxConcurrentJobs`
    capacity, and advertises the requested runtime plus every capability in `vessel.requiredCapabilities`.
 4. **Least load.** Among the remaining eligible Harbors, the least loaded one is chosen, with larger
    remaining headroom and then name used as deterministic tie-breakers.
 
-If nothing is eligible, the router holds the work with a specific reason -- no connected Harbor, no Harbor
-with the required capabilities, or all capable Harbors at capacity -- so the mission starts as soon as a
-slot or a host becomes available.
+If nothing is eligible, the router returns a specific reason -- no connected Harbor, no Harbor with the
+required capabilities, all capable Harbors at capacity, or the dock's Harbor is offline -- and what happens next
+depends on `requireHarborForLaunch`:
+
+- **Off (default):** the captain runs on the Admiral host, as in Local mode. The same happens when no Harbor is
+  connected at all.
+- **On:** the mission is not assigned until an eligible Harbor owned by the mission's user is connected; it stays
+  Pending and is retried on each dispatch pass.
+
+## Harbor disconnects
+
+When a Harbor's link closes, the Admiral marks the Harbor `Disconnected`, fails any git or deferred-launch request
+still waiting for its reply, and stops routing new work to it. Captain processes already running on that host keep
+running, and the Harbor app reconnects on its own (it retries every 3 seconds).
+
+Output and exit events a captain produces while the link is down are not buffered or replayed. If the Harbor
+reconnects while the captain is still running, later output streams to the same job again and the mission carries on.
+Otherwise the mission is recovered by stall detection, which is the accepted 1.0 behavior:
+
+1. The Admiral keeps treating the delegated captain process as alive (it cannot probe a process on another host), so
+   the mission is not failed the moment the link drops.
+2. Once no output has arrived for `stallThresholdMinutes` (default 10), the health check marks the captain stalled,
+   asks the Harbor to stop it (a no-op while the Harbor is disconnected), and runs auto-recovery: it relaunches the
+   captain in the mission's existing dock, up to `maxRecoveryAttempts` (default 3) times. The relaunch goes through
+   normal routing, so it lands on the dock's Harbor if that Harbor has reconnected; if it is still offline, the
+   relaunch falls back to the Admiral host like any other launch with no eligible Harbor.
+3. When recovery is exhausted, the mission fails with `StallRecoveryExhausted`. A recovery that cannot use the dock
+   fails the mission as `Infra`. `maxMissionRuntimeMinutes` still applies throughout.
+
+So a short blip costs nothing, while a Harbor that stays away holds its missions for about `stallThresholdMinutes`
+before recovery starts. Lower `stallThresholdMinutes` to recover sooner, at the cost of flagging captains that are
+merely quiet.
 
 ## Status
 
 The management surface and the host-runner app exist today: the `Harbor` entity and its persistence, the
 REST and MCP management APIs, the multi-Harbor router with dock affinity, the wire-protocol contract, and
 the `Armada.Harbor` app. The live split-mode link transport -- the server-side WebSocket endpoint that
-accepts Harbor links, credential authentication on the upgrade, and remote captain-process delegation -- is
+accepts Harbor links, credential authentication on the handshake, and remote captain-process delegation -- is
 **experimental**. Local mode is the supported way to run Armada. Split mode works, but its link transport, the
 Harbor management REST routes and MCP tools, the `harbor.*`, `deploymentMode`, and `requireHarborForLaunch` settings,
 and the link protocol below are excluded from the 1.0 compatibility promise and may change in a minor release (see

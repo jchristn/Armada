@@ -4,12 +4,11 @@
 
 This document describes the currently shipped tunnel contract between `Armada.Server` and `Armada.Proxy`.
 
-The direction is now:
+In short:
 
-- keep the outbound Armada tunnel
-- keep proxy tunnel termination at `/tunnel`
-- add generic dashboard transport relay for `/api/v1/*` and `/ws`
-- stop growing the proxy around feature-specific UI route families
+- Armada opens an outbound websocket to the proxy, which terminates it at `/tunnel`
+- the proxy relays dashboard traffic for `/api/v1/*` and `/ws` through generic relay methods
+- the proxy has no feature-specific UI route families
 
 The Admiral serves only the generic relay methods (`armada.http.request` and `armada.ws.open`, `armada.ws.message`, `armada.ws.close`). The older feature-specific methods were removed; any other request method gets a `404` response with error code `unsupported_method`.
 
@@ -81,9 +80,21 @@ Representative request payload:
   "enrollmentToken": "optional-token",
   "passwordTimestampUtc": "2026-05-16T18:30:00Z",
   "passwordNonce": "9f31c41b5f934d7ea2865a0b56d3c8ce",
-  "passwordProofSha256": "8c77f5..."
+  "passwordProofSha256": "8c77f5...",
+  "capabilities": [
+    "remoteControl.handshake",
+    "remoteControl.heartbeat",
+    "remoteControl.events",
+    "remoteControl.requests",
+    "dashboard.http.relay",
+    "dashboard.websocket.relay"
+  ]
 }
 ```
+
+`protocolVersion` is `Constants.RemoteTunnelProtocolVersion` (currently `2026-04-04`); `armadaVersion` is the product
+version. `capabilities` is the Admiral's capability manifest: exactly the six features above, where
+`dashboard.http.relay` and `dashboard.websocket.relay` signal the generic relay.
 
 The proxy validates:
 
@@ -100,25 +111,33 @@ Representative successful response:
 {
   "type": "response",
   "correlationId": "5a9b9ed0cc4343e5882e5f4abaf9d0e0",
-  "method": "armada.tunnel.handshake",
   "statusCode": 200,
   "success": true,
+  "message": "Handshake accepted.",
   "payload": {
-    "protocolVersion": "2026-04-04",
+    "accepted": true,
     "proxyVersion": "1.0.0",
-    "features": [
-      "remoteControl.handshake",
-      "remoteControl.heartbeat",
-      "remoteControl.events",
-      "remoteControl.requests",
+    "protocolVersion": "2026-04-04",
+    "instanceId": "armada-1f2e3d4c5b6a",
+    "message": "Handshake accepted.",
+    "capabilities": [
+      "proxy.portal",
+      "dashboard.static",
       "dashboard.http.relay",
-      "dashboard.websocket.relay"
+      "dashboard.websocket.relay",
+      "instances.summary",
+      "instances.selection",
+      "tunnel.handshake",
+      "tunnel.ping"
     ]
   }
 }
 ```
 
-The Admiral advertises exactly these features in its handshake capability manifest; `dashboard.http.relay` and `dashboard.websocket.relay` signal the generic relay.
+Responses carry no `method`; they are matched by `correlationId`. A first message that is not
+`armada.tunnel.handshake` gets an `error` envelope with code `invalid_handshake` and the socket closes. A handshake that
+fails validation gets a response with error code `handshake_rejected` and the socket closes; repeated failures from
+one client lock it out for a while.
 
 ## Generic HTTP Relay
 
@@ -142,7 +161,7 @@ Payload shape:
 
 Current behavior:
 
-- only `/api/v1/*` is accepted
+- only a canonical path under `/api/v1/*` is accepted
 - selected request headers are forwarded
 - request and response bodies are base64-encoded when present
 - JSON, text, uploads, and downloads are supported
@@ -165,7 +184,8 @@ Representative response payload:
 
 Current limitation:
 
-- the first shipped relay assumes request and response bodies fit in one tunnel payload
+- request and response bodies must fit in one tunnel payload; bodies larger than 8 MiB
+  (`Constants.DefaultRemoteRelayMaxBodyBytes`) are rejected
 - chunking/streaming remains open work
 
 ## Generic WebSocket Relay
@@ -176,8 +196,9 @@ The proxy forwards the dashboard websocket through these requests, which the Adm
 - `armada.ws.message`
 - `armada.ws.close`
 
-The Admiral reports socket state back to the proxy with these events:
+The Admiral sends socket traffic and state back to the proxy with these events:
 
+- `armada.ws.message` (a frame from the Armada `/ws` endpoint, same payload shape as the request)
 - `armada.ws.closed`
 - `armada.ws.error`
 
@@ -186,11 +207,15 @@ Representative open request payload:
 ```json
 {
   "proxySocketId": "7f3d1f7f1d90491c9b0f4fca1e50f8d9",
-  "path": "/ws"
+  "path": "/ws",
+  "queryString": null,
+  "subprotocols": null
 }
 ```
 
-Representative message event payload:
+Only `path: "/ws"` is accepted.
+
+Representative message payload:
 
 ```json
 {

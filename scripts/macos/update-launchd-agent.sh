@@ -21,4 +21,4 @@ launchctl bootout "gui/$(id -u)" "${PLIST_PATH}" >/dev/null 2>&1 \
     || launchctl unload -w "${PLIST_PATH}" >/dev/null 2>&1 \
     || true
 
-"${SCRIPT_DIR}/install-launchd-agent.sh"
+"${SCRIPT_DIR}/install-launchd-agent.sh" "$@"

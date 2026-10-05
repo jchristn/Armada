@@ -27,7 +27,7 @@ Not shipped in this cut:
 
 - proxy relay for the MCP endpoint
 - delegated identity or SSO between proxy auth and Armada auth
-- resumable tunnel subscriptions or large-body streaming
+- resumable tunnel subscriptions or large-body streaming (relayed bodies are capped at 8 MiB)
 - unrestricted remote access to every local-only admin route
 
 ## Default URLs
@@ -157,20 +157,21 @@ That split is acceptable for the current cut and is explicitly surfaced in the p
 
 The proxy relays the real dashboard transport, but it still blocks selected local-only actions.
 
-Always blocked:
+Always blocked (any method):
 
-- shutdown
-- factory reset
-- restore
+- shutdown (`/api/v1/status/shutdown`, `/api/v1/server/stop`)
+- factory reset (`/api/v1/status/factory-reset`, `/api/v1/server/reset`)
+- restore (`/api/v1/restore`)
 
-Write-blocked administrative families:
+Write-blocked administrative families (only `GET` and `HEAD` pass):
 
-- settings writes
-- tenant writes
-- user writes
-- credential writes
+- settings writes (`/api/v1/settings...`)
+- tenant writes (`/api/v1/tenants...`, except the login-time `POST /api/v1/tenants/lookup`)
+- user writes (`/api/v1/users...`)
+- credential writes (`/api/v1/credentials...`)
 
-If the dashboard reaches one of those routes through the proxy, the user gets an explicit policy-denied response instead of a proxy-specific substitute workflow.
+If the dashboard reaches one of those routes through the proxy, the user gets an explicit `403` policy-denied response
+instead of a proxy-specific substitute workflow. Only canonical paths under `/api/v1/*` are relayed at all.
 
 ## Troubleshooting
 

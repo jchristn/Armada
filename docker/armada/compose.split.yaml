@@ -3,9 +3,11 @@
 # on the Harbor, which dials out to the Admiral over the published link port (7890) and reaches the
 # advertised MCP endpoint (127.0.0.1:7891, published below) to call home.
 #
-# Bring the Admiral up with this profile, then start the Harbor app on the host and point it at
-# http://127.0.0.1:7890. Standalone/local mode remains the default and does not need Docker at all
-# (see compose.yaml).
+# Bring the Admiral up with this profile, then start the Harbor app on the host and set its link URL
+# (ServerLinkUrl) to ws://127.0.0.1:7890/v1.0/harbor/connect. The containerized Admiral listens on
+# 0.0.0.0 and sees the Harbor as a non-loopback peer, so the Harbor must also present an Armada
+# credential (AccessKey, sent as x-access-key; mint one in the dashboard or with the REST API).
+# Standalone/local mode remains the default and does not need Docker at all (see compose.yaml).
 services:
   armada-server:
     build:

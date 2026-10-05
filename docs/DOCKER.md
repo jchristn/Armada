@@ -190,7 +190,6 @@ Edit `docker/armada/armada.json` to customize (this is the file as shipped):
     }
   ],
   "allowSelfRegistration": false,
-  "requireAuthForShutdown": true,
   "rest": {
     "hostname": "0.0.0.0"
   },
@@ -221,6 +220,9 @@ To use MySQL, PostgreSQL, or SQL Server instead of SQLite, change the `database`
 ```
 
 Valid `type` values: `Sqlite`, `Mysql`, `Postgresql`, `SqlServer`.
+
+Stopping, restarting, rebuilding, and rolling back the server always require an admin (the old
+`requireAuthForShutdown` setting is deprecated and ignored).
 
 ### Vessels from repositories mounted into the container
 
@@ -254,6 +256,27 @@ affected. `scripts/common/install-verify/verify-docker.sh` uses exactly this set
 
 ---
 
+## Split Mode (Admiral in Docker, captains on the host)
+
+`docker/armada/compose.split.yaml` runs the Admiral and the observability stack without the standalone dashboard,
+using `docker/armada/armada.split.json`. That file sets `deploymentMode: "Split"`, `requireHarborForLaunch: true`, and
+`harbor.advertisedMcpBaseUrl: "http://127.0.0.1:7891/mcp"`, so missions wait for a Harbor on the host instead of
+running in the container. Split mode is experimental in 1.0 (see [COMPATIBILITY.md](COMPATIBILITY.md)).
+
+```bash
+cd docker/armada
+export ARMADA_INITIAL_ADMIN_PASSWORD='choose-a-strong-password'
+docker compose -f compose.split.yaml up -d
+```
+
+Then start Armada Harbor on the same host, set its `ServerLinkUrl` to `ws://127.0.0.1:7890/v1.0/harbor/connect`, and set its `AccessKey` to an Armada
+credential (a bearer token from Server > Credentials): the container listens on `0.0.0.0`, so the Admiral accepts a
+Harbor link only with a credential. The advertised MCP URL
+uses `127.0.0.1`, which works only when the Harbor runs on the Docker host; change it in `armada.split.json` for a
+Harbor on another machine. See [HARBOR.md](HARBOR.md).
+
+---
+
 ## Stopping and Restarting
 
 ```bash
@@ -268,6 +291,11 @@ docker compose up -d
 docker compose logs -f armada-server
 docker compose logs -f armada-dashboard
 ```
+
+To pick up a new version, `git pull` and run `docker/update.sh` (or `docker\update.bat`). It pulls the observability
+images, rebuilds the Admiral and dashboard from the checkout, and recreates the stack; `db/`, `logs/`, and the named
+volumes are kept. Pass a compose file relative to `docker/` to update another stack, for example
+`docker/update.sh armada/compose.split.yaml` or `docker/update.sh proxy/compose.yaml`.
 
 For the proxy stack:
 
@@ -303,7 +331,7 @@ Both scripts prompt for confirmation, stop containers, and delete local SQLite d
 
 ## Building Images from Source
 
-Build scripts are split by platform under `scripts/windows/`, `scripts/linux/`, and `scripts/macos/`. Shared shell implementations live under `scripts/common/`. They build multi-platform images (amd64 + arm64) with a single builder invocation, push the manifest to Docker Hub, and then pull the pushed tags back into the local Docker registry so the same images are available locally.
+Build scripts are split by platform under `scripts/windows/`, `scripts/linux/`, and `scripts/macos/`. Shared shell implementations live under `scripts/common/`. They build with `docker buildx` (server and dashboard for `linux/amd64` and `linux/arm64/v8`; the proxy for `linux/amd64` only), push to Docker Hub, and then pull the pushed tags back into the local Docker registry so the same images are available locally. You need a `docker buildx` builder that can target those platforms and a `docker login` with push rights to `jchristn77`.
 
 ### Build latest only
 
@@ -392,9 +420,14 @@ docker build -f src/Armada.Server/Dockerfile -t armada-server:local .
 
 # Dashboard
 docker build -f src/Armada.Dashboard/Dockerfile -t armada-dashboard:local .
+
+# Proxy
+docker build -f src/Armada.Proxy/Dockerfile -t armada-proxy:local .
 ```
 
-Then update `docker/armada/compose.yaml` or `docker/proxy/compose.yaml` to reference your local tags instead of local builds if you want to pin named images.
+Run these from the repository root. The compose files already build from source (`build:`), so this is only needed
+when you want named images: replace a service's `build:` block with `image: armada-server:local` (or a published tag
+such as `jchristn77/armada-server:v1.0.0`) to use one.
 
 ---
 
@@ -403,7 +436,7 @@ Then update `docker/armada/compose.yaml` or `docker/proxy/compose.yaml` to refer
 | Port | Protocol | Service | Description |
 |------|----------|---------|-------------|
 | 7890 | HTTP | Admiral REST API | REST endpoints, OpenAPI, built-in dashboard, WebSocket at /ws |
-| 7891 | TCP | MCP | Model Context Protocol for agent communication |
+| 7891 | HTTP | MCP | Model Context Protocol for agent communication (`/mcp`) |
 | 9464 | HTTP | Admiral metrics | Prometheus scrape endpoint (`/metrics`) |
 | 3000 | HTTP | React Dashboard | Standalone SPA (nginx) |
 | 9090 | HTTP | Prometheus | Metrics UI |

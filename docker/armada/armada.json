@@ -14,7 +14,6 @@
     }
   ],
   "allowSelfRegistration": false,
-  "requireAuthForShutdown": true,
   "rest": {
     "hostname": "0.0.0.0"
   },

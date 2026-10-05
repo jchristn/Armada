@@ -15,7 +15,8 @@
 # Containers run with --rm under unique names and are removed on exit.
 #
 # Usage: verify-linux-package.sh [--format deb|rpm] [--package <file>]
-#                                [--packages-dir <dir>] [--version 0.9.0] [--keep]
+#                                [--packages-dir <dir>] [--version X.Y.Z] [--keep]
+#   --version defaults to <Version> in src/Directory.Build.props.
 #   --packages-dir: reuse a package already in <dir>, or copy the freshly
 #   built .deb/.rpm files there (build once, test both formats).
 # =====================================================================
@@ -34,7 +35,7 @@ while [ $# -gt 0 ]; do
     --packages-dir) PACKAGES_DIR="$2"; shift 2 ;;
     --version) VERSION="$2"; shift 2 ;;
     --keep) KEEP=1; shift ;;
-    -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) grep '^#' "$0" | grep -v '^#!' | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done

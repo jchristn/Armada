@@ -6,7 +6,7 @@
 > **Scope:** the Admiral (REST, MCP, WebSocket, Harbor link, remote tunnel and dashboard relay), Armada.Proxy,
 > the Helm CLI's stdio MCP server, and every place that touches the host file system or runs a process.
 >
-> **Last updated:** 2026-10-04 (W1.9 security follow-ups; final pre-1.0 pass: F-33..F-37, O-04/O-06/O-17 closed, O-20 mostly closed, O-11 narrowed). **External review (W1.8):** not yet performed.
+> **Last updated:** 2026-10-05 (W1.9 security follow-ups; final pre-1.0 pass: F-33..F-37, O-04/O-06/O-17 closed, O-20 mostly closed, O-11 narrowed). **External review (W1.8):** not yet performed.
 
 ## How to read this document
 
@@ -42,8 +42,8 @@ defense in depth), **Low** (hardening).
 ### Authorization
 
 Every REST route and every MCP tool declares an explicit requirement: a resource type, an operation
-(`Read`, `Create`, `Update`, `Delete`, `Execute`, `Admin`, per AUTHENTICATION.md), and a permission level
-(`NoAuthRequired`, `Authenticated`, `TenantAdmin`, `AdminOnly`).
+(`ResourceOperationEnum`: `Read`, `Create`, `Update`, `Delete`, `Execute`, `Admin`), and a permission level
+(`PermissionLevel`: `NoAuthRequired`, `Authenticated`, `TenantAdmin`, `AdminOnly`).
 
 - **REST:** `RouteAuthorizationRegistry` holds one line per HTTP method and route template. The Admiral checks it
   centrally in Watson's PreRouting hook, after resolving the request to the exact template Watson will dispatch to,
@@ -75,6 +75,8 @@ Every REST route and every MCP tool declares an explicit requirement: a resource
 - The dashboard shows a persistent warning banner to admins and tenant admins while defaults are in use.
 - Self-registration (`POST /api/v1/onboarding`) is off by default.
 - MCP is authenticated by default; unauthenticated calls are accepted only on a loopback-bound listener (D2).
+- MCP tool calls are rate limited per client (`Mcp.ToolCallsPerSecond`, default 100, 0 disables); a call over the
+  limit gets a tool result with `isError` true.
 
 ### Accounting
 
@@ -156,12 +158,12 @@ and the server log for them.
 | O-08 | Medium | Fleet actions (TenantAdmin) | Template variables (`vessel.name`, `vessel.defaultBranch`, `vessel.workingDirectory`, `vessel.buildCommand`, `health.summary`) are substituted into shell text unescaped. | Fleet Actions owner (shell-quote substitutions). |
 | O-09 | Medium | Deployments (TenantAdmin) | Environment health and verification URLs make server-side HTTP requests (SSRF to internal addresses). | Delivery owner (URL allow-list, block link-local and metadata addresses). |
 | O-10 | Low | REST | `/openapi.json` and `/swagger` are public. | Accepted: documentation only, no data. |
-| O-11 | Medium | Proxy | One shared password and no per-user identity; `AllowInvalidCertificates` disables TLS validation on the tunnel; the route policy blocks paths by exact string; lockouts are in memory; `/proxy-api/v1/auth/challenge` is not rate limited (one-time, expiring challenges). Relayed calls still need Armada credentials. | Partly closed in W1.9 (F-30) and the final pass: proxy lockouts persist across restarts (`proxy-lockouts.json` in the proxy data directory); `RemoteControl.AllowInvalidCertificates` stays off by default and the Admiral logs a security warning when it is on. The route policy already evaluates a canonical path (R1c, `UrlPathCanonicalizer`). Explicit post-1.0 decisions: per-user proxy identity (the shared password plus Armada credentials on every relayed call is the 1.0 model) and rate limiting the challenge endpoint (challenges are one-time and expiring). Owner: proxy. |
+| O-11 | Medium | Proxy | One shared password and no per-user identity; `AllowInvalidCertificates` disables TLS validation on the tunnel; the route policy blocked paths by exact string; lockouts were in memory; `/proxy-api/v1/auth/challenge` is not rate limited (one-time, expiring challenges). Relayed calls still need Armada credentials. | Partly closed in W1.9 (F-30) and the final pass: proxy lockouts persist across restarts (`proxy-lockouts.json` in the proxy data directory); `RemoteControl.AllowInvalidCertificates` stays off by default and the Admiral logs a security warning when it is on. The route policy already evaluates a canonical path (R1c, `UrlPathCanonicalizer`). Explicit post-1.0 decisions: per-user proxy identity (the shared password plus Armada credentials on every relayed call is the 1.0 model) and rate limiting the challenge endpoint (challenges are one-time and expiring). Owner: proxy. |
 | O-12 | Low | MCP, WebSocket (AdminOnly) | `backup` and `restore` take arbitrary host paths. | Accepted: global admins are host operators; documented. |
 | O-13 | Low | WebSocket | Planning-session tool output and check-run output are broadcast to every socket in the tenant without secret scrubbing. | W1 follow-up (run broadcasts through `SecretRedactor`, owner-only delivery). |
 | O-14 | Low | Docker | The observability stack publishes Prometheus, Loki, and Grafana ports, Grafana uses `admin` / `admin`, and the Admiral's `/metrics` port 9464 is unauthenticated. | W5 / operations. |
 | O-15 | Medium | Docker (upgrade) | The Admiral container now runs as UID 1654: existing bind-mounted `db` and `logs` directories created by root must be made writable (`chown -R 1654:1654`). | W5 / operations (upgrade notes in DOCKER.md). |
-| O-16 | Low | Accounting | Operational events from `EmitEventAsync` carry no tenant or actor; authentication failures and authorization denials are not persisted events. | W1 follow-up (AUTHENTICATION.md accounting). |
+| O-16 | Low | Accounting | Operational events from `EmitEventAsync` carry no tenant or actor; authentication failures and authorization denials are not persisted events. | W1 follow-up (accounting). |
 | O-17 | Low | REST | Self-service password change through `PUT /api/v1/users/{id}` does not ask for the current password (`PUT /api/v1/account/password` does). | Closed (F-37). The dashboard and TUI Users pages ask for and send `CurrentPassword` when you change your own password. |
 | O-18 | Low | CLI | `armada mcp stdio` has no authentication: it opens the database directly as the OS user. | Accepted: trust boundary is the OS account that can read `~/.armada`. |
 | O-19 | Low | Dashboard | The new security strings (password change screen, banner, auto-approve toggle, token-shown-once dialog, vessel auto-approve field, login rate-limit message) are English in every locale. | W6.6. |
@@ -196,7 +198,7 @@ permission-bypass flag so missions can run unattended:
 | Runtime | Default flag | With `autoApprove` false |
 |---------|--------------|--------------------------|
 | Claude Code | `--dangerously-skip-permissions` | `--permission-mode acceptEdits --allowedTools mcp__armada` (file edits allowed; Armada's MCP tools allowed because Armada authorizes each call; shell and other tools need allow rules in the project's Claude Code settings and are refused, not prompted, in print mode) |
-| Codex | `--full-auto` (`--dangerously-bypass-approvals-and-sandbox` on Windows) | `--sandbox workspace-write` (no approval bypass; writes confined to the workspace) |
+| Codex | `--sandbox workspace-write` (the `full-auto` approval mode; `codex exec` never prompts) or `--dangerously-bypass-approvals-and-sandbox` (on Windows, or with the `dangerous` approval mode) | `--sandbox workspace-write` (no approval bypass; writes confined to the workspace) |
 | Gemini | `--approval-mode yolo` | `--approval-mode auto_edit` |
 | Cursor | `--force` | no `--force` |
 | OpenCode | `--auto` | no `--auto` |
@@ -221,8 +223,8 @@ Recommendations:
    Ask thread turns always run without auto-approve unless `Ask.CaptainAutoApprove` is true (default false): any
    authenticated user can start a turn, and Ask's proposal gate covers Armada's MCP tools, not the CLI's own shell.
    Leave it off unless every account that can use Ask is trusted with a shell on the Admiral host.
-3. Prefer Harbors on separate machines or VMs for untrusted repositories, and keep `RequireHarborForLaunch` on when
-   captains must never run on the Admiral host.
+3. Prefer Harbors on separate machines or VMs for untrusted repositories, and turn `RequireHarborForLaunch` on (default
+   off) when captains must never run on the Admiral host.
 4. Keep the Admiral on localhost unless you need remote access; when you expose it, change the default password
    first (the Admiral refuses otherwise) and put TLS in front of it.
 5. Review `audit.command` events (`enumerate` with entityType `events`, or the Events page) for commands run
@@ -231,7 +233,7 @@ Recommendations:
 
 ## REST routes
 
-Generated from `RouteAuthorizationRegistry` (350 declarations: 348 API routes plus the OpenAPI document and Swagger
+Generated from `RouteAuthorizationRegistry` (351 declarations: 349 API routes plus the OpenAPI document and Swagger
 UI). Columns: requirement (`Resource:Operation`), permission level, tenant scoping (how the handler limits data to the
 caller), input (how the request is parsed; every typed body is deserialized into a model, unknown fields ignored), and
 the findings that apply. "caller tenant/user (handler)" means the handler or the service it calls reads and writes
@@ -310,6 +312,7 @@ only within the caller's tenant (tenant admins) or the caller's own records (reg
 | DELETE | `/api/v1/environments/{id}` | EnvironmentRoutes | Environment:Delete | TenantAdmin | caller tenant/user (handler) | path + query | - |
 | GET | `/api/v1/events` | EventRoutes | Event:Read | Authenticated | caller tenant/user (handler) | path + query | - |
 | POST | `/api/v1/events/enumerate` | EventRoutes | Event:Read | Authenticated | caller tenant/user (handler) | typed JSON body | - |
+| GET | `/api/v1/events/{id}` | EventRoutes | Event:Read | Authenticated | caller tenant/user (handler) | path | - |
 | DELETE | `/api/v1/events/{id}` | EventRoutes | Event:Delete | TenantAdmin | caller tenant/user (handler) | path | F-16 Fixed |
 | POST | `/api/v1/events/delete/multiple` | EventRoutes | Event:Delete | TenantAdmin | caller tenant/user (handler) | typed JSON body | F-16 Fixed |
 | POST | `/api/v1/fleet-actions/enumerate` | FleetActionRoutes | FleetAction:Read | Authenticated | caller tenant/user (handler) | typed JSON body | - |
@@ -516,14 +519,14 @@ only within the caller's tenant (tenant admins) or the caller's own records (reg
 | PUT | `/api/v1/settings` | StatusRoutes | Settings:Admin | AdminOnly | server-wide (admin) | typed JSON body | F-13 Fixed |
 | POST | `/api/v1/server/reset` | StatusRoutes | Server:Admin | AdminOnly | server-wide (admin) | typed JSON body | - |
 | GET | `/api/v1/tenants` | TenantRoutes | Tenant:Read | AdminOnly | tenant (handler) | path + query | - |
-| POST | `/api/v1/tenants` | TenantRoutes | Tenant:Create | AdminOnly | tenant (handler) | typed JSON body | O-06 Open |
+| POST | `/api/v1/tenants` | TenantRoutes | Tenant:Create | AdminOnly | tenant (handler) | typed JSON body | F-37 Fixed |
 | GET | `/api/v1/tenants/{id}` | TenantRoutes | Tenant:Read | Authenticated | tenant (handler) | path | - |
 | PUT | `/api/v1/tenants/{id}` | TenantRoutes | Tenant:Update | AdminOnly | tenant (handler) | typed JSON body | - |
 | DELETE | `/api/v1/tenants/{id}` | TenantRoutes | Tenant:Delete | AdminOnly | tenant (handler) | path | - |
 | GET | `/api/v1/users` | TenantRoutes | User:Read | Authenticated | caller tenant/user (handler) | path + query | - |
 | POST | `/api/v1/users` | TenantRoutes | User:Create | TenantAdmin | caller tenant/user (handler) | typed JSON body | - |
 | GET | `/api/v1/users/{id}` | TenantRoutes | User:Read | Authenticated | caller tenant/user (handler) | path | - |
-| PUT | `/api/v1/users/{id}` | TenantRoutes | User:Update | Authenticated | caller tenant/user (handler) | typed JSON body | F-09 Fixed |
+| PUT | `/api/v1/users/{id}` | TenantRoutes | User:Update | Authenticated | caller tenant/user (handler) | typed JSON body | F-09, F-37 Fixed |
 | DELETE | `/api/v1/users/{id}` | TenantRoutes | User:Delete | Authenticated | caller tenant/user (handler) | path | F-09 Fixed |
 | GET | `/api/v1/credentials` | TenantRoutes | Credential:Read | Authenticated | caller tenant/user (handler) | path + query | F-12 Fixed |
 | POST | `/api/v1/credentials` | TenantRoutes | Credential:Create | Authenticated | caller tenant/user (handler) | typed JSON body | F-09, F-12 Fixed |
@@ -749,8 +752,8 @@ advertised tool by `E2E.McpTenantIsolation`; `status` stays server-wide like `GE
 
 The dashboard socket is `/ws` on the REST port. The upgrade is authenticated in PreRouting before the handshake
 (401 otherwise) with a session token as `?token=` or in `Sec-WebSocket-Protocol` (`armada-token.<base64url>`), or
-the REST credential headers; Ask thread tokens are refused. Query strings are no longer written to request logs
-(F-15).
+the REST credential headers; Ask thread and mission tokens are refused. Query strings are no longer written to
+request logs (F-15).
 
 | Route / command | Requirement | Tenant scoping | Input | Findings |
 |-----------------|-------------|----------------|-------|----------|
@@ -778,9 +781,9 @@ the REST credential headers; Ask thread tokens are refused. Query strings are no
 | Server to Harbor messages (`launch`, `git`, `kill`, `stdin`, `deferredLaunch`) | Link already authenticated | Routed only to Harbors eligible for the mission's user or tenant | Harbor ownership | `git` carries an executable and arguments run on the Harbor host; `launch` carries the resolved auto-approve decision (F-28) and the mission-scoped MCP token (F-36) | F-28, F-36 Fixed |
 | Remote tunnel (Admiral dials `RemoteControl.TunnelUrl`) | Admiral proves the shared tunnel password (SHA-256 challenge with timestamp and nonce) and optional enrollment token | n/a | One instance id per Admiral | Envelope deserialization | F-30 (Admiral warns on the default password); O-11 Open (`AllowInvalidCertificates`) |
 | Dashboard relay through the tunnel (`RemoteDashboardRelayService`) | Relayed requests replay to the loopback REST port with the browser's own `Authorization`, `X-Token`, `X-Api-Key`; cookies and proxy session headers stripped | Normal REST authorization (F-01 closes the unauthenticated server-control routes the relay used to reach) | Normal REST scoping | Only `/api/v1/*` and `/ws` are relayed | F-01 Fixed |
-| Armada.Proxy listener (port 7893): `/proxy-api/v1/auth/*`, `/proxy-api/v1/instances`, `/session/*`, `/tunnel`, browser `/ws`, `/api/v1/*` relay, static files | Shared proxy password (challenge-response, in-memory session cookie, `Secure` with `SecureCookie`); default or blank password refused at start; logins and tunnel handshakes rate limited per address; `/tunnel` by tunnel password proof; `/instances` needs a session; health is public | Proxy route policy blocks a few paths by exact match; Armada credentials still required on the Admiral | None at the proxy (no per-user identity) | Exact-string route blocks | F-30 Fixed; O-11 Open |
+| Armada.Proxy listener (port 7893): `/proxy-api/v1/auth/*`, `/proxy-api/v1/instances`, `/proxy-api/v1/session/*`, `/proxy-api/v1/status/health`, `/tunnel`, browser `/ws`, `/api/v1/*` relay, dashboard and portal static files | Shared proxy password (challenge-response, in-memory session cookie, `Secure` with `SecureCookie`); default or blank password refused at start; logins and tunnel handshakes rate limited per address; `/tunnel` by tunnel password proof; `/instances` needs a session; health is public | Proxy route policy on the canonical path: server stop and reset, `status/shutdown`, `status/factory-reset`, and `restore` blocked; `settings`, `tenants`, `users`, and `credentials` read-only (except the login POSTs); Armada credentials still required on the Admiral | None at the proxy (no per-user identity) | `UrlPathCanonicalizer` (percent-decoded, slashes collapsed; ambiguous encodings and dot segments rejected, 400); only `/api/v1/*` relayed | F-30 Fixed; O-11 Open |
 | `armada mcp stdio` (Helm) | None (local process) | Same tool handlers; no MCP authorization wrapper | Default tenant | Typed tool args | O-18 Accepted |
-| Static files: `/`, `/dashboard/*`, `/assets/*`, `/img/*` | None | None (no data) | n/a | Embedded files only | - |
+| Static files: `/`, `/dashboard/*`, `/assets/*`, `/img/*` | None | None (no data) | n/a | Files from the dashboard directory (`DashboardPath` or the installed dashboard), falling back to embedded resources; `.` and `..` segments refused | - |
 | `/openapi.json`, `/swagger` | None | NoAuthRequired | n/a | n/a | O-10 Accepted |
 | MCP health (`GET /` on the MCP port) | None | n/a | n/a | n/a | - |
 | Vessel import browse and discover (`GET /vessels/import/browse`, `POST /vessels/import/discover`, MCP `discover_vessels`) | Credential | TenantAdmin | Allowed roots from `Import.AllowedRoots`, default the Admiral user's home | Absolute paths, normalized, prefix-checked; reparse points skipped in listings; runs `git remote get-url` and `git symbolic-ref` | O-07 Open |

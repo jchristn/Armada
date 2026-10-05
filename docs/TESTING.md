@@ -25,6 +25,9 @@ npm run test:run
 cd ../..
 ```
 
+For reference, the 1.0.0 full run on `net10.0` is 3,839 tests (3,830 passed, 9 skipped) and the dashboard Vitest
+suite is 337 tests.
+
 Database-backed tests run against SQLite in-process by default. The PostgreSQL, MySQL, and SQL Server
 drivers are exercised by the same descriptors through `--db-*` (see [Multi-Database Testing](#multi-database-testing)).
 
@@ -32,7 +35,7 @@ drivers are exercised by the same descriptors through `--db-*` (see [Multi-Datab
 
 | Project | What It Covers |
 |---------|----------------|
-| `src/Test.Shared` | The shared descriptor library: every test case (about 2,950: models, database drivers, services, runtimes, the client contract, the terminal UI, the upgrade path, and end-to-end REST/MCP/WebSocket lifecycle), plus the test infrastructure (fixtures, stubs, `TestDatabaseHelper`, `TestTemp`). Depends on `Touchstone.Core`. |
+| `src/Test.Shared` | The shared descriptor library: every test case (3,839 on `net10.0`: models, database drivers, services, runtimes, the client contract, the terminal UI, the upgrade path, and end-to-end REST/MCP/WebSocket lifecycle), plus the test infrastructure (fixtures, stubs, `TestDatabaseHelper`, `TestTemp`). Depends on `Touchstone.Core`. |
 | `src/Test.Automated` | Console runner (`Touchstone.Cli`) that executes every discovered suite and prints per-test results; the primary way to run the full suite. |
 | `src/Test.Xunit` | Runs the shared descriptors through the xUnit adapter (VSTest / IDE integration). |
 | `src/Test.Nunit` | Runs the shared descriptors through the NUnit adapter (VSTest / IDE integration). |
@@ -107,7 +110,16 @@ each server provider in a throwaway Docker container on a random host port that 
 ```bash
 scripts/common/run-db-parity-tests.sh                       # all four providers
 scripts/common/run-db-parity-tests.sh --providers sqlite,postgresql
+scripts/common/run-db-parity-tests.sh --framework net8.0 --no-build
 ```
+
+`--providers` takes any comma-separated subset of `sqlite`, `postgresql` (or `postgres`, `pg`), `mysql` (or
+`mariadb`), and `sqlserver` (or `mssql`). `--framework` defaults to `net10.0`; `--no-build` skips the initial build.
+The container images can be overridden with `ARMADA_POSTGRES_IMAGE` (default `postgres:17-alpine`),
+`ARMADA_MYSQL_IMAGE` (default `mysql:8.4`), and `ARMADA_SQLSERVER_IMAGE` (default
+`mcr.microsoft.com/mssql/server:2022-latest`); `ARMADA_SQLSERVER_SA_PASSWORD` sets the SQL Server SA password. The
+script requires Docker and exits non-zero if any provider has a failing test. On Windows,
+`scripts\windows\run-db-parity-tests.bat` forwards to the same script (it needs `bash` from Git for Windows or WSL on `PATH`).
 
 Run the full suite at least against SQLite, and run the parity script for any change that touches the schema or a
 database driver.
