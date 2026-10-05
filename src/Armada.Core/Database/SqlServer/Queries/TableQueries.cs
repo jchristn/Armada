@@ -1535,6 +1535,12 @@ namespace Armada.Core.Database.SqlServer.Queries
                     76,
                     "Add nullable auto_approve to vessels: a per-vessel override of the captain auto-approve setting for missions on the vessel",
                     @"IF COL_LENGTH('vessels', 'auto_approve') IS NULL ALTER TABLE vessels ADD auto_approve BIT NULL;"
+                ),
+                new SchemaMigration(
+                    77,
+                    "Add failure_kind and wait_for_voyage_workers to missions: a persisted failure classification set where the failure happens, and a structured flag that defers a worker until the other workers in its voyage settle",
+                    @"IF COL_LENGTH('missions', 'failure_kind') IS NULL ALTER TABLE missions ADD failure_kind NVARCHAR(64) NULL;",
+                    @"IF COL_LENGTH('missions', 'wait_for_voyage_workers') IS NULL ALTER TABLE missions ADD wait_for_voyage_workers BIT NOT NULL CONSTRAINT DF_missions_wait_for_voyage_workers DEFAULT 0;"
                 )
 
             };

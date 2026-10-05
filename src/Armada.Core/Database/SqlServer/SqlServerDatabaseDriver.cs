@@ -630,6 +630,8 @@ namespace Armada.Core.Database.SqlServer
             try { mission.Persona = NullableString(reader["persona"]); } catch { }
             try { mission.DependsOnMissionId = NullableString(reader["depends_on_mission_id"]); } catch { }
             try { mission.FailureReason = NullableString(reader["failure_reason"]); } catch { }
+            try { mission.FailureKind = MissionFailureKindColumn.FromDbValue(reader["failure_kind"]); } catch { }
+            try { mission.WaitForVoyageWorkers = reader["wait_for_voyage_workers"] != DBNull.Value && Convert.ToBoolean(reader["wait_for_voyage_workers"]); } catch { }
             try { mission.RequiresReview = reader["requires_review"] != DBNull.Value && Convert.ToBoolean(reader["requires_review"]); } catch { }
             try
             {

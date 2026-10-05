@@ -706,6 +706,8 @@ namespace Armada.Core.Database.Sqlite
             try { mission.Persona = NullableString(reader["persona"]); } catch { }
             try { mission.DependsOnMissionId = NullableString(reader["depends_on_mission_id"]); } catch { }
             try { mission.FailureReason = NullableString(reader["failure_reason"]); } catch { }
+            try { mission.FailureKind = MissionFailureKindColumn.FromDbValue(reader["failure_kind"]); } catch { }
+            try { mission.WaitForVoyageWorkers = reader["wait_for_voyage_workers"] != DBNull.Value && Convert.ToInt64(reader["wait_for_voyage_workers"]) == 1; } catch { }
             try { mission.RequiresReview = Convert.ToInt64(reader["requires_review"]) == 1; } catch { }
             try
             {

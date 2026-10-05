@@ -120,14 +120,14 @@ namespace Armada.Core.Services
         /// <returns>A human-readable, secret-free summary.</returns>
         public static string Summarize(IReadOnlyList<BoundaryFinding> findings)
         {
-            if (findings == null || findings.Count == 0) return "dock_boundary_violation: no details";
+            if (findings == null || findings.Count == 0) return "Dock boundary violation: no details";
             List<string> parts = new List<string>();
             foreach (BoundaryFinding f in findings)
             {
                 string loc = f.Line.HasValue ? (f.Path + ":" + f.Line.Value) : f.Path;
                 parts.Add(f.Kind + " [" + f.RuleId + "] at " + (String.IsNullOrEmpty(loc) ? "(unknown)" : loc));
             }
-            return "dock_boundary_violation: " + String.Join("; ", parts);
+            return "Dock boundary violation: " + String.Join("; ", parts);
         }
 
         #endregion

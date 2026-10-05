@@ -235,6 +235,11 @@ namespace Armada.Core.Services
                             mission.FailureReason = "Parent voyage " + voyage.Id + " is " + voyage.Status + ".";
                         }
 
+                        if (!mission.FailureKind.HasValue)
+                        {
+                            mission.FailureKind = MissionFailureKindEnum.DependencyFailed;
+                        }
+
                         await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
                         _Logging.Info(_Header + "mission " + mission.Id + " belongs to terminal voyage " + voyage.Id +
                             " (" + voyage.Status + ") -- cancelling instead of assigning");
@@ -629,6 +634,7 @@ namespace Armada.Core.Services
             {
                 mission.Status = MissionStatusEnum.LandingFailed;
                 mission.FailureReason = "Review approved but the mission dock was unavailable for landing.";
+                mission.FailureKind = MissionFailureKindEnum.LandingConflict;
                 mission.CompletedUtc = DateTime.UtcNow;
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
@@ -675,6 +681,7 @@ namespace Armada.Core.Services
             {
                 mission.Status = MissionStatusEnum.Failed;
                 mission.FailureReason = BuildReviewDeniedFailureReason(reviewComment);
+                mission.FailureKind = MissionFailureKindEnum.ReviewDenied;
                 mission.CompletedUtc = DateTime.UtcNow;
                 mission.ProcessId = null;
                 mission.DockId = null;
@@ -696,6 +703,7 @@ namespace Armada.Core.Services
             mission.DiffSnapshot = null;
             mission.AgentOutput = null;
             mission.FailureReason = null;
+            mission.FailureKind = null;
             mission.StartedUtc = null;
             mission.CompletedUtc = null;
             mission.TotalRuntimeMs = null;
@@ -756,6 +764,7 @@ namespace Armada.Core.Services
 
             mission.Status = MissionStatusEnum.Failed;
             mission.FailureReason = DockBoundaryScanner.Summarize(findings);
+            mission.FailureKind = MissionFailureKindEnum.Boundary;
             mission.CaptainId = null;
             mission.DockId = null;
             mission.ProcessId = null;
@@ -825,7 +834,8 @@ namespace Armada.Core.Services
             if (result.Passed) return false;
 
             mission.Status = MissionStatusEnum.Failed;
-            mission.FailureReason = "definition_of_done_" + result.Outcome.ToString().ToLowerInvariant() + ": " + result.Detail;
+            mission.FailureReason = "Definition-of-Done gate failed (" + result.Outcome + "): " + result.Detail;
+            mission.FailureKind = MissionFailureClassifier.FromDefinitionOfDone(result.Outcome);
             mission.CompletedUtc = DateTime.UtcNow;
             mission.LastUpdateUtc = DateTime.UtcNow;
             await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
@@ -923,6 +933,7 @@ namespace Armada.Core.Services
                 mission.DiffSnapshot = null;
                 mission.AgentOutput = null;
                 mission.FailureReason = null;
+                mission.FailureKind = null;
                 mission.StartedUtc = null;
                 mission.CompletedUtc = null;
                 mission.TotalRuntimeMs = null;
@@ -941,8 +952,9 @@ namespace Armada.Core.Services
 
             // Retries exhausted: fail and surface to the operator inbox (LandingFailed/Failed feed it).
             mission.Status = MissionStatusEnum.Failed;
-            mission.FailureReason = "no_op_completion_detected: captain repeatedly completed with no changes after " +
+            mission.FailureReason = "No-op completion: the captain repeatedly completed with no changes after " +
                 mission.RedispatchAttempts + " re-dispatch attempt(s). Likely an impossible or mis-specified mission.";
+            mission.FailureKind = MissionFailureKindEnum.NoOp;
             mission.CaptainId = null;
             mission.DockId = null;
             mission.ProcessId = null;
@@ -1130,6 +1142,7 @@ namespace Armada.Core.Services
                     mission.CompletedUtc = DateTime.UtcNow;
                     mission.LastUpdateUtc = DateTime.UtcNow;
                     mission.FailureReason = blockingReason;
+                    mission.FailureKind = MissionFailureKindEnum.JudgeRejected;
                     await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
                     _Logging.Warn(_Header + "judge mission " + mission.Id + " blocked landing: " + blockingReason);
                 }
@@ -2293,6 +2306,7 @@ namespace Armada.Core.Services
                     " produced no valid mission definitions -- marking as failed");
                 completedMission.Status = MissionStatusEnum.Failed;
                 completedMission.FailureReason = failureReason;
+                completedMission.FailureKind = MissionFailureKindEnum.InvalidOutput;
                 completedMission.CompletedUtc = DateTime.UtcNow;
                 completedMission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(completedMission, token).ConfigureAwait(false);
@@ -2467,6 +2481,7 @@ namespace Armada.Core.Services
             {
                 dependent.Status = MissionStatusEnum.Cancelled;
                 dependent.FailureReason = "Blocked by failed dependency " + failedMission.Id;
+                dependent.FailureKind = MissionFailureKindEnum.DependencyFailed;
                 dependent.CompletedUtc = DateTime.UtcNow;
                 dependent.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(dependent, token).ConfigureAwait(false);
@@ -3237,6 +3252,7 @@ namespace Armada.Core.Services
             mission.CompletedUtc = DateTime.UtcNow;
             mission.LastUpdateUtc = DateTime.UtcNow;
             mission.FailureReason = "Mission modified files outside its scoped file list: " + String.Join(", ", outOfScopeFiles);
+            mission.FailureKind = MissionFailureKindEnum.ScopeViolation;
             await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
             _Logging.Warn(_Header + "mission " + mission.Id + " failed scope validation: " + mission.FailureReason);
             return true;

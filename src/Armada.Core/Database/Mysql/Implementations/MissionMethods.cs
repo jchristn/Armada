@@ -53,8 +53,8 @@ namespace Armada.Core.Database.Mysql.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (MySqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = @"INSERT INTO missions (id, tenant_id, user_id, voyage_id, vessel_id, captain_id, requested_captain_id, assigned_harbor_id, title, description, status, mode, priority, redispatch_attempts, tier, parent_mission_id, branch_name, dock_id, process_id, pr_url, commit_hash, diff_snapshot, agent_output, persona, depends_on_mission_id, failure_reason, requires_review, review_deny_action, review_comment, reviewed_by_user_id, review_requested_utc, reviewed_utc, review_deadline_utc, total_runtime_ms, created_utc, started_utc, completed_utc, last_update_utc)
-                        VALUES (@id, @tenant_id, @user_id, @voyage_id, @vessel_id, @captain_id, @requested_captain_id, @assigned_harbor_id, @title, @description, @status, @mode, @priority, @redispatch_attempts, @tier, @parent_mission_id, @branch_name, @dock_id, @process_id, @pr_url, @commit_hash, @diff_snapshot, @agent_output, @persona, @depends_on_mission_id, @failure_reason, @requires_review, @review_deny_action, @review_comment, @reviewed_by_user_id, @review_requested_utc, @reviewed_utc, @review_deadline_utc, @total_runtime_ms, @created_utc, @started_utc, @completed_utc, @last_update_utc);";
+                    cmd.CommandText = @"INSERT INTO missions (id, tenant_id, user_id, voyage_id, vessel_id, captain_id, requested_captain_id, assigned_harbor_id, title, description, status, mode, priority, redispatch_attempts, tier, parent_mission_id, branch_name, dock_id, process_id, pr_url, commit_hash, diff_snapshot, agent_output, persona, depends_on_mission_id, failure_reason, failure_kind, wait_for_voyage_workers, requires_review, review_deny_action, review_comment, reviewed_by_user_id, review_requested_utc, reviewed_utc, review_deadline_utc, total_runtime_ms, created_utc, started_utc, completed_utc, last_update_utc)
+                        VALUES (@id, @tenant_id, @user_id, @voyage_id, @vessel_id, @captain_id, @requested_captain_id, @assigned_harbor_id, @title, @description, @status, @mode, @priority, @redispatch_attempts, @tier, @parent_mission_id, @branch_name, @dock_id, @process_id, @pr_url, @commit_hash, @diff_snapshot, @agent_output, @persona, @depends_on_mission_id, @failure_reason, @failure_kind, @wait_for_voyage_workers, @requires_review, @review_deny_action, @review_comment, @reviewed_by_user_id, @review_requested_utc, @reviewed_utc, @review_deadline_utc, @total_runtime_ms, @created_utc, @started_utc, @completed_utc, @last_update_utc);";
                     cmd.Parameters.AddWithValue("@id", mission.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)mission.TenantId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@user_id", (object?)mission.UserId ?? DBNull.Value);
@@ -81,6 +81,8 @@ namespace Armada.Core.Database.Mysql.Implementations
                     cmd.Parameters.AddWithValue("@persona", (object?)mission.Persona ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@depends_on_mission_id", (object?)mission.DependsOnMissionId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@failure_reason", (object?)mission.FailureReason ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@failure_kind", MissionFailureKindColumn.ToDbValue(mission.FailureKind));
+                    cmd.Parameters.AddWithValue("@wait_for_voyage_workers", (mission.WaitForVoyageWorkers ? 1 : 0));
                     cmd.Parameters.AddWithValue("@requires_review", mission.RequiresReview ? 1 : 0);
                     cmd.Parameters.AddWithValue("@review_deny_action", mission.ReviewDenyAction.ToString());
                     cmd.Parameters.AddWithValue("@review_comment", (object?)mission.ReviewComment ?? DBNull.Value);
@@ -172,6 +174,8 @@ namespace Armada.Core.Database.Mysql.Implementations
                         persona = @persona,
                         depends_on_mission_id = @depends_on_mission_id,
                         failure_reason = @failure_reason,
+                        failure_kind = @failure_kind,
+                        wait_for_voyage_workers = @wait_for_voyage_workers,
                         requires_review = @requires_review,
                         review_deny_action = @review_deny_action,
                         review_comment = @review_comment,
@@ -210,6 +214,8 @@ namespace Armada.Core.Database.Mysql.Implementations
                     cmd.Parameters.AddWithValue("@persona", (object?)mission.Persona ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@depends_on_mission_id", (object?)mission.DependsOnMissionId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@failure_reason", (object?)mission.FailureReason ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@failure_kind", MissionFailureKindColumn.ToDbValue(mission.FailureKind));
+                    cmd.Parameters.AddWithValue("@wait_for_voyage_workers", (mission.WaitForVoyageWorkers ? 1 : 0));
                     cmd.Parameters.AddWithValue("@requires_review", mission.RequiresReview ? 1 : 0);
                     cmd.Parameters.AddWithValue("@review_deny_action", mission.ReviewDenyAction.ToString());
                     cmd.Parameters.AddWithValue("@review_comment", (object?)mission.ReviewComment ?? DBNull.Value);
@@ -1016,6 +1022,8 @@ namespace Armada.Core.Database.Mysql.Implementations
             try { mission.Persona = NullableString(reader["persona"]); } catch { }
             try { mission.DependsOnMissionId = NullableString(reader["depends_on_mission_id"]); } catch { }
             try { mission.FailureReason = NullableString(reader["failure_reason"]); } catch { }
+            try { mission.FailureKind = MissionFailureKindColumn.FromDbValue(reader["failure_kind"]); } catch { }
+            try { mission.WaitForVoyageWorkers = reader["wait_for_voyage_workers"] != DBNull.Value && Convert.ToInt64(reader["wait_for_voyage_workers"]) == 1; } catch { }
             try { mission.RequiresReview = Convert.ToInt64(reader["requires_review"]) == 1; } catch { }
             try
             {

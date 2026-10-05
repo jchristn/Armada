@@ -39,6 +39,52 @@ namespace Test.Shared.Suites.Database
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
+            cases.Add(CaseAsync("mission_failure_kind_and_wait_flag_round_trip", "Mission FailureKind and WaitForVoyageWorkers persist through create, update, read, and summary", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    MissionTestPrerequisites prereqs = await CreatePrerequisitesAsync(db);
+
+                    Mission mission = new Mission("Failure Kind Mission", "desc");
+                    mission.VesselId = prereqs.Vessel.Id;
+                    mission.VoyageId = prereqs.Voyage.Id;
+                    mission.Status = MissionStatusEnum.Failed;
+                    mission.FailureKind = MissionFailureKindEnum.Compile;
+                    mission.FailureReason = "Definition-of-Done gate failed (Compile): exit 1";
+                    mission.WaitForVoyageWorkers = true;
+                    await db.Missions.CreateAsync(mission);
+
+                    Mission? read = await db.Missions.ReadAsync(mission.Id);
+                    AssertNotNull(read);
+                    AssertEqual(MissionFailureKindEnum.Compile, read!.FailureKind, "failure kind persists on create");
+                    AssertTrue(read.WaitForVoyageWorkers, "wait flag persists on create");
+
+                    MissionSummary? summary = await db.Missions.ReadSummaryAsync(mission.Id);
+                    AssertNotNull(summary);
+                    AssertEqual(MissionFailureKindEnum.Compile, summary!.FailureKind, "failure kind appears in the summary projection");
+
+                    read.FailureKind = MissionFailureKindEnum.JudgeRejected;
+                    read.WaitForVoyageWorkers = false;
+                    await db.Missions.UpdateAsync(read);
+                    Mission? updated = await db.Missions.ReadAsync(mission.Id);
+                    AssertEqual(MissionFailureKindEnum.JudgeRejected, updated!.FailureKind, "failure kind persists on update");
+                    AssertFalse(updated.WaitForVoyageWorkers, "wait flag clears on update");
+
+                    updated.FailureKind = null;
+                    await db.Missions.UpdateAsync(updated);
+                    Mission? cleared = await db.Missions.ReadAsync(mission.Id);
+                    AssertNull(cleared!.FailureKind, "failure kind clears to null");
+
+                    Mission plain = new Mission("Plain Mission", "desc");
+                    plain.VesselId = prereqs.Vessel.Id;
+                    await db.Missions.CreateAsync(plain);
+                    Mission? plainRead = await db.Missions.ReadAsync(plain.Id);
+                    AssertNull(plainRead!.FailureKind, "a new mission has no failure kind");
+                    AssertFalse(plainRead.WaitForVoyageWorkers, "a new mission does not wait for voyage workers");
+                }
+            }));
+
             cases.Add(CaseAsync("mission_create", "Mission_Create", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())

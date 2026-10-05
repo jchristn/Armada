@@ -53,6 +53,7 @@ namespace Test.Shared.Suites.Services
                     Mission? mission = await testDb.Driver.Missions.ReadAsync(entities.Mission.Id).ConfigureAwait(false);
                     AssertEqual(MissionStatusEnum.LandingFailed, mission!.Status);
                     AssertContains("Error merging locally: Simulated merge failure", mission.FailureReason ?? "");
+                    AssertEqual(MissionFailureKindEnum.LandingConflict, mission.FailureKind, "failure kind is recorded where the failure happens");
                     AssertFalse(git.OperationCalls.Contains("delete-local-branch:" + entities.Dock.BranchName), "branch kept for retry");
                 }
             }));
@@ -70,6 +71,7 @@ namespace Test.Shared.Suites.Services
                     Mission? mission = await testDb.Driver.Missions.ReadAsync(entities.Mission.Id).ConfigureAwait(false);
                     AssertEqual(MissionStatusEnum.LandingFailed, mission!.Status);
                     AssertContains("Local merge succeeded but push failed", mission.FailureReason ?? "");
+                    AssertEqual(MissionFailureKindEnum.LandingConflict, mission.FailureKind, "failure kind is recorded where the failure happens");
                     AssertEqual(1, git.MergeBranchCalls.Count, "merge ran");
                     AssertFalse(git.OperationCalls.Contains("delete-local-branch:" + entities.Dock.BranchName), "branch kept for retry");
                 }
@@ -109,6 +111,7 @@ namespace Test.Shared.Suites.Services
                     Mission? mission = await testDb.Driver.Missions.ReadAsync(entities.Mission.Id).ConfigureAwait(false);
                     AssertEqual(MissionStatusEnum.LandingFailed, mission!.Status);
                     AssertContains("Error pushing/creating PR", mission.FailureReason ?? "");
+                    AssertEqual(MissionFailureKindEnum.LandingConflict, mission.FailureKind, "failure kind is recorded where the failure happens");
                     AssertNull(mission.PrUrl, "no PR URL recorded");
                 }
             }));

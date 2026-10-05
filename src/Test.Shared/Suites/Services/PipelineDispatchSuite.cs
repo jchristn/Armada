@@ -388,6 +388,7 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(updatedCaptain, "Captain should still exist");
                     AssertEqual(MissionStatusEnum.Cancelled, updatedMission!.Status, "Pending mission should be cancelled when its voyage is terminal");
                     AssertContains("Parent voyage", updatedMission.FailureReason ?? String.Empty, "Mission should record why assignment was skipped");
+                    AssertEqual(MissionFailureKindEnum.DependencyFailed, updatedMission.FailureKind, "failure kind is recorded where the failure happens");
                     AssertEqual(CaptainStateEnum.Idle, updatedCaptain!.State, "Captain should remain idle when assignment is skipped");
                 }
             }));
@@ -530,9 +531,11 @@ namespace Test.Shared.Suites.Services
                         AssertNotNull(updatedArchitect, "Architect mission should still exist");
                         AssertEqual(MissionStatusEnum.Failed, updatedArchitect!.Status, "Architect mission should fail when no mission markers are produced");
                         AssertContains("no [ARMADA:MISSION] markers", updatedArchitect.FailureReason ?? String.Empty);
+                        AssertEqual(MissionFailureKindEnum.InvalidOutput, updatedArchitect.FailureKind, "failure kind is recorded where the failure happens");
                         AssertNotNull(updatedWorker, "Dependent worker mission should still exist");
                         AssertEqual(MissionStatusEnum.Cancelled, updatedWorker!.Status, "Dependent worker mission should be cancelled when architect handoff fails");
                         AssertContains("Blocked by failed dependency", updatedWorker.FailureReason ?? String.Empty);
+                        AssertEqual(MissionFailureKindEnum.DependencyFailed, updatedWorker.FailureKind, "failure kind is recorded where the failure happens");
                         AssertNotNull(updatedVoyage, "Voyage should still exist");
                         AssertEqual(VoyageStatusEnum.Failed, updatedVoyage!.Status, "Voyage should fail when architect handoff failure blocks the remaining pipeline");
                         AssertEqual(0, landingCalls, "Landing should not run when handoff fails");
@@ -1465,6 +1468,7 @@ namespace Test.Shared.Suites.Services
 
                     AssertEqual(MissionStatusEnum.Failed, updatedArchitect!.Status, "Placeholder architect example should not create downstream missions");
                     AssertContains("no valid [ARMADA:MISSION] definitions", updatedArchitect.FailureReason ?? String.Empty);
+                    AssertEqual(MissionFailureKindEnum.InvalidOutput, updatedArchitect.FailureKind, "failure kind is recorded where the failure happens");
                     AssertEqual(4, afterArchitect.Count, "Placeholder architect example should not fan out the pipeline");
                 }
             }));
@@ -1678,6 +1682,7 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(reloadedJudge, "Judge mission should remain readable");
                     AssertEqual(MissionStatusEnum.Failed, reloadedJudge!.Status, "Judge NEEDS_REVISION should block landing");
                     AssertContains("Judge verdict: NEEDS_REVISION", reloadedJudge.FailureReason!, "Judge failure reason should preserve verdict");
+                    AssertEqual(MissionFailureKindEnum.JudgeRejected, reloadedJudge.FailureKind, "failure kind is recorded where the failure happens");
                     AssertEqual(0, landingCalls, "Judge NEEDS_REVISION must not invoke landing");
                 }
             }));
@@ -1749,6 +1754,7 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(reloadedJudge, "Judge mission should remain readable");
                     AssertEqual(MissionStatusEnum.Failed, reloadedJudge!.Status, "Judge should honor the final NEEDS_REVISION verdict instead of the legend");
                     AssertContains("Judge verdict: NEEDS_REVISION", reloadedJudge.FailureReason!, "Judge failure reason should preserve verdict");
+                    AssertEqual(MissionFailureKindEnum.JudgeRejected, reloadedJudge.FailureKind, "failure kind is recorded where the failure happens");
                     AssertEqual(0, landingCalls, "Judge NEEDS_REVISION must not invoke landing");
                 }
             }));
@@ -2054,6 +2060,7 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(reloadedJudge, "Judge mission should remain readable");
                     AssertEqual(MissionStatusEnum.Failed, reloadedJudge!.Status, "Judge failure should block landing");
                     AssertContains("Judge verdict: NEEDS_REVISION", reloadedJudge.FailureReason!, "Failure reason should preserve the verdict");
+                    AssertEqual(MissionFailureKindEnum.JudgeRejected, reloadedJudge.FailureKind, "failure kind is recorded where the failure happens");
                     AssertEqual(0, landingCalls, "Judge failure must not invoke landing");
 
                     List<Signal> signals = await testDb.Driver.Signals.EnumerateRecentAsync(10).ConfigureAwait(false);
@@ -2141,6 +2148,7 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(MissionStatusEnum.Failed, reloadedJudge!.Status, "PASS without structured review sections should be rejected");
                     AssertEqual(0, landingCalls, "Rejected PASS review should not invoke landing");
                     AssertContains("missing required lens sections", reloadedJudge.FailureReason!, "Failure reason should explain why the PASS review was rejected");
+                    AssertEqual(MissionFailureKindEnum.JudgeRejected, reloadedJudge.FailureKind, "failure kind is recorded where the failure happens");
                 }
             }));
 
@@ -2377,6 +2385,7 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(failedWorker, "Failed worker mission should remain readable");
                     AssertEqual(MissionStatusEnum.Failed, failedWorker!.Status, "Out-of-scope file changes should fail the mission");
                     AssertContains("MissionRoutes.cs", failedWorker.FailureReason, "Failure reason should list the out-of-scope file");
+                    AssertEqual(MissionFailureKindEnum.ScopeViolation, failedWorker.FailureKind, "failure kind is recorded where the failure happens");
                     AssertNotNull(cancelledDependent, "Dependent mission should remain readable");
                     AssertEqual(MissionStatusEnum.Cancelled, cancelledDependent!.Status, "Dependent missions should be cancelled when scope validation fails");
                     AssertFalse(landingCalled, "Scope validation failure should block landing");

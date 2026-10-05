@@ -76,6 +76,7 @@ namespace Test.Shared.Suites.Services
                     Mission? mission = await testDb.Driver.Missions.ReadAsync(fixture.Mission.Id).ConfigureAwait(false);
                     AssertEqual(MissionStatusEnum.Failed, mission!.Status);
                     AssertEqual("Captain stalled, recovery exhausted", mission.FailureReason);
+                    AssertEqual(MissionFailureKindEnum.StallRecoveryExhausted, mission.FailureKind, "failure kind is recorded where the failure happens");
                     AssertNull(mission.ProcessId, "process id cleared");
                     AssertNotNull(mission.CompletedUtc, "completion time recorded");
                     AssertEqual(1, fixture.Stopped.Count, "stalled process is stopped");

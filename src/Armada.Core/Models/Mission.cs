@@ -175,6 +175,21 @@ namespace Armada.Core.Models
         public string? FailureReason { get; set; } = null;
 
         /// <summary>
+        /// Structured classification of the failure, set at the point the mission fails (null while the mission
+        /// has not failed, or for failures recorded before the column existed). Recovery decisions switch on this
+        /// value; <see cref="FailureReason"/> is human-readable text only and is never parsed.
+        /// </summary>
+        public MissionFailureKindEnum? FailureKind { get; set; } = null;
+
+        /// <summary>
+        /// When true, a Worker mission is not assigned while any other Worker mission in the same voyage is still
+        /// unsettled (not Complete, WorkProduced, Failed, Cancelled, or LandingFailed). Set from the structured
+        /// architect plan (waitForOtherMissions) so that "run after the other implementation missions" sequencing
+        /// does not depend on description wording.
+        /// </summary>
+        public bool WaitForVoyageWorkers { get; set; } = false;
+
+        /// <summary>
         /// Whether this mission requires an explicit review approval before the pipeline may continue.
         /// Copied from the owning pipeline stage when the mission is created.
         /// </summary>

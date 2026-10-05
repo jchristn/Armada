@@ -189,6 +189,7 @@ namespace Armada.Core.Services
                 {
                     _Logging.Warn(_Header + "no landing handler configured -- cannot retry landing for mission " + missionId);
                     mission.Status = MissionStatusEnum.LandingFailed;
+                    mission.FailureKind = MissionFailureKindEnum.LandingConflict;
                     mission.LastUpdateUtc = DateTime.UtcNow;
                     await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
                     return false;
@@ -218,6 +219,7 @@ namespace Armada.Core.Services
                     {
                         mission.Status = MissionStatusEnum.LandingFailed;
                         mission.FailureReason = failureReason;
+                        mission.FailureKind = MissionFailureKindEnum.LandingConflict;
                         mission.LastUpdateUtc = DateTime.UtcNow;
                         await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
                     }

@@ -1129,6 +1129,7 @@ namespace Armada.Core.Services
                     {
                         mission.Status = MissionStatusEnum.Failed;
                         mission.FailureReason = "Mission exceeded max runtime of " + _Settings.MaxMissionRuntimeMinutes + " minutes";
+                        mission.FailureKind = MissionFailureKindEnum.MaxRuntimeExceeded;
                         mission.ProcessId = null;
                         mission.CompletedUtc = DateTime.UtcNow;
                         mission.LastUpdateUtc = DateTime.UtcNow;
@@ -1176,6 +1177,7 @@ namespace Armada.Core.Services
                             {
                                 mission.Status = MissionStatusEnum.Failed;
                                 mission.FailureReason = "Captain stalled, recovery exhausted";
+                                mission.FailureKind = MissionFailureKindEnum.StallRecoveryExhausted;
                                 mission.ProcessId = null;
                                 mission.CompletedUtc = DateTime.UtcNow;
                                 mission.LastUpdateUtc = DateTime.UtcNow;
@@ -1681,6 +1683,7 @@ namespace Armada.Core.Services
             mission.DockId = null;
             mission.ProcessId = null;
             mission.FailureReason = null;
+            mission.FailureKind = null;
             mission.StartedUtc = null;
             mission.CompletedUtc = null;
             mission.TotalRuntimeMs = null;
@@ -1709,6 +1712,7 @@ namespace Armada.Core.Services
             {
                 mission.Status = MissionStatusEnum.Failed;
                 mission.FailureReason = failureReason;
+                mission.FailureKind = MissionFailureKindEnum.Crash;
                 mission.ProcessId = null;
                 mission.CompletedUtc = DateTime.UtcNow;
                 mission.LastUpdateUtc = DateTime.UtcNow;
@@ -1830,6 +1834,7 @@ namespace Armada.Core.Services
 
                 otherMission.Status = MissionStatusEnum.Cancelled;
                 otherMission.FailureReason = "Voyage halted after mission " + failedMissionId + " failed: " + failureReason;
+                otherMission.FailureKind = MissionFailureKindEnum.DependencyFailed;
                 otherMission.ProcessId = null;
                 otherMission.CompletedUtc = DateTime.UtcNow;
                 otherMission.LastUpdateUtc = DateTime.UtcNow;

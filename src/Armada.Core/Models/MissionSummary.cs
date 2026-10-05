@@ -101,6 +101,11 @@ namespace Armada.Core.Models
         public string? FailureReason { get; set; } = null;
 
         /// <summary>
+        /// Structured classification of the failure (see <see cref="Mission.FailureKind"/>).
+        /// </summary>
+        public MissionFailureKindEnum? FailureKind { get; set; } = null;
+
+        /// <summary>
         /// Whether this mission requires explicit review approval.
         /// </summary>
         public bool RequiresReview { get; set; } = false;

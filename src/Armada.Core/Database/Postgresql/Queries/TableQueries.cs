@@ -1603,7 +1603,11 @@ namespace Armada.Core.Database.Postgresql.Queries
                     @"CREATE INDEX IF NOT EXISTS idx_ask_tracked_work_entity ON ask_tracked_work(entity_type, entity_id);"),
 
                 new SchemaMigration(76, "Add nullable auto_approve to vessels: a per-vessel override of the captain auto-approve setting for missions on the vessel",
-                    @"ALTER TABLE vessels ADD COLUMN IF NOT EXISTS auto_approve BOOLEAN NULL;")
+                    @"ALTER TABLE vessels ADD COLUMN IF NOT EXISTS auto_approve BOOLEAN NULL;"),
+
+                new SchemaMigration(77, "Add failure_kind and wait_for_voyage_workers to missions: a persisted failure classification set where the failure happens, and a structured flag that defers a worker until the other workers in its voyage settle",
+                    @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS failure_kind TEXT NULL;",
+                    @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS wait_for_voyage_workers BOOLEAN NOT NULL DEFAULT FALSE;")
 
             };
         }

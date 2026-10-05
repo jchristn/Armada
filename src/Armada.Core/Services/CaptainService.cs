@@ -100,6 +100,7 @@ namespace Armada.Core.Services
                      currentMission.Status == MissionStatusEnum.Assigned))
                 {
                     currentMission.Status = MissionStatusEnum.Failed;
+                    currentMission.FailureKind = MissionFailureKindEnum.OperatorAction;
                     currentMission.ProcessId = null;
                     currentMission.CompletedUtc = DateTime.UtcNow;
                     currentMission.LastUpdateUtc = DateTime.UtcNow;
@@ -152,7 +153,7 @@ namespace Armada.Core.Services
                 {
                     string missingReason = "Auto-recovery failed because the mission or dock could not be reloaded.";
                     _Logging.Warn(_Header + "cannot recover captain " + captain.Id + ": mission or dock not found -- failing mission and releasing to idle");
-                    await FinalizeRecoveryFailureAsync(captain, mission, missingReason, token).ConfigureAwait(false);
+                    await FinalizeRecoveryFailureAsync(captain, mission, missingReason, MissionFailureKindEnum.Infra, token).ConfigureAwait(false);
                     return;
                 }
 
@@ -199,7 +200,7 @@ namespace Armada.Core.Services
                 {
                     string worktreeReason = "Auto-recovery failed because dock " + dock.Id + " has no worktree path.";
                     _Logging.Warn(_Header + "cannot recover captain " + captain.Id + ": dock " + dock.Id + " has no worktree path -- failing mission and releasing to idle");
-                    await FinalizeRecoveryFailureAsync(captain, mission, worktreeReason, token).ConfigureAwait(false);
+                    await FinalizeRecoveryFailureAsync(captain, mission, worktreeReason, MissionFailureKindEnum.Infra, token).ConfigureAwait(false);
                     return;
                 }
 
@@ -232,7 +233,7 @@ namespace Armada.Core.Services
                 {
                     string inaccessibleReason = "Auto-recovery failed because dock " + dock.Id + " is not a usable git worktree.";
                     _Logging.Warn(_Header + "cannot recover captain " + captain.Id + ": dock " + dock.Id + " is not a usable git worktree -- failing mission and releasing to idle");
-                    await FinalizeRecoveryFailureAsync(captain, mission, inaccessibleReason, token).ConfigureAwait(false);
+                    await FinalizeRecoveryFailureAsync(captain, mission, inaccessibleReason, MissionFailureKindEnum.Infra, token).ConfigureAwait(false);
                     return;
                 }
 
@@ -271,7 +272,7 @@ namespace Armada.Core.Services
                     {
                         _Logging.Warn(_Header + "recovery launch failed for captain " + captain.Id + ": " + ex.ToString());
                         string launchReason = "Auto-recovery failed while relaunching the agent: " + ex.Message;
-                        await FinalizeRecoveryFailureAsync(captain, mission, launchReason, token).ConfigureAwait(false);
+                        await FinalizeRecoveryFailureAsync(captain, mission, launchReason, MissionFailureKindEnum.StallRecoveryExhausted, token).ConfigureAwait(false);
                     }
                 }
             }
@@ -284,7 +285,7 @@ namespace Armada.Core.Services
                         ? await _Database.Missions.ReadAsync(captain.CurrentMissionId, token).ConfigureAwait(false)
                         : null;
                     string unexpectedReason = "Auto-recovery failed unexpectedly: " + ex.Message;
-                    await FinalizeRecoveryFailureAsync(captain, mission, unexpectedReason, token).ConfigureAwait(false);
+                    await FinalizeRecoveryFailureAsync(captain, mission, unexpectedReason, MissionFailureKindEnum.StallRecoveryExhausted, token).ConfigureAwait(false);
                 }
                 catch { }
             }
@@ -313,13 +314,14 @@ namespace Armada.Core.Services
         /// <summary>
         /// Mark the mission as failed and return the captain to Idle when auto-recovery cannot continue.
         /// </summary>
-        private async Task FinalizeRecoveryFailureAsync(Captain captain, Mission? mission, string reason, CancellationToken token)
+        private async Task FinalizeRecoveryFailureAsync(Captain captain, Mission? mission, string reason, MissionFailureKindEnum failureKind, CancellationToken token)
         {
             if (mission != null &&
                 !MissionStateMachine.IsTerminalOrPostWork(mission.Status))
             {
                 mission.Status = MissionStatusEnum.Failed;
                 mission.FailureReason = reason;
+                mission.FailureKind = failureKind;
                 mission.ProcessId = null;
                 mission.CompletedUtc = DateTime.UtcNow;
                 mission.LastUpdateUtc = DateTime.UtcNow;

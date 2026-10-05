@@ -1,9 +1,12 @@
 namespace Armada.Core.Enums
 {
+    using System.Text.Json.Serialization;
+
     /// <summary>
     /// Classified cause of a failed mission, used to decide whether autonomous recovery should open an
     /// incident and dispatch a bounded rescue mission.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum MissionFailureKindEnum
     {
         /// <summary>
@@ -59,6 +62,39 @@ namespace Armada.Core.Enums
         /// <summary>
         /// The failure could not be classified.
         /// </summary>
-        Unknown
+        Unknown,
+
+        /// <summary>
+        /// A reviewer denied the work. Needs a human, not a mechanical rescue.
+        /// </summary>
+        ReviewDenied,
+
+        /// <summary>
+        /// The mission was not run or was stopped because something it depends on failed: a failed dependency
+        /// mission, or its voyage was halted or cancelled after another mission failed.
+        /// </summary>
+        DependencyFailed,
+
+        /// <summary>
+        /// The mission ran past the configured maximum mission runtime and was stopped.
+        /// </summary>
+        MaxRuntimeExceeded,
+
+        /// <summary>
+        /// The captain stalled and stall recovery was exhausted.
+        /// </summary>
+        StallRecoveryExhausted,
+
+        /// <summary>
+        /// The mission was failed by an operator or by removal of the resource it targets (for example its
+        /// vessel was deleted).
+        /// </summary>
+        OperatorAction,
+
+        /// <summary>
+        /// The captain's output did not satisfy the mission's output contract (for example an architect that
+        /// produced no mission plan).
+        /// </summary>
+        InvalidOutput
     }
 }
