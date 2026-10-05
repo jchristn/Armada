@@ -911,7 +911,8 @@ namespace Test.Shared.Suites.Services
 
                     AssertContains("[ARMADA:MISSION]", prompt);
                     AssertContains("Do not ask for more input.", prompt);
-                    AssertContains("respond only with real [ARMADA:MISSION] blocks", prompt);
+                    AssertContains("respond only with real mission definitions", prompt);
+                    AssertContains("armada-plan", prompt);
                 }
             }));
 

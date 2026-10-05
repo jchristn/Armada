@@ -929,6 +929,238 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("architect_plan_json_drives_dependencies_and_deferral", "Architect armada-plan JSON drives dependencies and wait-for-others sequencing", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    DirCreatingGitStub git = new DirCreatingGitStub();
+                    IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
+                    ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
+                    MissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService, git: git);
+                    captainService.OnLaunchAgent = (Captain c, Mission m, Dock d) => Task.FromResult(2000 + git.WorktreeCalls.Count);
+
+                    int landingCalls = 0;
+                    missionService.OnMissionComplete = (Mission mission, Dock dock) =>
+                    {
+                        landingCalls++;
+                        mission.Status = MissionStatusEnum.Complete;
+                        mission.CompletedUtc = DateTime.UtcNow;
+                        mission.LastUpdateUtc = DateTime.UtcNow;
+                        return testDb.Driver.Missions.UpdateAsync(mission);
+                    };
+
+                    Vessel vessel = new Vessel("sequenced-fanout-vessel", "https://github.com/test/repo.git");
+                    vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
+                    vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
+                    vessel.DefaultBranch = "main";
+                    vessel.BranchCleanupPolicy = BranchCleanupPolicyEnum.LocalAndRemote;
+                    vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    Captain architectCaptain = new Captain("sequenced-architect");
+                    architectCaptain.State = CaptainStateEnum.Idle;
+                    architectCaptain = await testDb.Driver.Captains.CreateAsync(architectCaptain).ConfigureAwait(false);
+
+                    Captain workerCaptain = new Captain("sequenced-worker");
+                    workerCaptain.State = CaptainStateEnum.Idle;
+                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+
+                    Captain reviewerCaptain = new Captain("sequenced-reviewer");
+                    reviewerCaptain.State = CaptainStateEnum.Idle;
+                    reviewerCaptain = await testDb.Driver.Captains.CreateAsync(reviewerCaptain).ConfigureAwait(false);
+
+                    Voyage voyage = new Voyage("sequenced-fanout-voyage");
+                    voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
+
+                    Mission architect = new Mission("[Architect] Plan", "Break this down");
+                    architect.VesselId = vessel.Id;
+                    architect.VoyageId = voyage.Id;
+                    architect.CaptainId = architectCaptain.Id;
+                    architect.Persona = "Architect";
+                    architect.Status = MissionStatusEnum.InProgress;
+                    architect.BranchName = "armada/sequenced/architect";
+                    architect = await testDb.Driver.Missions.CreateAsync(architect).ConfigureAwait(false);
+
+                    Dock architectDock = new Dock(vessel.Id);
+                    architectDock.CaptainId = architectCaptain.Id;
+                    architectDock.WorktreePath = Path.Combine(settings.DocksDirectory, vessel.Name, architect.Id);
+                    architectDock.BranchName = architect.BranchName;
+                    architectDock.Active = true;
+                    architectDock = await testDb.Driver.Docks.CreateAsync(architectDock).ConfigureAwait(false);
+                    architect.DockId = architectDock.Id;
+                    await testDb.Driver.Missions.UpdateAsync(architect).ConfigureAwait(false);
+
+                    Mission worker = new Mission("[Worker] Placeholder", "Initial worker");
+                    worker.VesselId = vessel.Id;
+                    worker.VoyageId = voyage.Id;
+                    worker.Persona = "Worker";
+                    worker.Status = MissionStatusEnum.Pending;
+                    worker.DependsOnMissionId = architect.Id;
+                    worker = await testDb.Driver.Missions.CreateAsync(worker).ConfigureAwait(false);
+
+                    Mission testEngineer = new Mission("[Test Engineer] Placeholder", "Initial tests");
+                    testEngineer.VesselId = vessel.Id;
+                    testEngineer.VoyageId = voyage.Id;
+                    testEngineer.Persona = "Test Engineer";
+                    testEngineer.Status = MissionStatusEnum.Pending;
+                    testEngineer.DependsOnMissionId = worker.Id;
+                    testEngineer = await testDb.Driver.Missions.CreateAsync(testEngineer).ConfigureAwait(false);
+
+                    Mission judge = new Mission("[Judge] Placeholder", "Initial review");
+                    judge.VesselId = vessel.Id;
+                    judge.VoyageId = voyage.Id;
+                    judge.Persona = "Judge";
+                    judge.Status = MissionStatusEnum.Pending;
+                    judge.DependsOnMissionId = testEngineer.Id;
+                    judge = await testDb.Driver.Missions.CreateAsync(judge).ConfigureAwait(false);
+
+                    architectCaptain.CurrentMissionId = architect.Id;
+                    architectCaptain.CurrentDockId = architectDock.Id;
+                    await testDb.Driver.Captains.UpdateAsync(architectCaptain).ConfigureAwait(false);
+
+                    missionService.OnGetMissionOutput = _ =>
+                        "Here is the plan.\n\n" +
+                        "```armada-plan\n" +
+                        "{\"missions\": [\n" +
+                        "  {\"title\": \"Add core model properties\", \"description\": \"Update Captain.cs and Mission.cs.\", \"dependsOn\": null},\n" +
+                        "  {\"title\": \"Extend secondary backends\", \"description\": \"Update PostgreSQL and MySQL. Depends on: Mission 9\", \"dependsOn\": 1},\n" +
+                        "  {\"title\": \"Document the final behavior\", \"description\": \"Update README.md once the work is done.\", \"waitForOtherMissions\": true}\n" +
+                        "]}\n" +
+                        "```\n" +
+                        "[ARMADA:MISSION] Ignored legacy block\n" +
+                        "This marker block is ignored because a structured plan is present.";
+
+                    await missionService.HandleCompletionAsync(architectCaptain, architect.Id).ConfigureAwait(false);
+
+                    List<Mission> afterArchitect = await testDb.Driver.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false);
+                    Mission? coreWorker = afterArchitect.FirstOrDefault(m => m.Title == "Add core model properties [Worker]");
+                    Mission? coreJudge = afterArchitect.FirstOrDefault(m => m.Title == "Add core model properties [Judge]");
+                    Mission? backendWorker = afterArchitect.FirstOrDefault(m => m.Title == "Extend secondary backends [Worker]");
+                    Mission? docsWorker = afterArchitect.FirstOrDefault(m => m.Title == "Document the final behavior [Worker]");
+                    Mission? ignored = afterArchitect.FirstOrDefault(m => m.Title == "Ignored legacy block [Worker]");
+
+                    AssertNotNull(coreWorker, "Primary worker should exist");
+                    AssertNotNull(coreJudge, "Primary judge stage should exist");
+                    AssertNotNull(backendWorker, "Dependent worker should exist");
+                    AssertNotNull(docsWorker, "Deferred docs worker should exist");
+                    AssertNull(ignored, "Legacy marker blocks are not read when a structured plan is present");
+                    AssertEqual(coreJudge!.Id, backendWorker!.DependsOnMissionId, "dependsOn: 1 waits for mission 1's terminal stage, not the text in the description");
+                    AssertFalse(coreWorker!.WaitForVoyageWorkers, "missions without waitForOtherMissions are not deferred");
+                    AssertTrue(docsWorker!.WaitForVoyageWorkers, "waitForOtherMissions sets the structured flag");
+                    AssertEqual(MissionStatusEnum.InProgress, coreWorker.Status, "Primary worker should auto-dispatch after architect completion");
+                    AssertEqual(MissionStatusEnum.Pending, backendWorker.Status, "Dependent worker should remain pending until the upstream chain completes");
+                }
+            }));
+
+            cases.Add(CaseAsync("architect_legacy_marker_deferral_phrase_sets_structured_flag", "Legacy marker-format deferral wording is converted once into the structured flag", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    DirCreatingGitStub git = new DirCreatingGitStub();
+                    IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
+                    ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
+                    MissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService, git: git);
+                    captainService.OnLaunchAgent = (Captain c, Mission m, Dock d) => Task.FromResult(2000 + git.WorktreeCalls.Count);
+
+                    int landingCalls = 0;
+                    missionService.OnMissionComplete = (Mission mission, Dock dock) =>
+                    {
+                        landingCalls++;
+                        mission.Status = MissionStatusEnum.Complete;
+                        mission.CompletedUtc = DateTime.UtcNow;
+                        mission.LastUpdateUtc = DateTime.UtcNow;
+                        return testDb.Driver.Missions.UpdateAsync(mission);
+                    };
+
+                    Vessel vessel = new Vessel("sequenced-fanout-vessel", "https://github.com/test/repo.git");
+                    vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
+                    vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
+                    vessel.DefaultBranch = "main";
+                    vessel.BranchCleanupPolicy = BranchCleanupPolicyEnum.LocalAndRemote;
+                    vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    Captain architectCaptain = new Captain("sequenced-architect");
+                    architectCaptain.State = CaptainStateEnum.Idle;
+                    architectCaptain = await testDb.Driver.Captains.CreateAsync(architectCaptain).ConfigureAwait(false);
+
+                    Captain workerCaptain = new Captain("sequenced-worker");
+                    workerCaptain.State = CaptainStateEnum.Idle;
+                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+
+                    Captain reviewerCaptain = new Captain("sequenced-reviewer");
+                    reviewerCaptain.State = CaptainStateEnum.Idle;
+                    reviewerCaptain = await testDb.Driver.Captains.CreateAsync(reviewerCaptain).ConfigureAwait(false);
+
+                    Voyage voyage = new Voyage("sequenced-fanout-voyage");
+                    voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
+
+                    Mission architect = new Mission("[Architect] Plan", "Break this down");
+                    architect.VesselId = vessel.Id;
+                    architect.VoyageId = voyage.Id;
+                    architect.CaptainId = architectCaptain.Id;
+                    architect.Persona = "Architect";
+                    architect.Status = MissionStatusEnum.InProgress;
+                    architect.BranchName = "armada/sequenced/architect";
+                    architect = await testDb.Driver.Missions.CreateAsync(architect).ConfigureAwait(false);
+
+                    Dock architectDock = new Dock(vessel.Id);
+                    architectDock.CaptainId = architectCaptain.Id;
+                    architectDock.WorktreePath = Path.Combine(settings.DocksDirectory, vessel.Name, architect.Id);
+                    architectDock.BranchName = architect.BranchName;
+                    architectDock.Active = true;
+                    architectDock = await testDb.Driver.Docks.CreateAsync(architectDock).ConfigureAwait(false);
+                    architect.DockId = architectDock.Id;
+                    await testDb.Driver.Missions.UpdateAsync(architect).ConfigureAwait(false);
+
+                    Mission worker = new Mission("[Worker] Placeholder", "Initial worker");
+                    worker.VesselId = vessel.Id;
+                    worker.VoyageId = voyage.Id;
+                    worker.Persona = "Worker";
+                    worker.Status = MissionStatusEnum.Pending;
+                    worker.DependsOnMissionId = architect.Id;
+                    worker = await testDb.Driver.Missions.CreateAsync(worker).ConfigureAwait(false);
+
+                    Mission testEngineer = new Mission("[Test Engineer] Placeholder", "Initial tests");
+                    testEngineer.VesselId = vessel.Id;
+                    testEngineer.VoyageId = voyage.Id;
+                    testEngineer.Persona = "Test Engineer";
+                    testEngineer.Status = MissionStatusEnum.Pending;
+                    testEngineer.DependsOnMissionId = worker.Id;
+                    testEngineer = await testDb.Driver.Missions.CreateAsync(testEngineer).ConfigureAwait(false);
+
+                    Mission judge = new Mission("[Judge] Placeholder", "Initial review");
+                    judge.VesselId = vessel.Id;
+                    judge.VoyageId = voyage.Id;
+                    judge.Persona = "Judge";
+                    judge.Status = MissionStatusEnum.Pending;
+                    judge.DependsOnMissionId = testEngineer.Id;
+                    judge = await testDb.Driver.Missions.CreateAsync(judge).ConfigureAwait(false);
+
+                    architectCaptain.CurrentMissionId = architect.Id;
+                    architectCaptain.CurrentDockId = architectDock.Id;
+                    await testDb.Driver.Captains.UpdateAsync(architectCaptain).ConfigureAwait(false);
+
+                    missionService.OnGetMissionOutput = _ =>
+                        "[ARMADA:MISSION] Add core model properties\n" +
+                        "Update Captain.cs and Mission.cs.\n" +
+                        "[ARMADA:MISSION] Document the final behavior\n" +
+                        "Update README.md after both implementation missions complete so the docs match.";
+
+                    await missionService.HandleCompletionAsync(architectCaptain, architect.Id).ConfigureAwait(false);
+
+                    List<Mission> afterArchitect = await testDb.Driver.Missions.EnumerateByVoyageAsync(voyage.Id).ConfigureAwait(false);
+                    Mission? coreWorker = afterArchitect.FirstOrDefault(m => m.Title == "Add core model properties [Worker]");
+                    Mission? docsWorker = afterArchitect.FirstOrDefault(m => m.Title == "Document the final behavior [Worker]");
+                    AssertNotNull(coreWorker);
+                    AssertNotNull(docsWorker);
+                    AssertFalse(coreWorker!.WaitForVoyageWorkers);
+                    AssertTrue(docsWorker!.WaitForVoyageWorkers, "the legacy fallback converts the wording into the flag at parse time");
+                }
+            }));
+
             cases.Add(CaseAsync("architect_fan_out_honors_explicit_mission_dependencies_across_worker_chains", "Architect fan-out honors explicit mission dependencies across worker chains", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
@@ -1600,6 +1832,7 @@ namespace Test.Shared.Suites.Services
                     docsMission.VesselId = vessel.Id;
                     docsMission.VoyageId = voyage.Id;
                     docsMission.Persona = "Worker";
+                    docsMission.WaitForVoyageWorkers = true;
                     docsMission.Status = MissionStatusEnum.Pending;
                     docsMission = await testDb.Driver.Missions.CreateAsync(docsMission).ConfigureAwait(false);
 
@@ -1616,6 +1849,62 @@ namespace Test.Shared.Suites.Services
 
                     bool assignedAfterSiblingsSettled = await missionService.TryAssignAsync(docsMission, vessel).ConfigureAwait(false);
                     AssertTrue(assignedAfterSiblingsSettled, "Sequenced docs mission should assign once sibling worker missions are settled");
+                }
+            }));
+
+            cases.Add(CaseAsync("description_wording_alone_does_not_defer_worker", "Deferral wording in a description without the structured flag does not defer the mission", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    DirCreatingGitStub git = new DirCreatingGitStub();
+                    IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
+                    ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
+                    MissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService);
+                    captainService.OnLaunchAgent = (Captain c, Mission m, Dock d) => Task.FromResult(4000 + git.WorktreeCalls.Count);
+
+                    Vessel vessel = new Vessel("sequenced-vessel", "https://github.com/test/repo.git");
+                    vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
+                    vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
+                    vessel.DefaultBranch = "main";
+                    vessel.AllowConcurrentMissions = true;
+                    vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    Captain workerCaptain = new Captain("sequenced-worker");
+                    workerCaptain.State = CaptainStateEnum.Idle;
+                    workerCaptain = await testDb.Driver.Captains.CreateAsync(workerCaptain).ConfigureAwait(false);
+
+                    Voyage voyage = new Voyage("sequenced-voyage");
+                    voyage = await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
+
+                    Mission implementationA = new Mission("Implementation A", "Do the first implementation");
+                    implementationA.VesselId = vessel.Id;
+                    implementationA.VoyageId = voyage.Id;
+                    implementationA.Persona = "Worker";
+                    implementationA.Status = MissionStatusEnum.InProgress;
+                    implementationA = await testDb.Driver.Missions.CreateAsync(implementationA).ConfigureAwait(false);
+
+                    Mission implementationB = new Mission("Implementation B", "Do the second implementation");
+                    implementationB.VesselId = vessel.Id;
+                    implementationB.VoyageId = voyage.Id;
+                    implementationB.Persona = "Worker";
+                    implementationB.Status = MissionStatusEnum.Pending;
+                    implementationB = await testDb.Driver.Missions.CreateAsync(implementationB).ConfigureAwait(false);
+
+                    Mission docsMission = new Mission(
+                        "Document the final behavior",
+                        "Update README.md and REST_API.md after both implementation missions complete so the docs match the final shipped behavior.");
+                    docsMission.VesselId = vessel.Id;
+                    docsMission.VoyageId = voyage.Id;
+                    docsMission.Persona = "Worker";
+                    docsMission.Status = MissionStatusEnum.Pending;
+                    docsMission = await testDb.Driver.Missions.CreateAsync(docsMission).ConfigureAwait(false);
+
+                    // Before the fix six English phrases in any Worker description deferred it; only the structured
+                    // WaitForVoyageWorkers flag does now.
+                    bool assigned = await missionService.TryAssignAsync(docsMission, vessel).ConfigureAwait(false);
+                    AssertTrue(assigned, "A mission is not deferred by description wording alone");
                 }
             }));
 
@@ -2540,6 +2829,46 @@ namespace Test.Shared.Suites.Services
 
                     bool assigned = await missionService.TryAssignAsync(workerMission, vessel).ConfigureAwait(false);
                     AssertFalse(assigned, "Mission should remain pending when no captain is eligible for the requested persona");
+
+                    Mission? reloaded = await testDb.Driver.Missions.ReadAsync(workerMission.Id).ConfigureAwait(false);
+                    AssertNotNull(reloaded, "Mission should remain readable after failed assignment");
+                    AssertNull(reloaded!.CaptainId, "No ineligible captain should be assigned");
+                    AssertEqual(MissionStatusEnum.Pending, reloaded.Status, "Mission should stay Pending when no persona-compatible captain exists");
+                }
+            }));
+
+            cases.Add(CaseAsync("malformed_allowed_personas_is_not_substring_matched", "Malformed AllowedPersonas JSON is not searched as text", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    DirCreatingGitStub git = new DirCreatingGitStub();
+                    IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
+                    ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
+                    MissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService);
+                    captainService.OnLaunchAgent = (Captain c, Mission m, Dock d) => Task.FromResult(12345);
+
+                    Vessel vessel = new Vessel("no-eligible-vessel", "https://github.com/test/repo.git");
+                    vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
+                    vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
+                    vessel.DefaultBranch = "main";
+                    await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    Captain architectOnly = new Captain("architect-only");
+                    architectOnly.State = CaptainStateEnum.Idle;
+                    // Not valid JSON. The old fallback searched the raw text for "\"Worker\"" and matched.
+                    architectOnly.AllowedPersonas = "[\"Architect\", \"Worker\"";
+                    await testDb.Driver.Captains.CreateAsync(architectOnly).ConfigureAwait(false);
+
+                    Mission workerMission = new Mission("Implement worker task");
+                    workerMission.VesselId = vessel.Id;
+                    workerMission.Persona = "Worker";
+                    workerMission.Status = MissionStatusEnum.Pending;
+                    workerMission = await testDb.Driver.Missions.CreateAsync(workerMission).ConfigureAwait(false);
+
+                    bool assigned = await missionService.TryAssignAsync(workerMission, vessel).ConfigureAwait(false);
+                    AssertFalse(assigned, "A malformed persona list never admits a persona by substring");
 
                     Mission? reloaded = await testDb.Driver.Missions.ReadAsync(workerMission.Id).ConfigureAwait(false);
                     AssertNotNull(reloaded, "Mission should remain readable after failed assignment");

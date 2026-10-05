@@ -167,9 +167,30 @@ When a pipeline has multiple stages:
 
 ### The Architect Special Case
 
-The Architect outputs structured mission definitions using `[ARMADA:MISSION]` markers.
-Currently this output is injected as context for the next stage; full automatic parsing
-into new Worker missions is a planned enhancement.
+The Architect outputs its plan as one fenced code block whose info string is `armada-plan`:
+
+````
+```armada-plan
+{"missions": [
+  {"title": "Add core model properties", "description": "Update Captain.cs and Mission.cs.", "dependsOn": null},
+  {"title": "Extend secondary backends", "description": "Update PostgreSQL and MySQL.", "dependsOn": 1},
+  {"title": "Document the final behavior", "description": "Update README.md.", "waitForOtherMissions": true}
+]}
+```
+````
+
+The Admiral deserializes the block and creates one Worker mission (plus the downstream
+stages) per entry. `dependsOn` is the 1-based number of an earlier entry whose full
+Worker -> Test Engineer -> Judge chain must finish first; `waitForOtherMissions` holds the
+mission until every other Worker mission in the voyage has settled. Sequencing comes only
+from these fields (persisted as `DependsOnMissionId` and `WaitForVoyageWorkers`), never from
+description wording.
+
+Fallback: when the output has no valid `armada-plan` block, the older `[ARMADA:MISSION]`
+marker format is still read (title on the marker line, description below, an optional
+standalone `Depends on: Mission N` line). For that format only, deferral wording such as
+"after both implementation missions complete" is converted once, at parse time, into
+`WaitForVoyageWorkers`; a mission created any other way is never deferred by its wording.
 
 ### Captain Status Signals
 
