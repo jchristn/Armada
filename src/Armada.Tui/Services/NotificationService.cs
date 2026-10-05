@@ -7,6 +7,8 @@ namespace Armada.Tui.Services
     using System.Text.Json;
     using System.Text.Json.Serialization;
     using Armada.Client.Socket;
+    using Armada.Core.Enums;
+    using Armada.Tui.Widgets;
 
     /// <summary>
     /// Notifications and toasts (W1.10): the dashboard's entity-change notifications with the same text and severity
@@ -78,6 +80,7 @@ namespace Armada.Tui.Services
         #region Private-Members
 
         private static readonly JsonSerializerOptions _Json = CreateJson();
+        private static readonly Dictionary<string, NotificationSeverityEnum> _SeverityByName = BuildSeverityMap();
         private readonly List<NotificationEntry> _History = new List<NotificationEntry>();
         private readonly List<ToastEntry> _Toasts = new List<ToastEntry>();
         private readonly Dictionary<string, string> _LastSeen = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -116,18 +119,60 @@ namespace Armada.Tui.Services
         #region Public-Methods
 
         /// <summary>
-        /// The dashboard's severity for a status (<c>statusToSeverity</c>).
+        /// The dashboard's severity for a status name (<c>statusToSeverity</c>), by exact case-insensitive name only.
+        /// Composed or unknown text (for example "Succeeded / Failed") is informational; use the typed overloads.
         /// </summary>
         /// <param name="status">Status.</param>
         /// <returns>Severity.</returns>
         public static NotificationSeverityEnum SeverityFor(string? status)
         {
-            if (String.IsNullOrEmpty(status)) return NotificationSeverityEnum.Info;
-            string s = status!.ToLowerInvariant();
-            if (s == "completed" || s == "complete" || s == "landed" || s == "passed" || s.Contains("succeeded")) return NotificationSeverityEnum.Success;
-            if (s == "failed" || s == "error" || s.Contains("failed")) return NotificationSeverityEnum.Error;
-            if (s == "cancelled" || s == "stalled" || s == "stopping" || s.Contains("rolledback") || s.Contains("denied")) return NotificationSeverityEnum.Warning;
-            return NotificationSeverityEnum.Info;
+            if (String.IsNullOrWhiteSpace(status)) return NotificationSeverityEnum.Info;
+            return _SeverityByName.TryGetValue(status!.Trim(), out NotificationSeverityEnum severity) ? severity : NotificationSeverityEnum.Info;
+        }
+
+        /// <summary>
+        /// Notification severity for a typed status severity (running states are informational).
+        /// </summary>
+        /// <param name="severity">Status severity.</param>
+        /// <returns>Notification severity.</returns>
+        public static NotificationSeverityEnum SeverityFor(StatusSeverityEnum severity)
+        {
+            switch (severity)
+            {
+                case StatusSeverityEnum.Success: return NotificationSeverityEnum.Success;
+                case StatusSeverityEnum.Error: return NotificationSeverityEnum.Error;
+                case StatusSeverityEnum.Warning: return NotificationSeverityEnum.Warning;
+                default: return NotificationSeverityEnum.Info;
+            }
+        }
+
+        /// <summary>
+        /// Notification severity for an entity change, computed from the typed status values of the event (for
+        /// deployments the deployment status and the verification status together, so a succeeded deployment whose
+        /// verification failed is an error). Falls back to the exact-name map when the status is not a known name.
+        /// </summary>
+        /// <param name="eventType">Socket event type (for example <see cref="ArmadaEventTypes.MissionChanged"/>).</param>
+        /// <param name="data">Event payload.</param>
+        /// <returns>Severity.</returns>
+        public static NotificationSeverityEnum SeverityFor(string eventType, EntityChangedEvent data)
+        {
+            if (data == null) throw new ArgumentNullException(nameof(data));
+            Enum? typed = null;
+            switch (eventType)
+            {
+                case ArmadaEventTypes.MissionChanged: typed = data.MissionStatus; break;
+                case ArmadaEventTypes.VoyageChanged: typed = data.VoyageStatus; break;
+                case ArmadaEventTypes.CaptainChanged: typed = data.CaptainState; break;
+                case ArmadaEventTypes.ObjectiveChanged: typed = data.ObjectiveStatus; break;
+                case ArmadaEventTypes.IncidentChanged: typed = data.IncidentStatus; break;
+                case ArmadaEventTypes.DeploymentChanged:
+                    DeploymentStatusEnum? deployment = data.DeploymentStatus;
+                    if (deployment != null) return SeverityFor(StatusBadge.Severity(deployment.Value, data.DeploymentVerificationStatus));
+                    break;
+            }
+
+            if (typed != null) return SeverityFor(StatusBadge.Severity(typed));
+            return SeverityFor(eventType == ArmadaEventTypes.CaptainChanged ? (data.State ?? data.Status) : data.Status);
         }
 
         /// <summary>
@@ -153,9 +198,10 @@ namespace Armada.Tui.Services
             if (data == null) return false;
             string? status = asset == "Captain" ? (data.State ?? data.Status) : data.Status;
             if (String.IsNullOrEmpty(status)) return false;
+            NotificationSeverityEnum severity = SeverityFor(message.Type, data);
             if (asset == "Deployment" && !String.IsNullOrEmpty(data.VerificationStatus)) status += " / " + data.VerificationStatus;
             string name = asset == "Captain" ? (data.Name ?? data.Id ?? "") : (data.Title ?? data.Id ?? "");
-            return PushEntityChange(asset, data.Id ?? "", name, status!);
+            return PushEntityChange(asset, data.Id ?? "", name, status!, severity);
         }
 
         /// <summary>
@@ -168,12 +214,27 @@ namespace Armada.Tui.Services
         /// <returns>True when recorded (false for a repeat).</returns>
         public bool PushEntityChange(string assetType, string id, string name, string status)
         {
+            return PushEntityChange(assetType, id, name, status, SeverityFor(status));
+        }
+
+        /// <summary>
+        /// Record an entity status change with an explicit severity (deduplicated per entity and status) and raise a
+        /// toast. <paramref name="status"/> is display text only.
+        /// </summary>
+        /// <param name="assetType">Asset type.</param>
+        /// <param name="id">Entity id.</param>
+        /// <param name="name">Name or title.</param>
+        /// <param name="status">Status display text.</param>
+        /// <param name="severity">Severity computed from the typed status.</param>
+        /// <returns>True when recorded (false for a repeat).</returns>
+        public bool PushEntityChange(string assetType, string id, string name, string status, NotificationSeverityEnum severity)
+        {
             string key = assetType + ":" + id;
             if (_LastSeen.TryGetValue(key, out string? seen) && seen == status) return false;
             _LastSeen[key] = status;
             string truncated = name.Length > 80 ? name.Substring(0, 80) + "..." : name;
             NotificationEntry entry = new NotificationEntry();
-            entry.Severity = SeverityFor(status);
+            entry.Severity = severity;
             entry.AssetType = assetType;
             entry.Name = truncated;
             entry.Status = status;
@@ -336,6 +397,18 @@ namespace Armada.Tui.Services
         #endregion
 
         #region Private-Methods
+
+        private static Dictionary<string, NotificationSeverityEnum> BuildSeverityMap()
+        {
+            Dictionary<string, NotificationSeverityEnum> map = new Dictionary<string, NotificationSeverityEnum>(StringComparer.OrdinalIgnoreCase);
+            foreach (string name in new string[] { "Completed", "Complete", "Landed", "Passed", "Succeeded" })
+                map[name] = NotificationSeverityEnum.Success;
+            foreach (string name in new string[] { "Failed", "Error", "LandingFailed", "VerificationFailed", "DependencyFailed", "MissionFailed" })
+                map[name] = NotificationSeverityEnum.Error;
+            foreach (string name in new string[] { "Cancelled", "Stalled", "Stopping", "RolledBack", "Denied", "ReviewDenied", "AccessDenied" })
+                map[name] = NotificationSeverityEnum.Warning;
+            return map;
+        }
 
         private static string? RouteFor(string assetType, string id)
         {

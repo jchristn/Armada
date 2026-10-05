@@ -3,6 +3,7 @@ namespace Armada.Tui.Screens.Build
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Tui.Modals;
     using Armada.Tui.Screens.Operations;
@@ -78,10 +79,10 @@ namespace Armada.Tui.Screens.Build
 
             List<CaptainToolServerSummary> servers = data.Servers ?? new List<CaptainToolServerSummary>();
             List<CaptainToolSummary> tools = data.Tools ?? new List<CaptainToolSummary>();
-            List<CaptainToolServerSummary> mcpServers = servers.Where(s => s.SourceKind == "McpServer").ToList();
-            List<CaptainToolServerSummary> runtimeSources = servers.Where(s => s.SourceKind != "McpServer").ToList();
-            List<CaptainToolSummary> internalTools = tools.Where(t => t.SourceKind == "RuntimeBuiltIn").ToList();
-            List<CaptainToolSummary> mcpTools = tools.Where(t => t.SourceKind == "McpServer").ToList();
+            List<CaptainToolServerSummary> mcpServers = servers.Where(s => s.SourceKind == CaptainToolSourceKindEnum.McpServer).ToList();
+            List<CaptainToolServerSummary> runtimeSources = servers.Where(s => s.SourceKind != CaptainToolSourceKindEnum.McpServer).ToList();
+            List<CaptainToolSummary> internalTools = tools.Where(t => t.SourceKind == CaptainToolSourceKindEnum.RuntimeBuiltIn).ToList();
+            List<CaptainToolSummary> mcpTools = tools.Where(t => t.SourceKind == CaptainToolSourceKindEnum.McpServer).ToList();
             int runtimeReported = runtimeSources.Sum(s => Math.Max(0, s.ToolCount));
 
             doc.Blank();

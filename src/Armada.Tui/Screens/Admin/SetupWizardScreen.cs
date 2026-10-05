@@ -1602,7 +1602,7 @@ namespace Armada.Tui.Screens.Admin
             {
                 lines.Add(new SetupWizardLine(L("Mission") + ": " + mission.Title));
                 lines.Add(new SetupWizardLine(L("Mission ID") + ": " + IdShort(mission.Id)));
-                lines.Add(new SetupWizardLine(L("Status") + ": " + L(mission.Status.ToString()), t => StatusBadge.Style(mission.Status.ToString(), t)));
+                lines.Add(new SetupWizardLine(L("Status") + ": " + L(mission.Status.ToString()), t => StatusBadge.Style(mission.Status, t)));
                 lines.Add(new SetupWizardLine(L("Captain ID") + ": " + IdShort(mission.CaptainId)));
                 lines.Add(new SetupWizardLine(L("Vessel ID") + ": " + IdShort(mission.VesselId)));
                 lines.Add(new SetupWizardLine(L("Branch") + ": " + (String.IsNullOrEmpty(mission.BranchName) ? "-" : mission.BranchName)));

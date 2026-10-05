@@ -356,6 +356,24 @@ namespace Armada.Tui.Screens.Operations
         }
 
         /// <summary>
+        /// A typed select field wired to this screen's modal host.
+        /// </summary>
+        /// <typeparam name="T">Option value type (for example an enum).</typeparam>
+        /// <param name="title">English picker title.</param>
+        /// <param name="options">Options.</param>
+        /// <param name="placeholder">English placeholder, or null.</param>
+        /// <returns>The field.</returns>
+        public SelectField<T> NewSelect<T>(string title, List<SelectOption<T>> options, string? placeholder = null)
+        {
+            SelectField<T> select = new SelectField<T>();
+            select.ModalHost = Context.Modals;
+            select.PickerTitle = title;
+            select.Options = options ?? new List<SelectOption<T>>();
+            if (placeholder != null) select.Placeholder = placeholder;
+            return select;
+        }
+
+        /// <summary>
         /// Open a row or screen action menu.
         /// </summary>
         /// <param name="title">English title.</param>

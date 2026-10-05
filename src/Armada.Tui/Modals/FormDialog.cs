@@ -40,6 +40,11 @@ namespace Armada.Tui.Modals
         public string? Status { get; private set; } = null;
 
         /// <summary>
+        /// True when <see cref="Status"/> is an error (drawn in the error style).
+        /// </summary>
+        public bool StatusIsError { get; private set; } = false;
+
+        /// <summary>
         /// True while <see cref="Submit"/> runs.
         /// </summary>
         public bool Busy { get; private set; } = false;
@@ -121,6 +126,7 @@ namespace Armada.Tui.Modals
 
             Busy = true;
             Status = T("Saving...");
+            StatusIsError = false;
             CancellationTokenSource cts = new CancellationTokenSource();
             _Cts = cts;
             Task.Run(async () =>
@@ -149,6 +155,7 @@ namespace Armada.Tui.Modals
                     if (error == null)
                     {
                         Status = null;
+                        StatusIsError = false;
                         Form.MarkClean();
                         RequestClose(true);
                         AfterAsyncClose?.Invoke();
@@ -156,6 +163,7 @@ namespace Armada.Tui.Modals
                     else
                     {
                         Status = "! " + T(error);
+                        StatusIsError = true;
                     }
                 });
             });
@@ -167,7 +175,18 @@ namespace Armada.Tui.Modals
         /// <param name="message">Message, or null to clear.</param>
         public void SetStatus(string? message)
         {
+            SetStatus(message, false);
+        }
+
+        /// <summary>
+        /// Show a message under the form (already translated), optionally as an error.
+        /// </summary>
+        /// <param name="message">Message, or null to clear.</param>
+        /// <param name="isError">True to draw the message in the error style.</param>
+        public void SetStatus(string? message, bool isError)
+        {
             Status = message;
+            StatusIsError = message != null && isError;
         }
 
         /// <summary>
@@ -179,6 +198,7 @@ namespace Armada.Tui.Modals
             {
                 _ConfirmDiscard = true;
                 Status = T("Unsaved changes. Press Esc again to discard them.");
+                StatusIsError = false;
                 return;
             }
 
@@ -198,7 +218,11 @@ namespace Armada.Tui.Modals
             if (key.Code != KeyCode.Escape && _ConfirmDiscard)
             {
                 _ConfirmDiscard = false;
-                if (!Busy) Status = null;
+                if (!Busy)
+                {
+                    Status = null;
+                    StatusIsError = false;
+                }
             }
 
             Form.HandleKey(key);
@@ -254,7 +278,7 @@ namespace Armada.Tui.Modals
             SurfaceText.FillRow(content, 0, height - 1, width, Body());
             if (Status != null)
             {
-                CellStyle style = Status.StartsWith("!", StringComparison.Ordinal) ? On(Theme.Error) : _ConfirmDiscard ? On(Theme.Warning) : Dim();
+                CellStyle style = StatusIsError ? On(Theme.Error) : _ConfirmDiscard ? On(Theme.Warning) : Dim();
                 SurfaceText.Draw(content, 0, height - 1, TextCells.Truncate(Status, width), style, width);
             }
         }

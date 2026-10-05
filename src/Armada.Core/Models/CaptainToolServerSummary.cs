@@ -1,5 +1,7 @@
 namespace Armada.Core.Models
 {
+    using Armada.Core.Enums;
+
     /// <summary>
     /// Summary of one MCP server or internal tool source available to a captain runtime.
     /// </summary>
@@ -13,7 +15,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Source kind, such as MCP server or internal runtime support.
         /// </summary>
-        public string SourceKind { get; set; } = "McpServer";
+        public CaptainToolSourceKindEnum SourceKind { get; set; } = CaptainToolSourceKindEnum.McpServer;
 
         /// <summary>
         /// Transport type, such as stdio or streamable_http.

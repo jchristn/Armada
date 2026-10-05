@@ -174,7 +174,7 @@ namespace Armada.Tui.Screens.Configuration
             s.Row("Base URL", EntityUi.Dash(endpoint.BaseUrl), t => t.Code);
             if (!String.IsNullOrEmpty(endpoint.Model)) s.Row("Model", endpoint.Model);
             if (endpoint.LastLatencyMs.HasValue) s.Row("Latency", endpoint.LastLatencyMs.Value.ToString(CultureInfo.InvariantCulture) + " ms");
-            s.Row("Status", EntityUi.Badge(context, endpoint.HealthStatus.ToString()), t => Widgets.StatusBadge.Style(endpoint.HealthStatus.ToString(), t));
+            s.Row("Status", EntityUi.Badge(context, endpoint.HealthStatus.ToString()), t => Widgets.StatusBadge.Style(endpoint.HealthStatus, t));
             s.Row("Uptime", endpoint.HealthHistory.Count > 0 ? endpoint.UptimePercentage.ToString("0.00", CultureInfo.InvariantCulture) + "%" : "-");
             s.Row("History Span", EndpointHealthHistogram.Span(endpoint.FirstHealthCheckUtc, now));
             s.Row("Consecutive OK", endpoint.ConsecutiveSuccesses.ToString(CultureInfo.InvariantCulture), t => t.Success);

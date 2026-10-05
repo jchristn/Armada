@@ -7,6 +7,7 @@ namespace Test.Shared.Suites.Client
     using System.Threading.Tasks;
     using Armada.Client;
     using Armada.Client.Models;
+    using Armada.Core.Enums;
     using Test.Shared.Infrastructure;
     using Test.Shared.Suites.Tui;
     using Touchstone.Core;
@@ -59,7 +60,7 @@ namespace Test.Shared.Suites.Client
                 {
                     RebuildStatus? rebuild = await client.RebuildServerAsync();
                     AssertEqual("rb_1", rebuild?.RebuildId, "rebuild id");
-                    AssertEqual("Building", rebuild?.Status, "rebuild status");
+                    AssertEqual<ServerRebuildStatusEnum?>(ServerRebuildStatusEnum.Building, rebuild?.Status, "rebuild status");
                     RebuildStatus? rollback = await client.RollbackServerAsync();
                     AssertEqual("slot-2", rollback?.PreviousSlot, "rollback slot");
                 }

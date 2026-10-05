@@ -159,7 +159,7 @@ namespace Armada.Tui.Screens.Delivery
             Executions.MultiSelect = false;
             Executions.EmptyText = "No runbook executions are linked to this incident yet.";
             Executions.AddColumn(new GridColumn<RunbookExecution>("title", "Title", e => e.Title) { Weight = 3, Sortable = true });
-            Executions.AddColumn(new GridColumn<RunbookExecution>("status", "Status", e => StatusBadge.Label(e.Status.ToString())) { Width = 14, Sortable = true, Style = (e, t) => StatusBadge.Style(e.Status.ToString(), t) });
+            Executions.AddColumn(new GridColumn<RunbookExecution>("status", "Status", e => StatusBadge.Label(e.Status)) { Width = 14, Sortable = true, Style = (e, t) => StatusBadge.Style(e.Status, t) });
             Executions.AddColumn(new GridColumn<RunbookExecution>("environment", "Environment", e => String.IsNullOrEmpty(e.EnvironmentName) ? T("No environment") : e.EnvironmentName!) { Weight = 2 });
             Executions.AddColumn(new GridColumn<RunbookExecution>("checkType", "Check Type", e => e.CheckType.HasValue ? e.CheckType.Value.ToString() : T("No check type")) { Weight = 2 });
             Executions.AddColumn(new GridColumn<RunbookExecution>("steps", "steps complete", e => e.CompletedStepIds.Count.ToString(CultureInfo.InvariantCulture)) { Width = 15, Align = TUIKit.Widgets.CellAlignment.Right });
@@ -195,7 +195,7 @@ namespace Armada.Tui.Screens.Delivery
             Dictionary<string, string> environments = _Environments.ToDictionary(e => e.Id, e => e.Name);
             Overview.Reset();
             Overview.Section("Overview");
-            Overview.Row("Status", EntityUi.Badge(Context, i.Status.ToString()), t => StatusBadge.Style(i.Status.ToString(), t));
+            Overview.Row("Status", EntityUi.Badge(Context, i.Status.ToString()), t => StatusBadge.Style(i.Status, t));
             Overview.Row("Severity", i.Severity.ToString(), i.Severity == IncidentSeverityEnum.Critical || i.Severity == IncidentSeverityEnum.High ? (Func<Armada.Tui.Theming.ArmadaTheme, TUIKit.CellStyle>)(t => t.Error) : null);
             Overview.Link("Vessel", EntityLookups.Name(vessels, i.VesselId), !String.IsNullOrEmpty(i.VesselId) ? () => Context.Navigate("/vessels/" + i.VesselId) : (Action?)null);
             Overview.Link("Environment", !String.IsNullOrEmpty(i.EnvironmentId) ? EntityLookups.Name(environments, i.EnvironmentId, i.EnvironmentName ?? "-") : EntityUi.Dash(i.EnvironmentName),

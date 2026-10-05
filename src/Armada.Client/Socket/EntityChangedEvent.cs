@@ -1,6 +1,9 @@
 namespace Armada.Client.Socket
 {
     using System;
+    using System.Text.Json.Serialization;
+    using Armada.Core;
+    using Armada.Core.Enums;
 
     /// <summary>
     /// Payload of mission.changed, voyage.changed, captain.changed, deployment.changed, objective.changed, and incident.changed.
@@ -43,6 +46,70 @@ namespace Armada.Client.Socket
         /// Verification status (deployments).
         /// </summary>
         public string? VerificationStatus { get; set; } = null;
+
+        /// <summary>
+        /// <see cref="Status"/> as a mission status (mission.changed), or null when absent or not a defined name.
+        /// </summary>
+        [JsonIgnore]
+        public MissionStatusEnum? MissionStatus
+        {
+            get { return EnumNames.ParseOrNull<MissionStatusEnum>(Status); }
+        }
+
+        /// <summary>
+        /// <see cref="Status"/> as a voyage status (voyage.changed), or null when absent or not a defined name.
+        /// </summary>
+        [JsonIgnore]
+        public VoyageStatusEnum? VoyageStatus
+        {
+            get { return EnumNames.ParseOrNull<VoyageStatusEnum>(Status); }
+        }
+
+        /// <summary>
+        /// <see cref="State"/> (else <see cref="Status"/>) as a captain state (captain.changed), or null when absent or
+        /// not a defined name.
+        /// </summary>
+        [JsonIgnore]
+        public CaptainStateEnum? CaptainState
+        {
+            get { return EnumNames.ParseOrNull<CaptainStateEnum>(!String.IsNullOrEmpty(State) ? State : Status); }
+        }
+
+        /// <summary>
+        /// <see cref="Status"/> as a deployment status (deployment.changed), or null when absent or not a defined name.
+        /// </summary>
+        [JsonIgnore]
+        public DeploymentStatusEnum? DeploymentStatus
+        {
+            get { return EnumNames.ParseOrNull<DeploymentStatusEnum>(Status); }
+        }
+
+        /// <summary>
+        /// <see cref="VerificationStatus"/> as a deployment verification status, or null when absent or not a defined name.
+        /// </summary>
+        [JsonIgnore]
+        public DeploymentVerificationStatusEnum? DeploymentVerificationStatus
+        {
+            get { return EnumNames.ParseOrNull<DeploymentVerificationStatusEnum>(VerificationStatus); }
+        }
+
+        /// <summary>
+        /// <see cref="Status"/> as an objective status (objective.changed), or null when absent or not a defined name.
+        /// </summary>
+        [JsonIgnore]
+        public ObjectiveStatusEnum? ObjectiveStatus
+        {
+            get { return EnumNames.ParseOrNull<ObjectiveStatusEnum>(Status); }
+        }
+
+        /// <summary>
+        /// <see cref="Status"/> as an incident status (incident.changed), or null when absent or not a defined name.
+        /// </summary>
+        [JsonIgnore]
+        public IncidentStatusEnum? IncidentStatus
+        {
+            get { return EnumNames.ParseOrNull<IncidentStatusEnum>(Status); }
+        }
 
         #endregion
 

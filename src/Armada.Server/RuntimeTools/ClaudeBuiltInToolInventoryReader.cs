@@ -4,6 +4,7 @@ namespace Armada.Server.RuntimeTools
     using System.Collections.Generic;
     using System.IO;
     using System.Text.RegularExpressions;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
 
     /// <summary>
@@ -70,7 +71,7 @@ namespace Armada.Server.RuntimeTools
                     Name = name,
                     Description = description,
                     RegistrationSource = _SourceName,
-                    SourceKind = "RuntimeBuiltIn"
+                    SourceKind = CaptainToolSourceKindEnum.RuntimeBuiltIn
                 });
             }
 

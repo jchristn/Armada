@@ -22,7 +22,7 @@ namespace Armada.Core.Services
     /// </summary>
     public class GitHubIntegrationService
     {
-        private const string GitHubProviderName = "GitHub";
+        private const string GitHubProviderName = Objective.GitHubSourceProvider;
         private const string GitHubActionsProviderName = "GitHubActions";
 
         private readonly DatabaseDriver _Database;

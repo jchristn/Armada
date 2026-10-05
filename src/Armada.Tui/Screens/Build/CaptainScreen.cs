@@ -80,8 +80,8 @@ namespace Armada.Tui.Screens.Build
             MissionGrid.EmptyText = "No missions yet";
             MissionGrid.ModalHost = context.Modals;
             MissionGrid.AddColumn(new GridColumn<MissionSummary>("title", "Mission", m => m.Title + "  " + m.Id) { Weight = 4 });
-            GridColumn<MissionSummary> status = new GridColumn<MissionSummary>("status", "Status", m => StatusBadge.Label(m.Status.ToString())) { Width = 16 };
-            status.Style = (m, t) => StatusBadge.Style(m.Status.ToString(), t);
+            GridColumn<MissionSummary> status = new GridColumn<MissionSummary>("status", "Status", m => StatusBadge.Label(m.Status)) { Width = 16 };
+            status.Style = (m, t) => StatusBadge.Style(m.Status, t);
             MissionGrid.AddColumn(status);
             MissionGrid.AddColumn(new GridColumn<MissionSummary>("branch", "Branch", m => String.IsNullOrEmpty(m.BranchName) ? "-" : m.BranchName!) { Weight = 3 });
             MissionGrid.AddColumn(new GridColumn<MissionSummary>("date", "Date", m => Context.Loc.FormatRelative(m.CompletedUtc ?? m.CreatedUtc, Context.Clock.UtcNow)) { Width = 14 });
@@ -281,7 +281,7 @@ namespace Armada.Tui.Screens.Build
             doc.Field("Preferred Persona", String.IsNullOrEmpty(c.PreferredPersona) ? Tr("None") : c.PreferredPersona);
             doc.Field("Reasoning effort", c.ReasoningEffort?.ToString() ?? Tr("Runtime default"));
             doc.Field("Capability tier", c.Tier.HasValue ? Tr(c.Tier.Value.ToString()) : Tr("Auto (classify from model)"));
-            doc.Field("State", StatusBadge.Label(c.State.ToString()), StatusBadge.Style(c.State.ToString(), doc.Theme));
+            doc.Field("State", StatusBadge.Label(c.State), StatusBadge.Style(c.State, doc.Theme));
             if (c.State == CaptainStateEnum.Quarantined)
             {
                 string q = String.IsNullOrEmpty(c.QuarantineReason) ? Tr("quarantined") : c.QuarantineReason!;
@@ -307,7 +307,7 @@ namespace Armada.Tui.Screens.Build
             if (m != null)
             {
                 doc.Section("Current Mission");
-                doc.Add(StyledText.From(m.Title + "  ", doc.Theme.Text).Append(StyledText.From(StatusBadge.Label(m.Status.ToString()), StatusBadge.Style(m.Status.ToString(), doc.Theme))));
+                doc.Add(StyledText.From(m.Title + "  ", doc.Theme.Text).Append(StyledText.From(StatusBadge.Label(m.Status), StatusBadge.Style(m.Status, doc.Theme))));
                 if (!String.IsNullOrEmpty(m.Description)) doc.Text(m.Description, doc.Theme.Muted);
                 doc.Text(Tr("Branch") + ": " + (String.IsNullOrEmpty(m.BranchName) ? "-" : m.BranchName) + "   " + Tr("Priority") + ": " + m.Priority);
                 doc.Note("m " + Tr("View Mission"));

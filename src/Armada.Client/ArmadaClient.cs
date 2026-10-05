@@ -291,7 +291,7 @@ namespace Armada.Client
                 catch (OperationCanceledException oce) when (!token.IsCancellationRequested)
                 {
                     RaiseCompleted(method, path, 0, DateTime.UtcNow - started);
-                    throw new ArmadaApiException("Request timed out", 0, "timeout", null, requestId, method, path, null, null, oce);
+                    throw new ArmadaApiException("Request timed out", 0, ArmadaApiException.TimeoutCode, null, requestId, method, path, null, null, oce);
                 }
                 catch (HttpRequestException hre)
                 {

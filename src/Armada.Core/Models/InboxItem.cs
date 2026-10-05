@@ -34,6 +34,12 @@ namespace Armada.Core.Models
         public string? EntityType { get; set; } = null;
 
         /// <summary>
+        /// Display name of the referenced entity (mission title, captain name, deployment environment, merge target
+        /// branch), or null. Use this instead of parsing <see cref="Title"/>.
+        /// </summary>
+        public string? EntityName { get; set; } = null;
+
+        /// <summary>
         /// The referenced entity id.
         /// </summary>
         public string? EntityId { get; set; } = null;

@@ -61,7 +61,7 @@ namespace Armada.Tui.Screens.Operations
 
             Column("title", "Title", v => v.Title, 4, null, v => v.Title);
             Column("id", "ID", v => v.Id, 0, 24);
-            Column("status", "Status", v => StatusBadge.Label(v.Status.ToString()), 0, 14, v => v.Status.ToString(), (v, t) => StatusBadge.Style(v.Status.ToString(), t));
+            Column("status", "Status", v => StatusBadge.Label(v.Status), 0, 14, v => v.Status.ToString(), (v, t) => StatusBadge.Style(v.Status, t));
             Column("autoPush", "Auto Push", v => YesNo(v.AutoPush), 0, 10);
             Column("autoCreatePullRequests", "Auto Create PRs", v => YesNo(v.AutoCreatePullRequests), 0, 15);
             Column("landingMode", "Landing Mode", v => v.LandingMode?.ToString() ?? "-", 1);

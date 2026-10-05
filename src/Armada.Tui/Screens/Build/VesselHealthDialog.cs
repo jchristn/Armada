@@ -154,7 +154,7 @@ namespace Armada.Tui.Screens.Build
             SetupGrid(Findings, "No findings yet. Findings appear after the first evaluation.");
             Findings.AddColumn(new GridColumn<VesselHealthFinding>("criterion", "Criterion", f => T(HealthText.CriterionLabel(f.Criterion))) { Width = 24 });
             GridColumn<VesselHealthFinding> fstatus = new GridColumn<VesselHealthFinding>("status", "Status", FindingStatus) { Width = 34 };
-            fstatus.Style = (f, t) => StatusBadge.Style(f.Status.ToString(), t);
+            fstatus.Style = (f, t) => StatusBadge.Style(f.Status, t);
             Findings.AddColumn(fstatus);
             Findings.AddColumn(new GridColumn<VesselHealthFinding>("details", "Details", FindingDetails) { Weight = 5 });
             Findings.Activated += (s, f) => StartOverride(f.Criterion);
@@ -177,7 +177,7 @@ namespace Armada.Tui.Screens.Build
             SetupGrid(Overrides, "No overrides. An override sets a manual status for one criterion or for Overall.");
             Overrides.AddColumn(new GridColumn<VesselHealthOverride>("criterion", "Criterion", o => T(HealthText.CriterionLabel(o.Criterion))) { Width = 24 });
             GridColumn<VesselHealthOverride> ostatus = new GridColumn<VesselHealthOverride>("status", "Status", o => HealthText.Badge(o.Status, Localizer, true)) { Width = 18 };
-            ostatus.Style = (o, t) => StatusBadge.Style(o.Status.ToString(), t);
+            ostatus.Style = (o, t) => StatusBadge.Style(o.Status, t);
             Overrides.AddColumn(ostatus);
             Overrides.AddColumn(new GridColumn<VesselHealthOverride>("updated", "Updated", o => _Screen.Context.Loc.FormatRelative(o.LastUpdateUtc, _Screen.Context.Clock.UtcNow)) { Width = 14 });
             Overrides.AddColumn(new GridColumn<VesselHealthOverride>("note", "Note", o => o.Note ?? "") { Weight = 4 });
@@ -451,7 +451,7 @@ namespace Armada.Tui.Screens.Build
             VesselHealthOverride? overall = Detail?.Overrides?.FirstOrDefault(o => o.Criterion == VesselHealthCriterionEnum.Overall);
             string name = !String.IsNullOrEmpty(h?.VesselName) ? h!.VesselName! : _VesselName;
             int x = SurfaceText.Draw(content, 0, y, name, On(Theme.Accent), width);
-            if (h != null) SurfaceText.Draw(content, x + 2, y, HealthText.Badge(h.OverallStatus, Localizer, overall != null), On(StatusBadge.Style(h.OverallStatus.ToString(), Theme)), Math.Max(0, width - x - 2));
+            if (h != null) SurfaceText.Draw(content, x + 2, y, HealthText.Badge(h.OverallStatus, Localizer, overall != null), On(StatusBadge.Style(h.OverallStatus, Theme)), Math.Max(0, width - x - 2));
             y++;
             string evaluated = h?.EvaluatedUtc != null
                 ? Localizer.T("Evaluated {{when}}", LocalizationArgs.Of("when", _Screen.Context.Loc.FormatRelative(h.EvaluatedUtc.Value, _Screen.Context.Clock.UtcNow)))

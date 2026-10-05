@@ -272,7 +272,7 @@ namespace Armada.Server
                         : FirstNonEmptyLine(probe?.ErrorMessage, probe?.ErrorCode);
                     string mcpSummary = servers.Count == 0
                         ? "No external MCP servers are configured for the active Mux config directory."
-                        : snapshot.Servers.Count(s => s.SourceKind == "McpServer" && s.Reachable) +
+                        : snapshot.Servers.Count(s => s.SourceKind == CaptainToolSourceKindEnum.McpServer && s.Reachable) +
                           " of " + servers.Count + " configured MCP server(s) responded and exposed " +
                           snapshot.Tools.Count + " named tool(s).";
                     snapshot.Summary = "Mux model-endpoint probe did not complete (" +
@@ -288,7 +288,7 @@ namespace Armada.Server
                 {
                     snapshot.Summary = "Mux endpoint '" + endpointName + "' reports " + builtInToolCount +
                         " built-in tool(s) and " + servers.Count + " configured MCP server(s); " +
-                        snapshot.Servers.Count(s => s.SourceKind == "McpServer" && s.Reachable) +
+                        snapshot.Servers.Count(s => s.SourceKind == CaptainToolSourceKindEnum.McpServer && s.Reachable) +
                         " MCP server(s) responded and exposed " + snapshot.Tools.Count +
                         " named tool(s). Configured MCP servers that did not respond may simply be offline at query time. Mux does not currently expose individual built-in tool names.";
                 }
@@ -700,7 +700,7 @@ namespace Armada.Server
                     Description = tool.Description,
                     InputSchemaJson = String.IsNullOrEmpty(tool.InputSchemaJson) ? null : tool.InputSchemaJson,
                     RegistrationSource = sourceName,
-                    SourceKind = "McpServer"
+                    SourceKind = CaptainToolSourceKindEnum.McpServer
                 });
             }
 
@@ -815,7 +815,7 @@ namespace Armada.Server
             return new CaptainToolServerSummary
             {
                 Name = server.Name,
-                SourceKind = "McpServer",
+                SourceKind = CaptainToolSourceKindEnum.McpServer,
                 Transport = server.TransportType,
                 Target = server.Target,
                 Url = SanitizeUrl(server.Url),
@@ -839,7 +839,7 @@ namespace Armada.Server
             return new CaptainToolServerSummary
             {
                 Name = "Mux Built-In Tools",
-                SourceKind = "RuntimeBuiltIn",
+                SourceKind = CaptainToolSourceKindEnum.RuntimeBuiltIn,
                 Transport = "mux",
                 Target = BuildMuxBuiltInTarget(probe),
                 Url = SanitizeUrl(probe.BaseUrl),
@@ -864,7 +864,7 @@ namespace Armada.Server
             return new CaptainToolServerSummary
             {
                 Name = sourceName,
-                SourceKind = "RuntimeBuiltIn",
+                SourceKind = CaptainToolSourceKindEnum.RuntimeBuiltIn,
                 Transport = "internal",
                 Target = target,
                 Enabled = true,

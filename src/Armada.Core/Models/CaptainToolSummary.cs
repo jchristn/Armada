@@ -1,5 +1,7 @@
 namespace Armada.Core.Models
 {
+    using Armada.Core.Enums;
+
     /// <summary>
     /// Summary of one named tool visible from a captain runtime.
     /// </summary>
@@ -28,6 +30,6 @@ namespace Armada.Core.Models
         /// <summary>
         /// Source kind for the tool, such as MCP server or internal runtime support.
         /// </summary>
-        public string SourceKind { get; set; } = "Internal";
+        public CaptainToolSourceKindEnum SourceKind { get; set; } = CaptainToolSourceKindEnum.Internal;
     }
 }

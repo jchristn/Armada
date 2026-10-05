@@ -207,7 +207,7 @@ namespace Armada.Tui.Screens.Operations
             OpsLandingPreview.Render(doc, LandingPreview, _LoadingPreview, e.BranchName + " -> " + e.TargetBranch, false);
             doc.Section("Merge Entry");
             doc.Field("ID", e.Id);
-            doc.Field("Status", StatusBadge.Label(e.Status.ToString()), StatusBadge.Style(e.Status.ToString(), doc.Theme));
+            doc.Field("Status", StatusBadge.Label(e.Status), StatusBadge.Style(e.Status, doc.Theme));
             doc.Field("Branch", e.BranchName);
             doc.Field("Target Branch", e.TargetBranch);
             doc.Field("Priority", e.Priority.ToString(CultureInfo.InvariantCulture));

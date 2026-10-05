@@ -125,7 +125,7 @@ namespace Armada.Tui.Screens.Ask
                 .Append(StyledText.From(titleText, theme.Accent.WithAttribute(CellAttributes.Bold, true)));
             StyledText right = String.IsNullOrEmpty(status)
                 ? StyledText.From(loc.T("Waiting for status..."), theme.Muted)
-                : StyledText.From((active ? "* " : "") + StatusBadge.Label(loc.T(status!)), StatusBadge.Style(status, theme));
+                : StyledText.From((active ? "* " : "") + StatusBadge.Label(status, loc.T(status!)), StatusBadge.Style(status, theme));
             List<StyledText> body = new List<StyledText>();
             AskWorkProgress? progress = AskWorkLogic.Progress(snapshot);
             if (progress != null)
@@ -303,7 +303,7 @@ namespace Armada.Tui.Screens.Ask
         {
             List<StyledText> rows = new List<StyledText>();
             bool failed = AskWorkLogic.IsFailedChild(m.Status);
-            string status = TextCells.PadRight(StatusBadge.Label(loc.T(m.Status)), 16);
+            string status = TextCells.PadRight(StatusBadge.Label(m.Status, loc.T(m.Status)), 16);
             StyledText first = StyledText.From(status + " ", StatusBadge.Style(m.Status, theme))
                 .Append(StyledText.From(String.IsNullOrEmpty(m.Title) ? m.Id : m.Title, failed ? theme.Error : theme.Text));
             if (!String.IsNullOrEmpty(m.CaptainName) || !String.IsNullOrEmpty(m.CaptainId))
@@ -327,7 +327,7 @@ namespace Armada.Tui.Screens.Ask
         {
             List<StyledText> rows = new List<StyledText>();
             bool failed = AskWorkLogic.IsFailedChild(t.Status);
-            string status = TextCells.PadRight(StatusBadge.Label(loc.T(t.Status)), 16);
+            string status = TextCells.PadRight(StatusBadge.Label(t.Status, loc.T(t.Status)), 16);
             rows.Add(Fit(StyledText.From(status + " ", StatusBadge.Style(t.Status, theme))
                 .Append(StyledText.From(!String.IsNullOrEmpty(t.VesselName) ? t.VesselName : !String.IsNullOrEmpty(t.VesselId) ? t.VesselId : t.Id, failed ? theme.Error : theme.Text)), width));
             List<string> facts = new List<string>();

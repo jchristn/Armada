@@ -101,7 +101,7 @@ namespace Armada.Tui.Screens.Delivery
         protected override void BuildColumns(ArmadaGrid<Incident> grid)
         {
             grid.AddColumn(new GridColumn<Incident>("title", "Incident", i => i.Title) { Weight = 3, MinWidth = 16, Sortable = true, Pinned = true });
-            grid.AddColumn(new GridColumn<Incident>("status", "Status", i => StatusBadge.Label(i.Status.ToString())) { Width = 14, Sortable = true, Style = (i, t) => StatusBadge.Style(i.Status.ToString(), t) });
+            grid.AddColumn(new GridColumn<Incident>("status", "Status", i => StatusBadge.Label(i.Status)) { Width = 14, Sortable = true, Style = (i, t) => StatusBadge.Style(i.Status, t) });
             grid.AddColumn(new GridColumn<Incident>("severity", "Severity", i => SeverityLabel(i.Severity)) { Width = 12, Sortable = true, Style = (i, t) => SeverityStyle(i.Severity, t) });
             grid.AddColumn(new GridColumn<Incident>("environment", "Environment", i => !String.IsNullOrEmpty(i.EnvironmentId) ? EntityLookups.Name(_Environments, i.EnvironmentId, i.EnvironmentName ?? "-") : EntityUi.Dash(i.EnvironmentName)) { Weight = 2, Sortable = true });
             grid.AddColumn(new GridColumn<Incident>("deployment", "Deployment", i => EntityLookups.Name(_Deployments, i.DeploymentId)) { Weight = 2, Sortable = true });

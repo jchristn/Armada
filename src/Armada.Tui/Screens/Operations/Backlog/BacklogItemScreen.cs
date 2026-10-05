@@ -5,6 +5,7 @@ namespace Armada.Tui.Screens.Operations
     using System.Globalization;
     using System.Linq;
     using Armada.Client.Socket;
+    using Armada.Core;
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Tui.Routing;
@@ -537,10 +538,7 @@ namespace Armada.Tui.Screens.Operations
 
         private int? GitHubNumber()
         {
-            string source = Item?.SourceId ?? "";
-            int hash = source.LastIndexOf('#');
-            if (hash < 0) return null;
-            return Int32.TryParse(source.Substring(hash + 1), NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) ? n : (int?)null;
+            return Item?.SourceNumber;
         }
 
         private void BuildForm()
@@ -644,7 +642,7 @@ namespace Armada.Tui.Screens.Operations
             Sessions.ModalHost = Context.Modals;
             Sessions.EmptyText = "No refinement sessions yet.";
             Sessions.AddColumn(new GridColumn<ObjectiveRefinementSession>("title", "Title", x => (x.Id == _SelectedSessionId ? "> " : "") + x.Title) { Weight = 3 });
-            Sessions.AddColumn(new GridColumn<ObjectiveRefinementSession>("status", "Status", x => StatusBadge.Label(x.Status.ToString())) { Width = 14, Style = (x, t) => StatusBadge.Style(x.Status.ToString(), t) });
+            Sessions.AddColumn(new GridColumn<ObjectiveRefinementSession>("status", "Status", x => StatusBadge.Label(x.Status)) { Width = 14, Style = (x, t) => StatusBadge.Style(x.Status, t) });
             Sessions.AddColumn(new GridColumn<ObjectiveRefinementSession>("captain", "Captain", x => Reference.CaptainName(x.CaptainId)) { Weight = 2 });
             Sessions.AddColumn(new GridColumn<ObjectiveRefinementSession>("updated", "Updated", x => Context.Loc.FormatRelative(x.LastUpdateUtc, Context.Clock.UtcNow)) { Width = 16 });
             Sessions.Activated += (s, x) =>
@@ -702,7 +700,7 @@ namespace Armada.Tui.Screens.Operations
             Action("back", "Back", Back, "b");
             Action("json", "View JSON", () => ShowJson(TitleField.Value, Item), "j", loaded, true);
             Action("history", "History", () => Context.Navigate("/history?objectiveId=" + Uri.EscapeDataString(Item!.Id)), "H", loaded, true);
-            Action("refresh-github", "Refresh GitHub", RefreshGitHub, "F", () => loaded() && Item!.SourceProvider == "GitHub" && PrimaryVesselId().Length > 0 && GitHubNumber().HasValue, true);
+            Action("refresh-github", "Refresh GitHub", RefreshGitHub, "F", () => loaded() && Item!.SourceProvider == Objective.GitHubSourceProvider && PrimaryVesselId().Length > 0 && GitHubNumber().HasValue, true);
             Action("planning", "Start Planning", StartPlanning, "P", () => loaded() && PrimaryVesselId().Length > 0, true);
             Action("dispatch", "Open In Dispatch", OpenInDispatch, "D", () => loaded() && PrimaryVesselId().Length > 0, true);
             Action("release", "Draft Release", DraftRelease, "R", () => loaded() && PrimaryVesselId().Length > 0, true);
@@ -918,7 +916,7 @@ namespace Armada.Tui.Screens.Operations
                 doc.Add(TUIKit.StyledText.From(Tr("Primary vessel {{vessel}} is linked, so planning, dispatch, and release drafting can start from this backlog item.", LocalizationArgs.Of("vessel", Reference.VesselName(primary))), Theme.Success));
             else
                 doc.Note("This backlog item can be refined now, but it still needs a vessel before repository-aware planning or dispatch can start.", Theme.Warning);
-            if (o.SourceProvider == "GitHub")
+            if (o.SourceProvider == Objective.GitHubSourceProvider)
             {
                 doc.Section("GitHub Source", "  " + (String.IsNullOrEmpty(o.SourceType) ? Tr("Unknown source") : o.SourceType));
                 doc.Field("Provider", o.SourceProvider);
@@ -942,7 +940,7 @@ namespace Armada.Tui.Screens.Operations
 
             string captain = d.Captain?.Name ?? d.Session.CaptainId;
             string clause = d.Vessel != null ? Tr("with optional vessel context {{vessel}}", LocalizationArgs.Of("vessel", d.Vessel.Name)) : Tr("without vessel context");
-            doc.Add(TUIKit.StyledText.From(d.Session.Title + "   " + StatusBadge.Label(d.Session.Status.ToString()), Theme.Accent));
+            doc.Add(TUIKit.StyledText.From(d.Session.Title + "   " + StatusBadge.Label(d.Session.Status), Theme.Accent));
             doc.Add(TUIKit.StyledText.From(Tr("Captain {{captain}} {{vesselClause}}", LocalizationArgs.Of("captain", captain, "vesselClause", clause)), Theme.Muted));
             doc.Add(TUIKit.StyledText.From(Tr("Selected Captain") + ": " + captain + "   " + Tr("Captain State") + ": " + (d.Captain?.State.ToString() ?? "-")
                 + "   " + Tr("Vessel Context") + ": " + (d.Vessel?.Name ?? Tr("None")) + "   " + Tr("Updated") + ": " + Context.Loc.FormatRelative(d.Session.LastUpdateUtc, Context.Clock.UtcNow), Theme.Muted));
@@ -1157,7 +1155,7 @@ namespace Armada.Tui.Screens.Operations
             GitHubObjectiveImportRequest req = new GitHubObjectiveImportRequest();
             req.ObjectiveId = o.Id;
             req.VesselId = vessel;
-            req.SourceType = o.SourceType == "PullRequest" ? GitHubObjectiveSourceTypeEnum.PullRequest : GitHubObjectiveSourceTypeEnum.Issue;
+            req.SourceType = EnumNames.ParseOrNull<GitHubObjectiveSourceTypeEnum>(o.SourceType) ?? GitHubObjectiveSourceTypeEnum.Issue;
             req.Number = number.Value;
             Call((c, t) => c.ImportObjectiveFromGitHubAsync(req, t), refreshed =>
             {

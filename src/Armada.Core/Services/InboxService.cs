@@ -69,9 +69,10 @@ namespace Armada.Core.Services
                     bool overdue = mission.ReviewDeadlineUtc.HasValue && mission.ReviewDeadlineUtc.Value < DateTime.UtcNow;
                     items.Add(new InboxItem
                     {
-                        Kind = "review",
+                        Kind = InboxItemKinds.Review,
                         Severity = overdue ? InboxSeverityEnum.Critical : InboxSeverityEnum.Warning,
                         Title = "Review: " + mission.Title,
+                        EntityName = mission.Title,
                         Detail = overdue ? "Review is overdue -- awaiting your approval." : "Awaiting your review.",
                         EntityType = "mission",
                         EntityId = mission.Id,
@@ -84,9 +85,10 @@ namespace Armada.Core.Services
                 {
                     items.Add(new InboxItem
                     {
-                        Kind = "landing_failed",
+                        Kind = InboxItemKinds.LandingFailed,
                         Severity = InboxSeverityEnum.Critical,
                         Title = "Landing failed: " + mission.Title,
+                        EntityName = mission.Title,
                         Detail = String.IsNullOrWhiteSpace(mission.FailureReason) ? "The work could not be landed." : mission.FailureReason!,
                         EntityType = "mission",
                         EntityId = mission.Id,
@@ -99,9 +101,10 @@ namespace Armada.Core.Services
                 {
                     items.Add(new InboxItem
                     {
-                        Kind = "failed",
+                        Kind = InboxItemKinds.Failed,
                         Severity = InboxSeverityEnum.Warning,
                         Title = "Failed: " + mission.Title,
+                        EntityName = mission.Title,
                         Detail = String.IsNullOrWhiteSpace(mission.FailureReason) ? "The mission failed." : mission.FailureReason!,
                         EntityType = "mission",
                         EntityId = mission.Id,
@@ -114,9 +117,10 @@ namespace Armada.Core.Services
                 {
                     items.Add(new InboxItem
                     {
-                        Kind = "stalled_captain",
+                        Kind = InboxItemKinds.StalledCaptain,
                         Severity = InboxSeverityEnum.Warning,
                         Title = "Stalled captain: " + captain.Name,
+                        EntityName = captain.Name,
                         Detail = "This captain is stalled and may need recovery or a dock reclaim.",
                         EntityType = "captain",
                         EntityId = captain.Id,
@@ -129,9 +133,10 @@ namespace Armada.Core.Services
                 {
                     items.Add(new InboxItem
                     {
-                        Kind = "merge_failed",
+                        Kind = InboxItemKinds.MergeFailed,
                         Severity = InboxSeverityEnum.Critical,
                         Title = "Merge failed: " + entry.TargetBranch,
+                        EntityName = entry.TargetBranch,
                         Detail = "A queued merge failed testing or landing and needs attention.",
                         EntityType = "merge_entry",
                         EntityId = entry.Id,
@@ -147,9 +152,10 @@ namespace Armada.Core.Services
                 {
                     items.Add(new InboxItem
                     {
-                        Kind = "deployment_approval",
+                        Kind = InboxItemKinds.DeploymentApproval,
                         Severity = InboxSeverityEnum.Warning,
                         Title = "Deployment awaiting approval: " + (String.IsNullOrWhiteSpace(deployment.EnvironmentName) ? deployment.Id : deployment.EnvironmentName!),
+                        EntityName = String.IsNullOrWhiteSpace(deployment.EnvironmentName) ? deployment.Id : deployment.EnvironmentName!,
                         Detail = "A deployment is waiting for your approval before it runs.",
                         EntityType = "deployment",
                         EntityId = deployment.Id,
@@ -161,9 +167,10 @@ namespace Armada.Core.Services
                 {
                     items.Add(new InboxItem
                     {
-                        Kind = "deployment_failed",
+                        Kind = InboxItemKinds.DeploymentFailed,
                         Severity = InboxSeverityEnum.Critical,
                         Title = "Deployment failed: " + (String.IsNullOrWhiteSpace(deployment.EnvironmentName) ? deployment.Id : deployment.EnvironmentName!),
+                        EntityName = String.IsNullOrWhiteSpace(deployment.EnvironmentName) ? deployment.Id : deployment.EnvironmentName!,
                         Detail = deployment.Status == DeploymentStatusEnum.VerificationFailed
                             ? "Deployment verification failed and needs attention."
                             : "A deployment failed and needs attention.",

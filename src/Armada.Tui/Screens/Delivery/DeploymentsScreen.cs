@@ -107,8 +107,8 @@ namespace Armada.Tui.Screens.Delivery
         protected override void BuildColumns(ArmadaGrid<Deployment> grid)
         {
             grid.AddColumn(new GridColumn<Deployment>("title", "Deployment", d => d.Title + (d.ApprovalRequired ? "  (" + T("Approval required") + ")" : "")) { Weight = 3, MinWidth = 16, Sortable = true, Pinned = true });
-            grid.AddColumn(new GridColumn<Deployment>("status", "Status", d => StatusBadge.Label(d.Status.ToString())) { Width = 20, Sortable = true, Style = (d, t) => StatusBadge.Style(d.Status.ToString(), t) });
-            grid.AddColumn(new GridColumn<Deployment>("verification", "Verification", d => StatusBadge.Label(d.VerificationStatus.ToString())) { Width = 14, Sortable = true, Style = (d, t) => StatusBadge.Style(d.VerificationStatus.ToString(), t) });
+            grid.AddColumn(new GridColumn<Deployment>("status", "Status", d => StatusBadge.Label(d.Status)) { Width = 20, Sortable = true, Style = (d, t) => StatusBadge.Style(d.Status, t) });
+            grid.AddColumn(new GridColumn<Deployment>("verification", "Verification", d => StatusBadge.Label(d.VerificationStatus)) { Width = 14, Sortable = true, Style = (d, t) => StatusBadge.Style(d.VerificationStatus, t) });
             grid.AddColumn(new GridColumn<Deployment>("vessel", "Vessel", d => EntityLookups.Name(_Vessels, d.VesselId)) { Weight = 2, Sortable = true });
             grid.AddColumn(new GridColumn<Deployment>("environment", "Environment", d => !String.IsNullOrEmpty(d.EnvironmentId) ? EntityLookups.Name(_Environments, d.EnvironmentId, d.EnvironmentName ?? "-") : EntityUi.Dash(d.EnvironmentName)) { Weight = 2, Sortable = true });
             grid.AddColumn(new GridColumn<Deployment>("release", "Release", d => EntityLookups.Name(_Releases, d.ReleaseId)) { Weight = 2, Sortable = true, DefaultVisible = true });

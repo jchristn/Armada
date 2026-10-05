@@ -146,7 +146,7 @@ namespace Armada.Tui.Screens.Configuration
             grid.AddColumn(new GridColumn<ModelEndpoint>("model", "Model", e => EntityUi.Dash(e.Model)) { Weight = 2, Sortable = true });
             grid.AddColumn(new GridColumn<ModelEndpoint>("baseUrl", "Base URL", e => EntityUi.Dash(e.BaseUrl)) { Weight = 3, Sortable = true, DefaultVisible = false });
             grid.AddColumn(new GridColumn<ModelEndpoint>("visibility", "Visibility", e => T(ScopeRules.Label(e.Scope))) { Width = 12, Sortable = true });
-            grid.AddColumn(new GridColumn<ModelEndpoint>("health", "Health", e => StatusBadge.Label(e.HealthStatus.ToString()) + " " + EndpointHealthHistogram.Strip(e.HealthHistory, Context.Clock.UtcNow, 12)) { Width = 24, Sortable = true, Style = (e, t) => StatusBadge.Style(e.HealthStatus.ToString(), t) });
+            grid.AddColumn(new GridColumn<ModelEndpoint>("health", "Health", e => StatusBadge.Label(e.HealthStatus) + " " + EndpointHealthHistogram.Strip(e.HealthHistory, Context.Clock.UtcNow, 12)) { Width = 24, Sortable = true, Style = (e, t) => StatusBadge.Style(e.HealthStatus, t) });
             grid.AddColumn(new GridColumn<ModelEndpoint>("lastChecked", "Last Checked", e => e.LastHealthCheckUtc.HasValue ? EntityUi.When(Context, e.LastHealthCheckUtc) : T("Never")) { Width = 13, Sortable = true });
             grid.AddColumn(new GridColumn<ModelEndpoint>("id", "ID", e => e.Id) { Width = 26, DefaultVisible = false });
             grid.EmptyText = "No endpoints match the current filters.";

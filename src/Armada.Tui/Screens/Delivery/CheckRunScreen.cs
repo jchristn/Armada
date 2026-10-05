@@ -156,7 +156,7 @@ namespace Armada.Tui.Screens.Delivery
             Overview.Section("Check Run");
             Overview.Row("ID", r.Id, t => t.Code);
             Overview.Row("Type", r.Type.ToString());
-            Overview.Row("Status", EntityUi.Badge(Context, r.Status.ToString()), t => StatusBadge.Style(r.Status.ToString(), t));
+            Overview.Row("Status", EntityUi.Badge(Context, r.Status.ToString()), t => StatusBadge.Style(r.Status, t));
             Overview.Row("Exit Code", r.ExitCode.HasValue ? r.ExitCode.Value.ToString(CultureInfo.InvariantCulture) : "-");
             Overview.Link("Vessel", String.IsNullOrEmpty(r.VesselId) ? "-" : (_Vessel?.Name ?? r.VesselId), !String.IsNullOrEmpty(r.VesselId) ? () => Context.Navigate("/vessels/" + r.VesselId) : (Action?)null);
             Overview.Link("Workflow Profile", String.IsNullOrEmpty(r.WorkflowProfileId) ? T("Resolved override only") : (_Profile?.Name ?? r.WorkflowProfileId),

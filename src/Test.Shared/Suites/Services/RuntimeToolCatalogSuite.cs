@@ -274,7 +274,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(1, result.Tools.Count, "tools");
                 AssertEqual("fixture_echo", result.Tools[0].Name, "tool name");
                 AssertEqual("fixture", result.Tools[0].RegistrationSource, "tool source");
-                AssertEqual("McpServer", result.Tools[0].SourceKind, "tool source kind");
+                AssertEqual(CaptainToolSourceKindEnum.McpServer, result.Tools[0].SourceKind, "tool source kind");
 
                 CaptainToolServerSummary? fixtureServer = result.Servers.FirstOrDefault(s => s.Name == "fixture");
                 CaptainToolServerSummary? offlineServer = result.Servers.FirstOrDefault(s => s.Name == "offline");

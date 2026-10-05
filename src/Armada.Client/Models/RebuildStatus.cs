@@ -1,6 +1,8 @@
 namespace Armada.Client.Models
 {
     using System;
+    using System.Text.Json.Serialization;
+    using Armada.Core.Enums;
 
     /// <summary>
     /// Status of a server rebuild and its accumulated log.
@@ -40,9 +42,10 @@ namespace Armada.Client.Models
         public string? BackupPath { get; set; } = null;
 
         /// <summary>
-        /// Building, CuttingOver, Succeeded, Failed, RolledBack, or none.
+        /// Rebuild state, or null when no rebuild has run (older servers sent the string "none", read as null).
         /// </summary>
-        public string Status { get; set; } = "none";
+        [JsonConverter(typeof(RebuildStatusValueConverter))]
+        public ServerRebuildStatusEnum? Status { get; set; } = null;
 
         /// <summary>
         /// Start time, or null.

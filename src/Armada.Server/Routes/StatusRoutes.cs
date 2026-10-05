@@ -408,13 +408,14 @@ namespace Armada.Server.Routes
                 }
 
                 ServerRebuildStatus? status = _rebuild.Latest;
-                if (status == null) return new { Status = "none" };
+                // No rebuild yet: Status is null (earlier servers sent the string "none"; clients accept both).
+                if (status == null) return new { Status = (ServerRebuildStatusEnum?)null };
                 return status;
             },
             api => api
                 .WithTag("Status")
                 .WithSummary("Get the latest rebuild status")
-                .WithDescription("Returns the most recent Admiral rebuild status and its accumulated build log, or {\"status\":\"none\"} when no rebuild has run.")
+                .WithDescription("Returns the most recent Admiral rebuild status and its accumulated build log, or {\"Status\":null} when no rebuild has run (earlier servers returned the string \"none\").")
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/server/rollback", async (ApiRequest req) =>

@@ -347,7 +347,7 @@ namespace Armada.Tui.Screens.Operations
             doc.Section("Mission");
             doc.Field("ID", m.Id);
             doc.Field("Tenant ID", m.TenantId);
-            doc.Field("Status", StatusBadge.Label(m.Status.ToString()), StatusBadge.Style(m.Status.ToString(), doc.Theme));
+            doc.Field("Status", StatusBadge.Label(m.Status), StatusBadge.Style(m.Status, doc.Theme));
             doc.Field("Mode", Tr(m.Mode.ToString()));
             doc.Field("Review Gate", m.RequiresReview ? Tr(m.Status == MissionStatusEnum.Review ? "Waiting Review" : "Required") : Tr("None"));
             doc.Field("On Deny", m.RequiresReview ? Tr(m.ReviewDenyAction == ReviewDenyActionEnum.FailPipeline ? "Fail pipeline" : "Retry stage") : "-");

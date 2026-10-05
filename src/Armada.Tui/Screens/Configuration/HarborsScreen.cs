@@ -113,7 +113,7 @@ namespace Armada.Tui.Screens.Configuration
         protected override void BuildColumns(ArmadaGrid<Harbor> grid)
         {
             grid.AddColumn(new GridColumn<Harbor>("name", "Harbor", h => h.Name + (h.Enabled ? "" : " (" + T("disabled") + ")")) { Weight = 3, MinWidth = 14, Sortable = true, Pinned = true });
-            grid.AddColumn(new GridColumn<Harbor>("status", "Status", h => StatusBadge.Label(h.ConnectionStatus.ToString())) { Width = 15, Sortable = true, Style = (h, t) => StatusBadge.Style(h.ConnectionStatus.ToString(), t) });
+            grid.AddColumn(new GridColumn<Harbor>("status", "Status", h => StatusBadge.Label(h.ConnectionStatus)) { Width = 15, Sortable = true, Style = (h, t) => StatusBadge.Style(h.ConnectionStatus, t) });
             grid.AddColumn(new GridColumn<Harbor>("enabled", "Enabled", h => h.Enabled ? T("Yes") : T("No")) { Width = 8, Sortable = true });
             grid.AddColumn(new GridColumn<Harbor>("capabilities", "Capabilities", h => h.Capabilities.Count == 0 ? "-" : String.Join(", ", h.Capabilities.Select(c => c.Name))) { Weight = 3, Sortable = true });
             grid.AddColumn(new GridColumn<Harbor>("capacity", "Capacity", h => h.MaxConcurrentJobs.ToString(System.Globalization.CultureInfo.InvariantCulture)) { Width = 9, Sortable = true, Align = TUIKit.Widgets.CellAlignment.Right });

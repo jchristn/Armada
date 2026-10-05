@@ -340,8 +340,8 @@ namespace Armada.Tui.Screens.Admin
                 list.Add(Cmd(p + "health", "Health Check", HealthCheck, null));
                 list.Add(Cmd(p + "restart", "Restart Server", RestartServer, () => !ProxyMode));
                 list.Add(Cmd(p + "rebuild", "Rebuild Armada", RebuildServer, () => !ProxyMode));
-                list.Add(Cmd(p + "build-log", "Build Log", OpenBuildLog, () => Rebuild != null && Rebuild.Status != "none"));
-                list.Add(Cmd(p + "rollback", "Roll Back", Rollback, () => !ProxyMode && Rebuild != null && Rebuild.Status == "Succeeded" && !String.IsNullOrEmpty(Rebuild.PreviousSlot)));
+                list.Add(Cmd(p + "build-log", "Build Log", OpenBuildLog, () => Rebuild != null && Rebuild.Status != null));
+                list.Add(Cmd(p + "rollback", "Roll Back", Rollback, () => !ProxyMode && Rebuild != null && Rebuild.Status == ServerRebuildStatusEnum.Succeeded && !String.IsNullOrEmpty(Rebuild.PreviousSlot)));
                 list.Add(Cmd(p + "stop", "Stop Server", StopServer, () => !ProxyMode));
                 list.Add(Cmd(p + "reset", "Factory Reset", FactoryReset, () => !ProxyMode));
             }
@@ -1019,10 +1019,10 @@ namespace Armada.Tui.Screens.Admin
             if (_RebuildButton != null) _RebuildButton.Enabled = !proxy;
             if (_StopButton != null) _StopButton.Enabled = !proxy;
             if (_ResetButton != null) _ResetButton.Enabled = !proxy;
-            if (_BuildLogButton != null) _BuildLogButton.Visible = Rebuild != null && Rebuild.Status != "none";
+            if (_BuildLogButton != null) _BuildLogButton.Visible = Rebuild != null && Rebuild.Status != null;
             if (_RollbackButton != null)
             {
-                _RollbackButton.Visible = Rebuild != null && Rebuild.Status == "Succeeded" && !String.IsNullOrEmpty(Rebuild.PreviousSlot);
+                _RollbackButton.Visible = Rebuild != null && Rebuild.Status == ServerRebuildStatusEnum.Succeeded && !String.IsNullOrEmpty(Rebuild.PreviousSlot);
                 _RollbackButton.Enabled = !proxy;
             }
 
@@ -1531,7 +1531,7 @@ namespace Armada.Tui.Screens.Admin
         {
             if (_RebuildLog == null) return;
             string text = Rebuild?.Log ?? "";
-            if (Rebuild != null && ServerSettingsRules.RebuildDone(Rebuild.Status)) text += (text.Length > 0 && !text.EndsWith("\n") ? "\n" : "") + "[" + Context.Loc.T(Rebuild.Status) + "]" + (String.IsNullOrEmpty(Rebuild.Error) ? "" : " " + Rebuild.Error);
+            if (Rebuild != null && ServerSettingsRules.RebuildDone(Rebuild.Status)) text += (text.Length > 0 && !text.EndsWith("\n") ? "\n" : "") + "[" + Context.Loc.T(Rebuild.Status.ToString() ?? "") + "]" + (String.IsNullOrEmpty(Rebuild.Error) ? "" : " " + Rebuild.Error);
             _RebuildLog.SetText(text);
         }
 
