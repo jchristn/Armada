@@ -82,5 +82,21 @@ namespace Armada.Server.RuntimeTools
         public string Target { get; set; } = String.Empty;
 
         #endregion
+
+        #region Public-Methods
+
+        /// <summary>
+        /// A shallow copy of this definition that connects to a different URL (the display <see cref="Target"/> is kept).
+        /// </summary>
+        /// <param name="url">The URL the copy connects to.</param>
+        /// <returns>The copy.</returns>
+        public RuntimeMcpServerDefinition WithUrl(string url)
+        {
+            RuntimeMcpServerDefinition copy = (RuntimeMcpServerDefinition)MemberwiseClone();
+            copy.Url = url;
+            return copy;
+        }
+
+        #endregion
     }
 }

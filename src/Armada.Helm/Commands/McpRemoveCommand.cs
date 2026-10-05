@@ -3,6 +3,7 @@ namespace Armada.Helm.Commands
     using System.ComponentModel;
     using Spectre.Console;
     using Spectre.Console.Cli;
+    using Armada.Core.Services;
     using Armada.Core.Settings;
 
     /// <summary>
@@ -15,7 +16,7 @@ namespace Armada.Helm.Commands
         public override async Task<int> ExecuteAsync(CommandContext context, McpRemoveSettings settings, CancellationToken cancellationToken)
         {
             ArmadaSettings armadaSettings = await ArmadaSettings.LoadAsync().ConfigureAwait(false);
-            List<McpConfigHelper.ConfigTarget> targets = McpConfigHelper.BuildTargets(armadaSettings.McpPort);
+            List<McpConfigHelper.ConfigTarget> targets = McpConfigHelper.BuildTargets(armadaSettings.McpPort, ArmadaMcpConfigBuilder.ClientHostFor(armadaSettings.Rest.Hostname));
             List<McpConfigHelper.InstructionTarget> instructionTargets = McpConfigHelper.BuildInstructionTargets();
 
             AnsiConsole.MarkupLine("[bold dodgerblue1]Armada MCP Remove[/]");

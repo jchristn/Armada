@@ -5,10 +5,12 @@ namespace Test.Shared.Suites.E2E
     using System.IO;
     using System.Net;
     using System.Net.Http;
+    using System.Net.Http.Headers;
     using System.Net.Sockets;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
     using Armada.Core.Settings;
     using Armada.Server;
     using SyslogLogging;
@@ -93,6 +95,54 @@ namespace Test.Shared.Suites.E2E
                 }
             }));
 
+            cases.Add(CaseAsync("generated_captain_mcp_url_answers_on_loopback_literal", "A captain MCP URL generated for an Admiral bound to 127.0.0.1 answers initialize with 200", TestTags.Positive, async () =>
+            {
+                int restPort = FreePort();
+                int mcpPort = FreePort();
+                ArmadaServer server = CreateServer(restPort, mcpPort, out string tempDir);
+                try
+                {
+                    await server.StartAsync().ConfigureAwait(false);
+
+                    // The URL a captain is handed: the isolated Claude Code launch config built for the configured hostname
+                    // (the same host AgentLifecycleHandler and CaptainChatService pass). Before the fix it was localhost,
+                    // which this listener answers with HTTP 404.
+                    string host = ArmadaMcpConfigBuilder.ClientHostFor("127.0.0.1");
+                    CaptainLaunchIsolationPlan plan = CaptainLaunchIsolationPlanner.Plan(AgentRuntimeEnum.ClaudeCode, mcpPort, tempDir, null, host);
+                    KeyedMcpServersDocument document = JsonHelper.Deserialize<KeyedMcpServersDocument>(plan.FilesToWrite[0].Contents);
+                    string url = document.McpServers!["armada"].Url!;
+                    AssertEqual("http://127.0.0.1:" + mcpPort + "/mcp", url, "generated captain MCP URL");
+
+                    using (HttpClient client = new HttpClient())
+                    {
+                        client.Timeout = TimeSpan.FromSeconds(10);
+                        HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, url);
+                        request.Content = JsonHelper.ToJsonContent(new
+                        {
+                            jsonrpc = "2.0",
+                            id = 1,
+                            method = "initialize",
+                            @params = new
+                            {
+                                protocolVersion = "2024-11-05",
+                                capabilities = new { },
+                                clientInfo = new { name = "mcp-host-test", version = "1.0" }
+                            }
+                        });
+                        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
+                        HttpResponseMessage response = await client.SendAsync(request).ConfigureAwait(false);
+                        AssertEqual(HttpStatusCode.OK, response.StatusCode, "initialize at the generated URL");
+                        AssertTrue(response.Headers.Contains("Mcp-Session-Id"), "initialize assigns an MCP session");
+                    }
+                }
+                finally
+                {
+                    try { server.Stop(); } catch (Exception) { }
+                    TestTemp.TryDelete(tempDir);
+                }
+            }));
+
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Server Startup", cases: cases);
         }
 
@@ -139,6 +189,7 @@ namespace Test.Shared.Suites.E2E
             {
                 int candidate = random.Next(20000, 32000);
                 if (candidate >= 25000 && candidate < 25100) continue;
+                if (candidate >= 21000 && candidate < 21100) continue;
                 TcpListener probe = new TcpListener(IPAddress.Loopback, candidate);
                 try
                 {

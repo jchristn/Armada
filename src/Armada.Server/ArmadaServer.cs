@@ -268,7 +268,7 @@ namespace Armada.Server
             _ModelEndpointService = new ModelEndpointService(_Database, _Logging);
             _HarborService = new HarborService(_Database, _Logging);
             string harborMcpUrl = String.IsNullOrWhiteSpace(_Settings.Harbor.AdvertisedMcpBaseUrl)
-                ? ArmadaMcpConfigBuilder.GetMcpUrl(_Settings.McpPort)
+                ? ArmadaMcpConfigBuilder.GetMcpUrl(_Settings.McpPort, ArmadaMcpConfigBuilder.ClientHostFor(_Settings.Rest.Hostname))
                 : _Settings.Harbor.AdvertisedMcpBaseUrl!;
             _HarborConnectionManager = new HarborConnectionManager(_HarborService, _Logging, harborMcpUrl);
             _HarborLinkEndpoint = new HarborLinkEndpoint(
@@ -516,13 +516,15 @@ namespace Armada.Server
                 _Logging,
                 _Database,
                 _HarborConnectionManager,
-                RuntimeToolDiscoverySource);
+                RuntimeToolDiscoverySource,
+                _Settings.McpPort,
+                ArmadaMcpConfigBuilder.ClientHostFor(_Settings.Rest.Hostname));
 
             _RemoteTunnel.OnHandleRequest = HandleRemoteTunnelRequestAsync;
 
             // Ask Armada threads: thread store, approval gate / action executor, turn coordinator, and work tracker.
             // Thread events go only to the owner's sockets.
-            _CaptainChat = new CaptainChatService(_Database, _RuntimeFactory, _WebSocketHub, _PromptTemplateService, _SessionTokenService, _Settings.McpPort, _Logging);
+            _CaptainChat = new CaptainChatService(_Database, _RuntimeFactory, _WebSocketHub, _PromptTemplateService, _SessionTokenService, _Settings.McpPort, _Logging, ArmadaMcpConfigBuilder.ClientHostFor(_Settings.Rest.Hostname));
             _AskThreads = new Armada.Core.Services.Ask.AskThreadService(_Database, _Settings, _Logging);
             _AskActions = new Armada.Server.Ask.AskActionService(_Database, _AskThreads, _Settings, _Logging);
             _AskTurns = new Armada.Server.Ask.AskTurnCoordinator(_Database, _AskThreads, _CaptainChat, _SessionTokenService, _PromptTemplateService, _Settings, _Logging);
@@ -555,6 +557,8 @@ namespace Armada.Server
             // HttpListener cannot bind the literal 0.0.0.0 (the MCP listener silently never started in containers
             // configured that way); "*" is the HttpListener spelling of "all interfaces".
             string mcpHostname = String.Equals(_Settings.Rest.Hostname, "0.0.0.0", StringComparison.Ordinal) ? "*" : _Settings.Rest.Hostname;
+            string? loopbackLiteralWarning = ArmadaMcpConfigBuilder.LoopbackLiteralHostWarning(_Settings.Rest.Hostname, _Settings.McpPort);
+            if (loopbackLiteralWarning != null) _Logging.Warn(_Header + loopbackLiteralWarning);
             _McpServer = new McpHttpServer(mcpHostname, _Settings.McpPort);
             _McpServer.ServerName = ArmadaConstants.ProductName;
             _McpServer.ServerVersion = ArmadaConstants.ProductVersion;

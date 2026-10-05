@@ -37,6 +37,7 @@ namespace Armada.Server
         private readonly IPromptTemplateService? _PromptTemplates;
         private readonly ISessionTokenService? _SessionTokenService;
         private readonly int _McpPort;
+        private readonly string _McpHost;
         private readonly LoggingModule _Logging;
         private readonly string _Header = "[CaptainChatService] ";
 
@@ -62,7 +63,25 @@ namespace Armada.Server
         /// endpoint URL; a non-positive value disables MCP tool access.</param>
         /// <param name="logging">Logging module.</param>
         public CaptainChatService(DatabaseDriver database, AgentRuntimeFactory runtimeFactory, ArmadaWebSocketHub? webSocketHub, IPromptTemplateService? promptTemplates, ISessionTokenService? sessionTokenService, int mcpPort, LoggingModule logging)
+            : this(database, runtimeFactory, webSocketHub, promptTemplates, sessionTokenService, mcpPort, logging, Armada.Core.Services.ArmadaMcpConfigBuilder.DefaultHost)
         {
+        }
+
+        /// <summary>
+        /// Instantiate with the host MCP clients must use to reach Armada's MCP listener.
+        /// </summary>
+        /// <param name="database">Database driver.</param>
+        /// <param name="runtimeFactory">Agent runtime factory used to launch the captain's CLI headlessly.</param>
+        /// <param name="webSocketHub">WebSocket hub used to stream reply chunks live; may be null.</param>
+        /// <param name="promptTemplates">Prompt template service used to resolve the Ask Armada system prompt; may be null.</param>
+        /// <param name="sessionTokenService">Session token service used to mint a short-lived per-caller token; may be null.</param>
+        /// <param name="mcpPort">The port Armada's MCP server listens on; a non-positive value disables MCP tool access.</param>
+        /// <param name="logging">Logging module.</param>
+        /// <param name="mcpHost">Host placed in generated MCP URLs (see
+        /// <see cref="Armada.Core.Services.ArmadaMcpConfigBuilder.ClientHostFor"/>); null or empty means localhost.</param>
+        public CaptainChatService(DatabaseDriver database, AgentRuntimeFactory runtimeFactory, ArmadaWebSocketHub? webSocketHub, IPromptTemplateService? promptTemplates, ISessionTokenService? sessionTokenService, int mcpPort, LoggingModule logging, string? mcpHost)
+        {
+            _McpHost = String.IsNullOrWhiteSpace(mcpHost) ? Armada.Core.Services.ArmadaMcpConfigBuilder.DefaultHost : mcpHost!;
             _Database = database ?? throw new ArgumentNullException(nameof(database));
             _RuntimeFactory = runtimeFactory ?? throw new ArgumentNullException(nameof(runtimeFactory));
             _WebSocketHub = webSocketHub;
@@ -424,12 +443,12 @@ namespace Armada.Server
                 {
                     if (captain.Runtime == AgentRuntimeEnum.ApiEndpoint)
                     {
-                        // Use the same canonical MCP URL captains' generated configs target (http://localhost:<port>/mcp).
-                        // The MCP listener binds to the configured hostname (default "localhost"), and Windows HTTP.sys
-                        // rejects a request whose Host header does not match the registered prefix.
+                        // Use the same MCP URL captains' generated configs target (http://<host>:<port>/mcp). The MCP
+                        // listener binds to the configured hostname (default "localhost") and only answers requests whose
+                        // Host matches it, so the host comes from ArmadaMcpConfigBuilder.ClientHostFor of that hostname.
                         environment = new Dictionary<string, string>
                         {
-                            ["ARMADA_MCP_URL"] = Armada.Core.Services.ArmadaMcpConfigBuilder.GetMcpUrl(_McpPort),
+                            ["ARMADA_MCP_URL"] = Armada.Core.Services.ArmadaMcpConfigBuilder.GetMcpUrl(_McpPort, _McpHost),
                             ["ARMADA_MCP_TOKEN"] = options.McpSessionToken!
                         };
                     }
@@ -438,6 +457,7 @@ namespace Armada.Server
                         && Armada.Core.Services.CaptainThreadMcpPlanner.SupportsApprovalGating(captain.Runtime))
                     {
                         scopedRuntime.McpSessionToken = options.McpSessionToken;
+                        scopedRuntime.McpHost = _McpHost;
                         isolateLaunch = true;
                     }
                 }

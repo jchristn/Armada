@@ -88,9 +88,23 @@ namespace Armada.Runtimes
         /// </summary>
         public string? McpSessionToken { get; set; } = null;
 
+        /// <summary>
+        /// Host placed in the Armada MCP URLs written for an isolated or thread-scoped launch. The Admiral's MCP listener
+        /// only answers requests whose Host matches the name it was bound with, so the caller sets this from
+        /// <see cref="Armada.Core.Services.ArmadaMcpConfigBuilder.ClientHostFor"/> of the configured REST hostname.
+        /// Default "localhost"; null or empty also means localhost.
+        /// </summary>
+        public string McpHost
+        {
+            get => _McpHost;
+            set => _McpHost = String.IsNullOrWhiteSpace(value) ? Armada.Core.Services.ArmadaMcpConfigBuilder.DefaultHost : value;
+        }
+
         #endregion
 
         #region Private-Members
+
+        private string _McpHost = Armada.Core.Services.ArmadaMcpConfigBuilder.DefaultHost;
 
         private string _Header = "[BaseAgentRuntime] ";
         private LoggingModule _Logging;
@@ -172,6 +186,7 @@ namespace Armada.Runtimes
                     {
                         Runtime = RuntimeType,
                         McpPort = mcpPort,
+                        McpHost = McpHost,
                         ScopedConfigDirectory = scopedConfigDirectory,
                         WorkingDirectory = workingDirectory,
                         SessionToken = McpSessionToken!
@@ -181,7 +196,7 @@ namespace Armada.Runtimes
                 }
                 else
                 {
-                    isolationPlan = Armada.Core.Services.CaptainLaunchIsolationPlanner.Plan(RuntimeType, mcpPort, scopedConfigDirectory, McpSessionToken);
+                    isolationPlan = Armada.Core.Services.CaptainLaunchIsolationPlanner.Plan(RuntimeType, mcpPort, scopedConfigDirectory, McpSessionToken, McpHost);
                 }
 
                 if (!isolationPlan.IsEmpty)

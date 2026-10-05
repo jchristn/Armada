@@ -3,6 +3,7 @@ namespace Armada.Helm.Commands
     using System.Diagnostics;
     using System.Text.Json;
     using System.Text.Json.Nodes;
+    using Armada.Core.Services;
 
     internal static class McpConfigHelper
     {
@@ -29,13 +30,15 @@ namespace Armada.Helm.Commands
         private const string ManagedBlockEnd = "<!-- armada:mcp:end -->";
         private const string SourceMcpFramework = "net10.0";
 
-        internal static string GetMcpUrl(int mcpPort)
+        internal static string GetMcpUrl(int mcpPort, string host)
         {
             // Voltaic serves the modern MCP Streamable HTTP transport at /mcp (POST for JSON-RPC,
             // GET for the SSE notification stream, DELETE to terminate the session). This is the
             // endpoint modern MCP clients (Claude Code, Gemini, Cursor, Mux) expect. The legacy
             // /rpc + /events pair is still served for older clients but is no longer advertised.
-            return $"http://localhost:{mcpPort}/mcp";
+            // The host must be the one the MCP listener is bound with (ArmadaMcpConfigBuilder.ClientHostFor of
+            // rest.hostname): a listener bound to 127.0.0.1 answers http://localhost:<port>/mcp with HTTP 404.
+            return ArmadaMcpConfigBuilder.GetMcpUrl(mcpPort, host);
         }
 
         internal static string GetClaudeJsonPath()
@@ -210,9 +213,9 @@ namespace Armada.Helm.Commands
             return ResolveMuxExecutable() != null;
         }
 
-        internal static List<ConfigTarget> BuildTargets(int mcpPort)
+        internal static List<ConfigTarget> BuildTargets(int mcpPort, string host)
         {
-            string mcpUrl = GetMcpUrl(mcpPort);
+            string mcpUrl = GetMcpUrl(mcpPort, host);
             string codexCommand = ResolveCliCommand("codex");
             string geminiCommand = ResolveCliCommand("gemini");
 
@@ -227,7 +230,7 @@ namespace Armada.Helm.Commands
                         ["url"] = mcpUrl,
                     },
                     InstallAgent: true,
-                    ManualInstallCommand: BuildClaudeCliCommand(mcpPort)),
+                    ManualInstallCommand: BuildClaudeCliCommand(mcpPort, host)),
                 new(
                     "Codex",
                     GetCodexConfigPath(),
@@ -268,7 +271,7 @@ namespace Armada.Helm.Commands
                     {
                         ["name"] = "armada",
                         ["transport"] = "http",
-                        ["url"] = $"http://localhost:{mcpPort}",
+                        ["url"] = ArmadaMcpConfigBuilder.GetMcpBaseUrl(mcpPort, host),
                         ["mcpPath"] = "/mcp",
                     },
                     IsMuxServers: true));
@@ -708,9 +711,9 @@ namespace Armada.Helm.Commands
             return "Remove the `armada` object from the `mcpServers` section.";
         }
 
-        internal static string BuildClaudeCliCommand(int mcpPort)
+        internal static string BuildClaudeCliCommand(int mcpPort, string host)
         {
-            return $"claude mcp add --transport http --scope user armada {GetMcpUrl(mcpPort)}";
+            return $"claude mcp add --transport http --scope user armada {GetMcpUrl(mcpPort, host)}";
         }
 
         internal static string BuildClaudeStdioCommand()

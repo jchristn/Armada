@@ -3,6 +3,7 @@ namespace Armada.Helm.Commands
     using System.ComponentModel;
     using Spectre.Console;
     using Spectre.Console.Cli;
+    using Armada.Core.Services;
     using Armada.Core.Settings;
 
     /// <summary>
@@ -15,8 +16,9 @@ namespace Armada.Helm.Commands
         public override async Task<int> ExecuteAsync(CommandContext context, McpInstallSettings settings, CancellationToken cancellationToken)
         {
             ArmadaSettings armadaSettings = await ArmadaSettings.LoadAsync().ConfigureAwait(false);
-            string mcpUrl = McpConfigHelper.GetMcpUrl(armadaSettings.McpPort);
-            List<McpConfigHelper.ConfigTarget> targets = McpConfigHelper.BuildTargets(armadaSettings.McpPort);
+            string mcpHost = ArmadaMcpConfigBuilder.ClientHostFor(armadaSettings.Rest.Hostname);
+            string mcpUrl = McpConfigHelper.GetMcpUrl(armadaSettings.McpPort, mcpHost);
+            List<McpConfigHelper.ConfigTarget> targets = McpConfigHelper.BuildTargets(armadaSettings.McpPort, mcpHost);
             List<McpConfigHelper.InstructionTarget> instructionTargets = McpConfigHelper.BuildInstructionTargets();
 
             AnsiConsole.MarkupLine("[bold dodgerblue1]Armada MCP Install[/]");
@@ -72,7 +74,7 @@ namespace Armada.Helm.Commands
                     }
                 }
 
-                WriteManualSection(target, armadaSettings.McpPort);
+                WriteManualSection(target, armadaSettings.McpPort, mcpHost);
             }
 
             foreach (McpConfigHelper.InstructionTarget target in instructionTargets)
@@ -129,7 +131,7 @@ namespace Armada.Helm.Commands
             AnsiConsole.MarkupLine($"  [dim]{Markup.Escape(result.FilePath)}[/]");
         }
 
-        private static void WriteManualSection(McpConfigHelper.ConfigTarget target, int mcpPort)
+        private static void WriteManualSection(McpConfigHelper.ConfigTarget target, int mcpPort, string mcpHost)
         {
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine($"[bold]{target.ClientName} manual snippet[/] -> [green]{Markup.Escape(target.FilePath)}[/]");
@@ -145,14 +147,14 @@ namespace Armada.Helm.Commands
             if (target.ClientName == "Claude Code")
             {
                 AnsiConsole.MarkupLine("[dim]Claude CLI helper:[/]");
-                AnsiConsole.MarkupLine($"[green]  {Markup.Escape(McpConfigHelper.BuildClaudeCliCommand(mcpPort))}[/]");
+                AnsiConsole.MarkupLine($"[green]  {Markup.Escape(McpConfigHelper.BuildClaudeCliCommand(mcpPort, mcpHost))}[/]");
                 AnsiConsole.MarkupLine("[dim]Claude stdio alternative:[/]");
                 AnsiConsole.MarkupLine($"[green]  {Markup.Escape(McpConfigHelper.BuildClaudeStdioCommand())}[/]");
                 AnsiConsole.MarkupLine($"[dim]Claude agent file:[/] [green]{Markup.Escape(McpConfigHelper.GetClaudeAgentPath())}[/]");
             }
             if (target.ClientName == "Mux")
             {
-                AnsiConsole.MarkupLine("[dim]Or add it interactively:[/] start [green]mux[/], run [green]/mcp[/], choose [green]+ Add MCP server[/], then set transport [green]http[/], url [green]http://localhost:" + mcpPort + "[/], mcp path [green]/mcp[/], auth [green]none[/].");
+                AnsiConsole.MarkupLine("[dim]Or add it interactively:[/] start [green]mux[/], run [green]/mcp[/], choose [green]+ Add MCP server[/], then set transport [green]http[/], url [green]" + Markup.Escape(ArmadaMcpConfigBuilder.GetMcpBaseUrl(mcpPort, mcpHost)) + "[/], mcp path [green]/mcp[/], auth [green]none[/].");
             }
             AnsiConsole.WriteLine();
         }

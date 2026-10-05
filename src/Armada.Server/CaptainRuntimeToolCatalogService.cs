@@ -22,6 +22,8 @@ namespace Armada.Server
         private readonly LoggingModule _Logging;
         private readonly HarborConnectionManager? _HarborConnections;
         private readonly IRuntimeToolDiscoverySource _Discovery;
+        private readonly int _McpPort;
+        private readonly string _McpHost;
         private readonly JsonSerializerOptions _JsonOptions = new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
@@ -37,11 +39,19 @@ namespace Armada.Server
         /// <param name="logging">Logging module.</param>
         /// <param name="harborConnections">Harbor connection manager, or null in standalone mode.</param>
         /// <param name="discovery">Discovery source for host touch points; null uses <see cref="HostRuntimeToolDiscoverySource"/>.</param>
+        /// <param name="mcpPort">The Admiral MCP port, used to recognize configured entries that point at Armada; 0 disables
+        /// URL-based recognition (entries named "armada" are always recognized).</param>
+        /// <param name="mcpHost">The host MCP clients must use to reach the Admiral (see
+        /// <see cref="ArmadaMcpConfigBuilder.ClientHostFor"/>); null or empty means localhost.</param>
         public CaptainRuntimeToolCatalogService(
             LoggingModule logging,
             HarborConnectionManager? harborConnections = null,
-            IRuntimeToolDiscoverySource? discovery = null)
+            IRuntimeToolDiscoverySource? discovery = null,
+            int mcpPort = 0,
+            string? mcpHost = null)
         {
+            _McpPort = mcpPort > 0 ? mcpPort : 0;
+            _McpHost = String.IsNullOrWhiteSpace(mcpHost) ? ArmadaMcpConfigBuilder.DefaultHost : mcpHost!;
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _HarborConnections = harborConnections;
             _Discovery = discovery ?? new HostRuntimeToolDiscoverySource(logging);
@@ -255,7 +265,7 @@ namespace Armada.Server
                 int reachableSources = snapshot.Servers.Count(s => s.Reachable);
                 snapshot.ReachableServerCount = reachableSources;
                 snapshot.ToolsAccessible = builtInToolCount > 0 || snapshot.Tools.Count > 0;
-                snapshot.ArmadaToolCount = snapshot.Tools.Count(t => String.Equals(t.RegistrationSource, "armada", StringComparison.OrdinalIgnoreCase));
+                snapshot.ArmadaToolCount = snapshot.Tools.Count(t => t.RegistrationSource != null && snapshot.ArmadaServerNames.Contains(t.RegistrationSource));
                 snapshot.EffectiveToolCount = builtInToolCount + snapshot.Tools.Count;
                 snapshot.AvailabilityVerified = (probe?.Success ?? false) || snapshot.Servers.Count > 0;
 
@@ -412,6 +422,16 @@ namespace Armada.Server
                 }
 
                 RuntimeMcpServerDefinition capturedServer = server;
+                if (_McpPort > 0 && ArmadaMcpConfigBuilder.IsArmadaMcpUrl(server.Url, _McpPort, _McpHost))
+                {
+                    // localhost, 127.0.0.1 and ::1 on the MCP port are the same Armada server. The listener only answers
+                    // the host it is bound with, so probe the entry at that host; an entry written with localhost is
+                    // then still recognized when the Admiral is bound to 127.0.0.1 (Ask turns connect through a
+                    // generated configuration that already uses the bound host).
+                    snapshot.ArmadaServerNames.Add(server.Name);
+                    capturedServer = server.WithUrl(ArmadaMcpConfigBuilder.RewriteArmadaMcpUrlHost(server.Url!, _McpPort, _McpHost));
+                }
+
                 CaptainToolServerSummary capturedSummary = serverSummary;
                 tasks.Add(Task.Run(async () =>
                 {
@@ -458,7 +478,7 @@ namespace Armada.Server
             snapshot.ConfiguredServerCount = snapshot.Servers.Count;
             snapshot.ReachableServerCount = snapshot.Servers.Count(s => s.Reachable);
             snapshot.ToolsAccessible = snapshot.Tools.Count > 0;
-            snapshot.ArmadaToolCount = snapshot.Tools.Count(t => String.Equals(t.RegistrationSource, "armada", StringComparison.OrdinalIgnoreCase));
+            snapshot.ArmadaToolCount = snapshot.Tools.Count(t => t.RegistrationSource != null && snapshot.ArmadaServerNames.Contains(t.RegistrationSource));
             snapshot.EffectiveToolCount = snapshot.Tools.Count;
             string builtInNote = builtInInventory != null && builtInInventory.Tools.Count > 0
                 ? builtInInventory.Note
@@ -1061,6 +1081,7 @@ namespace Armada.Server
             public int EffectiveToolCount { get; set; } = 0;
             public List<CaptainToolServerSummary> Servers { get; set; } = new List<CaptainToolServerSummary>();
             public List<CaptainToolSummary> Tools { get; set; } = new List<CaptainToolSummary>();
+            public HashSet<string> ArmadaServerNames { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "armada" };
         }
 
 

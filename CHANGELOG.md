@@ -6,6 +6,10 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Fixes
+
+- MCP client URLs use the host the Admiral's MCP listener is bound with. The listener only answers requests whose Host matches `rest.hostname`, but every generated URL hard-coded `localhost`, so an Admiral configured with `127.0.0.1` handed captains (isolated and Ask launches, the ApiEndpoint `ARMADA_MCP_URL`), the Harbor advertised MCP URL, and `armada mcp install` / `remove` a URL that returned HTTP 404 (Ask then reported the captain as not connected to Armada MCP). New `ArmadaMcpConfigBuilder.ClientHostFor` maps wildcards (empty, `*`, `+`, `0.0.0.0`, `::`) to `localhost`, brackets IPv6 literals, and keeps any other hostname; the host is passed explicitly through the builder overloads, `CaptainLaunchIsolationPlanner`, `CaptainThreadMcpPlanRequest.McpHost`, and `BaseAgentRuntime.McpHost` (default `localhost`, so existing output is unchanged). Captain tool discovery and the Ask host-config scan treat `localhost`, `127.0.0.1`, and `::1` on the MCP port as the same Armada server (parsed URLs instead of a `:port/mcp` substring), so a client entry written with `localhost` is still recognized and probed at the bound host. Startup logs one warning when `rest.hostname` is a loopback IP literal, naming the URL clients must use.
+
 ### Fragility remediation
 
 - Dock boundary scan and auto-land read diffs structurally: a new `UnifiedDiffParser` consumes hunks by their `@@` line ranges, so an added line whose text starts with "++ " (shown as "+++ ...") is no longer skipped by the secret scan, and content that looks like a file header no longer changes the reported file. Deleted files, both sides of a rename (including pure renames), and C-quoted (non-ASCII) paths now reach protected-path and auto-land path rules, and auto-land line counts include such lines. When the dock worktree still exists, paths and counts are also taken from `git diff --name-status -z --no-renames` and `--numstat -z` (new `IGitService.GetBranchChangesAsync`) and combined with the snapshot.

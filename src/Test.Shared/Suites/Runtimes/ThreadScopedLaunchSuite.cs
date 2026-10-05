@@ -68,6 +68,14 @@ namespace Test.Shared.Suites.Runtimes
                 AssertEqual(Environment.GetEnvironmentVariable("HOME") ?? String.Empty, record.Home);
             }));
 
+            cases.Add(Case("cursor_launch_uses_runtime_mcp_host", "A thread launch writes the runtime's McpHost (the bound listener host) into the MCP URL", async () =>
+            {
+                LaunchRecord? record = await LaunchAsync((LoggingModule logging, string stub) => new CursorRuntime(logging) { ExecutablePath = stub, McpHost = "127.0.0.1" }).ConfigureAwait(false);
+                if (record == null) return;
+                KeyedMcpServersDocument document = JsonHelper.Deserialize<KeyedMcpServersDocument>(record.CursorMcp);
+                AssertEqual("http://127.0.0.1:7891/mcp", document.McpServers!["armada"].Url);
+            }));
+
             cases.Add(Case("opencode_launch_sets_inline_config", "OpenCode thread launch sets OPENCODE_CONFIG_CONTENT", async () =>
             {
                 LaunchRecord? record = await LaunchAsync((LoggingModule logging, string stub) => new OpenCodeRuntime(logging) { ExecutablePath = stub }).ConfigureAwait(false);
