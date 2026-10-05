@@ -97,8 +97,8 @@ namespace Test.Shared.Suites.Tui
                     TuiConfigTestHelpers.Input(dialog, "Name").Value = "claude";
                     host.Press("ctrl+s");
                     TuiEntityFixtures.WaitFor(host, () => box.Body != null && !host.App.Modals.IsActive, "saved");
-                    AssertTrue(box.Body!.Contains("\"Provider\":\"Anthropic\""), "provider: " + box.Body);
-                    AssertFalse(box.Body.Contains("\"apiKey\""), "blank key not sent");
+                    AssertEqual(Armada.Core.Enums.ModelProviderEnum.Anthropic, box.As<Armada.Core.Models.ModelEndpoint>().Provider, "provider: " + box.Body);
+                    AssertNull(JsonShape.TopLevelProperty(box.Body!, "apiKey"), "blank key not sent (any casing): " + box.Body);
                 }
             }));
 

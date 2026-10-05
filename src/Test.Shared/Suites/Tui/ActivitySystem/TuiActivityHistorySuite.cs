@@ -48,19 +48,20 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                 using (TuiTestHost host = TuiCase.SignedIn(170, 44, "/activity?source=history&actor=alice&postmortemOnly=true", stub))
                 {
                     AssertTrue(host.WaitForText("Deploy failed"), "rows render");
-                    AssertTrue(stub.Bodies.Any(b => b.Contains("\"Actor\":\"alice\"") && b.Contains("\"PostmortemOnly\":true")), "deep link filters: " + String.Join("\n", stub.Bodies));
+                    AssertTrue(stub.BodiesFor<Armada.Core.Models.HistoricalTimelineQuery>("POST", "/api/v1/history/enumerate").Any(q => q.Actor == "alice" && q.PostmortemOnly), "deep link filters: " + String.Join("\n", stub.RequestsFor("POST", "/api/v1/history/enumerate").Select(r => r.Body)));
                     ActivityScreen screen = Current<ActivityScreen>(host);
                     screen.TextFilter.Value = "deploy";
                     screen.SourceTypeFilter.SetValue("deployment");
                     screen.VesselFilter.SetValue("vsl_1");
-                    int before = stub.Count("POST /api/v1/history/enumerate");
+                    int before = stub.CountFor("POST", "/api/v1/history/enumerate");
                     host.Press("a");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/history/enumerate") > before), "apply reloads");
-                    string body = stub.Bodies.Last(b => b.Contains("\"Text\""));
-                    AssertTrue(body.Contains("\"Text\":\"deploy\""), "text: " + body);
-                    AssertTrue(body.Contains("\"SourceTypes\":[\"deployment\"]"), "source: " + body);
-                    AssertTrue(body.Contains("\"VesselId\":\"vsl_1\""), "vessel: " + body);
-                    AssertTrue(body.Contains("\"PageSize\":250"), "page size: " + body);
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/history/enumerate") > before), "apply reloads");
+                    StubRequest applied = stub.Last("POST", "/api/v1/history/enumerate");
+                    Armada.Core.Models.HistoricalTimelineQuery query = applied.BodyAs<Armada.Core.Models.HistoricalTimelineQuery>();
+                    AssertEqual("deploy", query.Text, "text: " + applied.Body);
+                    AssertEqual("deployment", String.Join("|", query.SourceTypes), "source: " + applied.Body);
+                    AssertEqual("vsl_1", query.VesselId, "vessel: " + applied.Body);
+                    AssertEqual(250, query.PageSize, "page size: " + applied.Body);
                 }
             }));
 
@@ -118,13 +119,14 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                         AssertTrue(csv.StartsWith("id,sourceType,title,status,severity,occurredUtc,actorDisplay,vesselId,missionId,voyageId,route,description", StringComparison.Ordinal), "csv header: " + csv);
                         TuiCase.Contains(csv, "\"Deploy failed, rolled back\"", "csv quoting");
                         string json = File.ReadAllText(Directory.GetFiles(dir, "*.json")[0]);
-                        TuiCase.Contains(json, "\"totalCount\": 3", "json total");
-                        TuiCase.Contains(json, "\"entries\"", "json entries");
+                        List<JsonPropertyShape> exportShape = JsonShape.TopLevel(json);
+                        AssertTrue(exportShape.Any(p => p.Name == "totalCount" && p.ValueToken == System.Text.Json.JsonTokenType.Number && p.ScalarText == "3"), "json total (camelCase totalCount = 3)");
+                        AssertTrue(exportShape.Any(p => p.Name == "entries" && p.ValueToken == System.Text.Json.JsonTokenType.StartArray), "json entries array");
                         string md = File.ReadAllText(Directory.GetFiles(dir, "*.md")[0]);
                         TuiCase.Contains(md, "# Armada History Export", "md heading");
                         TuiCase.Contains(md, "Entries: 3", "md count");
                         TuiCase.Contains(md, "- Source: deployment", "md source");
-                        AssertTrue(stub.Bodies.Any(b => b.Contains("\"PageSize\":5000")), "export page size");
+                        AssertTrue(stub.BodiesFor<Armada.Core.Models.HistoricalTimelineQuery>("POST", "/api/v1/history/enumerate").Any(q => q.PageSize == 5000), "export page size");
                     }
                 }
                 finally
@@ -148,7 +150,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     host.Press("del");
                     AssertTrue(host.WaitForText("Delete this request-history entry?"), "confirm");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/request-history/req_9") == 1), "delete sent");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("DELETE", "/api/v1/request-history/req_9") == 1), "delete sent");
                     screen.Grid.MoveCursor(0);
                     AssertFalse(ActivityScreen.CanDeleteEntry(screen.Grid.Rows.First(r => r.SourceId != "req_9")), "non-request not deletable");
                 }

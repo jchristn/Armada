@@ -82,7 +82,7 @@ namespace Test.Shared.Suites.Tui
                     host.Type("Duplicate");
                     host.Press("enter");
                     TuiEntityFixtures.WaitFor(host, () => box.Body != null, "duplicate posted");
-                    AssertTrue(box.Body!.Contains("\"FileName\":\"ARCH (Copy).md\""), "copy name: " + box.Body);
+                    AssertEqual("ARCH (Copy).md", box.As<Armada.Core.Models.Playbook>().FileName, "copy name: " + box.Body);
                     TuiEntityFixtures.WaitFor(host, () => host.Tui.Context.Router.Current!.Path == "/playbooks/pbk_copy", "opened the copy");
                 }
             }));
@@ -106,7 +106,7 @@ namespace Test.Shared.Suites.Tui
                     TuiConfigTestHelpers.Input(dialog, "File Name").Value = "NEW.md";
                     host.Press("ctrl+s");
                     TuiEntityFixtures.WaitFor(host, () => box.Body != null && !host.App.Modals.IsActive, "posted and closed");
-                    AssertTrue(box.Body!.Contains("\"FileName\":\"NEW.md\""), "file name: " + box.Body);
+                    AssertEqual("NEW.md", box.As<Armada.Core.Models.Playbook>().FileName, "file name: " + box.Body);
                 }
             }));
 
