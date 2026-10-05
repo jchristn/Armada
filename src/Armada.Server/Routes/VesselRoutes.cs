@@ -336,7 +336,7 @@ namespace Armada.Server.Routes
                         ? await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
                         : await _database.Vessels.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (vessel == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
-                if (_git == null) { req.Http.Response.StatusCode = 503; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Git service is not available" }; }
+                if (_git == null) { req.Http.Response.StatusCode = 503; return new ApiStatusErrorResponse(ApiStatusErrorCodeEnum.ServiceUnavailable, "Git service is not available"); }
 
                 string? repoPath = ResolveRepoPath(vessel);
                 if (repoPath == null)
@@ -365,7 +365,7 @@ namespace Armada.Server.Routes
                 .WithDescription("Returns the vessel repository's branches with current flag and ahead/behind counts relative to the default branch.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
-                .WithResponse(503, OpenApiJson.For<ApiErrorResponse>("A required service is unavailable (Error is BadRequest or NotFound; use the HTTP status)"))
+                .WithResponse(503, OpenApiJson.For<ApiStatusErrorResponse>("Git service is not available (Error ServiceUnavailable)"))
                 .WithSecurity("ApiKey"));
 
             app.Post<BranchActionRequest>("/api/v1/vessels/{id}/branches/push", async (ApiRequest req) =>
@@ -383,7 +383,7 @@ namespace Armada.Server.Routes
                         ? await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
                         : await _database.Vessels.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (vessel == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
-                if (_git == null) { req.Http.Response.StatusCode = 503; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Git service is not available" }; }
+                if (_git == null) { req.Http.Response.StatusCode = 503; return new ApiStatusErrorResponse(ApiStatusErrorCodeEnum.ServiceUnavailable, "Git service is not available"); }
                 BranchActionRequest pushBody = JsonSerializer.Deserialize<BranchActionRequest>(req.Http.Request.DataAsString, _jsonOptions) ?? new BranchActionRequest();
                 if (String.IsNullOrWhiteSpace(pushBody.Branch)) { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Branch is required" }; }
 
@@ -398,7 +398,7 @@ namespace Armada.Server.Routes
                 catch (Exception ex)
                 {
                     req.Http.Response.StatusCode = 422;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Push failed: " + ex.Message };
+                    return new ApiStatusErrorResponse(ApiStatusErrorCodeEnum.UnprocessableEntity, "Push failed: " + ex.Message);
                 }
             },
             api => api
@@ -409,8 +409,8 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
-                .WithResponse(422, OpenApiJson.For<ApiErrorResponse>("Rejected by the remote (Error is BadRequest; use the HTTP status)"))
-                .WithResponse(503, OpenApiJson.For<ApiErrorResponse>("A required service is unavailable (Error is BadRequest or NotFound; use the HTTP status)"))
+                .WithResponse(422, OpenApiJson.For<ApiStatusErrorResponse>("Rejected by the remote (Error UnprocessableEntity)"))
+                .WithResponse(503, OpenApiJson.For<ApiStatusErrorResponse>("Git service is not available (Error ServiceUnavailable)"))
                 .WithSecurity("ApiKey"));
 
             app.Post<BranchMergeRequest>("/api/v1/vessels/{id}/branches/merge", async (ApiRequest req) =>
@@ -428,7 +428,7 @@ namespace Armada.Server.Routes
                         ? await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
                         : await _database.Vessels.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (vessel == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
-                if (_git == null) { req.Http.Response.StatusCode = 503; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Git service is not available" }; }
+                if (_git == null) { req.Http.Response.StatusCode = 503; return new ApiStatusErrorResponse(ApiStatusErrorCodeEnum.ServiceUnavailable, "Git service is not available"); }
                 BranchMergeRequest mergeBody = JsonSerializer.Deserialize<BranchMergeRequest>(req.Http.Request.DataAsString, _jsonOptions) ?? new BranchMergeRequest();
                 if (String.IsNullOrWhiteSpace(mergeBody.Source) || String.IsNullOrWhiteSpace(mergeBody.Target))
                 { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Source and target are required" }; }
@@ -456,7 +456,7 @@ namespace Armada.Server.Routes
                 catch (Exception ex)
                 {
                     req.Http.Response.StatusCode = 422;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Merge failed: " + ex.Message };
+                    return new ApiStatusErrorResponse(ApiStatusErrorCodeEnum.UnprocessableEntity, "Merge failed: " + ex.Message);
                 }
             },
             api => api
@@ -467,8 +467,8 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
-                .WithResponse(422, OpenApiJson.For<ApiErrorResponse>("Rejected by the remote (Error is BadRequest; use the HTTP status)"))
-                .WithResponse(503, OpenApiJson.For<ApiErrorResponse>("A required service is unavailable (Error is BadRequest or NotFound; use the HTTP status)"))
+                .WithResponse(422, OpenApiJson.For<ApiStatusErrorResponse>("Rejected by the remote (Error UnprocessableEntity)"))
+                .WithResponse(503, OpenApiJson.For<ApiStatusErrorResponse>("Git service is not available (Error ServiceUnavailable)"))
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/vessels/{id}/readiness", async (ApiRequest req) =>
@@ -577,7 +577,7 @@ namespace Armada.Server.Routes
                 if (_contextService == null)
                 {
                     req.Http.Response.StatusCode = 501;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Model Context building is not available on this server." };
+                    return new ApiStatusErrorResponse(ApiStatusErrorCodeEnum.NotImplemented, "Model Context building is not available on this server.");
                 }
 
                 string buildId = req.Parameters["id"];
@@ -608,7 +608,7 @@ namespace Armada.Server.Routes
                 catch (TimeoutException ex)
                 {
                     req.Http.Response.StatusCode = 504;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
+                    return new ApiStatusErrorResponse(ApiStatusErrorCodeEnum.GatewayTimeout, ex.Message);
                 }
                 catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {
@@ -624,8 +624,8 @@ namespace Armada.Server.Routes
                 .WithResponse(200, OpenApiJson.For<Vessel>("Updated vessel with new Model Context"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
-                .WithResponse(501, OpenApiJson.For<ApiErrorResponse>("Not supported for the captain's runtime (Error is BadRequest; use the HTTP status)"))
-                .WithResponse(504, OpenApiJson.For<ApiErrorResponse>("Timed out (Error is BadRequest; use the HTTP status)"))
+                .WithResponse(501, OpenApiJson.For<ApiStatusErrorResponse>("Model context building is not available on this server (Error NotImplemented)"))
+                .WithResponse(504, OpenApiJson.For<ApiStatusErrorResponse>("Model context build timed out (Error GatewayTimeout)"))
                 .WithSecurity("ApiKey"));
 
             app.Delete("/api/v1/vessels/{id}", async (ApiRequest req) =>

@@ -212,6 +212,39 @@ namespace Test.Shared.Suites.E2E
                 AssertTrue(failures.Count == 0, "OpenAPI parameter metadata problems:\n" + String.Join("\n", failures));
             }));
 
+            cases.Add(CaseAsync("status_specific_errors_use_matching_code", "422, 501, 503, and 504 responses carry an Error code that names their status", TestTags.Negative, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
+                List<string> failures = new List<string>();
+                int checkedResponses = 0;
+                foreach (RestRouteDescriptor route in fx.Server.GetRestRouteDescriptors())
+                {
+                    foreach (KeyValuePair<string, string> response in route.Responses)
+                    {
+                        if (response.Key != "422" && response.Key != "501" && response.Key != "503" && response.Key != "504") continue;
+                        checkedResponses++;
+                        if (response.Value != nameof(ApiStatusErrorResponse))
+                            failures.Add(route.Method + " " + route.Template + " " + response.Key + ": " + response.Value);
+                    }
+                }
+
+                AssertTrue(checkedResponses >= 20, "expected the planning, refinement, and vessel routes to declare these statuses, got " + checkedResponses);
+                AssertTrue(failures.Count == 0, "responses whose body type cannot carry a matching Error code:\n" + String.Join("\n", failures));
+
+                foreach (ApiStatusErrorCodeEnum code in Enum.GetValues<ApiStatusErrorCodeEnum>())
+                {
+                    ApiStatusErrorResponse body = new ApiStatusErrorResponse(code, "x");
+                    E2eStatusErrorBody parsed = JsonHelper.Deserialize<E2eStatusErrorBody>(JsonSerializer.Serialize(body));
+                    AssertEqual(code.ToString(), parsed.Error, "Error serializes as the code name");
+                    AssertEqual(ApiStatusErrorResponse.StatusCodeFor(code), parsed.StatusCode, "StatusCode for " + code);
+                }
+
+                AssertEqual(501, ApiStatusErrorResponse.StatusCodeFor(ApiStatusErrorCodeEnum.NotImplemented));
+                AssertEqual(503, ApiStatusErrorResponse.StatusCodeFor(ApiStatusErrorCodeEnum.ServiceUnavailable));
+                AssertEqual(422, ApiStatusErrorResponse.StatusCodeFor(ApiStatusErrorCodeEnum.UnprocessableEntity));
+                AssertEqual(504, ApiStatusErrorResponse.StatusCodeFor(ApiStatusErrorCodeEnum.GatewayTimeout));
+            }));
+
             cases.Add(CaseAsync("error_codes_match_status", "REST errors are ApiErrorResponse bodies whose Error code matches the status", TestTags.Negative, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
