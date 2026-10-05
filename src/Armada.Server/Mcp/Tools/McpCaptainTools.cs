@@ -124,10 +124,10 @@ namespace Armada.Server.Mcp.Tools
                     properties = new
                     {
                         name = new { type = "string", description = "Captain display name" },
-                        runtime = new { type = "string", description = "Agent runtime: ClaudeCode, Codex, Gemini, Cursor, Mux, or Custom" },
+                        runtime = new { type = "string", description = "Agent runtime: " + McpToolHelpers.EnumNames<AgentRuntimeEnum>() },
                         systemInstructions = new { type = "string", description = "System instructions for this captain -- injected into every mission prompt to specialize behavior" },
                         model = new { type = "string", description = "AI model identifier; null means runtime default" },
-                        reasoningEffort = new { type = "string", description = "Reasoning effort: Off, Minimal, Low, Medium, or High. Translated per runtime (Claude thinking budget, Codex reasoning effort, Mux --effort). Ignored by runtimes without a control." },
+                        reasoningEffort = new { type = "string", description = "Reasoning effort: " + McpToolHelpers.EnumNames<ReasoningEffortEnum>() + ". Translated per runtime (Claude thinking budget, Codex reasoning effort, Mux --effort). Ignored by runtimes without a control." },
                         tier = new { type = "string", description = "Capability tier for dispatch routing: Economy, Standard, or Premium. Empty auto-classifies from the model name." },
                         allowedPersonas = new { type = "string", description = "JSON array of persona names this captain can fill, e.g. [\"Worker\",\"Judge\"]. Null means any persona." },
                         preferredPersona = new { type = "string", description = "Preferred persona for dispatch routing priority" },
@@ -182,10 +182,10 @@ namespace Armada.Server.Mcp.Tools
                     {
                         captainId = new { type = "string", description = "Captain ID (cpt_ prefix)" },
                         name = new { type = "string", description = "New display name" },
-                        runtime = new { type = "string", description = "New agent runtime: ClaudeCode, Codex, Gemini, Cursor, Mux, or Custom" },
+                        runtime = new { type = "string", description = "New agent runtime: " + McpToolHelpers.EnumNames<AgentRuntimeEnum>() },
                         systemInstructions = new { type = "string", description = "New system instructions for this captain" },
                         model = new { type = "string", description = "New AI model identifier; null means runtime default" },
-                        reasoningEffort = new { type = "string", description = "Reasoning effort: Off, Minimal, Low, Medium, or High. Empty string clears it. Translated per runtime (Claude thinking budget, Codex reasoning effort, Mux --effort)." },
+                        reasoningEffort = new { type = "string", description = "Reasoning effort: " + McpToolHelpers.EnumNames<ReasoningEffortEnum>() + ". Empty string clears it. Translated per runtime (Claude thinking budget, Codex reasoning effort, Mux --effort)." },
                         tier = new { type = "string", description = "Capability tier: Economy, Standard, or Premium. Empty string clears it (auto-classify from model)." },
                         allowedPersonas = new { type = "string", description = "JSON array of persona names this captain can fill, e.g. [\"Worker\",\"Judge\"]. Null means any persona." },
                         preferredPersona = new { type = "string", description = "Preferred persona for dispatch routing priority" },

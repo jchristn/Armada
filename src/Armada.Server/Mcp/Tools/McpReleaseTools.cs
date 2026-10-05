@@ -3,6 +3,7 @@ namespace Armada.Server.Mcp.Tools
     using System;
     using System.Text.Json;
     using System.Text.Json.Serialization;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
 
@@ -60,7 +61,7 @@ namespace Armada.Server.Mcp.Tools
                         tagName = new { type = "string", description = "Optional git tag or image tag" },
                         summary = new { type = "string", description = "Optional short release summary" },
                         notes = new { type = "string", description = "Optional long-form release notes" },
-                        status = new { type = "string", description = "Optional release status such as Draft, Candidate, or Shipped" },
+                        status = new { type = "string", description = "Optional release status: " + McpToolHelpers.EnumNames<ReleaseStatusEnum>() },
                         voyageIds = new { type = "array", items = new { type = "string" }, description = "Linked voyage IDs (vyg_ prefix)" },
                         missionIds = new { type = "array", items = new { type = "string" }, description = "Linked mission IDs (msn_ prefix)" },
                         checkRunIds = new { type = "array", items = new { type = "string" }, description = "Linked check-run IDs (chk_ prefix)" }

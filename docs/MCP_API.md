@@ -721,9 +721,9 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 | `objectives` (aliases `backlog`, `backlog_item`, `backlog_items`) | `status`, `vesselId`, `voyageId`, `missionId`, `search` |
 | `fleets` | `createdAfter`, `createdBefore` |
 | `vessels` | `fleetId`, `createdAfter`, `createdBefore` |
-| `captains` | `status` (Idle/Working/Stalled), `createdAfter`, `createdBefore` |
+| `captains` | `status` (Idle/Working/Planning/Refining/Stalled/Stopping/Quarantined/Analyzing), `createdAfter`, `createdBefore` |
 | `missions` | `status`, `vesselId`, `captainId`, `voyageId`, `createdAfter`, `createdBefore` |
-| `voyages` | `status` (Active/Complete/Cancelled), `createdAfter`, `createdBefore` |
+| `voyages` | `status` (Open/InProgress/Complete/Failed/Cancelled), `createdAfter`, `createdBefore` |
 | `docks` | `vesselId`, `createdAfter`, `createdBefore` |
 | `signals` | `signalType`, `captainId`, `toCaptainId`, `unreadOnly`, `createdAfter`, `createdBefore` |
 | `events` | `eventType`, `captainId`, `missionId`, `vesselId`, `voyageId`, `createdAfter`, `createdBefore` |
@@ -745,7 +745,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 | `memories` | `search` (plus paginated browse) |
 | `jobs` | (paginated browse only) |
 | `model_endpoints` | `createdAfter`, `createdBefore` (current MCP enumeration is primarily paginated browse) |
-| `vessel_import_batch` (aliases `vessel_import_batches`, `vessel-import-batch`, `import_batches`) | `status` (Discovered/Importing/Completed/CompletedWithFailures/Failed), `createdAfter`, `createdBefore`, `order`. Scoped to the caller's tenant. Items are not included; read a batch with items through `GET /api/v1/vessels/import/batches/{id}`. |
+| `vessel_import_batch` (aliases `vessel_import_batches`, `vessel-import-batch`, `import_batches`) | `status` (Discovered/Importing/Completed/CompletedWithFailures/Failed/Discovering), `createdAfter`, `createdBefore`, `order`. Scoped to the caller's tenant. Items are not included; read a batch with items through `GET /api/v1/vessels/import/batches/{id}`. |
 | `fleet_action` | `includeInactive`, `createdAfter`, `createdBefore` |
 | `fleet_action_run` | `status` (Pending/Running/Completed/CompletedWithFailures/Cancelled/Failed), `createdAfter`, `createdBefore` |
 | `fleet_action_run_target` | `runId` (required), `status` (Pending/Skipped/Running/Succeeded/Failed/Cancelled/TimedOut) |
@@ -2555,7 +2555,7 @@ Register a new captain (AI agent).
   "type": "object",
   "properties": {
     "name": { "type": "string", "description": "Captain display name" },
-    "runtime": { "type": "string", "description": "Agent runtime: ClaudeCode, Codex, Gemini, Cursor, Mux, OpenCode, or Custom" },
+    "runtime": { "type": "string", "description": "Agent runtime: ClaudeCode, Codex, Gemini, Cursor, Mux, OpenCode, ApiEndpoint, Custom" },
     "model": { "type": "string", "description": "Optional model override for this captain. When omitted, the runtime chooses automatically" },
     "reasoningEffort": { "type": "string", "description": "Reasoning effort: Off, Minimal, Low, Medium, or High. Translated per runtime (Claude thinking budget, Codex reasoning effort, Mux --effort). Ignored by runtimes without a control." },
     "tier": { "type": "string", "description": "Capability tier for dispatch routing: Economy, Standard, or Premium. Empty auto-classifies from the model name." },
@@ -2652,7 +2652,7 @@ Update a captain's properties (name, runtime, model, tier, personas, Mux options
   "properties": {
     "captainId": { "type": "string", "description": "Captain ID (cpt_ prefix)" },
     "name": { "type": "string", "description": "New display name" },
-    "runtime": { "type": "string", "description": "New agent runtime: ClaudeCode, Codex, Gemini, Cursor, Mux, OpenCode, or Custom" },
+    "runtime": { "type": "string", "description": "New agent runtime: ClaudeCode, Codex, Gemini, Cursor, Mux, OpenCode, ApiEndpoint, Custom" },
     "model": { "type": "string", "description": "New optional model override for this captain" },
     "reasoningEffort": { "type": "string", "description": "Reasoning effort: Off, Minimal, Low, Medium, or High. Empty string clears it. Translated per runtime (Claude thinking budget, Codex reasoning effort, Mux --effort)." },
     "tier": { "type": "string", "description": "Capability tier: Economy, Standard, or Premium. Empty string clears it (auto-classify from model)." },

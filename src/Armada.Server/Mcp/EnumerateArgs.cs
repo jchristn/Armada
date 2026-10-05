@@ -20,7 +20,7 @@ namespace Armada.Server.Mcp
         public int? PageNumber { get; set; }
 
         /// <summary>
-        /// Results per page (default 100, max 1000).
+        /// Results per page (default 10, max 1000).
         /// </summary>
         public int? PageSize { get; set; }
 

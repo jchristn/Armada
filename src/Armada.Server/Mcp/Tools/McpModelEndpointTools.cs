@@ -50,20 +50,20 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "create_model_endpoint",
-                "Create a managed model endpoint. Kind must be Embedding or Inference; Provider is one of Ollama, OpenAI, OpenAICompatible, Anthropic, Gemini, VoyageAI. Anthropic cannot be used for Embedding and VoyageAI cannot be used for Inference.",
+                "Create a managed model endpoint. Kind must be one of " + McpToolHelpers.EnumNames<ModelEndpointKindEnum>() + "; Provider is one of " + McpToolHelpers.EnumNames<ModelProviderEnum>() + ". Anthropic cannot be used for Embedding and VoyageAI cannot be used for Inference.",
                 new
                 {
                     type = "object",
                     properties = new
                     {
                         name = new { type = "string", description = "Human-facing endpoint name" },
-                        kind = new { type = "string", description = "Embedding or Inference" },
-                        provider = new { type = "string", description = "Ollama, OpenAI, OpenAICompatible, Anthropic, Gemini, or VoyageAI" },
+                        kind = new { type = "string", description = McpToolHelpers.EnumNames<ModelEndpointKindEnum>() },
+                        provider = new { type = "string", description = McpToolHelpers.EnumNames<ModelProviderEnum>() },
                         baseUrl = new { type = "string", description = "Base URL of the endpoint" },
                         model = new { type = "string", description = "Model identifier to request (optional)" },
                         apiKey = new { type = "string", description = "API key/credential (optional; stored but never returned)" },
                         dimensionality = new { type = "integer", description = "Optional embedding dimensionality hint" },
-                        timeoutMs = new { type = "integer", description = "Per-request timeout in milliseconds (default 120000)" },
+                        timeoutMs = new { type = "integer", description = "Per-request timeout in milliseconds (default 120000, clamped to 1000-600000)" },
                         enabled = new { type = "boolean", description = "Whether the endpoint is enabled (default true)" }
                     },
                     required = new[] { "name", "baseUrl" }
@@ -105,8 +105,8 @@ namespace Armada.Server.Mcp.Tools
                     {
                         endpointId = new { type = "string", description = "Model endpoint ID (mep_ prefix)" },
                         name = new { type = "string", description = "Human-facing endpoint name" },
-                        kind = new { type = "string", description = "Embedding or Inference" },
-                        provider = new { type = "string", description = "Ollama, OpenAI, OpenAICompatible, Anthropic, Gemini, or VoyageAI" },
+                        kind = new { type = "string", description = McpToolHelpers.EnumNames<ModelEndpointKindEnum>() },
+                        provider = new { type = "string", description = McpToolHelpers.EnumNames<ModelProviderEnum>() },
                         baseUrl = new { type = "string", description = "Base URL of the endpoint" },
                         model = new { type = "string", description = "Model identifier to request" },
                         apiKey = new { type = "string", description = "API key/credential (omit to keep the stored key)" },
