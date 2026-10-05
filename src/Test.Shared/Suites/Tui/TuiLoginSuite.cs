@@ -191,6 +191,54 @@ namespace Test.Shared.Suites.Tui
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "tab_order", "Tab moves through the login card top to bottom and wraps; Shift+Tab reverses", () =>
+            {
+                using (TuiTestHost host = new TuiTestHost(120, 40, TuiFixtures.SignedInServer(1), "http://127.0.0.1:9"))
+                {
+                    host.Start();
+                    LoginView login = host.Tui.Shell.Login;
+                    AssertTrue(ReferenceEquals(login.Scope.Focused, login.Email), "starts on email");
+                    List<string> order = new List<string>();
+                    for (int i = 0; i < 6; i++)
+                    {
+                        host.Press("tab");
+                        order.Add(Name(login, login.Scope.Focused));
+                    }
+
+                    AssertEqual("buttons,language,theme,server,modes,email", String.Join(",", order), "tab order");
+                    host.Press("shift+tab");
+                    AssertEqual("modes", Name(login, login.Scope.Focused), "shift+tab reverses");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "edit_server", "e in the Server picker edits the highlighted server's name and URL", () =>
+            {
+                using (TuiTestHost host = new TuiTestHost(160, 40, TuiFixtures.SignedInServer(1), "http://127.0.0.1:9"))
+                {
+                    host.Start();
+                    LoginView login = host.Tui.Shell.Login;
+                    string before = host.Tui.Context.Session.Profile.Name;
+                    PickerModal<string>? picker = login.Server.Open();
+                    AssertNotNull(picker, "picker");
+                    host.Pump();
+                    TuiCase.Contains(host.Screen(), "e Edit", "footer hint");
+                    picker!.List.SelectValue("__add__");
+                    host.Press("e");
+                    AssertTrue(host.PumpUntil(() => !host.Screen().Contains("Edit server")) && picker.List.Current?.Value == "__add__", "add row is not editable");
+                    picker.List.SelectValue(before);
+                    host.Press("E");
+                    AssertTrue(host.WaitForText("Edit server"), "edit form opened");
+                    host.Press("ctrl+u").Type("Local Lab").Press("tab").Press("ctrl+u").Type("not a url").Press("ctrl+s");
+                    AssertTrue(host.WaitForText("Enter an absolute http or https URL."), "url validation");
+                    host.Press("ctrl+u").Type("http://localhost:19/").Press("ctrl+s");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Session.Profile.Url == "http://localhost:19"), "url saved and applied: " + host.Tui.Context.Session.Profile.Url);
+                    AssertEqual("Local Lab", host.Tui.Context.Session.Profile.Name, "renamed");
+                    AssertEqual("Local Lab", host.Tui.Context.Prefs.Current.ActiveProfile, "active profile follows the rename");
+                    AssertNull(host.Tui.Context.Prefs.FindProfile(before), "old name gone");
+                    AssertEqual("Local Lab", login.Server.Selected?.Value, "picker shows the new name");
+                }
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "localhost_prefill", "A localhost server prefills the seeded admin, the default password, and the local API key; a remote one prefills nothing", () =>
             {
                 string settingsPath = Path.Combine(Armada.Core.Constants.DefaultDataDirectory, "settings.json");
@@ -278,6 +326,19 @@ namespace Test.Shared.Suites.Tui
             }));
 
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI login and session", cases: cases);
+        }
+
+        private static string Name(LoginView login, object? focused)
+        {
+            if (ReferenceEquals(focused, login.Email)) return "email";
+            if (ReferenceEquals(focused, login.Password)) return "password";
+            if (ReferenceEquals(focused, login.ApiKey)) return "apikey";
+            if (ReferenceEquals(focused, login.Tenant)) return "tenant";
+            if (ReferenceEquals(focused, login.Server)) return "server";
+            if (ReferenceEquals(focused, login.Modes)) return "modes";
+            if (ReferenceEquals(focused, login.Language)) return "language";
+            if (ReferenceEquals(focused, login.ThemePicker)) return "theme";
+            return focused == null ? "none" : "buttons";
         }
     }
 }

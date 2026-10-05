@@ -28,7 +28,8 @@ All notable changes to Armada are documented in this file.
 ### Terminal UI: Ask Armada and approvals
 - Ask Armada in the TUI: conversation list, conversation header, streaming transcript with confirm cards (approve with `a`, reject with `r`) and live work cards, a composer with `/` quick actions and inline Dispatch and Fleet action forms, the Ask dock (Ctrl+J) on every screen, and "Ask about this" (Alt+A).
 - Approvals center (Ctrl+A): Ask proposals, mission reviews, deployment approvals, failed landings, and stalled captains with single-key decisions using the dashboard's calls and confirmations, a header count, and actionable toasts.
-- TUI login is prefilled for a localhost Admiral (seeded admin, default password until first sign-in, local API key, settings port) and the Server picker is 50% wider.
+- TUI login is prefilled for a localhost Admiral (seeded admin, default password until first sign-in, local API key, settings port) and the Server picker is 50% wider; `e` in the Server picker edits a server's name and URL.
+- Fixed: TUI login Tab order now follows the layout instead of jumping between the field, the buttons, and the pickers.
 - The default admin password is flagged, not enforced: the server no longer blocks API calls from a session on the default password, the TUI signs in and shows a header warning, and the dashboard still prompts for a change.
 - Fixed: `Armada.Client` serialized raw JSON request values as an object, so quick-action arguments sent from the TUI did not reach the server correctly.
 

@@ -27,11 +27,11 @@ Preferences live in `~/.armada/tui.json`: server profiles (name, URL, last user,
 
 Session tokens and API keys are stored per profile in the operating system's credential store: the macOS Keychain (through `/usr/bin/security`), Windows Credential Manager, or libsecret on Linux (through `secret-tool`). When none of those is available, or a keychain write fails (a locked keychain over SSH, for example), the token goes to `~/.armada/tui-credentials.json`, created with mode 0600. `ARMADA_TUI_CREDENTIAL_STORE` forces a store (`file`, `keychain`, `wincred`, or `secret-tool`) and `ARMADA_TUI_CREDENTIALS` moves the file.
 
-You can switch servers from the login screen's Server picker (which also has "Add server...") or from File, Switch server profile.
+You can switch servers from the login screen's Server picker (which also has "Add server...") or from File, Switch server profile. In the Server picker, `e` (or `E`) edits the highlighted server's name and URL; saving an edit to the server you are on reconnects the login screen to the new URL. While editing is available, `e` edits instead of filtering.
 
 ## Signing in
 
-The login screen mirrors the dashboard. Email Login asks for your email, looks up your tenants, shows a tenant picker when more than one matches, and then asks for the password. API Key Login takes a session token, a credential's bearer token, or the Admiral API key; the TUI tries it as `X-Token`, then as a bearer token, then as `X-Api-Key`, and validates it with `whoami`. `F2` switches between the two modes, and `Ctrl+R` shows or hides a masked password or key. The language and theme pickers work before you sign in, and the screen shows the default credentials (`admin@armada` / `password`) for a fresh install.
+The login screen mirrors the dashboard. Email Login asks for your email, looks up your tenants, shows a tenant picker when more than one matches, and then asks for the password. API Key Login takes a session token, a credential's bearer token, or the Admiral API key; the TUI tries it as `X-Token`, then as a bearer token, then as `X-Api-Key`, and validates it with `whoami`. `F2` switches between the two modes, and `Ctrl+R` shows or hides a masked password or key. `Tab` and `Shift+Tab` move through the card top to bottom (Server, login mode, the current field, the buttons, Language, Theme) and wrap; the current field has focus when the screen opens. The language and theme pickers work before you sign in, and the screen shows the default credentials (`admin@armada` / `password`) for a fresh install.
 
 A stored token is reused on the next start. If the server later answers 401, the TUI returns to the login screen with "Your session expired. Sign in again." File, Sign out forgets the stored token.
 

@@ -25,6 +25,25 @@ namespace Armada.Tui.Modals
         public FilterList<T> List { get; }
 
         /// <summary>
+        /// When set, <c>e</c> or <c>E</c> closes the picker (with no choice) and edits the highlighted option instead
+        /// of filtering.
+        /// </summary>
+        public Action<SelectOption<T>>? Edit
+        {
+            get { return _Edit; }
+            set
+            {
+                _Edit = value;
+                FooterHint = " " + T("Type to filter") + "  Enter " + T("Select") + (_Edit != null ? "  e " + T("Edit") : "") + "  Esc " + T("Cancel") + " ";
+            }
+        }
+
+        /// <summary>
+        /// Which options <see cref="Edit"/> applies to (null: all enabled options).
+        /// </summary>
+        public Func<SelectOption<T>, bool>? CanEdit { get; set; } = null;
+
+        /// <summary>
         /// Width multiplier applied to the measured, minimum, and maximum width (1.0 = default; clamped to 1.0-3.0).
         /// </summary>
         public double WidthScale
@@ -43,6 +62,7 @@ namespace Armada.Tui.Modals
         #region Private-Members
 
         private double _WidthScale = 1.0;
+        private Action<SelectOption<T>>? _Edit = null;
 
         #endregion
 
@@ -73,6 +93,19 @@ namespace Armada.Tui.Modals
         public override bool HandleKey(KeyEvent key)
         {
             if (HandleDismiss(key, null)) return true;
+            if (_Edit != null && key.Code == KeyCode.Character && (key.Rune == 'e' || key.Rune == 'E')
+                && (key.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Alt)) == 0)
+            {
+                SelectOption<T>? target = List.Current;
+                if (target != null && target.Enabled && (CanEdit == null || CanEdit(target)))
+                {
+                    RequestClose(null);
+                    _Edit(target);
+                }
+
+                return true;
+            }
+
             if (key.Code == KeyCode.Enter)
             {
                 SelectOption<T>? current = List.Current;

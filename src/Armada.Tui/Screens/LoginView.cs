@@ -7,6 +7,7 @@ namespace Armada.Tui.Screens
     using Armada.Client;
     using Armada.Client.Models;
     using Armada.Core.Models;
+    using Armada.Tui.Modals;
     using Armada.Tui.Services;
     using Armada.Tui.Text;
     using Armada.Tui.Theming;
@@ -142,6 +143,8 @@ namespace Armada.Tui.Screens
 
             Server.PickerTitle = "Server";
             Server.PickerWidthScale = 1.5;
+            Server.PickerEdit = option => EditServer(option.Value);
+            Server.PickerCanEdit = option => option.Value != "__add__";
             Server.ModalHost = context.Modals;
             Server.ValueChanged += (s, e) => OnServerChosen(e.NewValue);
             Language.PickerTitle = "Language";
@@ -445,10 +448,12 @@ namespace Armada.Tui.Screens
             else if (Step == LoginStepEnum.Email) primary = Email;
             else if (Step == LoginStepEnum.Tenant) primary = Tenant;
             else primary = Password;
+            _Back.Visible = !ApiKeyMode && Step != LoginStepEnum.Email;
+            // Tab order follows the layout top to bottom; the step's input still takes focus first.
+            AddChild(Server);
+            AddChild(Modes);
             AddChild(primary);
             AddChild(_Buttons);
-            AddChild(Modes);
-            AddChild(Server);
             AddChild(Language);
             AddChild(ThemePicker);
             Scope.Wrap = true;
@@ -480,6 +485,54 @@ namespace Armada.Tui.Screens
 
             ServerProfile? chosen = _Context.Prefs.FindProfile(name);
             if (chosen != null && !ReferenceEquals(chosen, _Context.Session.Profile)) SwitchTo(chosen);
+        }
+
+        /// <summary>
+        /// Open the Edit server form for a profile (<c>e</c> in the Server picker): name and URL. Saving updates the
+        /// profile; when it is the active one the login screen switches to the edited URL.
+        /// </summary>
+        /// <param name="name">Profile name.</param>
+        /// <returns>The dialog, or null when the profile does not exist.</returns>
+        public FormDialog? EditServer(string? name)
+        {
+            ServerProfile? profile = _Context.Prefs.FindProfile(name);
+            if (profile == null) return null;
+            FormView form = new FormView();
+            InputField nameField = form.AddField(T("Name"), new InputField());
+            nameField.Value = profile.Name;
+            InputField urlField = form.AddField(T("URL"), new InputField());
+            urlField.Value = profile.Url;
+            urlField.Placeholder = "http://127.0.0.1:7890";
+            FormDialog dialog = new FormDialog("Edit server", form, _Context.Dispatcher, "Save", _Context.Loc, _Context.Theme.Current);
+            dialog.AfterAsyncClose = () => _Context.App.Modals.RemoveClosed();
+            string newName = "";
+            string newUrl = "";
+            dialog.Submit = token =>
+            {
+                newName = nameField.Value.Trim();
+                string rawUrl = urlField.Value.Trim();
+                if (newName.Length == 0) return Task.FromResult<string?>("Enter a name.");
+                if (!Uri.TryCreate(rawUrl, UriKind.Absolute, out Uri? uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                    return Task.FromResult<string?>("Enter an absolute http or https URL.");
+                ServerProfile? clash = _Context.Prefs.FindProfile(newName);
+                if (clash != null && !ReferenceEquals(clash, profile)) return Task.FromResult<string?>("Another server already uses that name.");
+                newUrl = rawUrl.TrimEnd('/');
+                return Task.FromResult<string?>(null);
+            };
+            _Context.Modals.Show(dialog, result =>
+            {
+                if (!(result is bool ok) || !ok) return;
+                bool active = ReferenceEquals(profile, _Context.Session.Profile);
+                bool wasActiveName = String.Equals(_Context.Prefs.Current.ActiveProfile, profile.Name, StringComparison.OrdinalIgnoreCase);
+                bool urlChanged = !String.Equals(profile.Url, newUrl, StringComparison.OrdinalIgnoreCase);
+                profile.Name = newName;
+                profile.Url = newUrl;
+                if (wasActiveName) _Context.Prefs.Current.ActiveProfile = newName;
+                _Context.Prefs.Save();
+                if (active && urlChanged) SwitchTo(profile);
+                else RefreshPickers();
+            });
+            return dialog;
         }
 
         /// <summary>

@@ -48,6 +48,16 @@ namespace Armada.Tui.Widgets
         public string PickerTitle { get; set; } = "Select";
 
         /// <summary>
+        /// When set, <c>e</c>/<c>E</c> in the picker edits the highlighted option (see <see cref="PickerModal{T}.Edit"/>).
+        /// </summary>
+        public Action<SelectOption<T>>? PickerEdit { get; set; } = null;
+
+        /// <summary>
+        /// Which options <see cref="PickerEdit"/> applies to (null: all).
+        /// </summary>
+        public Func<SelectOption<T>, bool>? PickerCanEdit { get; set; } = null;
+
+        /// <summary>
         /// Width multiplier for the picker modal (1.0 = default; clamped to 1.0-3.0).
         /// </summary>
         public double PickerWidthScale
@@ -122,6 +132,8 @@ namespace Armada.Tui.Widgets
             if (ModalHost == null) return null;
             PickerModal<T> picker = new PickerModal<T>(PickerTitle, Options, Localizer, Theme);
             picker.WidthScale = PickerWidthScale;
+            picker.Edit = PickerEdit;
+            picker.CanEdit = PickerCanEdit;
             if (Selected != null) picker.List.SelectValue(Selected.Value);
             ModalHost.Show(picker, result =>
             {
