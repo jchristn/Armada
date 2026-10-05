@@ -28,7 +28,7 @@ A Mission action dispatches one voyage per vessel, with the rendered prompt as t
 
 Concurrency means something different here. A captain voyage can take an hour, so a Mission run's concurrency is a pacing limit: at most that many voyages from the run are active at once. A sixty-vessel dependency sweep at concurrency 4 trickles work out four voyages at a time instead of flooding every captain and starving everything else. The Admiral's health-check loop advances Mission runs on every cycle, updating finished voyages and dispatching the next pending vessels, so progress moves at the heartbeat interval.
 
-The `Persona` field is stored on actions and run snapshots, but Armada does not apply it at dispatch time. Use a pipeline when you need a particular persona sequence.
+The `Persona` field (Mission actions) is applied at dispatch. Without a pipeline, each vessel's mission runs as a single stage with that persona; the vessel and fleet default pipelines are skipped, because naming a persona is an explicit choice. With a single-stage pipeline, the persona replaces the stage's persona and the stage's review settings still apply. A multi-stage pipeline decides its own personas, and `Persona` is ignored. Use a pipeline when you need a particular persona sequence.
 
 ## Templates
 

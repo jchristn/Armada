@@ -50,7 +50,13 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<string> DispatchAsync(Vessel vessel, string title, string prompt, string? pipelineId, CancellationToken token = default)
+        public Task<string> DispatchAsync(Vessel vessel, string title, string prompt, string? pipelineId, CancellationToken token = default)
+        {
+            return DispatchAsync(vessel, title, prompt, pipelineId, null, token);
+        }
+
+        /// <inheritdoc />
+        public async Task<string> DispatchAsync(Vessel vessel, string title, string prompt, string? pipelineId, string? persona, CancellationToken token = default)
         {
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
             if (String.IsNullOrEmpty(title)) throw new ArgumentNullException(nameof(title));
@@ -58,6 +64,9 @@ namespace Armada.Core.Services
             List<MissionDescription> missions = new List<MissionDescription>
             {
                 new MissionDescription(title, prompt ?? String.Empty)
+                {
+                    Persona = String.IsNullOrWhiteSpace(persona) ? null : persona.Trim()
+                }
             };
 
             Voyage voyage = await _Admiral.DispatchVoyageAsync(title, prompt ?? String.Empty, vessel.Id, missions, pipelineId, token).ConfigureAwait(false);

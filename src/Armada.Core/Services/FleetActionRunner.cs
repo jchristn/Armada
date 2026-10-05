@@ -894,7 +894,7 @@ namespace Armada.Core.Services
             string voyageId;
             try
             {
-                voyageId = await _MissionDispatcher.DispatchAsync(vessel, title, prompt, validation.ResolvedPipelineId ?? run.PipelineId, token).ConfigureAwait(false);
+                voyageId = await _MissionDispatcher.DispatchAsync(vessel, title, prompt, validation.ResolvedPipelineId ?? run.PipelineId, run.Persona, token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested)
             {

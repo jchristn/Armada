@@ -217,6 +217,9 @@ namespace Armada.Core.Services
                     mission.RequiresReview = singleStagePolicy.RequiresReview;
                     mission.ReviewDenyAction = singleStagePolicy.ReviewDenyAction;
                 }
+
+                if (!String.IsNullOrWhiteSpace(md.Persona))
+                    mission.Persona = md.Persona!.Trim();
                 mission = await _Database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
                 await PersistMissionPlaybooksAsync(mission, voyage.SelectedPlaybooks, token).ConfigureAwait(false);
                 _Logging.Info(_Header + "created mission " + mission.Id + ": " + md.Title);
@@ -278,8 +281,12 @@ namespace Armada.Core.Services
                 await _Playbooks.ResolveSelectionsAsync(vessel.TenantId, selectedPlaybooks, token).ConfigureAwait(false);
             }
 
-            // Resolve pipeline: explicit > vessel default > fleet default > WorkerOnly
-            Pipeline? pipeline = await ResolvePipelineAsync(pipelineId, vessel, token).ConfigureAwait(false);
+            // Resolve pipeline: explicit > vessel default > fleet default > WorkerOnly. When no pipeline is named and
+            // every mission carries its own persona (a Mission fleet action's Persona), the missions run as single
+            // stages with those personas instead of the vessel or fleet default pipeline.
+            bool personaDispatch = String.IsNullOrWhiteSpace(pipelineId)
+                && missionDescriptions.All(md => !String.IsNullOrWhiteSpace(md.Persona));
+            Pipeline? pipeline = personaDispatch ? null : await ResolvePipelineAsync(pipelineId, vessel, token).ConfigureAwait(false);
 
             // If pipeline is single-stage Worker (or null), use the standard dispatch path
             if (pipeline == null)

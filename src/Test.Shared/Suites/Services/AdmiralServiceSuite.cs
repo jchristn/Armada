@@ -946,6 +946,31 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("fleet_action_persona_dispatch_sets_mission_persona", "A persona dispatch runs one mission with that persona instead of the vessel default pipeline", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    AdmiralService service = CreateAdmiralService(CreateLogging(), testDb.Driver, CreateSettings(), new StubGitService());
+                    Pipeline reviewed = new Pipeline("WorkerThenJudge");
+                    reviewed.Stages.Add(new PipelineStage(1, "Worker"));
+                    reviewed.Stages.Add(new PipelineStage(2, "Judge"));
+                    reviewed = await testDb.Driver.Pipelines.CreateAsync(reviewed);
+                    Vessel vessel = new Vessel("v", "https://github.com/test/repo.git");
+                    vessel.DefaultPipelineId = reviewed.Id;
+                    vessel = await testDb.Driver.Vessels.CreateAsync(vessel);
+
+                    AdmiralFleetActionMissionDispatcher dispatcher = new AdmiralFleetActionMissionDispatcher(testDb.Driver, service);
+                    string voyageId = await dispatcher.DispatchAsync(vessel, "Fleet action: review", "Review the repo", null, "Judge");
+                    List<Mission> missions = await testDb.Driver.Missions.EnumerateByVoyageAsync(voyageId);
+                    AssertEqual(1, missions.Count, "a persona dispatch is a single stage");
+                    AssertEqual("Judge", missions[0].Persona);
+
+                    string plainVoyageId = await dispatcher.DispatchAsync(vessel, "Fleet action: plain", "Do the work", null, null);
+                    List<Mission> plain = await testDb.Driver.Missions.EnumerateByVoyageAsync(plainVoyageId);
+                    AssertEqual(2, plain.Count, "without a persona the vessel default pipeline still applies");
+                }
+            }));
+
             cases.Add(CaseAsync("validate_dispatch_missing_vessel_bare_allowed_is_bare", "ValidateDispatchAsync treats a missing vessel as a bare voyage when allowed", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
