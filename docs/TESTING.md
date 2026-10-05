@@ -25,8 +25,8 @@ npm run test:run
 cd ../..
 ```
 
-For reference, the 1.0.0 full run on `net10.0` is 3,839 tests (3,830 passed, 9 skipped) and the dashboard Vitest
-suite is 337 tests.
+For reference, the 1.0.0 full run on `net10.0` is 3,896 tests (3,887 passed, 9 skipped) and the dashboard Vitest
+suite is 348 tests.
 
 Database-backed tests run against SQLite in-process by default. The PostgreSQL, MySQL, and SQL Server
 drivers are exercised by the same descriptors through `--db-*` (see [Multi-Database Testing](#multi-database-testing)).
