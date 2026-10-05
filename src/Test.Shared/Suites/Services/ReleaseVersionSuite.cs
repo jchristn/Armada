@@ -23,7 +23,7 @@ namespace Test.Shared.Suites.Services
     {
         #region Private-Members
 
-        private static readonly string[] _StaleReleaseVersions = { "0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0", "0.3.0" };
+        private static readonly string[] _StaleReleaseVersions = { "0.9.0", "0.8.0", "0.7.0", "0.6.0", "0.5.0", "0.4.0", "0.3.0" };
 
         #endregion
 
@@ -48,7 +48,7 @@ namespace Test.Shared.Suites.Services
 
                 AssertTrue(versionMatches.Count == 1, "Directory.Build.props should contain exactly one Version element");
                 Match versionMatch = versionMatches[0];
-                AssertEqual("0.9.0", Constants.ProductVersion);
+                AssertEqual("1.0.0", Constants.ProductVersion);
                 AssertEqual(Constants.ProductVersion, versionMatch.Groups[1].Value.Trim());
                 AssertContains("<Version>" + Constants.ProductVersion + "</Version>", helmProjectContents, "Helm package version should align with the shared release version");
                 AssertContains("\"version\": \"" + Constants.ProductVersion + "\"", dashboardPackageContents, "Dashboard package.json should align with the shared release version");
@@ -63,9 +63,9 @@ namespace Test.Shared.Suites.Services
                 AssertContains("AnsiConsole.MarkupLine(\"[dim]Multi-Agent Orchestration System  \" + _VersionLabel + \"[/]\");", programContents, "Helm subtitle should render the shared version label");
                 AssertContains("config.SetApplicationVersion(Constants.ProductVersion);", programContents, "Helm CLI version should come from Constants.ProductVersion");
                 AssertFalse(programContents.Contains("0.3.0"), "Helm entry point should not contain the stale 0.3.0 literal");
-                AssertFalse(programContents.Contains("\"0.9.0\""), "Helm entry point should not contain a hard-coded release version literal");
-                AssertFalse(programContents.Contains("\"v0.9.0\""), "Helm entry point should compose the prefixed version instead of hard-coding it");
-                AssertFalse(programContents.Contains("SetApplicationVersion(\"0.9.0\")"), "Helm CLI version should not be hard-coded");
+                AssertFalse(programContents.Contains("\"1.0.0\""), "Helm entry point should not contain a hard-coded release version literal");
+                AssertFalse(programContents.Contains("\"v1.0.0\""), "Helm entry point should compose the prefixed version instead of hard-coding it");
+                AssertFalse(programContents.Contains("SetApplicationVersion(\"1.0.0\")"), "Helm CLI version should not be hard-coded");
             }));
 
             cases.Add(Case("source_mcp_helpers_use_net10_framework", "Source MCP Helpers Use Net10 Framework", TestTags.Positive, () =>

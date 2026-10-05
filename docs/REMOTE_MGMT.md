@@ -1,6 +1,6 @@
 # Remote Management
 
-**Version:** `0.9.0`
+**Version:** `1.0.0`
 
 This guide describes the current remote-access model for Armada:
 

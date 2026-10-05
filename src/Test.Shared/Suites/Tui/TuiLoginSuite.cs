@@ -264,6 +264,28 @@ namespace Test.Shared.Suites.Tui
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "ascii_logo", "The login screen shows the ASCII logo when the terminal is tall enough, else a one-line title", () =>
+            {
+                using (TuiTestHost host = new TuiTestHost(120, 40, TuiFixtures.SignedInServer(1), "http://127.0.0.1:9"))
+                {
+                    host.Start();
+                    string frame = host.Screen();
+                    TuiCase.Contains(frame, "__ _ _ _ _ __  __ _ __| |__ _", "logo line 2");
+                    TuiCase.Contains(frame, "\\__,_|_| |_|_|_\\__,_\\__,_\\__,_|", "logo line 4");
+                    TuiCase.NotContains(frame, "A R M A D A", "no one-line title when the logo fits");
+                    TuiCase.Contains(frame, "Continue", "card still fits under the logo");
+                }
+
+                using (TuiTestHost host = new TuiTestHost(80, 24, TuiFixtures.SignedInServer(1), "http://127.0.0.1:9"))
+                {
+                    host.Start();
+                    string frame = host.Screen();
+                    TuiCase.Contains(frame, "A R M A D A", "one-line title on a short terminal");
+                    TuiCase.NotContains(frame, "__ _ _ _ _ __", "no logo on a short terminal");
+                    TuiCase.Contains(frame, "Continue", "card fits at 80x24");
+                }
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "localhost_prefill", "A localhost server prefills the seeded admin, the default password, and the local API key; a remote one prefills nothing", () =>
             {
                 string settingsPath = Path.Combine(Armada.Core.Constants.DefaultDataDirectory, "settings.json");

@@ -103,6 +103,17 @@ namespace Armada.Tui.Screens
 
         #region Private-Members
 
+        // Terminal rows needed to show the ASCII logo above the login card; shorter terminals show a one-line title.
+        private const int _LogoMinimumHeight = 32;
+
+        private static readonly string[] _Logo = new string[]
+        {
+            @"                        _      ",
+            @" __ _ _ _ _ __  __ _ __| |__ _ ",
+            @"/ _` | '_| '  \/ _` / _` / _` |",
+            @"\__,_|_| |_|_|_\__,_\__,_\__,_|"
+        };
+
         private readonly TuiContext _Context;
         private readonly ButtonRow _Buttons = new ButtonRow();
         private readonly Button _Primary;
@@ -364,8 +375,23 @@ namespace Armada.Tui.Screens
             SurfaceText.FillRect(surface, new Rect(0, 0, width, height), Theme.Text);
             int cardWidth = Math.Min(64, width - 4);
             int left = Math.Max(0, (width - cardWidth) / 2);
-            int y = Math.Max(0, height / 2 - 11);
-            Center(surface, ref y, "A R M A D A", Theme.Accent, width);
+            bool showLogo = height >= _LogoMinimumHeight;
+            int y = Math.Max(0, height / 2 - 11 - (showLogo ? _Logo.Length - 1 : 0));
+            if (showLogo)
+            {
+                // Draw the logo as one block (left edges aligned) centered on the widest line, so the art keeps its shape.
+                int logoWidth = _Logo.Max(line => line.Length);
+                int logoLeft = Math.Max(0, (width - logoWidth) / 2);
+                foreach (string line in _Logo)
+                {
+                    SurfaceText.Draw(surface, logoLeft, y++, line, Theme.Accent, Math.Max(0, width - logoLeft));
+                }
+            }
+            else
+            {
+                Center(surface, ref y, "A R M A D A", Theme.Accent, width);
+            }
+
             Center(surface, ref y, T("Multi-agent orchestration") + "  v" + Armada.Core.Constants.ProductVersion, Theme.Muted, width);
             y++;
             Label(surface, left, y, T("Server"));

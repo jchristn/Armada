@@ -1,6 +1,6 @@
 # Armada WebSocket API Reference
 
-**Version:** 0.9.0
+**Version:** 1.0.0
 **Default URL:** `ws://localhost:7890/ws`
 **Protocol:** WebSocket (RFC 6455) via Watson7
 **Transport:** JSON text frames

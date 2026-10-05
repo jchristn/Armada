@@ -168,7 +168,7 @@ CLI examples:
 ```bash
 armada backlog list
 armada backlog create --title "Stabilize release rollout" --priority P1 --backlog-state Inbox
-armada backlog update obj_abc123 --kind Feature --target-version 0.9.0
+armada backlog update obj_abc123 --kind Feature --target-version 1.1.0
 armada backlog reorder obj_abc123 --rank 10
 armada backlog show obj_abc123
 ```

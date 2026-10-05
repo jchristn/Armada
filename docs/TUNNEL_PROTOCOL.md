@@ -1,6 +1,6 @@
 # Tunnel Protocol
 
-**Version:** `0.9.0`
+**Version:** `1.0.0`
 
 This document describes the currently shipped tunnel contract between `Armada.Server` and `Armada.Proxy`.
 
@@ -76,7 +76,7 @@ Representative request payload:
 ```json
 {
   "protocolVersion": "2026-04-04",
-  "armadaVersion": "0.9.0",
+  "armadaVersion": "1.0.0",
   "instanceId": "armada-1f2e3d4c5b6a",
   "enrollmentToken": "optional-token",
   "passwordTimestampUtc": "2026-05-16T18:30:00Z",
@@ -105,7 +105,7 @@ Representative successful response:
   "success": true,
   "payload": {
     "protocolVersion": "2026-04-04",
-    "proxyVersion": "0.9.0",
+    "proxyVersion": "1.0.0",
     "features": [
       "remoteControl.handshake",
       "remoteControl.heartbeat",

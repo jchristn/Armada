@@ -1,6 +1,6 @@
 # Tunnel Operations
 
-**Version:** 0.9.0
+**Version:** 1.0.0
 
 This guide covers the shipped remote-control tunnel and proxy MVP surfaces in Armada `v0.9.0`.
 

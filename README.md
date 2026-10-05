@@ -7,7 +7,7 @@
 <p align="center">
   <strong>Reduce context switching across projects. Keep agent work in queryable memory.</strong>
   <br />
-  <em>v0.9.0 alpha -- APIs and schemas may change</em>
+  <em>v1.0.0</em>
 </p>
 
 <p align="center">
