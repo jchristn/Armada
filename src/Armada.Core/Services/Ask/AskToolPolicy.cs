@@ -42,6 +42,9 @@ namespace Armada.Core.Services.Ask
             "token_usage_summary",
             "search_memory",
             "evaluate_autoland",
+            "list_cli_permission_requests",
+            "get_cli_permission_request",
+            "list_cli_permission_rules",
 
             // get_* readers
             "get_backlog_item",
@@ -77,6 +80,23 @@ namespace Armada.Core.Services.Ask
             "list_prompt_templates"
         };
 
+        private static readonly HashSet<string> _GateExempt = new HashSet<string>(StringComparer.Ordinal)
+        {
+            // The CLI's own permission prompt: answered by an approver in Armada, never turned into a proposal.
+            CliPermissionPolicyResolver.PromptToolName
+        };
+
+        private static readonly HashSet<string> _ThreadForbidden = new HashSet<string>(StringComparer.Ordinal)
+        {
+            // A captain must never decide (or pre-approve) its own permission prompts, not even through a proposal the
+            // user approves without reading.
+            "decide_cli_permission_request",
+            "create_cli_permission_rule",
+            "update_cli_permission_rule",
+            "delete_cli_permission_rule",
+            "set_captain_cli_permission_policy"
+        };
+
         #endregion
 
         #region Public-Methods
@@ -90,6 +110,30 @@ namespace Armada.Core.Services.Ask
         {
             string normalized = NormalizeToolName(toolName);
             return normalized.Length > 0 && _ReadOnly.Contains(normalized);
+        }
+
+        /// <summary>
+        /// Whether a thread-scoped call of the tool runs without becoming a proposal and without the read-only check
+        /// (the CLI permission prompt tool, which is answered by an approver).
+        /// </summary>
+        /// <param name="toolName">Tool name.</param>
+        /// <returns>True when exempt from the Ask gate.</returns>
+        public static bool IsGateExempt(string? toolName)
+        {
+            string normalized = NormalizeToolName(toolName);
+            return normalized.Length > 0 && _GateExempt.Contains(normalized);
+        }
+
+        /// <summary>
+        /// Whether a thread-scoped call of the tool is refused outright (never proposed): CLI permission decisions,
+        /// rules, and policies.
+        /// </summary>
+        /// <param name="toolName">Tool name.</param>
+        /// <returns>True when refused in Ask threads.</returns>
+        public static bool IsThreadForbidden(string? toolName)
+        {
+            string normalized = NormalizeToolName(toolName);
+            return normalized.Length > 0 && _ThreadForbidden.Contains(normalized);
         }
 
         /// <summary>

@@ -215,6 +215,16 @@ namespace Armada.Core
         public static readonly string AskThreadIdPrefix = "ath_";
 
         /// <summary>
+        /// ID prefix for CLI permission requests (a CLI captain's permission prompt routed to Armada).
+        /// </summary>
+        public static readonly string CliPermissionRequestIdPrefix = "cpr_";
+
+        /// <summary>
+        /// ID prefix for CLI permission rules.
+        /// </summary>
+        public static readonly string CliPermissionRuleIdPrefix = "cpl_";
+
+        /// <summary>
         /// ID prefix for Ask Armada thread messages.
         /// </summary>
         public static readonly string AskMessageIdPrefix = "amg_";

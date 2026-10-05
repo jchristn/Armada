@@ -32,6 +32,9 @@ namespace Armada.Core.Models
         /// <summary>An Ask Armada action proposal is waiting for approval.</summary>
         public const string AskProposal = "ask_proposal";
 
+        /// <summary>A CLI captain's permission prompt (for example a shell command) is waiting for an approver.</summary>
+        public const string CliPermission = "cli_permission";
+
         #endregion
     }
 }

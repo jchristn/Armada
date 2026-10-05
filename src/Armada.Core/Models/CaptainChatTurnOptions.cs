@@ -51,6 +51,24 @@ namespace Armada.Core.Models
         public string? McpSessionToken { get; set; } = null;
 
         /// <summary>
+        /// CLI tool permission policy the turn runs with, or null for the captain's legacy behavior. With
+        /// ApproveInArmada and a session token, a Claude Code captain sends its permission prompts to Armada's
+        /// cli_permission_prompt tool. Bypass and Refuse are applied through the launched captain's auto-approve option.
+        /// </summary>
+        public Armada.Core.Enums.CliPermissionPolicyEnum? CliPermissionPolicy { get; set; } = null;
+
+        /// <summary>
+        /// Seconds a permission prompt may wait for a decision (Permissions.PromptTimeoutSeconds), or null.
+        /// </summary>
+        public int? PermissionPromptTimeoutSeconds { get; set; } = null;
+
+        /// <summary>
+        /// Answers an in-process permission prompt (an API-endpoint captain's run_process call under ApproveInArmada):
+        /// (tool name, arguments JSON, cancellation) to the outcome; null refuses such calls.
+        /// </summary>
+        public Func<string, string, System.Threading.CancellationToken, System.Threading.Tasks.Task<CliPermissionPromptOutcome>>? PermissionPrompt { get; set; } = null;
+
+        /// <summary>
         /// Maximum turn duration in milliseconds. Default 300000, minimum 5000, maximum 7200000.
         /// </summary>
         public int TimeoutMs

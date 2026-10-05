@@ -1898,7 +1898,55 @@ namespace Armada.Core.Database.Sqlite.Queries
 
                 new SchemaMigration(77, "Add failure_kind and wait_for_voyage_workers to missions: a persisted failure classification set where the failure happens, and a structured flag that defers a worker until the other workers in its voyage settle",
                     @"ALTER TABLE missions ADD COLUMN failure_kind TEXT NULL;",
-                    @"ALTER TABLE missions ADD COLUMN wait_for_voyage_workers INTEGER NOT NULL DEFAULT 0;")
+                    @"ALTER TABLE missions ADD COLUMN wait_for_voyage_workers INTEGER NOT NULL DEFAULT 0;"),
+
+                new SchemaMigration(78, "Add CLI tool permissions: cli_permission_requests and cli_permission_rules tables, cli_permission_policy on captains and ask_threads, and permission_denied on ask_message_tool_calls",
+                    @"CREATE TABLE IF NOT EXISTS cli_permission_requests (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        tenant_id TEXT,
+                        user_id TEXT,
+                        captain_id TEXT,
+                        mission_id TEXT,
+                        voyage_id TEXT,
+                        vessel_id TEXT,
+                        thread_id TEXT,
+                        message_id TEXT,
+                        runtime TEXT NOT NULL,
+                        tool_name TEXT NOT NULL,
+                        input_text TEXT NOT NULL,
+                        summary_text TEXT NOT NULL,
+                        suggested_rule TEXT,
+                        status TEXT NOT NULL,
+                        decision_source TEXT,
+                        rule_id TEXT,
+                        decided_by_user_id TEXT,
+                        decision_message TEXT,
+                        expires_utc TEXT NOT NULL,
+                        decided_utc TEXT,
+                        created_utc TEXT NOT NULL,
+                        last_update_utc TEXT NOT NULL
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS cli_permission_rules (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        tenant_id TEXT,
+                        scope TEXT NOT NULL,
+                        vessel_id TEXT,
+                        captain_id TEXT,
+                        pattern TEXT NOT NULL,
+                        action TEXT NOT NULL,
+                        description TEXT,
+                        created_by_user_id TEXT,
+                        created_utc TEXT NOT NULL,
+                        last_update_utc TEXT NOT NULL
+                    );",
+                    @"CREATE INDEX IF NOT EXISTS idx_cli_permission_requests_status_created ON cli_permission_requests(status, created_utc);",
+                    @"CREATE INDEX IF NOT EXISTS idx_cli_permission_requests_tenant_status ON cli_permission_requests(tenant_id, status);",
+                    @"CREATE INDEX IF NOT EXISTS idx_cli_permission_requests_thread ON cli_permission_requests(thread_id);",
+                    @"CREATE INDEX IF NOT EXISTS idx_cli_permission_requests_mission ON cli_permission_requests(mission_id);",
+                    @"CREATE INDEX IF NOT EXISTS idx_cli_permission_rules_tenant_scope ON cli_permission_rules(tenant_id, scope);",
+                    @"ALTER TABLE captains ADD COLUMN cli_permission_policy TEXT NULL;",
+                    @"ALTER TABLE ask_threads ADD COLUMN cli_permission_policy TEXT NULL;",
+                    @"ALTER TABLE ask_message_tool_calls ADD COLUMN permission_denied INTEGER NULL;")
 
             };
         }

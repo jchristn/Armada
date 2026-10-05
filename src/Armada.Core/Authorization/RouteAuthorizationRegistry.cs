@@ -49,6 +49,17 @@ namespace Armada.Core.Authorization
             Add("POST", "/api/v1/ask/threads/{id}/proposals/{pid}/reject", "AskThread", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/ask/threads/{id}/work/{workId}", "AskThread", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/ask/quick-actions", "AskThread", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("PUT", "/api/v1/ask/threads/{id}/cli-permission-policy", "AskThread", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+
+            // CLI tool permissions (decisions and visibility are checked per request by CliPermissionAccess)
+            Add("GET", "/api/v1/cli-permissions/requests", "CliPermission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/cli-permissions/requests/{id}", "CliPermission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/cli-permissions/requests/{id}/decide", "CliPermission", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/cli-permissions/rules", "CliPermission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/cli-permissions/rules", "CliPermission", ResourceOperationEnum.Create, PermissionLevel.TenantAdmin);
+            Add("GET", "/api/v1/cli-permissions/rules/{id}", "CliPermission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("PUT", "/api/v1/cli-permissions/rules/{id}", "CliPermission", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
+            Add("DELETE", "/api/v1/cli-permissions/rules/{id}", "CliPermission", ResourceOperationEnum.Delete, PermissionLevel.TenantAdmin);
 
             // AuthRoutes
             Add("POST", "/api/v1/authenticate", "Session", ResourceOperationEnum.Execute, PermissionLevel.NoAuthRequired);
@@ -67,6 +78,7 @@ namespace Armada.Core.Authorization
             Add("GET", "/api/v1/captains/{id}", "Captain", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/captains/{id}/tools", "Captain", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("PUT", "/api/v1/captains/{id}", "Captain", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
+            Add("PUT", "/api/v1/captains/{id}/cli-permission-policy", "Captain", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
             Add("POST", "/api/v1/captains/{id}/unquarantine", "Captain", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
             Add("POST", "/api/v1/captains/{id}/stop", "Captain", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
             Add("POST", "/api/v1/captains/stop-all", "Captain", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);

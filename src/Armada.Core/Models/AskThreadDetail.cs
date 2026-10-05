@@ -36,6 +36,15 @@ namespace Armada.Core.Models
             set => _PendingProposals = value ?? new List<AskActionProposal>();
         }
 
+        /// <summary>
+        /// Pending CLI permission requests of the thread's captain, newest first.
+        /// </summary>
+        public List<CliPermissionRequest> PendingCliPermissions
+        {
+            get => _PendingCliPermissions;
+            set => _PendingCliPermissions = value ?? new List<CliPermissionRequest>();
+        }
+
         #endregion
 
         #region Private-Members
@@ -43,6 +52,7 @@ namespace Armada.Core.Models
         private AskThread _Thread = new AskThread();
         private List<AskTrackedWork> _TrackedWork = new List<AskTrackedWork>();
         private List<AskActionProposal> _PendingProposals = new List<AskActionProposal>();
+        private List<CliPermissionRequest> _PendingCliPermissions = new List<CliPermissionRequest>();
 
         #endregion
 

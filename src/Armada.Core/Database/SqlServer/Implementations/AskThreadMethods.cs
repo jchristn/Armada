@@ -8,6 +8,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
     using Microsoft.Data.SqlClient;
     using Armada.Core.Database;
     using Armada.Core.Database.Interfaces;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Settings;
     using SyslogLogging;
@@ -20,9 +21,9 @@ namespace Armada.Core.Database.SqlServer.Implementations
         #region Private-Members
 
         private static readonly string _Insert = @"INSERT INTO ask_threads
-            (id, tenant_id, user_id, title, captain_id, auto_approve, summary_text, summary_utc, pinned, archived, last_message_utc, message_count, unread_count, created_utc, last_update_utc)
+            (id, tenant_id, user_id, title, captain_id, auto_approve, cli_permission_policy, summary_text, summary_utc, pinned, archived, last_message_utc, message_count, unread_count, created_utc, last_update_utc)
             VALUES
-            (@id, @tenant_id, @user_id, @title, @captain_id, @auto_approve, @summary_text, @summary_utc, @pinned, @archived, @last_message_utc, @message_count, @unread_count, @created_utc, @last_update_utc);";
+            (@id, @tenant_id, @user_id, @title, @captain_id, @auto_approve, @cli_permission_policy, @summary_text, @summary_utc, @pinned, @archived, @last_message_utc, @message_count, @unread_count, @created_utc, @last_update_utc);";
 
         private static readonly string _Update = @"UPDATE ask_threads SET
             title = @title, captain_id = @captain_id, auto_approve = @auto_approve, summary_text = @summary_text, summary_utc = @summary_utc,
@@ -114,6 +115,28 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     if (!includeArchived) SqlServerCommandHelper.Add(cmd, "@archived", false);
                     SqlServerCommandHelper.AddDate(cmd, "@cutoff", inactiveBeforeUtc);
                 }, FromReader, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> UpdateCliPermissionPolicyAsync(string tenantId, string id, CliPermissionPolicyEnum? policy, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+
+            int updated = 0;
+            await SqlServerCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqlConnection conn, SqlTransaction tx) =>
+            {
+                updated = await SqlServerCommandHelper.ExecuteAsync(conn, tx,
+                    "UPDATE ask_threads SET cli_permission_policy = @policy, last_update_utc = @now WHERE tenant_id = @tenant_id AND id = @id;",
+                    cmd =>
+                    {
+                        SqlServerCommandHelper.Add(cmd, "@policy", policy?.ToString());
+                        SqlServerCommandHelper.AddDate(cmd, "@now", DateTime.UtcNow);
+                        SqlServerCommandHelper.Add(cmd, "@tenant_id", tenantId);
+                        SqlServerCommandHelper.Add(cmd, "@id", id);
+                    }, token).ConfigureAwait(false);
+            }, token).ConfigureAwait(false);
+            return updated > 0;
         }
 
         /// <inheritdoc />
@@ -253,6 +276,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
             SqlServerCommandHelper.Add(cmd, "@title", thread.Title);
             SqlServerCommandHelper.Add(cmd, "@captain_id", thread.CaptainId);
             SqlServerCommandHelper.Add(cmd, "@auto_approve", thread.AutoApprove);
+            SqlServerCommandHelper.Add(cmd, "@cli_permission_policy", thread.CliPermissionPolicy?.ToString());
             SqlServerCommandHelper.Add(cmd, "@summary_text", thread.SummaryText);
             SqlServerCommandHelper.AddDate(cmd, "@summary_utc", thread.SummaryUtc);
             SqlServerCommandHelper.Add(cmd, "@pinned", thread.Pinned);
@@ -273,6 +297,8 @@ namespace Armada.Core.Database.SqlServer.Implementations
             thread.Title = reader["title"].ToString()!;
             thread.CaptainId = SqlServerCommandHelper.ReadString(reader["captain_id"]);
             thread.AutoApprove = SqlServerCommandHelper.ReadBool(reader["auto_approve"], false);
+            string? cliPolicy = SqlServerCommandHelper.ReadString(reader["cli_permission_policy"]);
+            thread.CliPermissionPolicy = cliPolicy != null && Enum.TryParse<CliPermissionPolicyEnum>(cliPolicy, true, out CliPermissionPolicyEnum parsedPolicy) ? parsedPolicy : (CliPermissionPolicyEnum?)null;
             thread.SummaryText = SqlServerCommandHelper.ReadString(reader["summary_text"]);
             thread.SummaryUtc = SqlServerCommandHelper.ReadNullableDate(reader["summary_utc"]);
             thread.Pinned = SqlServerCommandHelper.ReadBool(reader["pinned"], false);

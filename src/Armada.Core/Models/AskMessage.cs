@@ -126,6 +126,12 @@ namespace Armada.Core.Models
         /// </summary>
         public AskTrackedWork? TrackedWork { get; set; } = null;
 
+        /// <summary>
+        /// The linked CLI permission request of a CliPermission card (populated on read; the request stores the message
+        /// id).
+        /// </summary>
+        public CliPermissionRequest? CliPermissionRequest { get; set; } = null;
+
         #endregion
 
         #region Private-Members

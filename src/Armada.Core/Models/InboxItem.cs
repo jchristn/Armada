@@ -59,5 +59,16 @@ namespace Armada.Core.Models
         /// A relative dashboard path that takes the operator to the item.
         /// </summary>
         public string Href { get; set; } = string.Empty;
+
+        /// <summary>
+        /// For CLI permission items: the request (tool, input summary, captain, vessel, mission or thread, expiry, and
+        /// whether the caller may decide it), or null for other kinds.
+        /// </summary>
+        public CliPermissionRequest? CliPermission { get; set; } = null;
+
+        /// <summary>
+        /// When the item stops waiting (for CLI permission items, the request expiry), or null.
+        /// </summary>
+        public DateTime? ExpiresUtc { get; set; } = null;
     }
 }

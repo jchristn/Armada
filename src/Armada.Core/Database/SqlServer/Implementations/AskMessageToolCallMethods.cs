@@ -20,9 +20,9 @@ namespace Armada.Core.Database.SqlServer.Implementations
         #region Private-Members
 
         private static readonly string _Insert = @"INSERT INTO ask_message_tool_calls
-            (id, tenant_id, user_id, message_id, thread_id, call_id, tool_name, arguments_text, result_text, ok, elapsed_ms, created_utc, last_update_utc)
+            (id, tenant_id, user_id, message_id, thread_id, call_id, tool_name, arguments_text, result_text, ok, elapsed_ms, permission_denied, created_utc, last_update_utc)
             VALUES
-            (@id, @tenant_id, @user_id, @message_id, @thread_id, @call_id, @tool_name, @arguments_text, @result_text, @ok, @elapsed_ms, @created_utc, @last_update_utc);";
+            (@id, @tenant_id, @user_id, @message_id, @thread_id, @call_id, @tool_name, @arguments_text, @result_text, @ok, @elapsed_ms, @permission_denied, @created_utc, @last_update_utc);";
 
         private readonly string _ConnectionString;
         private readonly SemaphoreSlim? _WriteLock;
@@ -123,6 +123,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
             SqlServerCommandHelper.Add(cmd, "@result_text", call.ResultText);
             SqlServerCommandHelper.Add(cmd, "@ok", call.Ok);
             SqlServerCommandHelper.Add(cmd, "@elapsed_ms", call.ElapsedMs);
+            SqlServerCommandHelper.Add(cmd, "@permission_denied", call.PermissionDenied);
             SqlServerCommandHelper.AddDate(cmd, "@created_utc", call.CreatedUtc);
             SqlServerCommandHelper.AddDate(cmd, "@last_update_utc", call.LastUpdateUtc);
         }
@@ -141,6 +142,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
             call.ResultText = SqlServerCommandHelper.ReadString(reader["result_text"]);
             call.Ok = SqlServerCommandHelper.ReadNullableBool(reader["ok"]);
             call.ElapsedMs = SqlServerCommandHelper.ReadNullableLong(reader["elapsed_ms"]);
+            call.PermissionDenied = SqlServerCommandHelper.ReadNullableBool(reader["permission_denied"]);
             call.CreatedUtc = SqlServerCommandHelper.ReadDate(reader["created_utc"]);
             call.LastUpdateUtc = SqlServerCommandHelper.ReadDate(reader["last_update_utc"]);
             return call;

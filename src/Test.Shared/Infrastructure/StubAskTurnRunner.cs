@@ -66,6 +66,7 @@ namespace Test.Shared.Infrastructure
                 copy.ArgumentsText = call.ArgumentsText;
                 copy.ResultText = call.ResultText;
                 copy.Ok = call.Ok;
+                copy.PermissionDenied = call.PermissionDenied;
                 result.ToolCalls.Add(copy);
             }
 

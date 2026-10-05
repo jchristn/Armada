@@ -225,6 +225,16 @@ namespace Armada.Core.Database
         public IAskTrackedWorkMethods AskTrackedWork { get; protected set; } = null!;
 
         /// <summary>
+        /// CLI permission request methods.
+        /// </summary>
+        public ICliPermissionRequestMethods CliPermissionRequests { get; protected set; } = null!;
+
+        /// <summary>
+        /// CLI permission rule methods.
+        /// </summary>
+        public ICliPermissionRuleMethods CliPermissionRules { get; protected set; } = null!;
+
+        /// <summary>
         /// Fleet action definition operations.
         /// </summary>
         public IFleetActionMethods FleetActions { get; protected set; } = null!;

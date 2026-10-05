@@ -105,6 +105,12 @@ namespace Armada.Core.Protocol
         public string? Name { get; set; } = null;
 
         /// <summary>
+        /// Tool calls the CLI refused for lack of permission, on a result event (permission_denials), or null.
+        /// </summary>
+        [JsonPropertyName("permission_denials")]
+        public List<ClaudePermissionDenial>? PermissionDenials { get; set; } = null;
+
+        /// <summary>
         /// Model of a system init event, or null.
         /// </summary>
         [JsonPropertyName("model")]

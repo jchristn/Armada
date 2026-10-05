@@ -29,6 +29,16 @@ namespace Armada.Core.Database.Interfaces
         Task<Captain> UpdateAsync(Captain captain, CancellationToken token = default);
 
         /// <summary>
+        /// Set or clear a captain's CLI tool permission policy. <see cref="UpdateAsync"/> never writes this column, so
+        /// ordinary captain updates (state, heartbeats, edits) cannot change it.
+        /// </summary>
+        /// <param name="id">Captain identifier.</param>
+        /// <param name="policy">Policy, or null to inherit.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when a row was updated.</returns>
+        Task<bool> UpdateCliPermissionPolicyAsync(string id, CliPermissionPolicyEnum? policy, CancellationToken token = default);
+
+        /// <summary>
         /// Delete a captain by identifier.
         /// </summary>
         Task DeleteAsync(string id, CancellationToken token = default);

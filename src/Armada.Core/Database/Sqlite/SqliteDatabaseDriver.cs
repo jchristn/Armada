@@ -119,6 +119,8 @@ namespace Armada.Core.Database.Sqlite
             AskMessageToolCalls = new AskMessageToolCallMethods(this, _Settings, _Logging);
             AskActionProposals = new AskActionProposalMethods(this, _Settings, _Logging);
             AskTrackedWork = new AskTrackedWorkMethods(this, _Settings, _Logging);
+            CliPermissionRequests = new CliPermissionRequestMethods(this, _Settings, _Logging);
+            CliPermissionRules = new CliPermissionRuleMethods(this, _Settings, _Logging);
             FleetActions = new FleetActionMethods(this, _Settings, _Logging);
             FleetActionRuns = new FleetActionRunMethods(this, _Settings, _Logging);
             FleetActionRunTargets = new FleetActionRunTargetMethods(this, _Settings, _Logging);
@@ -183,6 +185,8 @@ namespace Armada.Core.Database.Sqlite
             AskMessageToolCalls = new AskMessageToolCallMethods(this, _Settings, _Logging);
             AskActionProposals = new AskActionProposalMethods(this, _Settings, _Logging);
             AskTrackedWork = new AskTrackedWorkMethods(this, _Settings, _Logging);
+            CliPermissionRequests = new CliPermissionRequestMethods(this, _Settings, _Logging);
+            CliPermissionRules = new CliPermissionRuleMethods(this, _Settings, _Logging);
             FleetActions = new FleetActionMethods(this, _Settings, _Logging);
             FleetActionRuns = new FleetActionRunMethods(this, _Settings, _Logging);
             FleetActionRunTargets = new FleetActionRunTargetMethods(this, _Settings, _Logging);
@@ -661,6 +665,12 @@ namespace Armada.Core.Database.Sqlite
             }
             catch { }
             try { captain.RuntimeOptionsJson = NullableString(reader["runtime_options_json"]); } catch { }
+            try
+            {
+                string? cliPolicy = NullableString(reader["cli_permission_policy"]);
+                captain.CliPermissionPolicy = !String.IsNullOrEmpty(cliPolicy) && Enum.TryParse<CliPermissionPolicyEnum>(cliPolicy, out CliPermissionPolicyEnum parsedPolicy) ? parsedPolicy : (CliPermissionPolicyEnum?)null;
+            }
+            catch { captain.CliPermissionPolicy = null; }
             return captain;
         }
 

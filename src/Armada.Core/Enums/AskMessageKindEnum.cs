@@ -43,6 +43,12 @@ namespace Armada.Core.Enums
         /// A failed turn or action.
         /// </summary>
         [EnumMember(Value = "Error")]
-        Error
+        Error,
+
+        /// <summary>
+        /// A CLI permission prompt of the thread's captain waiting for (or decided by) an approver (permission card).
+        /// </summary>
+        [EnumMember(Value = "CliPermission")]
+        CliPermission
     }
 }
