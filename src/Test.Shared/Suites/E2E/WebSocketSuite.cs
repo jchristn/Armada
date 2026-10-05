@@ -405,6 +405,18 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual(before.UserId, after.UserId);
             }));
 
+            cases.Add(CaseAsync("create_fleet_undeserializable_data_returns_invalid_argument", "CreateFleet_UndeserializableData_ReturnsInvalidArgument", TestTags.Negative, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                int restPort = fx.RestPort;
+
+                // A string where the Fleet object is expected cannot be deserialized: that is bad input, not a server fault.
+                JsonElement resp = await WsCommandAsync(restPort, "create_fleet", new { data = "not-a-fleet" }).ConfigureAwait(false);
+                E2eWebSocketFrame frame = E2eWebSocketFrame.Parse(resp.GetRawText())!;
+                AssertEqual("command.error", frame.Type);
+                AssertEqual(WebSocketCommandErrorCodeEnum.InvalidArgument, frame.Code);
+            }));
+
             cases.Add(CaseAsync("delete_fleet_existing_fleet_returns_deleted", "DeleteFleet_ExistingFleet_ReturnsDeleted", TestTags.Positive, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);

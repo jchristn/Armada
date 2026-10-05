@@ -2709,9 +2709,9 @@ it, never on the English `error` text (which is not stable).
 ```
 
 If a command throws (for example a `data` object that cannot be deserialized into the target model), `action` is null
-and `code` comes from the exception type: `NotFound` for a missing key, `InvalidArgument` for an invalid argument,
-`Forbidden`, `Unavailable` for an unsupported operation (such as backup on a non-SQLite database), `Conflict` for an
-invalid operation, and `InternalError` otherwise (a JSON deserialization error currently maps to `InternalError`):
+and `code` comes from the exception type: `NotFound` for a missing key, `InvalidArgument` for an invalid argument or a
+`data` object that cannot be deserialized, `Forbidden`, `Unavailable` for an unsupported operation (such as backup on a
+non-SQLite database), `Conflict` for an invalid operation, and `InternalError` otherwise:
 
 ```json
 {
