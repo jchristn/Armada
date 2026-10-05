@@ -585,6 +585,26 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     conditions.Add("created_utc < @created_before");
                     parameters.Add(new SqliteParameter("@created_before", SqliteDatabaseDriver.ToIso8601(query.CreatedBefore.Value)));
                 }
+                if (!string.IsNullOrEmpty(query.Status))
+                {
+                    conditions.Add("status = @status");
+                    parameters.Add(new SqliteParameter("@status", query.Status));
+                }
+                if (!string.IsNullOrEmpty(query.VoyageId))
+                {
+                    conditions.Add("voyage_id = @voyage_id");
+                    parameters.Add(new SqliteParameter("@voyage_id", query.VoyageId));
+                }
+                if (!string.IsNullOrEmpty(query.VesselId))
+                {
+                    conditions.Add("vessel_id = @vessel_id");
+                    parameters.Add(new SqliteParameter("@vessel_id", query.VesselId));
+                }
+                if (!string.IsNullOrEmpty(query.CaptainId))
+                {
+                    conditions.Add("captain_id = @captain_id");
+                    parameters.Add(new SqliteParameter("@captain_id", query.CaptainId));
+                }
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
                 long totalCount = 0;
@@ -812,6 +832,26 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 {
                     conditions.Add("created_utc < @created_before");
                     parameters.Add(new SqliteParameter("@created_before", SqliteDatabaseDriver.ToIso8601(query.CreatedBefore.Value)));
+                }
+                if (!string.IsNullOrEmpty(query.Status))
+                {
+                    conditions.Add("status = @status");
+                    parameters.Add(new SqliteParameter("@status", query.Status));
+                }
+                if (!string.IsNullOrEmpty(query.VoyageId))
+                {
+                    conditions.Add("voyage_id = @voyage_id");
+                    parameters.Add(new SqliteParameter("@voyage_id", query.VoyageId));
+                }
+                if (!string.IsNullOrEmpty(query.VesselId))
+                {
+                    conditions.Add("vessel_id = @vessel_id");
+                    parameters.Add(new SqliteParameter("@vessel_id", query.VesselId));
+                }
+                if (!string.IsNullOrEmpty(query.CaptainId))
+                {
+                    conditions.Add("captain_id = @captain_id");
+                    parameters.Add(new SqliteParameter("@captain_id", query.CaptainId));
                 }
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";

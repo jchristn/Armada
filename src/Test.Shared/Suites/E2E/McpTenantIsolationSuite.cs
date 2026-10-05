@@ -69,6 +69,15 @@ namespace Test.Shared.Suites.E2E
             "discover_vessels"
         };
 
+        // Every entity type the enumerate tool accepts (fleet_action_run_target needs a run id and is checked by id).
+        private static readonly string[] _EnumerateEntityTypes = new[]
+        {
+            "objectives", "jobs", "model_endpoints", "harbors", "vessel_health", "fleets", "vessels", "captains", "missions",
+            "voyages", "docks", "signals", "events", "releases", "deployments", "incidents", "runbooks", "runbook_executions",
+            "merge_queue", "personas", "memories", "prompt_templates", "pipelines", "playbooks", "workflow_profiles",
+            "project_profiles", "skills", "check_runs", "vessel_import_batch", "fleet_action", "fleet_action_run"
+        };
+
         private SecurityTestServer? _Server;
         private E2ETenantUser? _TenantA;
         private E2ETenantUser? _TenantB;
@@ -191,6 +200,120 @@ namespace Test.Shared.Suites.E2E
                 AssertTrue(unmappedTools.Count == 0, "by-id tools with id arguments this suite cannot map (seed them or list them in _UnseededIdTools):\n" + String.Join("\n", unmappedTools));
                 AssertTrue(checkedTools >= 60, "expected at least 60 by-id tools to be exercised, got " + checkedTools);
                 AssertTrue(failures.Count == 0, "cross-tenant MCP failures:\n" + String.Join("\n", failures));
+            }));
+
+            cases.Add(CaseAsync("enumerate_every_entity_type_is_tenant_scoped", "MCP enumerate never returns tenant A's records to tenant B, on the summary and the include paths", TestTags.Negative, async () =>
+            {
+                RequireSetup();
+                List<string> failures = new List<string>();
+                using (McpToolClient client = CreateClient(_TenantB!))
+                {
+                    await client.InitializeAsync().ConfigureAwait(false);
+                    foreach (string entityType in _EnumerateEntityTypes)
+                    {
+                        foreach (bool include in new[] { false, true })
+                        {
+                            string args = JsonHelper.Serialize(new
+                            {
+                                entityType = entityType,
+                                pageSize = 1000,
+                                includeDescription = include,
+                                includeContext = include,
+                                includeTestOutput = include,
+                                includePayload = include,
+                                includeMessage = include
+                            });
+                            Armada.Runtimes.Mcp.McpToolCallResult result = await client.CallToolResultAsync("enumerate", args).ConfigureAwait(false);
+                            string label = entityType + (include ? " (include)" : " (summary)");
+                            if (result.Text.IndexOf(_Marker, StringComparison.Ordinal) >= 0)
+                                failures.Add(label + " LEAKED tenant A data: " + Truncate(result.Text));
+                            foreach (KeyValuePair<string, string> seeded in _Ids)
+                            {
+                                if (result.Text.IndexOf(seeded.Value, StringComparison.Ordinal) >= 0)
+                                    failures.Add(label + " returned tenant A's " + seeded.Key + " " + seeded.Value);
+                            }
+                        }
+                    }
+                }
+
+                AssertTrue(failures.Count == 0, "cross-tenant enumerate failures:\n" + String.Join("\n", failures));
+            }));
+
+            cases.Add(CaseAsync("enumerate_filters_apply_in_tenant_scope", "MCP enumerate applies the voyage, vessel, status, captain and fleet filters for a tenant-scoped caller", TestTags.Positive, async () =>
+            {
+                RequireSetup();
+                // A second mission, vessel, voyage, captain, dock, signal and merge entry in tenant A that every filter below
+                // must exclude; without the filters the tenant-scoped page would hold both.
+                using (DatabaseDriver db = await OpenDatabaseAsync().ConfigureAwait(false))
+                {
+                    string tenant = _TenantA!.TenantId;
+                    string user = _TenantA.UserId;
+                    Fleet otherFleet = new Fleet("iso-other-fleet");
+                    otherFleet.TenantId = tenant;
+                    otherFleet.UserId = user;
+                    otherFleet = await db.Fleets.CreateAsync(otherFleet).ConfigureAwait(false);
+                    Vessel otherVessel = new Vessel("iso-other-vessel", "https://example.invalid/iso-other.git");
+                    otherVessel.TenantId = tenant;
+                    otherVessel.UserId = user;
+                    otherVessel.FleetId = otherFleet.Id;
+                    otherVessel = await db.Vessels.CreateAsync(otherVessel).ConfigureAwait(false);
+                    Captain otherCaptain = new Captain("iso-other-captain");
+                    otherCaptain.TenantId = tenant;
+                    otherCaptain.UserId = user;
+                    otherCaptain.State = CaptainStateEnum.Idle;
+                    otherCaptain = await db.Captains.CreateAsync(otherCaptain).ConfigureAwait(false);
+                    Voyage otherVoyage = new Voyage("iso-other-voyage", "other");
+                    otherVoyage.TenantId = tenant;
+                    otherVoyage.UserId = user;
+                    otherVoyage.Status = VoyageStatusEnum.Complete;
+                    otherVoyage = await db.Voyages.CreateAsync(otherVoyage).ConfigureAwait(false);
+                    Mission otherMission = new Mission("iso-other-mission", "other");
+                    otherMission.TenantId = tenant;
+                    otherMission.UserId = user;
+                    otherMission.VesselId = otherVessel.Id;
+                    otherMission.VoyageId = otherVoyage.Id;
+                    otherMission.CaptainId = otherCaptain.Id;
+                    otherMission.Status = MissionStatusEnum.Complete;
+                    await db.Missions.CreateAsync(otherMission).ConfigureAwait(false);
+                    Dock otherDock = new Dock(otherVessel.Id);
+                    otherDock.TenantId = tenant;
+                    otherDock.UserId = user;
+                    otherDock.BranchName = "iso-other-branch";
+                    await db.Docks.CreateAsync(otherDock).ConfigureAwait(false);
+                    Signal otherSignal = new Signal(SignalTypeEnum.Mail, "other");
+                    otherSignal.TenantId = tenant;
+                    otherSignal.UserId = user;
+                    otherSignal.ToCaptainId = otherCaptain.Id;
+                    await db.Signals.CreateAsync(otherSignal).ConfigureAwait(false);
+                    MergeEntry otherEntry = new MergeEntry("iso-other-merge");
+                    otherEntry.TenantId = tenant;
+                    otherEntry.UserId = user;
+                    otherEntry.VesselId = otherVessel.Id;
+                    otherEntry.Status = MergeStatusEnum.Queued;
+                    await db.MergeEntries.CreateAsync(otherEntry).ConfigureAwait(false);
+                }
+
+                List<string> failures = new List<string>();
+                using (McpToolClient client = CreateClient(_TenantA!))
+                {
+                    await client.InitializeAsync().ConfigureAwait(false);
+                    foreach (bool include in new[] { false, true })
+                    {
+                        await ExpectOnlyAsync(client, failures, new { entityType = "missions", voyageId = _Ids["voyage"], includeDescription = include }, _Ids["mission"]).ConfigureAwait(false);
+                        await ExpectOnlyAsync(client, failures, new { entityType = "missions", vesselId = _Ids["vessel"], includeDescription = include }, _Ids["mission"]).ConfigureAwait(false);
+                        await ExpectOnlyAsync(client, failures, new { entityType = "missions", status = "Failed", includeDescription = include }, _Ids["mission"]).ConfigureAwait(false);
+                        await ExpectOnlyAsync(client, failures, new { entityType = "missions", voyageId = _Ids["voyage"], status = "Complete", includeDescription = include }, null).ConfigureAwait(false);
+                        await ExpectOnlyAsync(client, failures, new { entityType = "voyages", status = "Open", includeDescription = include }, _Ids["voyage"]).ConfigureAwait(false);
+                        await ExpectOnlyAsync(client, failures, new { entityType = "vessels", fleetId = _Ids["fleet"], includeContext = include }, _Ids["vessel"]).ConfigureAwait(false);
+                        await ExpectOnlyAsync(client, failures, new { entityType = "signals", toCaptainId = _Ids["captain"], includeMessage = include }, _Ids["signal"]).ConfigureAwait(false);
+                        await ExpectOnlyAsync(client, failures, new { entityType = "merge_queue", status = "Failed", includeTestOutput = include }, _Ids["merge"]).ConfigureAwait(false);
+                    }
+
+                    await ExpectOnlyAsync(client, failures, new { entityType = "captains", status = "Working" }, _Ids["captain"]).ConfigureAwait(false);
+                    await ExpectOnlyAsync(client, failures, new { entityType = "docks", vesselId = _Ids["vessel"] }, _Ids["dock"]).ConfigureAwait(false);
+                }
+
+                AssertTrue(failures.Count == 0, "tenant-scoped enumerate filter failures:\n" + String.Join("\n", failures));
             }));
 
             cases.Add(CaseAsync("stop_all_is_tenant_scoped", "stop_all by tenant B leaves tenant A's working captain alone", TestTags.Negative, async () =>
@@ -673,7 +796,24 @@ namespace Test.Shared.Suites.E2E
                 || tool == "voyage_status";
         }
 
-        private static string Truncate(string text)
+        private async Task ExpectOnlyAsync(McpToolClient client, List<string> failures, object arguments, string? expectedId)
+        {
+            string args = JsonHelper.Serialize(arguments);
+            Armada.Runtimes.Mcp.McpToolCallResult result = await client.CallToolResultAsync("enumerate", args).ConfigureAwait(false);
+            if (result.IsError)
+            {
+                failures.Add(args + ": error: " + Truncate(result.Text));
+                return;
+            }
+
+            EnumerationResult<McpLengthHints> page = JsonHelper.Deserialize<EnumerationResult<McpLengthHints>>(result.Text);
+            List<string> ids = page.Objects.Select(o => o.Id).ToList();
+            bool ok = expectedId == null ? ids.Count == 0 : ids.Count == 1 && ids[0] == expectedId;
+            if (!ok)
+                failures.Add(args + ": expected " + (expectedId ?? "no records") + ", got [" + String.Join(", ", ids) + "]");
+        }
+
+                private static string Truncate(string text)
         {
             string flat = text.Replace('\n', ' ').Replace('\r', ' ');
             return flat.Length <= 300 ? flat : flat.Substring(0, 300) + "...";

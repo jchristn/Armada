@@ -637,6 +637,26 @@ namespace Armada.Core.Database.Mysql.Implementations
                     conditions.Add("created_utc < @created_before");
                     parameters.Add(new MySqlParameter("@created_before", ToIso8601(query.CreatedBefore.Value)));
                 }
+                if (!string.IsNullOrEmpty(query.Status))
+                {
+                    conditions.Add("status = @status");
+                    parameters.Add(new MySqlParameter("@status", query.Status));
+                }
+                if (!string.IsNullOrEmpty(query.VoyageId))
+                {
+                    conditions.Add("voyage_id = @voyage_id");
+                    parameters.Add(new MySqlParameter("@voyage_id", query.VoyageId));
+                }
+                if (!string.IsNullOrEmpty(query.VesselId))
+                {
+                    conditions.Add("vessel_id = @vessel_id");
+                    parameters.Add(new MySqlParameter("@vessel_id", query.VesselId));
+                }
+                if (!string.IsNullOrEmpty(query.CaptainId))
+                {
+                    conditions.Add("captain_id = @captain_id");
+                    parameters.Add(new MySqlParameter("@captain_id", query.CaptainId));
+                }
 
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
@@ -891,6 +911,26 @@ namespace Armada.Core.Database.Mysql.Implementations
                 {
                     conditions.Add("created_utc < @created_before");
                     parameters.Add(new MySqlParameter("@created_before", ToIso8601(query.CreatedBefore.Value)));
+                }
+                if (!string.IsNullOrEmpty(query.Status))
+                {
+                    conditions.Add("status = @status");
+                    parameters.Add(new MySqlParameter("@status", query.Status));
+                }
+                if (!string.IsNullOrEmpty(query.VoyageId))
+                {
+                    conditions.Add("voyage_id = @voyage_id");
+                    parameters.Add(new MySqlParameter("@voyage_id", query.VoyageId));
+                }
+                if (!string.IsNullOrEmpty(query.VesselId))
+                {
+                    conditions.Add("vessel_id = @vessel_id");
+                    parameters.Add(new MySqlParameter("@vessel_id", query.VesselId));
+                }
+                if (!string.IsNullOrEmpty(query.CaptainId))
+                {
+                    conditions.Add("captain_id = @captain_id");
+                    parameters.Add(new MySqlParameter("@captain_id", query.CaptainId));
                 }
 
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);

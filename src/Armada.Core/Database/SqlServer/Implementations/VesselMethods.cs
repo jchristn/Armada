@@ -558,6 +558,11 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     conditions.Add("created_utc < @created_before");
                     parameters.Add(new SqlParameter("@created_before", SqlServerDatabaseDriver.ToIso8601(query.CreatedBefore.Value)));
                 }
+                if (!string.IsNullOrEmpty(query.FleetId))
+                {
+                    conditions.Add("fleet_id = @fleet_id");
+                    parameters.Add(new SqlParameter("@fleet_id", query.FleetId));
+                }
 
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
@@ -687,6 +692,11 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 {
                     conditions.Add("created_utc < @created_before");
                     parameters.Add(new SqlParameter("@created_before", SqlServerDatabaseDriver.ToIso8601(query.CreatedBefore.Value)));
+                }
+                if (!string.IsNullOrEmpty(query.FleetId))
+                {
+                    conditions.Add("fleet_id = @fleet_id");
+                    parameters.Add(new SqlParameter("@fleet_id", query.FleetId));
                 }
 
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);

@@ -416,6 +416,11 @@ namespace Armada.Core.Database.Mysql.Implementations
                     conditions.Add("created_utc < @created_before");
                     parameters.Add(new MySqlParameter("@created_before", ToIso8601(query.CreatedBefore.Value)));
                 }
+                if (!string.IsNullOrEmpty(query.Status))
+                {
+                    conditions.Add("status = @status");
+                    parameters.Add(new MySqlParameter("@status", query.Status));
+                }
 
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
@@ -592,6 +597,11 @@ namespace Armada.Core.Database.Mysql.Implementations
                 {
                     conditions.Add("created_utc < @created_before");
                     parameters.Add(new MySqlParameter("@created_before", ToIso8601(query.CreatedBefore.Value)));
+                }
+                if (!string.IsNullOrEmpty(query.Status))
+                {
+                    conditions.Add("status = @status");
+                    parameters.Add(new MySqlParameter("@status", query.Status));
                 }
 
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);
