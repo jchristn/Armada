@@ -34,11 +34,11 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     TuiScreenDump.Write("token-usage", frame);
                     TuiCase.Contains(frame, "1.5K", "total formatted");
                     TuiCase.Contains(frame, "2 of 10 records estimated", "estimated note");
-                    AssertTrue(stub.Requests.Any(r => r.StartsWith("GET /api/v1/token-usage/summary") && r.Contains("bucketMinutes=15")), "day query: " + String.Join("\n", stub.Requests));
+                    AssertTrue(stub.Saw("GET", "/api/v1/token-usage/summary", r => r.QueryValue("bucketMinutes") == "15"), "day query: " + String.Join("\n", stub.Requests));
                     host.Press("h");
-                    AssertTrue(host.PumpUntil(() => stub.Requests.Any(r => r.StartsWith("GET /api/v1/token-usage/summary") && r.Contains("bucketMinutes=0.5"))), "hour query");
+                    AssertTrue(host.PumpUntil(() => stub.Saw("GET", "/api/v1/token-usage/summary", r => r.QueryValue("bucketMinutes") == "0.5")), "hour query");
                     host.Press("m");
-                    AssertTrue(host.PumpUntil(() => stub.Requests.Any(r => r.StartsWith("GET /api/v1/token-usage/summary") && r.Contains("bucketMinutes=360"))), "month query");
+                    AssertTrue(host.PumpUntil(() => stub.Saw("GET", "/api/v1/token-usage/summary", r => r.QueryValue("bucketMinutes") == "360")), "month query");
                     TokenUsageScreen screen = Current<TokenUsageScreen>(host);
                     host.PumpUntil(() => !screen.Loading);
                     AssertEqual("claude-opus", screen.TimeChart.Series[0].Name, "series by model");

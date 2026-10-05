@@ -253,13 +253,14 @@ namespace Test.Shared.Suites.Tui
                         for (int attempt = 0; attempt < 20; attempt++)
                         {
                             body = await http.GetStringAsync("http://localhost:37061/metrics").ConfigureAwait(false);
-                            if (body.Contains("armada_tui_screen_views_total", StringComparison.Ordinal)) break;
+                            if (PrometheusTextParser.Parse(body).Any(m => m.Name == "armada_tui_screen_views_total")) break;
                             await Task.Delay(250).ConfigureAwait(false);
                         }
                     }
 
-                    TuiCase.Contains(body, "armada_tui_screen_views_total", "screen views series");
-                    TuiCase.Contains(body, "route=\"/telemetry-scrape\"", "route label");
+                    List<PrometheusTextSample> samples = PrometheusTextParser.Parse(body);
+                    AssertTrue(samples.Any(m => m.Name == "armada_tui_screen_views_total"), "screen views series:\n" + body);
+                    AssertTrue(samples.Any(m => m.Name == "armada_tui_screen_views_total" && m.Labels.TryGetValue("route", out string? route) && route == "/telemetry-scrape"), "route label:\n" + body);
                 }
                 finally
                 {

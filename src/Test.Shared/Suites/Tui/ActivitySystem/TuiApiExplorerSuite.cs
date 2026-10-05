@@ -6,6 +6,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
     using System.Linq;
     using Armada.Tui.Screens.Admin;
     using Test.Shared.Infrastructure;
+    using Test.Shared.Suites.Tui.Bodies;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
 
@@ -65,8 +66,10 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                 {
                     ApiExplorerScreen screen = Screen(host);
                     AssertTrue(host.PumpUntil(() => screen.Selected != null && screen.Selected.Id == "updateMission"), "route operation selected");
-                    AssertTrue(screen.BodyField != null && screen.BodyField.Value.Contains("\"Title\": \"New title\""), "example body: " + screen.BodyField?.Value);
-                    AssertTrue(screen.BodyField!.Value.Contains("\"Status\": \"Pending\""), "enum example");
+                    AssertNotNull(screen.BodyField, "example body field");
+                    ApiExplorerExampleBody example = JsonHelper.Deserialize<ApiExplorerExampleBody>(screen.BodyField!.Value);
+                    AssertEqual("New title", example.Title, "example body: " + screen.BodyField.Value);
+                    AssertEqual("Pending", example.Status, "enum example");
                     screen.PathFields["id"].Value = "msn_9";
                     ApiExplorerRequestPreview preview = screen.BuildPreview()!;
                     AssertEqual("/api/v1/missions/msn_9", preview.PathAndQuery, "path");
@@ -97,7 +100,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     screen.PathFields["id"].Value = "msn_9";
                     host.Tui.Context.Commands.Execute("ApiExplorerScreen.send");
                     AssertTrue(host.PumpUntil(() => screen.ResponsePane.Response != null), "response");
-                    AssertTrue(stub.Count("GET /api/v1/missions/msn_9") == 1, "endpoint called");
+                    AssertTrue(stub.CountFor("GET", "/api/v1/missions/msn_9") == 1, "endpoint called");
                     AssertEqual(200, screen.ResponsePane.Response!.Status, "status");
                     AssertTrue(host.WaitForText("\"Title\": \"Explorer\""), "body pretty-printed");
                     AssertTrue(host.WaitForText("Request completed with status 200."), "toast");
@@ -112,7 +115,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     host.Type(path);
                     host.Press("ctrl+s");
                     AssertTrue(host.PumpUntil(() => File.Exists(path)), "file written");
-                    AssertTrue(File.ReadAllText(path).Contains("Explorer"), "body saved");
+                    AssertEqual("Explorer", JsonHelper.Deserialize<ApiExplorerExampleBody>(File.ReadAllText(path)).Title, "body saved");
                 }
             }));
 

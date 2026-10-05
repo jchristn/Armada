@@ -9,6 +9,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
     using Armada.Tui.Screens.Kit;
     using Armada.Tui.Widgets;
     using Test.Shared.Infrastructure;
+    using Test.Shared.Suites.Tui.Bodies;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
 
@@ -55,12 +56,16 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     host.Press("ctrl+s");
                     AssertTrue(host.WaitForText("Passwords do not match."), "mismatch");
                     TuiScreenDump.Write("users-create", host.Screen());
-                    AssertEqual(0, stub.Count("POST /api/v1/users"), "nothing posted");
+                    AssertEqual(0, stub.CountFor("POST", "/api/v1/users"), "nothing posted");
                     host.Press("ctrl+u").Type("pw1").Press("ctrl+s");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/users") == 1), "posted");
-                    string body = stub.Bodies.Last(b => b.Contains("new@armada"));
-                    AssertTrue(body.Contains("\"Email\":\"new@armada\"") && body.Contains("\"Password\":\"pw1\"") && body.Contains("\"FirstName\":\"New\"") && body.Contains("\"TenantId\":\"ten_default\""), "body: " + body);
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/users") == 1), "posted");
+                    AdminUserBody body = stub.LastBody<AdminUserBody>("POST", "/api/v1/users");
+                    AssertEqual("new@armada", body.Email, "email");
+                    AssertEqual("pw1", body.Password, "password");
+                    AssertEqual("New", body.FirstName, "first name");
+                    AssertEqual("ten_default", body.TenantId, "tenant");
                     AssertTrue(host.WaitForText("created"), "toast");
+                    AssertTrue(TuiToasts.WaitForSuccess(host, "created"), "success toast");
                 }
             }));
 
@@ -76,9 +81,10 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     host.Pump();
                     TuiCase.Contains(host.Screen(), "Leave blank to keep current password", "placeholder");
                     modal!.RunSubmit();
-                    AssertTrue(host.PumpUntil(() => stub.Count("PUT /api/v1/users/usr_ops") == 1), "put");
-                    string body = stub.Bodies.Last(b => b.Contains("ops@armada"));
-                    AssertFalse(body.Contains("\"Password\""), "no password: " + body);
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("PUT", "/api/v1/users/usr_ops") == 1), "put");
+                    StubRequest put = stub.Last("PUT", "/api/v1/users/usr_ops");
+                    AssertEqual("ops@armada", put.BodyAs<AdminUserBody>().Email, "edited user: " + put.Body);
+                    AssertFalse(JsonShape.HasPropertyAnywhere(put.Body, "Password"), "no password: " + put.Body);
                     AssertNull(UsersScreen.ValidatePasswords(true, "", ""), "blank ok on edit");
                     AssertEqual("Password is required when creating a user.", UsersScreen.ValidatePasswords(false, "", ""), "required on create");
                 }
@@ -103,7 +109,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     SelectField<string> tenant = (SelectField<string>)modal.Form.Rows.First(r => r.Label == "Tenant").Field!;
                     AssertFalse(tenant.CanFocus, "tenant not editable");
                     AssertEqual(1, tenant.Options.Count, "own tenant only");
-                    AssertEqual(0, stub.Count("GET /api/v1/tenants"), "tenants not listed");
+                    AssertEqual(0, stub.CountFor("GET", "/api/v1/tenants"), "tenants not listed");
                 }
             }));
 
@@ -118,10 +124,12 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     host.Press("del");
                     AssertTrue(host.WaitForText("Delete 2 user(s)?"), "confirm");
                     host.Press("enter");
-                    AssertEqual(0, stub.Count("DELETE /api/v1/users/"), "blocked until typed");
+                    AssertEqual(0, stub.Log.Count(r => r.Method == "DELETE"), "blocked until typed");
                     host.Type("delete").Press("enter");
-                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/users/") == 2), "two deletes");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("DELETE", "/api/v1/users/usr_admin") == 1 && stub.CountFor("DELETE", "/api/v1/users/usr_ops") == 1), "two deletes");
+                    AssertEqual(2, stub.Log.Count(r => r.Method == "DELETE"), "only the two selected users deleted");
                     AssertTrue(host.WaitForText("Deleted 2 users."), "toast");
+                    AssertTrue(TuiToasts.WaitForSuccess(host, "Deleted 2 users."), "success toast");
                 }
             }));
 
@@ -144,8 +152,10 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     modal.RunSubmit();
                     AssertTrue(host.WaitForText("tok_NEWTOKEN1234"), "token shown");
                     TuiScreenDump.Write("credentials-token", host.Screen());
-                    string body = stub.Bodies.Last(b => b.Contains("Deploy"));
-                    AssertTrue(body.Contains("\"UserId\":\"usr_admin\"") && body.Contains("\"TenantId\":\"ten_default\""), "body: " + body);
+                    AdminCredentialBody body = stub.LastBody<AdminCredentialBody>("POST", "/api/v1/credentials");
+                    AssertEqual("Deploy", body.Name, "credential name");
+                    AssertEqual("usr_admin", body.UserId, "user");
+                    AssertEqual("ten_default", body.TenantId, "tenant");
                     host.Press("y");
                     AssertEqual("tok_NEWTOKEN1234", host.Tui.Context.Clipboard.LastCopied, "copied");
                     AssertEqual("tok_NEWTOKEN1234", screen.NewToken, "remembered");
@@ -167,7 +177,8 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     host.Press("del");
                     AssertTrue(host.WaitForText("Delete 2 credential(s)?"), "confirm");
                     host.Type("delete").Press("enter");
-                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/credentials/") == 2), "two deletes");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("DELETE", "/api/v1/credentials/crd_1") == 1 && stub.CountFor("DELETE", "/api/v1/credentials/crd_2") == 1), "two deletes");
+                    AssertEqual(2, stub.Log.Count(r => r.Method == "DELETE"), "only the two credentials deleted");
                 }
             }));
 
@@ -191,23 +202,23 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     AssertFalse(create!.Form.Rows.Any(r => r.Label == "Active"), "no Active on create");
                     host.Pump();
                     host.Type("Third").Press("ctrl+s");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/tenants") == 1), "created");
-                    AssertTrue(stub.Bodies.Any(b => b.Contains("\"Name\":\"Third\"")), "create body");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/tenants") == 1), "created");
+                    AssertTrue(stub.LastBody<AdminTenantBody>("POST", "/api/v1/tenants").Name == "Third", "create body");
                     host.Pump();
                     FormModal? edit = screen.OpenForm(screen.Items.First(t => t.Id == "ten_two"));
                     AssertTrue(edit!.Form.Rows.Any(r => r.Label == "Active"), "Active on edit");
                     host.Pump();
                     ((ToggleField)edit.Form.Rows.First(r => r.Label == "Active").Field!).SetValue(false);
                     host.Press("ctrl+s");
-                    AssertTrue(host.PumpUntil(() => stub.Count("PUT /api/v1/tenants/ten_two") == 1), "updated");
-                    AssertTrue(stub.Bodies.Any(b => b.Contains("Second Tenant") && b.Contains("\"Active\":false")), "edit body");
-                    AssertTrue(host.PumpUntil(() => stub.Count("GET /api/v1/tenants") >= 3 && screen.Grid.State == GridStateEnum.Ready), "reloaded");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("PUT", "/api/v1/tenants/ten_two") == 1), "updated");
+                    AssertTrue(stub.LastBody<AdminTenantBody>("PUT", "/api/v1/tenants/ten_two").Name == "Second Tenant" && stub.LastBody<AdminTenantBody>("PUT", "/api/v1/tenants/ten_two").Active == false, "edit body");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("GET", "/api/v1/tenants") >= 3 && screen.Grid.State == GridStateEnum.Ready), "reloaded");
                     host.Pump();
                     screen.Grid.MoveCursor(screen.Grid.Rows.ToList().FindIndex(t => t.Id == "ten_two"));
                     host.Press("del");
                     AssertTrue(host.WaitForText("Delete tenant"), "confirm");
                     host.Type("delete").Press("enter");
-                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/tenants/ten_two") == 1), "deleted");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("DELETE", "/api/v1/tenants/ten_two") == 1), "deleted");
                 }
             }));
 
@@ -221,7 +232,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     AssertEqual(1, screen.Items.Count, "own tenant");
                     AssertFalse(screen.CanWrite, "read only");
                     AssertNull(screen.OpenForm(null), "no form");
-                    AssertEqual(0, stub.Count("GET /api/v1/tenants"), "no tenant list");
+                    AssertEqual(0, stub.CountFor("GET", "/api/v1/tenants"), "no tenant list");
                 }
             }));
 

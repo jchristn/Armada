@@ -170,7 +170,7 @@ namespace Test.Shared.Suites.Tui
                     AssertTrue(host.App.Theme.UseAsciiBorders, "TUIKit ascii borders");
                     AssertTrue(host.Adapter.AsciiOutput, "terminal output transliterated");
                     AssertEqual(GlyphModeEnum.Ascii, host.Tui.Context.Prefs.Current.Glyphs, "persisted");
-                    AssertTrue(File.ReadAllText(host.Tui.Context.Prefs.FilePath).Contains("\"Ascii\"", StringComparison.Ordinal), "saved to tui.json");
+                    AssertEqual(GlyphModeEnum.Ascii, JsonHelper.Deserialize<TuiPreferences>(File.ReadAllText(host.Tui.Context.Prefs.FilePath)).Glyphs, "saved to tui.json");
                     string ascii = host.Screen();
                     char bad = ascii.FirstOrDefault(c => c > 0x7F);
                     AssertTrue(bad == default(char), "snapshot is ASCII (found U+" + ((int)bad).ToString("X4") + ")");
