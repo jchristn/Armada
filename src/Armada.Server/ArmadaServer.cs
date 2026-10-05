@@ -122,6 +122,7 @@ namespace Armada.Server
         private IncidentService _IncidentService = null!;
         private RunbookService _RunbookService = null!;
         private GitHubIntegrationService _GitHubIntegrationService = null!;
+        private ManualLandingReconciler _ManualLandingReconciler = null!;
         private LandingPreviewService _LandingPreviewService = null!;
         private HistoricalTimelineService _HistoricalTimelineService = null!;
         private ModelEndpointService _ModelEndpointService = null!;
@@ -265,6 +266,13 @@ namespace Armada.Server
             _RunbookService = new RunbookService(_Database, _Logging);
             _GitHubIntegrationService = new GitHubIntegrationService(_Database, _ObjectiveService, _CheckRunService, _DeploymentService, _Settings, _Logging);
             _LandingPreviewService = new LandingPreviewService(_Database, _Logging, _Settings);
+            _ManualLandingReconciler = new ManualLandingReconciler(_Database, _Settings, _Git, _Logging);
+            _ManualLandingReconciler.OnMissionReconciled = async (mission) =>
+            {
+                await EmitMissionStatusChangedAsync(mission, MissionStatusEnum.WorkProduced, "Mission completed (branch merged by hand): " + mission.Title).ConfigureAwait(false);
+                _WebSocketHub?.BroadcastMissionChange(mission, mission.Status.ToString());
+            };
+            admiralService.OnReconcileManualLandings = (ct) => _ManualLandingReconciler.ReconcileAsync(null, ct);
             _HistoricalTimelineService = new HistoricalTimelineService(_Database);
             _ModelEndpointService = new ModelEndpointService(_Database, _Logging);
             _HarborService = new HarborService(_Database, _Logging);
@@ -1077,7 +1085,7 @@ namespace Armada.Server
 
             // Vessels
             VesselContextService vesselContextService = new VesselContextService(_Database, _RuntimeFactory, _Docks, _PromptTemplateService, _Logging);
-            new VesselRoutes(_Database, _VesselReadinessService, _LandingPreviewService, EmitEventAsync, _JsonOptions, _Docks, vesselContextService, _Git, _Settings, _VesselService)
+            new VesselRoutes(_Database, _VesselReadinessService, _LandingPreviewService, EmitEventAsync, _JsonOptions, _Docks, vesselContextService, _Git, _Settings, _VesselService, _ManualLandingReconciler)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Vessel import (bulk onboarding)

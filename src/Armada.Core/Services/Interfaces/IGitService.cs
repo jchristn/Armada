@@ -300,6 +300,17 @@ namespace Armada.Core.Services.Interfaces
         Task<GitDivergenceCounts?> GetDivergenceAsync(string repoPath, string baseRef, string headRef, CancellationToken token = default);
 
         /// <summary>
+        /// Whether ancestorRef is an ancestor of (contained in) descendantRef, from the exit code of
+        /// git merge-base --is-ancestor (0 yes, 1 no). Used to detect a branch that was merged by hand.
+        /// </summary>
+        /// <param name="repoPath">Repository path (working tree or bare repository).</param>
+        /// <param name="ancestorRef">Candidate ancestor (a branch name or commit hash).</param>
+        /// <param name="descendantRef">Candidate descendant (for example the target branch).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True or false, or null when either ref does not resolve or git fails.</returns>
+        Task<bool?> IsAncestorAsync(string repoPath, string ancestorRef, string descendantRef, CancellationToken token = default);
+
+        /// <summary>
         /// Summarize the working tree (git status --porcelain): modified tracked files and untracked files.
         /// </summary>
         /// <param name="repoPath">Working tree path.</param>

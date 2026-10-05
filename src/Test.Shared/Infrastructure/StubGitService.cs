@@ -192,6 +192,9 @@ namespace Test.Shared.Infrastructure
         public Task<GitDivergenceCounts?> GetDivergenceAsync(string repoPath, string baseRef, string headRef, CancellationToken token = default)
             => Task.FromResult<GitDivergenceCounts?>(new GitDivergenceCounts(0, 0));
 
+        public Task<bool?> IsAncestorAsync(string repoPath, string ancestorRef, string descendantRef, CancellationToken token = default)
+            => Task.FromResult<bool?>(null);
+
         public Task<GitWorkingTreeStatus> GetWorkingTreeStatusAsync(string repoPath, CancellationToken token = default)
             => Task.FromResult(new GitWorkingTreeStatus());
 

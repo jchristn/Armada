@@ -896,6 +896,22 @@ namespace Armada.Core.Services
             return new GitDivergenceCounts(ahead, behind);
         }
 
+        /// <inheritdoc />
+        public async Task<bool?> IsAncestorAsync(string repoPath, string ancestorRef, string descendantRef, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
+            if (String.IsNullOrEmpty(ancestorRef)) throw new ArgumentNullException(nameof(ancestorRef));
+            if (String.IsNullOrEmpty(descendantRef)) throw new ArgumentNullException(nameof(descendantRef));
+
+            if (!await RefResolvesAsync(repoPath, ancestorRef, token).ConfigureAwait(false)) return null;
+            if (!await RefResolvesAsync(repoPath, descendantRef, token).ConfigureAwait(false)) return null;
+
+            GitProcessResult result = await ExecuteProcessAsync(repoPath, "git", token, "merge-base", "--is-ancestor", ancestorRef, descendantRef).ConfigureAwait(false);
+            if (result.ExitCode == 0) return true;
+            if (result.ExitCode == 1) return false;
+            return null;
+        }
+
         /// <summary>
         /// Summarize the working tree (git status --porcelain).
         /// </summary>
