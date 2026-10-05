@@ -45,9 +45,9 @@ namespace Test.Shared.Suites.Client
                     AssertEqual("Global admin required", ex.Message, "server message");
                 }
 
-                AssertEqual(1, stub.Count("POST /api/v1/server/stop"), "stop");
-                AssertEqual(1, stub.Count("POST /api/v1/server/restart"), "restart");
-                AssertEqual(1, stub.Count("POST /api/v1/server/reset"), "reset");
+                AssertEqual(1, stub.CountFor("POST", "/api/v1/server/stop"), "stop");
+                AssertEqual(1, stub.CountFor("POST", "/api/v1/server/restart"), "restart");
+                AssertEqual(1, stub.CountFor("POST", "/api/v1/server/reset"), "reset");
             }));
 
             cases.Add(TuiCase.Async(Suite, "rebuild_and_rollback", "Rebuild posts a request body and reads the status; rollback reads the status", async () =>
@@ -64,7 +64,7 @@ namespace Test.Shared.Suites.Client
                     AssertEqual("slot-2", rollback?.PreviousSlot, "rollback slot");
                 }
 
-                AssertTrue(stub.Bodies.Any(b => b.StartsWith("{", StringComparison.Ordinal)), "rebuild sends a JSON body");
+                AssertNotNull(stub.LastBody<RebuildRequest>("POST", "/api/v1/server/rebuild"), "rebuild sends a RebuildRequest JSON body");
             }));
 
             cases.Add(TuiCase.Async(Suite, "restore_backup", "Restore posts the archive bytes with the original file name", async () =>
@@ -74,11 +74,11 @@ namespace Test.Shared.Suites.Client
                 using (ArmadaClient client = new ArmadaClient(new ArmadaClientOptions("http://127.0.0.1:9"), stub))
                 {
                     ArmadaRawJson reply = await client.RestoreBackupAsync(new byte[] { 80, 75, 3, 4 }, "armada-backup.zip");
-                    AssertContains("\"Success\":true", reply.Json, "reply");
+                    AssertEqual<bool?>(true, JsonHelper.Deserialize<ClientRestoreReply>(reply.Json).Success, "reply");
                 }
 
-                AssertEqual(1, stub.Count("POST /api/v1/restore"), "posted");
-                AssertEqual("PK\u0003\u0004", stub.Bodies.Last(), "archive bytes sent as the body");
+                AssertEqual(1, stub.CountFor("POST", "/api/v1/restore"), "posted");
+                AssertEqual("PK\u0003\u0004", stub.Last("POST", "/api/v1/restore").Body, "archive bytes sent as the body");
             }));
 
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "Armada.Client destructive server calls (recording stub)", cases: cases);

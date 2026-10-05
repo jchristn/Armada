@@ -210,7 +210,9 @@ namespace Test.Shared.Suites.Client
                 await c.UpdateSettingsAsync(settings);
 
                 ArmadaRawJson? openApi = await c.GetOpenApiDocumentAsync();
-                AssertContains("\"/api/v1/events/{id}\"", openApi?.Json ?? "", "OpenAPI lists the routes");
+                AssertNotNull(openApi, "OpenAPI document");
+                ClientOpenApiDocument openApiDocument = JsonHelper.Deserialize<ClientOpenApiDocument>(openApi!.Json);
+                AssertTrue(openApiDocument.Paths != null && openApiDocument.Paths.TryGetValue("/api/v1/events/{id}", out ClientOpenApiPathItem? eventPath) && eventPath.Get != null, "OpenAPI lists GET /api/v1/events/{id}");
                 BackupFile backup = await c.DownloadBackupAsync();
                 AssertTrue(backup.Content.Length > 0, "backup bytes");
                 AssertTrue(backup.FileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase), "backup file name: " + backup.FileName);

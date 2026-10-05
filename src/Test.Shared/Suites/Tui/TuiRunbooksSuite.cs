@@ -4,6 +4,7 @@ namespace Test.Shared.Suites.Tui
     using System.Collections.Generic;
     using System.Linq;
     using System.Net;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Tui.Modals;
     using Armada.Tui.Screens.Delivery;
@@ -53,15 +54,15 @@ namespace Test.Shared.Suites.Tui
                 using (TuiTestHost host = TuiEntityFixtures.Open(stub, "/delivery?tab=runbooks&state=inactive"))
                 {
                     RunbooksScreen screen = TuiEntityFixtures.Screen<RunbooksScreen>(host);
-                    TuiEntityFixtures.WaitForRequest(host, stub, "GET /api/v1/runbooks?active=false");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/runbooks", "active", "false");
                     host.Press("/");
                     host.Type("deploy");
-                    TuiEntityFixtures.WaitForRequest(host, stub, "search=deploy");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/runbooks", "search", "deploy");
                     host.Press("esc");
                     screen.Filters.Clear();
                     TuiEntityFixtures.WaitFor(host, () => screen.Grid.Rows.Count == 25, "first page");
                     host.Press(">");
-                    TuiEntityFixtures.WaitForRequest(host, stub, "pageNumber=2");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/runbooks", "pageNumber", "2");
                     host.Press("<");
                     screen.Grid.SortBy("title", true);
                     TuiEntityFixtures.WaitFor(host, () => screen.Grid.Rows.Count > 0 && screen.Grid.Rows[0].Title == "Runbook 25", "sorted descending");
@@ -85,10 +86,10 @@ namespace Test.Shared.Suites.Tui
             cases.Add(TuiCase.Sync(Suite, "create_validates_and_submits", "Create Runbook keeps the dialog open on a blank title, then posts", () =>
             {
                 StubHttpHandler stub = Server();
-                string? posted = null;
+                RunbookUpsertRequest? posted = null;
                 stub.On("POST", "/api/v1/runbooks", body =>
                 {
-                    posted = body;
+                    posted = JsonHelper.Deserialize<RunbookUpsertRequest>(body);
                     return StubHttpHandler.Response(HttpStatusCode.Created, Runbook("rbk_new", "Rollback drill", true));
                 });
                 using (TuiTestHost host = TuiEntityFixtures.Open(stub, "/delivery?tab=runbooks"))
@@ -107,19 +108,19 @@ namespace Test.Shared.Suites.Tui
                     title.Value = "Rollback drill";
                     host.Press("ctrl+s");
                     TuiEntityFixtures.WaitFor(host, () => posted != null && !host.App.Modals.IsActive, "posted and closed");
-                    AssertTrue(posted!.Contains("\"Title\":\"Rollback drill\""), "title: " + posted);
-                    AssertTrue(posted.Contains("\"FileName\":\"RUNBOOK.md\""), "file name");
-                    AssertTrue(posted.Contains("\"Scope\":\"TenantWide\""), "scope");
+                    AssertEqual("Rollback drill", posted!.Title, "title");
+                    AssertEqual("RUNBOOK.md", posted.FileName, "file name");
+                    AssertEqual(ScopeEnum.TenantWide, posted.Scope, "scope");
                 }
             }));
 
             cases.Add(TuiCase.Sync(Suite, "handoff_and_start_execution", "A deployment hand-off is announced, carried to the runbook, and seeds Start Execution", () =>
             {
                 StubHttpHandler stub = Server();
-                string? started = null;
+                RunbookExecutionStartRequest? started = null;
                 stub.On("POST", "/api/v1/runbooks/rbk_1/executions", body =>
                 {
-                    started = body;
+                    started = JsonHelper.Deserialize<RunbookExecutionStartRequest>(body);
                     return StubHttpHandler.Response(HttpStatusCode.Created, Execution("rex_new", "rbk_1", "Running"));
                 });
                 using (TuiTestHost host = TuiEntityFixtures.Open(stub, "/delivery?tab=deployments"))
@@ -139,20 +140,19 @@ namespace Test.Shared.Suites.Tui
                     TuiCase.Contains(host.Screen(), "Target", "parameter field");
                     host.Press("ctrl+s");
                     TuiEntityFixtures.WaitFor(host, () => started != null, "started");
-                    AssertTrue(started!.Contains("\"DeploymentId\":\"dpl_1\""), "deployment carried: " + started);
-                    AssertTrue(started.Contains("\"EnvironmentName\":\"staging\""), "environment carried");
-                    AssertTrue(started.Contains("\"target\":\"prod\""), "parameter default");
+                    AssertEqual("dpl_1", started!.DeploymentId, "deployment carried");
+                    AssertEqual("staging", started.EnvironmentName, "environment carried");
+                    AssertTrue(started.ParameterValues != null && started.ParameterValues.TryGetValue("target", out string? target) && target == "prod", "parameter default target=prod");
                 }
             }));
 
             cases.Add(TuiCase.Sync(Suite, "detail_progress_and_cancel", "Detail shows panels; Space toggles a step, Save Progress puts it; Cancel Execution confirms", () =>
             {
                 StubHttpHandler stub = Server();
-                List<string> puts = new List<string>();
                 stub.On("PUT", "/api/v1/runbook-executions/rex_1", body =>
                 {
-                    lock (puts) puts.Add(body);
-                    return StubHttpHandler.Response(HttpStatusCode.OK, Execution("rex_1", "rbk_1", body.Contains("Cancelled") ? "Cancelled" : "Running"));
+                    RunbookExecutionUpdateRequest update = JsonHelper.Deserialize<RunbookExecutionUpdateRequest>(body);
+                    return StubHttpHandler.Response(HttpStatusCode.OK, Execution("rex_1", "rbk_1", update.Status == RunbookExecutionStatusEnum.Cancelled ? "Cancelled" : "Running"));
                 });
                 using (TuiTestHost host = TuiEntityFixtures.Open(stub, "/runbooks/rbk_1?executionId=rex_1"))
                 {
@@ -168,13 +168,15 @@ namespace Test.Shared.Suites.Tui
                     screen.StepChecklist.ToggleCurrent();
                     TuiCase.Contains(host.Screen(), "[x] Freeze merges", "toggled");
                     screen.ProgressForm.View.RequestSave();
-                    TuiEntityFixtures.WaitFor(host, () => { lock (puts) return puts.Count == 1; }, "save progress");
-                    AssertTrue(puts[0].Contains("\"CompletedStepIds\":[\"rbs_1\"]"), "completed steps: " + puts[0]);
+                    TuiEntityFixtures.WaitFor(host, () => stub.CountFor("PUT", "/api/v1/runbook-executions/rex_1") == 1, "save progress");
+                    RunbookExecutionUpdateRequest progress = stub.LastBody<RunbookExecutionUpdateRequest>("PUT", "/api/v1/runbook-executions/rex_1");
+                    AssertEqual("rbs_1", String.Join(",", progress.CompletedStepIds ?? new List<string>()), "completed steps");
+                    AssertNotEqual<RunbookExecutionStatusEnum?>(RunbookExecutionStatusEnum.Cancelled, progress.Status, "saving progress does not cancel");
                     AssertTrue(screen.RunAction("cancel-execution"), "cancel offered");
                     TuiCase.Contains(host.Screen(), "Cancel Execution", "confirm title");
                     host.Press("y");
-                    TuiEntityFixtures.WaitFor(host, () => { lock (puts) return puts.Count == 2; }, "cancel put");
-                    AssertTrue(puts[1].Contains("\"Status\":\"Cancelled\""), "cancelled status");
+                    TuiEntityFixtures.WaitFor(host, () => stub.CountFor("PUT", "/api/v1/runbook-executions/rex_1") == 2, "cancel put");
+                    AssertEqual(1, stub.BodiesFor<RunbookExecutionUpdateRequest>("PUT", "/api/v1/runbook-executions/rex_1").Count(b => b.Status == RunbookExecutionStatusEnum.Cancelled), "one PUT with status Cancelled");
                     host.Press("alt+1");
                     AssertEqual("overview", screen.ActivePanel, "back to overview");
                     TuiCase.Contains(host.Screen(), "pbk_1", "playbook id");
@@ -184,10 +186,10 @@ namespace Test.Shared.Suites.Tui
             cases.Add(TuiCase.Sync(Suite, "detail_edit_steps_and_save", "Runbook panel edits parameters and steps and saves with PUT", () =>
             {
                 StubHttpHandler stub = Server();
-                string? put = null;
+                RunbookUpsertRequest? put = null;
                 stub.On("PUT", "/api/v1/runbooks/rbk_1", body =>
                 {
-                    put = body;
+                    put = JsonHelper.Deserialize<RunbookUpsertRequest>(body);
                     return StubHttpHandler.Response(HttpStatusCode.OK, Runbook("rbk_1", "Release checklist", true));
                 });
                 using (TuiTestHost host = TuiEntityFixtures.Open(stub, "/runbooks/rbk_1"))
@@ -205,8 +207,9 @@ namespace Test.Shared.Suites.Tui
                     AssertTrue(screen.Editor.View.IsDirty, "form dirty");
                     screen.Editor.View.RequestSave();
                     TuiEntityFixtures.WaitFor(host, () => put != null, "saved");
-                    AssertTrue(put!.Contains("\"Title\":\"Verify\""), "new step in payload: " + put);
-                    AssertTrue(put.Contains("\"Name\":\"target\""), "parameters in payload");
+                    AssertTrue(put!.Steps != null && put.Steps.Any(st => st.Title == "Verify"), "new step in payload");
+                    AssertEqual(3, put.Steps!.Count, "all three steps sent");
+                    AssertTrue(put.Parameters != null && put.Parameters.Any(pm => pm.Name == "target"), "parameters in payload");
                 }
             }));
 

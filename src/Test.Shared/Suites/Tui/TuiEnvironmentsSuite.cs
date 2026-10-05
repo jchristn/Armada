@@ -4,6 +4,8 @@ namespace Test.Shared.Suites.Tui
     using System.Collections.Generic;
     using System.Linq;
     using System.Net;
+    using System.Text.Json;
+    using Armada.Core.Models;
     using Armada.Tui.Modals;
     using Armada.Tui.Screens.Delivery;
     using Armada.Tui.Screens.Entities;
@@ -49,12 +51,12 @@ namespace Test.Shared.Suites.Tui
                 using (TuiTestHost host = TuiEntityFixtures.Open(stub, "/delivery?tab=environments&kind=Production&active=true"))
                 {
                     EnvironmentsScreen screen = TuiEntityFixtures.Screen<EnvironmentsScreen>(host);
-                    TuiEntityFixtures.WaitForRequest(host, stub, "kind=Production");
-                    TuiEntityFixtures.WaitForRequest(host, stub, "active=true");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/environments", "kind", "Production");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/environments", "active", "true");
                     AssertEqual("Production", screen.Filters.Value("kind"), "deep-linked kind");
                     host.Press("/");
                     host.Type("prod");
-                    TuiEntityFixtures.WaitForRequest(host, stub, "search=prod");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/environments", "search", "prod");
                     host.Press("esc");
                     AssertTrue(ReferenceEquals(screen.Scope.Focused, screen.Grid), "esc returns to the grid");
                 }
@@ -70,7 +72,7 @@ namespace Test.Shared.Suites.Tui
                     EnvironmentsScreen screen = TuiEntityFixtures.Screen<EnvironmentsScreen>(host);
                     TuiEntityFixtures.WaitFor(host, () => screen.Grid.Rows.Count == 25, "first page");
                     host.Press(">");
-                    TuiEntityFixtures.WaitForRequest(host, stub, "GET /api/v1/environments?pageNumber=2");
+                    TuiEntityFixtures.WaitForQuery(host, stub, "GET", "/api/v1/environments", "pageNumber", "2");
                     host.Press("<");
                     screen.Grid.SortBy("name", true);
                     TuiEntityFixtures.WaitFor(host, () => screen.Grid.Rows.Count > 0 && screen.Grid.Rows[0].Name == "env 25", "sorted descending");
@@ -98,8 +100,9 @@ namespace Test.Shared.Suites.Tui
                     host.Type("Duplicate");
                     host.Press("enter");
                     TuiEntityFixtures.WaitFor(host, () => posted != null, "duplicate posted");
-                    AssertTrue(posted!.Contains("\"Name\":\"production (Copy)\""), "copy name: " + posted);
-                    AssertTrue(posted.Contains("\"IsDefault\":false"), "copy is not default");
+                    DeploymentEnvironmentUpsertRequest copy = JsonHelper.Deserialize<DeploymentEnvironmentUpsertRequest>(posted!);
+                    AssertEqual("production (Copy)", copy.Name, "copy name");
+                    AssertEqual<bool?>(false, copy.IsDefault, "copy is not default");
                     TuiEntityFixtures.WaitFor(host, () => host.Tui.Context.Router.Current!.Path == "/environments/env_copy", "opened the copy");
                 }
             }));
@@ -129,9 +132,10 @@ namespace Test.Shared.Suites.Tui
                     name.Value = "qa";
                     host.Press("ctrl+s");
                     TuiEntityFixtures.WaitFor(host, () => posted != null && !host.App.Modals.IsActive, "posted and closed");
-                    AssertTrue(posted!.Contains("\"Name\":\"qa\""), "name in payload: " + posted);
-                    AssertTrue(posted.Contains("\"RolloutMonitoringWindowMinutes\":60"), "monitoring default");
-                    AssertTrue(posted.Contains("\"Active\":true"), "active default");
+                    DeploymentEnvironmentUpsertRequest created = JsonHelper.Deserialize<DeploymentEnvironmentUpsertRequest>(posted!);
+                    AssertEqual("qa", created.Name, "name in payload");
+                    AssertEqual<int?>(60, created.RolloutMonitoringWindowMinutes, "monitoring default");
+                    AssertEqual<bool?>(true, created.Active, "active default");
                 }
             }));
 
@@ -160,8 +164,10 @@ namespace Test.Shared.Suites.Tui
                     AssertTrue(screen.Editor!.View.IsDirty, "editor dirty");
                     host.Press("ctrl+s");
                     TuiEntityFixtures.WaitFor(host, () => put != null, "saved");
-                    AssertTrue(put!.Contains("\"Path\":\"/health\""), "definition in payload: " + put);
-                    AssertTrue(put.Contains("\"ExpectedStatusCode\":200"), "expected status");
+                    List<DeploymentVerificationDefinition> definitions = JsonHelper.Deserialize<DeploymentEnvironmentUpsertRequest>(put!).VerificationDefinitions ?? new List<DeploymentVerificationDefinition>();
+                    AssertEqual(1, definitions.Count, "one definition in payload: " + put);
+                    AssertEqual("/health", definitions[0].Path, "definition path");
+                    AssertTrue(JsonShape.Properties(put!).Any(pr => pr.Name == "ExpectedStatusCode" && pr.ValueToken == JsonTokenType.Number && pr.ScalarText == "200"), "expected status 200 sent (not the model default): " + put);
                 }
             }));
 
