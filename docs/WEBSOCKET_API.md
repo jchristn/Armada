@@ -44,10 +44,13 @@ If the selected deployment disconnects or the tunnel drops, the proxy closes the
   - [objective-refinement-session.message.updated](#objective-refinement-sessionmessageupdated)
   - [objective-refinement-session.summary.created](#objective-refinement-sessionsummarycreated)
   - [objective-refinement-session.applied](#objective-refinement-sessionapplied)
+  - [objective-refinement-session.deleted](#objective-refinement-sessiondeleted)
   - [check-run.changed](#check-runchanged)
   - [deployment.changed](#deploymentchanged)
   - [deployment.progress](#deploymentprogress)
   - [environment.health](#environmenthealth)
+  - [incident.changed](#incidentchanged)
+  - [runbook-execution.changed](#runbook-executionchanged)
   - [approval-needed](#approval-needed)
   - [Ask Armada thread events](#ask-armada-thread-events)
   - [Planning session events](#planning-session-events)
@@ -96,7 +99,8 @@ handshake completes. The server accepts the same credentials as the REST API, in
    subprotocols but received none, so browsers should use the query parameter; .NET `ClientWebSocket` and similar
    clients accept the protocol form.
 
-Thread-scoped Ask Armada tokens (minted for a captain's MCP connection) are refused on `/ws` and on REST.
+Scoped session tokens minted for a captain's MCP connection (thread-scoped Ask Armada tokens and mission-scoped tokens)
+are refused on `/ws` and on REST; they are accepted only by the MCP server.
 
 Each socket keeps the identity that authenticated it (tenant, user, admin flags) and receives only what that identity is
 entitled to:
@@ -180,15 +184,18 @@ Messages sent from the client to the server must include a `Route` field to sele
 ### Server-to-Client
 
 Every server message includes a `type` field. Pushed events use the envelope `type`, `message`, `data`, `timestamp`
-(UTC); command replies use `type` (`command.result` or `command.error`), `action`, `data`, and `error`:
+(UTC), where `message` is present only on events that carry one (generic, planning, and refinement events);
+command replies use `type` (`command.result` or `command.error`), `action`, and `data` (results) or `error` and `code`
+(errors):
 
 ```json
 {
   "type": "mission.changed",
   "data": {
     "id": "msn_abc123",
+    "title": "Implement feature X",
     "status": "Complete",
-    "title": "Implement feature X"
+    "voyageId": "vyg_abc123"
   },
   "timestamp": "2026-03-07T12:34:56.789Z"
 }
@@ -200,7 +207,10 @@ Every server message includes a `type` field. Pushed events use the envelope `ty
 
 ### subscribe
 
-Subscribe to real-time event broadcasts. Upon connection with this route, the server immediately sends a `status.snapshot` message containing the current Armada state.
+Request the current state and set the all-tenants opt-in. The server immediately replies with a `status.snapshot`
+message containing the current Armada state. Event delivery itself does not depend on this route: every authenticated
+socket receives the events it is entitled to from the moment it connects, so send `subscribe` first to get a baseline
+before applying events.
 
 **Client sends:**
 
@@ -215,7 +225,7 @@ A global administrator may add `"AllTenants": true` to receive entity events of 
 
 **Server responds with:** a [`status.snapshot`](#statussnapshot) message.
 
-After the initial snapshot, the client will receive all broadcast events ([`mission.changed`](#missionchanged), [`voyage.changed`](#voyagechanged), [`captain.changed`](#captainchanged), [`objective.changed`](#objectivechanged), [`objective-refinement-session.changed`](#objective-refinement-sessionchanged), [`objective-refinement-session.message.created`](#objective-refinement-sessionmessagecreated), [`objective-refinement-session.message.updated`](#objective-refinement-sessionmessageupdated), [`objective-refinement-session.summary.created`](#objective-refinement-sessionsummarycreated), [`objective-refinement-session.applied`](#objective-refinement-sessionapplied), [`check-run.changed`](#check-runchanged), [`deployment.changed`](#deploymentchanged), [`deployment.progress`](#deploymentprogress), [`environment.health`](#environmenthealth), [`approval-needed`](#approval-needed), [planning session events](#planning-session-events), and [generic events](#generic-events)) as they occur. [Ask Armada thread events](#ask-armada-thread-events) go only to the thread owner's sockets.
+The client receives all broadcast events it is entitled to ([`mission.changed`](#missionchanged), [`voyage.changed`](#voyagechanged), [`captain.changed`](#captainchanged), [`objective.changed`](#objectivechanged), [`objective-refinement-session.changed`](#objective-refinement-sessionchanged), [`objective-refinement-session.message.created`](#objective-refinement-sessionmessagecreated), [`objective-refinement-session.message.updated`](#objective-refinement-sessionmessageupdated), [`objective-refinement-session.summary.created`](#objective-refinement-sessionsummarycreated), [`objective-refinement-session.applied`](#objective-refinement-sessionapplied), [`objective-refinement-session.deleted`](#objective-refinement-sessiondeleted), [`check-run.changed`](#check-runchanged), [`deployment.changed`](#deploymentchanged), [`deployment.progress`](#deploymentprogress), [`environment.health`](#environmenthealth), [`incident.changed`](#incidentchanged), [`runbook-execution.changed`](#runbook-executionchanged), [`approval-needed`](#approval-needed), [planning session events](#planning-session-events), and [generic events](#generic-events)) as they occur. [Ask Armada thread events](#ask-armada-thread-events) go only to the thread owner's sockets.
 
 ---
 
@@ -247,11 +257,13 @@ See [Command Actions](#command-actions) for the current operational action set. 
 
 ## Server-Pushed Events
 
-These events are delivered to the connected clients **entitled to them** (see [Authentication](#authentication): the entity's tenant, plus opted-in global admins) whenever state changes occur in the Armada system. Clients do not need to request these -- they are pushed automatically after subscribing.
+These events are delivered to the connected clients **entitled to them** (see [Authentication](#authentication): the entity's tenant, plus opted-in global admins) whenever state changes occur in the Armada system. Clients do not need to request these -- they are pushed automatically to every authenticated socket, whether or not it
+has sent `subscribe`.
 
 ### status.snapshot
 
-Sent immediately when a client connects via the `subscribe` route. Contains a full snapshot of the current Armada state.
+Sent in reply to the `subscribe` route. Contains a snapshot of the current Armada state. The snapshot is the same
+server-wide aggregate that `GET /api/v1/status` returns; it is not filtered by the socket's tenant.
 
 ```json
 {
@@ -262,6 +274,7 @@ Sent immediately when a client connects via the `subscribe` route. Contains a fu
     "workingCaptains": 2,
     "stalledCaptains": 1,
     "activeVoyages": 2,
+    "memoryPressureDeferrals": 0,
     "missionsByStatus": {
       "Pending": 3,
       "InProgress": 2,
@@ -289,11 +302,13 @@ Sent immediately when a client connects via the `subscribe` route. Contains a fu
     },
     "timestampUtc": "2026-03-07T12:34:56.789Z"
   },
+  "allTenants": false,
   "timestamp": "2026-03-07T12:34:56.789Z"
 }
 ```
 
-**`data` field:** [ArmadaStatus](#armadastatus) object.
+**`data` field:** [ArmadaStatus](#armadastatus) object. **`allTenants`** (top level, beside `data`): whether this socket
+receives every tenant's entity events (true only for a global administrator that subscribed with `"AllTenants": true`).
 
 ---
 
@@ -306,8 +321,9 @@ Broadcast when a mission's status changes (e.g., assigned, started, completed, f
   "type": "mission.changed",
   "data": {
     "id": "msn_abc123def456ghi789jk",
+    "title": "Add input validation to signup form",
     "status": "InProgress",
-    "title": "Add input validation to signup form"
+    "voyageId": "vyg_abc123def456ghi789jk"
   },
   "timestamp": "2026-03-07T12:35:00.000Z"
 }
@@ -317,8 +333,9 @@ Broadcast when a mission's status changes (e.g., assigned, started, completed, f
 |---|---|---|
 | `type` | string | Always `"mission.changed"` |
 | `data.id` | string | Mission ID (prefix `msn_`) |
-| `data.status` | string | New [MissionStatusEnum](#missionstatusenum) value |
 | `data.title` | string \| null | Mission title |
+| `data.status` | string | New [MissionStatusEnum](#missionstatusenum) value |
+| `data.voyageId` | string \| null | Parent voyage ID, or null for a standalone mission |
 | `timestamp` | string | ISO 8601 UTC timestamp |
 
 ---
@@ -385,7 +402,7 @@ Broadcast when a voyage state changes.
 |---|---|---|
 | `type` | string | Always `"voyage.changed"` |
 | `data.id` | string | Voyage ID (prefix `vyg_`) |
-| `data.status` | string | Voyage status value |
+| `data.status` | string | New [VoyageStatusEnum](#voyagestatusenum) value |
 | `data.title` | string \| null | Voyage title |
 | `timestamp` | string | ISO 8601 UTC timestamp |
 
@@ -594,7 +611,10 @@ Broadcast when Armada creates a structured refinement summary from the transcrip
 
 ### objective-refinement-session.applied
 
-Broadcast when Armada applies a refinement summary back to the linked backlog item.
+Broadcast when Armada applies a refinement summary back to the linked backlog item. Unless the apply request set
+`EndSession` to `false` (default `true`), the session is then stopped, which releases its captain: expect
+`objective-refinement-session.changed` (status `Stopped`), `captain.changed`, and the generic
+`objective-refinement-session.stopped` event to follow.
 
 ```json
 {
@@ -622,6 +642,32 @@ Broadcast when Armada applies a refinement summary back to the linked backlog it
 
 ---
 
+### objective-refinement-session.deleted
+
+Broadcast when a refinement session and its transcript are deleted (an active session is stopped first).
+
+```json
+{
+  "type": "objective-refinement-session.deleted",
+  "message": "Objective refinement session deleted",
+  "data": {
+    "sessionId": "ors_abc123def456ghi789jk",
+    "objectiveId": "obj_abc123def456ghi789jk"
+  },
+  "timestamp": "2026-03-07T12:35:00.000Z"
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `type` | string | Always `"objective-refinement-session.deleted"` |
+| `message` | string | Human-readable event label |
+| `data.sessionId` | string | Refinement session ID (prefix `ors_`) |
+| `data.objectiveId` | string | Linked backlog/objective ID (prefix `obj_`) |
+| `timestamp` | string | ISO 8601 UTC timestamp |
+
+---
+
 ### deployment.changed
 
 Broadcast when a deployment record changes, including approval, execution, verification, and rollback state.
@@ -631,9 +677,12 @@ Broadcast when a deployment record changes, including approval, execution, verif
   "type": "deployment.changed",
   "data": {
     "id": "dpl_abc123def456ghi789jk",
+    "title": "Release 1.4.0 to staging",
     "status": "Running",
+    "environmentId": "env_abc123def456ghi789jk",
     "environmentName": "Staging",
-    "verificationStatus": "Pending"
+    "verificationStatus": "NotRun",
+    "...": "..."
   },
   "timestamp": "2026-03-07T12:35:00.000Z"
 }
@@ -642,22 +691,28 @@ Broadcast when a deployment record changes, including approval, execution, verif
 | Field | Type | Description |
 |---|---|---|
 | `type` | string | Always `"deployment.changed"` |
-| `data` | object | Full serialized `Deployment` payload with enum values emitted as strings |
+| `data` | object | Full serialized `Deployment` payload with enum values emitted as strings (`status`: `PendingApproval`, `Running`, `Succeeded`, `VerificationFailed`, `Failed`, `Denied`, `RollingBack`, `RolledBack`; `verificationStatus`: `NotRun`, `Running`, `Passed`, `Failed`, `Partial`, `Skipped`). `environmentName` is the display name of the target environment (clients that name a deployment the way the inbox does use `environmentName`, else the deployment `id`) |
 | `timestamp` | string | ISO 8601 UTC timestamp |
 
 ---
 
 ### deployment.progress
 
-Broadcast when deployment progress or operator-facing execution messaging changes.
+Broadcast together with every `deployment.changed`, carrying a compact progress view of the same deployment.
 
 ```json
 {
   "type": "deployment.progress",
   "data": {
     "id": "dpl_abc123def456ghi789jk",
+    "title": "Release 1.4.0 to staging",
     "status": "Running",
-    "message": "Running deploy command for Staging"
+    "verificationStatus": "NotRun",
+    "environmentId": "env_abc123def456ghi789jk",
+    "environmentName": "Staging",
+    "startedUtc": "2026-03-07T12:34:00.000Z",
+    "completedUtc": null,
+    "lastUpdateUtc": "2026-03-07T12:35:00.000Z"
   },
   "timestamp": "2026-03-07T12:35:00.000Z"
 }
@@ -667,38 +722,79 @@ Broadcast when deployment progress or operator-facing execution messaging change
 |---|---|---|
 | `type` | string | Always `"deployment.progress"` |
 | `data.id` | string | Deployment ID (prefix `dpl_`) |
+| `data.title` | string | Deployment title |
 | `data.status` | string | Current deployment status |
-| `data.message` | string | Human-readable progress message |
+| `data.verificationStatus` | string | Current verification status |
+| `data.environmentId` | string \| null | Target environment ID (prefix `env_`) |
+| `data.environmentName` | string \| null | Target environment name |
+| `data.startedUtc` | string \| null | Execution start timestamp |
+| `data.completedUtc` | string \| null | Completion timestamp |
+| `data.lastUpdateUtc` | string | Last update timestamp |
 | `timestamp` | string | ISO 8601 UTC timestamp |
 
 ---
 
 ### environment.health
 
-Broadcast when rollout monitoring or verification updates health-related evidence for an environment deployment.
+Broadcast together with `deployment.changed` whenever the deployment names an environment (by `environmentId` or
+`environmentName`), carrying the rollout-monitoring and verification evidence for that environment.
 
 ```json
 {
   "type": "environment.health",
   "data": {
-    "deploymentId": "dpl_abc123def456ghi789jk",
     "environmentId": "env_abc123def456ghi789jk",
     "environmentName": "Staging",
+    "id": "dpl_abc123def456ghi789jk",
+    "title": "Release 1.4.0 to staging",
+    "status": "Succeeded",
     "verificationStatus": "Passed",
-    "message": "Health endpoint returned 200 OK"
+    "lastMonitoredUtc": "2026-03-07T12:40:00.000Z",
+    "lastRegressionAlertUtc": null,
+    "latestMonitoringSummary": "Health endpoint returned 200 OK",
+    "monitoringFailureCount": 0
   },
-  "timestamp": "2026-03-07T12:35:00.000Z"
+  "timestamp": "2026-03-07T12:40:00.000Z"
 }
 ```
 
 | Field | Type | Description |
 |---|---|---|
 | `type` | string | Always `"environment.health"` |
-| `data.deploymentId` | string \| null | Deployment ID tied to the health update |
-| `data.environmentId` | string \| null | Environment ID tied to the health update |
+| `data.environmentId` | string \| null | Environment ID (prefix `env_`) |
 | `data.environmentName` | string \| null | Environment name |
-| `data.verificationStatus` | string \| null | Current deployment verification status |
-| `data.message` | string \| null | Human-readable health/verification message |
+| `data.id` | string | Deployment ID (prefix `dpl_`) the update comes from |
+| `data.title` | string | Deployment title |
+| `data.status` | string | Deployment status |
+| `data.verificationStatus` | string | Deployment verification status |
+| `data.lastMonitoredUtc` | string \| null | Last rollout-monitoring check |
+| `data.lastRegressionAlertUtc` | string \| null | Last regression alert |
+| `data.latestMonitoringSummary` | string \| null | Latest monitoring summary text |
+| `data.monitoringFailureCount` | int | Consecutive monitoring failures |
+| `timestamp` | string | ISO 8601 UTC timestamp |
+
+---
+
+### incident.changed
+
+Broadcast when an incident record is created or updated.
+
+| Field | Type | Description |
+|---|---|---|
+| `type` | string | Always `"incident.changed"` |
+| `data` | object | Full serialized `Incident` payload (prefix `inc_`; `status`: `Open`, `Monitoring`, `Mitigated`, `RolledBack`, `Closed`; `severity`: `Critical`, `High`, `Medium`, `Low`; includes `environmentId` and `environmentName`) |
+| `timestamp` | string | ISO 8601 UTC timestamp |
+
+---
+
+### runbook-execution.changed
+
+Broadcast when a runbook execution is started, updated, or finished.
+
+| Field | Type | Description |
+|---|---|---|
+| `type` | string | Always `"runbook-execution.changed"` |
+| `data` | object | Full serialized `RunbookExecution` payload (prefix `rbx_`; `status`: `Running`, `Completed`, `Cancelled`; includes `environmentId` and `environmentName`) |
 | `timestamp` | string | ISO 8601 UTC timestamp |
 
 ---
@@ -782,7 +878,6 @@ Broadcast to the planning session's tenant. Field names are camelCase.
 | `planning-session.summary.created` | `{ sessionId, messageId, draft }` | A dispatch draft was generated |
 | `planning-session.dispatch.created` | `{ sessionId, voyageId, messageId }` | A voyage was dispatched from the session |
 | `planning-session.deleted` | `{ sessionId }` | The session was deleted |
-| `objective-refinement-session.deleted` | `{ sessionId, objectiveId }` | A refinement session was deleted |
 
 `planning-session.created` and `planning-session.stopped` (and the refinement-session `created` and `stopped`
 events) are generic events (see below).
@@ -793,8 +888,23 @@ events) are generic events (see below).
 
 Broadcast when the Admiral records an entity event that has no dedicated payload (deletions, purges, review
 decisions, landing outcomes, captain launches, planning and refinement session lifecycle). Every generic event has the
-same payload; the full list of generic event types is in [API_SURFACE_1.0.md](API_SURFACE_1.0.md#events). New types may
-be added in minor releases.
+same payload. The generic event types in 1.0 (also listed in [API_SURFACE_1.0.md](API_SURFACE_1.0.md#events)) are:
+
+| Entity | Generic event types |
+|---|---|
+| Captain | `captain.launched`, `captain.batch_deleted` |
+| Dock | `dock.deleted`, `dock.purged`, `dock.repaired`, `dock.unstuck`, `dock.batch_deleted` |
+| Event | `event.deleted`, `event.batch_deleted` |
+| Fleet | `fleet.batch_deleted` |
+| Merge queue | `merge.purged`, `merge.batch_purged` |
+| Mission | `mission.completed`, `mission.deleted`, `mission.landing_failed`, `mission.manual_complete_no_dock`, `mission.pull_request_open`, `mission.restarted`, `mission.review_approved`, `mission.review_denied`, `mission.work_produced`, `mission.batch_deleted`, and [`mission.status_changed`](#missionstatus_changed) (which adds `status` and `previousStatus`) |
+| Objective refinement session | `objective-refinement-session.created`, `objective-refinement-session.stopped` |
+| Planning session | `planning-session.created`, `planning-session.stopped` |
+| Signal | `signal.batch_deleted` |
+| Vessel | `vessel.batch_deleted` |
+| Voyage | `voyage.deleted`, `voyage.batch_deleted` |
+
+New types may be added in minor releases; clients must ignore types they do not recognize.
 
 ```json
 {
@@ -842,6 +952,7 @@ Commands are sent via the `command` route. Each command returns a `command.resul
 | **Status & Control** | `status` | Get current ArmadaStatus | - |
 | | `stop_captain` | Stop specific captain | `captainId` |
 | | `stop_all` | Emergency stop all captains | - |
+| | `stop_server` | Stop the Admiral | - |
 | **Fleet** | `list_fleets` | List/enumerate fleets | optional `query` |
 | | `get_fleet` | Get fleet by ID | `id` |
 | | `create_fleet` | Create fleet | `data` |
@@ -849,7 +960,7 @@ Commands are sent via the `command` route. Each command returns a `command.resul
 | | `delete_fleet` | Delete fleet | `id` |
 | **Vessel** | `list_vessels` | List/enumerate vessels | optional `query` |
 | | `get_vessel` | Get vessel by ID | `id` |
-| | `create_vessel` | Create vessel | `data` |
+| | `create_vessel` | Create vessel | `data` (with `RepoUrl`) |
 | | `update_vessel` | Update vessel | `id`, `data` |
 | | `update_vessel_context` | Update vessel project context and style guide | `id`, `data` |
 | | `delete_vessel` | Delete vessel | `id` |
@@ -866,12 +977,12 @@ Commands are sent via the `command` route. Each command returns a `command.resul
 | | `transition_mission_status` | Transition mission status | `id`, `status` |
 | | `cancel_mission` | Cancel mission | `id` |
 | | `purge_mission` | Permanently delete mission | `id` |
-| | `restart_mission` | Restart failed/cancelled mission | `id`, optional `data.title`, `data.description` |
+| | `restart_mission` | Restart a `Failed`, `LandingFailed`, or `Cancelled` mission | `id`, optional `data.title`, `data.description` |
 | **Captain** | `list_captains` | List/enumerate captains | optional `query` |
 | | `get_captain` | Get captain by ID | `id` |
 | | `create_captain` | Create captain | `data` |
 | | `update_captain` | Update captain (preserves operational fields) | `id`, `data` |
-| | `delete_captain` | Delete captain (auto-recalls if working) | `id` |
+| | `delete_captain` | Delete captain (refused while `Working` or with active missions) | `id` |
 | **Signal** | `list_signals` | List/enumerate signals | optional `query` |
 | | `send_signal` | Create signal | `data` |
 | **Event** | `list_events` | List/enumerate events | optional `query` |
@@ -897,7 +1008,6 @@ Commands are sent via the `command` route. Each command returns a `command.resul
 | **Enumerate** | `enumerate` | Paginated enumeration of any entity type | `entityType`, optional `query` |
 | **Backup** | `backup` | Create a backup ZIP | optional `outputPath` |
 | | `restore` | Restore from a backup ZIP | `filePath` |
-| **Status & Control** | `stop_server` | Stop the Admiral | - |
 
 Any other `action` is rejected with `command.error` code `UnknownAction` (`Unknown action: <action>`).
 
@@ -1079,7 +1189,7 @@ List or enumerate fleets with optional pagination and filtering.
 
 #### get_fleet
 
-Get a fleet by ID.
+Get a fleet by ID together with its vessels.
 
 **Request:**
 
@@ -1103,9 +1213,10 @@ Get a fleet by ID.
   "type": "command.result",
   "action": "get_fleet",
   "data": {
-    "id": "flt_abc123",
-    "name": "my-fleet",
-    "...": "..."
+    "fleet": { "id": "flt_abc123", "name": "my-fleet", "...": "..." },
+    "vessels": [
+      { "id": "vsl_abc123", "name": "my-repo", "fleetId": "flt_abc123", "...": "..." }
+    ]
   }
 }
 ```
@@ -1170,7 +1281,7 @@ Update an existing fleet.
 |---|---|---|---|
 | `action` | string | Yes | `"update_fleet"` |
 | `id` | string | Yes | Fleet ID (prefix `flt_`) |
-| `data` | object | Yes | Fields to update |
+| `data` | object | Yes | The full fleet: the stored record is replaced, so send the object as returned by `get_fleet` (including `tenantId` and `userId`) with your changes |
 
 **Response:**
 
@@ -1190,7 +1301,7 @@ Update an existing fleet.
 
 #### delete_fleet
 
-Delete a fleet.
+Delete a fleet. Its vessels are kept.
 
 **Request:**
 
@@ -1214,7 +1325,7 @@ Delete a fleet.
   "type": "command.result",
   "action": "delete_fleet",
   "data": {
-    "success": true
+    "status": "deleted"
   }
 }
 ```
@@ -1302,7 +1413,7 @@ Create a new vessel.
   "data": {
     "Name": "my-repo",
     "FleetId": "flt_abc123",
-    "RepositoryUrl": "https://github.com/org/repo.git"
+    "RepoUrl": "https://github.com/org/repo.git"
   }
 }
 ```
@@ -1310,7 +1421,7 @@ Create a new vessel.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `action` | string | Yes | `"create_vessel"` |
-| `data` | object | Yes | Vessel creation data |
+| `data` | object | Yes | Vessel creation data ([Vessel](#vessel) fields). `RepoUrl` is required (`command.error` `InvalidArgument` otherwise) |
 
 ---
 
@@ -1335,7 +1446,7 @@ Update an existing vessel.
 |---|---|---|---|
 | `action` | string | Yes | `"update_vessel"` |
 | `id` | string | Yes | Vessel ID (prefix `vsl_`) |
-| `data` | object | Yes | Fields to update |
+| `data` | object | Yes | The full vessel: the record is replaced (send every field you want to keep). `TenantId`, `UserId`, and the stored GitHub token override are preserved unless `GitHubTokenOverride` is sent |
 
 ---
 
@@ -1386,7 +1497,8 @@ Partial update of a vessel's project context and style guide fields only. Unlike
 
 #### delete_vessel
 
-Delete a vessel.
+Delete a vessel. Its `Pending`, `Assigned`, and `InProgress` missions are cancelled, its docks and their worktrees are
+removed, and its bare repository is deleted when it lives under the Admiral's repos directory.
 
 **Request:**
 
@@ -1402,6 +1514,8 @@ Delete a vessel.
 |---|---|---|---|
 | `action` | string | Yes | `"delete_vessel"` |
 | `id` | string | Yes | Vessel ID (prefix `vsl_`) |
+
+**Response:** `{ "type": "command.result", "action": "delete_vessel", "data": { "status": "deleted" } }`
 
 ---
 
@@ -1470,7 +1584,8 @@ Get a voyage by ID. Returns the voyage object along with its missions.
 
 #### create_voyage
 
-Create a new voyage. Optionally include a `vesselId` and `missions[]` array for immediate dispatch.
+Create a new voyage. When `data` includes both a `VesselId` and a non-empty `Missions` array, the voyage is dispatched
+(missions are created and assigned); otherwise an empty voyage is created. The reply's `data` is the voyage.
 
 **Request (basic):**
 
@@ -1506,14 +1621,17 @@ Create a new voyage. Optionally include a `vesselId` and `missions[]` array for 
 |---|---|---|---|
 | `action` | string | Yes | `"create_voyage"` |
 | `data` | object | Yes | Voyage creation data |
+| `data.Title` | string | No | Voyage title |
+| `data.Description` | string | No | Voyage description |
 | `data.VesselId` | string | No | Target vessel for missions |
-| `data.Missions` | array | No | Array of mission objects to create and dispatch |
+| `data.Missions` | array | No | Missions to create and dispatch: `Title`, `Description`, optional `Tier` and `RequestedCaptainId` |
 
 ---
 
 #### cancel_voyage
 
-Cancel a voyage. All pending and assigned missions are also cancelled.
+Cancel a voyage. Its `Pending` and `Assigned` missions are also cancelled (an assigned captain with no other active
+mission returns to `Idle`); `InProgress` missions keep running.
 
 **Request:**
 
@@ -1530,11 +1648,15 @@ Cancel a voyage. All pending and assigned missions are also cancelled.
 | `action` | string | Yes | `"cancel_voyage"` |
 | `id` | string | Yes | Voyage ID (prefix `vyg_`) |
 
+**Response:** `data` is `{ "voyage": { ... }, "cancelledMissions": 2 }`.
+
 ---
 
 #### purge_voyage
 
-Permanently delete a voyage and all of its missions.
+Permanently delete a voyage and all of its missions (with their docks, worktrees, logs, and saved diffs). Refused with
+`code` `Conflict` while the voyage is `Open` or `InProgress` (cancel it first) or while any of its missions is `Assigned`
+or `InProgress`.
 
 **Request:**
 
@@ -1550,6 +1672,8 @@ Permanently delete a voyage and all of its missions.
 |---|---|---|---|
 | `action` | string | Yes | `"purge_voyage"` |
 | `id` | string | Yes | Voyage ID (prefix `vyg_`) |
+
+**Response:** `data` is `{ "status": "deleted", "voyageId": "vyg_abc123", "missionsDeleted": 3 }`.
 
 ---
 
@@ -1612,6 +1736,8 @@ This action returns `MissionSummary` rows instead of full `Mission` objects. Use
 | Field | Type | Description |
 |---|---|---|
 | `id` | string | Mission ID |
+| `tenantId` | string \| null | Owning tenant |
+| `userId` | string \| null | Owning user |
 | `title` | string | Mission title |
 | `status` | string | [MissionStatusEnum](#missionstatusenum) value |
 | `vesselId` | string \| null | Linked vessel ID |
@@ -1626,10 +1752,19 @@ This action returns `MissionSummary` rows instead of full `Mission` objects. Use
 | `parentMissionId` | string \| null | Parent mission ID |
 | `persona` | string \| null | Assigned persona |
 | `dependsOnMissionId` | string \| null | Dependency mission ID |
+| `failureReason` | string \| null | Human-readable failure detail (not stable; do not parse) |
+| `failureKind` | string \| null | Structured failure classification (see [Mission](#mission)) |
+| `requiresReview` | bool | Whether the mission stops at a review gate |
+| `reviewDenyAction` | string | `RetryStage` or `FailPipeline` |
+| `reviewComment` | string \| null | Reviewer comment |
+| `reviewedByUserId` | string \| null | Reviewer user ID |
+| `reviewRequestedUtc` | string \| null | When review was requested |
+| `reviewedUtc` | string \| null | When the review decision was made |
 | `createdUtc` | string | Creation timestamp |
 | `lastUpdateUtc` | string | Last update timestamp |
 | `startedUtc` | string \| null | Start timestamp |
 | `completedUtc` | string \| null | Completion timestamp |
+| `totalRuntimeMs` | int \| null | Total captain runtime in milliseconds |
 | `descriptionLength` | int | Saved description length |
 | `diffSnapshotLength` | int | Saved diff length |
 | `agentOutputLength` | int | Saved agent output length |
@@ -1659,7 +1794,9 @@ Get a mission by ID.
 
 #### create_mission
 
-Create a new mission and dispatch it for assignment.
+Create a new mission and dispatch it for assignment. When no captain can take it yet, the mission stays `Pending` and
+the reply carries an extra top-level `warning` string ("Mission created but could not be assigned to any captain...");
+it is retried on the next health check cycle.
 
 **Request:**
 
@@ -1706,7 +1843,7 @@ Update an existing mission.
 |---|---|---|---|
 | `action` | string | Yes | `"update_mission"` |
 | `id` | string | Yes | Mission ID (prefix `msn_`) |
-| `data` | object | Yes | Fields to update |
+| `data` | object | Yes | The full mission: the stored record is replaced, so send the object as returned by `get_mission` (including `tenantId` and `userId`) with your changes |
 
 ---
 
@@ -1749,7 +1886,8 @@ Transition a mission to a new status. The transition must be valid according to 
 
 #### cancel_mission
 
-Cancel a mission.
+Cancel a mission. Its captain returns to `Idle` when this was its only active mission. The reply's `data` is the
+cancelled mission.
 
 **Request:**
 
@@ -1806,7 +1944,8 @@ Permanently delete a mission from the database. This action is irreversible.
 
 #### restart_mission
 
-Restart a failed or cancelled mission, resetting it to `Pending` for re-dispatch. Optionally update the title and description before restarting.
+Restart a `Failed`, `LandingFailed`, or `Cancelled` mission, resetting it to `Pending` for re-dispatch (captain, branch,
+pull request URL, and timestamps are cleared). Optionally update the title and description before restarting.
 
 **Request:**
 
@@ -1839,18 +1978,21 @@ Restart a failed or cancelled mission, resetting it to `Pending` for re-dispatch
     "id": "msn_abc123",
     "status": "Pending",
     "title": "Updated title",
-    "..."
+    "...": "..."
   }
 }
 ```
 
-**Errors:** `command.error` if mission not found or not in `Failed`/`Cancelled` status.
+**Errors:** `command.error` with `code` `NotFound` when the mission does not exist, or `Conflict` when it is not
+`Failed`, `LandingFailed`, or `Cancelled`.
 
 ---
 
 #### get_mission_diff
 
-Get the git diff for a mission. Returns a saved diff file if available, otherwise attempts a live diff from the worktree.
+Get the git diff for a mission. Returns the saved diff file if one exists, then the mission's `diffSnapshot`, and
+otherwise a live diff of the mission's worktree against the vessel's default branch. When none is available the reply is
+`command.error` with `code` `Unavailable`.
 
 **Request:**
 
@@ -1885,7 +2027,8 @@ Get the git diff for a mission. Returns a saved diff file if available, otherwis
 
 #### get_mission_log
 
-Get the session log for a mission with pagination support.
+Get the session log for a mission with pagination support. A mission without a log file returns an empty `log` with
+`lines` and `totalLines` of 0.
 
 **Request:**
 
@@ -1996,7 +2139,9 @@ Create a new captain.
 
 #### update_captain
 
-Update an existing captain. Operational fields (state, current mission, heartbeat) are preserved and cannot be overwritten.
+Update an existing captain. The stored record is replaced by `data`, except that the operational fields (`state`,
+`currentMissionId`, `currentDockId`, `processId`, `recoveryAttempts`, `lastHeartbeatUtc`) and `createdUtc` are kept;
+send the object as returned by `get_captain` (including `tenantId` and `userId`) with your changes.
 
 **Request:**
 
@@ -2021,7 +2166,8 @@ Update an existing captain. Operational fields (state, current mission, heartbea
 
 #### delete_captain
 
-Delete a captain. If the captain is currently working, it is automatically recalled before deletion.
+Delete a captain. Refused with `code` `Conflict` while the captain is `Working` (stop it first) or while any of its
+missions is `Assigned` or `InProgress`. On success `data` is `{ "status": "deleted" }`.
 
 **Request:**
 
@@ -2145,7 +2291,7 @@ List or enumerate events with optional pagination and filtering.
   "action": "list_events",
   "query": {
     "pageSize": 50,
-    "eventType": "escalation.triggered"
+    "eventType": "mission.status_changed"
   }
 }
 ```
@@ -2186,7 +2332,8 @@ List or enumerate docks (git worktrees) with optional pagination and filtering.
 
 #### list_merge_queue
 
-List merge queue entries with optional pagination and filtering.
+List merge queue entries with optional pagination. Only `pageNumber` and `pageSize` from `query` are applied; the
+other filters are ignored for the merge queue.
 
 **Request:**
 
@@ -2225,7 +2372,7 @@ Get a merge queue entry by ID.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `action` | string | Yes | `"get_merge_entry"` |
-| `id` | string | Yes | Merge entry ID |
+| `id` | string | Yes | Merge entry ID (prefix `mrg_`) |
 
 ---
 
@@ -2271,7 +2418,9 @@ Cancel a merge queue entry.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `action` | string | Yes | `"cancel_merge"` |
-| `id` | string | Yes | Merge entry ID |
+| `id` | string | Yes | Merge entry ID (prefix `mrg_`) |
+
+**Response:** `data` is `{ "status": "cancelled" }`.
 
 ---
 
@@ -2295,7 +2444,7 @@ Trigger processing of the merge queue.
   "type": "command.result",
   "action": "process_merge_queue",
   "data": {
-    "success": true
+    "status": "processed"
   }
 }
 ```
@@ -2314,16 +2463,16 @@ Create a backup of the Armada database and settings as a ZIP archive.
 {
   "Route": "command",
   "action": "backup",
-  "data": {
-    "OutputPath": "~/.armada/backups/my-backup.zip"
-  }
+  "outputPath": "/home/alex/.armada/backups/my-backup.zip"
 }
 ```
 
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `action` | string | Yes | `"backup"` |
-| `data.OutputPath` | string | No | File path for the backup ZIP. Defaults to `~/.armada/backups/armada-backup-{timestamp}.zip` |
+| `outputPath` | string | No | Path on the Admiral host for the backup ZIP (a top-level field, not inside `data`). Defaults to `{DataDirectory}/backups/armada-backup-{yyyy-MM-dd-HHmmss}.zip` |
+
+Backup and restore support the SQLite database provider only.
 
 **Response:**
 
@@ -2332,11 +2481,11 @@ Create a backup of the Armada database and settings as a ZIP archive.
   "type": "command.result",
   "action": "backup",
   "data": {
-    "Path": "~/.armada/backups/armada-backup-20260311T120000Z.zip",
-    "Timestamp": "2026-03-11T12:00:00Z",
-    "SchemaVersion": 9,
-    "SizeBytes": 245760,
-    "RecordCounts": {
+    "path": "/home/alex/.armada/backups/armada-backup-2026-03-11-120000.zip",
+    "timestampUtc": "2026-03-11T12:00:00.0000000Z",
+    "schemaVersion": 9,
+    "sizeBytes": 245760,
+    "recordCounts": {
       "Fleets": 2,
       "Vessels": 5,
       "Captains": 3,
@@ -2359,16 +2508,14 @@ Restore Armada from a previously created backup ZIP file.
 {
   "Route": "command",
   "action": "restore",
-  "data": {
-    "FilePath": "~/.armada/backups/armada-backup-20260311T120000Z.zip"
-  }
+  "filePath": "/home/alex/.armada/backups/armada-backup-2026-03-11-120000.zip"
 }
 ```
 
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `action` | string | Yes | `"restore"` |
-| `data.FilePath` | string | Yes | Path to the backup ZIP file to restore from |
+| `filePath` | string | Yes | Path on the Admiral host of the backup ZIP to restore from (a top-level field, not inside `data`). Missing: `command.error` `InvalidArgument` |
 
 **Response:**
 
@@ -2377,15 +2524,16 @@ Restore Armada from a previously created backup ZIP file.
   "type": "command.result",
   "action": "restore",
   "data": {
-    "Status": "restored",
-    "SafetyBackupPath": "~/.armada/backups/armada-safety-backup-20260311T120000Z.zip",
-    "SchemaVersion": 9,
-    "Message": "Database restored from armada-backup-20260311T120000Z.zip. Restart the server to reload the restored data."
+    "status": "restored",
+    "backupPath": "/home/alex/.armada/backups/pre-restore-2026-03-11-120500.zip",
+    "schemaVersion": 9,
+    "message": "Database restored from armada-backup-2026-03-11-120000.zip. Restart the server to reload the restored data."
   }
 }
 ```
 
-> **Note:** A safety backup is automatically created before overwriting. Restart the server after restoring.
+> **Note:** A safety backup of the current state (`backupPath`, `pre-restore-{timestamp}.zip` under
+> `{DataDirectory}/backups`) is created before overwriting. Restart the server after restoring.
 
 ---
 
@@ -2422,15 +2570,16 @@ Generic paginated enumeration of any entity type with filtering and sorting. Thi
 |---|---|
 | `fleets` | `createdAfter`, `createdBefore` |
 | `vessels` | `fleetId`, `createdAfter`, `createdBefore` |
-| `captains` | `status` (Idle/Working/Stalled), `createdAfter`, `createdBefore` |
+| `captains` | `status` ([CaptainStateEnum](#captainstateenum)), `createdAfter`, `createdBefore` |
 | `missions` | `status`, `vesselId`, `captainId`, `voyageId`, `createdAfter`, `createdBefore` |
-| `voyages` | `status` (Active/Complete/Cancelled), `createdAfter`, `createdBefore` |
+| `voyages` | `status` ([VoyageStatusEnum](#voyagestatusenum)), `createdAfter`, `createdBefore` |
 | `docks` | `vesselId`, `createdAfter`, `createdBefore` |
 | `signals` | `signalType`, `captainId`, `toCaptainId`, `unreadOnly`, `createdAfter`, `createdBefore` |
 | `events` | `eventType`, `captainId`, `missionId`, `vesselId`, `voyageId`, `createdAfter`, `createdBefore` |
-| `merge_queue` | `status` (Queued/Testing/Passed/Failed/Landed/Cancelled), `createdAfter`, `createdBefore` |
+| `merge_queue` | Paging only (`pageNumber`, `pageSize`); filters are ignored |
 
-Singular forms (e.g., `"fleet"`, `"mission"`) are also accepted.
+Singular forms (e.g., `"fleet"`, `"mission"`) are also accepted, as are `merge-queue` and `mergequeue`. Entity type
+names are case-insensitive.
 
 **Response:**
 
@@ -2456,7 +2605,8 @@ Singular forms (e.g., `"fleet"`, `"mission"`) are also accepted.
 {
   "type": "command.error",
   "action": "enumerate",
-  "error": "Unknown entity type: bananas. Valid types: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue"
+  "error": "Unknown entity type: bananas. Valid types: fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue",
+  "code": "InvalidArgument"
 }
 ```
 
@@ -2464,14 +2614,14 @@ Singular forms (e.g., `"fleet"`, `"mission"`) are also accepted.
 
 ## Pagination
 
-All `list_*` actions and the `enumerate` action support an optional `query` object for pagination and filtering via [EnumerationQuery](#enumerationquery).
+All `list_*` actions and the `enumerate` action support an optional `query` object (field names case-insensitive) for pagination and filtering via [EnumerationQuery](#enumerationquery).
 
 ### EnumerationQuery
 
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `pageNumber` | int | 1 | Page number (1-based) |
-| `pageSize` | int | 100 | Results per page (min 1, max 1000) |
+| `pageSize` | int | 10 | Results per page (min 1, max 1000; out-of-range values are clamped) |
 | `order` | string | `"CreatedDescending"` | Sort order: `"CreatedAscending"` or `"CreatedDescending"` |
 | `createdAfter` | string | null | Filter: only records created after this ISO 8601 datetime |
 | `createdBefore` | string | null | Filter: only records created before this ISO 8601 datetime |
@@ -2520,20 +2670,21 @@ All `list_*` actions return a paginated response:
 
 ## Mission Status Transitions
 
-Not all status transitions are valid. The following table documents the allowed transitions:
+`transition_mission_status` accepts only the transitions below; any other target (including any transition out of
+`PullRequestOpen`, `Complete`, `Failed`, or `Cancelled`) is rejected. The landing pipeline moves missions into and out of
+`PullRequestOpen` itself.
 
 | From | Allowed To |
 |---|---|
 | `Pending` | `Assigned`, `Cancelled` |
 | `Assigned` | `InProgress`, `Cancelled` |
 | `InProgress` | `WorkProduced`, `Testing`, `Review`, `Complete`, `Failed`, `Cancelled` |
-| `WorkProduced` | `PullRequestOpen`, `Complete`, `LandingFailed`, `Cancelled` |
-| `PullRequestOpen` | `Complete`, `LandingFailed`, `Cancelled` |
+| `WorkProduced` | `Complete`, `LandingFailed`, `Cancelled` |
 | `Testing` | `Review`, `InProgress`, `Complete`, `Failed` |
 | `Review` | `Complete`, `InProgress`, `Failed` |
 | `LandingFailed` | `WorkProduced`, `Failed`, `Cancelled` |
 
-Invalid transitions will return a `command.error` response.
+An invalid transition returns `command.error` with `code` `Conflict`; an unknown status name returns `InvalidArgument`.
 
 ---
 
@@ -2553,14 +2704,17 @@ it, never on the English `error` text (which is not stable).
 }
 ```
 
-If the command body cannot be parsed or an exception occurs, `action` is null and `code` comes from the exception type:
+If a command throws (for example a `data` object that cannot be deserialized into the target model), `action` is null
+and `code` comes from the exception type: `NotFound` for a missing key, `InvalidArgument` for an invalid argument,
+`Forbidden`, `Unavailable` for an unsupported operation (such as backup on a non-SQLite database), `Conflict` for an
+invalid operation, and `InternalError` otherwise (a JSON deserialization error currently maps to `InternalError`):
 
 ```json
 {
   "type": "command.error",
   "action": null,
-  "error": "Unexpected character encountered while parsing value",
-  "code": "InvalidArgument"
+  "error": "Built-in backup and restore support SQLite only. Back up Postgresql with its own tools (pg_dump, mysqldump, or BACKUP DATABASE); see docs/UPGRADING.md.",
+  "code": "Unavailable"
 }
 ```
 
@@ -2575,7 +2729,7 @@ If the command body cannot be parsed or an exception occurs, `action` is null an
 |---|---|
 | `UnknownAction` | The `action` is not a command the handler accepts |
 | `NotFound` | The entity the command names does not exist |
-| `InvalidArgument` | A required field is missing or a value is invalid (including an unparseable body) |
+| `InvalidArgument` | A required field is missing or a value is invalid |
 | `Conflict` | The entity's current state does not allow the command (for example an invalid status transition) |
 | `Forbidden` | The caller may not run the command (WebSocket commands require a global administrator) |
 | `Unavailable` | A service or data the command needs is not available on this server (for example no saved diff) |
@@ -2604,18 +2758,18 @@ Sending a message to a route other than `subscribe` or `command` returns:
 ```json
 {
   "type": "error",
-  "message": "Unknown route: bad_route"
+  "message": "Unknown route: bad_route. Send a message with route 'subscribe' or 'command'"
 }
 ```
 
 ### No Route Specified
 
-If a message is sent without a route:
+If a message is sent without a route, or is not valid JSON:
 
 ```json
 {
   "type": "error",
-  "message": "Send a message with route 'subscribe' or 'command'"
+  "message": "Unknown route: null. Send a message with route 'subscribe' or 'command'"
 }
 ```
 
@@ -2624,6 +2778,10 @@ If a message is sent without a route:
 ## Data Types
 
 ### Models
+
+The tables below list the commonly used fields. Entity payloads carry every public property of the model, camelCased
+(the same models as the REST API; see [REST_API.md](REST_API.md#data-types)), and clients must ignore fields they do not
+recognize.
 
 #### ArmadaStatus
 
@@ -2634,6 +2792,7 @@ If a message is sent without a route:
 | `workingCaptains` | int | Captains in Working state |
 | `stalledCaptains` | int | Captains in Stalled state |
 | `activeVoyages` | int | Number of active (non-complete) voyages |
+| `memoryPressureDeferrals` | int | Cumulative dispatch attempts deferred because the host was under memory pressure |
 | `missionsByStatus` | object | Map of status string to count (e.g., `{"Pending": 3, "InProgress": 2}`) |
 | `voyages` | array | List of [VoyageProgress](#voyageprogress) objects |
 | `recentSignals` | array | List of recent [Signal](#signal) objects |
@@ -2652,7 +2811,8 @@ If a message is sent without a route:
 | `connectedUtc` | string \| null | Last successful connection timestamp |
 | `lastHeartbeatUtc` | string \| null | Last heartbeat or inbound tunnel activity timestamp |
 | `lastDisconnectUtc` | string \| null | Last disconnect timestamp |
-| `lastError` | string \| null | Last recorded tunnel error |
+| `lastError` | string \| null | Last recorded tunnel error (not stable; do not parse) |
+| `lastErrorCode` | string \| null | Machine-readable code for `lastError`, or null when there is no error |
 | `reconnectAttempts` | int | Consecutive reconnect attempts since the last successful connection |
 | `latencyMs` | int \| null | Last successful ping/pong latency in milliseconds |
 | `capabilityManifest` | object | Current handshake capability manifest |
@@ -2666,6 +2826,7 @@ If a message is sent without a route:
 | `completedMissions` | int | Missions with status Complete |
 | `failedMissions` | int | Missions with status Failed |
 | `inProgressMissions` | int | Missions currently in progress |
+| `vesselIds` | string[] | Distinct vessel IDs referenced by the voyage's missions |
 
 #### Voyage
 
@@ -2682,6 +2843,8 @@ If a message is sent without a route:
 | `autoCreatePullRequests` | bool \| null | Override global auto-create PR setting |
 | `autoMergePullRequests` | bool \| null | Override global auto-merge PR setting |
 | `landingMode` | string \| null | [LandingModeEnum](#landingmodeenum) -- per-voyage landing policy override |
+| `sourcePlanningSessionId` | string \| null | Planning session that dispatched the voyage |
+| `sourcePlanningMessageId` | string \| null | Planning message the voyage was dispatched from |
 
 #### Vessel
 
@@ -2723,11 +2886,15 @@ If a message is sent without a route:
 | `diffSnapshot` | string \| null | Saved git diff snapshot captured at mission completion |
 | `persona` | string \| null | Persona for this mission (for example `Worker`, `Architect`, `Judge`) |
 | `failureReason` | string \| null | Human-readable failure detail (not stable; do not parse) |
+| `requiresReview` | bool | Whether the mission stops at a review gate |
 | `failureKind` | string \| null | Structured failure classification (`MissionFailureKindEnum`: `Compile`, `TestFail`, `Timeout`, `LandingConflict`, `Crash`, `NoOp`, `Boundary`, `ScopeViolation`, `JudgeRejected`, `Infra`, `Unknown`, `ReviewDenied`, `DependencyFailed`, `MaxRuntimeExceeded`, `StallRecoveryExhausted`, `OperatorAction`, `InvalidOutput`). Branch on this, not on `failureReason` |
 | `createdUtc` | string | ISO 8601 creation timestamp |
 | `startedUtc` | string \| null | ISO 8601 start timestamp |
 | `completedUtc` | string \| null | ISO 8601 completion timestamp |
 | `lastUpdateUtc` | string | ISO 8601 last update timestamp |
+
+The REST API adds a computed `AssignmentBlocker` (why a `Pending` mission is still waiting for a captain) when one
+mission or a voyage's missions are read; WebSocket commands and events do not compute it, so the field is absent here.
 
 #### Captain
 
@@ -2736,6 +2903,7 @@ If a message is sent without a route:
 | `id` | string | Captain ID (prefix `cpt_`) |
 | `name` | string | Display name |
 | `runtime` | string | [AgentRuntimeEnum](#agentruntimeenum) value |
+| `model` | string \| null | Model override |
 | `state` | string | [CaptainStateEnum](#captainstateenum) value |
 | `currentMissionId` | string \| null | Currently assigned mission |
 | `currentDockId` | string \| null | Currently assigned dock (worktree) |
@@ -2761,10 +2929,16 @@ If a message is sent without a route:
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | string | Event ID |
-| `type` | string | Event type string |
-| `message` | string | Human-readable description |
-| `data` | string \| null | JSON data payload |
+| `id` | string | Event ID (prefix `evt_`) |
+| `eventType` | string | Event type string (for example `mission.status_changed`) |
+| `entityType` | string \| null | Related entity type |
+| `entityId` | string \| null | Related entity ID |
+| `captainId` | string \| null | Related captain |
+| `missionId` | string \| null | Related mission |
+| `vesselId` | string \| null | Related vessel |
+| `voyageId` | string \| null | Related voyage |
+| `message` | string | Human-readable description (not stable; do not parse) |
+| `payload` | string \| null | JSON payload string (for `mission.status_changed`: `{"Status": ..., "PreviousStatus": ...}`) |
 | `createdUtc` | string | ISO 8601 creation timestamp |
 
 #### Dock
@@ -2784,11 +2958,15 @@ If a message is sent without a route:
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | string | Merge entry ID |
+| `id` | string | Merge entry ID (prefix `mrg_`) |
 | `vesselId` | string | Target vessel ID |
 | `missionId` | string \| null | Associated mission ID |
 | `branchName` | string | Branch to merge |
+| `targetBranch` | string | Branch to merge into (default `main`) |
 | `status` | string | [MergeStatusEnum](#mergestatusenum) value |
+| `priority` | int | Queue priority (default 0) |
+| `testCommand` | string \| null | Test command run before landing |
+| `testExitCode` | int \| null | Exit code of the test command |
 | `createdUtc` | string | ISO 8601 creation timestamp |
 | `completedUtc` | string \| null | ISO 8601 completion timestamp |
 
@@ -2836,6 +3014,7 @@ If a message is sent without a route:
 | `Open` | Voyage created, missions being set up |
 | `InProgress` | Has active missions in progress |
 | `Complete` | All missions completed |
+| `Failed` | Reached a terminal state with one or more failed missions |
 | `Cancelled` | Voyage was cancelled |
 
 #### CaptainStateEnum
@@ -2844,8 +3023,12 @@ If a message is sent without a route:
 |---|---|
 | `Idle` | Available for assignment |
 | `Working` | Actively working on a mission |
+| `Planning` | Reserved for a planning session |
+| `Refining` | Reserved for a backlog refinement session |
 | `Stalled` | Process appears stalled (no heartbeat) |
 | `Stopping` | In process of stopping |
+| `Quarantined` | Excluded from dispatch until its quarantine expires (usage-limit or auth failure, or crash loop) |
+| `Analyzing` | Reserved for a one-off analysis job (for example fleet categorization of imported repositories) |
 
 #### SignalTypeEnum
 
@@ -2868,17 +3051,20 @@ If a message is sent without a route:
 | `Gemini` | Google Gemini CLI |
 | `Cursor` | Cursor agent CLI |
 | `Mux` | Mux CLI |
+| `OpenCode` | OpenCode CLI |
+| `ApiEndpoint` | In-process tool-calling loop driven by a configured model endpoint |
 | `Custom` | Custom agent runtime |
 
 #### MergeStatusEnum
 
 | Value | Description |
 |---|---|
-| `Pending` | Waiting in the queue |
-| `InProgress` | Currently being merged |
-| `Complete` | Successfully merged |
-| `Failed` | Merge failed |
-| `Cancelled` | Merge was cancelled |
+| `Queued` | Waiting in the queue |
+| `Testing` | Merged into the integration branch; tests running |
+| `Passed` | Tests passed; ready to land |
+| `Failed` | Tests or merge failed |
+| `Landed` | Merged into the target branch |
+| `Cancelled` | Removed from the queue (manually or due to a conflict) |
 
 #### EnumerationOrderEnum
 
@@ -2891,14 +3077,20 @@ If a message is sent without a route:
 
 ## Client Examples
 
+Every example authenticates with a token (see [Authentication](#authentication)); `ARMADA_TOKEN` stands for a bearer
+credential token, a session token from `POST /api/v1/authenticate`, or the API key. The commands shown require a global
+administrator; a tenant user's socket still receives its tenant's events.
+
 ### JavaScript
 
 ```javascript
-const ws = new WebSocket("ws://localhost:7890/ws");
+const token = process.env.ARMADA_TOKEN; // in a browser, the session token from login
+const ws = new WebSocket("ws://localhost:7890/ws?token=" + encodeURIComponent(token));
 
 ws.onopen = () => {
-  // Subscribe to receive real-time broadcasts
+  // Get a baseline snapshot, then send commands
   ws.send(JSON.stringify({ Route: "subscribe" }));
+  sendCommands();
 };
 
 ws.onmessage = (event) => {
@@ -2909,10 +3101,10 @@ ws.onmessage = (event) => {
       console.log("Initial status:", msg.data);
       break;
     case "mission.changed":
-      console.log(`Mission ${msg.missionId}: ${msg.status}`);
+      console.log(`Mission ${msg.data.id}: ${msg.data.status}`);
       break;
     case "captain.changed":
-      console.log(`Captain ${msg.captainId}: ${msg.state}`);
+      console.log(`Captain ${msg.data.id}: ${msg.data.state}`);
       break;
     case "command.result":
       console.log(`Command '${msg.action}' result:`, msg.data);
@@ -2923,63 +3115,65 @@ ws.onmessage = (event) => {
   }
 };
 
-// List fleets with pagination
-ws.send(JSON.stringify({
-  Route: "command",
-  action: "list_fleets",
-  query: { pageNumber: 1, pageSize: 25 }
-}));
+function sendCommands() {
+  // List fleets with pagination
+  ws.send(JSON.stringify({
+    Route: "command",
+    action: "list_fleets",
+    query: { pageNumber: 1, pageSize: 25 }
+  }));
 
-// Get a specific fleet
-ws.send(JSON.stringify({
-  Route: "command",
-  action: "get_fleet",
-  id: "flt_abc123def456ghi789jk"
-}));
+  // Get a specific fleet
+  ws.send(JSON.stringify({
+    Route: "command",
+    action: "get_fleet",
+    id: "flt_abc123def456ghi789jk"
+  }));
 
-// Create a new voyage with missions
-ws.send(JSON.stringify({
-  Route: "command",
-  action: "create_voyage",
-  data: {
-    Title: "Feature batch 1",
-    VesselId: "vsl_abc123def456ghi789jk",
-    Missions: [
-      { Title: "Add login page", Description: "Create the login form" },
-      { Title: "Add signup page", Description: "Create the signup form" }
-    ]
-  }
-}));
+  // Create a new voyage with missions
+  ws.send(JSON.stringify({
+    Route: "command",
+    action: "create_voyage",
+    data: {
+      Title: "Feature batch 1",
+      VesselId: "vsl_abc123def456ghi789jk",
+      Missions: [
+        { Title: "Add login page", Description: "Create the login form" },
+        { Title: "Add signup page", Description: "Create the signup form" }
+      ]
+    }
+  }));
 
-// Transition a mission status
-ws.send(JSON.stringify({
-  Route: "command",
-  action: "transition_mission_status",
-  id: "msn_abc123def456ghi789jk",
-  status: "Complete"
-}));
+  // Transition a mission status
+  ws.send(JSON.stringify({
+    Route: "command",
+    action: "transition_mission_status",
+    id: "msn_abc123def456ghi789jk",
+    status: "Complete"
+  }));
 
-// Update a captain
-ws.send(JSON.stringify({
-  Route: "command",
-  action: "update_captain",
-  id: "cpt_abc123def456ghi789jk",
-  data: { Name: "captain-primary" }
-}));
+  // Update a captain
+  ws.send(JSON.stringify({
+    Route: "command",
+    action: "update_captain",
+    id: "cpt_abc123def456ghi789jk",
+    data: { Name: "captain-primary" }
+  }));
 
-// Delete a vessel
-ws.send(JSON.stringify({
-  Route: "command",
-  action: "delete_vessel",
-  id: "vsl_abc123def456ghi789jk"
-}));
+  // Delete a vessel
+  ws.send(JSON.stringify({
+    Route: "command",
+    action: "delete_vessel",
+    id: "vsl_abc123def456ghi789jk"
+  }));
 
-// Stop a specific captain
-ws.send(JSON.stringify({
-  Route: "command",
-  action: "stop_captain",
-  captainId: "cpt_abc123def456ghi789jk"
-}));
+  // Stop a specific captain
+  ws.send(JSON.stringify({
+    Route: "command",
+    action: "stop_captain",
+    captainId: "cpt_abc123def456ghi789jk"
+  }));
+}
 ```
 
 ### C# / .NET
@@ -2989,7 +3183,9 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 
+string token = Environment.GetEnvironmentVariable("ARMADA_TOKEN") ?? "";
 ClientWebSocket ws = new ClientWebSocket();
+ws.Options.SetRequestHeader("Authorization", "Bearer " + token);
 await ws.ConnectAsync(new Uri("ws://localhost:7890/ws"), CancellationToken.None);
 
 // Subscribe to broadcasts
@@ -3049,13 +3245,13 @@ while (ws.State == WebSocketState.Open)
             Console.WriteLine($"Status snapshot received");
             break;
         case "mission.changed":
-            string missionId = doc.RootElement.GetProperty("missionId").GetString() ?? "";
-            string missionStatus = doc.RootElement.GetProperty("status").GetString() ?? "";
+            string missionId = doc.RootElement.GetProperty("data").GetProperty("id").GetString() ?? "";
+            string missionStatus = doc.RootElement.GetProperty("data").GetProperty("status").GetString() ?? "";
             Console.WriteLine($"Mission {missionId}: {missionStatus}");
             break;
         case "captain.changed":
-            string captainId = doc.RootElement.GetProperty("captainId").GetString() ?? "";
-            string state = doc.RootElement.GetProperty("state").GetString() ?? "";
+            string captainId = doc.RootElement.GetProperty("data").GetProperty("id").GetString() ?? "";
+            string state = doc.RootElement.GetProperty("data").GetProperty("state").GetString() ?? "";
             Console.WriteLine($"Captain {captainId}: {state}");
             break;
         case "command.result":
@@ -3075,10 +3271,13 @@ while (ws.State == WebSocketState.Open)
 ```python
 import asyncio
 import json
+import os
+import urllib.parse
 import websockets
 
 async def main():
-    async with websockets.connect("ws://localhost:7890/ws") as ws:
+    token = urllib.parse.quote(os.environ["ARMADA_TOKEN"], safe="")
+    async with websockets.connect("ws://localhost:7890/ws?token=" + token) as ws:
         # Subscribe to broadcasts
         await ws.send(json.dumps({"Route": "subscribe"}))
 
@@ -3139,9 +3338,9 @@ async def main():
             if event_type == "status.snapshot":
                 print(f"Status: {event['data']}")
             elif event_type == "mission.changed":
-                print(f"Mission {event['missionId']}: {event['status']}")
+                print(f"Mission {event['data']['id']}: {event['data']['status']}")
             elif event_type == "captain.changed":
-                print(f"Captain {event['captainId']}: {event['state']}")
+                print(f"Captain {event['data']['id']}: {event['data']['state']}")
             elif event_type == "command.result":
                 print(f"Command '{event['action']}' result: {event['data']}")
             elif event_type == "command.error":

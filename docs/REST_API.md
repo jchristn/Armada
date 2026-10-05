@@ -13,8 +13,9 @@ promise.
 
 **JSON casing.** REST request and response bodies use PascalCase property names (`PageNumber`, `VesselId`), enum values
 as strings, and omit null-valued properties. Request bodies are matched case-insensitively, so camelCase input is
-accepted. The WebSocket API and MCP tool results use camelCase instead (see [WEBSOCKET_API.md](WEBSOCKET_API.md)); each
-transport is consistent within itself, and the dashboard client camelizes REST responses.
+accepted. The WebSocket API uses camelCase instead (see [WEBSOCKET_API.md](WEBSOCKET_API.md)); MCP tool arguments are
+camelCase while tool results keep the PascalCase entity shapes (see [MCP_API.md](MCP_API.md)). The dashboard client
+camelizes REST responses.
 
 ---
 
@@ -27,6 +28,7 @@ transport is consistent within itself, and the dashboard client camelizes REST r
   - [Password Storage](#password-storage)
   - [Login Rate Limiting](#login-rate-limiting)
   - [Authorization Tiers](#authorization-tiers)
+  - [Data Scoping (who sees and edits what)](#data-scoping-who-sees-and-edits-what)
   - [Authorization Matrix](#authorization-matrix)
 - [Pagination](#pagination)
 - [Error Responses](#error-responses)
@@ -40,13 +42,10 @@ transport is consistent within itself, and the dashboard client camelizes REST r
   - [Vessels](#vessels)
   - [Vessel Import](#vessel-import)
   - [Vessel Health](#vessel-health)
-  - [Workspace](#workspace)
   - [Voyages](#voyages)
   - [Missions](#missions)
   - [Captains](#captains)
   - [Ask](#ask)
-  - [Planning Sessions](#planning-sessions)
-  - [Objectives](#objectives)
   - [Signals](#signals)
   - [Events](#events)
   - [Docks](#docks)
@@ -57,6 +56,16 @@ transport is consistent within itself, and the dashboard client camelizes REST r
   - [Inbox](#inbox)
   - [Skills](#skills)
   - [Project Profiles](#project-profiles)
+  - [Playbooks](#playbooks)
+  - [Prompt Templates](#prompt-templates)
+  - [Personas](#personas)
+  - [Pipelines](#pipelines)
+  - [Model Endpoints](#model-endpoints)
+  - [Memories](#memories)
+  - [Backup and Restore](#backup-and-restore)
+  - [Workspace](#workspace)
+  - [Planning Sessions](#planning-sessions)
+  - [Objectives](#objectives)
   - [Workflow Profiles](#workflow-profiles)
   - [Check Runs](#check-runs)
   - [Environments](#environments)
@@ -68,24 +77,22 @@ transport is consistent within itself, and the dashboard client camelizes REST r
   - [Runtime Helpers](#runtime-helpers)
   - [Request History](#request-history)
   - [Token Usage](#token-usage)
-  - [Playbooks](#playbooks)
-  - [Prompt Templates](#prompt-templates)
-  - [Personas](#personas)
-  - [Pipelines](#pipelines)
-  - [Model Endpoints](#model-endpoints)
-  - [Backup and Restore](#backup-and-restore)
   - [OpenAPI Discovery](#openapi-discovery)
+- [Per-Step Captain Selection](#per-step-captain-selection)
 - [Data Types](#data-types)
   - [Models](#models)
   - [Enumerations](#enumerations)
   - [Request Types](#request-types)
   - [Response Wrappers](#response-wrappers)
+- [Quick Endpoint Summary](#quick-endpoint-summary)
+- [Additional Ports](#additional-ports)
+- [CORS](#cors)
 
 ---
 
 ## Authentication
 
-As of v0.3.0, Armada supports multi-tenant authentication. All endpoints (except those listed as exempt) require authentication. There are three authentication methods, evaluated in the following order:
+Armada supports multi-tenant authentication. All endpoints (except those listed as exempt) require authentication. There are three authentication methods, evaluated in the following order:
 
 ### Bearer Token (Recommended)
 
@@ -106,6 +113,11 @@ Session tokens are self-contained, AES-256-CBC encrypted tokens with a 24-hour l
 ```
 X-Token: <encrypted-session-token>
 ```
+
+The Admiral also mints narrower session tokens for its own captains: an **Ask thread-scoped** token for an Ask Armada
+turn and a **mission-scoped** token for each captain launch on a mission. Both are accepted only by the MCP server (REST
+and WebSocket authentication reject them). A mission-scoped token stops working as soon as its mission is no longer
+`Assigned` or `InProgress` on the captain it was minted for, and it never carries global admin rights.
 
 ### API Key (Deprecated)
 
@@ -201,10 +213,13 @@ personas, pipelines, workflow profiles, project profiles, runbooks):
 - Only tenant/global admins may change an existing object's ownership scope on update.
 - Built-in/seeded objects are `TenantWide`.
 
-> MCP tools run as the MCP caller (credential identity, or the default tenant's tenant admin for unauthenticated
-> loopback callers) and check a declared permission level per tool, but several tools still resolve entities by id
-> without a tenant check (see O-01 in [SECURITY_REVIEW.md](SECURITY_REVIEW.md)). REST is the fully per-user-scoped
-> surface today.
+> MCP tools run as the MCP caller, check a declared permission level per tool, and apply the same scoping: every tool
+> that takes an entity id resolves it in the caller's scope (global admin any tenant, tenant admin own tenant, regular
+> user own entities) and answers a missing id and an out-of-scope id with the same not-found error. Unauthenticated MCP
+> calls are accepted only when `Mcp.AllowUnauthenticatedLoopback` is true (the default), the MCP listener is bound to a
+> loopback hostname, and the caller connects from loopback; such callers act as the default tenant's tenant admin.
+> Mission captains instead use a mission-scoped token (`Mcp.MissionScopedTokens`, default true) and act as the mission's
+> owner. See [MCP_API.md](MCP_API.md) and [SECURITY_REVIEW.md](SECURITY_REVIEW.md).
 
 ### Authorization Matrix
 
@@ -230,7 +245,7 @@ without a declaration requires a global admin. The complete per-route list is th
 | `/api/v1/tenants/lookup` | POST | NoAuthRequired | Input: email, returns matching tenants |
 | `/api/v1/onboarding` | POST | NoAuthRequired | Gated by `AllowSelfRegistration` setting (default `false`) |
 | `/api/v1/whoami` | GET | Authenticated | |
-| `/api/v1/status` | GET | Authenticated | Tenant-scoped |
+| `/api/v1/status` | GET | Authenticated | Server-wide aggregate counts and recent signals, not tenant-scoped (open item O-03 in [SECURITY_REVIEW.md](SECURITY_REVIEW.md)) |
 | `/api/v1/settings` | GET | AdminOnly | Server configuration and remote-control settings |
 | `/api/v1/settings` | PUT | AdminOnly | Partial update of server configuration and remote-control settings |
 | `/api/v1/fleets` | GET, POST `.../enumerate` | Authenticated | Tenant-scoped reads. Every create, update, delete, and action route under the prefix is TenantAdmin |
@@ -733,6 +748,8 @@ Creates a new user and an associated bearer token credential.
 
 List all tenants (paginated). Global admin only.
 
+**Permission:** AdminOnly
+
 **Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<[TenantMetadata](#tenantmetadata)\>
 
 ---
@@ -742,6 +759,8 @@ List all tenants (paginated). Global admin only.
 Create a new tenant. Global admin only. The tenant's admin account `admin@armada` is seeded with `AdminPassword` when
 supplied (at least 8 characters, not the default password; otherwise `400`), or with a random password that is returned
 once in the response and never again.
+
+**Permission:** AdminOnly
 
 **Request Body:** [TenantMetadata](#tenantmetadata) plus optional `AdminPassword`
 
@@ -753,7 +772,8 @@ once in the response and never again.
 ```
 
 **Response:** `201 Created` - `TenantCreateResult`: the [TenantMetadata](#tenantmetadata) fields plus `AdminEmail`
-(`admin@armada`) and `AdminPassword` (the generated password, or null when you supplied one).
+(`admin@armada`) and `AdminPassword` (the generated password; omitted when you supplied one). Both are omitted when
+no tenant admin was seeded (an `admin@armada` user already exists in the tenant).
 
 ```json
 {
@@ -771,6 +791,8 @@ once in the response and never again.
 
 Get a tenant by ID. Non-admin users can only read their own tenant.
 
+**Permission:** Authenticated
+
 **Response:** `200 OK` - [TenantMetadata](#tenantmetadata)
 
 ---
@@ -778,6 +800,8 @@ Get a tenant by ID. Non-admin users can only read their own tenant.
 #### PUT /api/v1/tenants/{id}
 
 Update a tenant. Global admin only.
+
+**Permission:** AdminOnly
 
 `Id`, `CreatedUtc`, `LastUpdateUtc`, and `IsProtected` are preserved server-side.
 
@@ -790,6 +814,8 @@ Update a tenant. Global admin only.
 #### DELETE /api/v1/tenants/{id}
 
 Delete a tenant. Global admin only.
+
+**Permission:** AdminOnly
 
 If the tenant is protected, the server returns `403 Forbidden`.
 
@@ -809,6 +835,8 @@ The delete flow is ownership-aware: direct delete of a protected tenant, user, o
 
 List users (paginated). Global admins can list all users. Tenant admins can list users in their own tenant.
 
+**Permission:** Authenticated
+
 **Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<[UserMaster](#usermaster)\>
 
 Password fields are redacted in responses.
@@ -818,6 +846,8 @@ Password fields are redacted in responses.
 #### POST /api/v1/users
 
 Create a new user. Global admins can create users in any tenant. Tenant admins can create users only in their own tenant and cannot grant global admin.
+
+**Permission:** TenantAdmin
 
 `IsProtected` is server-controlled and ignored if supplied by the client.
 `Password` is plaintext in the request body and is hashed server-side before persistence. `PasswordSha256` is accepted only for backward compatibility.
@@ -844,6 +874,8 @@ Create a new user. Global admins can create users in any tenant. Tenant admins c
 
 Get a user by ID. Global admins can read any user. Tenant admins can read users in their own tenant. Regular users can read only their own user record.
 
+**Permission:** Authenticated
+
 **Response:** `200 OK` - [UserMaster](#usermaster) (password redacted)
 
 ---
@@ -851,6 +883,8 @@ Get a user by ID. Global admins can read any user. Tenant admins can read users 
 #### PUT /api/v1/users/{id}
 
 Update a user. Global admins can update any user. Tenant admins can update users in their own tenant. Regular users can update only their own user record.
+
+**Permission:** Authenticated
 
 `Id`, `TenantId`, `CreatedUtc`, `LastUpdateUtc`, and `IsProtected` are server-controlled and cannot be modified by API clients.
 If `Password` is supplied, the server hashes and stores the new password. If `Password` is omitted or empty, the current password is preserved.
@@ -879,6 +913,8 @@ When the caller changes **their own** password this way, `CurrentPassword` is re
 
 Delete a user. Global admins can delete any unprotected user. Tenant admins can delete unprotected users in their own tenant. Regular users cannot delete users directly.
 
+**Permission:** Authenticated
+
 If the user is protected, the server returns `403 Forbidden`.
 
 Deleting an unprotected user cascades through that user's subordinate resources inside the tenant.
@@ -895,15 +931,19 @@ Deleting an unprotected user cascades through that user's subordinate resources 
 
 List credentials (paginated). Global admin: all credentials. Tenant admin: credentials in own tenant. Regular user: own credentials only.
 
+**Permission:** Authenticated
+
 **Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<[Credential](#credential)\>
 
 ---
 
 #### POST /api/v1/credentials
 
-Create a new credential (bearer token). A bearer token is auto-generated if not provided. Admin: can create for any tenant/user. Non-admin: can create for self only.
+Create a new credential (bearer token). The server always generates the ID and the bearer token; client-supplied values are ignored. Global admin: any tenant and user. Tenant admin: users in their own tenant (`400` when the user is not in the tenant; `403` for a global admin account other than their own). Regular user: self only (`TenantId` and `UserId` are forced to the caller).
 
-`IsProtected` is server-controlled and ignored if supplied by the client.
+**Permission:** Authenticated
+
+`IsProtected` is server-controlled and ignored if supplied by the client. Only `TenantId`, `UserId`, `Name`, and `Active` are read from the body.
 
 **Request Body:** [Credential](#credential)
 
@@ -915,13 +955,15 @@ Create a new credential (bearer token). A bearer token is auto-generated if not 
 }
 ```
 
-**Response:** `201 Created` - [Credential](#credential)
+**Response:** `201 Created` - [Credential](#credential), with the full `BearerToken` (returned only this once)
 
 ---
 
 #### GET /api/v1/credentials/{id}
 
 Get a credential by ID. Non-admin users can only read their own credentials.
+
+**Permission:** Authenticated
 
 **Response:** `200 OK` - [Credential](#credential)
 
@@ -930,6 +972,8 @@ Get a credential by ID. Non-admin users can only read their own credentials.
 #### PUT /api/v1/credentials/{id}
 
 Update a credential. Global admins can update any credential. Tenant admins can update credentials inside their tenant. Regular users can update only their own credentials.
+
+**Permission:** Authenticated
 
 `Id`, `TenantId`, `UserId`, `CreatedUtc`, `LastUpdateUtc`, and `IsProtected` are server-controlled and cannot be modified by API clients.
 
@@ -943,6 +987,8 @@ Update a credential. Global admins can update any credential. Tenant admins can 
 
 Delete a credential. Global admin: any. Tenant admin: credentials in own tenant. Regular user: own credentials only.
 
+**Permission:** Authenticated
+
 If the credential is protected, the server returns `403 Forbidden`.
 
 **Response:** `200 OK`
@@ -953,7 +999,10 @@ If the credential is protected, the server returns `403 Forbidden`.
 
 #### GET /api/v1/status
 
-Returns aggregate status including captain counts, mission breakdown, active voyages, and recent signals.
+Returns aggregate status including captain counts, mission breakdown, active voyages, and recent signals. The aggregate
+is server-wide, not scoped to the caller's tenant (open item O-03 in [SECURITY_REVIEW.md](SECURITY_REVIEW.md)).
+
+**Permission:** Authenticated
 
 **Response:** `200 OK` - [ArmadaStatus](#armadastatus)
 
@@ -1000,6 +1049,8 @@ Returns aggregate status including captain counts, mission breakdown, active voy
 #### GET /api/v1/status/health
 
 Health check endpoint. **Does not require authentication.**
+
+**Permission:** NoAuthRequired
 
 **Response:** `200 OK`
 
@@ -1055,6 +1106,8 @@ Each result has a `Status` of `Pass`, `Warn`, or `Fail`. Stalled-captain and fai
 #### GET /api/v1/settings
 
 Returns current server settings including ports, agent configuration, system paths, and remote-control tunnel configuration. `AutoCreatePr` mirrors the `autoCreatePullRequests` setting. `RemoteControl.Password` is always returned as `********`, and `RemoteControl.EnrollmentToken` is returned as `********` when set.
+
+**Permission:** AdminOnly
 
 **Response:** `200 OK`
 
@@ -1116,7 +1169,9 @@ Returns current server settings including ports, agent configuration, system pat
 
 #### PUT /api/v1/settings
 
-Accepts partial updates to editable server settings. When `RemoteControl` is supplied, it replaces the full `RemoteControl` settings object. When `Import` is supplied, it replaces the full `Import` (vessel import) settings object; see [Vessel Import](#vessel-import) for the fields and their ranges. When `FleetActions` is supplied, it replaces the full `FleetActions` object (omitted fields take their defaults; values are clamped: `MaxConcurrency` 1-32, `DefaultTimeoutSeconds` 5-7200, `MaxOutputBytes` 1024-1048576, `RunRetentionDays` 1-3650) and applies immediately.
+Accepts partial updates to editable server settings and saves them to `settings.json`. Editable top-level fields: `AdmiralPort`, `McpPort`, `MaxCaptains`, `HeartbeatIntervalSeconds`, `StallThresholdMinutes`, `IdleCaptainTimeoutSeconds`, `PlanningSessionInactivityTimeoutMinutes`, `PlanningSessionAbandonmentTimeoutMinutes`, `PlanningSessionRetentionDays`, `AutoCreatePr`, `SelfVesselId`, `RebuildSlotRetentionCount`, `RemoteControl`, `Import`, `FleetActions`, `RepositoryHealth`, and `Retention`; omitted fields are unchanged. When `RemoteControl` is supplied, it replaces the full `RemoteControl` settings object (send `Password` or `EnrollmentToken` as `********` to keep the stored value). When `Import` is supplied, it replaces the full `Import` (vessel import) settings object; see [Vessel Import](#vessel-import) for the fields and their ranges. When `FleetActions` is supplied, it replaces the full `FleetActions` object (omitted fields take their defaults; values are clamped: `MaxConcurrency` 1-32, `DefaultTimeoutSeconds` 5-7200, `MaxOutputBytes` 1024-1048576, `RunRetentionDays` 1-3650) and applies immediately.
+
+**Permission:** AdminOnly
 
 Self-rebuild fields (see [SERVER_REBUILD.md](SERVER_REBUILD.md)):
 
@@ -1124,7 +1179,9 @@ Self-rebuild fields (see [SERVER_REBUILD.md](SERVER_REBUILD.md)):
 |-------|------|-------------|
 | `SelfVesselId` | string | Vessel (`vsl_` prefix) holding Armada's own source for the "Rebuild Armada" feature. Send an empty string to clear. |
 | `RebuildSlotRetentionCount` | int | Published build slots to retain for rollback. Minimum 1. |
-| `RebuildSupervisorHarborId` | string | Optional on-box Harbor (`hbr_` prefix) that performs the health-gated cutover with rollback. Null uses the in-process baton. |
+
+`RebuildSupervisorHarborId` (the optional on-box Harbor that performs the health-gated cutover) is not editable here; set it
+in `settings.json`.
 
 Vessel health settings (see [VESSEL_HEALTH.md](VESSEL_HEALTH.md)): `GET /api/v1/settings` returns a `RepositoryHealth` object, and when `RepositoryHealth` is supplied on PUT it replaces the whole object. Out-of-range values are clamped, and every value applies live (the next scheduler tick or evaluation uses it).
 
@@ -1292,6 +1349,8 @@ A fleet is a named collection of repositories (vessels) under management.
 
 List all fleets with pagination.
 
+**Permission:** Authenticated
+
 **Query Parameters:** [Pagination parameters](#pagination-parameters)
 
 **Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<[Fleet](#fleet)\>
@@ -1305,6 +1364,8 @@ curl http://localhost:7890/api/v1/fleets?pageSize=10
 #### POST /api/v1/fleets/enumerate
 
 Paginated enumeration of fleets with optional filtering and sorting.
+
+**Permission:** Authenticated
 
 **Request Body:** [EnumerationQuery](#enumerationquery) (optional)
 
@@ -1321,6 +1382,8 @@ curl -X POST http://localhost:7890/api/v1/fleets/enumerate \
 #### POST /api/v1/fleets
 
 Create a new fleet.
+
+**Permission:** TenantAdmin
 
 **Request Body:** [Fleet](#fleet)
 
@@ -1343,6 +1406,8 @@ curl -X POST http://localhost:7890/api/v1/fleets \
 
 Get a single fleet by ID, including all its vessels.
 
+**Permission:** Authenticated
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -1360,6 +1425,8 @@ curl http://localhost:7890/api/v1/fleets/flt_abc123
 #### PUT /api/v1/fleets/{id}
 
 Update an existing fleet.
+
+**Permission:** TenantAdmin
 
 **Path Parameters:**
 | Parameter | Description |
@@ -1383,6 +1450,8 @@ curl -X PUT http://localhost:7890/api/v1/fleets/flt_abc123 \
 
 Delete a fleet. Vessels in the fleet are not deleted; their `FleetId` is set to null.
 
+**Permission:** TenantAdmin
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -1399,6 +1468,8 @@ curl -X DELETE http://localhost:7890/api/v1/fleets/flt_abc123
 #### `POST /api/v1/fleets/delete/multiple`
 
 Batch delete multiple fleets from the database by ID. Returns a summary of deleted and skipped entries. **This cannot be undone.**
+
+**Permission:** TenantAdmin
 
 **Request Body:**
 
@@ -1435,6 +1506,8 @@ the current value back to keep it.
 
 List all vessels with pagination.
 
+**Permission:** Authenticated
+
 **Query Parameters:** [Pagination parameters](#pagination-parameters), plus:
 
 | Parameter | Type | Description |
@@ -1453,6 +1526,8 @@ curl http://localhost:7890/api/v1/vessels?fleetId=flt_abc123
 
 Paginated enumeration of vessels with optional filtering and sorting.
 
+**Permission:** Authenticated
+
 **Request Body:** [EnumerationQuery](#enumerationquery) (optional)
 
 **Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<[Vessel](#vessel)\>
@@ -1468,6 +1543,8 @@ curl -X POST http://localhost:7890/api/v1/vessels/enumerate \
 #### POST /api/v1/vessels
 
 Register a new vessel (git repository).
+
+**Permission:** TenantAdmin
 
 **Request Body:** [Vessel](#vessel)
 
@@ -1493,6 +1570,8 @@ curl -X POST http://localhost:7890/api/v1/vessels \
 
 Get a single vessel by ID.
 
+**Permission:** Authenticated
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -1506,6 +1585,8 @@ Get a single vessel by ID.
 #### PUT /api/v1/vessels/{id}
 
 Update an existing vessel.
+
+**Permission:** TenantAdmin
 
 **Path Parameters:**
 | Parameter | Description |
@@ -1525,6 +1606,8 @@ Update an existing vessel.
 
 Delete a vessel.
 
+**Permission:** TenantAdmin
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -1537,6 +1620,8 @@ Delete a vessel.
 #### `POST /api/v1/vessels/delete/multiple`
 
 Batch delete multiple vessels from the database by ID. Returns a summary of deleted and skipped entries. **This cannot be undone.**
+
+**Permission:** TenantAdmin
 
 **Request Body:**
 
@@ -1563,6 +1648,8 @@ Skipped entries include the entity ID and the reason (e.g., "Not found" or "Empt
 #### PATCH /api/v1/vessels/{id}/context
 
 Update only the `ProjectContext`, `StyleGuide`, and `ModelContext` fields of a vessel.
+
+**Permission:** TenantAdmin
 
 **Path Parameters:**
 | Parameter | Description |
@@ -1592,6 +1679,8 @@ curl -X PATCH http://localhost:7890/api/v1/vessels/vsl_abc123/context \
 
 Return how far the vessel working directory is ahead of and behind the remote default branch. Performs a best-effort `git fetch` first.
 
+**Permission:** Authenticated
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -1616,6 +1705,8 @@ When no working directory is configured or a git error occurs, `CommitsAhead` an
 #### GET /api/v1/vessels/{id}/branches
 
 List the branches in the vessel repository, each with a current flag and ahead/behind counts relative to the default branch.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -1643,6 +1734,8 @@ When the repository cannot be resolved or a git error occurs, the response carri
 #### POST /api/v1/vessels/{id}/branches/push
 
 Push the named local branch to the vessel's remote.
+
+**Permission:** TenantAdmin
 
 **Path Parameters:**
 | Parameter | Description |
@@ -1676,6 +1769,8 @@ Push the named local branch to the vessel's remote.
 
 Merge the source branch into the target branch, optionally pushing the target afterward.
 
+**Permission:** TenantAdmin
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -1701,6 +1796,11 @@ Merge the source branch into the target branch, optionally pushing the target af
 }
 ```
 
+After a successful merge the Admiral reconciles manual landings for the vessel: every `WorkProduced` mission whose
+effective landing mode is `None` and whose work is now contained in its target branch moves to `Complete`. This is how
+the dashboard's Manage Branches merge finishes missions that Armada never lands itself. The Admiral health check runs
+the same reconciliation periodically for branches merged outside Armada.
+
 **Error:** `400` - Source and target are required
 **Error:** `404` - Vessel not found, or no repository found for this vessel
 **Error:** `422` - Merge failed
@@ -1711,6 +1811,8 @@ Merge the source branch into the target branch, optionally pushing the target af
 #### GET /api/v1/vessels/{id}/readiness
 
 Return readiness warnings and blocking issues for a vessel, optionally scoped to a requested workflow check.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -1735,6 +1837,8 @@ Return readiness warnings and blocking issues for a vessel, optionally scoped to
 
 Predict how Armada would land a branch for this vessel, including branch policy, check requirements, and likely blockers.
 
+**Permission:** Authenticated
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -1753,6 +1857,8 @@ Predict how Armada would land a branch for this vessel, including branch policy,
 #### POST /api/v1/vessels/{id}/build-context
 
 Launch the chosen captain in a worktree of the vessel repository to analyze it and write a Model Context document, refining the existing context when one is present. Runs synchronously and can take several minutes.
+
+**Permission:** TenantAdmin
 
 **Path Parameters:**
 | Parameter | Description |
@@ -2376,60 +2482,6 @@ The vessel's row, raw findings, outdated or vulnerable dependencies, and overrid
 }
 ```
 
-**Response (background):** `202 Accepted` - `VesselImportResponse` with `RunsInBackground: true`, `JobId` set, `Batch.Status` = `Importing`, and empty `Items`. Poll `GET /api/v1/vessels/import/batches/{id}` (or `GET /api/v1/jobs/{jobId}`) until the batch leaves `Importing`. The job's `ResultJson` is `{"batchId","createdCount","skippedCount","failedCount"}`; cancelling the job stops the import at the next checkpoint (remaining selected items stay `Pending` with reason `Cancelled`, and the batch becomes `Failed`).
-
-```json
-{
-  "BatchId": "vib_mut1abcd_Rp7EygrpeVo",
-  "JobId": "job_mut1c000_Z9x8c7v6b5n",
-  "RunsInBackground": true,
-  "Batch": { "Id": "vib_mut1abcd_Rp7EygrpeVo", "Status": "Importing", "JobId": "job_mut1c000_Z9x8c7v6b5n", "...": "..." },
-  "Items": []
-}
-```
-
-**Errors:** `400` missing `BatchId` or `Paths`, a path not in the batch, or an unknown fleet (`InvalidRequest`); `401`; `403` not a tenant admin; `404` batch not found in the tenant (`BatchNotFound`); `409` the batch is already being imported (`BatchBusy`).
-
----
-
-#### POST /api/v1/vessels/import/batches/enumerate
-
-Paged import history for the caller's tenant, newest first by default.
-
-**Permission:** Authenticated
-
-**Request Body:** [EnumerationQuery](#post-enumerate-with-json-body) (optional). Honors `PageNumber`, `PageSize`, `Order`, `CreatedAfter`, `CreatedBefore`, and `Status` (a batch status name).
-
-```json
-{ "PageNumber": 1, "PageSize": 25, "Status": "Completed" }
-```
-
-**Response:** `200 OK` - paginated result of `VesselImportBatch` (see the shape under discover's `Batch`).
-
----
-
-#### GET /api/v1/vessels/import/batches/{id}
-
-Return a batch with all of its items, ordered by path.
-
-**Permission:** Authenticated
-
-**Path Parameters:**
-| Parameter | Description |
-|---|---|
-| `id` | Batch ID (`vib_` prefix) |
-
-**Response:** `200 OK` - `VesselImportBatchDetail`
-
-```json
-{
-  "Batch": { "Id": "vib_mut1abcd_Rp7EygrpeVo", "Status": "Completed", "CreatedCount": 1, "...": "..." },
-  "Items": [ { "Id": "vii_mut1abce_xpuNadgd3wH", "Path": "/Users/alex/Code/api", "Outcome": "Created", "VesselId": "vsl_mut1b000_Q2w3e4r5t6y", "...": "..." } ]
-}
-```
-
-**Errors:** `401`; `404` batch not found in the caller's tenant (`BatchNotFound`).
-
 `Findings` hold one entry per criterion (`GitDivergence`, `WorkingTree`, `Branches`, `CommitRecency`, `Dependencies`, `Vulnerabilities`, `TestInfrastructure`, `ContinuousIntegration`, `ArmadaReadiness`, `MissionOutcomes`); there is no `Overall` finding. `Ecosystem` is `NuGet` or `npm`; `ProjectPath` is repository-relative (the project file for NuGet, the `package.json` for npm). `Drift` is `None`, `Patch`, `Minor`, or `Major`; `Severity` is `None`, `Low`, `Moderate`, `High`, or `Critical`. A dependency that is both outdated and vulnerable appears once with both sets of fields. For npm vulnerabilities, `CurrentVersion` holds the vulnerable range reported by `npm audit` and `AdvisoryUrl` is absent.
 
 #### POST /api/v1/vessel-health/evaluate
@@ -2541,6 +2593,8 @@ A voyage is a batch of related missions tracked together.
 
 List all voyages with pagination.
 
+**Permission:** Authenticated
+
 **Query Parameters:** [Pagination parameters](#pagination-parameters), plus:
 
 | Parameter | Type | Description |
@@ -2559,6 +2613,8 @@ curl http://localhost:7890/api/v1/voyages?status=InProgress
 
 Paginated enumeration of voyages with optional filtering and sorting.
 
+**Permission:** Authenticated
+
 **Request Body:** [EnumerationQuery](#enumerationquery) (optional)
 
 **Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<[Voyage](#voyage)\>
@@ -2568,6 +2624,8 @@ Paginated enumeration of voyages with optional filtering and sorting.
 #### POST /api/v1/voyages
 
 Create a new voyage with optional missions. Missions are automatically dispatched to the target vessel.
+
+**Permission:** TenantAdmin
 
 **Request Body:** [VoyageRequest](#voyagerequest)
 
@@ -2606,6 +2664,8 @@ curl -X POST http://localhost:7890/api/v1/voyages \
 
 Get a voyage and all its associated missions.
 
+**Permission:** Authenticated
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -2632,6 +2692,8 @@ completes once the entry lands (or fails, or is cancelled).
 
 Cancel a voyage. Sets the voyage status to `Cancelled` and cancels all `Pending` or `Assigned` missions. In-progress missions are not affected.
 
+**Permission:** TenantAdmin
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -2653,6 +2715,8 @@ Cancel a voyage. Sets the voyage status to `Cancelled` and cancels all `Pending`
 #### DELETE /api/v1/voyages/{id}/purge
 
 Permanently delete a voyage and all its associated missions from the database. **This cannot be undone.**
+
+**Permission:** TenantAdmin
 
 **Path Parameters:**
 | Parameter | Description |
@@ -2676,6 +2740,8 @@ Permanently delete a voyage and all its associated missions from the database. *
 #### `POST /api/v1/voyages/delete/multiple`
 
 Batch delete multiple voyages and their associated missions from the database by ID. Voyages that are Open/InProgress or have active missions are skipped. Returns a summary of deleted and skipped entries. **This cannot be undone.**
+
+**Permission:** TenantAdmin
 
 **Request Body:**
 
@@ -2707,6 +2773,8 @@ A mission is an atomic unit of work assigned to a captain (AI agent).
 
 List all missions with pagination.
 
+**Permission:** Authenticated
+
 **Query Parameters:** [Pagination parameters](#pagination-parameters), plus:
 
 | Parameter | Type | Description |
@@ -2730,6 +2798,8 @@ curl http://localhost:7890/api/v1/missions?status=InProgress&vesselId=vsl_abc123
 
 Paginated enumeration of missions with optional filtering and sorting.
 
+**Permission:** Authenticated
+
 **Request Body:** [EnumerationQuery](#enumerationquery) (optional)
 
 **Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<[Mission](#mission)\>
@@ -2746,6 +2816,8 @@ curl -X POST http://localhost:7890/api/v1/missions/enumerate \
 
 List lightweight mission summaries without large description, diff, or agent-output payloads. Useful for context-conserving overviews.
 
+**Permission:** Authenticated
+
 **Query Parameters:** [Pagination parameters](#pagination-parameters), plus `status`, `vesselId`, `captainId`, and `voyageId` filters.
 
 **Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<`MissionSummary`\>
@@ -2756,6 +2828,8 @@ List lightweight mission summaries without large description, diff, or agent-out
 
 Paginated enumeration of lightweight mission summaries with optional filtering and sorting.
 
+**Permission:** Authenticated
+
 **Request Body:** [EnumerationQuery](#enumerationquery) (optional)
 
 **Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<`MissionSummary`\>
@@ -2765,6 +2839,8 @@ Paginated enumeration of lightweight mission summaries with optional filtering a
 #### GET /api/v1/missions/history
 
 Return aggregated mission counts by time bucket for dashboard history charts.
+
+**Permission:** Authenticated
 
 **Query Parameters:**
 | Parameter | Type | Description |
@@ -2782,6 +2858,8 @@ Return aggregated mission counts by time bucket for dashboard history charts.
 #### POST /api/v1/missions
 
 Create and dispatch a new mission. If a `VesselId` is provided, the Admiral will assign a captain and set up a worktree.
+
+**Permission:** TenantAdmin
 
 **Request Body:** [Mission](#mission)
 
@@ -2810,6 +2888,8 @@ curl -X POST http://localhost:7890/api/v1/missions \
 
 Get a single mission by ID.
 
+**Permission:** Authenticated
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -2827,7 +2907,7 @@ yet. `Reason` is one of `AwaitingDispatch`, `VesselMissing`, `VesselMisconfigure
 `UntilUtc` is when it clears on its own (for example when the only captain's quarantine ends); `DependsOnMissionId` and
 `BlockingMissionIds` name the missions it waits for; and `Captains` lists what each captain in the tenant is doing
 (`State`, `Detail`, and the `MissionId`, `PlanningSessionId`, `RefinementSessionId`, `ObjectiveId`, or
-`QuarantineUntilUtc` that holds it). The field is absent for other statuses and in list responses.
+`QuarantineUntilUtc` and `QuarantineReason` that hold it). The field is absent for other statuses and in list responses.
 
 ```json
 "AssignmentBlocker": {
@@ -2849,6 +2929,8 @@ yet. `Reason` is one of `AwaitingDispatch`, `VesselMissing`, `VesselMisconfigure
 
 Read normalized GitHub pull-request evidence for one mission when that mission has a `PrUrl`.
 
+**Permission:** Authenticated
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -2865,6 +2947,8 @@ Read normalized GitHub pull-request evidence for one mission when that mission h
 #### GET /api/v1/missions/{id}/landing-preview
 
 Predict how Armada would land this mission, including branch policy, check requirements, and likely blockers.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -2887,6 +2971,8 @@ branch yourself, for example from Manage Branches), and `MissionStatus`. A `Comp
 
 Update mission fields (title, description, priority, etc.). Does not change status -- use the status transition endpoint for that.
 
+**Permission:** TenantAdmin
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -2902,6 +2988,8 @@ Update mission fields (title, description, priority, etc.). Does not change stat
 #### PUT /api/v1/missions/{id}/status
 
 Transition a mission to a new status. Only valid transitions are allowed.
+
+**Permission:** TenantAdmin
 
 **Path Parameters:**
 | Parameter | Description |
@@ -2946,6 +3034,8 @@ curl -X PUT http://localhost:7890/api/v1/missions/msn_abc123/status \
 
 Approve a mission waiting at a review gate. Non-terminal stages continue to the next pipeline stage; terminal stages continue to landing.
 
+**Permission:** TenantAdmin
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -2967,6 +3057,8 @@ Approve a mission waiting at a review gate. Non-terminal stages continue to the 
 #### POST /api/v1/missions/{id}/review/deny
 
 Deny a mission waiting at a review gate. The mission either returns for rework or fails the pipeline, depending on its review policy or the supplied action.
+
+**Permission:** TenantAdmin
 
 **Path Parameters:**
 | Parameter | Description |
@@ -2990,6 +3082,8 @@ Deny a mission waiting at a review gate. The mission either returns for rework o
 
 Cancel a mission by setting its status to `Cancelled`. Returns the full updated mission.
 
+**Permission:** TenantAdmin
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -3004,6 +3098,8 @@ Cancel a mission by setting its status to `Cancelled`. Returns the full updated 
 #### DELETE /api/v1/missions/{id}/purge
 
 Permanently delete a mission from the database, removing telemetry events that referenced it. **This cannot be undone.**
+
+**Permission:** TenantAdmin
 
 **Path Parameters:**
 | Parameter | Description |
@@ -3026,6 +3122,8 @@ Permanently delete a mission from the database, removing telemetry events that r
 #### `POST /api/v1/missions/delete/multiple`
 
 Batch delete multiple missions from the database by ID. Returns a summary of deleted and skipped entries. **This cannot be undone.**
+
+**Permission:** TenantAdmin
 
 **Request Body:**
 
@@ -3052,6 +3150,8 @@ Skipped entries include the entity ID and the reason (e.g., "Not found" or "Empt
 #### POST /api/v1/missions/{id}/restart
 
 Restart a failed or cancelled mission by resetting it to `Pending` for re-dispatch. Clears captain assignment, branch, PR URL, and timing fields. Optionally update the title and description (instructions) before restarting.
+
+**Permission:** TenantAdmin
 
 **Path Parameters:**
 | Parameter | Description |
@@ -3083,6 +3183,8 @@ Restart a failed or cancelled mission by resetting it to `Pending` for re-dispat
 
 Rebase the mission branch onto the current target and re-attempt landing. Only available for `WorkProduced` or `LandingFailed` missions.
 
+**Permission:** TenantAdmin
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -3101,13 +3203,15 @@ Rebase the mission branch onto the current target and re-attempt landing. Only a
 **Errors:**
 - `400` - Mission is not in `WorkProduced` or `LandingFailed` status
 - `404` - Mission not found
-- `409` - Landing did not complete (for example, the branch has conflicts, has no branch/vessel, or no landing mode is configured); the response message explains the specific reason
+- `409` - Landing did not complete (for example, the branch has conflicts, has no branch/vessel, or no automatic landing mode is configured); the response message explains the specific reason. With an effective landing mode of `None` the work stays `WorkProduced` and the branch is left for manual integration: merge it yourself (for example with [POST /api/v1/vessels/{id}/branches/merge](#post-apiv1vesselsidbranchesmerge), the dashboard's Manage Branches), and the mission moves to `Complete`
 
 ---
 
 #### GET /api/v1/missions/{id}/evaluate-autoland
 
 Dry-run the vessel's auto-land predicate against the mission's captured diff without landing it.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -3122,6 +3226,8 @@ Dry-run the vessel's auto-land predicate against the mission's captured diff wit
 #### GET /api/v1/missions/{id}/diff
 
 Returns the git diff of changes made by a captain in the mission's worktree. Checks for a saved diff file first (captured at completion), then falls back to a live worktree diff.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -3145,6 +3251,8 @@ Returns the git diff of changes made by a captain in the mission's worktree. Che
 #### GET /api/v1/missions/{id}/log
 
 Returns the session log (captured stdout/stderr) for a mission. Log files are written to disk when a captain executes a mission. Supports pagination via query parameters.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -3197,6 +3305,8 @@ curl http://localhost:8080/api/v1/missions/msn_abc123/log?offset=100&lines=100 \
 
 Return the instructions file the captain was given for a mission. Resolves the live dock/worktree first (using the runtime-specific instructions file name, then common fallbacks such as `CLAUDE.md`, `CODEX.md`, `AGENTS.md`), and falls back to a saved instructions snapshot when no live worktree exists.
 
+**Permission:** Authenticated
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -3224,6 +3334,8 @@ A captain is an AI agent instance (Claude Code, Codex, etc.) that executes missi
 
 List all captains with pagination.
 
+**Permission:** Authenticated
+
 **Query Parameters:** [Pagination parameters](#pagination-parameters), plus:
 
 | Parameter | Type | Description |
@@ -3242,6 +3354,8 @@ curl http://localhost:7890/api/v1/captains?status=Working
 
 Paginated enumeration of captains with optional filtering and sorting.
 
+**Permission:** Authenticated
+
 **Request Body:** [EnumerationQuery](#enumerationquery) (optional)
 
 **Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<[Captain](#captain)\>
@@ -3251,6 +3365,8 @@ Paginated enumeration of captains with optional filtering and sorting.
 #### POST /api/v1/captains
 
 Register a new captain (AI agent).
+
+**Permission:** TenantAdmin
 
 **Request Body:** [Captain](#captain)
 
@@ -3275,6 +3391,8 @@ curl -X POST http://localhost:7890/api/v1/captains \
 
 Get a single captain by ID.
 
+**Permission:** Authenticated
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -3288,6 +3406,8 @@ Get a single captain by ID.
 #### GET /api/v1/captains/{id}/tools
 
 Describe the Armada MCP tools available through a specific captain, including runtime-specific availability notes.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -3328,6 +3448,8 @@ Describe the Armada MCP tools available through a specific captain, including ru
 
 Update a captain's name, runtime, or model. Operational fields (state, process, mission) are preserved.
 
+**Permission:** TenantAdmin
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -3362,6 +3484,8 @@ curl -X PUT http://localhost:7890/api/v1/captains/cpt_abc123 \
 
 Lift a captain's quarantine, returning it to `Idle` and clearing the quarantine deadline and reason.
 
+**Permission:** TenantAdmin
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -3376,6 +3500,8 @@ Lift a captain's quarantine, returning it to `Idle` and clearing the quarantine 
 #### POST /api/v1/captains/{id}/stop
 
 Stop a running captain agent. Kills its OS process and recalls it to idle state.
+
+**Permission:** TenantAdmin
 
 **Path Parameters:**
 | Parameter | Description |
@@ -3398,6 +3524,8 @@ Stop a running captain agent. Kills its OS process and recalls it to idle state.
 
 Emergency stop all running captains, recalling them to idle state.
 
+**Permission:** TenantAdmin
+
 **Response:** `200 OK`
 
 ```json
@@ -3411,6 +3539,8 @@ Emergency stop all running captains, recalling them to idle state.
 #### GET /api/v1/captains/{id}/log
 
 Returns the current session log for a captain. The captain's `.current` pointer file is resolved to find the active mission's log file. Supports pagination via query parameters.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -3458,6 +3588,8 @@ curl http://localhost:8080/api/v1/captains/cpt_abc123/log?lines=200 \
 
 Delete a captain. Blocked if the captain is currently working or has active missions.
 
+**Permission:** TenantAdmin
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -3473,6 +3605,8 @@ Delete a captain. Blocked if the captain is currently working or has active miss
 #### `POST /api/v1/captains/delete/multiple`
 
 Batch delete multiple captains from the database by ID. Captains that are Working or have active missions are skipped. Returns a summary of deleted and skipped entries. **This cannot be undone.**
+
+**Permission:** TenantAdmin
 
 **Request Body:**
 
@@ -3503,6 +3637,8 @@ The Ask surface backs Ask Armada threads and a direct chat channel to a captain'
 #### POST /api/v1/captains/{id}/chat
 
 Send a chat turn directly to a captain's configured model (Mux/Ollama endpoints) and return the reply plus per-turn timing and token metrics.
+
+**Permission:** TenantAdmin
 
 **Path Parameters:**
 | Parameter | Description |
@@ -3645,6 +3781,8 @@ A signal is a message between the admiral and captains or between captains.
 
 List recent signals with pagination.
 
+**Permission:** Authenticated
+
 **Query Parameters:** [Pagination parameters](#pagination-parameters), plus:
 
 | Parameter | Type | Description |
@@ -3665,6 +3803,8 @@ curl http://localhost:7890/api/v1/signals?toCaptainId=cpt_abc123&unreadOnly=true
 
 Paginated enumeration of signals with optional filtering and sorting.
 
+**Permission:** Authenticated
+
 **Request Body:** [EnumerationQuery](#enumerationquery) (optional)
 
 **Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<[Signal](#signal)\>
@@ -3674,6 +3814,8 @@ Paginated enumeration of signals with optional filtering and sorting.
 #### POST /api/v1/signals
 
 Send a new signal (message).
+
+**Permission:** TenantAdmin
 
 **Request Body:** [Signal](#signal)
 
@@ -3698,6 +3840,8 @@ curl -X POST http://localhost:7890/api/v1/signals \
 
 Return the most recent signals, ordered by creation time descending.
 
+**Permission:** Authenticated
+
 **Query Parameters:**
 | Parameter | Type | Description |
 |---|---|---|
@@ -3710,6 +3854,8 @@ Return the most recent signals, ordered by creation time descending.
 #### GET /api/v1/signals/{id}
 
 Get a single signal by ID.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -3725,6 +3871,8 @@ Get a single signal by ID.
 
 Mark a signal as read.
 
+**Permission:** TenantAdmin
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -3738,6 +3886,8 @@ Mark a signal as read.
 #### GET /api/v1/signals/recipient/{captainId}
 
 Return signals addressed to a specific captain. Defaults to unread only.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -3757,6 +3907,8 @@ Return signals addressed to a specific captain. Defaults to unread only.
 
 Permanently delete a signal by ID.
 
+**Permission:** TenantAdmin
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -3770,6 +3922,8 @@ Permanently delete a signal by ID.
 #### `POST /api/v1/signals/delete/multiple`
 
 Batch soft-delete multiple signals by marking them as read. Returns a summary of deleted and skipped entries.
+
+**Permission:** TenantAdmin
 
 **Request Body:**
 
@@ -3801,6 +3955,8 @@ System events represent state changes and audit trail entries generated automati
 
 List system events with pagination.
 
+**Permission:** Authenticated
+
 **Query Parameters:** [Pagination parameters](#pagination-parameters), plus:
 
 | Parameter | Type | Description |
@@ -3824,6 +3980,8 @@ curl http://localhost:7890/api/v1/events?type=mission.status_changed&missionId=m
 
 Paginated enumeration of events with optional filtering and sorting.
 
+**Permission:** Authenticated
+
 **Request Body:** [EnumerationQuery](#enumerationquery) (optional)
 
 **Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<[ArmadaEvent](#armadaevent)\>
@@ -3834,6 +3992,8 @@ Paginated enumeration of events with optional filtering and sorting.
 
 Get a single event by ID. Scoped like the event list: global admins read any event, tenant admins their tenant's
 events, and users their own.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 
@@ -3851,6 +4011,8 @@ events, and users their own.
 
 Delete a single event by ID.
 
+**Permission:** TenantAdmin
+
 **Path Parameters:**
 
 | Parameter | Description |
@@ -3866,6 +4028,8 @@ Delete a single event by ID.
 #### `POST /api/v1/events/delete/multiple`
 
 Batch delete multiple events by ID. Returns a summary of deleted and skipped entries.
+
+**Permission:** TenantAdmin
 
 **Request Body:**
 
@@ -3897,6 +4061,8 @@ Docks are git worktrees provisioned for captains. These endpoints provide access
 
 List all docks with optional filtering.
 
+**Permission:** Authenticated
+
 **Query Parameters:**
 
 | Parameter | Type | Description |
@@ -3926,6 +4092,8 @@ List all docks with optional filtering.
 
 Paginated enumeration of docks with optional filtering and sorting.
 
+**Permission:** Authenticated
+
 **Request Body:**
 
 ```json
@@ -3944,6 +4112,8 @@ Paginated enumeration of docks with optional filtering and sorting.
 
 Get a single dock by ID.
 
+**Permission:** Authenticated
+
 **Path Parameters:**
 
 | Parameter | Description |
@@ -3959,6 +4129,8 @@ Get a single dock by ID.
 #### `DELETE /api/v1/docks/{id}`
 
 Delete a dock and clean up its git worktree. Blocked if the dock is actively in use by a captain.
+
+**Permission:** TenantAdmin
 
 **Path Parameters:**
 
@@ -3976,6 +4148,8 @@ Delete a dock and clean up its git worktree. Blocked if the dock is actively in 
 #### `DELETE /api/v1/docks/{id}/purge`
 
 Force purge a dock and its git worktree, even if a mission references it. **This cannot be undone.**
+
+**Permission:** TenantAdmin
 
 **Path Parameters:**
 
@@ -4000,6 +4174,8 @@ Force purge a dock and its git worktree, even if a mission references it. **This
 
 Run `git worktree repair` on the dock's worktree to fix a corrupted or relocated registration. Non-destructive: no work is removed.
 
+**Permission:** TenantAdmin
+
 **Path Parameters:**
 
 | Parameter | Description |
@@ -4023,6 +4199,8 @@ Run `git worktree repair` on the dock's worktree to fix a corrupted or relocated
 
 Release any captain still holding the dock back to `Idle` and reclaim its worktree so it stops pinning capacity. Committed branch history is preserved.
 
+**Permission:** TenantAdmin
+
 **Path Parameters:**
 
 | Parameter | Description |
@@ -4045,6 +4223,8 @@ Release any captain still holding the dock back to `Idle` and reclaim its worktr
 #### `POST /api/v1/docks/delete/multiple`
 
 Batch delete multiple docks and their git worktrees from the database by ID. Returns a summary of deleted and skipped entries. **This cannot be undone.**
+
+**Permission:** TenantAdmin
 
 **Request Body:**
 
@@ -4076,6 +4256,8 @@ A bors-style merge queue that batches branches, runs tests, and lands passing ba
 
 List merge queue entries with pagination.
 
+**Permission:** Authenticated
+
 **Query Parameters:** [Pagination parameters](#pagination-parameters)
 
 **Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<[MergeEntry](#mergeentry)\>
@@ -4090,6 +4272,8 @@ curl http://localhost:7890/api/v1/merge-queue
 
 Paginated enumeration of merge queue entries with optional filtering and sorting.
 
+**Permission:** Authenticated
+
 **Request Body:** [EnumerationQuery](#enumerationquery) (optional)
 
 **Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<[MergeEntry](#mergeentry)\>
@@ -4099,6 +4283,8 @@ Paginated enumeration of merge queue entries with optional filtering and sorting
 #### POST /api/v1/merge-queue
 
 Enqueue a branch for testing and merging.
+
+**Permission:** TenantAdmin
 
 **Request Body:** [MergeEntry](#mergeentry)
 
@@ -4125,6 +4311,8 @@ curl -X POST http://localhost:7890/api/v1/merge-queue \
 
 Get a single merge queue entry by ID.
 
+**Permission:** Authenticated
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -4139,6 +4327,8 @@ Get a single merge queue entry by ID.
 
 Cancel a queued merge entry.
 
+**Permission:** TenantAdmin
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -4151,6 +4341,8 @@ Cancel a queued merge entry.
 #### POST /api/v1/merge-queue/{id}/process
 
 Process a single merge queue entry by ID: create the integration branch, run tests, and land it if passing.
+
+**Permission:** TenantAdmin
 
 **Path Parameters:**
 | Parameter | Description |
@@ -4166,6 +4358,8 @@ Process a single merge queue entry by ID: create the integration branch, run tes
 
 Trigger processing of the merge queue. Creates integration branches, runs tests, and lands passing batches.
 
+**Permission:** TenantAdmin
+
 **Response:** `200 OK`
 
 ```json
@@ -4179,6 +4373,8 @@ Trigger processing of the merge queue. Creates integration branches, runs tests,
 #### `DELETE /api/v1/merge-queue/{id}/purge`
 
 Permanently delete a single terminal merge queue entry from the database. Only entries in Landed, Failed, or Cancelled status can be purged. **This cannot be undone.**
+
+**Permission:** TenantAdmin
 
 **Path Parameters:**
 
@@ -4203,6 +4399,8 @@ Permanently delete a single terminal merge queue entry from the database. Only e
 #### `POST /api/v1/merge-queue/purge`
 
 Batch purge multiple terminal merge queue entries from the database by ID. Returns a summary of purged and skipped entries. **This cannot be undone.**
+
+**Permission:** TenantAdmin
 
 **Request Body:**
 
@@ -4234,11 +4432,15 @@ Harbor records register host-side runners that let the Admiral run detached (in 
 
 List Harbors in the caller scope. Returns a plain array, not a paged envelope.
 
+**Permission:** Authenticated
+
 - Response: `200 OK` - `Harbor[]`
 
 #### POST /api/v1/harbors
 
 Register one Harbor. Only `name`, `maxConcurrentJobs`, and `enabled` are honored on create; all other fields are managed by the link.
+
+**Permission:** Authenticated
 
 ```json
 {
@@ -4254,12 +4456,16 @@ Register one Harbor. Only `name`, `maxConcurrentJobs`, and `enabled` are honored
 
 Read one Harbor.
 
+**Permission:** Authenticated
+
 - Response: `200 OK` - `Harbor`
 - Errors: `404 Not Found`
 
 #### PUT /api/v1/harbors/{id}
 
 Update one Harbor. Only `name`, `maxConcurrentJobs`, and `enabled` are updated; runtime state reported by the link is preserved server-side.
+
+**Permission:** Authenticated
 
 ```json
 {
@@ -4276,12 +4482,16 @@ Update one Harbor. Only `name`, `maxConcurrentJobs`, and `enabled` are updated; 
 
 Delete one Harbor registration.
 
+**Permission:** Authenticated
+
 - Response: `204 No Content`
 - Errors: `404 Not Found`
 
 #### POST /api/v1/harbors/{id}/enable
 
 Enable one Harbor so the router may route new missions to it.
+
+**Permission:** Authenticated
 
 - Response: `200 OK` - `Harbor`
 - Errors: `404 Not Found`
@@ -4290,12 +4500,16 @@ Enable one Harbor so the router may route new missions to it.
 
 Disable one Harbor. A disabled Harbor keeps its docks but receives no new missions.
 
+**Permission:** Authenticated
+
 - Response: `200 OK` - `Harbor`
 - Errors: `404 Not Found`
 
 #### POST /api/v1/harbors/{id}/probe
 
 Run a one-off host command on a connected Harbor over its link and return the result, verifying the end-to-end server-issues-work / Harbor-replies loop. Defaults to `git --version`.
+
+**Permission:** TenantAdmin
 
 **Request Body:** `HarborProbeRequest` (optional)
 
@@ -4320,6 +4534,8 @@ Jobs are background tasks tracked for status polling.
 #### GET /api/v1/jobs
 
 List background jobs, newest first, scoped to the caller.
+
+**Permission:** Authenticated
 
 Without query parameters the response holds every job in scope, which grows with history. Pass any of the parameters below to get one page instead; the dashboard header polls `?status=Queued,Running` this way.
 
@@ -4346,6 +4562,8 @@ Without query parameters the response holds every job in scope, which grows with
 
 Get a single background job by ID.
 
+**Permission:** Authenticated
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -4357,6 +4575,8 @@ Get a single background job by ID.
 #### POST /api/v1/jobs/{id}/cancel
 
 Cancel a background job.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -4382,6 +4602,8 @@ Fleet actions apply one action across many vessels and record a per-vessel resul
 
 Paged action definitions, newest first. Built-in actions are seeded into the caller's tenant on first use.
 
+**Permission:** Authenticated
+
 **Request Body** (`FleetActionEnumerateRequest`, all optional): the standard enumeration fields plus `IncludeInactive`.
 
 ```json
@@ -4393,6 +4615,8 @@ Paged action definitions, newest first. Built-in actions are seeded into the cal
 #### POST /api/v1/fleet-actions
 
 Create an action. Command kind requires tenant admin.
+
+**Permission:** TenantAdmin
 
 **Request Body** (`FleetActionUpsertRequest`):
 
@@ -4428,12 +4652,16 @@ Create an action. Command kind requires tenant admin.
 
 #### GET /api/v1/fleet-actions/{id}
 
+**Permission:** Authenticated
+
 - Response: `200 OK` - `FleetAction`
 - Errors: `404`
 
 #### PUT /api/v1/fleet-actions/{id}
 
 Partial update: only supplied (non-null) fields change. An empty string clears `Description`, `PipelineId` and `Persona`. Built-in actions can be edited.
+
+**Permission:** TenantAdmin
 
 - Request Body: `FleetActionUpsertRequest`
 - Response: `200 OK` - `FleetAction`
@@ -4443,12 +4671,16 @@ Partial update: only supplied (non-null) fields change. An empty string clears `
 
 Deletes an action. Built-ins are soft-deleted (`Active = false`) and are never re-seeded; other actions are removed. Past runs keep their snapshot.
 
+**Permission:** TenantAdmin
+
 - Response: `204 No Content`
 - Errors: `403`, `404`
 
 #### POST /api/v1/fleet-actions/{id}/run
 
 Start a run of a saved action. Every vessel is re-read with the tenant-scoped read before anything is written; a single unknown or cross-tenant vessel rejects the whole request with `404` and no run is created.
+
+**Permission:** TenantAdmin
 
 **Request Body** (`FleetActionRunRequest`):
 
@@ -4487,6 +4719,8 @@ Start a run of a saved action. Every vessel is re-read with the tenant-scoped re
 
 Ad hoc run with an inline definition; the run's `ActionId` is null. Same body as above plus `Definition` (a `FleetActionUpsertRequest`, validated exactly as on create). `Overrides` are ignored for ad hoc runs; put the values in `Definition`.
 
+**Permission:** TenantAdmin
+
 ```json
 {
   "VesselIds": ["vsl_abc"],
@@ -4501,6 +4735,8 @@ Ad hoc run with an inline definition; the run's `ActionId` is null. Same body as
 
 Paged runs, newest first. `Status` filters by run status (`Pending`, `Running`, `Completed`, `CompletedWithFailures`, `Cancelled`, `Failed`); an unknown value is `400`.
 
+**Permission:** Authenticated
+
 ```json
 { "PageNumber": 1, "PageSize": 25, "Status": "Running" }
 ```
@@ -4510,6 +4746,8 @@ Paged runs, newest first. `Status` filters by run status (`Pending`, `Running`, 
 #### GET /api/v1/fleet-action-runs/{id}
 
 Run plus summaries of every target, ordered by creation. No output text.
+
+**Permission:** Authenticated
 
 ```json
 {
@@ -4532,6 +4770,8 @@ Run plus summaries of every target, ordered by creation. No output text.
 
 Paged target summaries (same shape as `Targets` above).
 
+**Permission:** Authenticated
+
 **Request Body** (`FleetActionTargetEnumerateRequest`): `PageNumber` (from 1), `PageSize` (default 25, clamped 1-500), `Status` (optional target status).
 
 - Response: `200 OK` - `EnumerationResult<FleetActionRunTargetSummary>`
@@ -4541,12 +4781,16 @@ Paged target summaries (same shape as `Targets` above).
 
 One target including `RenderedText`, `OutputText` and `ErrorText`. This is the only endpoint that returns captured output.
 
+**Permission:** Authenticated
+
 - Response: `200 OK` - `FleetActionRunTarget`
 - Errors: `404`
 
 #### POST /api/v1/fleet-action-runs/{id}/cancel
 
 Cancel a run. Pending targets become `Cancelled`; running Command targets are killed and become `Cancelled`; running Mission targets have their voyage cancelled (pending and assigned missions are cancelled, missions already in progress finish) unless the voyage already finished. Cancelling an already cancelled run returns it unchanged. No body.
+
+**Permission:** TenantAdmin
 
 - Response: `200 OK` - `FleetActionRun`
 - Errors: `403`, `404`, `409` (run already finished)
@@ -4567,11 +4811,30 @@ Skip reasons: `DirtyTree`, `NoWorkingDirectory`, `NoBuildCommand`, `DispatchReje
 
 ### Inbox
 
-The inbox is a consolidated, most-urgent-first list of items awaiting operator attention (reviews to approve, failed landings, failed missions, stalled captains).
+The inbox is a consolidated, most-urgent-first list of items awaiting a human decision or intervention. Purely
+informational changes (completions, normal progress) are not included. Items are ordered by `Severity` (`Critical`,
+then `Warning`), then by `Title`; each category is capped at 100 items.
+
+| `Kind` | `Severity` | `EntityType` | Source |
+|---|---|---|---|
+| `review` | `Warning` (`Critical` once the review deadline has passed) | `mission` | Mission in `Review` |
+| `landing_failed` | `Critical` | `mission` | Mission in `LandingFailed` |
+| `failed` | `Warning` | `mission` | Mission in `Failed` |
+| `stalled_captain` | `Warning` | `captain` | Captain in `Stalled` |
+| `merge_failed` | `Critical` | `merge_entry` | Merge queue entry in `Failed` |
+| `deployment_approval` | `Warning` | `deployment` | Deployment pending approval |
+| `deployment_failed` | `Critical` | `deployment` | Deployment `Failed` or `VerificationFailed` |
+| `ask_proposal` | `Warning` | `ask_proposal` | Pending, unexpired Ask Armada action proposal in one of the caller's own threads (`Href` is `/ask/{threadId}`) |
+
+Operational items are scoped like other reads: a global admin sees everything, a tenant admin sees the tenant, and a
+regular user sees only the items they own. Ask proposals are always limited to the caller's own threads (only the
+thread owner can approve them), and proposals older than `Ask.ProposalExpiryMinutes` are left out.
 
 #### GET /api/v1/inbox
 
 Return the operator "needs you" inbox.
+
+**Permission:** Authenticated
 
 **Response:** `200 OK` - `InboxItem[]`
 
@@ -4580,14 +4843,18 @@ Return the operator "needs you" inbox.
   {
     "Kind": "review",
     "Severity": "Warning",
-    "Title": "Mission awaiting review",
-    "Detail": "msn_abc123 is waiting at a review gate",
+    "Title": "Review: Add retry logic",
+    "Detail": "Awaiting your review.",
     "EntityType": "mission",
+    "EntityName": "Add retry logic",
     "EntityId": "msn_abc123",
     "Href": "/missions/msn_abc123"
   }
 ]
 ```
+
+`EntityName` is the display name of the referenced entity (mission title, captain name, deployment environment, merge
+target branch, or the proposal summary); use it instead of parsing `Title`.
 
 ---
 
@@ -4598,6 +4865,8 @@ Skills are Category B shared configuration entities (`scope`: `TenantWide` or `U
 #### GET /api/v1/skills
 
 List skills scoped to the authenticated tenant.
+
+**Permission:** Authenticated
 
 **Query Parameters:**
 | Parameter | Type | Description |
@@ -4614,6 +4883,8 @@ List skills scoped to the authenticated tenant.
 
 Paginated enumeration of skills. Query-string parameters override body values.
 
+**Permission:** Authenticated
+
 **Request Body:** `SkillQuery` (optional)
 
 **Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<`Skill`\>
@@ -4621,6 +4892,8 @@ Paginated enumeration of skills. Query-string parameters override body values.
 #### POST /api/v1/skills
 
 Create a skill. A regular user may create only user-specific skills; the requested scope is coerced accordingly.
+
+**Permission:** Authenticated
 
 **Request Body:** `Skill`
 
@@ -4630,6 +4903,8 @@ Create a skill. A regular user may create only user-specific skills; the request
 #### GET /api/v1/skills/{id}
 
 Get a single skill by ID.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -4642,6 +4917,8 @@ Get a single skill by ID.
 #### PUT /api/v1/skills/{id}
 
 Update a skill. Only tenant/global admins may change an existing skill's ownership scope.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -4656,6 +4933,8 @@ Update a skill. Only tenant/global admins may change an existing skill's ownersh
 #### DELETE /api/v1/skills/{id}
 
 Delete a skill.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -4675,6 +4954,8 @@ Project profiles are Category B shared configuration entities that bundle a proj
 
 List project profiles scoped to the authenticated tenant.
 
+**Permission:** Authenticated
+
 **Query Parameters:**
 | Parameter | Type | Description |
 |---|---|---|
@@ -4692,6 +4973,8 @@ List project profiles scoped to the authenticated tenant.
 
 Paginated enumeration of project profiles. Query-string parameters override body values.
 
+**Permission:** Authenticated
+
 **Request Body:** `ProjectProfileQuery` (optional)
 
 **Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<`ProjectProfile`\>
@@ -4700,6 +4983,8 @@ Paginated enumeration of project profiles. Query-string parameters override body
 
 Validate a project-profile definition (scope consistency, referenced entities, persona overrides) without saving it.
 
+**Permission:** Authenticated
+
 **Request Body:** `ProjectProfile`
 
 **Response:** `200 OK` - `ProjectProfileValidationResult`
@@ -4707,6 +4992,8 @@ Validate a project-profile definition (scope consistency, referenced entities, p
 #### GET /api/v1/project-profiles/resolve/vessels/{vesselId}
 
 Resolve the best matching active project profile for a vessel using vessel, then fleet, then global precedence.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -4725,6 +5012,8 @@ Resolve the best matching active project profile for a vessel using vessel, then
 
 Return the base and effective (override-applied) persona prompt so the dashboard can render a live diff.
 
+**Permission:** Authenticated
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -4738,6 +5027,8 @@ Return the base and effective (override-applied) persona prompt so the dashboard
 
 Create a project profile. A regular user may create only user-specific profiles; the requested ownership scope is coerced accordingly.
 
+**Permission:** Authenticated
+
 **Request Body:** `ProjectProfile`
 
 - Response: `201 Created` - `ProjectProfile`
@@ -4746,6 +5037,8 @@ Create a project profile. A regular user may create only user-specific profiles;
 #### GET /api/v1/project-profiles/{id}
 
 Get a single project profile by ID.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -4758,6 +5051,8 @@ Get a single project profile by ID.
 #### PUT /api/v1/project-profiles/{id}
 
 Update a project profile. Only tenant/global admins may change the ownership scope.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -4772,6 +5067,8 @@ Update a project profile. Only tenant/global admins may change the ownership sco
 #### DELETE /api/v1/project-profiles/{id}
 
 Delete a project profile.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -4791,23 +5088,35 @@ Playbooks are tenant-scoped markdown documents that can be attached to voyages o
 
 List playbooks with pagination.
 
+**Permission:** Authenticated
+
 **Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<[Playbook](#playbook)\>
 
 #### POST /api/v1/playbooks/enumerate
 
 Paginated enumeration of playbooks with optional filtering and sorting.
 
+**Permission:** Authenticated
+
 **Request Body:** [EnumerationQuery](#enumerationquery) (optional)
+
+**Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<[Playbook](#playbook)\>
 
 #### POST /api/v1/playbooks
 
 Create a playbook.
 
-**Request Body:** [Playbook](#playbook)
+**Permission:** TenantAdmin
+
+**Request Body:** [Playbook](#playbook). `FileName` must end with `.md` (default `PLAYBOOK.md`) and `Content` must not be empty.
+
+**Response:** `201 Created` - [Playbook](#playbook). `409 Conflict` when a playbook with that file name already exists.
 
 #### GET /api/v1/playbooks/{id}
 
 Return a single playbook by ID.
+
+**Permission:** Authenticated
 
 **Response:** `200 OK` - [Playbook](#playbook)
 
@@ -4815,13 +5124,19 @@ Return a single playbook by ID.
 
 Update a playbook's file name, description, content, or active state.
 
+**Permission:** TenantAdmin
+
 **Request Body:** [Playbook](#playbook)
+
+**Response:** `200 OK` - [Playbook](#playbook). `404` when not found, `409` when the new file name is taken.
 
 #### DELETE /api/v1/playbooks/{id}
 
 Delete a playbook. Existing mission snapshots remain immutable.
 
-**Response:** `200 OK`
+**Permission:** TenantAdmin
+
+**Response:** `200 OK` - `{ "Status": "deleted", "PlaybookId": "pbk_..." }`. `404` when not found.
 
 ---
 
@@ -4834,6 +5149,8 @@ The built-in **`ask.system`** template (category `ask`) is the system prompt pre
 #### GET /api/v1/prompt-templates
 
 List all prompt templates with pagination.
+
+**Permission:** Authenticated
 
 **Query Parameters:** [Pagination parameters](#pagination-parameters)
 
@@ -4848,6 +5165,8 @@ curl http://localhost:7890/api/v1/prompt-templates
 #### POST /api/v1/prompt-templates/enumerate
 
 Paginated enumeration of prompt templates with optional filtering and sorting.
+
+**Permission:** Authenticated
 
 **Request Body:** [EnumerationQuery](#enumerationquery) (optional)
 
@@ -4864,6 +5183,8 @@ curl -X POST http://localhost:7890/api/v1/prompt-templates/enumerate \
 #### POST /api/v1/prompt-templates
 
 Create a prompt template.
+
+**Permission:** Authenticated
 
 **Request Body:**
 
@@ -4889,6 +5210,8 @@ curl -X POST http://localhost:7890/api/v1/prompt-templates \
 
 Get a prompt template by name.
 
+**Permission:** Authenticated
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -4906,6 +5229,8 @@ curl http://localhost:7890/api/v1/prompt-templates/default
 #### PUT /api/v1/prompt-templates/{name}
 
 Update a prompt template's content. Built-in templates can be customized by updating their content.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -4934,6 +5259,8 @@ curl -X PUT http://localhost:7890/api/v1/prompt-templates/default \
 
 Reset a prompt template to its built-in default content. Only applicable to built-in templates that have been customized.
 
+**Permission:** Authenticated
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -4956,6 +5283,8 @@ A persona associates a name and description with a prompt template. Personas are
 
 List all personas with pagination.
 
+**Permission:** Authenticated
+
 **Query Parameters:** [Pagination parameters](#pagination-parameters)
 
 **Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<Persona\>
@@ -4969,6 +5298,8 @@ curl http://localhost:7890/api/v1/personas
 #### POST /api/v1/personas/enumerate
 
 Paginated enumeration of personas with optional filtering and sorting.
+
+**Permission:** Authenticated
 
 **Request Body:** [EnumerationQuery](#enumerationquery) (optional)
 
@@ -4985,6 +5316,8 @@ curl -X POST http://localhost:7890/api/v1/personas/enumerate \
 #### GET /api/v1/personas/{name}
 
 Get a persona by name.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -5003,6 +5336,8 @@ curl http://localhost:7890/api/v1/personas/default
 #### POST /api/v1/personas
 
 Create a new persona.
+
+**Permission:** Authenticated
 
 **Request Body:**
 
@@ -5025,6 +5360,8 @@ curl -X POST http://localhost:7890/api/v1/personas \
 #### PUT /api/v1/personas/{name}
 
 Update an existing persona.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -5053,6 +5390,8 @@ curl -X PUT http://localhost:7890/api/v1/personas/reviewer \
 
 Delete a persona. Built-in personas cannot be deleted.
 
+**Permission:** Authenticated
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -5076,6 +5415,8 @@ A pipeline defines an ordered sequence of stages, each associated with a persona
 
 List all pipelines with pagination. Response includes the stages for each pipeline.
 
+**Permission:** Authenticated
+
 **Query Parameters:** [Pagination parameters](#pagination-parameters)
 
 **Response:** `200 OK` - [EnumerationResult](#enumerationresultt)\<Pipeline\>
@@ -5089,6 +5430,8 @@ curl http://localhost:7890/api/v1/pipelines
 #### POST /api/v1/pipelines/enumerate
 
 Paginated enumeration of pipelines with optional filtering and sorting.
+
+**Permission:** Authenticated
 
 **Request Body:** [EnumerationQuery](#enumerationquery) (optional)
 
@@ -5105,6 +5448,8 @@ curl -X POST http://localhost:7890/api/v1/pipelines/enumerate \
 #### GET /api/v1/pipelines/{name}
 
 Get a pipeline by name, including its stages.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -5124,6 +5469,8 @@ curl http://localhost:7890/api/v1/pipelines/default
 
 Create a new pipeline with stages.
 
+**Permission:** Authenticated
+
 **Request Body:**
 
 | Field | Type | Required | Description |
@@ -5139,13 +5486,16 @@ Create a new pipeline with stages.
 | `PersonaName` | string | yes | Name of the persona for this stage |
 | `IsOptional` | bool | no | Whether this stage can be skipped (default: false) |
 | `Description` | string | no | Stage description |
+| `Order` | int | no | 1-based execution order (default 1). Set it on every stage of a multi-stage pipeline; the REST API does not number stages for you |
+| `RequiresReview` | bool | no | Park the stage's mission in `Review` until a reviewer approves it (default: false) |
+| `ReviewDenyAction` | string | no | `RetryStage` (default) or `FailPipeline` when the review is denied |
 
 **Response:** `201 Created` - Pipeline
 
 ```bash
 curl -X POST http://localhost:7890/api/v1/pipelines \
   -H "Content-Type: application/json" \
-  -d '{"Name": "review-pipeline", "Description": "Code with review", "Stages": [{"PersonaName": "default", "Description": "Implementation"}, {"PersonaName": "reviewer", "IsOptional": false, "Description": "Code review"}]}'
+  -d '{"Name": "review-pipeline", "Description": "Code with review", "Stages": [{"Order": 1, "PersonaName": "Worker", "Description": "Implementation"}, {"Order": 2, "PersonaName": "Judge", "IsOptional": false, "Description": "Code review"}]}'
 ```
 
 ---
@@ -5153,6 +5503,8 @@ curl -X POST http://localhost:7890/api/v1/pipelines \
 #### PUT /api/v1/pipelines/{name}
 
 Update an existing pipeline.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -5180,6 +5532,8 @@ curl -X PUT http://localhost:7890/api/v1/pipelines/review-pipeline \
 #### DELETE /api/v1/pipelines/{name}
 
 Delete a pipeline. Built-in pipelines cannot be deleted.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -5210,6 +5564,8 @@ Requests that violate either constraint are rejected with `400 Bad Request`.
 #### GET /api/v1/model-endpoints
 
 List all model endpoints in the caller scope. This route returns a plain array, **not** a paginated `EnumerationResult` envelope.
+
+**Permission:** Authenticated
 
 **Response:** `200 OK` - [ModelEndpoint](#modelendpoint)[]
 
@@ -5247,6 +5603,8 @@ curl -H "Authorization: Bearer default" http://localhost:7890/api/v1/model-endpo
 #### POST /api/v1/model-endpoints
 
 Create a model endpoint. Supply `ApiKey` to store a provider key; it is write-only and is never returned on subsequent reads.
+
+**Permission:** Authenticated
 
 **Request Body:** [ModelEndpoint](#modelendpoint)
 
@@ -5314,6 +5672,8 @@ For `VertexAI` and `Bedrock`, `BaseUrl` is optional (the endpoint is derived fro
 
 Get a single model endpoint by ID.
 
+**Permission:** Authenticated
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -5327,6 +5687,8 @@ Get a single model endpoint by ID.
 #### PUT /api/v1/model-endpoints/{id}
 
 Update a model endpoint. Omit `ApiKey` to keep the stored key; send `ApiKey` to replace it.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -5354,6 +5716,8 @@ Update a model endpoint. Omit `ApiKey` to keep the stored key; send `ApiKey` to 
 
 Delete a model endpoint.
 
+**Permission:** Authenticated
+
 **Path Parameters:**
 | Parameter | Description |
 |---|---|
@@ -5367,6 +5731,8 @@ Delete a model endpoint.
 #### POST /api/v1/model-endpoints/{id}/validate
 
 Validate one endpoint by issuing a real request against the provider: an embedding request for `Embedding` endpoints, or a completion request for `Inference` endpoints. The resulting health status, timestamp, latency, and any error are persisted on the endpoint.
+
+**Permission:** Authenticated
 
 **Path Parameters:**
 | Parameter | Description |
@@ -5396,6 +5762,8 @@ Validate one endpoint by issuing a real request against the provider: an embeddi
 
 Probe all enabled model endpoints, deduplicated by base URL, and persist each endpoint's health status. Returns the number of distinct base URLs that were probed.
 
+**Permission:** Authenticated
+
 **Response:** `200 OK` - [ModelEndpointHealthSweepResponse](#modelendpointhealthsweepresponse)
 
 ```json
@@ -5408,32 +5776,41 @@ Probe all enabled model endpoints, deduplicated by base URL, and persist each en
 
 ### Memories
 
-Durable agent memories distilled from voyages (episodic, semantic, procedural). Scoped to the caller like other configuration entities. The API key is authenticated on every request.
+Durable agent memories distilled from voyages (episodic, semantic, procedural). Memories are Category B (shared
+configuration) entities: reads return tenant-wide memories plus the caller's own user-specific ones, and edits and
+deletes follow the same ownership rules (see [Data Scoping](#data-scoping-who-sees-and-edits-what)).
+
+**Permission:** Authenticated (every route)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/v1/memories` | List/search memories visible to the caller. Query: `type` (Episodic/Semantic/Procedural), `topic`, `vesselId`, `search`, `pageNumber`, `pageSize`. Ordered by salience then recency. Returns a paged `EnumerationResult`. |
-| POST | `/api/v1/memories` | Create a memory, or update it in place when a memory with the same `key` already exists in the caller's tenant. Returns `201`. |
-| GET | `/api/v1/memories/{id}` | Read one memory by id. |
-| PUT | `/api/v1/memories/{id}` | Update a memory's fields; increments its `version`. |
-| DELETE | `/api/v1/memories/{id}` | Delete a memory (e.g. a stale one). Returns `204`. |
+| GET | `/api/v1/memories` | List/search memories visible to the caller. Query: `type` (`Episodic`/`Semantic`/`Procedural`), `topic`, `vesselId`, `search`, `pageNumber`, `pageSize`. Ordered by salience then recency. Returns a paged [EnumerationResult](#enumerationresultt)\<`Memory`\>. |
+| POST | `/api/v1/memories` | Create a memory, or update it in place when a memory with the same `Key` already exists in the caller's tenant (and the caller may edit it). Returns `201`; `400` for an invalid body. |
+| GET | `/api/v1/memories/{id}` | Read one memory by id (`mem_` prefix). `404` when it does not exist or is not visible. |
+| PUT | `/api/v1/memories/{id}` | Update a memory's fields; increments its `Version`. `403` when the caller cannot edit it, `404` when not found. |
+| DELETE | `/api/v1/memories/{id}` | Delete a memory (e.g. a stale one). Returns `204`; `403` when the caller cannot edit it, `404` when not found. |
 
-**Memory fields:** `type` (`Episodic`\|`Semantic`\|`Procedural`), `topic`, `key` (stable idempotency slug), `summary` (one-line recall hook), `content`, `salience` (0.0-1.0, orders recall), `version`, `sourceKind` (`Voyage`\|`Mission`\|`Vessel`\|`Conversation`\|`Manual`\|`Other`), `sourceVoyageId`, `sourceMissionId`, `sourceVesselId`, `sourceDetail`, `vesselId`, `tags`, `scope` (`TenantWide`\|`UserSpecific`).
+**Memory fields:** `Id`, `TenantId`, `UserId`, `Scope` (`TenantWide`\|`UserSpecific`), `Type`
+(`Episodic`\|`Semantic`\|`Procedural`, default `Semantic`), `Topic`, `Key` (stable idempotency slug), `Summary`
+(one-line recall hook), `Content`, `Salience` (0.0-1.0, default 0.5, orders recall), `Version` (starts at 1),
+`SourceKind` (`Voyage`\|`Mission`\|`Vessel`\|`Conversation`\|`Manual`\|`Other`, default `Manual`), `SourceVoyageId`,
+`SourceMissionId`, `SourceVesselId`, `SourceDetail`, `VesselId`, `Tags`, `CreatedUtc`, `LastUpdateUtc`. Only tenant
+and global admins can change `Scope` on update.
 
 **Create/upsert example:**
 
 ```bash
 curl -X POST http://127.0.0.1:7890/api/v1/memories \
-  -H "X-Api-Key: $ARMADA_API_KEY" -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ARMADA_TOKEN" -H "Content-Type: application/json" \
   -d '{
-    "type": "Semantic",
-    "topic": "code-style",
-    "key": "code-style/no-var",
-    "summary": "No var in C#",
-    "content": "This user dislikes the use of var in C# code.",
-    "salience": 0.9,
-    "tags": ["csharp", "style"],
-    "sourceKind": "Voyage"
+    "Type": "Semantic",
+    "Topic": "code-style",
+    "Key": "code-style/no-var",
+    "Summary": "No var in C#",
+    "Content": "This user dislikes the use of var in C# code.",
+    "Salience": 0.9,
+    "Tags": ["csharp", "style"],
+    "SourceKind": "Voyage"
   }'
 ```
 
@@ -5444,6 +5821,8 @@ curl -X POST http://127.0.0.1:7890/api/v1/memories \
 #### GET /api/v1/backup
 
 Create and download a ZIP backup of the Armada database and settings.
+
+**Permission:** AdminOnly
 
 **Response:** `200 OK` - Binary ZIP file stream with `Content-Disposition: attachment; filename="armada-backup-{timestamp}.zip"` header.
 
@@ -5466,6 +5845,8 @@ curl -H "X-Api-Key: your-key" http://localhost:7890/api/v1/backup -o backup.zip
 #### POST /api/v1/restore
 
 Restore Armada from a previously created backup ZIP file.
+
+**Permission:** AdminOnly
 
 **Request:** Binary ZIP file in the request body (`Content-Type: application/zip`).
 
@@ -5514,12 +5895,16 @@ Workspace is a first-class REST surface for browsing and editing a vessel workin
 
 List one directory in the vessel workspace.
 
+**Permission:** Authenticated
+
 - Query: optional `path`
 - Response: `200 OK` - `WorkspaceTreeResult`
 
 #### GET /api/v1/workspace/vessels/{vesselId}/diff
 
 Return a unified git diff of the vessel working tree against HEAD, optionally scoped to one path.
+
+**Permission:** Authenticated
 
 - Query: optional `path` to scope the diff
 - Response: `200 OK` - `WorkspaceDiffResult`
@@ -5528,6 +5913,8 @@ Return a unified git diff of the vessel working tree against HEAD, optionally sc
 
 Read one file in the vessel workspace.
 
+**Permission:** Authenticated
+
 - Query: required `path`
 - Response: `200 OK` - `WorkspaceFileResponse`
 - Errors: `400` when `path` is missing, `404` when the file is not found
@@ -5535,6 +5922,8 @@ Read one file in the vessel workspace.
 #### PUT /api/v1/workspace/vessels/{vesselId}/file
 
 Save one text file with optimistic concurrency validation.
+
+**Permission:** Authenticated
 
 ```json
 {
@@ -5551,6 +5940,8 @@ Save one text file with optimistic concurrency validation.
 
 Execute a shell command in the vessel working tree (the in-browser dock terminal), bounded by a timeout. Tenant administrators only.
 
+**Permission:** TenantAdmin
+
 **Request Body:** `WorkspaceExecRequest`
 
 | Field | Type | Required | Description |
@@ -5565,6 +5956,8 @@ Execute a shell command in the vessel working tree (the in-browser dock terminal
 
 Create a directory inside the vessel workspace.
 
+**Permission:** Authenticated
+
 ```json
 {
   "Path": "docs/new-folder"
@@ -5576,6 +5969,8 @@ Create a directory inside the vessel workspace.
 #### POST /api/v1/workspace/vessels/{vesselId}/rename
 
 Rename or move one file or directory.
+
+**Permission:** Authenticated
 
 ```json
 {
@@ -5590,12 +5985,16 @@ Rename or move one file or directory.
 
 Delete one file or directory.
 
+**Permission:** Authenticated
+
 - Query: required `path`
 - Response: `200 OK` - `WorkspaceOperationResult`
 
 #### GET /api/v1/workspace/vessels/{vesselId}/search
 
 Search text files in the vessel workspace.
+
+**Permission:** Authenticated
 
 - Query: required `q`, optional `maxResults`
 - Response: `200 OK` - `WorkspaceSearchResult`
@@ -5604,11 +6003,15 @@ Search text files in the vessel workspace.
 
 Return branch state and changed files.
 
+**Permission:** Authenticated
+
 - Response: `200 OK` - `WorkspaceChangesResult`
 
 #### GET /api/v1/workspace/vessels/{vesselId}/status
 
 Return high-level workspace health, git state, and active-mission overlap context.
+
+**Permission:** Authenticated
 
 - Response: `200 OK` - `WorkspaceStatusResult`
 
@@ -5622,11 +6025,15 @@ Planning sessions back the dashboard's captain chat flow and transcript-to-dispa
 
 List planning sessions visible to the authenticated caller.
 
+**Permission:** Authenticated
+
 - Response: `200 OK` - `PlanningSession[]`
 
 #### POST /api/v1/planning-sessions
 
 Create a planning session, reserve the selected captain, and provision a planning dock.
+
+**Permission:** TenantAdmin
 
 ```json
 {
@@ -5655,12 +6062,16 @@ Create a planning session, reserve the selected captain, and provision a plannin
 
 Read one planning session with transcript, captain, and vessel context.
 
+**Permission:** Authenticated
+
 - Response: `200 OK`
 - Errors: `404 Not Found`
 
 #### POST /api/v1/planning-sessions/{id}/messages
 
 Append one user message and launch the next planning turn.
+
+**Permission:** TenantAdmin
 
 ```json
 {
@@ -5674,6 +6085,8 @@ Append one user message and launch the next planning turn.
 
 Generate a dispatch-ready draft from a selected or inferred assistant message without launching the voyage.
 
+**Permission:** TenantAdmin
+
 ```json
 {
   "MessageId": "psm_abc123",
@@ -5686,6 +6099,8 @@ Generate a dispatch-ready draft from a selected or inferred assistant message wi
 #### POST /api/v1/planning-sessions/{id}/dispatch
 
 Create a voyage directly from planning output.
+
+**Permission:** TenantAdmin
 
 ```json
 {
@@ -5701,11 +6116,15 @@ Create a voyage directly from planning output.
 
 Stop an active planning session and release its resources.
 
+**Permission:** TenantAdmin
+
 - Response: `200 OK` - same detail shape as `GET /api/v1/planning-sessions/{id}`
 
 #### POST /api/v1/planning-sessions/{id}/stop-turn
 
 Abort the in-flight planning turn (cancelling the captain runtime) while keeping the session active so the user can keep chatting.
+
+**Permission:** TenantAdmin
 
 **Path Parameters:**
 | Parameter | Description |
@@ -5718,6 +6137,8 @@ Abort the in-flight planning turn (cancelling the captain runtime) while keeping
 #### DELETE /api/v1/planning-sessions/{id}
 
 Delete a planning session and its transcript. Active sessions are stopped first.
+
+**Permission:** TenantAdmin
 
 - Response: `204 No Content`
 
@@ -5739,6 +6160,8 @@ Important shared `Objective` fields now include:
 
 List objective or backlog records in the caller scope.
 
+**Permission:** Authenticated
+
 - Query: `pageNumber`, `pageSize`, `owner`, `category`, `parentObjectiveId`, `vesselId`, `fleetId`, `planningSessionId`, `voyageId`, `missionId`, `checkRunId`, `releaseId`, `deploymentId`, `incidentId`, `tag`, `status`, `backlogState`, `kind`, `priority`, `effort`, `targetVersion`, `search`, `fromUtc`, `toUtc`
 - Response: `200 OK` - `EnumerationResult<Objective>`
 
@@ -5746,12 +6169,16 @@ List objective or backlog records in the caller scope.
 
 Enumerate objectives or backlog items using a JSON body and optional querystring overrides.
 
+**Permission:** Authenticated
+
 - Request body: `ObjectiveQuery`
 - Response: `200 OK` - `EnumerationResult<Objective>`
 
 #### POST /api/v1/objectives and POST /api/v1/backlog
 
 Create one scoped objective or backlog item.
+
+**Permission:** TenantAdmin
 
 ```json
 {
@@ -5782,6 +6209,8 @@ Create one scoped objective or backlog item.
 
 Apply one or more explicit backlog rank updates.
 
+**Permission:** TenantAdmin
+
 ```json
 {
   "Items": [
@@ -5797,6 +6226,8 @@ Apply one or more explicit backlog rank updates.
 #### POST /api/v1/objectives/import/github
 
 Import or refresh one objective from GitHub issue or pull-request metadata using the selected vessel's GitHub repository mapping.
+
+**Permission:** TenantAdmin
 
 Credential resolution order:
 
@@ -5823,12 +6254,16 @@ Credential resolution order:
 
 Read one objective or backlog item.
 
+**Permission:** Authenticated
+
 - Response: `200 OK` - `Objective`
 - Errors: `404 Not Found`
 
 #### PUT /api/v1/objectives/{id} and PUT /api/v1/backlog/{id}
 
 Update one objective or backlog item and its linked lifecycle scope.
+
+**Permission:** TenantAdmin
 
 - Request body: `ObjectiveUpsertRequest`
 - Response: `200 OK` - `Objective`
@@ -5838,6 +6273,8 @@ Update one objective or backlog item and its linked lifecycle scope.
 
 Delete one objective or backlog item.
 
+**Permission:** TenantAdmin
+
 - Response: `204 No Content`
 - Errors: `404 Not Found`
 
@@ -5845,12 +6282,16 @@ Delete one objective or backlog item.
 
 List refinement sessions linked to one objective or backlog item.
 
+**Permission:** Authenticated
+
 - Response: `200 OK` - `List<ObjectiveRefinementSession>`
 - Notes: backlog refinement reads are authenticated and scoped like other backlog reads
 
 #### POST /api/v1/objectives/{id}/refinement-sessions and POST /api/v1/backlog/{id}/refinement-sessions
 
 Create one captain-backed refinement session for an objective or backlog item.
+
+**Permission:** TenantAdmin
 
 ```json
 {
@@ -5872,12 +6313,16 @@ Create one captain-backed refinement session for an objective or backlog item.
 
 Read one refinement session with transcript, captain, vessel, and linked objective/backlog detail.
 
+**Permission:** Authenticated
+
 - Response: `200 OK` - `ObjectiveRefinementSessionDetail`
 - Errors: `404 Not Found`, `501 Not Implemented`
 
 #### POST /api/v1/objective-refinement-sessions/{id}/messages
 
 Append one user message to the refinement transcript and launch the next captain turn.
+
+**Permission:** TenantAdmin
 
 ```json
 {
@@ -5893,6 +6338,8 @@ Append one user message to the refinement transcript and launch the next captain
 
 Generate a structured refinement summary from a selected or inferred assistant message.
 
+**Permission:** TenantAdmin
+
 ```json
 {
   "MessageId": "orm_abc123"
@@ -5907,6 +6354,8 @@ Generate a structured refinement summary from a selected or inferred assistant m
 
 Summarize and apply a refinement result back to the linked backlog item.
 
+**Permission:** TenantAdmin
+
 ```json
 {
   "MessageId": "orm_abc123",
@@ -5918,15 +6367,20 @@ Summarize and apply a refinement result back to the linked backlog item.
 
 Applying ends the refinement session by default (`EndSession` true): the session is stopped and its captain returns to
 Idle, so it does not keep holding a captain that missions are waiting for. Pass `EndSession: false` to keep refining in
-the same session. The response includes the session after the apply (`Session`, `Stopped` when it was ended).
+the same session.
 
-- Request body: `ObjectiveRefinementApplyRequest`
-- Response: `200 OK` - `ObjectiveRefinementApplyResponse`
+- Request body: `ObjectiveRefinementApplyRequest` (optional): `MessageId` (assistant message to apply; default: the
+  selected assistant message, else the latest one), `MarkMessageSelected` (default `true`), `PromoteBacklogState` (default `true`), `EndSession` (default `true`)
+- Response: `200 OK` - `ObjectiveRefinementApplyResponse`: `Summary` (`ObjectiveRefinementSummaryResponse`),
+  `Objective` (the updated backlog item), and `Session` (the session as stored after the apply; its `Status` is
+  `Stopped` when the apply ended it)
 - Errors: `404 Not Found`, `409 Conflict`, `501 Not Implemented`
 
 #### POST /api/v1/objective-refinement-sessions/{id}/stop
 
 Stop an active refinement session and release the selected captain.
+
+**Permission:** TenantAdmin
 
 - Response: `200 OK` - `ObjectiveRefinementSessionDetail`
 - Errors: `404 Not Found`, `501 Not Implemented`
@@ -5934,6 +6388,8 @@ Stop an active refinement session and release the selected captain.
 #### DELETE /api/v1/objective-refinement-sessions/{id}
 
 Delete a refinement session and its transcript. Active sessions are stopped first.
+
+**Permission:** TenantAdmin
 
 - Response: `204 No Content`
 - Errors: `404 Not Found`, `409 Conflict`, `501 Not Implemented`
@@ -5948,6 +6404,8 @@ Workflow profiles define how a vessel or fleet builds, tests, versions, deploys,
 
 List workflow profiles in the caller scope.
 
+**Permission:** Authenticated
+
 - Query: `pageNumber`, `pageSize`, `scope`, `fleetId`, `vesselId`, `search`, `active`
 - Response: `200 OK` - `EnumerationResult<WorkflowProfile>`
 
@@ -5955,12 +6413,16 @@ List workflow profiles in the caller scope.
 
 Enumerate workflow profiles using a JSON body and optional querystring overrides.
 
+**Permission:** Authenticated
+
 - Request body: `WorkflowProfileQuery`
 - Response: `200 OK` - `EnumerationResult<WorkflowProfile>`
 
 #### POST /api/v1/workflow-profiles/validate
 
 Validate a workflow profile without saving it.
+
+**Permission:** TenantAdmin
 
 - Request body: `WorkflowProfile`
 - Response: `200 OK` - `WorkflowProfileValidationResult`
@@ -5970,6 +6432,8 @@ Validate a workflow profile without saving it.
 
 Preview the resolved workflow commands for one vessel.
 
+**Permission:** Authenticated
+
 - Query: optional `workflowProfileId`
 - Response: `200 OK` - `WorkflowProfileResolutionPreviewResult`
 - Errors: `404 Not Found` when the vessel does not exist or no workflow profile can be resolved
@@ -5977,6 +6441,8 @@ Preview the resolved workflow commands for one vessel.
 #### GET /api/v1/workflow-profiles/resolve/vessels/{vesselId}
 
 Resolve the active workflow profile for one vessel.
+
+**Permission:** Authenticated
 
 - Query: optional `workflowProfileId`
 - Response: `200 OK` - `WorkflowProfile`
@@ -5986,6 +6452,8 @@ Resolve the active workflow profile for one vessel.
 
 Create a workflow profile.
 
+**Permission:** TenantAdmin
+
 - Request body: `WorkflowProfile`
 - Response: `201 Created` - `WorkflowProfile`
 - Notes: reads are available to any authenticated caller in scope; create/update/delete require tenant admin or global admin
@@ -5994,12 +6462,16 @@ Create a workflow profile.
 
 Read one workflow profile by ID.
 
+**Permission:** Authenticated
+
 - Response: `200 OK` - `WorkflowProfile`
 - Errors: `404 Not Found`
 
 #### PUT /api/v1/workflow-profiles/{id}
 
 Update one workflow profile.
+
+**Permission:** TenantAdmin
 
 - Request body: `WorkflowProfile`
 - Response: `200 OK` - `WorkflowProfile`
@@ -6008,6 +6480,8 @@ Update one workflow profile.
 #### DELETE /api/v1/workflow-profiles/{id}
 
 Delete one workflow profile.
+
+**Permission:** TenantAdmin
 
 - Response: `204 No Content`
 - Errors: `404 Not Found`
@@ -6022,6 +6496,8 @@ Structured check runs are the delivery-memory record for build, test, packaging,
 
 List structured check runs in the caller scope.
 
+**Permission:** Authenticated
+
 - Query: `pageNumber`, `pageSize`, `workflowProfileId`, `vesselId`, `missionId`, `voyageId`, `type`, `status`, `source`, `providerName`, `environmentName`, `externalId`
 - Response: `200 OK` - `EnumerationResult<CheckRun>`
 
@@ -6029,12 +6505,16 @@ List structured check runs in the caller scope.
 
 Enumerate structured check runs using a JSON body and optional querystring overrides.
 
+**Permission:** Authenticated
+
 - Request body: `CheckRunQuery`
 - Response: `200 OK` - `EnumerationResult<CheckRun>`
 
 #### POST /api/v1/check-runs
 
 Execute one structured check run.
+
+**Permission:** TenantAdmin
 
 ```json
 {
@@ -6053,12 +6533,13 @@ Execute one structured check run.
 
 Import an externally executed or provider-hosted check run into Armada history.
 
+**Permission:** TenantAdmin
+
 ```json
 {
   "VesselId": "vsl_abc123",
   "Type": "Build",
   "Status": "Passed",
-  "Source": "External",
   "ProviderName": "GitHub Actions",
   "Label": "CI build",
   "StartedUtc": "2026-05-04T16:00:00Z",
@@ -6066,11 +6547,14 @@ Import an externally executed or provider-hosted check run into Armada history.
 }
 ```
 
+- Request body: `CheckRunImportRequest`: `VesselId` (required), `WorkflowProfileId`, `MissionId`, `VoyageId`, `DeploymentId`, `Type`, `Status`, `ProviderName`, `ExternalId`, `ExternalUrl`, `EnvironmentName`, `Label`, `BranchName`, `CommitHash`, `Command`, `Summary`, `Output`, `ExitCode`, `TestSummary`, `CoverageSummary`, `Artifacts`, `DurationMs`, `StartedUtc`, `CompletedUtc`
 - Response: `201 Created` - `CheckRun`
 
 #### POST /api/v1/check-runs/sync/github-actions
 
 Pull recent GitHub Actions workflow runs for one vessel into Armada check history. This is an on-demand pull surface; it does not require a webhook listener.
+
+**Permission:** TenantAdmin
 
 Credential resolution order:
 
@@ -6099,6 +6583,8 @@ Credential resolution order:
 
 Read one structured check run.
 
+**Permission:** Authenticated
+
 - Response: `200 OK` - `CheckRun`
 - Errors: `404 Not Found`
 
@@ -6106,12 +6592,16 @@ Read one structured check run.
 
 Retry a prior check run using the same resolved scope and command context.
 
+**Permission:** TenantAdmin
+
 - Response: `201 Created` - `CheckRun`
 - Errors: `404 Not Found`
 
 #### DELETE /api/v1/check-runs/{id}
 
 Delete one structured check run.
+
+**Permission:** TenantAdmin
 
 - Response: `204 No Content`
 - Errors: `404 Not Found`
@@ -6126,6 +6616,8 @@ Environment records define named rollout targets such as `Development`, `Staging
 
 List environments in the caller scope.
 
+**Permission:** Authenticated
+
 - Query: `pageNumber`, `pageSize`, `vesselId`, `kind`, `isDefault`, `active`, `search`
 - Response: `200 OK` - `EnumerationResult<DeploymentEnvironment>`
 
@@ -6133,12 +6625,16 @@ List environments in the caller scope.
 
 Enumerate environments using a JSON body and optional querystring overrides.
 
+**Permission:** Authenticated
+
 - Request body: `DeploymentEnvironmentQuery`
 - Response: `200 OK` - `EnumerationResult<DeploymentEnvironment>`
 
 #### POST /api/v1/environments
 
 Create one environment.
+
+**Permission:** TenantAdmin
 
 ```json
 {
@@ -6158,12 +6654,16 @@ Create one environment.
 
 Read one environment.
 
+**Permission:** Authenticated
+
 - Response: `200 OK` - `DeploymentEnvironment`
 - Errors: `404 Not Found`
 
 #### PUT /api/v1/environments/{id}
 
 Update one environment.
+
+**Permission:** TenantAdmin
 
 - Request body: `DeploymentEnvironmentUpsertRequest`
 - Response: `200 OK` - `DeploymentEnvironment`
@@ -6172,6 +6672,8 @@ Update one environment.
 #### DELETE /api/v1/environments/{id}
 
 Delete one environment.
+
+**Permission:** TenantAdmin
 
 - Response: `204 No Content`
 - Errors: `404 Not Found`
@@ -6186,6 +6688,8 @@ Deployment records track rollout approval, execution, verification, rollback, li
 
 List deployments in the caller scope.
 
+**Permission:** Authenticated
+
 - Query: `pageNumber`, `pageSize`, `vesselId`, `workflowProfileId`, `environmentId`, `environmentName`, `releaseId`, `missionId`, `voyageId`, `checkRunId`, `status`, `verificationStatus`, `search`, `fromUtc`, `toUtc`
 - Response: `200 OK` - `EnumerationResult<Deployment>`
 
@@ -6193,12 +6697,16 @@ List deployments in the caller scope.
 
 Enumerate deployments using a JSON body and optional querystring overrides.
 
+**Permission:** Authenticated
+
 - Request body: `DeploymentQuery`
 - Response: `200 OK` - `EnumerationResult<Deployment>`
 
 #### POST /api/v1/deployments
 
 Create one deployment. When approval is not required and `AutoExecute` is `true`, the deployment begins immediately.
+
+**Permission:** TenantAdmin
 
 ```json
 {
@@ -6217,12 +6725,16 @@ Create one deployment. When approval is not required and `AutoExecute` is `true`
 
 Read one deployment.
 
+**Permission:** Authenticated
+
 - Response: `200 OK` - `Deployment`
 - Errors: `404 Not Found`
 
 #### PUT /api/v1/deployments/{id}
 
 Update one deployment and its mutable metadata.
+
+**Permission:** TenantAdmin
 
 - Request body: `DeploymentUpsertRequest`
 - Response: `200 OK` - `Deployment`
@@ -6232,6 +6744,8 @@ Update one deployment and its mutable metadata.
 
 Approve one pending deployment and begin execution.
 
+**Permission:** TenantAdmin
+
 - Request body: optional `{ "Comment": "Ship it" }`
 - Response: `200 OK` - `Deployment`
 - Errors: `400 Bad Request`, `404 Not Found`
@@ -6239,6 +6753,8 @@ Approve one pending deployment and begin execution.
 #### POST /api/v1/deployments/{id}/deny
 
 Deny one pending deployment without executing it.
+
+**Permission:** TenantAdmin
 
 - Request body: optional `{ "Comment": "Need one more verification run" }`
 - Response: `200 OK` - `Deployment`
@@ -6248,6 +6764,8 @@ Deny one pending deployment without executing it.
 
 Re-run the configured post-deploy verification for an existing deployment.
 
+**Permission:** TenantAdmin
+
 - Response: `200 OK` - `Deployment`
 - Errors: `400 Bad Request`, `404 Not Found`
 
@@ -6255,12 +6773,16 @@ Re-run the configured post-deploy verification for an existing deployment.
 
 Run the configured rollback flow for an existing deployment.
 
+**Permission:** TenantAdmin
+
 - Response: `200 OK` - `Deployment`
 - Errors: `400 Bad Request`, `404 Not Found`
 
 #### DELETE /api/v1/deployments/{id}
 
 Delete one deployment record.
+
+**Permission:** TenantAdmin
 
 - Response: `204 No Content`
 - Errors: `404 Not Found`
@@ -6275,6 +6797,8 @@ Release records group versions, notes, artifacts, and linked work so a user can 
 
 List release records in the caller scope.
 
+**Permission:** Authenticated
+
 - Query: `pageNumber`, `pageSize`, `vesselId`, `workflowProfileId`, `voyageId`, `missionId`, `checkRunId`, `status`, `search`, `fromUtc`, `toUtc`
 - Response: `200 OK` - `EnumerationResult<Release>`
 
@@ -6282,12 +6806,16 @@ List release records in the caller scope.
 
 Enumerate releases using a JSON body and optional querystring overrides.
 
+**Permission:** Authenticated
+
 - Request body: `ReleaseQuery`
 - Response: `200 OK` - `EnumerationResult<Release>`
 
 #### POST /api/v1/releases
 
 Create a release from linked voyages, missions, and check runs.
+
+**Permission:** TenantAdmin
 
 ```json
 {
@@ -6308,6 +6836,8 @@ Create a release from linked voyages, missions, and check runs.
 
 Read one release.
 
+**Permission:** Authenticated
+
 - Response: `200 OK` - `Release`
 - Errors: `404 Not Found`
 
@@ -6315,15 +6845,19 @@ Read one release.
 
 Read normalized GitHub pull-request evidence derived from the `PrUrl` values on missions linked to one release.
 
+**Permission:** Authenticated
+
 - Response: `200 OK` - `List<GitHubPullRequestDetail>`
 - Errors: `400 Bad Request`, `404 Not Found`
 - Notes:
   - Duplicate repository/PR combinations are de-duplicated before the response is returned
-  - This is evidence-only today; Armada does not yet persist first-class PR entities
+  - The result is derived evidence; Armada does not persist pull requests as entities
 
 #### PUT /api/v1/releases/{id}
 
 Update one release and revalidate its linked work.
+
+**Permission:** TenantAdmin
 
 - Request body: `ReleaseUpsertRequest`
 - Response: `200 OK` - `Release`
@@ -6333,12 +6867,16 @@ Update one release and revalidate its linked work.
 
 Refresh one release from its current linked work.
 
+**Permission:** TenantAdmin
+
 - Response: `200 OK` - `Release`
 - Errors: `400 Bad Request`, `404 Not Found`
 
 #### DELETE /api/v1/releases/{id}
 
 Delete one release.
+
+**Permission:** TenantAdmin
 
 - Response: `204 No Content`
 - Errors: `404 Not Found`
@@ -6353,6 +6891,8 @@ Incident records capture operational failures, hotfix handoff, rollback linkage,
 
 List incidents in the caller scope.
 
+**Permission:** Authenticated
+
 - Query: `pageNumber`, `pageSize`, `vesselId`, `environmentId`, `deploymentId`, `releaseId`, `missionId`, `voyageId`, `status`, `severity`, `search`
 - Response: `200 OK` - `EnumerationResult<Incident>`
 
@@ -6360,12 +6900,16 @@ List incidents in the caller scope.
 
 Enumerate incidents using a JSON body and optional querystring overrides.
 
+**Permission:** Authenticated
+
 - Request body: `IncidentQuery`
 - Response: `200 OK` - `EnumerationResult<Incident>`
 
 #### POST /api/v1/incidents
 
 Create one incident.
+
+**Permission:** TenantAdmin
 
 - Request body: `IncidentUpsertRequest`
 - Response: `201 Created` - `Incident`
@@ -6375,12 +6919,16 @@ Create one incident.
 
 Read one incident.
 
+**Permission:** Authenticated
+
 - Response: `200 OK` - `Incident`
 - Errors: `404 Not Found`
 
 #### PUT /api/v1/incidents/{id}
 
 Update one incident, including status, impact, recovery, and postmortem details.
+
+**Permission:** TenantAdmin
 
 - Request body: `IncidentUpsertRequest`
 - Response: `200 OK` - `Incident`
@@ -6389,6 +6937,8 @@ Update one incident, including status, impact, recovery, and postmortem details.
 #### DELETE /api/v1/incidents/{id}
 
 Delete one incident.
+
+**Permission:** TenantAdmin
 
 - Response: `204 No Content`
 - Errors: `404 Not Found`
@@ -6403,6 +6953,8 @@ Runbooks extend playbooks into parameterized operational procedures with step tr
 
 List runbooks in the caller scope.
 
+**Permission:** Authenticated
+
 - Query: `pageNumber`, `pageSize`, `workflowProfileId`, `environmentId`, `defaultCheckType`, `active`, `search`
 - Response: `200 OK` - `EnumerationResult<Runbook>`
 
@@ -6410,12 +6962,16 @@ List runbooks in the caller scope.
 
 Enumerate runbooks using a JSON body and optional querystring overrides.
 
+**Permission:** Authenticated
+
 - Request body: `RunbookQuery`
 - Response: `200 OK` - `EnumerationResult<Runbook>`
 
 #### POST /api/v1/runbooks
 
 Create one runbook backed by a playbook and optional explicit steps/parameters.
+
+**Permission:** TenantAdmin
 
 - Request body: `RunbookUpsertRequest`
 - Response: `201 Created` - `Runbook`
@@ -6425,12 +6981,16 @@ Create one runbook backed by a playbook and optional explicit steps/parameters.
 
 Read one runbook.
 
+**Permission:** Authenticated
+
 - Response: `200 OK` - `Runbook`
 - Errors: `404 Not Found`
 
 #### PUT /api/v1/runbooks/{id}
 
 Update one runbook.
+
+**Permission:** TenantAdmin
 
 - Request body: `RunbookUpsertRequest`
 - Response: `200 OK` - `Runbook`
@@ -6440,12 +7000,16 @@ Update one runbook.
 
 Delete one runbook.
 
+**Permission:** TenantAdmin
+
 - Response: `204 No Content`
 - Errors: `404 Not Found`
 
 #### GET /api/v1/runbook-executions
 
 List runbook executions in the caller scope.
+
+**Permission:** Authenticated
 
 - Query: `pageNumber`, `pageSize`, `runbookId`, `deploymentId`, `incidentId`, `status`, `search`
 - Response: `200 OK` - `EnumerationResult<RunbookExecution>`
@@ -6454,12 +7018,16 @@ List runbook executions in the caller scope.
 
 Enumerate runbook executions using a JSON body and optional querystring overrides.
 
+**Permission:** Authenticated
+
 - Request body: `RunbookExecutionQuery`
 - Response: `200 OK` - `EnumerationResult<RunbookExecution>`
 
 #### POST /api/v1/runbooks/{id}/executions
 
 Start one runbook execution.
+
+**Permission:** TenantAdmin
 
 - Request body: `RunbookExecutionStartRequest`
 - Response: `201 Created` - `RunbookExecution`
@@ -6469,12 +7037,16 @@ Start one runbook execution.
 
 Read one runbook execution.
 
+**Permission:** Authenticated
+
 - Response: `200 OK` - `RunbookExecution`
 - Errors: `404 Not Found`
 
 #### PUT /api/v1/runbook-executions/{id}
 
 Update one runbook execution, including step completion and notes.
+
+**Permission:** TenantAdmin
 
 - Request body: `RunbookExecutionUpdateRequest`
 - Response: `200 OK` - `RunbookExecution`
@@ -6483,6 +7055,8 @@ Update one runbook execution, including step completion and notes.
 #### DELETE /api/v1/runbook-executions/{id}
 
 Delete one runbook execution.
+
+**Permission:** TenantAdmin
 
 - Response: `204 No Content`
 - Errors: `404 Not Found`
@@ -6497,25 +7071,35 @@ Delete one runbook execution.
 
 List historical timeline entries in the caller scope.
 
-- Query: `pageNumber`, `pageSize`, `vesselId`, `missionId`, `voyageId`, `objectiveId`, `environmentId`, `deploymentId`, `incidentId`, `actor`, `text`, `sourceType`, `fromUtc`, `toUtc`
-- Response: `200 OK` - `EnumerationResult<HistoricalTimelineEntry>`
+**Permission:** Authenticated
+
+- Query: `pageNumber`, `pageSize` (1-500, default 50), `vesselId`, `missionId`, `voyageId`, `objectiveId`, `environmentId`, `deploymentId`, `incidentId`, `actor`, `text`, `sourceType` (comma-separated), `fromUtc`, `toUtc`, `postmortemOnly` (bool), `excludeReadRequests` (bool; leaves out request-history entries for `GET`, `HEAD`, and `OPTIONS` so the timeline is not dominated by polling)
+- Response: `200 OK` - `EnumerationResult<HistoricalTimelineEntry>`, newest `OccurredUtc` first
+- Scope: a global admin sees every tenant; a tenant admin sees the tenant; a regular user sees only their own entries
+- Source types: `Objective`, `ObjectiveRefinementSession`, `Planning`, `Voyage`, `Mission`, `MergeEntry`, `CheckRun`, `Release`, `Deployment`, `Incident`, `RunbookExecution`, `Event`, `Request`
+- `HistoricalTimelineEntry`: `Id`, `SourceType`, `SourceId`, `EntityType`, `EntityId`, `ObjectiveId`, `VesselId`, `EnvironmentId`, `DeploymentId`, `IncidentId`, `MissionId`, `VoyageId`, `ActorId`, `ActorDisplay`, `Title`, `Description`, `Status`, `Severity`, `Route`, `OccurredUtc`, `MetadataJson`
 
 #### POST /api/v1/history/enumerate
 
 Enumerate historical timeline entries using a JSON body and optional querystring overrides.
 
-- Request body: `HistoricalTimelineQuery`
+**Permission:** Authenticated
+
+- Request body: `HistoricalTimelineQuery` (optional): `ObjectiveId`, `VesselId`, `EnvironmentId`, `DeploymentId`, `IncidentId`, `MissionId`, `VoyageId`, `PostmortemOnly`, `ExcludeReadRequests` (default `false`), `Actor`, `Text`, `SourceTypes` (string array), `FromUtc`, `ToUtc`, `PageNumber` (default 1), `PageSize` (default 50). `TenantId` and `UserId` narrow the view for admins only; they are overridden by the caller's scope otherwise.
+- Querystring values (same names as `GET /api/v1/history`) override the body.
 - Response: `200 OK` - `EnumerationResult<HistoricalTimelineEntry>`
 
 ---
 
 ### Runtime Helpers
 
-These helper routes support runtime-specific UX and validation. As of `v0.9.0`, the shipped runtime-helper surface is focused on Mux endpoint discovery for captain setup and editing.
+These helper routes support runtime-specific UX and validation: Mux endpoint discovery for captain setup and editing.
 
 #### GET /api/v1/runtimes/mux/endpoints
 
 List saved Mux endpoints, optionally from an explicit config directory.
+
+**Permission:** Authenticated
 
 - Query: optional `configDirectory`
 - Response: `200 OK` - `MuxEndpointListResult`
@@ -6523,6 +7107,8 @@ List saved Mux endpoints, optionally from an explicit config directory.
 #### GET /api/v1/runtimes/mux/endpoints/{name}
 
 Inspect one saved Mux endpoint with redacted secret values.
+
+**Permission:** Authenticated
 
 - Query: optional `configDirectory`
 - Response: `200 OK` - `MuxEndpointShowResult`
@@ -6538,12 +7124,16 @@ Armada captures sanitized REST request and response metadata for authenticated a
 
 List captured request-history entries in the caller's scope.
 
+**Permission:** Authenticated
+
 - Query: `pageNumber`, `pageSize`, `method`, `route`, `statusCode`, `principal`, `tenantId`, `userId`, `credentialId`, `isSuccess`, `fromUtc`, `toUtc`
 - Response: `200 OK` - `EnumerationResult<RequestHistoryEntry>`
 
 #### GET /api/v1/request-history/summary
 
 Return aggregate counts and time buckets for matching request-history entries.
+
+**Permission:** Authenticated
 
 - Query: `bucketMinutes`, `fromUtc`, `toUtc`, `method`, `route`, `statusCode`, `principal`
 - Defaults: last 24 hours, 15-minute buckets
@@ -6553,6 +7143,8 @@ Return aggregate counts and time buckets for matching request-history entries.
 
 Read one captured request, including expanded headers, params, and body snapshots.
 
+**Permission:** Authenticated
+
 - Response: `200 OK` - `RequestHistoryRecord`
 - Errors: `404 Not Found`
 
@@ -6560,11 +7152,15 @@ Read one captured request, including expanded headers, params, and body snapshot
 
 Delete one captured request-history entry within the caller's scope.
 
+**Permission:** TenantAdmin
+
 - Response: `204 No Content`
 
 #### POST /api/v1/request-history/delete/multiple
 
 Delete multiple request-history entries by identifier.
+
+**Permission:** TenantAdmin
 
 ```json
 {
@@ -6577,6 +7173,8 @@ Delete multiple request-history entries by identifier.
 #### POST /api/v1/request-history/delete/by-filter
 
 Delete all request-history entries matching the supplied filters within the caller's scope.
+
+**Permission:** TenantAdmin
 
 ```json
 {
@@ -6599,6 +7197,8 @@ Armada records per-model token usage for every mission run, Ask Armada turn, and
 
 Return token usage aggregated into time buckets (each with a per-model breakdown), a whole-window per-model aggregate ordered most-used first, and grand totals. This is the data behind the dashboard Token Usage charts.
 
+**Permission:** Authenticated
+
 - Query: `fromUtc`, `toUtc`, `bucketMinutes`, `model`, `runtime`, `source`, `vesselId`, `captainId`, `tenantId`, `userId`
 - Defaults: last 24 hours, 15-minute buckets
 - `source` is one of `mission`, `chat`, `planning`
@@ -6608,12 +7208,16 @@ Return token usage aggregated into time buckets (each with a per-model breakdown
 
 List token-usage records in the caller's scope.
 
+**Permission:** Authenticated
+
 - Query: `pageNumber`, `pageSize`, `model`, `runtime`, `source`, `vesselId`, `captainId`, `fromUtc`, `toUtc`
 - Response: `200 OK` - `EnumerationResult<TokenUsageRecord>`
 
 #### POST /api/v1/token-usage/delete/by-filter
 
 Delete all token-usage records matching the supplied filters within the caller's scope.
+
+**Permission:** Authenticated
 
 ```json
 {
@@ -6636,9 +7240,13 @@ Armada publishes live REST metadata for both human and machine consumers.
 
 Return the live OpenAPI document used by the dashboard API Explorer.
 
+**Permission:** NoAuthRequired
+
 #### GET /swagger
 
 Return the interactive Swagger UI for the same OpenAPI surface.
+
+**Permission:** NoAuthRequired
 
 ---
 
@@ -6681,7 +7289,7 @@ A tenant in the multi-tenant system.
 
 #### UserMaster
 
-A user in the multi-tenant system. Passwords are stored as SHA256 hashes and redacted in API responses.
+A user in the multi-tenant system. Passwords are stored salted and stretched (see [Password Storage](#password-storage)) and redacted in API responses.
 
 ```json
 {
@@ -6705,7 +7313,7 @@ A user in the multi-tenant system. Passwords are stored as SHA256 hashes and red
 | `Id` | string | auto-generated | Unique ID with `usr_` prefix |
 | `TenantId` | string | `"default"` | Parent tenant |
 | `Email` | string | `"admin@armada"` | Email address (unique within tenant) |
-| `PasswordSha256` | string | SHA256("password") | SHA256 hash of password (redacted in responses) |
+| `PasswordSha256` | string | hash of `"password"` | Stored password hash (redacted in responses). On create/update, send `Password` (plaintext) or the hex SHA-256 of the password here |
 | `FirstName` | string? | null | First name |
 | `LastName` | string? | null | Last name |
 | `IsAdmin` | bool | false | Global system admin privileges |
@@ -6741,7 +7349,7 @@ A bearer token credential for API authentication.
 | `TenantId` | string | `"default"` | Parent tenant |
 | `UserId` | string | `"default"` | Owning user |
 | `Name` | string? | null | Friendly name |
-| `BearerToken` | string | auto-generated | 64-character random alphanumeric token |
+| `BearerToken` | string | auto-generated | 64-character random alphanumeric token, generated by the server. Returned in full only by create; masked (`****` plus the last four characters) elsewhere |
 | `IsProtected` | bool | false | Protected credentials cannot be deleted directly |
 | `Active` | bool | true | Whether credential is active |
 | `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
@@ -6772,6 +7380,12 @@ Represents the authenticated identity context resolved from any authentication m
 | `IsAdmin` | bool | Global system admin privileges |
 | `IsTenantAdmin` | bool | Tenant-scoped admin privileges |
 | `AuthMethod` | string? | `"Bearer"`, `"Session"`, `"ApiKey"`, or null |
+| `CredentialId` | string? | Credential used for bearer-token authentication, when available |
+| `PrincipalDisplay` | string? | Human-readable principal label for diagnostics and request history |
+| `PasswordChangeRequired` | bool | True for a seeded admin user that still uses the default password (flag only; routes keep working) |
+| `AskThreadId` | string? | Ask Armada thread a session token is bound to. Thread-scoped tokens are accepted only by the MCP server |
+| `MissionId` | string? | Mission a session token is bound to. Mission-scoped tokens are minted per captain launch and accepted only by the MCP server while the mission is assigned to or running on that captain |
+| `MissionCaptainId` | string? | Captain a mission-scoped token was minted for |
 
 ---
 
@@ -6898,9 +7512,12 @@ A named collection of repositories under management.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `Id` | string | auto-generated | Unique ID with `flt_` prefix |
+| `TenantId` | string? | null | Owning tenant |
+| `UserId` | string? | null | Owning user |
 | `Name` | string | `"My Fleet"` | Fleet name |
 | `Description` | string? | null | Fleet description |
 | `Active` | bool | true | Whether fleet is active |
+| `DefaultPipelineId` | string? | null | Default pipeline for dispatches to this fleet (a vessel setting overrides it; null uses `WorkerOnly`) |
 | `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
 | `LastUpdateUtc` | datetime | now | Last update timestamp (UTC) |
 
@@ -6935,6 +7552,8 @@ A git repository registered with Armada.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `Id` | string | auto-generated | Unique ID with `vsl_` prefix |
+| `TenantId` | string? | null | Owning tenant |
+| `UserId` | string? | null | Owning user |
 | `FleetId` | string? | null | Parent fleet ID |
 | `Name` | string | `"My Vessel"` | Vessel name |
 | `RepoUrl` | string? | null | Remote repository URL |
@@ -6953,6 +7572,26 @@ A git repository registered with Armada.
 | `DefinitionOfDoneTestCommand` | string? | null | Shell command that runs unit tests inside the mission checkout (e.g. `dotnet test`); a non-zero exit classifies as TestFail |
 | `DefinitionOfDoneTimeoutSeconds` | int | 1800 | Per-phase timeout in seconds (clamped to [30, 7200]); exceeding it classifies as Timeout |
 | `Active` | bool | true | Whether vessel is active |
+| `DefaultPipelineId` | string? | null | Default pipeline for dispatches to this vessel (overrides the fleet setting; null uses `WorkerOnly`) |
+| `PreferredHarborId` | string? | null | Preferred Harbor (host runner) for this vessel's missions; null lets the router choose |
+| `RequiredCapabilities` | string? | null | Comma-separated capabilities a Harbor must advertise to run this vessel's missions (for example `claude,gh`) |
+| `GitHubTokenOverrideInput` | string? | null | Write-only: supply a per-vessel GitHub token on create/update. Never returned; see `HasGitHubTokenOverride` |
+| `AllowConcurrentMissions` | bool | false | When false, only one mission may be active (`Assigned`, `InProgress`, `WorkProduced`, `PullRequestOpen`) at a time |
+| `AutoApprove` | bool? | null | Per-vessel override of the captain auto-approve setting; null leaves the captain's own setting in effect |
+| `RequirePassingChecksToLand` | bool | false | Landing requires at least one passing structured check for the branch or mission |
+| `ProtectedBranchPatterns` | string[] | [] | Protected-branch glob or exact-match patterns |
+| `RequirePullRequestForProtectedBranches` | bool | false | Protected branches must land through a pull request |
+| `ReleaseBranchPrefix` | string | `"release/"` | Prefix that classifies release branches |
+| `HotfixBranchPrefix` | string | `"hotfix/"` | Prefix that classifies hotfix branches |
+| `RequireMergeQueueForReleaseBranches` | bool | false | Release branches must land through the merge queue |
+| `SecretScanEnabled` | bool | false | Run built-in secret detection in the pre-land scanner |
+| `ProtectedPathPatterns` | string[] | [] | File-path globs the pre-land scanner blocks a mission from touching (for example `.github/**`) |
+| `PrivateIdentifierDenylist` | string[] | [] | Private identifiers the pre-land scanner blocks from added diff lines |
+| `AutoLandEnabled` | bool | false | Gate unattended landing on the auto-land predicate below |
+| `AutoLandMaxFiles` | int | 0 | Maximum changed files that may auto-land (0 = no limit) |
+| `AutoLandMaxLines` | int | 0 | Maximum changed lines (added + removed) that may auto-land (0 = no limit) |
+| `AutoLandPathAllowGlobs` | string[] | [] | When non-empty, a mission touching any path outside these globs holds for review |
+| `AutoLandPathDenyGlobs` | string[] | [] | A mission touching any matching path never auto-lands |
 | `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
 | `LastUpdateUtc` | datetime | now | Last update timestamp (UTC) |
 
@@ -6987,10 +7626,15 @@ A batch of related missions tracked together.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `Id` | string | auto-generated | Unique ID with `vyg_` prefix |
+| `TenantId` | string? | null | Owning tenant |
+| `UserId` | string? | null | Owning user |
 | `Title` | string | `"New Voyage"` | Voyage title |
 | `Description` | string? | null | Voyage description |
 | `Status` | [VoyageStatusEnum](#voyagestatusenum) | `Open` | Current status |
 | `SelectedPlaybooks` | array\<[SelectedPlaybook](#selectedplaybook)\> | `[]` | Ordered playbook selections recorded on the voyage |
+| `SourcePlanningSessionId` | string? | null | Planning session this voyage was dispatched from |
+| `SourcePlanningMessageId` | string? | null | Planning transcript message the dispatch was created from |
+| `CaptainOverridesJson` | string? | null | Per-persona captain overrides chosen at dispatch, as a JSON array of `CaptainAssignmentOverride` (see `CaptainAssignments` on [VoyageRequest](#voyagerequest)) |
 | `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
 | `CompletedUtc` | datetime? | null | Completion timestamp (UTC) |
 | `LastUpdateUtc` | datetime | now | Last update timestamp (UTC) |
@@ -7047,6 +7691,8 @@ An atomic unit of work assigned to a captain.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `Id` | string | auto-generated | Unique ID with `msn_` prefix |
+| `TenantId` | string? | null | Owning tenant |
+| `UserId` | string? | null | Owning user |
 | `VoyageId` | string? | null | Parent voyage ID |
 | `VesselId` | string? | null | Target vessel (repository) ID |
 | `CaptainId` | string? | null | Assigned captain (agent) ID |
@@ -7067,6 +7713,21 @@ An atomic unit of work assigned to a captain.
 | `FailureReason` | string? | null | Human-readable reason for a failure or landing failure. Display text only; never parsed |
 | `FailureKind` | string? | null | Structured failure classification set where the failure happens: `Compile`, `TestFail`, `Timeout`, `LandingConflict`, `Crash`, `NoOp`, `Boundary`, `ScopeViolation`, `JudgeRejected`, `Infra`, `Unknown`, `ReviewDenied`, `DependencyFailed`, `MaxRuntimeExceeded`, `StallRecoveryExhausted`, `OperatorAction`, `InvalidOutput`. Autonomous recovery reads this field |
 | `WaitForVoyageWorkers` | bool | false | When true, a Worker mission is not assigned until every other Worker mission in its voyage has settled (set from an architect plan's `waitForOtherMissions`) |
+| `Persona` | string? | null | Persona for this mission (`Worker`, `Architect`, `Judge`, ...); null means `Worker` |
+| `Tier` | string? | null | Required capability tier (`CaptainTierEnum`); dispatch picks an idle captain at or above it. Null means `Standard` |
+| `RequestedCaptainId` | string? | null | Preferred captain (`cpt_`); used when idle, otherwise dispatch falls back by `Tier` |
+| `AssignedHarborId` | string? | null | Harbor the mission was routed to; null on the Admiral's own host |
+| `DependsOnMissionId` | string? | null | Mission that must complete successfully before this one can be assigned (pipeline stages) |
+| `RedispatchAttempts` | int | 0 | Automatic re-dispatches after a detected no-op completion |
+| `RequiresReview` | bool | false | The mission needs review approval before the pipeline continues |
+| `ReviewDenyAction` | string | `RetryStage` | What happens when the review is denied (`ReviewDenyActionEnum`) |
+| `ReviewComment` | string? | null | Reviewer comment from the latest review decision |
+| `ReviewedByUserId` | string? | null | User who made the latest review decision |
+| `ReviewRequestedUtc` | datetime? | null | When the mission last entered the review gate |
+| `ReviewDeadlineUtc` | datetime? | null | When a mission parked in `Review` is escalated and its dock and captain freed |
+| `ReviewedUtc` | datetime? | null | When the latest review decision was made |
+| `AgentOutput` | string? | null | Accumulated agent stdout (architect marker parsing and pipeline handoff) |
+| `AssignmentBlocker` | object? | null | Why a `Pending` mission is still waiting for a captain; computed on single-mission and voyage reads, absent otherwise (see [GET /api/v1/missions/{id}](#get-apiv1missionsid)) |
 | `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
 | `StartedUtc` | datetime? | null | Work start timestamp (UTC) |
 | `CompletedUtc` | datetime? | null | Completion timestamp (UTC) |
@@ -7100,6 +7761,8 @@ A worker AI agent instance executing missions.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `Id` | string | auto-generated | Unique ID with `cpt_` prefix |
+| `TenantId` | string? | null | Owning tenant |
+| `UserId` | string? | null | Owning user |
 | `Name` | string | `"Captain"` | Captain name |
 | `Runtime` | [AgentRuntimeEnum](#agentruntimeenum) | `ClaudeCode` | Agent runtime type |
 | `Model` | string? | null | Optional model override for this captain. When null, the runtime chooses its default model |
@@ -7110,6 +7773,17 @@ A worker AI agent instance executing missions.
 | `ProcessId` | int? | null | OS process ID |
 | `RecoveryAttempts` | int | 0 | Auto-recovery attempts for current mission |
 | `LastHeartbeatUtc` | datetime? | null | Last heartbeat timestamp (UTC) |
+| `ModelEndpointId` | string? | null | Inference model endpoint driven by an `ApiEndpoint` captain; null for CLI runtimes |
+| `AllowedPersonas` | string? | null | JSON array of personas the captain may fill (for example `["Worker","Judge"]`); null allows any |
+| `PreferredPersona` | string? | null | Persona the Admiral prefers to route to this captain |
+| `ReasoningEffort` | string? | null | Reasoning-effort level (`ReasoningEffortEnum`) translated to each runtime's native control; null uses the runtime default |
+| `Tier` | string? | null | Capability/cost tier (`CaptainTierEnum`); null auto-classifies from the model name |
+| `RuntimeOptionsJson` | string? | null | Runtime-specific options as JSON |
+| `QuarantineUntilUtc` | datetime? | null | Captain is excluded from dispatch until this time |
+| `QuarantineReason` | string? | null | Why the captain was quarantined |
+| `LastProcessAliveUtc` | datetime? | null | When the captain's OS process was last seen alive (distinct from `LastHeartbeatUtc`, which advances only on agent output) |
+| `SupportsPlanningSessions` | bool | computed | Whether the captain's runtime supports planning sessions (read-only) |
+| `PlanningSessionSupportReason` | string? | computed | Why the captain cannot host planning sessions, if it cannot (read-only) |
 | `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
 | `LastUpdateUtc` | datetime | now | Last update timestamp (UTC) |
 
@@ -7192,6 +7866,8 @@ A message between the admiral and captains.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `Id` | string | auto-generated | Unique ID with `sig_` prefix |
+| `TenantId` | string? | null | Owning tenant |
+| `UserId` | string? | null | Owning user |
 | `FromCaptainId` | string? | null | Sender captain ID (null = from Admiral) |
 | `ToCaptainId` | string? | null | Recipient captain ID (null = to Admiral) |
 | `Type` | [SignalTypeEnum](#signaltypeenum) | `Nudge` | Signal type |
@@ -7224,6 +7900,8 @@ A recorded event representing a state change in the system.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `Id` | string | auto-generated | Unique ID with `evt_` prefix |
+| `TenantId` | string? | null | Owning tenant |
+| `UserId` | string? | null | Owning user |
 | `EventType` | string | `""` | Event type identifier |
 | `EntityType` | string? | null | Related entity type |
 | `EntityId` | string? | null | Related entity ID |
@@ -7276,6 +7954,8 @@ An entry in the merge queue representing a branch to be tested and merged.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `Id` | string | auto-generated | Unique ID with `mrg_` prefix |
+| `TenantId` | string? | null | Owning tenant |
+| `UserId` | string? | null | Owning user |
 | `MissionId` | string? | null | Parent mission ID |
 | `VesselId` | string? | null | Vessel ID |
 | `BranchName` | string | `"unknown"` | Branch to merge |
@@ -7286,6 +7966,8 @@ An entry in the merge queue representing a branch to be tested and merged.
 | `TestCommand` | string? | null | Test command for verification |
 | `TestOutput` | string? | null | Test output or error message |
 | `TestExitCode` | int? | null | Test process exit code |
+| `RetryCount` | int | 0 | Processing attempts so far (bounds automatic retries) |
+| `LeaseExpiresUtc` | datetime? | null | When the current processing lease expires; an expired non-terminal entry is recovered |
 | `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
 | `LastUpdateUtc` | datetime | now | Last update timestamp (UTC) |
 | `TestStartedUtc` | datetime? | null | Test start timestamp (UTC) |
@@ -7355,6 +8037,7 @@ Aggregate status summary returned by the status endpoint.
 | `RecentSignals` | array | Recent [Signal](#signal) objects |
 | `RemoteTunnel` | [RemoteTunnelStatus](#remotetunnelstatus) | Current outbound remote tunnel status |
 | `TimestampUtc` | datetime | Snapshot timestamp (UTC) |
+| `MemoryPressureDeferrals` | long | 0 | Dispatch attempts deferred because the host was under memory pressure |
 
 ---
 
@@ -7376,6 +8059,7 @@ Current outbound remote tunnel status and telemetry.
 | `ReconnectAttempts` | int | Consecutive reconnect attempts since the last successful connection |
 | `LatencyMs` | int? | Round-trip latency from the last successful ping/pong |
 | `CapabilityManifest` | object | Current handshake capability manifest |
+| `LastErrorCode` | string? | null | Machine-readable code for `LastError` |
 
 ---
 
@@ -7390,6 +8074,7 @@ Progress information for an active voyage, nested in ArmadaStatus.
 | `CompletedMissions` | int | Number of completed missions |
 | `FailedMissions` | int | Number of failed missions |
 | `InProgressMissions` | int | Number of in-progress missions |
+| `VesselIds` | string[] | [] | Distinct vessels referenced by the voyage's missions |
 
 ---
 
@@ -7400,11 +8085,18 @@ A git worktree provisioned for a captain. Docks are managed internally by the Ad
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `Id` | string | auto-generated | Unique ID with `dck_` prefix |
+| `TenantId` | string? | null | Owning tenant |
+| `UserId` | string? | null | Owning user |
 | `VesselId` | string | `""` | Vessel ID |
 | `CaptainId` | string? | null | Captain currently using dock |
 | `WorktreePath` | string? | null | Local filesystem path to worktree |
 | `BranchName` | string? | null | Branch name checked out |
 | `Active` | bool | true | Whether dock is active/usable |
+| `HarborId` | string? | null | Harbor that owns the dock; null on the Admiral's own host |
+| `State` | string | `Available` | Lifecycle state (`DockStateEnum`) |
+| `LeaseExpiresUtc` | datetime? | null | When the current lease expires |
+| `OwnerToken` | string? | null | Opaque lease-holder token |
+| `GitAnchorsJson` | string? | null | Git anchors captured at provisioning (start commit, target and working branch, recent commits) as JSON |
 | `CreatedUtc` | datetime | now | Creation timestamp (UTC) |
 | `LastUpdateUtc` | datetime | now | Last update timestamp (UTC) |
 
@@ -7799,6 +8491,8 @@ Request body for creating a voyage with missions.
 | `SelectedPlaybooks` | array | no | Ordered [SelectedPlaybook](#selectedplaybook) rows to apply to the voyage |
 | `PipelineId` | string | no | Pipeline ID override |
 | `Pipeline` | string | no | Pipeline name override |
+| `ObjectiveId` | string? | null | Objective (backlog item) to link the voyage to |
+| `CaptainAssignments` | array? | null | Per-persona captain overrides: each entry binds a persona to a preferred captain and a fallback tier for every mission of that persona in the voyage |
 
 ---
 
@@ -7810,6 +8504,8 @@ A mission within a VoyageRequest.
 |---|---|---|---|
 | `Title` | string | yes | Mission title |
 | `Description` | string | no | Mission description/instructions |
+| `RequestedCaptainId` | string? | null | Preferred captain; used when idle, otherwise dispatch falls back by `Tier` |
+| `Tier` | string? | null | Required/fallback capability tier (`CaptainTierEnum`) |
 
 ---
 
@@ -8364,4 +9060,5 @@ All responses include permissive CORS headers:
 Access-Control-Allow-Origin: *
 Access-Control-Allow-Methods: GET, POST, PUT, DELETE, PATCH, OPTIONS
 Access-Control-Allow-Headers: Content-Type, X-Api-Key, X-Token, Authorization
+Access-Control-Expose-Headers: Retry-After
 ```

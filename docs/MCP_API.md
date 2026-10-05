@@ -188,9 +188,14 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
 
 **Contract.** Tool names, argument names and types, and which arguments are required are frozen for 1.0 and listed in
 [API_SURFACE_1.0.md](API_SURFACE_1.0.md) (rules: [COMPATIBILITY.md](COMPATIBILITY.md)). Arguments are camelCase (matched
-case-insensitively); tool results carry the same entity shapes as the REST API, with PascalCase property names. New
-tools, new optional arguments, and new result fields may be added in minor releases. Tools whose description starts with `[Experimental]` (the Harbor tools `get_harbor`, `create_harbor`,
-`update_harbor`, `delete_harbor`, `set_harbor_enabled`) are excluded from the promise.
+case-insensitively); tool results carry the same entity shapes as the REST API, with PascalCase property names (the
+camelCase exceptions are the `inbox` envelope, `count`, `criticalCount`, `warningCount`, and `items`, and the
+`list_prompt_templates` envelope and rows). Unlike REST, MCP results keep null-valued properties, and an enum whose type
+is not declared with a string converter is emitted as its number (for example `InboxItem.Severity`, and the status enums
+of check runs, deployments, releases, incidents, runbook executions, and objectives). New tools, new optional arguments,
+and new result fields may be added in minor releases. Tools whose description starts with `[Experimental]` (the Harbor
+tools `get_harbor`, `create_harbor`, `update_harbor`, `delete_harbor`, `set_harbor_enabled`) are excluded from the
+promise.
 
 Armada exposes a full MCP server that allows AI agents and MCP-compatible clients to interact with the Admiral orchestrator. MCP covers Armada's core orchestration and management surfaces directly from tool-calling clients:
 
@@ -416,39 +421,42 @@ No parameters required.
 
 ```json
 {
-  "totalCaptains": 4,
-  "idleCaptains": 1,
-  "workingCaptains": 2,
-  "stalledCaptains": 1,
-  "activeVoyages": 2,
-  "missionsByStatus": {
+  "TotalCaptains": 4,
+  "IdleCaptains": 1,
+  "WorkingCaptains": 2,
+  "StalledCaptains": 1,
+  "ActiveVoyages": 2,
+  "MemoryPressureDeferrals": 0,
+  "MissionsByStatus": {
     "Pending": 3,
     "InProgress": 2,
     "Complete": 10,
     "Failed": 1
   },
-  "voyages": [
+  "Voyages": [
     {
-      "voyage": { "id": "vyg_...", "title": "Feature batch 1", "...": "..." },
-      "totalMissions": 5,
-      "completedMissions": 3,
-      "failedMissions": 0,
-      "inProgressMissions": 2
+      "Voyage": { "Id": "vyg_...", "Title": "Feature batch 1", "...": "..." },
+      "TotalMissions": 5,
+      "CompletedMissions": 3,
+      "FailedMissions": 0,
+      "InProgressMissions": 2,
+      "VesselIds": ["vsl_..."]
     }
   ],
-  "recentSignals": [],
-  "remoteTunnel": {
-    "enabled": false,
-    "state": "Disabled",
-    "tunnelUrl": null,
-    "instanceId": "armada-1f2e3d4c5b6a",
-    "lastError": null,
-    "reconnectAttempts": 0,
-    "latencyMs": null,
-    "capabilityManifest": {
-      "protocolVersion": "2026-04-03",
-      "armadaVersion": "1.0.0",
-      "features": [
+  "RecentSignals": [],
+  "TimestampUtc": "2026-03-07T12:34:56.789Z",
+  "RemoteTunnel": {
+    "Enabled": false,
+    "State": "Disabled",
+    "TunnelUrl": null,
+    "InstanceId": "armada-1f2e3d4c5b6a",
+    "LastError": null,
+    "ReconnectAttempts": 0,
+    "LatencyMs": null,
+    "CapabilityManifest": {
+      "ProtocolVersion": "2026-04-03",
+      "ArmadaVersion": "1.0.0",
+      "Features": [
         "remoteControl.handshake",
         "remoteControl.heartbeat",
         "status.health",
@@ -456,8 +464,7 @@ No parameters required.
         "settings.remoteControl"
       ]
     }
-  },
-  "timestampUtc": "2026-03-07T12:34:56.789Z"
+  }
 }
 ```
 
@@ -469,14 +476,14 @@ Return the operator's inbox: everything across the fleet that requires a human's
 
 **What qualifies.** Two kinds of item appear:
 
-- **Awaiting your decision (human-in-the-loop):** a mission in `Review` (approve or reject), a deployment in `PendingApproval`, or a pending, unexpired Ask Armada action proposal in one of your own conversations.
+- **Awaiting your decision (human-in-the-loop):** a mission in `Review` (approve or reject), a deployment in `PendingApproval`, or a pending Ask Armada action proposal in one of your own conversations.
 - **Failed and needs intervention (human-out-of-the-loop):** a failed mission, a mission whose work could not be merged (landing failed), a failed merge, a failed or verification-failed deployment, or a stalled captain.
 
-Purely informational events (completions, normal progress) are deliberately excluded -- the inbox answers *"what needs me?"*, not *"what happened?"* (use `enumerate` or the Activity log for history). An empty `items` list means nothing currently needs the operator.
+Purely informational events (completions, normal progress) are deliberately excluded -- the inbox answers *"what needs me?"*, not *"what happened?"* (use `enumerate` or the Activity log for history). An empty `items` list means nothing currently needs the operator. Operational items are scoped like other reads (global admin: everything; tenant admin: the tenant; regular user: own items); Ask proposals are always limited to the caller's own threads. Each category is capped at 100 items, and items are ordered by severity (`Critical` first), then title.
 
 **Item kinds and severity:**
 
-| `kind` | Meaning | Severity |
+| `Kind` | Meaning | Severity |
 |---|---|---|
 | `review` | Mission awaiting your review/approval | `Warning`, or `Critical` if the review deadline has passed |
 | `landing_failed` | Mission produced work that could not be merged | `Critical` |
@@ -485,7 +492,7 @@ Purely informational events (completions, normal progress) are deliberately excl
 | `deployment_approval` | Deployment waiting for your approval before it runs | `Warning` |
 | `deployment_failed` | Deployment failed or failed verification | `Critical` |
 | `stalled_captain` | Captain is stalled and may need recovery or a dock reclaim | `Warning` |
-| `ask_proposal` | Ask Armada action proposal waiting for your approval (`href` is the conversation, `/ask/<threadId>`) | `Warning` |
+| `ask_proposal` | Ask Armada action proposal waiting for your approval (`Href` is the conversation, `/ask/<threadId>`) | `Warning` |
 
 **Input Schema:**
 
@@ -498,7 +505,10 @@ Purely informational events (completions, normal progress) are deliberately excl
 
 No parameters required.
 
-**Response:** counts plus the ordered item list. Each item has `kind`, `severity` (`Critical`, `Warning`, or `Info`), `title`, `detail`, `entityType`, `entityId`, and a dashboard `href`.
+**Response:** counts plus the ordered item list. The wrapper fields are camelCase (`count`, `criticalCount`,
+`warningCount`, `items`); each item is an `InboxItem` with `Kind`, `Severity`, `Title`, `Detail`, `EntityType`,
+`EntityName` (display name of the referenced entity; use it instead of parsing `Title`), `EntityId`, and a dashboard
+`Href`. `Severity` is emitted as its numeric value over MCP: `2` (Critical), `1` (Warning), or `0` (Info).
 
 ```json
 {
@@ -507,22 +517,24 @@ No parameters required.
   "warningCount": 1,
   "items": [
     {
-      "kind": "landing_failed",
-      "severity": "Critical",
-      "title": "Landing failed: Add JWT validation",
-      "detail": "The work could not be landed.",
-      "entityType": "mission",
-      "entityId": "msn_1a2b3c",
-      "href": "/missions/msn_1a2b3c"
+      "Kind": "landing_failed",
+      "Severity": 2,
+      "Title": "Landing failed: Add JWT validation",
+      "Detail": "The work could not be landed.",
+      "EntityType": "mission",
+      "EntityName": "Add JWT validation",
+      "EntityId": "msn_1a2b3c",
+      "Href": "/missions/msn_1a2b3c"
     },
     {
-      "kind": "review",
-      "severity": "Warning",
-      "title": "Review: Refactor auth service",
-      "detail": "Awaiting your review.",
-      "entityType": "mission",
-      "entityId": "msn_4d5e6f",
-      "href": "/missions/msn_4d5e6f"
+      "Kind": "review",
+      "Severity": 1,
+      "Title": "Review: Refactor auth service",
+      "Detail": "Awaiting your review.",
+      "EntityType": "mission",
+      "EntityName": "Refactor auth service",
+      "EntityId": "msn_4d5e6f",
+      "Href": "/missions/msn_4d5e6f"
     }
   ]
 }
@@ -536,7 +548,7 @@ No parameters required.
 
 Summarize model token usage over a time window. Returns time buckets (each with a per-model breakdown), a whole-window per-model aggregate ordered most-used first, and grand totals. Use it to answer *"how many tokens has each model used?"* or *"what's our token usage over the last week?"*.
 
-Counts are normalized across providers: `input` covers prompt tokens, `output` covers completion tokens, `cached` is the cache-read subset of input (informational), and `total` is input + output. Counts are measured where the runtime reports usage (for example Claude Code) and estimated from text length otherwise; `estimatedCount` reports how many aggregated records were estimated.
+Counts are normalized across providers: `input` covers prompt tokens, `output` covers completion tokens, `cached` is the cache-read subset of input (informational), and `total` is input + output. Counts are measured where the runtime reports usage (for example Claude Code) and estimated from text length otherwise; `EstimatedCount` reports how many aggregated records were estimated.
 
 **Input Schema:**
 
@@ -557,30 +569,30 @@ Counts are normalized across providers: `input` covers prompt tokens, `output` c
 }
 ```
 
-**Response:** grand totals plus `buckets` (time series) and `byModel` (most-used first).
+**Response:** grand totals plus `Buckets` (time series) and `ByModel` (most-used first).
 
 ```json
 {
-  "fromUtc": "2026-05-01T00:00:00Z",
-  "toUtc": "2026-05-08T00:00:00Z",
-  "bucketMinutes": 60,
-  "recordCount": 42,
-  "estimatedCount": 18,
-  "inputTokens": 1200000,
-  "outputTokens": 340000,
-  "cachedTokens": 90000,
-  "totalTokens": 1540000,
-  "byModel": [
-    { "model": "claude-sonnet-4", "inputTokens": 900000, "outputTokens": 250000, "cachedTokens": 80000, "totalTokens": 1150000 },
-    { "model": "gpt-5", "inputTokens": 300000, "outputTokens": 90000, "cachedTokens": 10000, "totalTokens": 390000 }
+  "FromUtc": "2026-05-01T00:00:00Z",
+  "ToUtc": "2026-05-08T00:00:00Z",
+  "BucketMinutes": 60,
+  "RecordCount": 42,
+  "EstimatedCount": 18,
+  "InputTokens": 1200000,
+  "OutputTokens": 340000,
+  "CachedTokens": 90000,
+  "TotalTokens": 1540000,
+  "ByModel": [
+    { "Model": "claude-sonnet-4", "InputTokens": 900000, "OutputTokens": 250000, "CachedTokens": 80000, "TotalTokens": 1150000 },
+    { "Model": "gpt-5", "InputTokens": 300000, "OutputTokens": 90000, "CachedTokens": 10000, "TotalTokens": 390000 }
   ],
-  "buckets": [
+  "Buckets": [
     {
-      "bucketStartUtc": "2026-05-01T00:00:00Z",
-      "bucketEndUtc": "2026-05-01T01:00:00Z",
-      "inputTokens": 20000, "outputTokens": 5000, "cachedTokens": 1000, "totalTokens": 25000,
-      "models": [
-        { "model": "claude-sonnet-4", "inputTokens": 20000, "outputTokens": 5000, "cachedTokens": 1000, "totalTokens": 25000 }
+      "BucketStartUtc": "2026-05-01T00:00:00Z",
+      "BucketEndUtc": "2026-05-01T01:00:00Z",
+      "InputTokens": 20000, "OutputTokens": 5000, "CachedTokens": 1000, "TotalTokens": 25000,
+      "Models": [
+        { "Model": "claude-sonnet-4", "InputTokens": 20000, "OutputTokens": 5000, "CachedTokens": 1000, "TotalTokens": 25000 }
       ]
     }
   ]
@@ -679,7 +691,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
     "createdAfter": { "type": "string", "description": "ISO 8601 timestamp filter" },
     "createdBefore": { "type": "string", "description": "ISO 8601 timestamp filter" },
     "status": { "type": "string", "description": "Filter by status (entity-specific)" },
-    "search": { "type": "string", "description": "Free-text search where supported (releases, deployments, incidents, runbooks, runbook_executions, memories, objectives)" },
+    "search": { "type": "string", "description": "Free-text search where supported (releases, deployments, incidents, runbooks, runbook_executions, memories, objectives; vessel name for vessel_health)" },
     "fleetId": { "type": "string", "description": "Filter by fleet ID (vessels)" },
     "vesselId": { "type": "string", "description": "Filter by vessel ID (missions, docks)" },
     "captainId": { "type": "string", "description": "Filter by captain ID (missions, events, signals)" },
@@ -1051,20 +1063,24 @@ Get status of a specific voyage. Returns summary with mission counts by default;
 | Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `voyageId` | string | Yes | -- | Voyage ID (prefix `vyg_`) |
-| `summary` | boolean | No | `true` | Return summary with mission counts only |
-| `includeMissions` | boolean | No | `false` | Include full mission objects in response |
-| `includeDescription` | boolean | No | `false` | Include full Description on voyage and missions |
-| `includeDiffs` | boolean | No | `false` | Include DiffSnapshot on missions |
-| `includeLogs` | boolean | No | `false` | Include session logs on missions |
+| `summary` | boolean | No | `true` | Return the summary shape with mission counts by status. Set `false` for the full voyage |
+| `includeMissions` | boolean | No | `false` | Include full mission objects. Only used when `summary` is `false` |
+| `includeDescription` | boolean | No | `false` | Include `Description` on the embedded missions |
+| `includeDiffs` | boolean | No | `false` | Include `DiffSnapshot` on the embedded missions |
+| `includeLogs` | boolean | No | `false` | Reserved; currently has no effect (logs live in files, use `get_mission_log`) |
 
-**Response (default summary mode):**
+**Response (default summary mode):** the voyage's `Id`, `Title`, `Description`, `Status`, `CreatedUtc`, and
+`LastUpdateUtc`, the mission total, and counts by mission status.
 
 ```json
 {
   "Voyage": {
-    "id": "vyg_abc123def456ghi789jk",
-    "title": "Implement authentication",
-    "status": "InProgress"
+    "Id": "vyg_abc123def456ghi789jk",
+    "Title": "Implement authentication",
+    "Description": null,
+    "Status": "InProgress",
+    "CreatedUtc": "2026-03-07T12:00:00Z",
+    "LastUpdateUtc": "2026-03-07T12:30:00Z"
   },
   "TotalMissions": 5,
   "MissionCountsByStatus": {
@@ -1075,32 +1091,29 @@ Get status of a specific voyage. Returns summary with mission counts by default;
 }
 ```
 
-**Response (with `includeMissions: true`):**
+**Response (`summary: false`):** `{ "Voyage": <full Voyage>, "TotalMissions": 5 }`.
+
+**Response (`summary: false, includeMissions: true`):**
 
 ```json
 {
   "Voyage": {
-    "id": "vyg_abc123def456ghi789jk",
-    "title": "Implement authentication",
-    "status": "InProgress"
-  },
-  "TotalMissions": 5,
-  "MissionCountsByStatus": {
-    "Pending": 1,
-    "InProgress": 2,
-    "Complete": 2
+    "Id": "vyg_abc123def456ghi789jk",
+    "Title": "Implement authentication",
+    "Status": "InProgress",
+    "...": "..."
   },
   "Missions": [
     {
-      "id": "msn_abc123def456ghi789jk",
-      "title": "Add JWT middleware",
-      "status": "Complete",
+      "Id": "msn_abc123def456ghi789jk",
+      "Title": "Add JWT middleware",
+      "Status": "Complete",
       "...": "..."
     },
     {
-      "id": "msn_def456ghi789jkl012mn",
-      "title": "Add login endpoint",
-      "status": "InProgress",
+      "Id": "msn_def456ghi789jkl012mn",
+      "Title": "Add login endpoint",
+      "Status": "InProgress",
       "...": "..."
     }
   ]
@@ -1109,10 +1122,12 @@ Get status of a specific voyage. Returns summary with mission counts by default;
 
 | Field | Type | Description |
 |---|---|---|
-| `Voyage` | object \| null | [Voyage](#voyage) object, or null if not found |
-| `TotalMissions` | int | Total number of missions in this voyage |
-| `MissionCountsByStatus` | object | Map of status string to count |
-| `Missions` | array \| null | List of [Mission](#mission) objects (only present when `includeMissions` is true) |
+| `Voyage` | object | [Voyage](#voyage) object (a subset of its fields in summary mode) |
+| `TotalMissions` | int | Total number of missions in this voyage (absent when `Missions` is returned) |
+| `MissionCountsByStatus` | object | Map of status string to count (summary mode only) |
+| `Missions` | array | List of [Mission](#mission) objects (only with `summary: false` and `includeMissions: true`) |
+
+An unknown voyage, or one outside the caller's scope, returns `{ "Error": "Voyage not found", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -1192,16 +1207,16 @@ Get details of a specific fleet including all its vessels.
 
 ```json
 {
-  "fleet": {
-    "id": "flt_abc123def456ghi789jk",
-    "name": "Backend Services",
+  "Fleet": {
+    "Id": "flt_abc123def456ghi789jk",
+    "Name": "Backend Services",
     "...": "..."
   },
-  "vessels": [
+  "Vessels": [
     {
-      "id": "vsl_abc123def456ghi789jk",
-      "name": "auth-service",
-      "repoUrl": "git@github.com:org/auth-service.git",
+      "Id": "vsl_abc123def456ghi789jk",
+      "Name": "auth-service",
+      "RepoUrl": "git@github.com:org/auth-service.git",
       "...": "..."
     }
   ]
@@ -1668,8 +1683,8 @@ Stop a specific captain agent.
 
 ```json
 {
-  "status": "stopped",
-  "captainId": "cpt_abc123def456ghi789jk"
+  "Status": "stopped",
+  "CaptainId": "cpt_abc123def456ghi789jk"
 }
 ```
 
@@ -1714,7 +1729,7 @@ No parameters required.
 
 ```json
 {
-  "status": "all_stopped"
+  "Status": "all_stopped"
 }
 ```
 
@@ -1841,13 +1856,13 @@ Returns `{ "Error": "Voyage not found", "ErrorCode": "NotFound" }` if the ID doe
 
 ```json
 {
-  "voyage": {
-    "id": "vyg_abc123def456ghi789jk",
-    "title": "Implement authentication",
-    "status": "Cancelled",
+  "Voyage": {
+    "Id": "vyg_abc123def456ghi789jk",
+    "Title": "Implement authentication",
+    "Status": "Cancelled",
     "...": "..."
   },
-  "cancelledMissions": 3
+  "CancelledMissions": 3
 }
 ```
 
@@ -2299,7 +2314,7 @@ Create and dispatch a standalone mission to a vessel. The Admiral assigns a capt
     "voyageId": { "type": "string", "description": "Optional voyage ID to associate with (vyg_ prefix)" },
     "persona": { "type": "string", "description": "Persona for this mission (e.g. Worker, Architect, Judge, Test Engineer)" },
     "mode": { "type": "string", "description": "Execution mode: Implementation (default), Audit, or Research. Audit and Research are read-only modes that produce a written report instead of a commit; their empty diff is treated as success, not a no-op failure." },
-    "tier": { "type": "string", "description": "Optional required capability tier for dispatch routing: Economy, Standard, or Premium. Null routes to any idle captain (default)." },
+    "tier": { "type": "string", "description": "Optional minimum captain tier for this mission (Economy, Standard, or Premium); only captains at or above it are assigned" },
     "selectedPlaybooks": {
       "type": "array",
       "description": "Optional ordered playbook selections for this mission",
@@ -2317,7 +2332,7 @@ Create and dispatch a standalone mission to a vessel. The Admiral assigns a capt
 }
 ```
 
-**Response:** [Mission](#mission) object. `tier` is accepted by the handler but is not declared in the tool's advertised input schema, so it is not part of the frozen 1.0 surface.
+**Response:** [Mission](#mission) object. Without `tier` the mission routes to any idle captain (treated as `Standard`).
 
 ---
 
@@ -3439,7 +3454,7 @@ Inspect one scoped objective or intake-style record, including linked vessels, p
 }
 ```
 
-**Response:** serialized `Objective` object with the expanded backlog fields (`kind`, `category`, `priority`, `rank`, `backlogState`, `effort`, `targetVersion`, `dueUtc`, `parentObjectiveId`, `blockedByObjectiveIds`, `refinementSummary`, `suggestedPipelineId`, `refinementSessionIds`), or `{ "Error": "Objective not found", "ErrorCode": "NotFound" }`.
+**Response:** serialized `Objective` object with the expanded backlog fields (`Kind`, `Category`, `Priority`, `Rank`, `BacklogState`, `Effort`, `TargetVersion`, `DueUtc`, `ParentObjectiveId`, `BlockedByObjectiveIds`, `RefinementSummary`, `SuggestedPipelineId`, `RefinementSessionIds`), or `{ "Error": "Objective not found", "ErrorCode": "NotFound" }`.
 
 ---
 
@@ -3497,47 +3512,45 @@ Create an internal-first objective or intake record that can link repositories, 
 
 Backlog is the user-facing label, but MCP keeps both objective-compatible and backlog-named tools for the same normalized `Objective` entity.
 
-Core CRUD and reorder tools:
+Core CRUD and reorder tools (`*` marks a required argument):
 
-| Tool | Purpose | Notes |
-|---|---|---|
-| `list_objectives` | Enumerate objective/backlog records | Same filters as `list_backlog` |
-| `list_backlog` | Enumerate backlog items | Preferred user-facing alias |
-| `get_objective` | Read one objective | Returns the expanded backlog shape |
-| `get_backlog_item` | Read one backlog item | Alias over the same objective-backed record |
-| `create_objective` | Create one objective | Accepts the expanded backlog metadata fields |
-| `create_backlog_item` | Create one backlog item | Preferred user-facing alias |
-| `update_objective` | Update one objective/backlog entry | Requires `objectiveId` plus any fields to mutate |
-| `update_backlog_item` | Update one backlog item | Preferred user-facing alias of `update_objective` -- identical schema (`objectiveId` plus any fields to mutate) |
-| `reorder_objectives` | Apply explicit rank updates | Uses `{ items: [{ objectiveId, rank }] }` |
-| `reorder_backlog_items` | Apply explicit rank updates | Preferred user-facing alias |
-| `delete_objective` | Delete one objective | Removes the normalized row and snapshot-backed current-state chain |
-| `delete_backlog_item` | Delete one backlog item | Preferred user-facing alias |
+| Tool | Permission | Arguments | Notes |
+|---|---|---|---|
+| `list_objectives` | Authenticated | `owner`, `category`, `parentObjectiveId`, `vesselId`, `fleetId`, `status`, `backlogState`, `kind`, `priority`, `effort`, `targetVersion`, `search`, `pageNumber`, `pageSize` | Enumerate objective/backlog records |
+| `list_backlog` | Authenticated | Same as `list_objectives` | Preferred user-facing alias |
+| `get_objective` | Authenticated | `objectiveId`* | Returns the expanded backlog shape |
+| `get_backlog_item` | Authenticated | `objectiveId`* | Alias over the same objective-backed record |
+| `create_objective` | TenantAdmin | `title`* plus the expanded backlog fields (see [create_objective](#create_objective)) | |
+| `create_backlog_item` | TenantAdmin | Same as `create_objective` | Preferred user-facing alias |
+| `update_objective` | TenantAdmin | `objectiveId`* plus any `create_objective` field to change (`title` is optional here) | Only supplied fields change |
+| `update_backlog_item` | TenantAdmin | Same as `update_objective` | Preferred user-facing alias; identical schema |
+| `reorder_objectives` | TenantAdmin | `items`* (`[{ objectiveId*, rank* }]`) | Apply explicit rank updates |
+| `reorder_backlog_items` | TenantAdmin | Same as `reorder_objectives` | Preferred user-facing alias |
+| `delete_objective` | TenantAdmin | `objectiveId`* | Removes the normalized row and snapshot-backed current-state chain |
+| `delete_backlog_item` | TenantAdmin | `objectiveId`* | Preferred user-facing alias |
 
 Refinement tools:
 
-| Tool | Purpose | Notes |
-|---|---|---|
-| `list_backlog_refinement_sessions` | List refinement sessions for one backlog item (lightweight, paginated) | Requires `objectiveId`; optional `pageNumber`, `pageSize` (default 25, max 100) |
-| `create_backlog_refinement_session` | Start captain-backed refinement | Requires explicit `captainId`; `vesselId` is optional |
-| `get_backlog_refinement_session` | Read one refinement transcript | Returns session, messages, captain, vessel, and linked backlog item |
-| `send_backlog_refinement_message` | Append one user message | Launches the next refinement turn |
-| `summarize_backlog_refinement_session` | Create/select a structured summary | Optional `messageId` |
-| `apply_backlog_refinement_summary` | Apply the summary back to the backlog item | Optional `markMessageSelected` and `promoteBacklogState` |
-| `stop_backlog_refinement_session` | Stop one active refinement session | Releases the selected captain |
+| Tool | Permission | Arguments | Notes |
+|---|---|---|---|
+| `list_backlog_refinement_sessions` | Authenticated | `objectiveId`*, `pageNumber` (default 1), `pageSize` (default 25, max 100) | Lightweight, paginated list for one backlog item |
+| `create_backlog_refinement_session` | TenantAdmin | `objectiveId`*, `captainId`*, `fleetId`, `vesselId`, `title`, `initialMessage` | Start captain-backed refinement; `vesselId` is optional |
+| `get_backlog_refinement_session` | Authenticated | `sessionId`* (`ors_`) | Returns session, messages, captain, vessel, and linked backlog item |
+| `send_backlog_refinement_message` | TenantAdmin | `sessionId`*, `content`* | Append one user message; launches the next refinement turn |
+| `summarize_backlog_refinement_session` | TenantAdmin | `sessionId`*, `messageId` | Create/select a structured summary (latest assistant turn when `messageId` is omitted) |
+| `apply_backlog_refinement_summary` | TenantAdmin | `sessionId`*, `messageId`, `markMessageSelected` (default `true`), `promoteBacklogState` (default `true`), `endSession` (default `true`) | Apply the summary back to the backlog item. Ends the session and releases its captain unless `endSession` is `false`. Returns `{ Summary, Objective, Session }` |
+| `stop_backlog_refinement_session` | TenantAdmin | `sessionId`* | Stop one active refinement session; releases the selected captain |
 
 Planning handoff tools:
 
-| Tool | Purpose | Notes |
-|---|---|---|
-| `create_backlog_planning_session` | Start a repository-aware planning session from one backlog item | Requires `objectiveId`, `captainId`, and `vesselId` |
-| `get_backlog_planning_session` | Inspect one planning session created from backlog work | Returns transcript plus linked backlog items |
-| `dispatch_backlog_planning_session` | Dispatch a voyage from the planning session | Keeps the backlog/objective linkage on the resulting voyage |
+| Tool | Permission | Arguments | Notes |
+|---|---|---|---|
+| `create_backlog_planning_session` | TenantAdmin | `objectiveId`*, `captainId`*, `vesselId`*, `fleetId`, `pipelineId`, `title`, `selectedPlaybooks` | Start a repository-aware planning session from one backlog item |
+| `get_backlog_planning_session` | Authenticated | `sessionId`* (`psn_`) | Returns transcript plus linked backlog items |
+| `dispatch_backlog_planning_session` | TenantAdmin | `sessionId`*, `messageId`, `title`, `description` | Dispatch a voyage from the planning session; keeps the backlog/objective linkage on the resulting voyage |
 
 Shared input notes:
 
-- `update_objective` accepts the same expanded backlog fields as `create_objective`, plus the required `objectiveId`
-- `update_backlog_item` is a backlog-named alias of `update_objective` with an identical input schema (both mutate the same normalized `Objective` record)
 - `create_backlog_item` mirrors `create_objective` but uses backlog terminology in the tool name and descriptions
 - refinement sessions are lighter than planning and do not provision a dock/worktree by default
 - planning handoff tools are repository-aware and require an explicit vessel
@@ -3571,7 +3584,7 @@ Example `create_backlog_planning_session` input:
   "objectiveId": "obj_abc123",
   "captainId": "cpt_abc123",
   "vesselId": "vsl_abc123",
-  "pipelineId": "pln_abc123",
+  "pipelineId": "ppl_abc123",
   "title": "Plan release rollback implementation"
 }
 ```
@@ -4286,7 +4299,7 @@ Returns `{ "Error": "Cannot delete built-in pipeline", "ErrorCode": "Conflict" }
 
 ### get_model_endpoint
 
-Get details of a specific model endpoint (managed embedding or inference provider reference). The stored API key is never returned; `hasApiKey` indicates whether one is set.
+Get details of a specific model endpoint (managed embedding or inference provider reference). The stored API key is never returned; `HasApiKey` indicates whether one is set.
 
 **Input Schema:**
 
@@ -4320,7 +4333,7 @@ Create a model endpoint. Supply `apiKey` to store a provider key; it is write-on
   "properties": {
     "name": { "type": "string", "description": "Display name" },
     "baseUrl": { "type": "string", "description": "Provider API base URL" },
-    "kind": { "type": "string", "description": "Embedding (default) or Inference" },
+    "kind": { "type": "string", "description": "Embedding or Inference (default Inference)" },
     "provider": { "type": "string", "description": "Ollama, OpenAI, OpenAICompatible, Anthropic, Gemini, VoyageAI, AzureOpenAI, VertexAI, or Bedrock" },
     "model": { "type": "string", "description": "Model name to target" },
     "apiKey": { "type": "string", "description": "Provider API key. Write-only: accepted here, never returned on reads." },
@@ -4336,8 +4349,8 @@ Create a model endpoint. Supply `apiKey` to store a provider key; it is write-on
 |---|---|---|---|
 | `name` | string | Yes | Display name |
 | `baseUrl` | string | Yes | Provider API base URL |
-| `kind` | string | No | `Embedding` (default) or `Inference` |
-| `provider` | string | No | `Ollama`, `OpenAI`, `OpenAICompatible`, `Anthropic`, `Gemini`, `VoyageAI`, `AzureOpenAI`, `VertexAI`, or `Bedrock` |
+| `kind` | string | No | `Embedding` or `Inference` (default `Inference`) |
+| `provider` | string | No | `Ollama`, `OpenAI` (default), `OpenAICompatible`, `Anthropic`, `Gemini`, `VoyageAI`, `AzureOpenAI`, `VertexAI`, or `Bedrock` |
 | `model` | string | No | Model name to target |
 | `apiKey` | string | No | Provider API key. Write-only: accepted here, never returned on reads. |
 | `dimensionality` | integer | No | Embedding dimensionality (default 0) |
@@ -4358,7 +4371,7 @@ Create a model endpoint. Supply `apiKey` to store a provider key; it is write-on
 }
 ```
 
-**Response:** The newly created [ModelEndpoint](#modelendpoint) object (with `hasApiKey: true`, no `apiKey` field). Returns `{ "Error": "...", "ErrorCode": "InvalidArgument" }` when `Anthropic` is paired with `Embedding`, or `VoyageAI` is paired with `Inference`.
+**Response:** The newly created [ModelEndpoint](#modelendpoint) object (with `HasApiKey: true` and no API key field). Returns `{ "Error": "...", "ErrorCode": "InvalidArgument" }` when `Anthropic` is paired with `Embedding`, or `VoyageAI` is paired with `Inference`.
 
 **Provider-specific fields** (accepted on create and update): `AzureOpenAI` uses `baseUrl` (resource endpoint), `model` (deployment name), `apiKey`, and optional `apiVersion`. `VertexAI` requires `project` and `region`, with the service-account JSON supplied write-only as `apiKey`; `baseUrl` is an optional override. `Bedrock` requires `region` and `accessKeyId`, with the AWS secret access key supplied write-only as `apiKey`; `model` is the Bedrock model id and `baseUrl` is an optional override.
 
@@ -4394,7 +4407,7 @@ Update an existing model endpoint. Omit `apiKey` to keep the stored key; send `a
 | `endpointId` | string | Yes | Model endpoint ID (prefix `mep_`) |
 | `name` | string | No | New display name |
 | `kind` | string | No | `Embedding` or `Inference` |
-| `provider` | string | No | `Ollama`, `OpenAI`, `OpenAICompatible`, `Anthropic`, `Gemini`, `VoyageAI`, `AzureOpenAI`, `VertexAI`, or `Bedrock` |
+| `provider` | string | No | `Ollama`, `OpenAI` (default), `OpenAICompatible`, `Anthropic`, `Gemini`, `VoyageAI`, `AzureOpenAI`, `VertexAI`, or `Bedrock` |
 | `baseUrl` | string | No | New provider API base URL |
 | `model` | string | No | New model name to target |
 | `apiKey` | string | No | New provider API key. Omit to keep the stored key. |
@@ -4462,14 +4475,14 @@ Validate one endpoint by issuing a real request against the provider: an embeddi
 
 ```json
 {
-  "success": true,
-  "baseUrl": "https://api.openai.com/v1",
-  "latencyMs": 92,
-  "statusCode": 200,
-  "error": null,
-  "embeddingDimensions": 1536,
-  "sampleText": null,
-  "timestampUtc": "2026-03-07T12:00:00Z"
+  "Success": true,
+  "BaseUrl": "https://api.openai.com/v1",
+  "LatencyMs": 92,
+  "StatusCode": 200,
+  "Error": null,
+  "EmbeddingDimensions": 1536,
+  "SampleText": null,
+  "TimestampUtc": "2026-03-07T12:00:00Z"
 }
 ```
 
@@ -4495,7 +4508,7 @@ No parameters required.
 **Response:** [ModelEndpointHealthSweepResponse](#modelendpointhealthsweepresponse) object.
 
 ```json
-{ "distinctBaseUrlsProbed": 3 }
+{ "DistinctBaseUrlsProbed": 3 }
 ```
 
 ---
@@ -4587,43 +4600,46 @@ Personas can carry a default captain, and a dispatch can dictate which captain r
 
 | Field | Type | Description |
 |---|---|---|
-| `totalCaptains` | int | Total registered captains |
-| `idleCaptains` | int | Captains in Idle state |
-| `workingCaptains` | int | Captains in Working state |
-| `stalledCaptains` | int | Captains in Stalled state |
-| `activeVoyages` | int | Number of active (non-complete) voyages |
-| `missionsByStatus` | object | Map of status string to count (e.g., `{"Pending": 3}`) |
-| `voyages` | array | List of [VoyageProgress](#voyageprogress) objects |
-| `recentSignals` | array | List of recent [Signal](#signal) objects |
-| `remoteTunnel` | [RemoteTunnelStatus](#remotetunnelstatus) | Current outbound remote tunnel status |
-| `timestampUtc` | string | ISO 8601 UTC timestamp |
+| `TotalCaptains` | int | Total registered captains |
+| `IdleCaptains` | int | Captains in Idle state |
+| `WorkingCaptains` | int | Captains in Working state |
+| `StalledCaptains` | int | Captains in Stalled state |
+| `ActiveVoyages` | int | Number of active (non-complete) voyages |
+| `MissionsByStatus` | object | Map of status string to count (e.g., `{"Pending": 3}`) |
+| `Voyages` | array | List of [VoyageProgress](#voyageprogress) objects |
+| `RecentSignals` | array | List of recent [Signal](#signal) objects |
+| `RemoteTunnel` | [RemoteTunnelStatus](#remotetunnelstatus) | Current outbound remote tunnel status |
+| `TimestampUtc` | string | ISO 8601 UTC timestamp |
+| `MemoryPressureDeferrals` | long | Cumulative number of dispatch attempts deferred because the host was under memory pressure (the resource-pressure admission gate declined to launch a captain). |
 
 #### RemoteTunnelStatus
 
 | Field | Type | Description |
 |---|---|---|
-| `enabled` | bool | Whether the remote tunnel feature is enabled |
-| `state` | string | Tunnel state (`Disabled`, `Disconnected`, `Connecting`, `Connected`, `Error`, `Stopping`) |
-| `tunnelUrl` | string \| null | Configured or normalized websocket endpoint |
-| `instanceId` | string \| null | Stable instance identifier advertised during handshake |
-| `lastConnectAttemptUtc` | string \| null | Last connection attempt timestamp |
-| `connectedUtc` | string \| null | Last successful connection timestamp |
-| `lastHeartbeatUtc` | string \| null | Last heartbeat or inbound tunnel activity timestamp |
-| `lastDisconnectUtc` | string \| null | Last disconnect timestamp |
-| `lastError` | string \| null | Last recorded error |
-| `reconnectAttempts` | int | Consecutive reconnect attempts since the last successful connection |
-| `latencyMs` | int \| null | Last successful ping/pong latency in milliseconds |
-| `capabilityManifest` | object | Current handshake capability manifest |
+| `Enabled` | bool | Whether the remote tunnel feature is enabled |
+| `State` | string | Tunnel state (`Disabled`, `Disconnected`, `Connecting`, `Connected`, `Error`, `Stopping`) |
+| `TunnelUrl` | string \| null | Configured or normalized websocket endpoint |
+| `InstanceId` | string \| null | Stable instance identifier advertised during handshake |
+| `LastConnectAttemptUtc` | string \| null | Last connection attempt timestamp |
+| `ConnectedUtc` | string \| null | Last successful connection timestamp |
+| `LastHeartbeatUtc` | string \| null | Last heartbeat or inbound tunnel activity timestamp |
+| `LastDisconnectUtc` | string \| null | Last disconnect timestamp |
+| `LastError` | string \| null | Last recorded error |
+| `ReconnectAttempts` | int | Consecutive reconnect attempts since the last successful connection |
+| `LatencyMs` | int \| null | Last successful ping/pong latency in milliseconds |
+| `CapabilityManifest` | object | Current handshake capability manifest |
+| `LastErrorCode` | string \| null | Machine-readable code for `LastError`: a `RemoteTunnelErrorCodes` value for errors the Admiral detects, or the proxy's envelope ErrorCode (for example invalid_handshake). Null when there is no error. |
 
 #### VoyageProgress
 
 | Field | Type | Description |
 |---|---|---|
-| `voyage` | object | [Voyage](#voyage) object |
-| `totalMissions` | int | Total missions in this voyage |
-| `completedMissions` | int | Missions with status Complete |
-| `failedMissions` | int | Missions with status Failed |
-| `inProgressMissions` | int | Missions currently in progress |
+| `Voyage` | object | [Voyage](#voyage) object |
+| `TotalMissions` | int | Total missions in this voyage |
+| `CompletedMissions` | int | Missions with status Complete |
+| `FailedMissions` | int | Missions with status Failed |
+| `InProgressMissions` | int | Missions currently in progress |
+| `VesselIds` | array | Distinct vessel identifiers referenced by this voyage's missions. |
 
 #### EnumerationResult
 
@@ -4631,225 +4647,317 @@ Paginated result wrapper returned by `enumerate`.
 
 | Field | Type | Description |
 |---|---|---|
-| `success` | bool | Whether the query succeeded |
-| `pageNumber` | int | Current page number (1-based) |
-| `pageSize` | int | Items per page |
-| `totalPages` | int | Total number of pages |
-| `totalRecords` | long | Total matching records |
-| `objects` | array | Array of entity objects for this page |
-| `totalMs` | double | Query execution time in milliseconds |
+| `Success` | bool | Whether the query succeeded |
+| `PageNumber` | int | Current page number (1-based) |
+| `PageSize` | int | Items per page |
+| `TotalPages` | int | Total number of pages |
+| `TotalRecords` | long | Total matching records |
+| `Objects` | array | Array of entity objects for this page |
+| `TotalMs` | double | Query execution time in milliseconds |
 
 #### Fleet
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | string | Fleet ID (prefix `flt_`) |
-| `name` | string | Fleet display name |
-| `description` | string \| null | Fleet description |
-| `active` | bool | Whether the fleet is active |
-| `createdUtc` | string | ISO 8601 creation timestamp |
-| `lastUpdateUtc` | string | ISO 8601 last update timestamp |
+| `Id` | string | Fleet ID (prefix `flt_`) |
+| `Name` | string | Fleet display name |
+| `Description` | string \| null | Fleet description |
+| `Active` | bool | Whether the fleet is active |
+| `CreatedUtc` | string | ISO 8601 creation timestamp |
+| `LastUpdateUtc` | string | ISO 8601 last update timestamp |
+| `TenantId` | string \| null | Tenant identifier. |
+| `UserId` | string \| null | Owning user identifier. |
+| `DefaultPipelineId` | string \| null | Default pipeline to use for dispatches to this fleet. Vessel setting overrides fleet setting. Null uses WorkerOnly pipeline. |
 
 #### Vessel
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | string | Vessel ID (prefix `vsl_`) |
-| `fleetId` | string \| null | Parent fleet ID |
-| `name` | string | Display name |
-| `repoUrl` | string \| null | Git repository URL |
-| `localPath` | string \| null | Bare repository clone path |
-| `workingDirectory` | string \| null | User checkout path for merge operations |
-| `defaultBranch` | string | Default branch name (default: `"main"`) |
-| `projectContext` | string \| null | Project context describing architecture, key files, and dependencies |
-| `styleGuide` | string \| null | Style guide describing naming conventions, patterns, and library preferences |
-| `hasGitHubTokenOverride` | bool | Indicates whether a per-vessel GitHub token override is stored. MCP never returns the raw token value. |
-| `landingMode` | string \| null | [LandingModeEnum](#landingmodeenum) - per-vessel landing policy override |
-| `branchCleanupPolicy` | string \| null | [BranchCleanupPolicyEnum](#branchcleanuppolicyenum) - per-vessel branch cleanup override |
-| `active` | bool | Whether the vessel is active |
-| `createdUtc` | string | ISO 8601 creation timestamp |
-| `lastUpdateUtc` | string | ISO 8601 last update timestamp |
+| `Id` | string | Vessel ID (prefix `vsl_`) |
+| `FleetId` | string \| null | Parent fleet ID |
+| `Name` | string | Display name |
+| `RepoUrl` | string \| null | Git repository URL |
+| `LocalPath` | string \| null | Bare repository clone path |
+| `WorkingDirectory` | string \| null | User checkout path for merge operations |
+| `DefaultBranch` | string | Default branch name (default: `"main"`) |
+| `ProjectContext` | string \| null | Project context describing architecture, key files, and dependencies |
+| `StyleGuide` | string \| null | Style guide describing naming conventions, patterns, and library preferences |
+| `HasGitHubTokenOverride` | bool | Indicates whether a per-vessel GitHub token override is stored. MCP never returns the raw token value. |
+| `LandingMode` | string \| null | [LandingModeEnum](#landingmodeenum) - per-vessel landing policy override |
+| `BranchCleanupPolicy` | string \| null | [BranchCleanupPolicyEnum](#branchcleanuppolicyenum) - per-vessel branch cleanup override |
+| `Active` | bool | Whether the vessel is active |
+| `CreatedUtc` | string | ISO 8601 creation timestamp |
+| `LastUpdateUtc` | string | ISO 8601 last update timestamp |
+| `TenantId` | string \| null | Tenant identifier. |
+| `UserId` | string \| null | Owning user identifier. |
+| `PreferredHarborId` | string \| null | Optional preferred Harbor (host runner) identifier for this vessel's missions. Honored by the router when the Harbor is otherwise eligible; null lets the router choose. |
+| `RequiredCapabilities` | string \| null | Optional comma-separated list of capabilities a Harbor must advertise to run this vessel's missions (for example "claude,gh"). Null or empty imposes no capability requirement. |
+| `gitHubTokenOverride` | string \| null | Write-only JSON input for the GitHub token override. This allows create and update requests to supply the token without Armada ever returning it. |
+| `EnableModelContext` | bool | Whether model context accumulation is enabled for this vessel. When true, captains are instructed to update the model context with key information discovered during missions. |
+| `ModelContext` | string \| null | Agent-accumulated context about this repository. Contains key information discovered by AI agents during missions, such as architectural insights, testing patterns, build quirks, and other knowledge useful for future missions. Updated by agents via update_vessel_context when EnableModelContext is true. |
+| `AllowConcurrentMissions` | bool | Whether this vessel allows multiple concurrent missions. Default false. When false, only one mission may be in an active state (Assigned, InProgress, WorkProduced, PullRequestOpen) at a time. |
+| `AutoApprove` | bool \| null | Per-vessel override of the captain auto-approve setting for missions on this vessel. Null (the default) leaves the captain's own setting in effect; true or false wins over the captain setting, so a vessel can require CLI captains to run without their auto-approve or permission-bypass flags (or allow them). |
+| `RequirePassingChecksToLand` | bool | Whether successful landing requires at least one passing structured check for the current branch or mission context. |
+| `ProtectedBranchPatterns` | array | Optional protected-branch glob or exact-match patterns. |
+| `SecretScanEnabled` | bool | Whether the pre-land dock-boundary scanner runs built-in secret detection for this vessel. |
+| `ProtectedPathPatterns` | array | Protected file-path globs the pre-land scanner blocks a mission from touching (e.g. ".github/**"). |
+| `PrivateIdentifierDenylist` | array | Private identifiers (company/domain strings) the pre-land scanner blocks from leaking into added diff lines for public repos. |
+| `AutoLandEnabled` | bool | Whether the auto-land predicate gates unattended landing on this vessel. When false, a passing mission lands per the usual review/landing-mode rules; when true, a mission must also satisfy the file/line/path rules below to land without review. |
+| `AutoLandMaxFiles` | int | Maximum number of changed files that may auto-land unattended; 0 means no file-count limit. Clamped to non-negative. |
+| `AutoLandMaxLines` | int | Maximum number of changed lines (added + removed) that may auto-land unattended; 0 means no line-count limit. Clamped to non-negative. |
+| `AutoLandPathAllowGlobs` | array | Glob patterns a changed path must match to be auto-landable. When non-empty, a mission touching any path outside this allow-list holds for review. |
+| `AutoLandPathDenyGlobs` | array | Glob patterns that force a hold: a mission touching any matching path never auto-lands. |
+| `DefinitionOfDoneEnabled` | bool | Whether the in-dock Definition-of-Done gate runs before a mission is accepted. When true, the build and unit-test commands below run inside the mission's own checkout before landing; a failure blocks acceptance with a classified reason (Compile/TestFail/Timeout/Infra). When false, no gate runs and acceptance follows the usual rules. |
+| `DefinitionOfDoneBuildCommand` | string \| null | Shell command that builds the project inside the mission's checkout (e.g. "dotnet build"). A non-zero exit classifies as Compile. Null or empty skips the build phase. |
+| `DefinitionOfDoneTestCommand` | string \| null | Shell command that runs unit tests inside the mission's checkout (e.g. "dotnet test"). A non-zero exit classifies as TestFail. Null or empty skips the test phase. |
+| `DefinitionOfDoneTimeoutSeconds` | int | Per-phase timeout, in seconds, for each Definition-of-Done command. Exceeding it classifies as Timeout. Clamped to [30, 7200]; defaults to `DefaultDefinitionOfDoneTimeoutSeconds`. |
+| `ReleaseBranchPrefix` | string | Prefix used to classify release branches. |
+| `HotfixBranchPrefix` | string | Prefix used to classify hotfix branches. |
+| `RequirePullRequestForProtectedBranches` | bool | Whether protected branches must land via PR-oriented flow. |
+| `RequireMergeQueueForReleaseBranches` | bool | Whether release branches must land via merge queue. |
+| `DefaultPipelineId` | string \| null | Default pipeline to use for dispatches to this vessel. Vessel setting overrides fleet setting. Null uses WorkerOnly pipeline. |
 
 #### Voyage
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | string | Voyage ID (prefix `vyg_`) |
-| `title` | string | Voyage title |
-| `description` | string \| null | Voyage description |
-| `status` | string | [VoyageStatusEnum](#voyagestatusenum) value |
-| `selectedPlaybooks` | array\<[SelectedPlaybook](#selectedplaybook)\> | Ordered playbook selections recorded on the voyage |
-| `createdUtc` | string | ISO 8601 creation timestamp |
-| `completedUtc` | string \| null | ISO 8601 completion timestamp |
-| `lastUpdateUtc` | string | ISO 8601 last update timestamp |
-| `autoPush` | bool \| null | Override global auto-push setting |
-| `autoCreatePullRequests` | bool \| null | Override global auto-create PR setting |
-| `autoMergePullRequests` | bool \| null | Override global auto-merge PR setting |
-| `landingMode` | string \| null | [LandingModeEnum](#landingmodeenum) - per-voyage landing policy override |
+| `Id` | string | Voyage ID (prefix `vyg_`) |
+| `Title` | string | Voyage title |
+| `Description` | string \| null | Voyage description |
+| `Status` | string | [VoyageStatusEnum](#voyagestatusenum) value |
+| `SelectedPlaybooks` | array\<[SelectedPlaybook](#selectedplaybook)\> | Ordered playbook selections recorded on the voyage |
+| `CreatedUtc` | string | ISO 8601 creation timestamp |
+| `CompletedUtc` | string \| null | ISO 8601 completion timestamp |
+| `LastUpdateUtc` | string | ISO 8601 last update timestamp |
+| `AutoPush` | bool \| null | Override global auto-push setting |
+| `AutoCreatePullRequests` | bool \| null | Override global auto-create PR setting |
+| `AutoMergePullRequests` | bool \| null | Override global auto-merge PR setting |
+| `LandingMode` | string \| null | [LandingModeEnum](#landingmodeenum) - per-voyage landing policy override |
+| `TenantId` | string \| null | Tenant identifier. |
+| `UserId` | string \| null | Owning user identifier. |
+| `SourcePlanningSessionId` | string \| null | Source planning session identifier, if this voyage originated from planning. |
+| `SourcePlanningMessageId` | string \| null | Source planning message identifier, if dispatch was created from a specific transcript entry. |
+| `CaptainOverridesJson` | string \| null | Serialized per-persona captain overrides selected at dispatch, as a JSON array of `CaptainAssignmentOverride`. Resolves the preferred captain and fallback tier for every mission of a given persona in this voyage, including fan-out missions created later. Null or empty means no per-voyage overrides (fall back to persona defaults / normal routing). |
 
 #### Mission
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | string | Mission ID (prefix `msn_`) |
-| `voyageId` | string \| null | Parent voyage ID |
-| `vesselId` | string \| null | Target vessel ID |
-| `captainId` | string \| null | Assigned captain ID |
-| `title` | string | Mission title |
-| `description` | string \| null | Mission description |
-| `status` | string | [MissionStatusEnum](#missionstatusenum) value |
-| `priority` | int | Priority (lower = higher priority, default 100) |
-| `selectedPlaybooks` | array\<[SelectedPlaybook](#selectedplaybook)\> | Ordered playbook selections requested for the mission |
-| `playbookSnapshots` | array\<[MissionPlaybookSnapshot](#missionplaybooksnapshot)\> | Immutable playbook materialization used for execution |
-| `parentMissionId` | string \| null | Parent mission ID for sub-tasks |
-| `branchName` | string \| null | Git branch name created for this mission |
-| `dockId` | string \| null | Assigned dock (worktree) ID |
-| `processId` | int \| null | OS process ID of the agent working this mission |
-| `prUrl` | string \| null | Pull request URL |
-| `commitHash` | string \| null | Git commit hash (HEAD) captured at mission completion |
-| `diffSnapshot` | string \| null | Always `null` in list/status responses. Use `get_mission_diff` to retrieve the full diff. |
-| `createdUtc` | string | ISO 8601 creation timestamp |
-| `startedUtc` | string \| null | ISO 8601 start timestamp |
-| `completedUtc` | string \| null | ISO 8601 completion timestamp |
-| `totalRuntimeMs` | long \| null | Total execution runtime in milliseconds |
-| `lastUpdateUtc` | string | ISO 8601 last update timestamp |
+| `Id` | string | Mission ID (prefix `msn_`) |
+| `VoyageId` | string \| null | Parent voyage ID |
+| `VesselId` | string \| null | Target vessel ID |
+| `CaptainId` | string \| null | Assigned captain ID |
+| `Title` | string | Mission title |
+| `Description` | string \| null | Mission description |
+| `Status` | string | [MissionStatusEnum](#missionstatusenum) value |
+| `Priority` | int | Priority (lower = higher priority, default 100) |
+| `SelectedPlaybooks` | array\<[SelectedPlaybook](#selectedplaybook)\> | Ordered playbook selections requested for the mission |
+| `PlaybookSnapshots` | array\<[MissionPlaybookSnapshot](#missionplaybooksnapshot)\> | Immutable playbook materialization used for execution |
+| `ParentMissionId` | string \| null | Parent mission ID for sub-tasks |
+| `BranchName` | string \| null | Git branch name created for this mission |
+| `DockId` | string \| null | Assigned dock (worktree) ID |
+| `ProcessId` | int \| null | OS process ID of the agent working this mission |
+| `PrUrl` | string \| null | Pull request URL |
+| `CommitHash` | string \| null | Git commit hash (HEAD) captured at mission completion |
+| `DiffSnapshot` | string \| null | Always `null` in list/status responses. Use `get_mission_diff` to retrieve the full diff. |
+| `CreatedUtc` | string | ISO 8601 creation timestamp |
+| `StartedUtc` | string \| null | ISO 8601 start timestamp |
+| `CompletedUtc` | string \| null | ISO 8601 completion timestamp |
+| `TotalRuntimeMs` | long \| null | Total execution runtime in milliseconds |
+| `LastUpdateUtc` | string | ISO 8601 last update timestamp |
+| `TenantId` | string \| null | Tenant identifier. |
+| `UserId` | string \| null | Owning user identifier. |
+| `RequestedCaptainId` | string \| null | Optional preferred (dictated) captain identifier for this mission, referenced by captain id (cpt_ prefix). Resolved at creation from the dispatch payload, the voyage override, or the persona default. When set and that captain is idle, dispatch assigns it (bypassing the persona fence); when it is busy, dispatch falls back to an idle captain at or above `Tier`. Null means no preference (normal persona/tier routing). |
+| `AssignedHarborId` | string \| null | Identifier of the Harbor (host runner) this mission was routed to when its dock was provisioned, or null when it runs on the Admiral's own host (Local mode) or has not yet been routed. |
+| `Mode` | string | MissionModeEnum value. Execution mode. Implementation (default) is a write mission that lands its diff; Audit and Research are read-only modes that produce a written report and whose empty diff is treated as success rather than a no-op failure. |
+| `RedispatchAttempts` | int | Number of times this mission has been automatically re-dispatched after a detected no-op completion. Bounds the auto-retry before the mission is failed and surfaced to the operator. |
+| `Tier` | string \| null | CaptainTierEnum value. Optional required capability tier. Dispatch routes the mission to an idle captain at or above this tier (preferring the lowest eligible tier). Null means Standard. |
+| `AgentOutput` | string \| null | Accumulated agent stdout output captured during mission execution. Used by architect missions for [ARMADA:MISSION] marker parsing and by pipeline handoff to pass context to the next stage. |
+| `Persona` | string \| null | Persona assigned to this mission (e.g. "Worker", "Architect", "Judge"). Null defaults to "Worker" for backward compatibility. |
+| `DependsOnMissionId` | string \| null | Mission ID that this mission depends on. When set, this mission cannot be assigned until the dependency completes successfully. Used by pipelines to chain persona stages. |
+| `FailureReason` | string \| null | Human-readable reason for failure or landing failure. Set when a mission transitions to Failed or LandingFailed status. |
+| `FailureKind` | string \| null | MissionFailureKindEnum value. Structured classification of the failure, set at the point the mission fails (null while the mission has not failed, or for failures recorded before the column existed). Recovery decisions switch on this value; `FailureReason` is human-readable text only and is never parsed. |
+| `WaitForVoyageWorkers` | bool | When true, a Worker mission is not assigned while any other Worker mission in the same voyage is still unsettled (not Complete, WorkProduced, Failed, Cancelled, or LandingFailed). Set from the structured architect plan (waitForOtherMissions) so that "run after the other implementation missions" sequencing does not depend on description wording. |
+| `RequiresReview` | bool | Whether this mission requires an explicit review approval before the pipeline may continue. Copied from the owning pipeline stage when the mission is created. |
+| `ReviewDenyAction` | string | ReviewDenyActionEnum value. Action to take if the review gate for this mission is denied. |
+| `ReviewComment` | string \| null | Reviewer comment from the most recent review decision. |
+| `ReviewedByUserId` | string \| null | User identifier for the most recent reviewer. |
+| `ReviewRequestedUtc` | string \| null | Timestamp when this mission most recently entered the review gate. |
+| `ReviewDeadlineUtc` | string \| null | UTC deadline by which a mission parked in Review must be actioned. When elapsed, the review watchdog escalates and frees the retained dock and captain so a forgotten review cannot pin capacity indefinitely. Null when the mission is not awaiting review. |
+| `ReviewedUtc` | string \| null | Timestamp when this mission's most recent review decision was made. |
 
 #### Captain
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | string | Captain ID (prefix `cpt_`) |
-| `name` | string | Display name |
-| `runtime` | string | [AgentRuntimeEnum](#agentruntimeenum) value |
-| `model` | string \| null | Optional model override for this captain |
-| `state` | string | [CaptainStateEnum](#captainstateenum) value |
-| `currentMissionId` | string \| null | Currently assigned mission ID |
-| `currentDockId` | string \| null | Currently assigned dock (worktree) ID |
-| `processId` | int \| null | OS process ID of the agent |
-| `recoveryAttempts` | int | Number of recovery attempts after stalls |
-| `lastHeartbeatUtc` | string \| null | ISO 8601 last heartbeat timestamp |
-| `createdUtc` | string | ISO 8601 creation timestamp |
-| `lastUpdateUtc` | string | ISO 8601 last update timestamp |
+| `Id` | string | Captain ID (prefix `cpt_`) |
+| `Name` | string | Display name |
+| `Runtime` | string | [AgentRuntimeEnum](#agentruntimeenum) value |
+| `Model` | string \| null | Optional model override for this captain |
+| `State` | string | [CaptainStateEnum](#captainstateenum) value |
+| `CurrentMissionId` | string \| null | Currently assigned mission ID |
+| `CurrentDockId` | string \| null | Currently assigned dock (worktree) ID |
+| `ProcessId` | int \| null | OS process ID of the agent |
+| `RecoveryAttempts` | int | Number of recovery attempts after stalls |
+| `LastHeartbeatUtc` | string \| null | ISO 8601 last heartbeat timestamp |
+| `CreatedUtc` | string | ISO 8601 creation timestamp |
+| `LastUpdateUtc` | string | ISO 8601 last update timestamp |
+| `TenantId` | string \| null | Tenant identifier. |
+| `UserId` | string \| null | Owning user identifier. |
+| `SupportsPlanningSessions` | bool | Whether this captain's runtime is currently supported by Armada planning sessions. |
+| `PlanningSessionSupportReason` | string \| null | Reason the captain cannot be used for planning sessions, if any. |
+| `ModelEndpointId` | string \| null | Identifier of the inference ModelEndpoint this captain drives, when `Runtime` is `ApiEndpoint`. Null for CLI-harness runtimes. Must reference a configured Inference endpoint. |
+| `SystemInstructions` | string \| null | User-supplied system instructions for this captain. Injected into every mission's instructions before vessel context and mission details. Use this to specialize captain behavior, add guardrails, or provide persistent context. |
+| `AllowedPersonas` | string \| null | JSON array of persona names this captain is allowed to fill. Null means the captain can take on any persona. Example: ["Worker", "Judge"] |
+| `PreferredPersona` | string \| null | Preferred persona for dispatch routing priority. The Admiral prefers to assign work matching this persona to this captain. |
+| `ReasoningEffort` | string \| null | ReasoningEffortEnum value. Optional reasoning-effort level for this captain, translated to each runtime's native control at launch (Claude Code thinking budget, Codex model_reasoning_effort, Mux --effort). Runtimes without a native control ignore it. Null means "use the runtime default". |
+| `Tier` | string \| null | CaptainTierEnum value. Optional capability/cost tier used by dispatch to route missions of a given complexity. Null means the tier is auto-classified from the model name at selection time (defaulting to Standard). |
+| `RuntimeOptionsJson` | string \| null | Runtime-specific configuration serialized as JSON. Use this for settings that should not be promoted into generic captain fields. |
+| `QuarantineUntilUtc` | string \| null | UTC time until which the captain is quarantined and excluded from dispatch selection. Null when the captain is not quarantined; a time in the past means the quarantine has expired and will be lifted on the next health tick. |
+| `QuarantineReason` | string \| null | Why the captain was quarantined (e.g. "provider usage limit", "auth failure", "crash loop"). Null when not quarantined. |
+| `LastProcessAliveUtc` | string \| null | UTC time the captain's OS process was last observed alive by the supervisor. This is distinct from `LastHeartbeatUtc`, which advances only on real agent output: stall detection compares output-heartbeat age so a process that is alive but silent is still detected as stalled, while liveness telemetry stays fresh here. |
 
 #### CaptainToolAccessResult
 
 | Field | Type | Description |
 |---|---|---|
-| `captainId` | string | Captain ID |
-| `captainName` | string | Captain display name |
-| `runtime` | string | [AgentRuntimeEnum](#agentruntimeenum) value |
-| `toolsAccessible` | bool | Whether Armada currently considers the catalog reachable through this captain |
-| `availabilityVerified` | bool | Whether Armada actively verified availability instead of inferring it |
-| `availabilitySource` | string | Machine-readable availability source such as `mux-probe` or `runtime-assumption` |
-| `summary` | string | Human-readable explanation of availability and caveats |
-| `endpointName` | string \| null | Mux endpoint name when applicable |
-| `toolsEnabled` | bool \| null | Whether the runtime reported tool calling enabled when applicable |
-| `effectiveToolCount` | int \| null | Runtime-reported total tool count when applicable |
-| `armadaToolCount` | int | Number of Armada MCP tools in the returned catalog |
-| `tools` | array | Ordered list of [CaptainToolSummary](#captaintoolsummary) objects |
+| `CaptainId` | string | Captain ID |
+| `CaptainName` | string | Captain display name |
+| `Runtime` | string | [AgentRuntimeEnum](#agentruntimeenum) value |
+| `ToolsAccessible` | bool | Whether Armada currently considers the catalog reachable through this captain |
+| `AvailabilityVerified` | bool | Whether Armada actively verified availability instead of inferring it |
+| `AvailabilitySource` | string | Machine-readable availability source such as `mux-probe` or `runtime-assumption` |
+| `Summary` | string | Human-readable explanation of availability and caveats |
+| `EndpointName` | string \| null | Mux endpoint name when applicable |
+| `ToolsEnabled` | bool \| null | Whether the runtime reported tool calling enabled when applicable |
+| `EffectiveToolCount` | int \| null | Runtime-reported total tool count when applicable |
+| `ArmadaToolCount` | int | Number of Armada MCP tools in the returned catalog |
+| `Tools` | array | Ordered list of [CaptainToolSummary](#captaintoolsummary) objects |
+| `ConfiguredServerCount` | int | Number of configured external or internal tool sources Armada inspected. |
+| `AskApprovalGated` | bool | True when Ask Armada thread turns run by this captain connect to Armada's MCP server with a thread-scoped token, so mutating Armada tool calls are held as approval cards. False means the captain's Armada actions in an Ask thread run without approval cards. |
+| `ReachableServerCount` | int | Number of configured sources that Armada successfully reached. |
+| `Servers` | array | Source summaries discovered for this captain runtime. |
 
 #### CaptainToolSummary
 
 | Field | Type | Description |
 |---|---|---|
-| `name` | string | Tool name |
-| `description` | string | Human-readable tool description |
-| `inputSchemaJson` | string \| null | Serialized JSON input schema when available |
+| `Name` | string | Tool name |
+| `Description` | string | Human-readable tool description |
+| `InputSchemaJson` | string \| null | Serialized JSON input schema when available |
+| `RegistrationSource` | string | Registration origin for the tool, such as an MCP server name or the internal runtime. |
+| `SourceKind` | string | CaptainToolSourceKindEnum value. Source kind for the tool, such as MCP server or internal runtime support. |
 
 #### Signal
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | string | Signal ID (prefix `sig_`) |
-| `fromCaptainId` | string \| null | Sender captain ID (null = Admiral) |
-| `toCaptainId` | string \| null | Recipient captain ID (null = Admiral) |
-| `type` | string | [SignalTypeEnum](#signaltypeenum) value |
-| `payload` | string \| null | JSON payload string |
-| `read` | bool | Whether the signal has been read |
-| `createdUtc` | string | ISO 8601 creation timestamp |
+| `Id` | string | Signal ID (prefix `sig_`) |
+| `FromCaptainId` | string \| null | Sender captain ID (null = Admiral) |
+| `ToCaptainId` | string \| null | Recipient captain ID (null = Admiral) |
+| `Type` | string | [SignalTypeEnum](#signaltypeenum) value |
+| `Payload` | string \| null | JSON payload string |
+| `Read` | bool | Whether the signal has been read |
+| `CreatedUtc` | string | ISO 8601 creation timestamp |
+| `TenantId` | string \| null | Tenant identifier. |
+| `UserId` | string \| null | Owning user identifier. |
 
 #### ArmadaEvent
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | string | Event ID (prefix `evt_`) |
-| `eventType` | string | Event type (e.g., `"mission.created"`, `"captain.stalled"`) |
-| `entityType` | string \| null | Entity type (e.g., `"mission"`, `"captain"`, `"voyage"`) |
-| `entityId` | string \| null | Entity ID |
-| `captainId` | string \| null | Related captain ID |
-| `missionId` | string \| null | Related mission ID |
-| `vesselId` | string \| null | Related vessel ID |
-| `voyageId` | string \| null | Related voyage ID |
-| `message` | string | Human-readable event description |
-| `payload` | string \| null | Optional JSON payload |
-| `createdUtc` | string | ISO 8601 creation timestamp |
+| `Id` | string | Event ID (prefix `evt_`) |
+| `EventType` | string | Event type (e.g., `"mission.created"`, `"captain.stalled"`) |
+| `EntityType` | string \| null | Entity type (e.g., `"mission"`, `"captain"`, `"voyage"`) |
+| `EntityId` | string \| null | Entity ID |
+| `CaptainId` | string \| null | Related captain ID |
+| `MissionId` | string \| null | Related mission ID |
+| `VesselId` | string \| null | Related vessel ID |
+| `VoyageId` | string \| null | Related voyage ID |
+| `Message` | string | Human-readable event description |
+| `Payload` | string \| null | Optional JSON payload |
+| `CreatedUtc` | string | ISO 8601 creation timestamp |
+| `TenantId` | string \| null | Tenant identifier. |
+| `UserId` | string \| null | Owning user identifier. |
 
 #### Dock
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | string | Dock ID (prefix `dck_`) |
-| `vesselId` | string | Parent vessel ID |
-| `captainId` | string \| null | Assigned captain ID |
-| `branchName` | string \| null | Git branch name |
-| `worktreePath` | string \| null | Filesystem path to the worktree |
-| `active` | bool | Whether the dock is active |
-| `createdUtc` | string | ISO 8601 creation timestamp |
-| `lastUpdateUtc` | string | ISO 8601 last update timestamp |
+| `Id` | string | Dock ID (prefix `dck_`) |
+| `VesselId` | string | Parent vessel ID |
+| `CaptainId` | string \| null | Assigned captain ID |
+| `BranchName` | string \| null | Git branch name |
+| `WorktreePath` | string \| null | Filesystem path to the worktree |
+| `Active` | bool | Whether the dock is active |
+| `CreatedUtc` | string | ISO 8601 creation timestamp |
+| `LastUpdateUtc` | string | ISO 8601 last update timestamp |
+| `TenantId` | string \| null | Tenant identifier. |
+| `UserId` | string \| null | Owning user identifier. |
+| `HarborId` | string \| null | Identifier of the Harbor (host runner) that owns this dock, or null when the dock is on the Admiral's own host (Local mode). A dock's worktree lives on exactly one host, so this pins the mission's later host operations to that Harbor (dock affinity). |
+| `State` | string | DockStateEnum value. Authoritative lifecycle state of the dock. Occupancy is tracked here rather than inferred from captain/mission rows, so a stuck or orphaned dock can be detected and reclaimed deterministically. |
+| `LeaseExpiresUtc` | string \| null | UTC time at which the current lease expires. A leased dock whose lease has elapsed without renewal is eligible for reclamation even in a multi-instance deployment. Null when the dock is not leased. |
+| `OwnerToken` | string \| null | Opaque token identifying the current lease holder (typically the owning captain plus a generation stamp). Used for compare-and-swap lease acquisition and renewal so two instances cannot both claim the same dock. Null when the dock is not leased. |
+| `GitAnchorsJson` | string \| null | Resolved git anchors captured at dock provisioning, serialized as JSON (start commit, target branch, working branch, recent-commit and subject-term summaries). This is a documented, intentional raw-JSON snapshot for the dashboard and for a resuming captain -- not a general data blob. Null when anchors were not resolved. |
 
 #### Playbook
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | string | Playbook ID (prefix `pbk_`) |
-| `tenantId` | string \| null | Owning tenant |
-| `userId` | string \| null | Owning user |
-| `fileName` | string | Markdown file name |
-| `description` | string \| null | Human-readable description |
-| `content` | string | Markdown body |
-| `active` | bool | Whether the playbook is available for new selections |
-| `createdUtc` | string | ISO 8601 creation timestamp |
-| `lastUpdateUtc` | string | ISO 8601 last update timestamp |
+| `Id` | string | Playbook ID (prefix `pbk_`) |
+| `TenantId` | string \| null | Owning tenant |
+| `UserId` | string \| null | Owning user |
+| `FileName` | string | Markdown file name |
+| `Description` | string \| null | Human-readable description |
+| `Content` | string | Markdown body |
+| `Active` | bool | Whether the playbook is available for new selections |
+| `CreatedUtc` | string | ISO 8601 creation timestamp |
+| `LastUpdateUtc` | string | ISO 8601 last update timestamp |
+| `Scope` | string | Armada.Core.Enums.ScopeEnum value. Ownership scope: tenant-wide playbooks are visible to everyone in the tenant but editable only by tenant/global admins; user-specific playbooks are owned by `UserId`. Defaults tenant-wide. |
 
 #### SelectedPlaybook
 
 | Field | Type | Description |
 |---|---|---|
-| `playbookId` | string | Selected playbook ID |
-| `deliveryMode` | [PlaybookDeliveryModeEnum](#playbookdeliverymodeenum) | How the playbook is delivered to the model |
+| `PlaybookId` | string | Selected playbook ID |
+| `DeliveryMode` | [PlaybookDeliveryModeEnum](#playbookdeliverymodeenum) | How the playbook is delivered to the model |
 
 #### MissionPlaybookSnapshot
 
 | Field | Type | Description |
 |---|---|---|
-| `playbookId` | string \| null | Source playbook ID |
-| `fileName` | string | Source file name |
-| `description` | string \| null | Source description |
-| `content` | string | Frozen markdown body used for execution |
-| `deliveryMode` | [PlaybookDeliveryModeEnum](#playbookdeliverymodeenum) | Resolved delivery mode |
-| `resolvedPath` | string \| null | Absolute runtime path when materialized outside the worktree |
-| `worktreeRelativePath` | string \| null | Relative dock path when attached into the worktree |
-| `sourceLastUpdateUtc` | string | ISO 8601 source update timestamp captured into the snapshot |
+| `PlaybookId` | string \| null | Source playbook ID |
+| `FileName` | string | Source file name |
+| `Description` | string \| null | Source description |
+| `Content` | string | Frozen markdown body used for execution |
+| `DeliveryMode` | [PlaybookDeliveryModeEnum](#playbookdeliverymodeenum) | Resolved delivery mode |
+| `ResolvedPath` | string \| null | Absolute runtime path when materialized outside the worktree |
+| `WorktreeRelativePath` | string \| null | Relative dock path when attached into the worktree |
+| `SourceLastUpdateUtc` | string | ISO 8601 source update timestamp captured into the snapshot |
 
 #### MergeEntry
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | string | Merge entry ID (prefix `mrg_`) |
-| `missionId` | string \| null | Associated mission ID |
-| `vesselId` | string | Target vessel ID |
-| `branchName` | string | Branch to merge |
-| `targetBranch` | string | Target branch (default `"main"`) |
-| `status` | string | [MergeStatusEnum](#mergestatusenum) value |
-| `priority` | int | Queue priority (lower = higher) |
-| `batchId` | string \| null | Batch identifier during testing |
-| `testCommand` | string \| null | Custom test command |
-| `testOutput` | string \| null | Test output/error |
-| `testExitCode` | int \| null | Test exit code |
-| `createdUtc` | string | ISO 8601 creation timestamp |
-| `lastUpdateUtc` | string | ISO 8601 last update timestamp |
-| `testStartedUtc` | string \| null | ISO 8601 test start timestamp |
-| `completedUtc` | string \| null | ISO 8601 completion timestamp |
+| `Id` | string | Merge entry ID (prefix `mrg_`) |
+| `MissionId` | string \| null | Associated mission ID |
+| `VesselId` | string | Target vessel ID |
+| `BranchName` | string | Branch to merge |
+| `TargetBranch` | string | Target branch (default `"main"`) |
+| `Status` | string | [MergeStatusEnum](#mergestatusenum) value |
+| `Priority` | int | Queue priority (lower = higher) |
+| `BatchId` | string \| null | Batch identifier during testing |
+| `TestCommand` | string \| null | Custom test command |
+| `TestOutput` | string \| null | Test output/error |
+| `TestExitCode` | int \| null | Test exit code |
+| `CreatedUtc` | string | ISO 8601 creation timestamp |
+| `LastUpdateUtc` | string | ISO 8601 last update timestamp |
+| `TestStartedUtc` | string \| null | ISO 8601 test start timestamp |
+| `CompletedUtc` | string \| null | ISO 8601 completion timestamp |
+| `TenantId` | string \| null | Tenant identifier. |
+| `UserId` | string \| null | Owning user identifier. |
+| `RetryCount` | int | Number of times processing this entry has been attempted. Bounds automatic retries so a persistently failing entry is not retried forever. |
+| `LeaseExpiresUtc` | string \| null | UTC time at which the current processing lease on this entry expires. A non-terminal entry (e.g. stuck in Testing) whose lease has elapsed is recovered by the queue driver rather than blocking the queue head indefinitely. Null when not being processed. |
 
 #### Harbor
 
@@ -4857,107 +4965,130 @@ A registered host-side runner. Only `name`, `maxConcurrentJobs`, and `enabled` a
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | string | Harbor ID (prefix `hbr_`) |
-| `tenantId` | string \| null | Owning tenant ID |
-| `userId` | string \| null | Owning user ID |
-| `name` | string | Human-facing Harbor name |
-| `capabilities` | array | Advertised [HarborCapability](#harborcapability) entries |
-| `connectionStatus` | string | [HarborConnectionStatusEnum](#harborconnectionstatusenum) value |
-| `maxConcurrentJobs` | int | Maximum concurrent jobs the Harbor accepts (default 4, minimum 1) |
-| `enabled` | bool | Whether the Harbor is enabled for routing (default true) |
-| `protocolVersion` | string \| null | Protocol version reported at handshake |
-| `osPlatform` | string \| null | OS platform reported at handshake (e.g. `Windows`, `Linux`, `macOS`) |
-| `architecture` | string \| null | Processor architecture reported at handshake (e.g. `X64`, `Arm64`) |
-| `lastSeenUtc` | string \| null | ISO 8601 last heartbeat or message timestamp |
-| `lastConnectedUtc` | string \| null | ISO 8601 last link-establishment timestamp |
-| `createdUtc` | string | ISO 8601 creation timestamp |
-| `lastUpdateUtc` | string | ISO 8601 last update timestamp |
+| `Id` | string | Harbor ID (prefix `hbr_`) |
+| `TenantId` | string \| null | Owning tenant ID |
+| `UserId` | string \| null | Owning user ID |
+| `Name` | string | Human-facing Harbor name |
+| `Capabilities` | array | Advertised [HarborCapability](#harborcapability) entries |
+| `ConnectionStatus` | string | [HarborConnectionStatusEnum](#harborconnectionstatusenum) value |
+| `MaxConcurrentJobs` | int | Maximum concurrent jobs the Harbor accepts (default 4, minimum 1) |
+| `Enabled` | bool | Whether the Harbor is enabled for routing (default true) |
+| `ProtocolVersion` | string \| null | Protocol version reported at handshake |
+| `OsPlatform` | string \| null | OS platform reported at handshake (e.g. `Windows`, `Linux`, `macOS`) |
+| `Architecture` | string \| null | Processor architecture reported at handshake (e.g. `X64`, `Arm64`) |
+| `LastSeenUtc` | string \| null | ISO 8601 last heartbeat or message timestamp |
+| `LastConnectedUtc` | string \| null | ISO 8601 last link-establishment timestamp |
+| `CreatedUtc` | string | ISO 8601 creation timestamp |
+| `LastUpdateUtc` | string | ISO 8601 last update timestamp |
 
 #### HarborCapability
 
 | Field | Type | Description |
 |---|---|---|
-| `name` | string | Capability name (e.g. a runtime like `claude` or a host tool like `git`) |
-| `available` | bool | Whether the capability is currently available on the host |
-| `detail` | string \| null | Optional human-readable detail (e.g. a version string) |
+| `Name` | string | Capability name (e.g. a runtime like `claude` or a host tool like `git`) |
+| `Available` | bool | Whether the capability is currently available on the host |
+| `Detail` | string \| null | Optional human-readable detail (e.g. a version string) |
 
 #### PromptTemplate
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | string | Prompt template ID |
-| `name` | string | Template name (e.g. `"mission.rules"`, `"persona.worker"`) |
-| `description` | string \| null | Template description |
-| `category` | string \| null | Template category |
-| `content` | string | Template content |
-| `isBuiltIn` | bool | Whether this is a built-in template |
-| `active` | bool | Whether the template is active |
+| `Id` | string | Prompt template ID |
+| `Name` | string | Template name (e.g. `"mission.rules"`, `"persona.worker"`) |
+| `Description` | string \| null | Template description |
+| `Category` | string \| null | Template category |
+| `Content` | string | Template content |
+| `IsBuiltIn` | bool | Whether this is a built-in template |
+| `Active` | bool | Whether the template is active |
+| `TenantId` | string \| null | Tenant identifier. |
+| `UserId` | string \| null | Owning user identifier (null for tenant-wide objects). |
+| `Scope` | string | Armada.Core.Enums.ScopeEnum value. Ownership scope: tenant-wide objects are visible to everyone in the tenant but editable only by tenant/global admins; user-specific objects are owned by `UserId`. Defaults tenant-wide. |
+| `CreatedUtc` | string | Creation timestamp in UTC. |
+| `LastUpdateUtc` | string | Last update timestamp in UTC. |
 
 #### Persona
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | string | Persona ID |
-| `name` | string | Persona name |
-| `description` | string \| null | Persona description |
-| `promptTemplateName` | string | Name of the prompt template used by this persona |
-| `isBuiltIn` | bool | Whether this is a built-in persona |
-| `active` | bool | Whether the persona is active |
+| `Id` | string | Persona ID |
+| `Name` | string | Persona name |
+| `Description` | string \| null | Persona description |
+| `PromptTemplateName` | string | Name of the prompt template used by this persona |
+| `IsBuiltIn` | bool | Whether this is a built-in persona |
+| `Active` | bool | Whether the persona is active |
+| `TenantId` | string \| null | Tenant identifier. |
+| `UserId` | string \| null | Owning user identifier (null for tenant-wide objects). |
+| `Scope` | string | Armada.Core.Enums.ScopeEnum value. Ownership scope: tenant-wide objects are visible to everyone in the tenant but editable only by tenant/global admins; user-specific objects are owned by `UserId`. Defaults tenant-wide. |
+| `DefaultCaptainId` | string \| null | Optional default (preferred) captain for this persona, referenced by captain id (cpt_ prefix). At dispatch, each pipeline step for this persona is pre-filled with this captain, and any mission created for this persona inherits it as its preferred captain when none is explicitly dictated (including fan-out missions produced by an Architect stage). Null means no default; a dangling id (captain later deleted) resolves to "no default" at assignment time and falls back to normal persona/tier routing. |
+| `CreatedUtc` | string | Creation timestamp in UTC. |
+| `LastUpdateUtc` | string | Last update timestamp in UTC. |
 
 #### Pipeline
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | string | Pipeline ID |
-| `name` | string | Pipeline name |
-| `description` | string \| null | Pipeline description |
-| `stages` | array | Ordered list of [PipelineStage](#pipelinestage) objects |
-| `isBuiltIn` | bool | Whether this is a built-in pipeline |
-| `active` | bool | Whether the pipeline is active |
+| `Id` | string | Pipeline ID |
+| `Name` | string | Pipeline name |
+| `Description` | string \| null | Pipeline description |
+| `Stages` | array | Ordered list of [PipelineStage](#pipelinestage) objects |
+| `IsBuiltIn` | bool | Whether this is a built-in pipeline |
+| `Active` | bool | Whether the pipeline is active |
+| `TenantId` | string \| null | Tenant identifier. |
+| `UserId` | string \| null | Owning user identifier (null for tenant-wide objects). |
+| `Scope` | string | Armada.Core.Enums.ScopeEnum value. Ownership scope: tenant-wide objects are visible to everyone in the tenant but editable only by tenant/global admins; user-specific objects are owned by `UserId`. Defaults tenant-wide. |
+| `CreatedUtc` | string | Creation timestamp in UTC. |
+| `LastUpdateUtc` | string | Last update timestamp in UTC. |
 
 #### PipelineStage
 
 | Field | Type | Description |
 |---|---|---|
-| `personaName` | string | Persona name for this stage |
-| `isOptional` | bool | Whether this stage is optional |
-| `description` | string \| null | Stage description |
+| `PersonaName` | string | Persona name for this stage |
+| `IsOptional` | bool | Whether this stage is optional |
+| `Description` | string \| null | Stage description |
+| `Id` | string | Unique identifier. |
+| `PipelineId` | string \| null | Pipeline identifier this stage belongs to. |
+| `Order` | int | Execution order within the pipeline (1-based). |
+| `RequiresReview` | bool | Whether this stage requires an explicit review approval before the pipeline may continue. |
+| `ReviewDenyAction` | string | ReviewDenyActionEnum value. Action to take when the review gate is denied. |
 
 #### ModelEndpoint
 
-A managed reference to an external embedding or inference model behind a provider API. The `apiKey` is write-only: it is accepted on create/update but is never returned on reads. Reads expose `hasApiKey` instead.
+A managed reference to an external embedding or inference model behind a provider API. The `apiKey` is write-only: it is accepted on create/update but is never returned on reads. Reads expose `HasApiKey` instead.
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | string | Model endpoint ID (prefix `mep_`) |
-| `tenantId` | string \| null | Owning tenant ID |
-| `userId` | string \| null | Owning user ID |
-| `name` | string | Display name |
-| `kind` | string | `Embedding` or `Inference` |
-| `provider` | string | `Ollama`, `OpenAI`, `OpenAICompatible`, `Anthropic`, `Gemini`, `VoyageAI`, `AzureOpenAI`, `VertexAI`, or `Bedrock` |
-| `baseUrl` | string | Provider API base URL. For Azure OpenAI this is the resource endpoint; for Vertex AI and Bedrock it is an optional override (the endpoint is derived from `region`). |
-| `model` | string \| null | Model name to target. For Azure OpenAI this is the deployment name; for Bedrock, the Bedrock model id. |
-| `region` | string \| null | Cloud region. Required for `VertexAI` and `Bedrock`. |
-| `project` | string \| null | GCP project id. Required for `VertexAI`. |
-| `apiVersion` | string \| null | API version for `AzureOpenAI` (defaults to the provider's current GA version when omitted). |
-| `accessKeyId` | string \| null | AWS access key id for `Bedrock`. The paired secret access key is supplied write-only via `apiKey`. |
-| `dimensionality` | int | Embedding dimensionality (default 0) |
-| `timeoutMs` | int | Request timeout in milliseconds (default 120000, clamped to [1000, 600000]) |
-| `enabled` | bool | Whether the endpoint participates in health sweeps (default true) |
-| `hasApiKey` | bool | Read-only. Whether a provider key/credential is stored. For `AzureOpenAI` this is the API key, for `VertexAI` the service-account JSON, for `Bedrock` the AWS secret access key. |
-| `healthStatus` | string | `Unknown`, `Healthy`, or `Unhealthy` |
-| `lastHealthCheckUtc` | string \| null | ISO 8601 timestamp of the last probe |
-| `lastHealthError` | string \| null | Error text from the last failed probe |
-| `lastLatencyMs` | int \| null | Latency of the last probe in milliseconds |
-| `healthHistory` | array | Rolling series of recent probes (oldest first), each `{ timestampUtc, success }`, capped at 500 |
-| `uptimePercentage` | double | Read-only. Percentage of retained probes that succeeded (0-100), derived from `healthHistory` |
-| `consecutiveSuccesses` | int | Read-only. Trailing run of successful probes |
-| `consecutiveFailures` | int | Read-only. Trailing run of failed probes |
-| `firstHealthCheckUtc` | string \| null | Read-only. Earliest retained probe timestamp |
-| `lastHealthyUtc` | string \| null | Read-only. Most recent successful probe timestamp |
-| `lastUnhealthyUtc` | string \| null | Read-only. Most recent failed probe timestamp |
-| `createdUtc` | string | ISO 8601 creation timestamp |
-| `lastUpdateUtc` | string | ISO 8601 last update timestamp |
+| `Id` | string | Model endpoint ID (prefix `mep_`) |
+| `TenantId` | string \| null | Owning tenant ID |
+| `UserId` | string \| null | Owning user ID |
+| `Name` | string | Display name |
+| `Kind` | string | `Embedding` or `Inference` |
+| `Provider` | string | `Ollama`, `OpenAI`, `OpenAICompatible`, `Anthropic`, `Gemini`, `VoyageAI`, `AzureOpenAI`, `VertexAI`, or `Bedrock` |
+| `BaseUrl` | string | Provider API base URL. For Azure OpenAI this is the resource endpoint; for Vertex AI and Bedrock it is an optional override (the endpoint is derived from `region`). |
+| `Model` | string \| null | Model name to target. For Azure OpenAI this is the deployment name; for Bedrock, the Bedrock model id. |
+| `Region` | string \| null | Cloud region. Required for `VertexAI` and `Bedrock`. |
+| `Project` | string \| null | GCP project id. Required for `VertexAI`. |
+| `ApiVersion` | string \| null | API version for `AzureOpenAI` (defaults to the provider's current GA version when omitted). |
+| `AccessKeyId` | string \| null | AWS access key id for `Bedrock`. The paired secret access key is supplied write-only via `apiKey`. |
+| `Dimensionality` | int | Embedding dimensionality (default 0) |
+| `TimeoutMs` | int | Request timeout in milliseconds (default 120000, clamped to [1000, 600000]) |
+| `Enabled` | bool | Whether the endpoint participates in health sweeps (default true) |
+| `HasApiKey` | bool | Read-only. Whether a provider key/credential is stored. For `AzureOpenAI` this is the API key, for `VertexAI` the service-account JSON, for `Bedrock` the AWS secret access key. |
+| `HealthStatus` | string | `Unknown`, `Healthy`, or `Unhealthy` |
+| `LastHealthCheckUtc` | string \| null | ISO 8601 timestamp of the last probe |
+| `LastHealthError` | string \| null | Error text from the last failed probe |
+| `LastLatencyMs` | int \| null | Latency of the last probe in milliseconds |
+| `HealthHistory` | array | Rolling series of recent probes (oldest first), each `{ timestampUtc, success }`, capped at 500 |
+| `UptimePercentage` | double | Read-only. Percentage of retained probes that succeeded (0-100), derived from `healthHistory` |
+| `ConsecutiveSuccesses` | int | Read-only. Trailing run of successful probes |
+| `ConsecutiveFailures` | int | Read-only. Trailing run of failed probes |
+| `FirstHealthCheckUtc` | string \| null | Read-only. Earliest retained probe timestamp |
+| `LastHealthyUtc` | string \| null | Read-only. Most recent successful probe timestamp |
+| `LastUnhealthyUtc` | string \| null | Read-only. Most recent failed probe timestamp |
+| `CreatedUtc` | string | ISO 8601 creation timestamp |
+| `LastUpdateUtc` | string | ISO 8601 last update timestamp |
+| `Scope` | string | ScopeEnum value. Ownership scope: a tenant-wide endpoint is visible to everyone in the tenant but editable only by tenant/global admins; a user-specific endpoint is owned by `UserId`. Defaults to tenant-wide (existing rows and admin-created rows); regular users create user-specific endpoints. |
+| `apiKey` | string \| null | Write-only JSON input for the API key. Lets create/update supply the key without Armada ever returning it. |
 
 `Anthropic` cannot be paired with `kind` `Embedding`, and `VoyageAI` cannot be paired with `kind` `Inference`; both combinations are rejected with an error.
 
@@ -4967,14 +5098,14 @@ Returned by `validate_model_endpoint`.
 
 | Field | Type | Description |
 |---|---|---|
-| `success` | bool | Whether the probe request succeeded |
-| `baseUrl` | string \| null | Base URL that was probed |
-| `latencyMs` | int | Round-trip latency in milliseconds |
-| `statusCode` | int \| null | HTTP status code returned by the provider, when available |
-| `error` | string \| null | Error text when the probe failed |
-| `embeddingDimensions` | int \| null | Dimensionality returned by an embedding probe |
-| `sampleText` | string \| null | Sample completion text returned by an inference probe |
-| `timestampUtc` | string | ISO 8601 timestamp of when the probe ran |
+| `Success` | bool | Whether the probe request succeeded |
+| `BaseUrl` | string \| null | Base URL that was probed |
+| `LatencyMs` | int | Round-trip latency in milliseconds |
+| `StatusCode` | int \| null | HTTP status code returned by the provider, when available |
+| `Error` | string \| null | Error text when the probe failed |
+| `EmbeddingDimensions` | int \| null | Dimensionality returned by an embedding probe |
+| `SampleText` | string \| null | Sample completion text returned by an inference probe |
+| `TimestampUtc` | string | ISO 8601 timestamp of when the probe ran |
 
 #### ModelEndpointHealthSweepResponse
 
@@ -4982,7 +5113,7 @@ Returned by `health_check_model_endpoints`.
 
 | Field | Type | Description |
 |---|---|---|
-| `distinctBaseUrlsProbed` | int | Number of distinct base URLs probed during the sweep |
+| `DistinctBaseUrlsProbed` | int | Number of distinct base URLs probed during the sweep |
 
 ---
 
@@ -5011,7 +5142,7 @@ Returned by `health_check_model_endpoints`.
 | `LocalMerge` | Merge branch into default branch locally and push |
 | `PullRequest` | Create a pull request and poll for merge confirmation |
 | `MergeQueue` | Enqueue the branch into Armada's merge queue |
-| `None` | No automated landing; leave work on the branch |
+| `None` | No automated landing: the mission stops at `WorkProduced` with its work on the branch, to be merged by hand (the dashboard and TUI offer Merge in Manage Branches). The Admiral moves it to `Complete` once its commit is contained in the target branch, checked right after a Manage Branches merge and on every health check |
 
 #### BranchCleanupPolicyEnum
 
@@ -5168,7 +5299,7 @@ Any MCP-compatible client can connect to the Armada MCP server using the HTTP tr
     "content": [
       {
         "type": "text",
-        "text": "{\"totalCaptains\":4,\"idleCaptains\":1,...}"
+        "text": "{\"TotalCaptains\":4,\"IdleCaptains\":1,...}"
       }
     ]
   }
