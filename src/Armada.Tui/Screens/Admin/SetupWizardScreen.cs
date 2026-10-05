@@ -3,8 +3,6 @@ namespace Armada.Tui.Screens.Admin
     using System;
     using System.Collections.Generic;
     using System.Linq;
-    using System.Net.Http;
-    using System.Text;
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
@@ -756,7 +754,7 @@ namespace Armada.Tui.Screens.Admin
             request.Title = MissionTitle.Value.Trim();
             request.Description = MissionDescription.Value.Trim();
             request.Priority = ParsePriority(Priority.Value);
-            RunStep(() => DispatchAsync(request), response =>
+            RunStep(() => Context.Client.DispatchMissionAsync(request), response =>
             {
                 if (response == null || response.Mission == null)
                 {
@@ -1052,37 +1050,6 @@ namespace Armada.Tui.Screens.Admin
                     });
                 }
             });
-        }
-
-        private async Task<SetupWizardDispatchResponse?> DispatchAsync(DispatchRequest request)
-        {
-            using (StringContent content = new StringContent(ArmadaJson.Serialize(request), Encoding.UTF8, "application/json"))
-            using (HttpResponseMessage response = await Context.Client.SendRawAsync(HttpMethod.Post, "/api/v1/missions", content).ConfigureAwait(false))
-            {
-                string text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                if (!response.IsSuccessStatusCode)
-                {
-                    SetupWizardErrorBody? error = null;
-                    try
-                    {
-                        error = ArmadaJson.Deserialize<SetupWizardErrorBody>(text);
-                    }
-                    catch (JsonException)
-                    {
-                        error = null;
-                    }
-
-                    string message = error != null && !String.IsNullOrEmpty(error.Message) ? error.Message! : "HTTP " + (int)response.StatusCode;
-                    throw new InvalidOperationException(message);
-                }
-
-                SetupWizardDispatchResponse? wrapped = ArmadaJson.Deserialize<SetupWizardDispatchResponse>(text);
-                if (wrapped != null && wrapped.Mission != null && !String.IsNullOrEmpty(wrapped.Mission.Title)) return wrapped;
-                Mission? mission = ArmadaJson.Deserialize<Mission>(text);
-                SetupWizardDispatchResponse plain = new SetupWizardDispatchResponse();
-                plain.Mission = mission != null && !String.IsNullOrEmpty(mission.Title) ? mission : null;
-                return plain;
-            }
         }
 
         private void InitializeFields()
