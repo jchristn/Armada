@@ -2450,7 +2450,9 @@ Returns `{ "Error": "ids is required and must not be empty", "ErrorCode": "Inval
 
 ### transition_mission_status
 
-Transition a mission to a new status with validation.
+Transition a mission to a new status with validation. The rules are `MissionStateMachine`'s, shared with
+`PUT /api/v1/missions/{id}/status` and the WebSocket `transition_mission_status` command; the tool description lists them
+generated from the same source.
 
 **Valid transitions:**
 

@@ -103,6 +103,22 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(Case("mcp_transition_rules_match_state_machine", "MCP transition_mission_status uses the state machine for every status pair", TestTags.Positive, () =>
+            {
+                List<string> mismatches = new List<string>();
+                foreach (MissionStatusEnum from in Enum.GetValues<MissionStatusEnum>())
+                {
+                    foreach (MissionStatusEnum to in Enum.GetValues<MissionStatusEnum>())
+                    {
+                        bool expected = MissionStateMachine.IsValidTransition(from, to);
+                        bool actual = Armada.Server.Mcp.Tools.McpToolHelpers.IsValidTransition(from, to);
+                        if (expected != actual) mismatches.Add(from + "->" + to + " (state machine " + expected + ", MCP " + actual + ")");
+                    }
+                }
+
+                AssertTrue(mismatches.Count == 0, "MCP transition rules differ from MissionStateMachine: " + String.Join(", ", mismatches));
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: "Services.MissionStateMachine",
                 displayName: "Mission State Machine",

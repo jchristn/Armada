@@ -2673,16 +2673,17 @@ All `list_*` actions return a paginated response:
 
 ## Mission Status Transitions
 
-`transition_mission_status` accepts only the transitions below; any other target (including any transition out of
-`PullRequestOpen`, `Complete`, `Failed`, or `Cancelled`) is rejected. The landing pipeline moves missions into and out of
-`PullRequestOpen` itself.
+`transition_mission_status` accepts only the transitions below (the same `MissionStateMachine` rules as
+`PUT /api/v1/missions/{id}/status` and the MCP `transition_mission_status` tool); any other target, including any
+transition out of `Complete`, `Failed`, or `Cancelled`, is rejected.
 
 | From | Allowed To |
 |---|---|
 | `Pending` | `Assigned`, `Cancelled` |
 | `Assigned` | `InProgress`, `Cancelled` |
 | `InProgress` | `WorkProduced`, `Testing`, `Review`, `Complete`, `Failed`, `Cancelled` |
-| `WorkProduced` | `Complete`, `LandingFailed`, `Cancelled` |
+| `WorkProduced` | `PullRequestOpen`, `Complete`, `LandingFailed`, `Cancelled` |
+| `PullRequestOpen` | `Complete`, `LandingFailed`, `Cancelled` |
 | `Testing` | `Review`, `InProgress`, `Complete`, `Failed` |
 | `Review` | `Complete`, `InProgress`, `Failed` |
 | `LandingFailed` | `WorkProduced`, `Failed`, `Cancelled` |

@@ -29,58 +29,37 @@ namespace Armada.Server.Mcp.Tools
         /// <returns>True if the transition is allowed; otherwise, false.</returns>
         public static bool IsValidTransition(MissionStatusEnum current, MissionStatusEnum target)
         {
-            if (current == MissionStatusEnum.Pending)
-            {
-                return target == MissionStatusEnum.Assigned
-                    || target == MissionStatusEnum.Cancelled;
-            }
+            return MissionStateMachine.IsValidTransition(current, target);
+        }
 
-            if (current == MissionStatusEnum.Assigned)
+        /// <summary>
+        /// Describe every legal manual transition, derived from <see cref="MissionStateMachine.IsValidTransition"/>, for
+        /// tool descriptions (for example "Pending->Assigned/Cancelled, ...").
+        /// </summary>
+        /// <returns>Comma-separated transition list.</returns>
+        public static string DescribeMissionTransitions()
+        {
+            List<string> parts = new List<string>();
+            foreach (MissionStatusEnum from in Enum.GetValues<MissionStatusEnum>())
             {
-                return target == MissionStatusEnum.InProgress
-                    || target == MissionStatusEnum.Cancelled;
+                List<string> targets = new List<string>();
+                foreach (MissionStatusEnum to in Enum.GetValues<MissionStatusEnum>())
+                {
+                    if (MissionStateMachine.IsValidTransition(from, to)) targets.Add(to.ToString());
+                }
+                if (targets.Count > 0) parts.Add(from + "->" + String.Join("/", targets));
             }
+            return String.Join(", ", parts);
+        }
 
-            if (current == MissionStatusEnum.InProgress)
-            {
-                return target == MissionStatusEnum.WorkProduced
-                    || target == MissionStatusEnum.Testing
-                    || target == MissionStatusEnum.Review
-                    || target == MissionStatusEnum.Complete
-                    || target == MissionStatusEnum.Failed
-                    || target == MissionStatusEnum.Cancelled;
-            }
-
-            if (current == MissionStatusEnum.WorkProduced)
-            {
-                return target == MissionStatusEnum.Complete
-                    || target == MissionStatusEnum.LandingFailed
-                    || target == MissionStatusEnum.Cancelled;
-            }
-
-            if (current == MissionStatusEnum.Testing)
-            {
-                return target == MissionStatusEnum.Review
-                    || target == MissionStatusEnum.InProgress
-                    || target == MissionStatusEnum.Complete
-                    || target == MissionStatusEnum.Failed;
-            }
-
-            if (current == MissionStatusEnum.Review)
-            {
-                return target == MissionStatusEnum.Complete
-                    || target == MissionStatusEnum.InProgress
-                    || target == MissionStatusEnum.Failed;
-            }
-
-            if (current == MissionStatusEnum.LandingFailed)
-            {
-                return target == MissionStatusEnum.WorkProduced
-                    || target == MissionStatusEnum.Failed
-                    || target == MissionStatusEnum.Cancelled;
-            }
-
-            return false;
+        /// <summary>
+        /// The names of an enum's values joined with ", ", for tool descriptions that list accepted values.
+        /// </summary>
+        /// <typeparam name="TEnum">Enum type.</typeparam>
+        /// <returns>Comma-separated value names in declaration order.</returns>
+        public static string EnumNames<TEnum>() where TEnum : struct, Enum
+        {
+            return String.Join(", ", Enum.GetNames<TEnum>());
         }
 
         /// <summary>

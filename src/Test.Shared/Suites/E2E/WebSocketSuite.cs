@@ -816,6 +816,30 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual("Mission not found", resp.GetProperty("error").GetString());
             }));
 
+            cases.Add(CaseAsync("transition_mission_status_pull_request_open_round_trip", "TransitionMissionStatus_PullRequestOpen_RoundTrip", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient authClient = fx.AuthClient;
+                int restPort = fx.RestPort;
+
+                string missionId = await CreateMissionViaRestAsync(authClient, "ws-pr-open-mission").ConfigureAwait(false);
+                foreach (string step in new[] { "Assigned", "InProgress", "WorkProduced" })
+                {
+                    HttpResponseMessage stepResp = await authClient.PutAsync("/api/v1/missions/" + missionId + "/status",
+                        JsonHelper.ToJsonContent(new { Status = step })).ConfigureAwait(false);
+                    AssertEqual(System.Net.HttpStatusCode.OK, stepResp.StatusCode, "REST transition to " + step);
+                }
+
+                // WorkProduced -> PullRequestOpen -> Complete are legal in MissionStateMachine and over REST.
+                JsonElement prResp = await WsCommandAsync(restPort, "transition_mission_status", new { id = missionId, status = "PullRequestOpen" }).ConfigureAwait(false);
+                AssertEqual("command.result", prResp.GetProperty("type").GetString());
+                AssertEqual(MissionStatusEnum.PullRequestOpen, DeserializeData<Mission>(prResp).Status);
+
+                JsonElement doneResp = await WsCommandAsync(restPort, "transition_mission_status", new { id = missionId, status = "Complete" }).ConfigureAwait(false);
+                AssertEqual("command.result", doneResp.GetProperty("type").GetString());
+                AssertEqual(MissionStatusEnum.Complete, DeserializeData<Mission>(doneResp).Status);
+            }));
+
             cases.Add(CaseAsync("transition_mission_status_valid_transition_returns_updated", "TransitionMissionStatus_ValidTransition_ReturnsUpdated", TestTags.Positive, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
