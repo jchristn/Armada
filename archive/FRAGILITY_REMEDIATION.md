@@ -1,6 +1,6 @@
 # Fragility Remediation Plan
 
-> **Status:** In progress
+> **Status:** Complete (2026-10-05)
 > **Started:** 2026-10-04
 > **Scope:** every place a decision (production behavior, security gate, or test pass/fail) rests on matching text
 > where a structured form exists or can be created.
@@ -68,16 +68,13 @@ always pass because `DescriptionLength` contains "Description".
 - [x] **R4 Clients, TUI, dashboard.** Status and runtime fields typed as enums in client models and TUI logic
   (approvals, rebuild status, notifications severity, status badges); `ArmadaApiException` codes instead of message
   compares; dashboard `ApiError` status/code instead of message compares; event routing by `EntityType`; action menu
-  keys; diff file lists from the API. Starts after the running TUI agents merge.
+  keys. Done on work/fx-clients; diff files come from `UnifiedDiffParser` line kinds (TUI, Helm) and a TypeScript
+  port of it (dashboard) rather than a new API field.
 - [x] **R5 Tests.** About 260 sites: typed body and response assertions (helpers that deserialize stub bodies),
-  keys; diff file lists from the API. Starts after the running TUI agents merge. Done on work/fx-clients; diff
-  files come from `UnifiedDiffParser` line kinds (TUI, Helm) and a TypeScript port of it (dashboard) rather than a
-  new API field.
-- [ ] **R5 Tests.** About 260 sites: typed body and response assertions (helpers that deserialize stub bodies),
-  `StubHttpHandler` single request queue with route selection, McpToolSuite on typed results and error codes, fix
+  `StubHttpHandler` single request queue with route selection, McpToolSuite on typed results and error codes, fixed
   always-pass checks (`Description`/`DescriptionLength`, `"log line 1"`, status-or-text OR chains), host-locale
-  independence, exit codes instead of tool wording, dashboard tests on parsed messages and matched calls. Starts
-  after the running TUI test agent merges. Done on work/fx-tests; production follow-ups listed in the progress log.
+  independence, exit codes instead of tool wording, dashboard tests on parsed messages and matched calls. Done on
+  work/fx-tests; production follow-ups are listed in the progress log.
 
 ## Progress log
 

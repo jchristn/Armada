@@ -4,9 +4,9 @@
 > document in sync with what actually shipped.
 >
 > **Target:** v1.0.0
-> **Current version:** 0.9.0
-> **Status:** Not started
-> **Last updated:** 2026-10-04
+> **Current version:** 1.0.0 (set 2026-10-05; images built after the final merges and green CI)
+> **Status:** In progress (engineering nearly complete; human checks and release steps remain)
+> **Last updated:** 2026-10-05
 
 Status values: `[ ]` not started, `[~]` in progress, `[x]` done, `[!]` blocked. Put a one-line note under any task
 you touch and add a dated row to the Progress Log.
