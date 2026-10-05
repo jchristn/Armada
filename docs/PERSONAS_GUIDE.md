@@ -43,14 +43,17 @@ Fleet
 
 A persona is a property of the **mission**, not the captain. Any captain can fill any
 persona role (unless restricted via `AllowedPersonas`). The Admiral assigns captains to
-missions based on availability and persona preferences.
+missions based on availability, persona restrictions and preferences, preferred captains, and
+capability tiers (see [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md)).
 
 ---
 
 ## 2. Built-in Personas
 
-Armada ships with four built-in personas, seeded on first startup. They cannot be deleted
-but their prompt templates can be customized.
+Armada ships with eight built-in personas, seeded on startup: Worker, Architect, Product
+Manager, Usability Engineer, Judge, Test Engineer, Linter, and Recorder. They cannot be
+deleted but their prompt templates can be customized. The older name `TestEngineer` is
+still accepted for Test Engineer.
 
 ### Worker
 
@@ -70,6 +73,25 @@ Plans work and decomposes goals into right-sized missions.
 - **Prompt template:** `persona.architect`
 - **When to use:** Large feature requests where you want AI-driven task decomposition.
   Typically the first stage in a multi-stage pipeline.
+
+### Product Manager
+
+Frames the work before it is planned.
+
+- **Purpose:** Turn the dispatched work into a whole-product picture: user value, success
+  criteria, user personas and workflows, the concrete experience, validation expectations,
+  and future-facing requirements, staying inside the dispatched scope.
+- **Prompt template:** `persona.product_manager`
+- **When to use:** First stage of `FullPipeline`, ahead of the Architect.
+
+### Usability Engineer
+
+Refines the implemented work from the user's side.
+
+- **Purpose:** Improve usability, edge-case experience, and consistency with the
+  surrounding product.
+- **Prompt template:** `persona.usability_engineer`
+- **When to use:** After the Worker stage, before tests and review (as in `FullPipeline`).
 
 ### Judge
 
@@ -119,6 +141,16 @@ Evaluates the mission's changed **code and documentation** for style and correct
 - **Prompt template:** `persona.linter`
 - **When to use:** As a quality gate after the work exists (typically after the Worker and
   Test Engineer stages) and before the final Judge review.
+
+### Recorder
+
+Captures what the voyage learned.
+
+- **Purpose:** Review the voyage conversation and distill durable memories (episodic,
+  semantic, procedural) into the vessel's model context, the Armada memory store, and
+  external memory facilities.
+- **Prompt template:** `persona.recorder`
+- **When to use:** As the last stage, after review (`FullPipeline` and `Recorded`).
 
 ---
 
@@ -222,17 +254,22 @@ change a captain can make:
 }
 ```
 
-**Via REST:**
+**Via REST:** `PUT /api/v1/vessels/{id}` replaces the whole vessel record, so read the
+vessel, change the field, and send the full object back:
 
 ```bash
-curl -X PUT http://localhost:7890/api/v1/vessels/vsl_abc123 \
-  -H "Content-Type: application/json" -H "Authorization: Bearer TOKEN" \
-  -d '{"DefaultPipelineId": "ppl_xyz789"}'
+curl -s http://localhost:7890/api/v1/vessels/vsl_abc123 -H "Authorization: Bearer TOKEN" \
+  | jq '.defaultPipelineId = "ppl_xyz789"' \
+  | curl -X PUT http://localhost:7890/api/v1/vessels/vsl_abc123 \
+      -H "Content-Type: application/json" -H "Authorization: Bearer TOKEN" -d @-
 ```
 
-**Via Dashboard:** Open the vessel detail page, click Edit, and select a default pipeline.
+**Via Dashboard:** Open the vessel detail page, choose Edit from its actions menu, and set
+**Default Pipeline**.
 
 ### Setting a Default Pipeline on a Fleet
+
+In the dashboard, the fleet form has the same **Default Pipeline** field. Via MCP:
 
 ```json
 // update_fleet
@@ -244,7 +281,8 @@ curl -X PUT http://localhost:7890/api/v1/vessels/vsl_abc123 \
 
 ### Overriding Per-Dispatch
 
-Pass `pipelineId` to `dispatch` to override for a single voyage:
+Pass `pipelineId` (or `pipeline`, the pipeline's name) to `dispatch` to override for a
+single voyage:
 
 ```json
 // dispatch
@@ -278,8 +316,10 @@ Pass `pipelineId` to `dispatch` to override for a single voyage:
 }
 ```
 
-**Via Dashboard:** Navigate to Pipelines in the sidebar, click Create, and use the
-dynamic stage editor to add stages in order.
+**Via Dashboard:** Open **Configuration**, choose the **Pipelines** tab, click **+ Pipeline**,
+and use the stage editor to add stages in order. The dashboard form also sets each stage's
+review gate (`requiresReview`, `reviewDenyAction`), which the `create_pipeline` MCP tool
+does not expose; see [PIPELINES.md](PIPELINES.md).
 
 Note: `SecurityAuditor` in this example is a custom persona you would create first
 (see [Section 7](#7-creating-custom-personas)).
@@ -293,22 +333,27 @@ Note: `SecurityAuditor` in this example is a custom persona you would create fir
 By default, any captain can fill any persona role (`AllowedPersonas` is null). You can
 restrict a captain to specific personas:
 
+`allowedPersonas` is a string holding a JSON array:
+
 ```json
 // update_captain
 {
   "captainId": "cpt_abc123",
-  "allowedPersonas": ["Worker", "Test Engineer"]
+  "allowedPersonas": "[\"Worker\", \"Test Engineer\"]"
 }
 ```
 
 When set, the Admiral will only assign this captain to missions requiring one of the
-listed personas. Missions with other personas will be assigned to other captains.
+listed personas. This is a hard filter: if no idle captain is allowed to serve a mission's
+persona, the mission stays `Pending` until one is. The one exception is a preferred captain
+(a dispatch override or the persona's `defaultCaptainId`), which is used whenever it is idle;
+see [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md).
 
 ### PreferredPersona
 
-A soft routing preference. The Admiral prefers captains whose `PreferredPersona` matches
-the mission's persona, but will fall back to any available captain if no preferred match
-exists.
+A soft routing preference. Among the captains eligible for a mission, the Admiral prefers
+those whose `PreferredPersona` matches the mission's persona, and falls back to any other
+eligible captain if none matches.
 
 ```json
 // update_captain
@@ -328,7 +373,7 @@ Dedicate a powerful model for Architect work and faster models for Worker tasks:
 {
   "name": "opus-architect",
   "runtime": "ClaudeCode",
-  "allowedPersonas": ["Architect", "Judge"],
+  "allowedPersonas": "[\"Architect\", \"Judge\"]",
   "preferredPersona": "Architect"
 }
 
@@ -337,7 +382,7 @@ Dedicate a powerful model for Architect work and faster models for Worker tasks:
 {
   "name": "sonnet-worker-1",
   "runtime": "ClaudeCode",
-  "allowedPersonas": ["Worker", "Test Engineer"],
+  "allowedPersonas": "[\"Worker\", \"Test Engineer\"]",
   "preferredPersona": "Worker"
 }
 ```
@@ -356,12 +401,15 @@ defaults for all templates. You can customize any template and reset at any time
 
 | Category | Purpose | Examples |
 |---|---|---|
-| **persona** | Core persona instructions | `persona.worker`, `persona.architect`, `persona.judge`, `persona.test_engineer` |
+| **persona** | Core persona instructions | `persona.worker`, `persona.architect`, `persona.product_manager`, `persona.usability_engineer`, `persona.judge`, `persona.test_engineer`, `persona.linter`, `persona.recorder` |
 | **mission** | Mission-level rules and constraints | `mission.rules`, `mission.context_conservation`, `mission.merge_conflict_avoidance`, `mission.progress_signals`, `mission.model_context_updates` |
-| **structure** | Layout wrappers for CLAUDE.md sections | `mission.metadata`, `mission.captain_instructions_wrapper`, `mission.project_context_wrapper`, `mission.code_style_wrapper`, `mission.model_context_wrapper`, `mission.existing_instructions_wrapper` |
+| **structure** | Layout wrappers for CLAUDE.md sections | `mission.metadata`, `mission.captain_instructions_wrapper`, `mission.project_context_wrapper`, `mission.code_style_wrapper`, `mission.model_context_wrapper`, `mission.playbooks_wrapper`, `mission.existing_instructions_wrapper` |
 | **commit** | Commit message instructions (always sent) and the sentence introducing the Armada trailers (sent only when commit metadata is enabled) | `commit.instructions_preamble`, `commit.trailers_preamble` |
 | **landing** | PR creation templates | `landing.pr_body` |
 | **agent** | Agent launch prompts | `agent.launch_prompt` |
+| **ask** | Ask Armada system prompt | `ask.system` |
+| **vessel** | Vessel "Build Context" action | `vessel.build_context` |
+| **import** | Fleet recommendations for bulk-imported repositories | `import.fleet_categorization` |
 
 ### How Resolution Works
 
@@ -371,12 +419,13 @@ defaults for all templates. You can customize any template and reset at any time
 
 ### Available Placeholders
 
-Placeholders are grouped by context. Not all placeholders are available in all templates --
-they depend on what data is available at render time.
+Rendering replaces each `{Name}` with its value; a placeholder Armada does not fill is left in
+the text unchanged. These are filled for mission prompt templates (`mission.*`, `persona.*`,
+and the structure wrappers):
 
 **Mission Context:**
 `{MissionId}`, `{MissionTitle}`, `{MissionDescription}`, `{MissionPersona}`,
-`{VoyageId}`, `{VoyageTitle}`, `{BranchName}`
+`{VoyageId}`, `{BranchName}`, `{PersonaPrompt}`, `{SelectedPlaybooksMarkdown}`
 
 **Vessel Context:**
 `{VesselId}`, `{VesselName}`, `{DefaultBranch}`, `{ProjectContext}`, `{StyleGuide}`,
@@ -385,21 +434,25 @@ they depend on what data is available at render time.
 **Captain Context:**
 `{CaptainId}`, `{CaptainName}`, `{CaptainInstructions}`
 
-**Pipeline Context:**
-`{PipelineName}`, `{StageNumber}`, `{TotalStages}`, `{PreviousStageDiff}`,
-`{PreviousStageOutput}`
-
 **System:**
 `{Timestamp}`, `{ExistingClaudeMd}`
 
+There are no pipeline placeholders. Prior-stage context (persona, title, branch, agent output, and diff)
+reaches the next stage through its mission description, which the stage handoff rewrites,
+so `{MissionDescription}` carries it. The commit and PR message templates use a different
+set, including `{VoyageTitle}` and `{DockId}`; see [MESSAGE_TEMPLATES.md](MESSAGE_TEMPLATES.md).
+
 ### Editing via Dashboard
 
-Navigate to **Prompt Templates** in the sidebar. The detail page has a two-column editor:
+Open **Configuration** and choose the **Prompts** tab. The detail page has a two-column editor:
 the left panel is a monospace text editor with save/reset buttons, and the right panel
 shows available placeholders grouped by context with click-to-insert. Built-in templates
 display a badge and offer "Reset to Default" in the action menu.
 
 ### Editing via MCP Tools
+
+`list_prompt_templates` lists templates (optionally by `category`), and
+`create_prompt_template` creates a new one.
 
 **Get a template:**
 
@@ -451,7 +504,8 @@ curl -X POST http://localhost:7890/api/v1/prompt-templates/mission.rules/reset \
 }
 ```
 
-Now every mission (regardless of persona) will include your custom rule.
+Now every mission (regardless of persona) will include your custom rule. Placeholders you
+invent, such as `{MyCustomRule}` above, are not filled; they appear in the prompt as written.
 
 ---
 
@@ -525,9 +579,9 @@ Each stage sees the diff from the previous stage.
 | Tool | Description |
 |---|---|
 | **Personas** | |
-| `create_persona` | Create a custom persona (name, promptTemplateName required) |
+| `create_persona` | Create a custom persona (name, promptTemplateName required; optional `defaultCaptainId`) |
 | `get_persona` | Get a persona by name |
-| `update_persona` | Update persona description or prompt template |
+| `update_persona` | Update persona description, prompt template, or `defaultCaptainId` |
 | `delete_persona` | Delete a custom persona (built-in personas cannot be deleted) |
 | **Pipelines** | |
 | `create_pipeline` | Create a pipeline with ordered stages |
@@ -535,13 +589,15 @@ Each stage sees the diff from the previous stage.
 | `update_pipeline` | Update pipeline description or replace stages |
 | `delete_pipeline` | Delete a custom pipeline (built-in pipelines cannot be deleted) |
 | **Prompt Templates** | |
+| `list_prompt_templates` | List templates, optionally by category |
+| `create_prompt_template` | Create a template |
 | `get_prompt_template` | Get a template by name |
-| `update_prompt_template` | Update template content and/or description |
+| `update_prompt_template` | Update template content and/or description (creates it if missing) |
 | `reset_prompt_template` | Reset a template to its built-in default |
 | **Enumeration** | |
-| `enumerate` | Use `entityType: "persona"`, `"pipeline"`, or `"prompt_template"` to list/filter/paginate |
+| `enumerate` | Use `entityType: "personas"`, `"pipelines"`, or `"prompt_templates"` to list/filter/paginate |
 | **Related** | |
-| `dispatch` | Pass `pipelineId` to override the default pipeline |
+| `dispatch` | Pass `pipelineId` or `pipeline` (name) to override the default pipeline |
 | `update_vessel` | Set `defaultPipelineId` on a vessel |
 | `update_fleet` | Set `defaultPipelineId` on a fleet |
 | `create_captain` | Set `allowedPersonas` and `preferredPersona` |
@@ -557,14 +613,15 @@ All three entity types follow the same pattern. Replace `{entity}` with `persona
 | GET | `/api/v1/{entity}` | List all |
 | POST | `/api/v1/{entity}/enumerate` | Paginated enumeration with filters |
 | GET | `/api/v1/{entity}/{name}` | Get by name |
-| POST | `/api/v1/{entity}` | Create (personas and pipelines only) |
+| POST | `/api/v1/{entity}` | Create |
 | PUT | `/api/v1/{entity}/{name}` | Update |
 | DELETE | `/api/v1/{entity}/{name}` | Delete (personas and pipelines only, built-in protected) |
 | POST | `/api/v1/prompt-templates/{name}/reset` | Reset template to built-in default |
 
 ### WebSocket Commands
 
-The WebSocket API provides equivalent commands via the `command` route. Actions follow
-the pattern `get_persona`, `create_persona`, `update_persona`, `delete_persona` (same
-for `pipeline` and `prompt_template`). Use the `enumerate` action with `entityType` set
-to `persona`, `pipeline`, or `prompt_template` for listing.
+The WebSocket API accepts `get_persona`, `create_persona`, `update_persona`,
+`delete_persona`, `get_pipeline`, `create_pipeline`, `update_pipeline`, `delete_pipeline`,
+`get_prompt_template`, and `update_prompt_template` as `command` actions. Listing,
+creating, and resetting prompt templates, and enumerating any of the three, are available
+through MCP and REST only.

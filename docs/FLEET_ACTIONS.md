@@ -14,7 +14,7 @@ A **target** is one vessel inside a run. Each target has its own status, a stabl
 
 ### Command actions
 
-A Command action runs its command text in each vessel's working directory. That is deliberate: the point of "fast-forward everything" is to update the checkouts you actually work in, so Armada does not create a throwaway worktree for these runs. The safety net is the clean-tree check. When the action requires a clean working tree (the default for Command actions), Armada runs `git status --porcelain` first and skips the vessel with reason `DirtyTree` if anything is modified or untracked. Your uncommitted work is never touched by a fleet action you forgot was running.
+A Command action runs its command text in each vessel's working directory. That is deliberate: the point of "fast-forward everything" is to update the checkouts you actually work in, so Armada does not create a throwaway worktree for these runs. A vessel with no working directory configured (or whose working directory does not exist on the Admiral host) is skipped with reason `NoWorkingDirectory`. The safety net is the clean-tree check. When the action requires a clean working tree (the default for Command actions), Armada runs `git status --porcelain` first and skips the vessel with reason `DirtyTree` if anything is modified or untracked. Your uncommitted work is never touched by a fleet action you forgot was running.
 
 Armada hands the command to the platform shell on standard input rather than as a quoted argument string. On Linux and macOS that is `/bin/sh -s`. On Windows it is `powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command -`. Feeding the shell through standard input sidesteps every quoting problem and leaves nothing on disk. PowerShell has two quirks worth knowing in this mode: it reads the script line by line, so a block statement that spans lines needs a blank line after it, and the exit code only reflects whether the last statement succeeded. If you want a native tool's exit code to decide success, end the command with `exit $LASTEXITCODE`.
 
@@ -24,11 +24,11 @@ Each target records its exit code, standard output, and standard error. Output i
 
 ### Mission actions
 
-A Mission action dispatches one voyage per vessel, with the rendered prompt as the single mission's description, through the same path `POST /api/v1/voyages` uses. The target stays `Running` while the voyage is active, becomes `Succeeded` when the voyage completes, and becomes `Failed` with reason `VoyageFailed` when a mission fails or its landing fails. Dispatch validation runs first. When it rejects a vessel (for example because the pipeline cannot be found), the target is skipped with `DispatchRejected` and the validator's message lands in `ErrorText`.
+A Mission action dispatches one voyage per vessel, with the rendered prompt as the single mission's description, through the same path `POST /api/v1/voyages` uses. The target stays `Running` while the voyage is active, becomes `Succeeded` when the voyage completes, and becomes `Failed` with reason `VoyageFailed` when a mission fails or its landing fails, and becomes `Cancelled` when the voyage is cancelled. Dispatch validation runs first. When it rejects a vessel (for example because the pipeline cannot be found), the target is skipped with `DispatchRejected` and the validator's message lands in `ErrorText`.
 
 Concurrency means something different here. A captain voyage can take an hour, so a Mission run's concurrency is a pacing limit: at most that many voyages from the run are active at once. A sixty-vessel dependency sweep at concurrency 4 trickles work out four voyages at a time instead of flooding every captain and starving everything else. The Admiral's health-check loop advances Mission runs on every cycle, updating finished voyages and dispatching the next pending vessels, so progress moves at the heartbeat interval.
 
-The `Persona` field is stored on actions and run snapshots, but this release does not yet apply it at dispatch time. Use a pipeline when you need a particular persona sequence.
+The `Persona` field is stored on actions and run snapshots, but Armada does not apply it at dispatch time. Use a pipeline when you need a particular persona sequence.
 
 ## Templates
 
@@ -69,7 +69,7 @@ The intended loop runs through the Health page: select the red rows, run "Update
 
 A run's status rolls up from its targets. It is `Pending` until the first target starts and `Running` while any target is pending or running. Once every target is resolved it becomes `Completed`, or `CompletedWithFailures` when at least one target failed or timed out. Skipped targets do not count as failures, since a skip is Armada declining to act, not something going wrong. A run is `Failed` only when the runner itself hit an unexpected error.
 
-Cancelling a run marks every pending target `Cancelled`, kills running commands (their targets also become `Cancelled`), and for Mission runs cancels each voyage that has not finished yet using the normal voyage cancel, which cancels pending and assigned missions and lets a mission already in progress finish. Cancelling a finished run returns HTTP 409.
+Cancelling a run sets the run to `Cancelled`, marks every pending target `Cancelled`, kills running commands (their targets also become `Cancelled`), and for Mission runs cancels each voyage that has not finished yet using the normal voyage cancel, which cancels pending and assigned missions and lets a mission already in progress finish. Cancelling a finished run returns HTTP 409.
 
 The runner survives an Admiral restart. On startup, any Command target still marked `Running` is failed with reason `Interrupted`, since its process died with the old Admiral, and pending targets resume. Mission runs simply keep syncing, because their state lives in the voyages.
 
@@ -93,6 +93,8 @@ Command actions execute arbitrary code on the Admiral host or a Harbor, so creat
 Captured output can contain secrets that request-history redaction will not catch, because that redaction only covers headers. For that reason output is returned only by the single-target endpoint (`GET /api/v1/fleet-action-runs/{id}/targets/{targetId}`). Run creation responses, run details, target lists, and the MCP status tool return length hints instead.
 
 ## Using it
+
+In the dashboard, open **Fleet Actions** in the sidebar (`/fleet-actions`) to browse, create, edit, and run actions and to watch runs (each run has a detail page at `/fleet-actions/runs/:id`). The Vessels list and the Vessel Health page both offer a bulk **Run action...** button for the selected vessels. In the TUI, the same Fleet Actions hub has **Actions** and **Runs** tabs, and Ask Armada's `/fleet-action` quick action runs a saved action across selected vessels.
 
 From the API, `POST /api/v1/fleet-actions/{id}/run` with `{"VesselIds": [...], "Concurrency": 4}` starts a run and returns 202 with the run ID; `GET /api/v1/fleet-action-runs/{id}` shows progress. [REST_API.md](REST_API.md#fleet-actions) has every route and shape.
 

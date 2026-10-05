@@ -14,6 +14,15 @@ connected" regardless of its real configuration.
 This document describes the fix: route the probe through the existing host-command seam so it runs where
 the captain actually runs.
 
+> **Current state (1.0.0).** The probe no longer decides the Ask Armada banner for most captains. Ask turns
+> connect every Claude Code, Codex, Gemini, Cursor, Mux, OpenCode, and ApiEndpoint captain to Armada's MCP
+> server with a per-turn, thread-scoped configuration (`CaptainThreadMcpPlanner`), and
+> `GET /api/v1/captains/{id}/tools` reports `askApprovalGated: true` for those runtimes. The dashboard shows
+> the "not connected to Armada over MCP" banner only when `askApprovalGated` is false and
+> `ArmadaToolCount <= 0`, so in practice only `Custom` captains can see it. The probe described here still
+> feeds the captain tools view (`GET /api/v1/captains/{id}/tools`), so the split-mode accuracy work below
+> still matters there.
+
 ## The existing plumbing (already built)
 
 Armada already has a general "run a host command where the captain lives" seam:
@@ -84,11 +93,13 @@ than inferred from the raw server count, and the "Ask Armada" banner is not yet 
 
 ### Not yet done: OpenCode
 
-OpenCode has no probe branch at all today (it falls through to `unsupported-runtime`). Adding one needs one
-piece of verification this document cannot settle from the Admiral: whether the `opencode` CLI has a
-subcommand that dumps its MCP servers/tools (e.g. `opencode mcp ...`). If it does, run it over the seam; if
-not, the fallback is to read OpenCode's config over the seam. `OpenCodeRuntime.cs` currently contains no
-MCP-config handling, so how an OpenCode captain is wired to the Armada MCP server should be confirmed first.
+OpenCode has no probe branch in `CaptainRuntimeToolCatalogService` (it falls through to
+`unsupported-runtime`). Adding one needs one piece of verification this document cannot settle from the
+Admiral: whether the `opencode` CLI has a subcommand that dumps its MCP servers/tools (e.g. `opencode mcp
+...`). If it does, run it over the seam; if not, the fallback is to read OpenCode's config over the seam.
+How an OpenCode captain reaches Armada is settled: for Ask turns `OpenCodeRuntime` passes
+`OPENCODE_CONFIG_CONTENT` with a thread-scoped Armada entry (`CaptainThreadMcpPlanner`), so Ask approvals
+work for OpenCode captains without this probe.
 
 ## The remaining gap: per-server tool enumeration over the link
 
@@ -124,7 +135,7 @@ dashboard shows an accurate note for it rather than the inapplicable "add the Ar
 captain's runtime config" warning.
 
 Update: `ApiEndpoint` captains run Armada's built-in coding tools in-process, and, in an Ask Armada chat,
-they now also act as an MCP client against Armada's own `/mcp` endpoint -- the runtime is handed the local
+they also act as an MCP client against Armada's own `/mcp` endpoint -- the runtime is handed the local
 MCP URL plus a short-lived per-caller session token and merges the discovered Armada tools into its
 tool-calling loop, scoped to the asking user. The dashboard note reflects this (it no longer states that
 orchestration tools are unavailable to `ApiEndpoint` captains in chat).

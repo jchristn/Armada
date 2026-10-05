@@ -1,6 +1,12 @@
-# Personas and Prompt Templates -- Implementation Plan
+# Personas and Prompt Templates -- Implementation Record
 
-This plan covers two interrelated features:
+This is the original implementation plan for personas, pipelines, and prompt templates, kept as a record of how the
+features were built. Every phase below shipped. For how the features behave today, read
+[PERSONAS_GUIDE.md](PERSONAS_GUIDE.md), [PIPELINES.md](PIPELINES.md), and [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md);
+where this record and the code disagree, the code wins. Notes marked "Current:" describe how the shipped code differs
+from the original plan.
+
+The plan covered two interrelated features:
 
 1. **Personas** -- Named agent roles (Architect, Worker, Judge, Test Engineer, etc.) that define what a captain does during a mission, with user-extensible persona definitions and per-captain capability constraints.
 2. **Prompt Templates** -- Extracting all hardcoded prompts from C# code into user-editable, database-stored templates with embedded resource defaults as fallbacks.
@@ -86,17 +92,15 @@ CREATE INDEX idx_prompt_templates_active ON prompt_templates(active);
 - [x] Implement for SQL Server in `src/Armada.Core/Database/SqlServer/Implementations/PromptTemplateMethods.cs`
   - Use `NVARCHAR(MAX)` for `content` column
 - [x] Add in-code `SchemaMigration` entry (next sequence number after current max) in each driver's `TableQueries.cs`:
-  - SQLite: `src/Armada.Core/Database/Sqlite/Queries/TableQueries.cs` (currently at migration 18)
+  - SQLite: `src/Armada.Core/Database/Sqlite/Queries/TableQueries.cs` (migration 19)
   - MySQL: `src/Armada.Core/Database/Mysql/Queries/TableQueries.cs`
   - PostgreSQL: `src/Armada.Core/Database/Postgresql/Queries/TableQueries.cs`
   - SQL Server: `src/Armada.Core/Database/SqlServer/Queries/TableQueries.cs`
   - Each migration must include CREATE TABLE + all CREATE INDEX statements
 - [x] Add the table to the initial schema DDL in each driver's `TableQueries.cs` (for fresh installs)
-- [x] Create migration scripts in `migrations/`:
-  - `migrations/migrate_add_prompt_templates.sh`
-  - `migrations/migrate_add_prompt_templates.bat`
-  - Follow existing pattern (sqlite3 check, settings file, backup, idempotent column check, SQL execution)
-  - Scripts must include table creation + all indexes
+- [x] Schema changes are applied by the in-code `SchemaMigration` entries at startup. (Current: no standalone
+  `migrations/migrate_add_*.sh` / `.bat` scripts were shipped for these tables; the planned script names below do not
+  exist.)
 - [x] Wire into `DatabaseDriver` as `PromptTemplates` property
 
 ### 1.3 Embedded Resource Defaults
@@ -118,6 +122,9 @@ This avoids the .csproj embedded resource complexity and keeps templates co-loca
   - `persona.judge` -- judge/reviewer persona
   - `persona.test_engineer` -- test writing persona
   - `persona.linter` -- style/correctness linter persona (code and documentation)
+  - Current: the shipped defaults also include `persona.product_manager`, `persona.usability_engineer`,
+    `persona.recorder`, `mission.playbooks_wrapper`, `ask.system` (the Ask Armada system prompt), and
+    `vessel.build_context`, plus the structure and landing templates from 1.8
 
 ### 1.4 Template Resolution Service
 
@@ -234,9 +241,7 @@ CREATE INDEX idx_personas_prompt_template ON personas(prompt_template_name);
 - [x] Implement for SQL Server in `src/Armada.Core/Database/SqlServer/Implementations/PersonaMethods.cs`
 - [x] Add in-code `SchemaMigration` entry in each driver's `TableQueries.cs` (CREATE TABLE + indexes)
 - [x] Add the table to the initial schema DDL in each driver's `TableQueries.cs`
-- [x] Create migration scripts:
-  - `migrations/migrate_add_personas.sh`
-  - `migrations/migrate_add_personas.bat`
+- [x] Startup `SchemaMigration` only (no standalone migration scripts).
 - [x] Wire into `DatabaseDriver` as `Personas` property
 
 ### 2.3 Built-in Persona Seeding
@@ -246,6 +251,9 @@ CREATE INDEX idx_personas_prompt_template ON personas(prompt_template_name);
   - `Architect` -- plans voyages and decomposes work into missions
   - `Judge` -- reviews completed mission diffs through three lenses (correctness, blast radius, source fidelity); must exhibit a concrete affected case to block
   - `Test Engineer` -- writes/updates tests for mission changes
+  - Current: eight built-in personas are seeded: `Worker`, `Architect`, `Product Manager`, `Usability Engineer`,
+    `Judge`, `Test Engineer`, `Linter`, and `Recorder` (`PersonaSeedService`); the legacy name `TestEngineer` is
+    still accepted as an alias for `Test Engineer`
 - [x] Built-in personas reference built-in prompt templates (`persona.worker`, etc.)
 
 ### 2.4 Captain Persona Capabilities
@@ -268,13 +276,12 @@ CREATE INDEX idx_captains_preferred_persona ON captains(preferred_persona);
 - [x] Add `AllowedPersonas` (string?, nullable JSON array) to `Captain` model
   - `null` means "can take on any persona" (default)
   - When set, contains a list of persona names the captain is allowed to fill, e.g. `["Worker", "Judge"]`
-  - This is a soft preference for dispatch routing -- the Admiral prefers matching captains but can fall back
+  - Current: this is a hard filter. A mission whose persona no idle captain is allowed to serve stays `Pending`;
+    only a preferred captain (`RequestedCaptainId`, see [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md)) bypasses it
 - [x] Add `PreferredPersona` (string?, nullable) to `Captain` model
   - Optional hint for dispatch priority
 - [x] Add in-code `SchemaMigration` entry in each driver's `TableQueries.cs` (ALTER TABLE + index)
-- [x] Create migration scripts:
-  - `migrations/migrate_add_captain_personas.sh`
-  - `migrations/migrate_add_captain_personas.bat`
+- [x] Startup `SchemaMigration` only (no standalone migration scripts).
 - [x] Update `McpCaptainTools` to expose both fields on create/update
 - [x] Update `CaptainCreateArgs` and `CaptainUpdateArgs`
 
@@ -298,9 +305,7 @@ CREATE INDEX idx_missions_persona ON missions(persona);
   - When set, indicates which persona this mission requires
   - `null` defaults to `"Worker"` for backward compatibility
 - [x] Add in-code `SchemaMigration` entry in each driver's `TableQueries.cs` (ALTER TABLE + index)
-- [x] Create migration scripts:
-  - `migrations/migrate_add_mission_persona.sh`
-  - `migrations/migrate_add_mission_persona.bat`
+- [x] Startup `SchemaMigration` only (no standalone migration scripts).
 - [x] Update `McpMissionTools` to expose `persona` on create/update
 
 ---
@@ -326,6 +331,8 @@ A pipeline is an ordered list of persona stages that a dispatch goes through.
   - `PersonaName` (string, references a Persona by name)
   - `IsOptional` (bool, if true the Admiral may skip this stage)
   - `Description` (string?, e.g. "Plan the voyage", "Execute the mission", "Review the diff")
+  - Current: stages also carry `RequiresReview` (bool) and `ReviewDenyAction` (`RetryStage` by default, or
+    `FailPipeline`); see [PIPELINES.md](PIPELINES.md)
 
 ### 3.2 Database Schema: `pipelines` and `pipeline_stages` Tables
 
@@ -379,10 +386,7 @@ CREATE INDEX idx_pipeline_stages_persona ON pipeline_stages(persona_name);
 - [x] Implement for SQL Server in `src/Armada.Core/Database/SqlServer/Implementations/PipelineMethods.cs`
 - [x] Add in-code `SchemaMigration` entry in each driver's `TableQueries.cs` (both CREATE TABLEs + all indexes)
 - [x] Add both tables to the initial schema DDL in each driver's `TableQueries.cs`
-- [x] Create migration scripts:
-  - `migrations/migrate_add_pipelines.sh`
-  - `migrations/migrate_add_pipelines.bat`
-  - Must create both tables and all indexes
+- [x] Startup `SchemaMigration` only (no standalone migration scripts).
 - [x] Wire into `DatabaseDriver` as `Pipelines` property
 
 ### 3.3 Built-in Pipeline Seeding
@@ -392,6 +396,9 @@ CREATE INDEX idx_pipeline_stages_persona ON pipeline_stages(persona_name);
   - `Reviewed` -- `[Worker, Judge]`
   - `FullPipeline` -- `[Architect, Worker, Test Engineer, Judge]`
   - `Tested` -- `[Worker, Test Engineer, Judge]`
+  - Current: `FullPipeline` is `[Product Manager, Architect, Worker, Usability Engineer, Test Engineer, Linter,
+    Judge, Recorder]`, and a fifth built-in, `Recorded`, is `[Worker, Recorder]`. Every stage except Recorder
+    requires review in the built-ins, and the Judge stage's deny action is `FailPipeline`
 
 ### 3.4 Fleet/Vessel Pipeline Configuration
 
@@ -416,9 +423,7 @@ CREATE INDEX idx_vessels_default_pipeline ON vessels(default_pipeline_id);
   - Vessel setting overrides fleet setting
   - `null` means use `WorkerOnly` for backward compatibility
 - [x] Add in-code `SchemaMigration` entry in each driver's `TableQueries.cs` (ALTER TABLEs + indexes)
-  - Note: combined into migration 23 (pipelines) rather than separate migration 24
-- [x] Create migration scripts:
-  - Note: combined into `migrations/migrate_add_pipelines.sh/.bat` rather than separate scripts
+  - Note: combined into migration 23 (pipelines) rather than a separate migration
 - [x] Update `McpFleetTools` and `McpVesselTools` to expose `defaultPipelineId`
 
 ### 3.5 Dispatch Pipeline Override
@@ -458,9 +463,7 @@ CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);
 - [x] Add `DependsOnMissionId` (string?, nullable) to `Mission` model
   - When set, this mission cannot be assigned until the dependency mission reaches a terminal success state
 - [x] Add in-code `SchemaMigration` entry in each driver's `TableQueries.cs` (ALTER TABLE + index)
-  - Note: combined into migration 22 (mission persona) rather than separate migration 25
-- [x] Create migration scripts:
-  - Note: combined into `migrations/migrate_add_mission_persona.sh/.bat` rather than separate scripts
+  - Note: combined into migration 22 (mission persona) rather than a separate migration
 - [x] Admiral health check / assignment loop: skip missions whose dependency is not yet satisfied
   - Dependency check in `TryAssignAsync` -- skips if dependency not Complete/WorkProduced
 
@@ -479,7 +482,8 @@ CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);
   1. Mission has a `Persona` field (e.g. `"Architect"`)
   2. Filter available captains by `AllowedPersonas` (null = all allowed)
   3. Sort by `PreferredPersona` match (prefer captains whose preference matches)
-  4. Fall back to any available captain if no preferred match
+  4. Fall back to any eligible captain if no preferred match (Current: a captain outside `AllowedPersonas` is never
+     used, and a preferred captain and capability tiers are checked first; see [SCHEDULING.md](SCHEDULING.md))
 
 ---
 
@@ -513,7 +517,7 @@ CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);
 
 - [x] Create `src/Armada.Dashboard/src/pages/Personas.tsx` -- list view with table, filters, sort, pagination, CRUD modals
 - [x] Create `src/Armada.Dashboard/src/pages/PersonaDetail.tsx` -- detail view with edit, JSON viewer, delete (built-in guard)
-- [x] Add navigation entry in sidebar under System section
+- [x] Add navigation entry (Current: Personas, Pipelines, and Prompts are tabs of the Configuration page)
 
 ### 6.2 Prompt Template Management Page
 
@@ -523,13 +527,13 @@ CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);
   - Right: parameter reference panel grouped by context (Mission, Vessel, Captain, Pipeline, System) with click-to-insert
   - Built-in badge, ActionMenu with View JSON and Reset to Default
   - Detail grid with ID, Active, Created, Last Updated
-- [x] Add navigation entry in sidebar under System section
+- [x] Add navigation entry (Current: Personas, Pipelines, and Prompts are tabs of the Configuration page)
 
 ### 6.3 Pipeline Management Page
 
 - [x] Create `src/Armada.Dashboard/src/pages/Pipelines.tsx` -- list view with stages display (arrow-joined), CRUD, dynamic stage editor
 - [x] Create `src/Armada.Dashboard/src/pages/PipelineDetail.tsx` -- detail view with stages table, edit modal with dynamic stage list
-- [x] Add navigation entry in sidebar under System section
+- [x] Add navigation entry (Current: Personas, Pipelines, and Prompts are tabs of the Configuration page)
 
 ### 6.4 Vessel/Fleet Detail Updates
 
@@ -555,6 +559,8 @@ CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);
 
 ### 7.1 Prompt Template MCP Tools
 
+- [x] `list_prompt_templates` -- list templates (Current)
+- [x] `create_prompt_template` -- create a template (Current)
 - [x] `get_prompt_template` -- get a template by name
 - [x] `update_prompt_template` -- update template content
 - [x] `reset_prompt_template` -- reset to embedded default
@@ -578,11 +584,11 @@ CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);
 
 ### 7.4 Enumerate Support
 
-- [x] Add `persona`, `prompt_template`, and `pipeline` as entity types in `enumerate`
+- [x] Add `personas`, `prompt_templates`, and `pipelines` as entity types in `enumerate`
 
 ### 7.5 REST API Routes
 
-- [x] Create `src/Armada.Server/Routes/PromptTemplateRoutes.cs` -- 5 endpoints (list, enumerate, get by name, update, reset)
+- [x] Create `src/Armada.Server/Routes/PromptTemplateRoutes.cs` -- 6 endpoints (list, enumerate, create, get by name, update, reset)
 - [x] Create `src/Armada.Server/Routes/PersonaRoutes.cs` -- 6 endpoints (list, enumerate, get, create, update, delete)
 - [x] Create `src/Armada.Server/Routes/PipelineRoutes.cs` -- 6 endpoints (list, enumerate, get, create, update, delete)
 
@@ -594,7 +600,7 @@ CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);
 
 ### 7.7 Updated Existing Tools
 
-- [x] `dispatch` -- add `pipelineId` parameter (pipeline name alias TBD)
+- [x] `dispatch` -- add `pipelineId` parameter and the `pipeline` name alias
 - [x] `create_captain` / `update_captain` -- add `allowedPersonas`, `preferredPersona`
 - [x] `update_vessel` -- add `defaultPipelineId`
 - [x] `update_fleet` -- add `defaultPipelineId`
@@ -604,6 +610,10 @@ CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);
 ## Phase 8: Tests
 
 ### 8.1 Unit Tests
+
+Current: the tests live as suites in `src/Test.Shared/Suites/Services` (`PromptTemplateServiceSuite`,
+`PersonaPipelineDbSuite`, `PipelineDispatchSuite`, `MissionPromptSuite`, `PersonaSeedServiceSuite`) and run through
+`src/Test.Automated`, `src/Test.Xunit`, and `src/Test.Nunit`; the file names below are the originally planned ones.
 
 - [x] `PromptTemplateServiceTests.cs` -- 7 tests: seed, resolve DB/embedded, render, reset, list, list by category
 - [x] `PersonaPipelineDbTests.cs` -- 9 tests: persona CRUD, pipeline CRUD with stages, cascade delete
@@ -650,24 +660,21 @@ CREATE INDEX idx_missions_depends_on ON missions(depends_on_mission_id);
 
 ## Appendix A: Migration Summary
 
-All schema changes required by this plan, consolidated for reference. Each migration must be implemented as:
-1. An in-code `SchemaMigration` entry in each of the four driver `TableQueries.cs` files (SQLite, MySQL, PostgreSQL, SQL Server)
-2. Added to the initial schema DDL in each driver (for fresh installs)
-3. A pair of standalone migration scripts (`migrations/*.sh` + `migrations/*.bat`) following the existing pattern
+All schema changes made for this feature, as shipped. Each is an in-code `SchemaMigration` entry in each of the four
+driver `TableQueries.cs` files (SQLite, MySQL, PostgreSQL, SQL Server), applied automatically at startup, and is part
+of the initial schema DDL for fresh installs. No standalone migration scripts exist for them. Later migrations added
+more columns (for example `default_captain_id` and `requested_captain_id` in migration 55, see
+[CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md)).
 
-Current highest SQLite migration number: **18**. New migrations should start at **19**.
+| Migration # | Name | Tables/Columns Affected | Indexes Created |
+|------------|------|------------------------|----------------|
+| 19 | Add prompt_templates table | New table: `prompt_templates` (id, tenant_id, name, description, category, content, is_built_in, active, created_utc, last_update_utc) | `idx_prompt_templates_tenant_name` (UNIQUE), `idx_prompt_templates_category`, `idx_prompt_templates_active` |
+| 20 | Add personas table | New table: `personas` (id, tenant_id, name, description, prompt_template_name, is_built_in, active, created_utc, last_update_utc) | `idx_personas_tenant_name` (UNIQUE), `idx_personas_active`, `idx_personas_prompt_template` |
+| 21 | Add captain persona fields | `captains`: +`allowed_personas` (TEXT), +`preferred_persona` (TEXT) | `idx_captains_preferred_persona` |
+| 22 | Add mission persona and dependency fields | `missions`: +`persona` (TEXT), +`depends_on_mission_id` (TEXT) | `idx_missions_persona`, `idx_missions_depends_on` |
+| 23 | Add pipelines and pipeline_stages tables | New table: `pipelines` (id, tenant_id, name, description, is_built_in, active, created_utc, last_update_utc). New table: `pipeline_stages` (id, pipeline_id, stage_order, persona_name, is_optional, description). `fleets` and `vessels`: +`default_pipeline_id` (TEXT) | `idx_pipelines_tenant_name` (UNIQUE), `idx_pipelines_active`, `idx_pipeline_stages_pipeline`, `idx_pipeline_stages_order` (UNIQUE), `idx_pipeline_stages_persona`, `idx_fleets_default_pipeline`, `idx_vessels_default_pipeline` |
 
-| Migration # | Name | Tables/Columns Affected | Indexes Created | Scripts |
-|------------|------|------------------------|----------------|---------|
-| 19 | Add prompt_templates table | New table: `prompt_templates` (id, tenant_id, name, description, category, content, is_built_in, active, created_utc, last_update_utc) | `idx_prompt_templates_tenant_name` (UNIQUE), `idx_prompt_templates_category`, `idx_prompt_templates_active` | `migrate_add_prompt_templates.sh/.bat` |
-| 20 | Add personas table | New table: `personas` (id, tenant_id, name, description, prompt_template_name, is_built_in, active, created_utc, last_update_utc) | `idx_personas_tenant_name` (UNIQUE), `idx_personas_active`, `idx_personas_prompt_template` | `migrate_add_personas.sh/.bat` |
-| 21 | Add captain persona fields | `captains`: +`allowed_personas` (TEXT), +`preferred_persona` (TEXT) | `idx_captains_preferred_persona` | `migrate_add_captain_personas.sh/.bat` |
-| 22 | Add mission persona field | `missions`: +`persona` (TEXT) | `idx_missions_persona` | `migrate_add_mission_persona.sh/.bat` |
-| 23 | Add pipelines and pipeline_stages tables | New table: `pipelines` (id, tenant_id, name, description, is_built_in, active, created_utc, last_update_utc). New table: `pipeline_stages` (id, pipeline_id, stage_order, persona_name, is_optional, description) | `idx_pipelines_tenant_name` (UNIQUE), `idx_pipelines_active`, `idx_pipeline_stages_pipeline`, `idx_pipeline_stages_order` (UNIQUE), `idx_pipeline_stages_persona` | `migrate_add_pipelines.sh/.bat` |
-| 24 | Add default_pipeline_id to fleets and vessels | `fleets`: +`default_pipeline_id` (TEXT). `vessels`: +`default_pipeline_id` (TEXT) | `idx_fleets_default_pipeline`, `idx_vessels_default_pipeline` | `migrate_add_default_pipeline.sh/.bat` |
-| 25 | Add mission dependency chain | `missions`: +`depends_on_mission_id` (TEXT) | `idx_missions_depends_on` | `migrate_add_mission_dependency.sh/.bat` |
-
-**Total: 7 migrations, 4 new tables, 7 new columns on existing tables, 16 new indexes**
+**Total: 5 migrations, 4 new tables, 7 new columns on existing tables, 16 new indexes**
 
 **Driver-specific type mappings for `content`/large text columns:**
 
@@ -700,30 +707,42 @@ All prompts that are or were hardcoded in C#. Status column indicates current st
 | 12 | `agent.launch_prompt` | agent | Short CLI prompt: `Mission: {MissionTitle}\n\n{MissionDescription}` | **DONE** -- template-resolved |
 | 13 | `commit.instructions_preamble` | commit | "IMPORTANT: Every git commit MUST include a full manifest and description of what changed..." | **DONE** -- resolved at runtime via ResolveAsync (operator edits apply); always sent, trailers split into `commit.trailers_preamble` |
 | 14 | `landing.pr_body` | landing | PR body: `## Mission\n**{MissionTitle}**\n\n{MissionDescription}` | **DONE** -- template-resolved |
-| 15 | `commit.message_template` | commit | Commit trailer template | Already configurable via MessageTemplateSettings |
-| 16 | `commit.pr_description_template` | commit | PR description metadata | Already configurable via MessageTemplateSettings |
-| 17 | `commit.merge_message_template` | commit | Merge commit message | Already configurable via MessageTemplateSettings |
+| 15 | (setting) | commit | Commit trailer template | Not a prompt template: `MessageTemplates.CommitMessageTemplate` in settings, see [MESSAGE_TEMPLATES.md](MESSAGE_TEMPLATES.md) |
+| 16 | (setting) | commit | PR description metadata | Not a prompt template: `MessageTemplates.PrDescriptionTemplate` |
+| 17 | (setting) | commit | Merge commit message | Not a prompt template: `MessageTemplates.MergeCommitTemplate` |
 | 18 | `persona.worker` | persona | Default worker persona preamble | **DONE** -- template-resolved |
 | 19 | `persona.architect` | persona | Architect planning instructions | **DONE** -- template-resolved |
 | 20 | `persona.judge` | persona | Judge review instructions | **DONE** -- template-resolved |
 | 21 | `persona.test_engineer` | persona | Test engineer instructions | **DONE** -- template-resolved |
+| 22 | `persona.product_manager` | persona | Product manager instructions | **DONE** -- template-resolved |
+| 23 | `persona.usability_engineer` | persona | Usability engineer instructions | **DONE** -- template-resolved |
+| 24 | `persona.linter` | persona | Linter instructions | **DONE** -- template-resolved |
+| 25 | `persona.recorder` | persona | Recorder (memory distillation) instructions | **DONE** -- template-resolved |
+| 26 | `commit.trailers_preamble` | commit | Introduces the Armada commit trailers (only when commit metadata is enabled) | **DONE** -- template-resolved |
+| 27 | `mission.playbooks_wrapper` | structure | Wrapper for selected playbooks (`{SelectedPlaybooksMarkdown}`) | **DONE** -- template-resolved |
+| 28 | `ask.system` | ask | Ask Armada system prompt | **DONE** -- template-resolved |
+| 29 | `vessel.build_context` | vessel | Vessel "Build Context" action prompt | **DONE** -- template-resolved |
+| 30 | `import.fleet_categorization` | import | Fleet recommendations for bulk-imported repositories | **DONE** -- template-resolved |
 
 ---
 
 ## Appendix C: Template Placeholder Reference
 
-All placeholders available for template rendering:
+Placeholders available when mission prompt templates (the `mission.*`, `persona.*`, and structure templates) are
+rendered. Rendering is plain text substitution of `{Name}`; a placeholder that is not in this list is left in the
+output unchanged. Source: `MissionPromptBuilder.BuildTemplateParams` and `MissionService.GenerateClaudeMdAsync`.
 
 ### Mission Context
 | Placeholder | Source | Description |
 |-------------|--------|-------------|
 | `{MissionId}` | `mission.Id` | Mission identifier |
 | `{MissionTitle}` | `mission.Title` | Mission title |
-| `{MissionDescription}` | `mission.Description` | Full mission description |
-| `{MissionPersona}` | `mission.Persona` | Persona assigned to this mission |
+| `{MissionDescription}` | `mission.Description` | Full mission description ("No additional description provided." when empty) |
+| `{MissionPersona}` | `mission.Persona` | Persona assigned to this mission (`Worker` when unset) |
 | `{VoyageId}` | `mission.VoyageId` | Parent voyage identifier |
-| `{VoyageTitle}` | `voyage.Title` | Parent voyage title |
-| `{BranchName}` | `mission.BranchName` | Git branch for this mission |
+| `{BranchName}` | dock or mission branch | Git branch for this mission |
+| `{PersonaPrompt}` | rendered `persona.*` template | Resolved persona prompt (used by `mission.metadata`) |
+| `{SelectedPlaybooksMarkdown}` | selected playbooks | Rendered playbook content (used by `mission.playbooks_wrapper`) |
 
 ### Vessel Context
 | Placeholder | Source | Description |
@@ -733,7 +752,7 @@ All placeholders available for template rendering:
 | `{DefaultBranch}` | `vessel.DefaultBranch` | Default branch (e.g. main) |
 | `{ProjectContext}` | `vessel.ProjectContext` | User-supplied project description |
 | `{StyleGuide}` | `vessel.StyleGuide` | User-supplied style guide |
-| `{ModelContext}` | `vessel.ModelContext` | Agent-accumulated context |
+| `{ModelContext}` | `vessel.ModelContext` | Agent-accumulated context (empty unless model context is enabled) |
 | `{FleetId}` | `vessel.FleetId` | Parent fleet identifier |
 
 ### Captain Context
@@ -743,23 +762,14 @@ All placeholders available for template rendering:
 | `{CaptainName}` | `captain.Name` | Captain display name |
 | `{CaptainInstructions}` | `captain.SystemInstructions` | User-supplied captain instructions |
 
-### Dock/Runtime Context
-| Placeholder | Source | Description |
-|-------------|--------|-------------|
-| `{DockId}` | `dock.Id` | Dock (worktree) identifier |
-| `{WorktreePath}` | `dock.WorktreePath` | Filesystem path to worktree |
-
-### Pipeline Context (new)
-| Placeholder | Source | Description |
-|-------------|--------|-------------|
-| `{PipelineName}` | `pipeline.Name` | Pipeline name |
-| `{StageNumber}` | stage order | Current stage number |
-| `{TotalStages}` | pipeline stage count | Total stages in pipeline |
-| `{PreviousStageDiff}` | git diff from prior stage | Diff output from the previous stage (for Judge/Test Engineer) |
-| `{PreviousStageOutput}` | prior mission output | Structured output from the previous stage (for Architect output) |
-
 ### System
 | Placeholder | Source | Description |
 |-------------|--------|-------------|
-| `{Timestamp}` | `DateTime.UtcNow` | Current UTC timestamp |
-| `{ExistingClaudeMd}` | file read | Contents of repo's existing CLAUDE.md |
+| `{Timestamp}` | `DateTime.UtcNow` | Current UTC timestamp (ISO 8601) |
+| `{ExistingClaudeMd}` | file read | Contents of the repository's existing CLAUDE.md (used by `mission.existing_instructions_wrapper`) |
+
+The original plan also listed `{VoyageTitle}`, `{DockId}`, `{WorktreePath}`, `{PipelineName}`, `{StageNumber}`,
+`{TotalStages}`, `{PreviousStageDiff}`, and `{PreviousStageOutput}`. None of these is filled for prompt templates.
+`{VoyageTitle}` and `{DockId}` exist only for the commit and PR message templates (see
+[MESSAGE_TEMPLATES.md](MESSAGE_TEMPLATES.md)). Prior-stage context reaches the next stage through the mission
+description, which the stage handoff rewrites, not through placeholders.

@@ -29,7 +29,9 @@ Agent commit metadata works by injecting instructions into the agent's prompt as
 | `{BranchName}` | Git branch name | `armada/fix-login-bug` |
 | `{Timestamp}` | UTC timestamp (ISO 8601) | `2026-03-07T14:30:00.0000000Z` |
 
-Placeholders that cannot be resolved (e.g., no voyage assigned) are replaced with an empty string. Unknown placeholders are left as-is in the output.
+Placeholders that cannot be resolved (e.g., no voyage assigned) are replaced with an empty string. Unknown placeholders are left as-is in the output. The PR description and merge commit are rendered without a captain, so `{CaptainName}` is empty there; `{CaptainId}` still comes from the mission.
+
+These are the message-template placeholders only. Prompt templates (Configuration > Prompts) use their own set; see [PERSONAS_GUIDE.md](PERSONAS_GUIDE.md#available-placeholders).
 
 ## Commit Message Template
 
@@ -43,7 +45,7 @@ Armada-Captain-Id: {CaptainId}
 Armada-Vessel-Id: {VesselId}
 ```
 
-This template is rendered and included in the agent's prompt as instructions. The agent is asked to append these Git trailers to every commit message it creates.
+Every mission prompt asks the agent for a descriptive commit message (the `commit.instructions_preamble` prompt template, always sent). When `enableCommitMetadata` is true, this template is rendered and appended after the `commit.trailers_preamble` prompt template, asking the agent to add these Git trailers to every commit message it creates. Both preamble templates can be edited under Configuration > Prompts in the dashboard.
 
 **Example commit produced by an agent:**
 ```
@@ -73,7 +75,7 @@ Committed by [Armada](https://github.com/jchristn/armada)
 - Vessel ID  : {VesselId}
 ```
 
-This template is appended to the pull request body after the mission title and description.
+When `enablePrMetadata` is true, this template is appended to the pull request body. The body itself comes from the `landing.pr_body` prompt template (by default the mission title and description).
 
 **Example PR body:**
 ```markdown
@@ -102,7 +104,7 @@ Armada-Mission-Id: {MissionId}
 Armada-Voyage-Id: {VoyageId}
 ```
 
-Used for local merge commits when Armada merges a captain's branch into the user's working directory (non-PR flow).
+Used for local merge commits when Armada merges a captain's branch into the vessel's working directory (non-PR flow). It is applied only when `enableCommitMetadata` is true; otherwise git's default merge message is used.
 
 ## Configuration
 
@@ -132,7 +134,7 @@ armada config show
 
 ### Via settings.json
 
-Edit `~/.armada/settings.json`:
+Edit `settings.json` in the Armada data directory (`~/.armada/settings.json` by default):
 
 ```json
 {
@@ -166,7 +168,7 @@ Edit `~/.armada/settings.json`:
 {
   "messageTemplates": {
     "commitMessageTemplate": "\nArmada-Mission-Id: {MissionId}\nArmada-Mission-Title: {MissionTitle}\nArmada-Voyage-Id: {VoyageId}\nArmada-Captain-Id: {CaptainId}\nArmada-Captain-Name: {CaptainName}\nArmada-Vessel-Id: {VesselId}\nArmada-Vessel-Name: {VesselName}\nArmada-Fleet-Id: {FleetId}\nArmada-Dock-Id: {DockId}",
-    "prDescriptionTemplate": "\n\n---\nCommitted by [Armada](https://github.com/jchristn/armada)\n| Field | Value |\n|-------|-------|\n| Mission | {MissionTitle} (`{MissionId}`) |\n| Voyage | {VoyageTitle} (`{VoyageId}`) |\n| Captain | {CaptainName} (`{CaptainId}`) |\n| Vessel | {VesselName} (`{VesselId}`) |\n| Branch | `{BranchName}` |"
+    "prDescriptionTemplate": "\n\n---\nCommitted by [Armada](https://github.com/jchristn/armada)\n| Field | Value |\n|-------|-------|\n| Mission | {MissionTitle} (`{MissionId}`) |\n| Voyage | {VoyageTitle} (`{VoyageId}`) |\n| Captain | `{CaptainId}` |\n| Vessel | {VesselName} (`{VesselId}`) |\n| Branch | `{BranchName}` |"
   }
 }
 ```

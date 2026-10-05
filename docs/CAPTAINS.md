@@ -11,15 +11,17 @@ code is the thing to check first.
 
 ## Supported runtimes
 
-| Runtime | `AgentRuntimeEnum` | Executable Armada runs | Install hint printed by `armada doctor` |
-|---------|--------------------|------------------------|------------------------------------------|
+| Runtime | `AgentRuntimeEnum` | Executable Armada runs | Install hint (`RuntimeDetectionService.GetInstallHint`) |
+|---------|--------------------|------------------------|----------------------------------------------------------|
 | Claude Code | `ClaudeCode` | `claude` | `npm install -g @anthropic-ai/claude-code` |
 | Codex | `Codex` | `codex` | `npm install -g @openai/codex` |
 | Gemini | `Gemini` | `gemini` | `npm install -g @google/gemini-cli` |
 | Cursor | `Cursor` | `cursor-agent` | See https://docs.cursor.com/cli |
-| Mux | `Mux` | `mux` | Install mux and put `mux` on PATH |
-| OpenCode | `OpenCode` | `opencode` | (none; not probed by `armada doctor`) |
+| Mux | `Mux` | `mux` | Install mux and ensure the `mux` command is on PATH |
+| OpenCode | `OpenCode` | `opencode` | (see runtime documentation); not probed by `armada doctor` |
 | API endpoint | `ApiEndpoint` | none (runs in the Admiral process) | Configure an inference endpoint in the dashboard |
+
+`armada doctor` lists each runtime it finds; when it finds none it prints only the Claude Code hint.
 
 A `Custom` value also exists in the enum. It is a hook for code that registers its own `IAgentRuntime` with
 `AgentRuntimeFactory.Register`; it is not a product runtime, it cannot be used for planning or Ask, and the rest of
@@ -86,6 +88,19 @@ were verified up to the MCP handshake (the server received the thread token in `
 or model endpoint was available for them. The Codex override uses `default_tools_approval_mode`, which older Codex
 releases may not accept; Mux needs 0.7.0 or newer for `--strict-mcp-config`.
 
+**Mission-scoped tokens.** Missions use the same per-invocation binding. With `Mcp.MissionScopedTokens` on (the
+default), every mission launch mints an MCP-only session token bound to the mission's tenant, owner, and captain,
+valid only while the mission is Assigned or InProgress on that captain, so a mission captain calls Armada as the
+mission's owner rather than as the unauthenticated loopback caller (`Mcp.AllowUnauthenticatedLoopback`, default
+`true`, which only applies while the MCP listener is bound to a loopback hostname). The binding is the one in the table
+above with two differences: no client files are written into the mission's worktree, so Gemini and Cursor missions get
+the token only when `IsolateCaptainLaunch` is on, and with `IsolateCaptainLaunch` on the token rides in the isolated
+configuration described under "How Armada launches each runtime" instead (that configuration has no token for Mux,
+and OpenCode has no isolated form, so both then run without one). ApiEndpoint missions receive
+`ARMADA_MCP_URL` and `ARMADA_MCP_TOKEN`, and Harbor launches bind the token on the Harbor. Because Claude Code's binding
+is `--strict-mcp-config`, a Claude Code mission sees only Armada's MCP server, not other servers in the user's Claude
+Code configuration. Set `Mcp.MissionScopedTokens` to `false` to launch missions without a token.
+
 A `Custom` runtime is not gated, and neither is a captain on a server whose MCP listener is off. The dashboard reads
 `askApprovalGated` from `GET /api/v1/captains/{id}/tools`; when it is false, the Ask conversation shows a persistent
 note under the header: "Actions from this captain run without approval cards."
@@ -134,20 +149,23 @@ often and orphaned MSBuild nodes outlive the mission otherwise.
 How a captain finds Armada's MCP server depends on `IsolateCaptainLaunch` in `settings.json` (default `false`). With it
 off, the CLI uses its normal user configuration, which is what `armada mcp install` writes. With it on, Armada writes a
 scoped config directory under the system temp directory (`armada/isolation/<captainId>`) that contains only the Armada
-MCP server at `http://localhost:<mcpPort>/mcp`, and points the CLI at it. Each runtime section names the mechanism.
+MCP server at `http://<host>:<mcpPort>/mcp` (`localhost` unless the Admiral is bound to another hostname), and points the CLI at it. Each runtime section names the mechanism.
 
 ### Claude Code
 
 ```
-claude --print --verbose [--output-format stream-json --include-partial-messages] [--model <model>] --dangerously-skip-permissions
+claude --print --verbose [--output-format stream-json --include-partial-messages] [--model <model>]
+    (--dangerously-skip-permissions | --permission-mode acceptEdits --allowedTools mcp__armada)
 ```
 
-The stream-json flags are added only for Ask and interactive planning turns. Armada sets
+The stream-json flags are added only for Ask and interactive planning turns. Without auto-approve (see "Running agents
+safely") Claude Code accepts file edits, allows Armada's own MCP tools, and refuses any other tool, including shell
+commands, that the project's Claude Code settings do not allow; print mode refuses rather than prompts. Armada sets
 `CLAUDE_CODE_DISABLE_NONINTERACTIVE_HINT=1`, removes `CLAUDECODE` and `CLAUDE_CODE_ENTRYPOINT` so a captain can start
 even when the Admiral itself was launched from inside a Claude Code session, and sets `MAX_THINKING_TOKENS` from the
 captain's reasoning effort. Isolated launches add `--setting-sources project,local --strict-mcp-config --mcp-config
-<dir>/armada-mcp.json`. Ask thread turns always use that isolated form, with the session token as an `X-Token` header,
-which is what makes approval gating work. Claude Code is the only runtime that reports `SupportsResume`.
+<dir>/armada-mcp.json`. Ask thread turns, and missions launched with a mission-scoped token, always use that strict
+form with the session token as an `X-Token` header in a per-launch file, which is what makes approval gating work. Claude Code is the only runtime that reports `SupportsResume`.
 
 Guides: [INSTRUCTIONS_FOR_CLAUDE_CODE.md](INSTRUCTIONS_FOR_CLAUDE_CODE.md),
 [CLAUDE_CODE_AS_ORCHESTRATOR.md](CLAUDE_CODE_AS_ORCHESTRATOR.md).
@@ -159,7 +177,8 @@ codex exec --skip-git-repo-check --sandbox workspace-write [--model <model>] [-c
 ```
 
 The approval mode defaults to `full-auto`, sent as `--sandbox workspace-write` (Codex 0.159 removed the `--full-auto`
-alias from `codex exec`, which never prompts). `--skip-git-repo-check` lets chat and planning turns start in their
+alias from `codex exec`, which never prompts). A captain without auto-approve always gets `--sandbox workspace-write`,
+on every OS. `--skip-git-repo-check` lets chat and planning turns start in their
 throwaway directory, which is not a git repository. On Windows, `full-auto` is sent as
 `--dangerously-bypass-approvals-and-sandbox` instead, and a `dangerous` mode sends that flag on every OS. The final reply is read from the
 `--output-last-message` file. Isolated launches write `config.toml` with an `[mcp_servers.armada]` entry and set
@@ -171,8 +190,10 @@ Guides: [INSTRUCTIONS_FOR_CODEX.md](INSTRUCTIONS_FOR_CODEX.md), [CODEX_AS_ORCHES
 ### Gemini
 
 ```
-gemini [--model <model>] --approval-mode yolo
+gemini [--model <model>] --approval-mode (yolo | auto_edit)
 ```
+
+`auto_edit` is used when the captain runs without auto-approve.
 
 Gemini reads the prompt from piped stdin when no `-p` is given. Isolated launches write `.gemini/settings.json` with
 an `mcpServers.armada` entry and point `HOME` and `USERPROFILE` at the scoped directory.
@@ -182,10 +203,10 @@ Guides: [INSTRUCTIONS_FOR_GEMINI.md](INSTRUCTIONS_FOR_GEMINI.md), [GEMINI_AS_ORC
 ### Cursor
 
 ```
-cursor-agent -p [--model <model>] --force --output-format text
+cursor-agent -p [--model <model>] [--force] --output-format text
 ```
 
-Isolated launches write `.cursor/mcp.json` and override `HOME` and `USERPROFILE` the same way as Gemini. Outside
+`--force` is omitted when the captain runs without auto-approve. Isolated launches write `.cursor/mcp.json` and override `HOME` and `USERPROFILE` the same way as Gemini. Outside
 isolation, Cursor's MCP configuration is project-scoped (`.cursor/mcp.json` in the working directory), which is why the
 captain tool inventory often cannot see it.
 
@@ -203,9 +224,10 @@ mux print [--config-dir <dir>] [--mcp-config <dir>/mcp-servers.json] [--effort <
 Mux is the most configurable runtime because its per-captain options (config directory, endpoint, base URL, adapter
 type, temperature, max tokens, system prompt path, approval policy) are stored on the captain and passed through.
 `--mcp-config` is added whenever `mcp-servers.json` exists in the Mux config directory (`--config-dir`, then
-`MUX_CONFIG_DIR`, then `~/.mux`). An empty or `auto` approval policy becomes `--yolo`; anything else is passed as
-`--approval-policy`. Mux is also the only runtime where the approval policy can be changed per captain
-(`muxApprovalPolicy` on the captain MCP tools). Isolated launches write `mcp-servers.json` and set `MUX_CONFIG_DIR`.
+`MUX_CONFIG_DIR`, then `~/.mux`). An empty, `auto`, or `autoapprove` approval policy becomes `--yolo`; anything else is passed as
+`--approval-policy`. With no policy set and auto-approve off, the policy is `deny`. Mux is the only runtime with a
+named approval policy per captain (`muxApprovalPolicy` on the captain MCP tools); the other runtimes have only the
+on/off `autoApprove` switch. Isolated launches write `mcp-servers.json` and set `MUX_CONFIG_DIR`.
 Mux is the one CLI runtime that takes the prompt as a positional argument (the last one) rather than on stdin.
 
 Guides: [INSTRUCTIONS_FOR_MUX.md](INSTRUCTIONS_FOR_MUX.md), [MUX_AS_ORCHESTRATOR.md](MUX_AS_ORCHESTRATOR.md).
@@ -213,10 +235,10 @@ Guides: [INSTRUCTIONS_FOR_MUX.md](INSTRUCTIONS_FOR_MUX.md), [MUX_AS_ORCHESTRATOR
 ### OpenCode
 
 ```
-opencode run --format json [--model <model>] [--variant <variant>] [--thinking] --auto --dir <workingDirectory>
+opencode run --format json [--model <model>] [--variant <variant>] [--thinking] [--auto] --dir <workingDirectory>
 ```
 
-OpenCode has no entry in the launch isolation planner, so `IsolateCaptainLaunch` has no effect on it; it always reads
+`--auto` is omitted when the captain runs without auto-approve. OpenCode has no entry in the launch isolation planner, so `IsolateCaptainLaunch` has no effect on it; it always reads
 the user's `~/.config/opencode/opencode.json` (or `.jsonc`), where `armada mcp install` writes a `remote` entry under
 `mcp`. It is also missing from `armada doctor` runtime detection, as noted above.
 
@@ -229,25 +251,42 @@ No process is started. `ApiAgentRuntime` resolves the captain's model endpoint (
 the dashboard) and runs a tool-calling loop inside the Admiral, up to 100 iterations per run, with Armada's built-in
 coding tools: read, write, edit, multi-edit, glob, grep, list and manage directories, file metadata, delete, run
 process, and a task-plan pair. The model comes from the endpoint; a captain-level model overrides it. When Armada
-supplies `ARMADA_MCP_URL` and `ARMADA_MCP_TOKEN` (Ask turns do), the loop also connects to Armada's own MCP server as
-that user and exposes its tools to the model. Missions do not supply them, so a mission run by an API-endpoint captain
-has the coding tools only.
+supplies `ARMADA_MCP_URL` and `ARMADA_MCP_TOKEN`, the loop also connects to Armada's own MCP server as that caller and
+exposes its tools to the model. Ask turns always supply them; missions supply them while `Mcp.MissionScopedTokens` is
+on (the default), and otherwise a mission run by an API-endpoint captain has the coding tools only.
 
 ## Running agents safely
 
-Every CLI runtime is launched with its "do not ask me" switch on by default: `--dangerously-skip-permissions` for
-Claude Code, `--sandbox workspace-write` for Codex (and `--dangerously-bypass-approvals-and-sandbox` on Windows), `--approval-mode
-yolo` for Gemini, `--force` for Cursor, `--yolo` for Mux unless an approval policy is set, and `--auto` for OpenCode.
-A captain runs unattended inside a git worktree, so there is nobody to answer a permission prompt; without these flags
-the mission would stall on its first shell command.
+By default every CLI runtime is launched with its "do not ask me" switch on: `--dangerously-skip-permissions` for
+Claude Code, `--sandbox workspace-write` for Codex (and `--dangerously-bypass-approvals-and-sandbox` on Windows),
+`--approval-mode yolo` for Gemini, `--force` for Cursor, `--yolo` for Mux unless an approval policy is set, and `--auto`
+for OpenCode. A captain runs unattended inside a git worktree, so there is nobody to answer a permission prompt; without
+these flags a mission stalls or is refused on its first shell command.
 
 The consequence is that a captain can run any command the Admiral's (or Harbor's) user account can run, on that
 machine, with that user's credentials. The worktree is a working directory, not a sandbox. Run captains under an
 account that has only what the work needs, keep secrets you do not want an agent to read out of that account's home
-directory, and prefer a dedicated machine or VM for fleets that touch untrusted repositories. Only Mux's approval mode
-can be changed per captain today. Making the others configurable, and auditing every command Armada runs on a user's
-behalf, is W1.5 in `V1_READINESS.md`.
+directory, and prefer a dedicated machine or VM for fleets that touch untrusted repositories.
 
-Ask threads are the one place where a human sits in the loop, and the gate there covers Armada's own MCP tools, not
-the agent's shell. Even on a gated Claude Code thread, the captain's built-in file and shell tools run without
-prompting.
+Three settings turn the switch off:
+
+- **Per captain:** `autoApprove` (default `true`) on `create_captain` / `update_captain`, stored in the captain's
+  `runtimeOptionsJson`; in the dashboard it is the "Auto-approve agent tool use" checkbox on the captain form, and the
+  TUI captain form has the same field. With it off, Claude Code runs with `--permission-mode acceptEdits --allowedTools
+  mcp__armada`, Codex with `--sandbox workspace-write`, Gemini with `--approval-mode auto_edit`, Cursor without
+  `--force`, OpenCode without `--auto`, and Mux with approval policy `deny` (unless `muxApprovalPolicy` is set). It does
+  not apply to ApiEndpoint captains, which run Armada's coding tools in-process.
+- **Per vessel:** `autoApprove` on `add_vessel` / `update_vessel` (`clearAutoApprove` removes it), shown as "Agent
+  Auto-Approve" on the vessel form (On, Off, or use the captain setting). When set it wins over the captain's setting
+  for missions on that vessel, including Harbor launches.
+- **Ask Armada:** `Ask.CaptainAutoApprove` in `settings.json` (default `false`). While it is false, Ask thread turns and
+  milestone narrations run CLI captains without auto-approve whatever the captain's own setting, because any
+  authenticated user can start an Ask turn. Set it to `true` only when everyone who can use Ask is trusted with a shell
+  on the Admiral host.
+
+Every command Armada itself runs on a user's behalf (workspace exec, fleet action commands, check runs, Harbor probes,
+merge-queue tests) is recorded as an `audit.command` event. See [SECURITY_REVIEW.md](SECURITY_REVIEW.md#running-agents-safely) for the threat
+model.
+
+Ask threads are the one place where a human approves Armada actions, and that gate covers Armada's own MCP tools, not
+the agent's shell or file tools. Those are governed by the auto-approve settings above.

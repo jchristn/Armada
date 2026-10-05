@@ -1,6 +1,6 @@
 # Delivery Operations
 
-This guide covers the current internal-first operator workflow for:
+This guide covers the internal-first operator workflow for:
 
 - drafting and curating releases
 - executing deployments against named environments
@@ -8,11 +8,11 @@ This guide covers the current internal-first operator workflow for:
 - rolling back failed rollouts
 - recording incidents and postmortems
 
-It describes the shipped Armada-side workflow in `v0.9.0`. It does not assume external CI, PR providers, or remote multi-host delivery.
+It describes the shipped Armada-side workflow in `v1.0.0`. It does not assume external CI, PR providers, or remote multi-host delivery.
 
 ## Scope
 
-Armada currently supports:
+In the dashboard these are tabs of the Delivery page (`/delivery`); the terminal UI (`armada tui`) has the same screens. Armada supports:
 
 - `Delivery > Releases` for release drafting, notes, artifacts, and linked work
 - `Delivery > Environments` for named rollout targets and rollout-monitoring settings
@@ -20,6 +20,7 @@ Armada currently supports:
 - `Delivery > Incidents` for incident records, hotfix handoff, rollback context, and postmortem notes
 - `Delivery > Runbooks` for step-by-step operational runbooks linked to deployments and incidents
 - `Activity` (All Activity) for reconstructing what happened across releases, deployments, incidents, checks, requests, and runbook executions
+- `Needs You` (`/inbox`) for deployments waiting on approval and failed or verification-failed deployments
 
 Armada does not yet support:
 
@@ -33,14 +34,14 @@ Before using releases or deployments, make sure the vessel is set up with:
 
 - a valid working directory
 - a default branch
-- a default captain if you want planning or dispatch handoff
+- at least one captain if you want planning or dispatch handoff
 - a workflow profile with the commands you expect to run
 
-Minimum workflow-profile coverage for delivery work:
+Minimum workflow-profile coverage for delivery work (the profile-level `ReleaseVersioningCommand`, plus per-environment commands in the profile's `Environments` list, each matched by `EnvironmentName`):
 
 - `ReleaseVersioningCommand` when you want version inference
 - `DeployCommand` for each target environment
-- `SmokeTestCommand` or `DeploymentVerificationCommand` where verification should run automatically
+- `SmokeTestCommand`, `HealthCheckCommand`, or `DeploymentVerificationCommand` where verification should run automatically
 - `RollbackCommand` when rollback should be executable through Armada
 - `RollbackVerificationCommand` when rollback must produce proof
 
@@ -57,10 +58,10 @@ to confirm the vessel is ready before operating on releases or deployments.
 
 You can start a release from:
 
-- `Activity > Objectives`
-- `Missions > Voyages`
-- `Delivery > Checks`
-- `Delivery > Releases > New`
+- a backlog item (`Dispatch > Backlog`, then the item's `Draft Release` action)
+- a voyage (`Missions > Voyages`, then the voyage's `Draft Release` action)
+- a check run (`Delivery > Checks`, then the check's `Draft Release` action)
+- `Delivery > Releases > Create Release`
 
 Recommended operator flow:
 
@@ -98,12 +99,12 @@ During execution, deployment detail becomes the source of truth for:
 - request-history evidence
 - rollback state
 
-If the environment requires approval, use:
+If the environment requires approval, the deployment starts in `PendingApproval`. Use:
 
 - `Approve`
 - `Deny`
 
-from deployment detail instead of bypassing the workflow manually.
+from deployment detail instead of bypassing the workflow manually. A pending approval also appears in `Needs You` (`/inbox`) and in the terminal UI's Approvals center (`Ctrl+A`) as "Deployment awaiting approval: <environment>", named by the environment (the deployment id when the deployment has no environment name). The MCP equivalent is `approve_deployment`.
 
 ## 4. Verify The Rollout
 
@@ -118,7 +119,7 @@ After deployment starts or completes, use deployment detail to inspect:
 
 Use `Verify` when you need to re-run the deployment verification path without re-running the original deployment command.
 
-Use `Activity` (All Activity) and `Activity` (Requests) when you need supporting evidence beyond the deployment record itself.
+Use `Activity` (All Activity) and `Activity` (API Requests) when you need supporting evidence beyond the deployment record itself.
 
 ## 5. Roll Back A Failed Release
 
@@ -169,13 +170,15 @@ action. On each health cycle the recovery coordinator:
 
 1. **Classifies** each recently failed mission from its status and failure reason into a
    `FailureKind` (Compile, TestFail, Timeout, LandingConflict, Crash for mechanical
-   failures; NoOp, Boundary, ScopeViolation, JudgeRejected, Infra, Unknown otherwise).
+   failures; NoOp, Boundary, ScopeViolation, JudgeRejected, Infra, ReviewDenied,
+   DependencyFailed, MaxRuntimeExceeded, StallRecoveryExhausted, OperatorAction,
+   InvalidOutput, and Unknown otherwise).
 2. **Opens an incident** for the mechanical (recoverable) kinds, linked to the mission,
    vessel, and voyage, recording the classified `FailureKind`. Non-recoverable kinds are
    left to the existing escalation/inbox path -- they need a human, not a retry.
 3. **Dispatches a bounded rescue mission**: a fresh Worker mission carrying the original
    brief plus the failure evidence (classified kind, failure reason, prior diff). Rescues
-   are capped per incident by `MaxMissionRecoveryAttempts` (default 2); a failed rescue
+   are capped per incident by `MaxMissionRecoveryAttempts` (default 2, maximum 5); a failed rescue
    re-dispatches until the cap, after which the incident is left **Open** with a note for a
    human.
 4. **Advances the incident from evidence alone**: `Open -> Mitigated` when a rescue mission
@@ -203,7 +206,7 @@ Runbook execution history is preserved and appears in the broader delivery timel
 When you need to understand what happened after the fact, use:
 
 - `Activity` (All Activity) for cross-entity chronology
-- `Activity` (Requests) for API- and server-level request evidence
+- `Activity` (API Requests) for API- and server-level request evidence
 - `Delivery > Checks` for execution logs, parsed results, and artifacts
 - `Delivery > Releases` for what was intended to ship
 - `Delivery > Deployments` for what actually rolled out
@@ -223,4 +226,4 @@ For the cleanest operator experience, treat these as required:
 
 - No provider-backed PR evidence is attached to releases yet.
 - No external CI provider deployment evidence is attached yet.
-- Proxy delivery workflows remain bounded and operator-focused rather than full dashboard parity. They currently expose releases, environments, deployments, incidents, runbooks, and runbook executions through the tunnel shell, but they do not attempt full administrative coverage or secret editing.
+- Through the remote proxy, the full dashboard (including every Delivery tab) is relayed over the tunnel, but administrative resources (`settings`, `tenants`, `users`, `credentials`) are read-only there, and shutdown, factory reset, and restore are blocked.
