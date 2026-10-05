@@ -230,7 +230,7 @@ namespace Test.Shared.Suites.Tui
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI runbooks", cases: cases);
         }
 
-        private static StubHttpHandler Server()
+        internal static StubHttpHandler Server()
         {
             StubHttpHandler stub = TuiEntityFixtures.Server();
             AddRunbooks(stub);

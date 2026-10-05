@@ -14,6 +14,15 @@ namespace Armada.Tui.Widgets
         #region Public-Members
 
         /// <summary>
+        /// True when the row can take focus: never while it has no buttons (focus would land on nothing visible).
+        /// </summary>
+        public override bool CanFocus
+        {
+            get { return _CanFocus && Scope.Children.Count > 0; }
+            set { _CanFocus = value; }
+        }
+
+        /// <summary>
         /// Buttons in order.
         /// </summary>
         public IReadOnlyList<Button> Buttons
@@ -25,6 +34,12 @@ namespace Armada.Tui.Widgets
         /// Cells between buttons. Default 2.
         /// </summary>
         public int Gap { get; set; } = 2;
+
+        #endregion
+
+        #region Private-Members
+
+        private bool _CanFocus = true;
 
         #endregion
 

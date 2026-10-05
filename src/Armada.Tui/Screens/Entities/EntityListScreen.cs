@@ -269,29 +269,26 @@ namespace Armada.Tui.Screens.Entities
             int height = surface.Size.Height;
             SurfaceText.FillRect(surface, new Rect(0, 0, width, height), Theme.Text);
             if (width < 10 || height < 4) return;
-            int y = 0;
+            // The filter row and the grid are focus regions, each with a box line above and below (see RegionStack).
+            RegionStack stack = new RegionStack(width, height);
             int kpiLines = Math.Min(3, Kpis.LinesFor(width));
             if (kpiLines > 0)
             {
-                Kpis.Render(new SurfaceView(surface, new Rect(0, y, width, kpiLines)));
-                y += kpiLines;
+                int top = stack.Content(kpiLines);
+                Kpis.Render(new SurfaceView(surface, new Rect(0, top, width, kpiLines)));
             }
 
             int filterLines = Math.Min(3, Filters.LinesFor(width));
-            if (filterLines > 0)
-            {
-                Scope.RenderChild(surface, Filters, new Rect(0, y, width, filterLines));
-                y += filterLines;
-            }
+            if (filterLines > 0) Scope.RenderChild(surface, Filters, stack.Place(Filters, filterLines));
 
             if (!String.IsNullOrEmpty(Notice))
             {
-                SurfaceText.Draw(surface, 0, y, T(Notice!), Theme.Muted, width);
-                y++;
+                int top = stack.Content(1);
+                SurfaceText.Draw(surface, 0, top, T(Notice!), Theme.Muted, width);
             }
 
-            if (y > 0) y++;
-            if (height - y >= 2) Scope.RenderChild(surface, Grid, new Rect(0, y, width, height - y));
+            Rect grid = stack.Fill(Grid);
+            if (grid.Height >= 2) Scope.RenderChild(surface, Grid, grid);
         }
 
         #endregion

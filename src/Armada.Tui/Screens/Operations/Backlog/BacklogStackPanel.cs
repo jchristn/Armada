@@ -32,6 +32,18 @@ namespace Armada.Tui.Screens.Operations
 
         #endregion
 
+        #region Constructors-and-Factories
+
+        /// <summary>
+        /// Instantiate. Each row is its own focus region (see <see cref="RegionFrames"/>).
+        /// </summary>
+        public BacklogStackPanel()
+        {
+            Scope.RegionHost = true;
+        }
+
+        #endregion
+
         #region Public-Methods
 
         /// <summary>
@@ -72,33 +84,38 @@ namespace Armada.Tui.Screens.Operations
             int width = surface.Size.Width;
             int height = surface.Size.Height;
             SurfaceText.FillRect(surface, new Rect(0, 0, width, height), Theme.Text);
-            List<int> heights = new List<int>();
-            int fixedTotal = 0;
+            // Each row that is a focus region gets its own box (the panel is a region host): measure the fixed rows and
+            // the box lines with the flexible row empty, then give it what is left.
             int flex = -1;
             for (int i = 0; i < _Rows.Count; i++)
             {
                 bool visible = !(_Rows[i] is ArmadaWidget aw) || aw.Visible;
-                int h = visible ? _Heights[i]() : 0;
-                if (visible && h <= 0 && flex < 0)
+                if (visible && _Heights[i]() <= 0)
                 {
                     flex = i;
-                    heights.Add(0);
-                    continue;
+                    break;
                 }
-
-                h = Math.Max(0, h);
-                heights.Add(h);
-                fixedTotal += h;
             }
 
-            if (flex >= 0) heights[flex] = Math.Max(1, height - fixedTotal);
-            int y = 0;
+            RegionStack measure = new RegionStack(width, height);
+            Arrange(measure, width, flex, 0, null);
+            Arrange(new RegionStack(width, height), width, flex, Math.Max(1, height - measure.Y), surface);
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private void Arrange(RegionStack stack, int width, int flex, int flexHeight, ISurface? surface)
+        {
             for (int i = 0; i < _Rows.Count; i++)
             {
-                int h = heights[i];
-                if (h <= 0 || y >= height) continue;
-                Scope.RenderChild(surface, _Rows[i], new Rect(0, y, width, Math.Min(h, height - y)));
-                y += h;
+                bool visible = !(_Rows[i] is ArmadaWidget aw) || aw.Visible;
+                int h = !visible ? 0 : i == flex ? flexHeight : Math.Max(0, _Heights[i]());
+                if (i != flex && h <= 0) continue;
+                if (stack.Y >= stack.Height) break;
+                Rect r = stack.Place(_Rows[i], h);
+                if (surface != null && r.Height > 0) Scope.RenderChild(surface, _Rows[i], r);
             }
         }
 

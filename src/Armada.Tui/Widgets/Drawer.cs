@@ -120,7 +120,7 @@ namespace Armada.Tui.Widgets
             int width = surface.Size.Width;
             int height = surface.Size.Height;
             SurfaceText.FillRect(surface, new Rect(0, 0, width, height), Theme.Dialog);
-            for (int y = 0; y < height; y++) surface.DrawText(0, y, "|", Theme.DialogBorder);
+            // Column 0 stays blank: the screen's box around the open drawer is drawn there (see IRegionOverlayHost).
             SurfaceText.Draw(surface, 2, 0, T(Title), Theme.DialogBorder.WithAttribute(CellAttributes.Bold, true), width - 12);
             string hint = "Esc " + T("Close");
             SurfaceText.Draw(surface, Math.Max(2, width - TextCells.Width(hint) - 1), 0, hint, Theme.Dialog.WithForeground(Theme.Muted.Foreground), width);

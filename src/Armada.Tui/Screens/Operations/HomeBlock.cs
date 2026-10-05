@@ -46,6 +46,12 @@ namespace Armada.Tui.Screens.Operations
         /// </summary>
         public Action<ISurface>? Draw { get; set; } = null;
 
+        /// <summary>
+        /// Right edge of the widget's focus region when it is wider than where the widget draws (a button row that
+        /// shares its row with text inside the same box), or 0 for the drawn rectangle.
+        /// </summary>
+        public int RegionRight { get; set; } = 0;
+
         #endregion
 
         #region Public-Methods

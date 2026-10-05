@@ -118,7 +118,7 @@ namespace Test.Shared.Suites.Tui
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI merge queue", cases: cases);
         }
 
-        private static StubHttpHandler Stub()
+        internal static StubHttpHandler Stub()
         {
             StubHttpHandler stub = TuiFixtures.SignedInServer();
             string entry1 = "{\"Id\":\"mrg_1\",\"BranchName\":\"armada/one\",\"TargetBranch\":\"main\",\"Status\":\"Failed\",\"Priority\":5,\"MissionId\":\"msn_1\",\"VesselId\":\"vsl_demo\",\"TestCommand\":\"make test\",\"TestOutput\":\"3 tests failed\",\"TestExitCode\":1,\"CreatedUtc\":\"2026-10-04T10:00:00Z\",\"LastUpdateUtc\":\"2026-10-04T10:00:00Z\"}";

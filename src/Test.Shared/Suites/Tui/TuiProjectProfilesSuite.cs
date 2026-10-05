@@ -165,7 +165,7 @@ namespace Test.Shared.Suites.Tui
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI project profiles", cases: cases);
         }
 
-        private static StubHttpHandler Server()
+        internal static StubHttpHandler Server()
         {
             StubHttpHandler stub = TuiEntityFixtures.Server();
             stub.Json("GET", "/api/v1/project-profiles", TuiEntityFixtures.Page(Profile("ppr_1", "Web project", "TenantWide"), Profile("ppr_2", "Api project", "TenantWide")));

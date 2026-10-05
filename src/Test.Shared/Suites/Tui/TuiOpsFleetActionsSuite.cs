@@ -222,7 +222,7 @@ namespace Test.Shared.Suites.Tui
             return (T)(object)hub.Content;
         }
 
-        private static StubHttpHandler Stub()
+        internal static StubHttpHandler Stub()
         {
             StubHttpHandler stub = TuiFixtures.SignedInServer();
             stub.Json("GET", "/api/v1/settings", "{\"FleetActions\":{\"DefaultTimeoutSeconds\":120}}");

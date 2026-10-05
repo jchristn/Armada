@@ -17,6 +17,15 @@ namespace Armada.Tui.Widgets
         #region Public-Members
 
         /// <summary>
+        /// True when the bar can take focus: never while it has no buttons (focus would land on nothing visible).
+        /// </summary>
+        public override bool CanFocus
+        {
+            get { return _CanFocus && Scope.Children.Count > 0; }
+            set { _CanFocus = value; }
+        }
+
+        /// <summary>
         /// Buttons in order. Never null.
         /// </summary>
         public IReadOnlyList<Button> Buttons
@@ -36,6 +45,8 @@ namespace Armada.Tui.Widgets
         #endregion
 
         #region Private-Members
+
+        private bool _CanFocus = true;
 
         private readonly List<Button> _Buttons = new List<Button>();
         private int _Gap = 1;

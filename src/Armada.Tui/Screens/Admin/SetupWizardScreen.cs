@@ -949,9 +949,11 @@ namespace Armada.Tui.Screens.Admin
             int navHeight = Math.Max(1, Navigation.HeightFor(width));
             bool loadingLine = Loading && Current == 0;
             int resultLines = (ResultMessage != null ? 1 : 0) + (loadingLine ? 1 : 0);
-            int panelHeight = Math.Max(3, height - y - navHeight - resultLines - 1);
+            // The panel and the navigation bar are focus regions; the rows between them are box lines (see
+            // RegionFrames): one shared line, or one line on either side of the result lines.
+            int panelHeight = Math.Max(3, height - y - navHeight - 1 - (resultLines > 0 ? resultLines + 1 : 0));
             Scope.RenderChild(surface, _Panels[Current], new Rect(0, y, width, panelHeight));
-            int ry = y + panelHeight;
+            int ry = y + panelHeight + 1;
             if (loadingLine && ry < height)
             {
                 SurfaceText.Draw(surface, 0, ry++, T("Loading existing Armada resources..."), Theme.Info, width);

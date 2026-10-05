@@ -16,8 +16,9 @@ namespace Armada.Tui.Shell
     /// The root widget (W1.2): header, menu bar, sidebar, main region, Ask dock, status bar, and toasts, laid out by
     /// <see cref="ShellLayout"/> on every frame (so resizes reflow at the breakpoints without a resize event). While
     /// signed out it shows the <see cref="LoginView"/>. The sidebar, main screen, and dock each sit in a reserved
-    /// one-cell border, drawn in the theme's focus color around the pane that holds keyboard focus (or along the
-    /// stretch of the main border beside the focused sub-region; see <see cref="FocusFrame"/>). It is bound to one
+    /// one-cell border, and every focus region of the main screen (a grid, a filter row, a tab bar, the Ask composer)
+    /// sits in a box that shares edges with it (<see cref="RegionFrames"/>); exactly one box, the one around the pane
+    /// or region that holds keyboard focus, is drawn whole in the focus style (see <see cref="FocusFrame"/>). It is bound to one
     /// full-screen TUIKit region, so it owns focus routing (sidebar, main, dock via <see cref="FocusScope"/>), key
     /// precedence (menu, focused pane, back on Backspace, then command bindings), mouse hit-testing, and the status bar
     /// hints, which follow the focused control (<see cref="CurrentFocusHints"/>). Swaps the main screen when the router navigates. Not thread-safe.
@@ -78,6 +79,17 @@ namespace Armada.Tui.Shell
         /// Layout used for the last frame.
         /// </summary>
         public ShellLayout? LastLayout { get; private set; } = null;
+
+        /// <summary>
+        /// The focus regions of the main screen as drawn in the last frame (shell coordinates). Never null.
+        /// </summary>
+        public IReadOnlyList<RegionFrame> LastRegions { get; private set; } = new List<RegionFrame>();
+
+        /// <summary>
+        /// The box drawn in the focus style in the last frame (a shell pane or a region of the main screen), or
+        /// <see cref="Rect.Empty"/> when none was (a modal or the menu has focus).
+        /// </summary>
+        public Rect LastFocusedBox { get; private set; } = Rect.Empty;
 
         /// <summary>
         /// True in narrow terminals when the user showed the sidebar with Ctrl+B.
@@ -357,6 +369,8 @@ namespace Armada.Tui.Shell
             _SurfaceWidth = size.Width;
             LastSize = size;
             SurfaceText.FillRect(surface, new Rect(0, 0, size.Width, size.Height), Theme.Text);
+            LastRegions = new List<RegionFrame>();
+            LastFocusedBox = Rect.Empty;
             if (!_Context.Session.IsSignedIn)
             {
                 LastLayout = null;
@@ -395,28 +409,61 @@ namespace Armada.Tui.Shell
                 return;
             }
 
-            if (sidebarWasShown != !layout.Sidebar.IsEmpty) RebuildScope();
+            // The sidebar is a Tab stop exactly while it is shown (a hidden sidebar holding focus would hide focus).
+            bool sidebarInScope = false;
+            foreach (IWidget child in Scope.Children) sidebarInScope |= ReferenceEquals(child, Sidebar);
+            if (sidebarWasShown != !layout.Sidebar.IsEmpty || sidebarInScope == layout.Sidebar.IsEmpty) RebuildScope();
             Header.Render(new SurfaceView(surface, layout.Header));
+            Rect focusedBox = Rect.Empty;
             if (!layout.Sidebar.IsEmpty)
             {
                 Sidebar.Compact = layout.CompactSidebar;
                 Scope.RenderChild(surface, Sidebar, layout.SidebarInner);
-                FocusFrame.Draw(surface, layout.Sidebar, Theme, PaneHasFocus(Sidebar), Rect.Empty);
+                bool sidebarFocused = PaneHasFocus(Sidebar);
+                FocusFrame.Draw(surface, layout.Sidebar, Theme, sidebarFocused);
+                if (sidebarFocused) focusedBox = layout.Sidebar;
             }
 
+            List<RegionFrame> regions = new List<RegionFrame>();
             if (Screen != null)
             {
+                Screen.Scope.ResetPlacements();
                 Scope.RenderChild(surface, Screen, layout.MainInner);
+                // Layout may have hidden the focused control (a button whose action is unavailable); move focus to
+                // one that is drawn, and draw again so the new focus shows in this frame.
+                if (Screen.Scope.RepairFocus())
+                {
+                    Screen.Scope.ResetPlacements();
+                    Scope.RenderChild(surface, Screen, layout.MainInner);
+                }
+
                 bool mainFocused = PaneHasFocus(Screen);
-                FocusFrame.Draw(surface, layout.Main, Theme, mainFocused, mainFocused ? FocusedSubRegion(layout.MainInner) : Rect.Empty);
+                regions = RegionFrames.Collect(Screen, layout.MainInner, mainFocused);
+                RegionFrame? focusedRegion = RegionFrames.FocusedOf(regions);
+                Rect mainBox = Rect.Empty;
+                if (focusedRegion != null) mainBox = focusedRegion.Box.Intersect(layout.Main);
+                else if (mainFocused) mainBox = layout.Main;
+                List<Rect> boxes = new List<Rect>();
+                foreach (RegionFrame r in regions) boxes.Add(r.Box);
+                FocusFrame.DrawNested(surface, layout.Main, Theme, boxes, mainBox);
+                foreach (RegionFrame r in regions)
+                {
+                    if (r.Title != null) FocusFrame.DrawTitle(surface, r.Box.Intersect(layout.Main), Theme, r.Title, r.Focused);
+                }
+
+                if (!mainBox.IsEmpty) focusedBox = mainBox;
             }
 
+            LastRegions = regions;
             if (!layout.Dock.IsEmpty)
             {
                 Scope.RenderChild(surface, Dock, layout.DockInner);
-                FocusFrame.Draw(surface, layout.Dock, Theme, PaneHasFocus(Dock), Rect.Empty);
+                bool dockFocused = PaneHasFocus(Dock);
+                FocusFrame.Draw(surface, layout.Dock, Theme, dockFocused);
+                if (dockFocused) focusedBox = layout.Dock;
             }
 
+            LastFocusedBox = focusedBox;
             StatusBar.Hints = BuildHints();
             StatusBar.Render(new SurfaceView(surface, layout.StatusBar));
             ToastLayer.Render(surface, layout.MenuBar.Bottom, _Context.Notifications.ActiveToasts(), Theme, _Context.Loc);
@@ -426,20 +473,10 @@ namespace Armada.Tui.Shell
 
         private bool PaneHasFocus(IWidget pane)
         {
+            // While a dialog or the menu is open it holds the keyboard, so no pane is drawn focused (the dialog's own box
+            // is; see ArmadaDialog).
+            if (_Context.Modals.IsModalOpen || Menu.IsOpen) return false;
             return Scope.IsActive && ReferenceEquals(Scope.Focused, pane);
-        }
-
-        /// <summary>
-        /// The focused sub-region of the main screen in main-content coordinates, or empty when the screen itself is the
-        /// focus target or the sub-region covers the whole screen.
-        /// </summary>
-        private Rect FocusedSubRegion(Rect mainInner)
-        {
-            if (Screen == null || !Screen.Scope.RegionHost) return Rect.Empty;
-            Rect region = Screen.Scope.FocusedRegion();
-            if (region.IsEmpty) return Rect.Empty;
-            if (region.X <= 0 && region.Y <= 0 && region.Right >= mainInner.Width && region.Bottom >= mainInner.Height) return Rect.Empty;
-            return region;
         }
 
         private void ShowRoute(RouteMatch match)

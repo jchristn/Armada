@@ -135,7 +135,7 @@ namespace Test.Shared.Suites.Tui
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI playbooks", cases: cases);
         }
 
-        private static StubHttpHandler Server()
+        internal static StubHttpHandler Server()
         {
             StubHttpHandler stub = TuiEntityFixtures.Server();
             stub.Json("GET", "/api/v1/playbooks", TuiEntityFixtures.Page(Playbook("pbk_1", "ARCH.md", true), Playbook("pbk_2", "OLD.md", false)));

@@ -15,6 +15,7 @@ namespace Armada.Tui.Screens.Operations
     using Armada.Tui.Widgets;
     using TUIKit;
     using TUIKit.Input;
+    using TUIKit.Widgets;
 
     /// <summary>
     /// Fleet action run (W3.7, <c>/fleet-actions/runs/:id</c>), the dashboard's FleetActionRunDetail: the run's
@@ -25,9 +26,18 @@ namespace Armada.Tui.Screens.Operations
     /// and output. While the run is active the page refreshes every 5 seconds, paused while the drawer or a dialog is
     /// open. Not thread-safe.
     /// </summary>
-    public class FleetActionRunScreen : OpsDetailScreen
+    public class FleetActionRunScreen : OpsDetailScreen, IRegionOverlayHost
     {
         #region Public-Members
+
+        /// <inheritdoc />
+        public IWidget? RegionOverlay
+        {
+            get { return TargetDrawer.IsOpen ? TargetDrawer : null; }
+        }
+
+        /// <inheritdoc />
+        public Rect RegionOverlayRect { get; private set; } = Rect.Empty;
 
         /// <summary>
         /// Refresh cadence while the run is active, in seconds (RUN_DETAIL_REFRESH_SECONDS).
@@ -220,10 +230,13 @@ namespace Armada.Tui.Screens.Operations
         {
             UpdateSubtitle();
             base.Render(surface);
+            RegionOverlayRect = Rect.Empty;
             if (TargetDrawer.IsOpen)
             {
                 Rect r = TargetDrawer.RectIn(surface.Size);
                 TargetDrawer.Render(new SurfaceView(surface, r));
+                // The drawer's left rule is its box's left edge (see RegionFrames).
+                RegionOverlayRect = new Rect(r.X + 1, r.Y, Math.Max(1, r.Width - 1), r.Height);
             }
         }
 

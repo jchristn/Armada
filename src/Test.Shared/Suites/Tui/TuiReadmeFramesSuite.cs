@@ -83,7 +83,7 @@ namespace Test.Shared.Suites.Tui
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI README frames", cases: cases);
         }
 
-        private static AskFixtures Fixtures()
+        internal static AskFixtures Fixtures()
         {
             AskFixtures fx = new AskFixtures();
             AskMessage user = AskFixtures.Message("amg_1", "ath_1", 1, AskMessageRoleEnum.User, AskMessageKindEnum.Text, "What is left before we cut the 1.0 release?");

@@ -56,6 +56,7 @@ namespace Armada.Tui.Services
         {
             if (modal == null) throw new ArgumentNullException(nameof(modal));
             ThemeApplicator.Apply(modal, _Theme.Current);
+            if (modal is Modals.ArmadaDialog dialog) dialog.IsTopmost = () => ReferenceEquals(_App.Modals.Top, dialog);
             Task<object?> completion = _App.ShowAsync(modal);
             completion.ContinueWith(t =>
             {

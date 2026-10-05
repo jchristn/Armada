@@ -2,6 +2,7 @@ namespace Armada.Tui.Screens.Kit
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
     using Armada.Tui.Routing;
     using Armada.Tui.Text;
     using Armada.Tui.Theming;
@@ -35,6 +36,9 @@ namespace Armada.Tui.Screens.Kit
         #endregion
 
         #region Private-Members
+
+        private const int MinimumFill = 4;
+        private readonly HashSet<IWidget> _Dropped = new HashSet<IWidget>(ReferenceEqualityComparer.Instance);
 
         private readonly List<IWidget> _Parts = new List<IWidget>();
         private readonly Dictionary<IWidget, Func<int, int>> _Heights = new Dictionary<IWidget, Func<int, int>>();
@@ -73,36 +77,25 @@ namespace Armada.Tui.Screens.Kit
             SurfaceText.FillRect(surface, new Rect(0, 0, width, height), Theme.Text);
             if (width < 4 || height < 2) return;
             BeforeRender(width, height);
-            Dictionary<IWidget, int> sizes = new Dictionary<IWidget, int>();
-            int fixedTotal = 0;
-            foreach (IWidget part in _Parts)
-            {
-                if (ReferenceEquals(part, _Fill)) continue;
-                int h = IsHidden(part) ? 0 : Math.Max(0, _Heights[part](width));
-                sizes[part] = h;
-                fixedTotal += h;
-            }
-
             bool banner = !String.IsNullOrEmpty(Banner);
-            int fill = Math.Max(1, height - fixedTotal - (banner ? 1 : 0));
-            int y = 0;
-            bool bannerDrawn = false;
-            foreach (IWidget part in _Parts)
+            // Each focus region gets a box line above and below it (see RegionStack); measure the fixed parts and the
+            // lines first, then give the fill part what is left.
+            // When the fill part (the grid) would get fewer than MinimumFill rows, plain content parts (charts, KPI
+            // rows) are left out, tallest first, so the focus regions stay on screen (80x24).
+            _Dropped.Clear();
+            int fill = Measure(banner, width, height);
+            while (_Fill != null && fill < MinimumFill)
             {
-                int h = ReferenceEquals(part, _Fill) ? fill : sizes[part];
-                if (h > 0 && y < height)
-                {
-                    Scope.RenderChild(surface, part, new Rect(0, y, width, Math.Min(h, height - y)));
-                    y += h;
-                }
-
-                if (banner && !bannerDrawn)
-                {
-                    bannerDrawn = true;
-                    if (y < height) SurfaceText.Draw(surface, 0, y, Banner, BannerStyle != null ? BannerStyle(Theme) : Theme.Warning, width);
-                    y++;
-                }
+                IWidget? drop = _Parts
+                    .Where(p => !ReferenceEquals(p, _Fill) && !_Dropped.Contains(p) && !RegionStack.IsRegion(p) && !IsHidden(p) && _Heights[p](width) > 0)
+                    .OrderByDescending(p => _Heights[p](width))
+                    .FirstOrDefault();
+                if (drop == null) break;
+                _Dropped.Add(drop);
+                fill = Measure(banner, width, height);
             }
+
+            Arrange(new RegionStack(width, height), banner, width, fill, surface);
         }
 
         #endregion
@@ -148,6 +141,34 @@ namespace Armada.Tui.Screens.Kit
         #endregion
 
         #region Private-Methods
+
+        private int Measure(bool banner, int width, int height)
+        {
+            RegionStack measure = new RegionStack(width, height);
+            Arrange(measure, banner, width, 1, null);
+            return Math.Max(1, 1 + height - measure.Y);
+        }
+
+        private void Arrange(RegionStack stack, bool banner, int width, int fill, ISurface? surface)
+        {
+            bool bannerDrawn = false;
+            foreach (IWidget part in _Parts)
+            {
+                int h = ReferenceEquals(part, _Fill) ? fill : (IsHidden(part) || _Dropped.Contains(part) ? 0 : Math.Max(0, _Heights[part](width)));
+                if (h > 0 && stack.Y < stack.Height)
+                {
+                    Rect r = stack.Place(part, h);
+                    if (surface != null && !r.IsEmpty) Scope.RenderChild(surface, part, r);
+                }
+
+                if (banner && !bannerDrawn)
+                {
+                    bannerDrawn = true;
+                    int y = stack.Content(1);
+                    if (surface != null && y < stack.Height) SurfaceText.Draw(surface, 0, y, Banner, BannerStyle != null ? BannerStyle(Theme) : Theme.Warning, width);
+                }
+            }
+        }
 
         private static bool IsHidden(IWidget widget)
         {

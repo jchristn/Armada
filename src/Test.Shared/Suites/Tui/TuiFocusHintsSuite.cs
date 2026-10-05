@@ -83,12 +83,12 @@ namespace Test.Shared.Suites.Tui
                     string[] lines = frame.Split('\n');
                     int stripRow = Array.FindIndex(lines, l => l.Contains(strip, StringComparison.Ordinal));
                     int composerTop = host.Tui.Shell.LastLayout!.MainInner.Y + screen.Scope.RectOf(screen.Composer).Y;
-                    // The strip wraps to a second row when the composer is narrow; either way its last row touches the
-                    // composer and nothing is cut off.
+                    // The strip wraps to a second row when the composer is narrow; either way its last row sits on the
+                    // top line of the composer's box (see RegionFrames) and nothing is cut off.
                     int column = lines[stripRow].IndexOf(strip, StringComparison.Ordinal);
                     string stripText = lines[stripRow].Substring(column).TrimEnd(' ', '\u2502', '\u2503');
-                    if (stripRow == composerTop - 2) stripText += " " + lines[stripRow + 1].Substring(column).Trim(' ', '\u2502', '\u2503');
-                    else AssertEqual(composerTop - 1, stripRow, "strip directly above the composer");
+                    if (stripRow == composerTop - 3) stripText += " " + lines[stripRow + 1].Substring(column).Trim(' ', '\u2502', '\u2503');
+                    else AssertEqual(composerTop - 2, stripRow, "strip directly above the composer's box");
                     AssertEqual(strip + " (Ctrl+A for all)", stripText, "the whole strip is shown");
 
                     host.Press("esc");

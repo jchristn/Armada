@@ -478,13 +478,17 @@ namespace Armada.Tui.Screens.Build
                 SurfaceText.Draw(surface, 0, y++, "! " + (String.IsNullOrEmpty(s.Error) ? Tr("This vessel does not have a usable working directory.") : s.Error), Theme.Warning, width);
             if (Error != null) SurfaceText.Draw(surface, 0, y++, "! " + Error, Theme.Error, width);
             if (_Loading && Status == null) SurfaceText.Draw(surface, 0, y++, Tr("Loading Workspace..."), Theme.Muted, width);
-            SurfaceText.Draw(surface, 0, y++, new string('-', width), Theme.Border, width);
+            // The tree, the editor, and the preview are focus regions: each sits in a box (see RegionFrames) whose
+            // edges are the blank row above the panes and the column between them.
+            y++;
             int bodyTop = y;
             int bodyHeight = Math.Max(1, height - bodyTop);
             int treeWidth = Math.Clamp(width * 32 / 100, 22, 56);
-            RenderTreePane(surface, new Rect(0, bodyTop, treeWidth, bodyHeight));
-            for (int r = bodyTop; r < height; r++) SurfaceText.Draw(surface, treeWidth, r, "|", Theme.Border, 1);
-            RenderEditorPane(surface, new Rect(treeWidth + 1, bodyTop, Math.Max(1, width - treeWidth - 1), bodyHeight));
+            int treeTop = RenderTreePane(surface, new Rect(0, bodyTop, treeWidth, bodyHeight));
+            int editorTop = RenderEditorPane(surface, new Rect(treeWidth + 1, bodyTop, Math.Max(1, width - treeWidth - 1), bodyHeight));
+            // Above the boxes the column between the panes is a plain divider.
+            int boxesTop = Math.Min(treeTop, editorTop) - 1;
+            for (int r = bodyTop; r < Math.Min(boxesTop, height); r++) SurfaceText.Draw(surface, treeWidth, r, "|", Theme.Border, 1);
         }
 
         #endregion
@@ -516,18 +520,20 @@ namespace Armada.Tui.Screens.Build
             _Actions.Add(new OpsScreenAction(id, label, run, key, when));
         }
 
-        private void RenderTreePane(ISurface surface, Rect rect)
+        private int RenderTreePane(ISurface surface, Rect rect)
         {
             int y = rect.Y;
             string head = Tr("Files") + "  n " + Tr("New File") + "  N " + Tr("New Folder");
             SurfaceText.Draw(surface, rect.X, y++, head, ReferenceEquals(Scope.Focused, Tree) ? Theme.Accent : Theme.Muted, rect.Width);
+            y++;
             List<string> selection = Tree.Selected.ToList();
-            int footer = selection.Count > 0 ? 2 : 0;
+            int footer = selection.Count > 0 ? 3 : 0;
             List<WorkspaceActiveMission> overlap = Overlapping();
-            if (overlap.Count > 0) footer++;
+            if (overlap.Count > 0) footer += footer > 0 ? 1 : 2;
+            int treeTop = y;
             int treeHeight = Math.Max(1, rect.Y + rect.Height - y - footer);
             Scope.RenderChild(surface, Tree, new Rect(rect.X, y, rect.Width, treeHeight));
-            y += treeHeight;
+            y += treeHeight + 1;
             if (selection.Count > 0 && y < rect.Y + rect.Height)
             {
                 SurfaceText.Draw(surface, rect.X, y++, Tr("Selection") + " (" + selection.Count + ")", Theme.Accent, rect.Width);
@@ -538,9 +544,11 @@ namespace Armada.Tui.Screens.Build
             {
                 SurfaceText.Draw(surface, rect.X, y, "! " + Tr("Active mission overlap") + ": " + String.Join(", ", overlap.Select(m => m.Title + " (" + m.Status + ")")), Theme.Warning, rect.Width);
             }
+
+            return treeTop;
         }
 
-        private void RenderEditorPane(ISurface surface, Rect rect)
+        private int RenderEditorPane(ISurface surface, Rect rect)
         {
             int y = rect.Y;
             int bottom = rect.Y + rect.Height;
@@ -565,7 +573,7 @@ namespace Armada.Tui.Screens.Build
             {
                 if (y < bottom) SurfaceText.Draw(surface, rect.X, y++, Tr("Open a file to begin"), Theme.Accent, rect.Width);
                 if (y < bottom) SurfaceText.Draw(surface, rect.X, y, Tr("Browse the vessel tree, then select a file to start editing, planning, or dispatching scoped work."), Theme.Muted, rect.Width);
-                return;
+                return bottom + 1;
             }
 
             string info = file.Path + (IsDirty(ActivePath) ? "   * " + Tr("Unsaved changes") : "") + (file.IsEditable ? "   " + Editor.Position() : "") + "   Ctrl+W " + Tr("Close Tab") + "  R " + Tr("Rename") + "  Del " + Tr("Delete");
@@ -580,9 +588,11 @@ namespace Armada.Tui.Screens.Build
                 SurfaceText.Draw(surface, rect.X, y++, "! " + warning, Theme.Warning, rect.Width);
             }
 
+            y++;
             Rect body = new Rect(rect.X, y, rect.Width, Math.Max(1, bottom - y));
             if (file.IsEditable) Scope.RenderChild(surface, Editor, body);
             else Scope.RenderChild(surface, Preview, body);
+            return y;
         }
 
         private List<WorkspaceActiveMission> Overlapping()

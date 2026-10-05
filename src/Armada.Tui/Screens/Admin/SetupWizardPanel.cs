@@ -63,6 +63,8 @@ namespace Armada.Tui.Screens.Admin
         public SetupWizardPanel(string heading)
         {
             Heading = heading ?? "";
+            // The mode toggle, the body, and the step's buttons are separate focus regions, each in its own box.
+            Scope.RegionHost = true;
         }
 
         #endregion
@@ -130,6 +132,7 @@ namespace Armada.Tui.Screens.Admin
 
             if (ModeBar != null && y < height)
             {
+                y++;
                 int mh = Math.Max(1, ModeBar.HeightFor(width));
                 Scope.RenderChild(surface, ModeBar, new Rect(0, y, width, mh));
                 y += mh;

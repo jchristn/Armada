@@ -119,7 +119,7 @@ namespace Test.Shared.Suites.Tui
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI memory", cases: cases);
         }
 
-        private static StubHttpHandler Server()
+        internal static StubHttpHandler Server()
         {
             StubHttpHandler stub = TuiEntityFixtures.Server();
             stub.Json("GET", "/api/v1/memories", TuiEntityFixtures.Page(Memory("mem_1", "Episodic", "deploys", 0.8), Memory("mem_2", "Semantic", "style", 0.5)));

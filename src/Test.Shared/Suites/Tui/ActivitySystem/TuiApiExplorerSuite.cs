@@ -141,7 +141,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI API Explorer", cases: cases);
         }
 
-        private static StubHttpHandler Stub()
+        internal static StubHttpHandler Stub()
         {
             return TuiRequestHistorySuite.Stub();
         }

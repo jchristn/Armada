@@ -19,6 +19,15 @@ namespace Armada.Tui.Screens.Operations
         #region Public-Members
 
         /// <summary>
+        /// True when the bar can take focus: never while it has no filters (it is not drawn then).
+        /// </summary>
+        public override bool CanFocus
+        {
+            get { return _CanFocus && !IsEmpty; }
+            set { _CanFocus = value; }
+        }
+
+        /// <summary>
         /// English status bar description of where <c>Esc</c> takes focus. Default "Back to the list".
         /// </summary>
         public string ExitLabel { get; set; } = "Back to the list";
@@ -39,6 +48,8 @@ namespace Armada.Tui.Screens.Operations
         #endregion
 
         #region Private-Members
+
+        private bool _CanFocus = true;
 
         private readonly List<OpsFilterItem> _Items = new List<OpsFilterItem>();
 

@@ -150,7 +150,7 @@ namespace Test.Shared.Suites.Tui
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI endpoints", cases: cases);
         }
 
-        private static StubHttpHandler Server()
+        internal static StubHttpHandler Server()
         {
             StubHttpHandler stub = TuiEntityFixtures.Server();
             stub.Json("GET", "/api/v1/model-endpoints", "[" + Endpoint("mep_1", "openai-chat", "Inference", "Healthy", true) + "," + Endpoint("mep_2", "embedder", "Embedding", "Unhealthy", false) + "]");

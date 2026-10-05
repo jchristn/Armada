@@ -2,24 +2,25 @@
  File  Go  View  Actions  Ask  Help                                                                            F10 Menu
 +----------------------++----------------------------------------------------------------------------------------------+
 |  Dashboard           || Release checklist [e]          Captain: claude-1 (ClaudeCode) [Esc c]   Auto-approve: off ...|
-|> Ask Armada          ||----------------------------------------------------------------------------------------------|
-|- OPERATIONS          ||  You                                                                                   1m ago|
-|   Needs You          ||    What is left before we cut the 1.0 release?                                               |
-|   Planning           ||                                                                                              |
-|   Dispatch           ||  claude-1  3.8s                                                                        1m ago|
-|   Fleet Actions      ||  Two things are open:                                                                        |
-|   Missions           ||                                                                                              |
-|- DELIVERY            ||  1. Fix column widths is in progress on DemoRepo.                                            |
-|   Delivery           ||  2. Broken failed its tests; I can restart it.                                               |
-|- BUILD               ||                                                                                              |
-|   Vessels            ||  Want me to dispatch a voyage for the remaining docs work?                                   |
-|   Captains           ||                                                                                              |
-|- CONFIGURATION       ||  You                                                                                   1m ago|
-|   Configuration      ||    Yes, one mission for the README.                                                          |
-|- ACTIVITY            ||                                                                                              |
+|> Ask Armada          || CLI tools: Inherit [Esc p]                                                                   |
+|- OPERATIONS          |+----------------------------------------------------------------------------------------------+
+|   Needs You          ||  You                                                                                   1m ago|
+|   Planning           ||    What is left before we cut the 1.0 release?                                               |
+|   Dispatch           ||                                                                                              |
+|   Fleet Actions      ||  claude-1  3.8s                                                                        1m ago|
+|   Missions           ||  Two things are open:                                                                        |
+|- DELIVERY            ||                                                                                              |
+|   Delivery           ||  1. Fix column widths is in progress on DemoRepo.                                            |
+|- BUILD               ||  2. Broken failed its tests; I can restart it.                                               |
+|   Vessels            ||                                                                                              |
+|   Captains           ||  Want me to dispatch a voyage for the remaining docs work?                                   |
+|- CONFIGURATION       ||                                                                                              |
+|   Configuration      ||  You                                                                                   1m ago|
+|- ACTIVITY            ||    Yes, one mission for the README.                                                          |
 |   Activity           ||                                                                                              |
 |   Jobs               ||                                                                                              |
 |- SYSTEM              ||                                                                                              |
+|   CLI Tool Permiss...||                                                                                              |
 |   API Explorer       ||                                                                                              |
 |   Settings           ||                                                                                              |
 |                      ||                                                                                              |
@@ -32,9 +33,8 @@
 |                      ||                                                                                              |
 |                      ||                                                                                              |
 |                      ||                                                                                              |
-|                      ||                                                                                              |
-|                      ||----------------------------------------------------------------------------------------------|
-|                      ||>  Message the captain, or type / for quick actions                                           |
-|                      ||[typing]  [ ] Show thinking (Alt+T)   / Quick actions   Ctrl+E Editor   AI can m... Enter Send|
-+----------------------++----------------------------------------------------------------------------------------------+
+|                      |#==============================================================================================#
+|                      |#>  Message the captain, or type / for quick actions                                           #
+|                      |#[typing]  [ ] Show thinking (Alt+T)   / Quick actions   Ctrl+E Editor   AI can m... Enter Send#
++----------------------+#==============================================================================================#
  Esc Leave the message box  Enter Send  Ctrl+J Newline  / Quick actions  F1 Help  Ctrl+K Palette  F10 Menu       manual

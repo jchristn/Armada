@@ -154,7 +154,7 @@ namespace Test.Shared.Suites.Tui.Build
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "TUI workspace", cases: cases);
         }
 
-        private static StubHttpHandler Stub()
+        internal static StubHttpHandler Stub()
         {
             StubHttpHandler stub = BuildStubs.Server();
             string w = "/api/v1/workspace/vessels/vsl_demo";
