@@ -18,9 +18,10 @@ import {
   type RebuildStatus,
   type BranchInfo,
 } from '../api/client';
-import type { FleetActionSettingsData, RetentionSettingsData, Vessel, VesselImportSettingsData } from '../types/models';
+import type { CliPermissionSettingsData, FleetActionSettingsData, RetentionSettingsData, Vessel, VesselImportSettingsData } from '../types/models';
 import ImportFleetActionSettings from '../components/settings/ImportFleetActionSettings';
 import RetentionSettings from '../components/settings/RetentionSettings';
+import CliPermissionSettings from '../components/settings/CliPermissionSettings';
 import LogViewer from '../components/shared/LogViewer';
 import RefreshButton from '../components/shared/RefreshButton';
 import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
@@ -105,6 +106,7 @@ interface ServerSettings {
   import?: VesselImportSettingsData;
   fleetActions?: FleetActionSettingsData;
   retention?: RetentionSettingsData;
+  permissions?: CliPermissionSettingsData;
 }
 
 type McpClientKey = 'claude' | 'codex' | 'gemini' | 'cursor';
@@ -1064,6 +1066,15 @@ export default function Server() {
         <ImportFleetActionSettings
           importSettings={settings.import}
           fleetActionSettings={settings.fleetActions}
+          locked={remoteSettingsLocked}
+          onSaved={(updated) => setSettings(mergeServerSettings(updated as unknown as ServerSettings))}
+          notify={showToast}
+        />
+      )}
+
+      {settings && isAdmin && (
+        <CliPermissionSettings
+          permissions={settings.permissions}
           locked={remoteSettingsLocked}
           onSaved={(updated) => setSettings(mergeServerSettings(updated as unknown as ServerSettings))}
           notify={showToast}

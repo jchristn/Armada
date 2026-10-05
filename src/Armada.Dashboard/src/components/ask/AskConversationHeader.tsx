@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AskThread, Captain } from '../../types/models';
+import type { AskThread, Captain, CliPermissionPolicy } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
 import ActionMenu, { type ActionMenuItem } from '../shared/ActionMenu';
+import CliPermissionPolicySelect from '../cliPermissions/CliPermissionPolicySelect';
+import { resolutionSummary } from '../../lib/cliPermissions';
 
 interface AskConversationHeaderProps {
   thread: AskThread | null;
@@ -18,6 +20,10 @@ interface AskConversationHeaderProps {
   onDelete: () => void;
   onOpenList: () => void;
   busy: boolean;
+  /** Set or clear (null) the conversation's CLI tool permission policy. */
+  onCliPolicyChange?: (policy: CliPermissionPolicy | null) => void;
+  /** The current user may choose Bypass (global or tenant admin). */
+  canBypassCli?: boolean;
 }
 
 /**
@@ -25,7 +31,7 @@ interface AskConversationHeaderProps {
  * and an overflow menu. On narrow screens a button opens the conversation list drawer.
  */
 export default function AskConversationHeader(props: AskConversationHeaderProps) {
-  const { thread, captains, draftCaptainId, onDraftCaptainChange, onRename, onCaptainChange, onAutoApproveChange, onSummarize, onTogglePin, onToggleArchive, onDelete, onOpenList, busy } = props;
+  const { thread, captains, draftCaptainId, onDraftCaptainChange, onRename, onCaptainChange, onAutoApproveChange, onSummarize, onTogglePin, onToggleArchive, onDelete, onOpenList, busy, onCliPolicyChange, canBypassCli } = props;
   const { t } = useLocale();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState('');
@@ -113,6 +119,24 @@ export default function AskConversationHeader(props: AskConversationHeaderProps)
             {thread.autoApprove && <span className="ask-auto-approve-warn" aria-hidden="true">&#9888;</span>}
             <span id="ask-auto-approve-help" className="sr-only">{autoWarning}</span>
           </label>
+        )}
+
+        {thread && onCliPolicyChange && (
+          <div className="ask-cli-policy-field" title={t('How the captain CLI handles shell commands, file edits, and fetches that need permission. Inherit uses the captain policy, then the server default.')}>
+            <span className="text-dim" id="ask-cli-policy-label">{t('CLI tools')}</span>
+            <CliPermissionPolicySelect
+              value={thread.cliPermissionPolicy ?? null}
+              onChange={onCliPolicyChange}
+              allowBypass={!!canBypassCli}
+              ariaLabel={t('CLI tools')}
+              ariaDescribedBy={thread.cliPermission ? 'ask-cli-policy-effective' : undefined}
+            />
+            {thread.cliPermission && (
+              <span id="ask-cli-policy-effective" className="ask-cli-policy-effective text-dim" data-testid="ask-cli-policy-effective">
+                {resolutionSummary(t, { ...thread.cliPermission, fallbackReason: null })}
+              </span>
+            )}
+          </div>
         )}
 
         {thread && (

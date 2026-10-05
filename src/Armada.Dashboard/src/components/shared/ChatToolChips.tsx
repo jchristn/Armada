@@ -2,6 +2,8 @@
 // Renders each tool call as a compact, collapsible chip: status glyph, name, runtime, and an
 // expandable body showing the call arguments and result.
 
+import { Fragment } from 'react';
+
 export interface ToolEvent {
   id: string;
   name: string;
@@ -9,6 +11,8 @@ export interface ToolEvent {
   arguments?: string | null;
   result?: string | null;
   elapsedMs?: number | null;
+  /** True when the CLI refused the call because its permission policy did not grant it. */
+  permissionDenied?: boolean;
 }
 
 // A raw tool event delivered over the WebSocket (ask.tool / planning-session.tool).
@@ -20,6 +24,7 @@ export interface ToolEventMessage {
   ok?: boolean | null;
   elapsedMs?: number | null;
   result?: string | null;
+  permissionDenied?: boolean | null;
 }
 
 // Fold a WebSocket tool event into an existing tools list (matched by call id). Returns a new array.
@@ -39,6 +44,10 @@ export function applyToolEvent(existing: ToolEvent[] | undefined, d: ToolEventMe
       result: d.result ?? null,
       elapsedMs: d.elapsedMs ?? null,
     };
+    if (d.permissionDenied === true) {
+      done.permissionDenied = true;
+      done.status = 'failed';
+    }
     if (idx >= 0) tools[idx] = done; else tools.push(done);
   }
   return tools;
@@ -74,18 +83,27 @@ interface ChatToolChipsProps {
   argumentsLabel: string;
   resultLabel: string;
   noDetailsLabel: string;
+  /** Explanation shown under a call the CLI refused for lack of permission (already localized). */
+  permissionDeniedNote?: string;
+  /** Accessible label of the refused marker (already localized). */
+  permissionDeniedLabel?: string;
 }
 
-export default function ChatToolChips({ tools, runtimeLabel, runningLabel, argumentsLabel, resultLabel, noDetailsLabel }: ChatToolChipsProps) {
+export default function ChatToolChips({ tools, runtimeLabel, runningLabel, argumentsLabel, resultLabel, noDetailsLabel, permissionDeniedNote, permissionDeniedLabel }: ChatToolChipsProps) {
   if (!tools || tools.length === 0) return null;
   return (
     <div className="chat-tools">
       {tools.map((tool) => (
-        <details key={tool.id} className={`chat-tool chat-tool-${tool.status}`}>
+        <Fragment key={tool.id}>
+        <details className={`chat-tool chat-tool-${tool.status}${tool.permissionDenied ? ' chat-tool-denied' : ''}`}>
           <summary className="chat-tool-summary">
+            {tool.permissionDenied && <span className="chat-tool-status" aria-hidden="true">{'\u2715!'}</span>}
+            {!tool.permissionDenied && (
             <span className="chat-tool-status" aria-hidden="true">
               {tool.status === 'running' ? '…' : tool.status === 'success' ? '✓' : '✕'}
             </span>
+            )}
+            {tool.permissionDenied && permissionDeniedLabel && <span className="sr-only">{permissionDeniedLabel}</span>}
             <span className="chat-tool-name">{tool.name}</span>
             {runtimeLabel && <span className="chat-tool-runtime">{runtimeLabel}</span>}
             {tool.status !== 'running' && tool.result && (
@@ -113,6 +131,10 @@ export default function ChatToolChips({ tools, runtimeLabel, runningLabel, argum
             )}
           </div>
         </details>
+        {tool.permissionDenied && permissionDeniedNote && (
+          <div className="chat-tool-denied-note" role="note">{permissionDeniedNote}</div>
+        )}
+        </Fragment>
       ))}
     </div>
   );

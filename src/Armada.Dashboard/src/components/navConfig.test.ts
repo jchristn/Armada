@@ -22,13 +22,14 @@ describe('navConfig', () => {
     const present = [
       '/', '/ask', '/inbox', '/planning', '/dispatch', '/missions',
       '/delivery', '/fleet-actions', '/vessels', '/captains', '/configuration', '/activity',
-      '/jobs', '/api-explorer', '/server',
+      '/jobs', '/cli-permissions', '/api-explorer', '/server',
     ];
     for (const target of present) {
       expect(allTargets).toContain(target);
     }
-    // 15 top-level destinations (Jobs under Activity, Fleet Actions under Delivery); admin lives as tabs under Settings.
-    expect(commands).toHaveLength(15);
+    // 16 top-level destinations (Jobs under Activity, Fleet Actions under Delivery, CLI Tool Permissions under System);
+    // admin lives as tabs under Settings.
+    expect(commands).toHaveLength(16);
   });
 
   it('no longer surfaces the folded-away pages as nav items', () => {

@@ -1,11 +1,12 @@
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, type ReactNode } from 'react';
-import type { AskActionProposal, AskMessage, AskTrackedWork, AskWorkSnapshot } from '../../types/models';
+import type { AskActionProposal, AskMessage, AskTrackedWork, AskWorkSnapshot, CliPermissionRequest, CliPermissionResolution } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
 import Markdown from '../shared/Markdown';
 import ChatToolChips from '../shared/ChatToolChips';
 import AskMessageView from './AskMessageView';
 import AskWorkCard from './AskWorkCard';
-import { proposalForMessage, workCardHosts, type StreamingTurn } from '../../lib/askConversation';
+import { cliRequestForMessage, proposalForMessage, workCardHosts, type StreamingTurn } from '../../lib/askConversation';
+import { permissionDeniedExplanation } from '../../lib/cliPermissions';
 
 export interface AskMessageListHandle {
   /** Scroll the live card for a tracked item into view; false when it is not rendered. */
@@ -33,6 +34,11 @@ interface AskMessageListProps {
   highlightedWorkId: string | null;
   emptyState: ReactNode;
   turnError: string | null;
+  /** Latest CLI permission requests of this thread, by id. */
+  cliPermissions?: Record<string, CliPermissionRequest>;
+  onCliDecided?: (request: CliPermissionRequest) => void;
+  /** The thread's resolved CLI tool permission policy (explains refused tool calls). */
+  cliResolution?: CliPermissionResolution | null;
 }
 
 const LOAD_OLDER_THRESHOLD_PX = 80;
@@ -46,8 +52,11 @@ const AskMessageList = forwardRef<AskMessageListHandle, AskMessageListProps>(fun
   const {
     messages, proposals, trackedWork, snapshots, hasMore, loadingOlder, onLoadOlder, streaming, turnActive, waitingText,
     captainName, captainNames, busyProposalId, onApprove, onReject, highlightedWorkId, emptyState, turnError,
+    cliPermissions, onCliDecided, cliResolution,
   } = props;
   const { t } = useLocale();
+  const deniedNote = permissionDeniedExplanation(t, cliResolution);
+  const cliState = { cliPermissions: cliPermissions ?? {} };
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
   const prependRef = useRef<{ height: number; top: number; firstSeq: number | null } | null>(null);
@@ -149,6 +158,9 @@ const AskMessageList = forwardRef<AskMessageListHandle, AskMessageListProps>(fun
               onApprove={onApprove}
               onReject={onReject}
               workCard={card}
+              cliRequest={message.kind === 'CliPermission' ? cliRequestForMessage(cliState, message) : null}
+              onCliDecided={onCliDecided}
+              permissionDeniedNote={deniedNote}
               onShowWork={workId && !card ? () => {
                 const el = document.getElementById(`ask-work-${workId}`);
                 if (el && scrollRef.current) {
@@ -170,6 +182,8 @@ const AskMessageList = forwardRef<AskMessageListHandle, AskMessageListProps>(fun
             argumentsLabel={t('Arguments')}
             resultLabel={t('Result')}
             noDetailsLabel={t('No details available.')}
+            permissionDeniedNote={deniedNote}
+            permissionDeniedLabel={t('Refused for lack of permission')}
           />
           <div className="ask-bubble ask-bubble-assistant">
             <div className="ask-bubble-head text-dim"><span>{captainName || t('Captain')}</span></div>

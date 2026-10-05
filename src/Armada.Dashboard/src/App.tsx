@@ -57,6 +57,7 @@ const Skills = lazy(() => import('./pages/Skills'));
 const SkillDetail = lazy(() => import('./pages/SkillDetail'));
 const AskArmada = lazy(() => import('./pages/AskArmada'));
 const Inbox = lazy(() => import('./pages/Inbox'));
+const CliPermissions = lazy(() => import('./pages/CliPermissions'));
 const CheckRuns = lazy(() => import('./pages/CheckRuns'));
 const CheckRunDetail = lazy(() => import('./pages/CheckRunDetail'));
 const Environments = lazy(() => import('./pages/Environments'));
@@ -166,6 +167,7 @@ export default function App() {
                       {/* One optional-segment route so moving between /ask and /ask/:threadId keeps the page mounted. */}
                       <Route path="ask/:threadId?" element={<AskArmada />} />
                       <Route path="inbox" element={<Inbox />} />
+                      <Route path="cli-permissions" element={<CliPermissions />} />
                       <Route path="delivery" element={<DeliveryHub />} />
                       <Route path="fleet-actions" element={<FleetActions />} />
                       <Route path="fleet-actions/runs/:id" element={<FleetActionRunDetail />} />

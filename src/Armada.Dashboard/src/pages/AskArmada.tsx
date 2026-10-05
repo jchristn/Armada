@@ -17,6 +17,7 @@ import {
   rejectAskProposal,
   runAskQuickAction,
   sendAskMessage,
+  setAskThreadCliPermissionPolicy,
   summarizeAskThread,
   updateAskThread,
 } from '../api/client';
@@ -29,6 +30,8 @@ import type {
   AskTrackedWork,
   Captain,
   CaptainToolAccessResult,
+  CliPermissionPolicy,
+  CliPermissionRequest,
   WebSocketMessage,
 } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
@@ -52,6 +55,7 @@ import { applyActivityEvent, applyThreadUpdate, sortThreads, type ThreadActivity
 import { DEFAULT_QUICK_ACTIONS, mergeQuickActions } from '../lib/askQuickActions';
 import { isWorkActive, workRoute } from '../lib/askWork';
 import { useFocusTrap } from '../lib/useFocusTrap';
+import { fallbackReasonText, isPendingRequest, parseCliPermissionEvent } from '../lib/cliPermissions';
 
 const CAPTAIN_STORAGE_KEY = 'armada_ask_captain';
 const THINKING_STORAGE_KEY = 'armada_ask_show_thinking';
@@ -96,7 +100,7 @@ export default function AskArmada() {
   const navigate = useNavigate();
   const { t } = useLocale();
   const { subscribe, reconnectCount } = useWebSocket();
-  const { user } = useAuth();
+  const { user, isAdmin, isTenantAdmin } = useAuth();
   const { pushToast } = useNotifications();
 
   // Captains and quick actions.
@@ -295,6 +299,15 @@ export default function AskArmada() {
 
   useEffect(() => {
     return subscribe((msg: WebSocketMessage) => {
+      const cli = parseCliPermissionEvent(msg);
+      if (cli) {
+        if (!cli.request.threadId || cli.request.threadId !== convRef.current.threadId) return;
+        dispatch({ type: 'cliPermission', request: cli.request });
+        if (cli.type === 'cli_permission.requested' && isPendingRequest(cli.request)) {
+          setAnnouncement(t('The captain needs permission to run {{tool}}: {{summary}}', { tool: cli.request.toolName, summary: cli.request.summaryText || cli.request.toolName }));
+        }
+        return;
+      }
       const event = parseAskEvent(msg);
       if (!event) return;
       setActivity((prev) => applyActivityEvent(prev, event));
@@ -316,7 +329,7 @@ export default function AskArmada() {
         const snippet = (event.message.contentText ?? '').replace(/\s+/g, ' ').slice(0, 160);
         if (kind === 'WorkUpdate') setAnnouncement(t('Work update: {{text}}', { text: snippet }));
         else if (kind === 'Error') setAnnouncement(t('Error: {{text}}', { text: snippet }));
-        else if (kind !== 'ActionProposal') setAnnouncement(t('New message: {{text}}', { text: snippet }));
+        else if (kind !== 'ActionProposal' && kind !== 'CliPermission') setAnnouncement(t('New message: {{text}}', { text: snippet }));
       } else if (event.type === 'ask.proposal' && String(event.proposal.status).toLowerCase() === 'pending') {
         setAnnouncement(t('An action needs your approval: {{summary}}', { summary: event.proposal.summaryText || event.proposal.toolName }));
       } else if (event.type === 'ask.work' && event.snapshot) {
@@ -432,6 +445,22 @@ export default function AskArmada() {
       setError(errorText(err, t('The conversation could not be updated.')));
       return null;
     }
+  }
+
+  async function changeCliPolicy(target: AskThread, policy: CliPermissionPolicy | null) {
+    try {
+      const updated = await setAskThreadCliPermissionPolicy(target.id, policy);
+      const merged = { ...target, ...updated, cliPermissionPolicy: updated?.cliPermissionPolicy ?? policy } as AskThread;
+      setThreads((prev) => applyThreadUpdate(prev, merged, filterRef.current, convRef.current.threadId));
+      if (merged.id === convRef.current.threadId) dispatch({ type: 'thread', thread: merged });
+      if (policy === 'Bypass') pushToast('warning', t('CLI tools bypass is on: the captain runs any command in this conversation without asking.'));
+    } catch (err: unknown) {
+      setError(errorText(err, t('The CLI tools policy could not be changed.')));
+    }
+  }
+
+  function cliDecided(request: CliPermissionRequest) {
+    dispatch({ type: 'cliPermission', request });
   }
 
   async function summarize(target: AskThread) {
@@ -565,6 +594,8 @@ export default function AskArmada() {
           onDelete={() => { if (thread) setDeleteTarget(thread); }}
           onOpenList={() => setDrawerOpen(true)}
           busy={conv.turnActive}
+          onCliPolicyChange={(policy) => { if (thread) void changeCliPolicy(thread, policy); }}
+          canBypassCli={!!isAdmin || !!isTenantAdmin}
         />
 
         {ungated && (
@@ -576,6 +607,11 @@ export default function AskArmada() {
         {thread?.autoApprove && (
           <div className="ask-auto-banner" role="note">
             {t('Auto-approve is on: actions the captain proposes run immediately. Every action is still recorded below.')}
+          </div>
+        )}
+        {thread?.cliPermission?.fallbackReason && (
+          <div className="ask-mcp-note ask-cli-fallback-note" role="note" data-testid="ask-cli-fallback-note">
+            <span>{fallbackReasonText(t, thread.cliPermission.fallbackReason)}</span>
           </div>
         )}
         {mcpMissing && (
@@ -615,6 +651,9 @@ export default function AskArmada() {
             highlightedWorkId={highlightedWorkId}
             emptyState={emptyState}
             turnError={conv.turnError}
+            cliPermissions={conv.cliPermissions}
+            onCliDecided={cliDecided}
+            cliResolution={thread?.cliPermission ?? null}
           />
         )}
 
