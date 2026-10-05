@@ -190,6 +190,8 @@ The Admiral resolves which pipeline to use in `ResolvePipelineAsync`. Resolution
    a. Try ReadAsync(pipelineId)      -- lookup by ID
    b. Try ReadByNameAsync(pipelineId) -- lookup by name (convenience)
    c. If found, use it (highest priority)
+   d. If not found: reject the dispatch (PipelineNotFoundException; REST and MCP
+      validation report PipelineNotFound first). The defaults below are NOT used.
 
 2. If vessel.DefaultPipelineId is set:
    a. Try ReadAsync(vessel.DefaultPipelineId)
@@ -203,6 +205,8 @@ The Admiral resolves which pipeline to use in `ResolvePipelineAsync`. Resolution
 
 4. Return null (falls back to WorkerOnly behavior)
 ```
+
+**Unknown explicit pipeline:** a `pipelineId` or `pipeline` that matches no pipeline is an error, not a fallback. `POST /api/v1/voyages` returns `404 Not Found` (`Error: NotFound`), the MCP `voyage_dispatch` tool returns an `InvalidArgument` error with code `PipelineNotFound`, and a Mission fleet action skips the vessel with `DispatchRejected`. The vessel and fleet defaults apply only when no pipeline is named.
 
 **Stale reference handling:** If a vessel or fleet references a pipeline that has been deleted, the Admiral automatically clears the `DefaultPipelineId` to null, persists the update, and logs a warning. This prevents stale IDs from accumulating.
 

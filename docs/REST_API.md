@@ -2641,6 +2641,9 @@ Create a new voyage with optional missions. Missions are automatically dispatche
 
 **Response:** `201 Created` - [Voyage](#voyage)
 
+**Errors:** `404` when `ObjectiveId`, `PipelineId`, or `Pipeline` names something that does not exist (an unknown
+pipeline is not replaced by the vessel or fleet default); `400` for other validation failures.
+
 ```bash
 curl -X POST http://localhost:7890/api/v1/voyages \
   -H "Content-Type: application/json" \

@@ -144,7 +144,8 @@ namespace Armada.Server.Routes
                     voyageReq.ObjectiveId, voyageReq.PipelineId, voyageReq.Pipeline, voyageReq.VesselId, missions.Count, allowBareVoyage: true).ConfigureAwait(false);
                 if (!validation.IsValid)
                 {
-                    bool notFound = validation.Error == DispatchValidationErrorEnum.ObjectiveNotFound;
+                    bool notFound = validation.Error == DispatchValidationErrorEnum.ObjectiveNotFound
+                        || validation.Error == DispatchValidationErrorEnum.PipelineNotFound;
                     req.Http.Response.StatusCode = notFound ? 404 : 400;
                     return new ApiErrorResponse { Error = notFound ? ApiResultEnum.NotFound : ApiResultEnum.BadRequest, Message = validation.Message ?? "Invalid dispatch request" };
                 }

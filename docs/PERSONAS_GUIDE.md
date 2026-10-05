@@ -185,7 +185,9 @@ When a voyage is dispatched, the Admiral determines which pipeline to use. **Hig
 | 3 | **Fleet default** | `DefaultPipelineId` on the vessel's parent fleet (dashboard, MCP, REST) |
 | 4 (lowest) | **System fallback** | WorkerOnly (no configuration needed) |
 
-This means a fleet-level default applies to all vessels in that fleet unless overridden at the vessel level, and any explicit pipeline on a dispatch overrides both. If a referenced pipeline has been deleted, the stale reference is automatically cleared.
+This means a fleet-level default applies to all vessels in that fleet unless overridden at the vessel level, and any explicit pipeline on a dispatch overrides both. An explicit pipeline that does not exist rejects the
+dispatch (REST 404, MCP `PipelineNotFound`) instead of falling back to a default. If a vessel or fleet default
+references a pipeline that has been deleted, the stale reference is automatically cleared.
 
 ### How Missions Chain
 
