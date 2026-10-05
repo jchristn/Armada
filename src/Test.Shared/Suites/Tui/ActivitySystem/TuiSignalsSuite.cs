@@ -4,6 +4,8 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
     using System.Collections.Generic;
     using System.Linq;
     using System.Net;
+    using Armada.Client.Models;
+    using Armada.Core.Models;
     using Armada.Tui.Screens;
     using Armada.Tui.Screens.Activity;
     using Armada.Tui.Screens.Kit;
@@ -36,12 +38,12 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     TuiCase.Contains(frame, "Admiral", "admiral");
                     SignalsScreen screen = Current<SignalsScreen>(host);
                     screen.TypeFilter.Choose(screen.TypeFilter.Options.First(o => o.Value == "Mail"));
-                    AssertTrue(host.PumpUntil(() => stub.Requests.Any(r => r.StartsWith("GET /api/v1/signals?") && r.Contains("type=Mail"))), "type filter sent");
+                    AssertTrue(host.PumpUntil(() => stub.Saw("GET", "/api/v1/signals", r => r.QueryValue("type") == "Mail")), "type filter sent");
                     AssertTrue(host.PumpUntil(() => screen.CaptainFilter.Options.Count > 1), "captains loaded");
                     screen.CaptainFilter.Choose(screen.CaptainFilter.Options.First(o => o.Value == "cpt_1"));
-                    AssertTrue(host.PumpUntil(() => stub.Requests.Any(r => r.Contains("toCaptainId=cpt_1"))), "captain filter sent");
+                    AssertTrue(host.PumpUntil(() => stub.Saw("GET", "/api/v1/signals", r => r.QueryValue("toCaptainId") == "cpt_1")), "captain filter sent");
                     screen.UnreadOnly.SetValue(true);
-                    AssertTrue(host.PumpUntil(() => stub.Requests.Any(r => r.Contains("unreadOnly=true"))), "unread filter sent");
+                    AssertTrue(host.PumpUntil(() => stub.Saw("GET", "/api/v1/signals", r => r.QueryValue("unreadOnly") == "true")), "unread filter sent");
                     AssertTrue(host.WaitForText("Clear Filters"), "clear button");
                     screen.PayloadColumn.Value = "hello";
                     screen.Grid.Reload();
@@ -65,9 +67,11 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     ((SelectField<string>)modal.Form.Rows.First(r => r.Label == "To Captain (optional)").Field!).SetValue("cpt_1");
                     ((SelectField<string>)modal.Form.Rows.First(r => r.Label == "Type").Field!).SetValue("Mail");
                     host.Press("ctrl+s");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/signals") == 1), "posted");
-                    string body = stub.Bodies.Last(b => b.Contains("hello captain"));
-                    AssertTrue(body.Contains("\"Type\":\"Mail\"") && body.Contains("\"Payload\":\"hello captain\"") && body.Contains("\"ToCaptainId\":\"cpt_1\""), "body: " + body);
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/signals") == 1), "posted");
+                    SendSignalRequest body = stub.LastBody<SendSignalRequest>("POST", "/api/v1/signals");
+                    AssertEqual("Mail", body.Type, "type");
+                    AssertEqual("hello captain", body.Payload, "payload");
+                    AssertEqual("cpt_1", body.ToCaptainId, "target captain");
                     AssertTrue(host.WaitForText("Signal sent."), "toast");
                 }
             }));
@@ -79,14 +83,14 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                 {
                     AssertTrue(host.WaitForText("sig_1"), "rows");
                     host.Press("r");
-                    AssertTrue(host.PumpUntil(() => stub.Count("PUT /api/v1/signals/sig_1/read") == 1), "mark read");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("PUT", "/api/v1/signals/sig_1/read") == 1), "mark read");
                     AssertTrue(host.WaitForText("Signal marked as read."), "toast");
                     host.Press("space").Press("down").Press("space").Press("del");
                     AssertTrue(host.WaitForText("Delete 2 selected signal(s)?"), "confirm");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/signals/delete/multiple") == 1), "batch delete");
-                    string body = stub.Bodies.Last(b => b.Contains("Ids"));
-                    AssertTrue(body.Contains("sig_1") && body.Contains("sig_2"), "ids: " + body);
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/signals/delete/multiple") == 1), "batch delete");
+                    DeleteMultipleRequest body = stub.LastBody<DeleteMultipleRequest>("POST", "/api/v1/signals/delete/multiple");
+                    AssertEqual("sig_1,sig_2", String.Join(",", body.Ids.OrderBy(i => i, StringComparer.Ordinal)), "ids");
                 }
             }));
 
@@ -103,11 +107,11 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     TuiCase.Contains(frame, "Alpha", "to captain");
                     TuiCase.Contains(frame, "Mark Read", "mark read button");
                     host.Press("r");
-                    AssertTrue(host.PumpUntil(() => stub.Count("PUT /api/v1/signals/sig_1/read") == 1), "mark read");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("PUT", "/api/v1/signals/sig_1/read") == 1), "mark read");
                     host.Press("del");
                     AssertTrue(host.WaitForText("Delete signal sig_1?"), "confirm");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/signals/delete/multiple") == 1), "deleted");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/signals/delete/multiple") == 1), "deleted");
                 }
             }));
 

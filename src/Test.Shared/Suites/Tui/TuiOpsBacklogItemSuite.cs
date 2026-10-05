@@ -4,7 +4,10 @@ namespace Test.Shared.Suites.Tui
     using System.Collections.Generic;
     using System.Linq;
     using System.Net;
+    using System.Text.Json;
+    using Armada.Core.Models;
     using Armada.Tui.Screens.Operations;
+    using Armada.Tui.Services;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
@@ -37,11 +40,14 @@ namespace Test.Shared.Suites.Tui
                     host.Type(" v2");
                     AssertTrue(screen.Form.IsDirty, "dirty after edit");
                     host.Press("ctrl+s");
-                    AssertTrue(host.PumpUntil(() => stub.Count("PUT /api/v1/backlog/obj_a") == 1), "update call");
-                    string body = stub.Bodies.Last(b => b.Contains("Fix login v2"));
-                    AssertTrue(body.Contains("\"VesselIds\":[\"vsl_demo\"]") && body.Contains("\"FleetIds\":[\"flt_1\"]"), "scope kept: " + body);
-                    AssertTrue(body.Contains("\"Tags\":[\"area:auth\"]") && body.Contains("\"AcceptanceCriteria\":[\"Users can log in\"]"), "lists: " + body);
-                    AssertTrue(body.Contains("\"MissionIds\":[\"msn_1\"]"), "links carried: " + body);
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("PUT", "/api/v1/backlog/obj_a") == 1), "update call");
+                    ObjectiveUpsertRequest body = stub.LastBody<ObjectiveUpsertRequest>("PUT", "/api/v1/backlog/obj_a");
+                    AssertEqual("Fix login v2", body.Title, "edited title");
+                    AssertEqual("vsl_demo", String.Join(",", body.VesselIds ?? new List<string>()), "vessel scope kept");
+                    AssertEqual("flt_1", String.Join(",", body.FleetIds ?? new List<string>()), "fleet scope kept");
+                    AssertEqual("area:auth", String.Join(",", body.Tags ?? new List<string>()), "tags");
+                    AssertEqual("Users can log in", String.Join(",", body.AcceptanceCriteria ?? new List<string>()), "acceptance criteria");
+                    AssertEqual("msn_1", String.Join(",", body.MissionIds ?? new List<string>()), "links carried");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Backlog item \"Fix login\" saved."))), "save toast");
                 }
             }));
@@ -108,25 +114,27 @@ namespace Test.Shared.Suites.Tui
                     AssertEqual("orm_1", screen.Transcript.SelectedId, "Up selects the previous message");
                     host.Press("down");
                     host.Press("m");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/objective-refinement-sessions/ors_1/summarize") == 1), "summarize");
-                    AssertTrue(stub.Bodies.Any(b => b.Contains("\"MessageId\":\"orm_2\"")), "summarize message id");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/objective-refinement-sessions/ors_1/summarize") == 1), "summarize");
+                    AssertEqual("orm_2", stub.LastBody<ObjectiveRefinementSummaryRequest>("POST", "/api/v1/objective-refinement-sessions/ors_1/summarize").MessageId, "summarize message id");
                     AssertTrue(host.PumpUntil(() => screen.SummaryDraft != null), "summary draft");
                     screen.SelectPanel("summary");
                     AssertTrue(host.WaitForText("Narrow scope"), "summary shown\n" + host.Screen());
                     TuiCase.Contains(host.Screen(), "heuristic", "method");
                     screen.SelectPanel("transcript");
                     host.Press("A");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/objective-refinement-sessions/ors_1/apply") == 1), "apply");
-                    AssertTrue(stub.Bodies.Any(b => b.Contains("\"PromoteBacklogState\":true") && b.Contains("\"MarkMessageSelected\":true")), "apply body");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/objective-refinement-sessions/ors_1/apply") == 1), "apply");
+                    StubRequest apply = stub.Last("POST", "/api/v1/objective-refinement-sessions/ors_1/apply");
+                    AssertEqual(JsonTokenType.True, apply.BodyProperty("PromoteBacklogState")?.ValueToken, "apply sends PromoteBacklogState true (not the model default)");
+                    AssertEqual(JsonTokenType.True, apply.BodyProperty("MarkMessageSelected")?.ValueToken, "apply sends MarkMessageSelected true (not the model default)");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Applied refinement summary back to the backlog item."))), "apply toast");
                     screen.Composer.Text = "Add rollout notes";
                     AssertTrue(screen.RunAction("send-refinement"), "send action");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/objective-refinement-sessions/ors_1/messages") == 1), "send");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/objective-refinement-sessions/ors_1/messages") == 1), "send");
                     host.Tui.Context.Events.Inject(AskFixtures.EventJson("objective-refinement-session.message.created",
                         "{\"sessionId\":\"ors_1\",\"objectiveId\":\"obj_a\",\"message\":{\"id\":\"orm_9\",\"objectiveRefinementSessionId\":\"ors_1\",\"objectiveId\":\"obj_a\",\"role\":\"Assistant\",\"sequence\":9,\"content\":\"Live streamed reply\",\"createdUtc\":\"2026-10-04T10:00:00Z\",\"lastUpdateUtc\":\"2026-10-04T10:00:00Z\"}}"));
                     AssertTrue(host.WaitForText("Live streamed reply"), "live message\n" + host.Screen());
                     host.Press("x");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/objective-refinement-sessions/ors_1/stop") == 1), "stop");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/objective-refinement-sessions/ors_1/stop") == 1), "stop");
                     host.Tui.Context.Events.Inject(AskFixtures.EventJson("objective-refinement-session.deleted", "{\"sessionId\":\"ors_1\",\"objectiveId\":\"obj_a\"}"));
                     AssertTrue(host.PumpUntil(() => screen.Detail == null), "deleted event clears the transcript");
                     AssertTrue(host.WaitForText("No active refinement transcript selected."), "empty state");
@@ -136,8 +144,10 @@ namespace Test.Shared.Suites.Tui
                     host.Tui.Context.Events.Inject(AskFixtures.EventJson("captain.changed", "{\"id\":\"cpt_1\",\"name\":\"claude-1\",\"state\":\"Working\"}"));
                     AssertTrue(host.WaitForText("claude-1 is currently Working"), "captain.changed updates state");
                     AssertTrue(screen.RunAction("start-refinement"), "start action");
-                    AssertTrue(host.PumpUntil(() => stub.Count("POST /api/v1/backlog/obj_a/refinement-sessions") == 1), "start call");
-                    AssertTrue(stub.Bodies.Any(b => b.Contains("\"CaptainId\":\"cpt_1\"") && b.Contains("\"VesselId\":\"vsl_demo\"")), "start body");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/backlog/obj_a/refinement-sessions") == 1), "start call");
+                    ObjectiveRefinementSessionCreateRequest start = stub.LastBody<ObjectiveRefinementSessionCreateRequest>("POST", "/api/v1/backlog/obj_a/refinement-sessions");
+                    AssertEqual("cpt_1", start.CaptainId, "start captain");
+                    AssertEqual("vsl_demo", start.VesselId, "start vessel");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Notifications.ActiveToasts().Any(t => t.Text.Contains("Refinement session started with claude-1."))), "start toast");
                 }
             }));
@@ -155,9 +165,11 @@ namespace Test.Shared.Suites.Tui
                     host.Press("enter");
                     host.Type("Brand new item");
                     host.Press("ctrl+s");
-                    AssertTrue(host.PumpUntil(() => stub.Bodies.Any(b => b.Contains("Brand new item"))), "create call");
-                    string body = stub.Bodies.Last(b => b.Contains("Brand new item"));
-                    AssertTrue(body.Contains("\"VesselIds\":[\"vsl_demo\"]") && body.Contains("\"FleetIds\":[\"flt_1\"]"), "scope from query: " + body);
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/backlog") == 1), "create call");
+                    ObjectiveUpsertRequest body = stub.LastBody<ObjectiveUpsertRequest>("POST", "/api/v1/backlog");
+                    AssertEqual("Brand new item", body.Title, "created title");
+                    AssertEqual("vsl_demo", String.Join(",", body.VesselIds ?? new List<string>()), "vessel scope from query");
+                    AssertEqual("flt_1", String.Join(",", body.FleetIds ?? new List<string>()), "fleet scope from query");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.FullPath == "/backlog/obj_new"), "opens the created item");
                     screen = (BacklogItemScreen)host.Tui.Shell.Screen!;
                     host.Tui.Context.Router.Navigate("/objectives/obj_a");
@@ -167,7 +179,7 @@ namespace Test.Shared.Suites.Tui
                     host.Press("del");
                     TuiCase.Contains(host.Screen(), "snapshot history only.", "delete text");
                     host.Press("y");
-                    AssertTrue(host.PumpUntil(() => stub.Count("DELETE /api/v1/backlog/obj_a") == 1), "delete");
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("DELETE", "/api/v1/backlog/obj_a") == 1), "delete");
                     AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.FullPath.StartsWith("/dispatch")), "back to the backlog");
                 }
             }));

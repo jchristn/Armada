@@ -5,7 +5,6 @@ namespace Test.Shared.Suites.Client
     using System.IO;
     using System.Linq;
     using System.Text;
-    using System.Text.RegularExpressions;
     using System.Threading.Tasks;
     using Armada.Client;
     using Armada.Client.Models;
@@ -63,8 +62,7 @@ namespace Test.Shared.Suites.Client
                 string target = "contract/target-" + ClientContract.Suffix();
                 LiveServerSetup.Git(work, out _, "branch", target, "main");
                 AssertTrue((await c.MergeVesselBranchAsync(id, branch, target, true))?.Merged == true, "merge");
-                LiveServerSetup.Git(null, out string log, "--git-dir", setup.BarePath, "log", target, "--name-only", "--format=%s");
-                AssertContains("branch.txt", log, "merged and pushed to the origin");
+                AssertEqual(0, LiveServerSetup.Git(null, out string catFile, "--git-dir", setup.BarePath, "cat-file", "-e", target + ":branch.txt"), "merged and pushed to the origin (branch.txt exists on the target): " + catFile);
 
                 Captain captain = await LiveServerSetup.CreateCaptainAsync(c, "contract-context");
                 _Behavior.OnPrompt = prompt => "## Project context\nA test repository with one README.";
@@ -146,8 +144,7 @@ namespace Test.Shared.Suites.Client
                 Captain captain = await LiveServerSetup.CreateCaptainAsync(c, "contract-categorizer");
                 _Behavior.OnPrompt = prompt =>
                 {
-                    List<string> ids = Regex.Matches(prompt, "vsl_[A-Za-z0-9_]+").Select(m => m.Value).Distinct().ToList();
-                    return "{\"fleets\":[{\"name\":\"Contract Imported\",\"description\":\"From the stub captain\",\"vesselIds\":[\"" + String.Join("\",\"", ids) + "\"]}]}";
+                    return "{\"fleets\":[{\"name\":\"Contract Imported\",\"description\":\"From the stub captain\",\"vesselIds\":[\"" + String.Join("\",\"", vesselIds) + "\"]}]}";
                 };
                 await c.CategorizeVesselImportAsync(imported.BatchId, new VesselImportCategorizationRequest { Enabled = true, CaptainId = captain.Id });
                 List<VesselImportFleetRecommendation> recommendations = new List<VesselImportFleetRecommendation>();
@@ -158,11 +155,12 @@ namespace Test.Shared.Suites.Client
                 }, LiveTimeoutMs), "captain recommended a fleet: " + String.Join("; ", _Behavior.Errors));
 
                 FleetRecommendationApplyRequest apply = new FleetRecommendationApplyRequest();
-                apply.Fleets.Add(new FleetRecommendationApplyFleet { Name = "Contract Imported " + ClientContract.Suffix(), VesselIds = vesselIds });
+                string appliedFleetName = "Contract Imported " + ClientContract.Suffix();
+                apply.Fleets.Add(new FleetRecommendationApplyFleet { Name = appliedFleetName, VesselIds = vesselIds });
                 FleetRecommendationApplyResult? applied = await c.ApplyFleetRecommendationsAsync(imported.BatchId, apply);
                 AssertNotNull(applied, "applied");
                 Vessel? moved = await c.GetVesselAsync(vesselIds[0]);
-                AssertTrue((await c.GetFleetAsync(moved!.FleetId!))?.Fleet?.Name.StartsWith("Contract Imported", StringComparison.Ordinal) == true, "vessel moved to the new fleet");
+                AssertEqual(appliedFleetName, (await c.GetFleetAsync(moved!.FleetId!))?.Fleet?.Name, "vessel moved to the new fleet");
             }));
 
             cases.Add(Case("workspace", "Workspace status, tree, file read and save, directory, rename, delete, search, changes, exec, diff", async (c, fx) =>

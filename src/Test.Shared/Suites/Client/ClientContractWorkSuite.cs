@@ -108,7 +108,11 @@ namespace Test.Shared.Suites.Client
                 AssertStartsWith("vyg_", voyage.Id, "voyage id");
                 AssertEqual("Contract voyage", (await c.GetVoyageAsync(voyage.Id))?.Title, "GetVoyageAsync unwraps { Voyage, Missions }");
                 AssertTrue(await LiveServerSetup.WaitUntilAsync(async () => ((await c.GetVoyageDetailAsync(voyage.Id))?.Missions ?? new List<Mission>()).Any(m => m.Status == MissionStatusEnum.Complete), LiveTimeoutMs), "voyage mission landed");
-                AssertContains("\"Missions\"", (await c.GetVoyageStatusAsync(voyage.Id))?.Json ?? "", "status JSON");
+                ArmadaRawJson? statusJson = await c.GetVoyageStatusAsync(voyage.Id);
+                AssertNotNull(statusJson, "status JSON");
+                VoyageDetail statusDetail = JsonHelper.Deserialize<VoyageDetail>(statusJson!.Json);
+                AssertEqual(voyage.Id, statusDetail.Voyage?.Id, "status JSON voyage");
+                AssertTrue(statusDetail.Missions != null && statusDetail.Missions.Count > 0, "status JSON lists the missions");
 
                 _Behavior.MissionsSucceed = false;
                 VoyageCreateRequest second = new VoyageCreateRequest();

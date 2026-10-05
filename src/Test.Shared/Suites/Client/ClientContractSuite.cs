@@ -71,7 +71,10 @@ namespace Test.Shared.Suites.Client
                 Fleet created = (await c.CreateFleetAsync(new Fleet { Name = "client-contract-" + Guid.NewGuid().ToString("N").Substring(0, 6) }))!;
                 AssertStartsWith("flt_", created.Id, "id");
                 ArmadaRawJson? rawGet = await c.GetEntityAsync("fleets", created.Id);
-                AssertContains(created.Name, rawGet?.Json ?? "", "generic entity lookup");
+                AssertNotNull(rawGet, "generic entity lookup");
+                FleetDetail rawDetail = JsonHelper.Deserialize<FleetDetail>(rawGet!.Json);
+                AssertEqual(created.Id, rawDetail.Fleet?.Id, "generic entity lookup id");
+                AssertEqual(created.Name, rawDetail.Fleet?.Name, "generic entity lookup name");
                 FleetDetail? detail = await c.GetFleetAsync(created.Id);
                 Fleet? fetched = detail?.Fleet;
                 AssertEqual(created.Name, fetched?.Name, "get");
