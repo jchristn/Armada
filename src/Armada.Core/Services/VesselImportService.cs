@@ -279,7 +279,13 @@ namespace Armada.Core.Services
             detail.Batch = batch;
             detail.Items = await _Database.VesselImportItems.EnumerateByBatchAsync(tenantId, batchId, token).ConfigureAwait(false);
             detail.Hints = BuildHints(batch, detail.Items);
-            detail.FleetRecommendations = await _Database.VesselImportFleetRecommendations.EnumerateByBatchAsync(tenantId, batchId, token).ConfigureAwait(false);
+            // Recommendations are stored before the run records Completed; while a run is Pending or Running they are
+            // that run's partial output (or a previous run's, about to be replaced), and applying them is refused, so
+            // they are shown only once the run that wrote them has finished.
+            bool categorizationActive = batch.CategorizationStatus == VesselImportCategorizationStatusEnum.Pending
+                || batch.CategorizationStatus == VesselImportCategorizationStatusEnum.Running;
+            if (!categorizationActive)
+                detail.FleetRecommendations = await _Database.VesselImportFleetRecommendations.EnumerateByBatchAsync(tenantId, batchId, token).ConfigureAwait(false);
             return detail;
         }
 

@@ -62,6 +62,33 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0, (await testDb.Driver.Vessels.EnumerateAsync(Constants.DefaultTenantId).ConfigureAwait(false)).Count, "no vessels created by discover");
             }));
 
+            cases.Add(CaseAsync("recommendations_hidden_while_categorizing", "Batch detail shows fleet recommendations only once the categorization run has finished", TestTags.Reliability, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                string root = TestTemp.NewDirectory("import");
+                MakeFakeRepo(Path.Combine(root, "one"));
+                VesselImportService service = NewService(testDb, root);
+                VesselImportDiscoverResponse discovered = await DiscoverRoot(service, root).ConfigureAwait(false);
+
+                VesselImportFleetRecommendation recommendation = new VesselImportFleetRecommendation();
+                recommendation.TenantId = Constants.DefaultTenantId;
+                recommendation.BatchId = discovered.BatchId;
+                recommendation.Name = "Recommended";
+                await testDb.Driver.VesselImportFleetRecommendations.ReplaceForBatchAsync(Constants.DefaultTenantId, discovered.BatchId, new List<VesselImportFleetRecommendation> { recommendation }).ConfigureAwait(false);
+
+                // The categorization run stores its recommendations before it records Completed.
+                VesselImportBatch batch = (await testDb.Driver.VesselImportBatches.ReadAsync(Constants.DefaultTenantId, discovered.BatchId).ConfigureAwait(false))!;
+                batch.CategorizationStatus = VesselImportCategorizationStatusEnum.Running;
+                await testDb.Driver.VesselImportBatches.UpdateAsync(batch).ConfigureAwait(false);
+                VesselImportBatchDetail? running = await service.ReadBatchAsync(Constants.DefaultTenantId, discovered.BatchId).ConfigureAwait(false);
+                AssertEqual(0, running!.FleetRecommendations.Count, "no recommendations while the run is Running (applying them is refused)");
+
+                batch.CategorizationStatus = VesselImportCategorizationStatusEnum.Completed;
+                await testDb.Driver.VesselImportBatches.UpdateAsync(batch).ConfigureAwait(false);
+                VesselImportBatchDetail? completed = await service.ReadBatchAsync(Constants.DefaultTenantId, discovered.BatchId).ConfigureAwait(false);
+                AssertEqual(1, completed!.FleetRecommendations.Count, "recommendations once the run is Completed");
+            }));
+
             cases.Add(CaseAsync("inline_import_creates_vessels", "Inline import creates vessels with WorkingDirectory set and LocalPath null", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
