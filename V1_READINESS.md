@@ -192,7 +192,7 @@ The goal is a written threat model and a closed list of findings, not just fixes
   were only screen-checked, a restore, and triage of the open S3 findings.
 - [x] **W6.2 Captain support matrix.** `docs/CAPTAINS.md`: supported versions of Claude Code, Codex, Gemini, Cursor,
   Mux, OpenCode, and API endpoints, and which features each supports (missions, planning, Ask threads, Ask approval
-  gating -- today only Claude Code and ApiEndpoint are gated -- streaming, thinking, tool display).
+  gating, including CLI tool permission prompts under `ApproveInArmada` -- streaming, thinking, tool display).
 - [x] **W6.3 Ask approval gating for every runtime.** Extend thread-scoped MCP to the remaining CLI runtimes without
   breaking their logins, or document clearly in the UI that a captain's actions are not gated.
 - [x] **W6.4 Visual QA.** One full pass of every page and modal at 1920, 1512, 1280, 768, and 390 px in light and dark;

@@ -49,7 +49,7 @@ namespace Test.Shared.Suites.Tui
                     TuiCase.Contains(frame, "Bash: git push origin main", "tool and command");
                     TuiCase.Contains(frame, "Captain claude-1  Vessel web  Mission Fix tables", "where the captain runs");
                     TuiCase.Contains(frame, "Expires in ", "countdown");
-                    TuiCase.Contains(frame, "[a Allow once  A Allow and remember  d Deny]", "decision keys");
+                    TuiCase.Contains(frame, "[Allow once] a  [Allow and remember] A  [Deny] d", "decision buttons");
                     TuiCase.Contains(frame, "Suggested rule: Bash(git push:*)", "suggested rule in the detail");
                     List<string> hints = screen.Hints.Select(h => h.Key).ToList();
                     AssertTrue(hints.Contains("a") && hints.Contains("A") && hints.Contains("d"), "status bar hints");
@@ -192,7 +192,8 @@ namespace Test.Shared.Suites.Tui
                 using (TuiTestHost host = Host(Request(true, false), out StubHttpHandler stub))
                 {
                     ApprovalsScreen screen = Load(host);
-                    TuiCase.Contains(host.Screen(), "[a Allow once  d Deny]", "no A key");
+                    TuiCase.Contains(host.Screen(), "[Allow once] a  [Deny] d", "decision buttons without remember");
+                    AssertFalse(screen.Buttons().Any(b => b.DecisionKey == 'A'), "no Allow and remember button");
                     host.Press("A");
                     host.Pump();
                     AssertFalse(host.App.Modals.IsActive, "no rule dialog");
