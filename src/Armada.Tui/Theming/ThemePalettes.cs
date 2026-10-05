@@ -94,6 +94,8 @@ namespace Armada.Tui.Theming
             t.InputFocused = new CellStyle(fg, bg, CellAttributes.Underline | CellAttributes.Bold);
             t.Input = new CellStyle(fg, bg, CellAttributes.Underline);
             t.TabActive = inverse;
+            // The focused region's border is reverse video (a solid bar), unfocused borders are plain lines.
+            t.FocusBorder = new CellStyle(yellow, bg, CellAttributes.Bold | CellAttributes.Reverse);
             t.Muted = new CellStyle(fg, bg);
             return t;
         }
@@ -125,6 +127,7 @@ namespace Armada.Tui.Theming
             t.Muted = new CellStyle(muted, bg);
             t.Accent = new CellStyle(accent, bg, CellAttributes.Bold);
             t.Border = new CellStyle(border, bg);
+            t.FocusBorder = new CellStyle(accent, bg, CellAttributes.Bold);
             t.Success = new CellStyle(success, bg, CellAttributes.Bold);
             t.Warning = new CellStyle(warning, bg, CellAttributes.Bold);
             t.Error = new CellStyle(error, bg, CellAttributes.Bold);

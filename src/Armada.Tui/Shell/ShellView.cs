@@ -15,9 +15,11 @@ namespace Armada.Tui.Shell
     /// <summary>
     /// The root widget (W1.2): header, menu bar, sidebar, main region, Ask dock, status bar, and toasts, laid out by
     /// <see cref="ShellLayout"/> on every frame (so resizes reflow at the breakpoints without a resize event). While
-    /// signed out it shows the <see cref="LoginView"/>. It is bound to one full-screen TUIKit region, so it owns focus
-    /// routing (sidebar, main, dock via <see cref="FocusScope"/>), key precedence (menu, focused pane, back on Backspace,
-    /// then command bindings), and mouse hit-testing. Swaps the main screen when the router navigates. Not thread-safe.
+    /// signed out it shows the <see cref="LoginView"/>. The sidebar, main screen, and dock each sit in a reserved
+    /// one-cell border, drawn in the theme's focus color around the pane that holds keyboard focus (or along the
+    /// stretch of the main border beside the focused sub-region; see <see cref="FocusFrame"/>). It is bound to one
+    /// full-screen TUIKit region, so it owns focus routing (sidebar, main, dock via <see cref="FocusScope"/>), key
+    /// precedence (menu, focused pane, back on Backspace, then command bindings), and mouse hit-testing. Swaps the main screen when the router navigates. Not thread-safe.
     /// </summary>
     public class ShellView : ArmadaWidget, IFocusScopeOwner, IPasteTarget
     {
@@ -352,17 +354,46 @@ namespace Armada.Tui.Shell
             if (!layout.Sidebar.IsEmpty)
             {
                 Sidebar.Compact = layout.CompactSidebar;
-                Scope.RenderChild(surface, Sidebar, layout.Sidebar);
-                for (int y = layout.Sidebar.Y; y < layout.Sidebar.Bottom; y++) surface.DrawText(layout.Sidebar.Right, y, "|", Theme.Border);
+                Scope.RenderChild(surface, Sidebar, layout.SidebarInner);
+                FocusFrame.Draw(surface, layout.Sidebar, Theme, PaneHasFocus(Sidebar), Rect.Empty);
             }
 
-            if (Screen != null) Scope.RenderChild(surface, Screen, layout.Main);
-            if (!layout.Dock.IsEmpty) Scope.RenderChild(surface, Dock, layout.Dock);
+            if (Screen != null)
+            {
+                Scope.RenderChild(surface, Screen, layout.MainInner);
+                bool mainFocused = PaneHasFocus(Screen);
+                FocusFrame.Draw(surface, layout.Main, Theme, mainFocused, mainFocused ? FocusedSubRegion(layout.MainInner) : Rect.Empty);
+            }
+
+            if (!layout.Dock.IsEmpty)
+            {
+                Scope.RenderChild(surface, Dock, layout.DockInner);
+                FocusFrame.Draw(surface, layout.Dock, Theme, PaneHasFocus(Dock), Rect.Empty);
+            }
+
             StatusBar.Hints = BuildHints();
             StatusBar.Render(new SurfaceView(surface, layout.StatusBar));
             ToastLayer.Render(surface, layout.MenuBar.Bottom, _Context.Notifications.ActiveToasts(), Theme, _Context.Loc);
             Rect menuArea = new Rect(0, layout.MenuBar.Y, size.Width, size.Height - layout.MenuBar.Y - 1);
             Menu.Render(new SurfaceView(surface, menuArea));
+        }
+
+        private bool PaneHasFocus(IWidget pane)
+        {
+            return Scope.IsActive && ReferenceEquals(Scope.Focused, pane);
+        }
+
+        /// <summary>
+        /// The focused sub-region of the main screen in main-content coordinates, or empty when the screen itself is the
+        /// focus target or the sub-region covers the whole screen.
+        /// </summary>
+        private Rect FocusedSubRegion(Rect mainInner)
+        {
+            if (Screen == null || !Screen.Scope.RegionHost) return Rect.Empty;
+            Rect region = Screen.Scope.FocusedRegion();
+            if (region.IsEmpty) return Rect.Empty;
+            if (region.X <= 0 && region.Y <= 0 && region.Right >= mainInner.Width && region.Bottom >= mainInner.Height) return Rect.Empty;
+            return region;
         }
 
         private void ShowRoute(RouteMatch match)

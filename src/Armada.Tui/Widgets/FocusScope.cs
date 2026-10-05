@@ -53,6 +53,12 @@ namespace Armada.Tui.Widgets
         public bool IsActive { get; private set; } = false;
 
         /// <summary>
+        /// True when this scope's children are the focus regions of a pane (screens set it), so
+        /// <see cref="FocusedRegion"/> descends into it to find the focused sub-region. Default false.
+        /// </summary>
+        public bool RegionHost { get; set; } = false;
+
+        /// <summary>
         /// Raised after the focused child changes.
         /// </summary>
         public event EventHandler<IWidget?>? FocusMoved;
@@ -285,6 +291,35 @@ namespace Armada.Tui.Widgets
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// The rectangle of the focused sub-region in the owner's coordinates: the focused child's last placement,
+        /// descending through children whose scope is a <see cref="RegionHost"/> (a hub's content screen), so the result
+        /// is the deepest region that holds focus. Used to draw the pane border alongside it (see
+        /// <see cref="FocusFrame"/>).
+        /// </summary>
+        /// <returns>The rectangle, or <see cref="Rect.Empty"/> when no focused child has been placed.</returns>
+        public Rect FocusedRegion()
+        {
+            Rect result = Rect.Empty;
+            FocusScope scope = this;
+            int ox = 0;
+            int oy = 0;
+            for (int depth = 0; depth < 16; depth++)
+            {
+                IWidget? child = scope.Focused;
+                if (child == null) break;
+                Rect r = scope.RectOf(child);
+                if (r.IsEmpty) break;
+                result = new Rect(r.X + ox, r.Y + oy, r.Width, r.Height);
+                if (!(child is IFocusScopeOwner owner) || !owner.Scope.RegionHost) break;
+                scope = owner.Scope;
+                ox = result.X;
+                oy = result.Y;
+            }
+
+            return result;
         }
 
         /// <summary>

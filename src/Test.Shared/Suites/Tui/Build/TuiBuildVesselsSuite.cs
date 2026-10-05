@@ -183,6 +183,8 @@ namespace Test.Shared.Suites.Tui.Build
                     host.Press("esc");
                     host.PumpUntil(() => !host.App.Modals.IsActive);
                     AssertTrue(host.WaitForText("Needs Attention"), "readiness\n" + host.Screen());
+                    // The landing preview loads separately from the readiness panel; wait for it instead of racing it.
+                    host.WaitForText("Ready To Land");
                     string frame = host.Screen();
                     TuiCase.Contains(frame, "Ready To Land", "landing preview");
                     TuiCase.Contains(frame, "Web", "fleet name");

@@ -74,6 +74,13 @@ namespace Armada.Tui.Theming
         public CellStyle Info { get; set; } = CellStyle.Default;
 
         /// <summary>
+        /// Border of the region that holds keyboard focus (the focused shell pane, or the pane edges alongside the
+        /// focused sub-region). Unfocused regions use <see cref="Border"/>. The high-contrast palette adds reverse video
+        /// and bold so the focused border never depends on color alone.
+        /// </summary>
+        public CellStyle FocusBorder { get; set; } = CellStyle.Default;
+
+        /// <summary>
         /// Selected row or item in a focused widget.
         /// </summary>
         public CellStyle Selection { get; set; } = CellStyle.Default;

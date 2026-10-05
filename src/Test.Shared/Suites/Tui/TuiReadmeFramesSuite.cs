@@ -10,7 +10,8 @@ namespace Test.Shared.Suites.Tui
 
     /// <summary>
     /// Renders the README's text screenshots at 120x40 (login, Ask Armada, Home, the Missions list, and the Approvals
-    /// center) from stub data and, when ARMADA_TUI_README_DIR is set, writes them there (<c>docs/tui-screens</c>).
+    /// center) from stub data and, when ARMADA_TUI_README_DIR is set, writes them there (<c>docs/tui-screens</c>) as
+    /// ASCII (box-drawing borders transliterated to <c>+ - |</c>, as an ASCII terminal shows them), so the docs stay ASCII.
     /// Always asserts each frame shows its screen.
     /// </summary>
     public sealed class TuiReadmeFramesSuite : IArmadaTestSuite
@@ -75,7 +76,7 @@ namespace Test.Shared.Suites.Tui
                     Directory.CreateDirectory(dir!);
                     foreach (KeyValuePair<string, string> kvp in frames)
                     {
-                        File.WriteAllText(Path.Combine(dir!, kvp.Key + "-" + Width + "x" + Height + ".txt"), TrimRight(kvp.Value));
+                        File.WriteAllText(Path.Combine(dir!, kvp.Key + "-" + Width + "x" + Height + ".txt"), TrimRight(Armada.Tui.Theming.AsciiGlyphs.Transliterate(kvp.Value)));
                     }
                 }
             }));

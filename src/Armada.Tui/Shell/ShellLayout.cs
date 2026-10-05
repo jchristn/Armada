@@ -1,12 +1,15 @@
 namespace Armada.Tui.Shell
 {
     using System;
+    using Armada.Tui.Widgets;
     using TUIKit;
 
     /// <summary>
     /// Computes the shell's rectangles for a terminal size (W1.3): header, menu bar, sidebar, main, Ask dock, and status
     /// bar, with the breakpoints from the plan (sidebar collapses to icons below 110 columns and hides below 90; 80x24
-    /// minimum). Immutable.
+    /// minimum). The sidebar, main, and dock rectangles include a one-cell focus border (see <see cref="FocusFrame"/>)
+    /// that is reserved whether or not the pane has focus; the <c>Inner</c> rectangles are what the panes draw in.
+    /// Immutable.
     /// </summary>
     public class ShellLayout
     {
@@ -33,19 +36,43 @@ namespace Armada.Tui.Shell
         public Rect MenuBar { get; }
 
         /// <summary>
-        /// Sidebar (empty when hidden).
+        /// Sidebar including its focus border (empty when hidden).
         /// </summary>
         public Rect Sidebar { get; }
 
         /// <summary>
-        /// Main region.
+        /// Main region including its focus border.
         /// </summary>
         public Rect Main { get; }
 
         /// <summary>
-        /// Ask dock (empty when hidden).
+        /// Ask dock including its focus border (empty when hidden).
         /// </summary>
         public Rect Dock { get; }
+
+        /// <summary>
+        /// Sidebar content inside the focus border (empty when hidden).
+        /// </summary>
+        public Rect SidebarInner
+        {
+            get { return FocusFrame.Inner(Sidebar); }
+        }
+
+        /// <summary>
+        /// Main content inside the focus border.
+        /// </summary>
+        public Rect MainInner
+        {
+            get { return FocusFrame.Inner(Main); }
+        }
+
+        /// <summary>
+        /// Dock content inside the focus border (empty when hidden).
+        /// </summary>
+        public Rect DockInner
+        {
+            get { return FocusFrame.Inner(Dock); }
+        }
 
         /// <summary>
         /// Status bar.
@@ -68,7 +95,7 @@ namespace Armada.Tui.Shell
         /// <param name="headerRows">Header rows (1, or 2 with the proxy strip).</param>
         /// <param name="sidebarPreferred">User wants the sidebar (Ctrl+B).</param>
         /// <param name="dockVisible">Ask dock shown.</param>
-        /// <param name="dockHeight">Dock height.</param>
+        /// <param name="dockHeight">Dock content height (the border adds two rows).</param>
         /// <param name="narrowOverlay">Show the full sidebar even below 90 columns (Ctrl+B in narrow terminals).</param>
         public ShellLayout(Size size, int headerRows, bool sidebarPreferred, bool dockVisible, int dockHeight, bool narrowOverlay = false)
         {
@@ -93,20 +120,20 @@ namespace Armada.Tui.Shell
             CompactSidebar = false;
             if (sidebarPreferred)
             {
-                if (Mode == LayoutModeEnum.Wide) sidebarWidth = 24;
+                if (Mode == LayoutModeEnum.Wide) sidebarWidth = 22 + 2;
                 else if (Mode == LayoutModeEnum.Compact)
                 {
-                    sidebarWidth = 5;
+                    sidebarWidth = 4 + 2;
                     CompactSidebar = true;
                 }
             }
 
-            if (Mode == LayoutModeEnum.Narrow && narrowOverlay) sidebarWidth = 24;
+            if (Mode == LayoutModeEnum.Narrow && narrowOverlay) sidebarWidth = 22 + 2;
 
             Sidebar = sidebarWidth > 0 ? new Rect(0, bodyTop, sidebarWidth, bodyHeight) : Rect.Empty;
-            int mainLeft = sidebarWidth > 0 ? sidebarWidth + 1 : 0;
+            int mainLeft = sidebarWidth;
             int mainWidth = w - mainLeft;
-            int dh = dockVisible ? Math.Clamp(dockHeight, 4, Math.Max(4, bodyHeight / 2)) : 0;
+            int dh = dockVisible ? Math.Clamp(dockHeight + 2, 6, Math.Max(6, bodyHeight / 2)) : 0;
             Dock = dh > 0 ? new Rect(mainLeft, bodyTop + bodyHeight - dh, mainWidth, dh) : Rect.Empty;
             Main = new Rect(mainLeft, bodyTop, mainWidth, bodyHeight - dh);
         }
