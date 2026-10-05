@@ -7,13 +7,14 @@ namespace Armada.Tui.Widgets
     using TUIKit;
     using TUIKit.Content;
     using TUIKit.Input;
+    using TUIKit.Widgets;
 
     /// <summary>
     /// Base for read-only scrolling viewers (JSON, Markdown, logs, diffs): wraps styled lines to the width, scrolls
     /// with Up/Down/PgUp/PgDn/Home/End and the wheel, searches with <c>/</c> or <c>Ctrl+F</c> (<c>n</c>/<c>N</c> for
     /// next/previous), and optionally follows the tail. Not thread-safe.
     /// </summary>
-    public abstract class ScrollTextView : ArmadaWidget, IFocusHintSource
+    public abstract class ScrollTextView : ArmadaWidget, IKeyHintSource, ITextEntry
     {
         #region Public-Members
 
@@ -121,12 +122,20 @@ namespace Armada.Tui.Widgets
             return FindNext(true);
         }
 
+        /// <summary>
+        /// True while the search prompt is open: printable keys type into it (TUIKit's <see cref="ITextEntry"/>).
+        /// </summary>
+        public bool AcceptsText
+        {
+            get { return _Searching; }
+        }
+
         /// <inheritdoc />
-        public FocusHints? GetFocusHints()
+        public IReadOnlyList<KeyHint>? GetKeyHints()
         {
             // While the search prompt is open, keys type into it; otherwise the screen's hints apply.
-            if (_Searching) return FocusHints.Typing("Esc", "Cancel search").Add("Enter", "Find");
-            return null;
+            if (!_Searching) return null;
+            return new List<KeyHint> { new KeyHint("Esc", "Cancel search"), new KeyHint("Enter", "Find") };
         }
 
         /// <inheritdoc />

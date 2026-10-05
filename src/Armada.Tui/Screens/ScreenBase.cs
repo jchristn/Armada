@@ -6,13 +6,15 @@ namespace Armada.Tui.Screens
     using Armada.Tui.Input;
     using Armada.Tui.Routing;
     using Armada.Tui.Widgets;
+    using TUIKit.Input;
+    using TUIKit.Widgets;
 
     /// <summary>
     /// Base for every screen in the main region: carries the route and context, contributes screen-scoped commands
     /// (the Actions menu, palette, and help overlay), status bar hints, and an optional refresh action. Not
     /// thread-safe.
     /// </summary>
-    public abstract class ScreenBase : ContainerWidget
+    public abstract class ScreenBase : ContainerWidget, IKeyHintSource
     {
         #region Public-Members
 
@@ -110,27 +112,43 @@ namespace Armada.Tui.Screens
         }
 
         /// <summary>
-        /// Status bar hints for the control that has focus on this screen. <paramref name="inner"/> is the answer of
-        /// the deepest <see cref="IFocusHintSource"/> on the focus path below the screen (a filter row, a form), or
-        /// null. The default: the inner hints plus <see cref="TypingHints"/> when there are inner hints; a generic
-        /// "Tab Next field" plus <see cref="TypingHints"/> when a bare text field has focus; otherwise
-        /// <see cref="Hints"/>. Screens whose children carry no hints of their own (Ask) override this.
+        /// This screen's status bar hints for the control that has focus on it (TUIKit's <see cref="IKeyHintSource"/>;
+        /// the shell resolves them with <see cref="KeyHintResolver"/>, after the hints of the control itself). A screen
+        /// that hosts another screen (a hub's content) leaves the hints to the inner one.
         /// </summary>
-        /// <param name="inner">Inner hints, or null.</param>
-        /// <param name="textEntry">True when the focused leaf takes typed text.</param>
-        /// <returns>Hints. Never null.</returns>
-        public virtual FocusHints ResolveHints(FocusHints? inner, bool textEntry)
+        /// <returns>Hints, or null while an inner screen has focus.</returns>
+        public IReadOnlyList<KeyHint>? GetKeyHints()
         {
-            if (inner != null)
+            FocusPath path = FocusPath.Build(null, this);
+            for (int i = 1; i < path.Nodes.Count; i++)
             {
-                FocusHints result = new FocusHints(inner.TextEntry || textEntry);
-                result.AddRange(inner.Keys);
-                AddTypingHints(result);
-                return result;
+                if (path.Nodes[i] is ScreenBase) return null;
             }
 
-            if (textEntry) return AddTypingHints(FocusHints.Typing("Tab", "Next field"));
-            return FocusHints.Of(Hints);
+            return ComposeHints(KeyHints.Deeper(this), KeyHints.Typing(path));
+        }
+
+        /// <summary>
+        /// The screen's part of the status bar hints. <paramref name="inner"/> is the answer of the deepest
+        /// <see cref="IKeyHintSource"/> below the screen (a filter row, a form), or null; the status bar shows it first
+        /// and drops any key of the screen's that it already describes. The default: <see cref="TypingHints"/> when there
+        /// are inner hints; a generic "Tab Next field" plus <see cref="TypingHints"/> when a bare text field has focus;
+        /// otherwise <see cref="Hints"/>. Screens whose children carry no hints of their own (Ask) override this.
+        /// </summary>
+        /// <param name="inner">Inner hints, or null.</param>
+        /// <param name="typing">True when the focused leaf takes typed text.</param>
+        /// <returns>Hints. Never null.</returns>
+        public virtual IReadOnlyList<KeyHint> ComposeHints(IReadOnlyList<KeyHint>? inner, bool typing)
+        {
+            if (inner != null) return KeyHints.Of(TypingHints);
+            if (typing)
+            {
+                List<KeyHint> hints = new List<KeyHint> { new KeyHint("Tab", "Next field") };
+                hints.AddRange(KeyHints.Of(TypingHints));
+                return hints;
+            }
+
+            return KeyHints.Of(Hints);
         }
 
         /// <summary>
@@ -145,22 +163,6 @@ namespace Armada.Tui.Screens
         /// </summary>
         public virtual void OnDeactivated()
         {
-        }
-
-        #endregion
-
-        #region Private-Methods
-
-        private FocusHints AddTypingHints(FocusHints hints)
-        {
-            // The screen's own chords follow the control's keys; a key the control already describes (Ctrl+S in a form)
-            // is not repeated.
-            foreach (KeyValuePair<string, string> hint in TypingHints)
-            {
-                if (!hints.Keys.Any(k => k.Key == hint.Key)) hints.Keys.Add(hint);
-            }
-
-            return hints;
         }
 
         #endregion

@@ -10,6 +10,7 @@ namespace Armada.Tui.Screens.Ask
     using Armada.Tui.Widgets;
     using TUIKit;
     using TUIKit.Input;
+    using TUIKit.Widgets;
 
     /// <summary>
     /// The conversation list (W2.1, the dashboard's <c>AskThreadList</c>): New conversation, server-side search (300 ms
@@ -20,9 +21,18 @@ namespace Armada.Tui.Screens.Ask
     /// <c>A</c> show archived, <c>p</c> pin, <c>e</c> rename, <c>s</c> summarize, <c>Del</c> delete, <c>.</c> row menu,
     /// <c>R</c> retry. Not thread-safe.
     /// </summary>
-    public class AskThreadListView : ArmadaWidget, IPasteTarget
+    public class AskThreadListView : ArmadaWidget, IPasteTarget, ITextEntry
     {
         #region Public-Members
+
+        /// <summary>
+        /// True while the search field or an inline rename has focus: printable keys type into it (TUIKit's
+        /// <see cref="ITextEntry"/>).
+        /// </summary>
+        public bool AcceptsText
+        {
+            get { return SearchFocused || RenamingId != null; }
+        }
 
         /// <summary>
         /// Search field.

@@ -16,6 +16,7 @@ namespace Armada.Tui.Screens.Ask
     using Armada.Tui.Widgets;
     using TUIKit;
     using TUIKit.Input;
+    using TUIKit.Widgets;
 
     /// <summary>
     /// The Ask transcript (W2.3, W2.4, W2.5): a scrolling view over the blocks laid out by
@@ -37,9 +38,17 @@ namespace Armada.Tui.Screens.Ask
     /// <c>o</c> open the row's pull request, <c>l</c> mission log, <c>d</c> mission diff, <c>Ctrl+F</c> or <c>/</c> search
     /// with <c>n</c>/<c>N</c>. Not thread-safe.
     /// </summary>
-    public class AskTranscriptView : ArmadaWidget
+    public class AskTranscriptView : ArmadaWidget, ITextEntry
     {
         #region Public-Members
+
+        /// <summary>
+        /// True while the search prompt is open: printable keys type into it (TUIKit's <see cref="ITextEntry"/>).
+        /// </summary>
+        public bool AcceptsText
+        {
+            get { return _Searching; }
+        }
 
         /// <summary>
         /// Display choices (expanded sections, highlight).

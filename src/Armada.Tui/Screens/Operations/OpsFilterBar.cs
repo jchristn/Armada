@@ -14,7 +14,7 @@ namespace Armada.Tui.Screens.Operations
     /// toggles laid out left to right and wrapped. <c>/</c> on a list focuses it, <c>Tab</c> moves between fields, and
     /// <c>Esc</c> or <c>Enter</c> in a text field returns to the list (<see cref="Exited"/>). Not thread-safe.
     /// </summary>
-    public class OpsFilterBar : ContainerWidget, IFocusHintSource
+    public class OpsFilterBar : ContainerWidget, IKeyHintSource
     {
         #region Public-Members
 
@@ -89,8 +89,10 @@ namespace Armada.Tui.Screens.Operations
         }
 
         /// <inheritdoc />
-        public FocusHints? GetFocusHints()
+        public IReadOnlyList<KeyHint>? GetKeyHints()
         {
+            // A control below that describes its own keys speaks for itself.
+            if (KeyHints.Deeper(this) != null) return null;
             return FilterRowHints.For(Scope.Focused, ExitLabel);
         }
 

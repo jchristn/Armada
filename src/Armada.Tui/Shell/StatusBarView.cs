@@ -6,6 +6,7 @@ namespace Armada.Tui.Shell
     using Armada.Tui.Text;
     using Armada.Tui.Widgets;
     using TUIKit;
+    using TUIKit.Input;
 
     /// <summary>
     /// The status bar: key hints for the current context, a pending go-to prefix, the refresh state ("auto 15s",
@@ -21,7 +22,7 @@ namespace Armada.Tui.Shell
         /// <summary>
         /// Hints (key label, English description) for the current context.
         /// </summary>
-        public List<KeyValuePair<string, string>> Hints { get; set; } = new List<KeyValuePair<string, string>>();
+        public List<KeyHint> Hints { get; set; } = new List<KeyHint>();
 
         /// <summary>
         /// Index in <see cref="Hints"/> of the help hint, which is never pushed off by the others, or -1 for none.
@@ -83,7 +84,7 @@ namespace Armada.Tui.Shell
                 int reserve = hasHelp ? HintWidth(Hints[HelpIndex]) : 0;
                 for (int i = 0; i < Hints.Count; i++)
                 {
-                    KeyValuePair<string, string> hint = Hints[i];
+                    KeyHint hint = Hints[i];
                     if (hasHelp && i == HelpIndex)
                     {
                         x = DrawHint(surface, x, hint, limit);
@@ -108,17 +109,17 @@ namespace Armada.Tui.Shell
 
         #region Private-Methods
 
-        private int HintWidth(KeyValuePair<string, string> hint)
+        private int HintWidth(KeyHint hint)
         {
-            return TextCells.Width(hint.Key) + 1 + TextCells.Width(T(hint.Value)) + 2;
+            return TextCells.Width(hint.Key) + 1 + TextCells.Width(T(hint.Description)) + 2;
         }
 
-        private int DrawHint(ISurface surface, int x, KeyValuePair<string, string> hint, int limit)
+        private int DrawHint(ISurface surface, int x, KeyHint hint, int limit)
         {
             if (x + HintWidth(hint) > limit) return x;
             x += SurfaceText.Draw(surface, x, 0, hint.Key, Theme.StatusKey, limit - x);
             x += 1;
-            x += SurfaceText.Draw(surface, x, 0, T(hint.Value), Theme.StatusBar, limit - x);
+            x += SurfaceText.Draw(surface, x, 0, T(hint.Description), Theme.StatusBar, limit - x);
             return x + 2;
         }
 

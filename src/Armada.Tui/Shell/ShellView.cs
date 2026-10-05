@@ -125,6 +125,7 @@ namespace Armada.Tui.Shell
         #region Private-Members
 
         private readonly TuiContext _Context;
+        private readonly KeyHintResolver _HintResolver = CreateHintResolver();
         private LayoutModeEnum _LastMode = LayoutModeEnum.Wide;
         private int _SurfaceWidth = 80;
 
@@ -244,46 +245,16 @@ namespace Armada.Tui.Shell
         }
 
         /// <summary>
-        /// Hints for the control that holds keyboard focus: the sidebar's keys, the dock's, or the innermost screen's
-        /// answer for its focused control (<see cref="ScreenBase.ResolveHints"/>), given the deepest
-        /// <see cref="IFocusHintSource"/> below that screen and whether the focused leaf takes typed text.
+        /// Hints for the control that holds keyboard focus: TUIKit's <see cref="KeyHintResolver"/> over
+        /// <see cref="BuildFocusPath"/>, which asks every <see cref="IKeyHintSource"/> on the path from the focused leaf
+        /// outward (the sidebar, the dock, the deepest control that describes its keys, then the innermost screen,
+        /// <see cref="ScreenBase.GetKeyHints"/>), keeping the innermost description of a key. The shell's own keys
+        /// (help, palette, menu, next pane, refresh) are pinned after these by the status bar.
         /// </summary>
         /// <returns>Hints. Never null.</returns>
-        public FocusHints CurrentFocusHints()
+        public IReadOnlyList<KeyHint> CurrentFocusHints()
         {
-            IWidget? pane = Scope.Focused;
-            if (pane == null) return new FocusHints();
-            if (ReferenceEquals(pane, Sidebar))
-            {
-                return new FocusHints().Add("Enter", "Open").Add("Left/Right", "Collapse/expand");
-            }
-
-            List<IWidget> chain = new List<IWidget>();
-            foreach (object node in BuildFocusPath().Nodes)
-            {
-                if (!ReferenceEquals(node, this) && node is IWidget widget) chain.Add(widget);
-            }
-
-            IWidget leaf = chain[chain.Count - 1];
-            bool textEntry = leaf is ITextEntry entry && entry.AcceptsText;
-            int screenIndex = -1;
-            for (int i = chain.Count - 1; i >= 0; i--)
-            {
-                if (chain[i] is ScreenBase)
-                {
-                    screenIndex = i;
-                    break;
-                }
-            }
-
-            FocusHints? inner = null;
-            for (int i = chain.Count - 1; i > screenIndex && inner == null; i--)
-            {
-                if (chain[i] is IFocusHintSource source) inner = source.GetFocusHints();
-            }
-
-            if (screenIndex < 0) return inner ?? new FocusHints(textEntry);
-            return ((ScreenBase)chain[screenIndex]).ResolveHints(inner, textEntry);
+            return _HintResolver.Resolve(BuildFocusPath());
         }
 
         /// <inheritdoc />
@@ -410,13 +381,13 @@ namespace Armada.Tui.Shell
                 }
 
                 Scope.RenderChild(surface, Login, new Rect(0, 0, size.Width, size.Height - 1));
-                StatusBar.Hints = new List<KeyValuePair<string, string>>
+                StatusBar.Hints = new List<KeyHint>
                 {
-                    new KeyValuePair<string, string>("Tab", "Next field"),
-                    new KeyValuePair<string, string>("Enter", "Continue")
+                    new KeyHint("Tab", "Next field"),
+                    new KeyHint("Enter", "Continue"),
+                    new KeyHint("F2", "Switch login mode"),
+                    new KeyHint("Ctrl+Q", "Quit")
                 };
-                StatusBar.Hints.Add(new KeyValuePair<string, string>("F2", "Switch login mode"));
-                StatusBar.Hints.Add(new KeyValuePair<string, string>("Ctrl+Q", "Quit"));
                 StatusBar.HelpIndex = -1;
                 StatusBar.Render(new SurfaceView(surface, new Rect(0, size.Height - 1, size.Width, 1)));
                 ToastLayer.Render(surface, 1, _Context.Notifications.ActiveToasts(), Theme, _Context.Loc);
@@ -547,19 +518,33 @@ namespace Armada.Tui.Shell
             if (active) Scope.SetActive(true);
         }
 
-        private List<KeyValuePair<string, string>> BuildHints()
+        private List<KeyHint> BuildHints()
         {
-            FocusHints focus = CurrentFocusHints();
-            List<KeyValuePair<string, string>> hints = new List<KeyValuePair<string, string>>(focus.Keys);
-            // While typing, ? types a question mark and Tab moves between fields, so the hints name the keys that
-            // still work there (F1 and F6 do everywhere).
+            FocusPath path = BuildFocusPath();
+            bool typing = KeyHints.Typing(path);
+            List<KeyHint> hints = new List<KeyHint>(_HintResolver.Resolve(path));
+            // The shell's keys are pinned after the focused control's (like TUIKit's StatusBar fixed hints). While
+            // typing, ? types a question mark and Tab moves between fields, so they name the keys that still work there
+            // (F1 and F6 do everywhere).
             StatusBar.HelpIndex = hints.Count;
-            hints.Add(new KeyValuePair<string, string>(focus.TextEntry ? "F1" : "?", "Help"));
-            hints.Add(new KeyValuePair<string, string>("Ctrl+K", "Palette"));
-            hints.Add(new KeyValuePair<string, string>("F10", "Menu"));
-            hints.Add(new KeyValuePair<string, string>(focus.TextEntry ? "F6" : "Tab", "Next pane"));
-            hints.Add(new KeyValuePair<string, string>("F5", "Refresh"));
+            hints.Add(new KeyHint(typing ? "F1" : "?", "Help"));
+            hints.Add(new KeyHint("Ctrl+K", "Palette"));
+            hints.Add(new KeyHint("F10", "Menu"));
+            hints.Add(new KeyHint(typing ? "F6" : "Tab", "Next pane"));
+            hints.Add(new KeyHint("F5", "Refresh"));
             return hints;
+        }
+
+        private static KeyHintResolver CreateHintResolver()
+        {
+            // Armada's controls and screens list only keys that work in their state (the Ask composer's / works while
+            // typing) and name their own way out of a text field, so the resolver neither hides printable keys nor adds a
+            // generic leave hint; the status bar fits hints by width.
+            KeyHintResolver resolver = new KeyHintResolver();
+            resolver.HideTypingChords = false;
+            resolver.ShowLeaveTextHint = false;
+            resolver.MaxHints = 64;
+            return resolver;
         }
 
         #endregion
