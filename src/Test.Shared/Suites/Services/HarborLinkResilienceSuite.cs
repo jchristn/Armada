@@ -64,7 +64,7 @@ namespace Test.Shared.Suites.Services
             cases.Add(CaseAsync("client_drop_stops_heartbeat", "Client: a transport error propagates and stops the heartbeat", TestTags.Reliability, async () =>
             {
                 HarborLinkClient client = NewClient(20);
-                ScriptedHarborTransport transport = new ScriptedHarborTransport { FailAfterScript = true, EndDelayMs = 150 };
+                ScriptedHarborTransport transport = new ScriptedHarborTransport { FailAfterScript = true, EndAfterSent = s => HarborProtocol.Deserialize(s) is HarborHeartbeat };
                 transport.Enqueue(HarborProtocol.Serialize(new HarborHandshakeAck { Accepted = true }));
 
                 await AssertThrowsAsync<IOException>(() => client.RunSessionAsync(transport, CancellationToken.None)).ConfigureAwait(false);

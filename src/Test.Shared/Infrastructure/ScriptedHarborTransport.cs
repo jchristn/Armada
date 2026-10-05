@@ -33,6 +33,18 @@ namespace Test.Shared.Infrastructure
         public int EndDelayMs { get; set; } = 0;
 
         /// <summary>
+        /// When set, the scripted end of the inbound stream waits until the client has sent a message matching this
+        /// predicate (bounded by <see cref="EndWaitTimeoutMs"/>), so a test can end the link after a condition rather
+        /// than after a fixed delay.
+        /// </summary>
+        public Func<string, bool>? EndAfterSent { get; set; } = null;
+
+        /// <summary>
+        /// Upper bound, in milliseconds, on the wait for <see cref="EndAfterSent"/>.
+        /// </summary>
+        public int EndWaitTimeoutMs { get; set; } = 10000;
+
+        /// <summary>
         /// True after the client closed the transport.
         /// </summary>
         public bool Closed { get; private set; } = false;
@@ -42,6 +54,7 @@ namespace Test.Shared.Infrastructure
         #region Private-Members
 
         private readonly Queue<string> _Inbound = new Queue<string>();
+        private readonly TaskCompletionSource<bool> _EndSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         #endregion
 
@@ -66,6 +79,8 @@ namespace Test.Shared.Infrastructure
         public Task SendAsync(string text, CancellationToken token)
         {
             Sent.Enqueue(text);
+            Func<string, bool>? endAfterSent = EndAfterSent;
+            if (endAfterSent != null && endAfterSent(text)) _EndSignal.TrySetResult(true);
             return Task.CompletedTask;
         }
 
@@ -74,6 +89,10 @@ namespace Test.Shared.Infrastructure
         {
             if (_Inbound.Count > 0) return _Inbound.Dequeue();
             if (EndDelayMs > 0) await Task.Delay(EndDelayMs, token).ConfigureAwait(false);
+            if (EndAfterSent != null)
+            {
+                await Task.WhenAny(_EndSignal.Task, Task.Delay(EndWaitTimeoutMs, token)).ConfigureAwait(false);
+            }
             if (FailAfterScript) throw new IOException("Simulated link drop");
             return null;
         }
