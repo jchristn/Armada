@@ -7,6 +7,7 @@ namespace Armada.Server
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Protocol;
     using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
@@ -1319,30 +1320,22 @@ namespace Armada.Server
         private bool TryParseSummaryResponse(string content, out PlanningSessionSummaryResponse? response)
         {
             response = null;
-            if (String.IsNullOrWhiteSpace(content))
+
+            // A fenced json block or a balanced object found by the string-aware scanner, deserialized into a typed
+            // document; an object without a title or description is not the summary.
+            if (!EmbeddedJsonExtractor.TryExtract<PlanningSummaryDraftDocument>(
+                    content,
+                    doc => !String.IsNullOrWhiteSpace(doc.Title) || !String.IsNullOrWhiteSpace(doc.Description),
+                    out PlanningSummaryDraftDocument? document)
+                || document == null)
                 return false;
 
-            string candidate = content.Trim();
-            int firstBrace = candidate.IndexOf('{');
-            int lastBrace = candidate.LastIndexOf('}');
-            if (firstBrace >= 0 && lastBrace > firstBrace)
-                candidate = candidate.Substring(firstBrace, lastBrace - firstBrace + 1);
-
-            try
+            response = new PlanningSessionSummaryResponse
             {
-                using JsonDocument doc = JsonDocument.Parse(candidate);
-                JsonElement root = doc.RootElement;
-                response = new PlanningSessionSummaryResponse
-                {
-                    Title = root.TryGetProperty("title", out JsonElement title) ? title.GetString() ?? String.Empty : String.Empty,
-                    Description = root.TryGetProperty("description", out JsonElement description) ? description.GetString() ?? String.Empty : String.Empty,
-                };
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
+                Title = document.Title ?? String.Empty,
+                Description = document.Description ?? String.Empty,
+            };
+            return true;
         }
 
         private bool IsStopRequested(string sessionId)
@@ -1450,96 +1443,54 @@ namespace Armada.Server
             }
         }
 
-        /// <summary>
-        /// Parse one line of Claude Code streaming-JSON output and return the incremental assistant text for a
-        /// content_block_delta/text_delta event, or null for any other event (init, message framing, result,
-        /// tool use). The concatenation of the returned deltas is the full reply.
-        /// </summary>
-        private string? ExtractClaudeStreamDelta(string line)
-        {
-            try
-            {
-                using JsonDocument doc = JsonDocument.Parse(line.Trim());
-                JsonElement root = doc.RootElement;
-                if (root.ValueKind != JsonValueKind.Object) return null;
-
-                if (!root.TryGetProperty("type", out JsonElement ty) || ty.ValueKind != JsonValueKind.String || ty.GetString() != "stream_event")
-                    return null;
-
-                if (root.TryGetProperty("event", out JsonElement ev) && ev.ValueKind == JsonValueKind.Object
-                    && ev.TryGetProperty("type", out JsonElement evt) && evt.ValueKind == JsonValueKind.String
-                    && evt.GetString() == "content_block_delta"
-                    && ev.TryGetProperty("delta", out JsonElement delta) && delta.ValueKind == JsonValueKind.Object
-                    && delta.TryGetProperty("type", out JsonElement dty) && dty.ValueKind == JsonValueKind.String
-                    && dty.GetString() == "text_delta"
-                    && delta.TryGetProperty("text", out JsonElement dtx) && dtx.ValueKind == JsonValueKind.String)
-                {
-                    return dtx.GetString();
-                }
-            }
-            catch (JsonException)
-            {
-            }
-
-            return null;
-        }
-
         private string? ExtractPlanningStreamText(bool isMux, bool isClaudeStream, string sessionId, string messageId, string line)
         {
+            // Claude Code streaming-JSON: the concatenation of the typed text deltas is the full reply; every other
+            // event (init, message framing, result, tool use) and any non-event line yields nothing.
             if (isClaudeStream)
-                return ExtractClaudeStreamDelta(line);
+                return ClaudeStreamLine.TryParse(line, out ClaudeStreamLine? claudeEvent) && claudeEvent != null ? claudeEvent.TextDelta : null;
 
-            if (!isMux || !MuxRuntime.IsProtocolEventLine(line))
-                return line;
+            if (!isMux) return line;
+            if (!MuxProtocolEvent.TryParse(line, out MuxProtocolEvent? muxEvent) || muxEvent == null) return line;
 
-            try
+            switch (muxEvent.EventType)
             {
-                using JsonDocument doc = JsonDocument.Parse(line.Trim());
-                JsonElement root = doc.RootElement;
-                string eventType = root.TryGetProperty("eventType", out JsonElement et) && et.ValueKind == JsonValueKind.String
-                    ? et.GetString() ?? String.Empty : String.Empty;
+                case MuxProtocolEvent.AssistantText:
+                    return muxEvent.Text;
 
-                if (eventType == "assistant_text")
-                {
-                    if (root.TryGetProperty("text", out JsonElement tx) && tx.ValueKind == JsonValueKind.String)
-                        return tx.GetString();
-                }
-                else if (eventType == "assistant_thinking")
-                {
+                case MuxProtocolEvent.AssistantThinking:
                     // Mux reasoning channel (--show-thinking): stream it as its own event, mirroring Ask Armada.
-                    if (root.TryGetProperty("text", out JsonElement think) && think.ValueKind == JsonValueKind.String)
+                    if (!String.IsNullOrEmpty(muxEvent.Text))
+                        EmitPlanningThinking(sessionId, new { sessionId, messageId, delta = muxEvent.Text });
+                    break;
+
+                case MuxProtocolEvent.ToolCallProposed:
+                    if (muxEvent.ToolCall != null)
                     {
-                        string? thinkingDelta = think.GetString();
-                        if (!String.IsNullOrEmpty(thinkingDelta))
-                            EmitPlanningThinking(sessionId, new { sessionId, messageId, delta = thinkingDelta });
+                        EmitPlanningTool(sessionId, new
+                        {
+                            sessionId,
+                            messageId,
+                            phase = "started",
+                            id = muxEvent.ToolCall.Id,
+                            name = muxEvent.ToolCall.Name,
+                            arguments = TruncateJson(muxEvent.ToolCall.Arguments, 4000)
+                        });
                     }
-                }
-                else if (eventType == "tool_call_proposed" && root.TryGetProperty("toolCall", out JsonElement proposed))
-                {
-                    string? toolId = proposed.TryGetProperty("id", out JsonElement propId) && propId.ValueKind == JsonValueKind.String ? propId.GetString() : null;
-                    string? toolName = proposed.TryGetProperty("name", out JsonElement pnm) && pnm.ValueKind == JsonValueKind.String ? pnm.GetString() : null;
-                    string? argsJson = proposed.TryGetProperty("arguments", out JsonElement parg) ? TruncateJson(parg.GetRawText(), 4000) : null;
-                    EmitPlanningTool(sessionId, new { sessionId, messageId, phase = "started", id = toolId, name = toolName, arguments = argsJson });
-                }
-                else if (eventType == "tool_call_completed")
-                {
-                    string? toolId = root.TryGetProperty("toolCallId", out JsonElement cid) && cid.ValueKind == JsonValueKind.String ? cid.GetString() : null;
-                    string? toolName = root.TryGetProperty("toolName", out JsonElement cnm) && cnm.ValueKind == JsonValueKind.String ? cnm.GetString() : null;
-                    double? elapsedMs = root.TryGetProperty("elapsedMs", out JsonElement cel) && cel.ValueKind == JsonValueKind.Number ? cel.GetDouble() : (double?)null;
-                    bool? ok = null;
-                    string? resultJson = null;
-                    if (root.TryGetProperty("result", out JsonElement res))
+                    break;
+
+                case MuxProtocolEvent.ToolCallCompleted:
                     {
-                        if (res.TryGetProperty("success", out JsonElement suc) && (suc.ValueKind == JsonValueKind.True || suc.ValueKind == JsonValueKind.False))
-                            ok = suc.GetBoolean();
-                        JsonElement resultBody = res.TryGetProperty("content", out JsonElement content) ? content : res;
-                        resultJson = TruncateJson(resultBody.GetRawText(), 16000);
+                        bool? ok = muxEvent.Result?.Success;
+                        string? resultJson = muxEvent.Result == null
+                            ? null
+                            : TruncateJson(muxEvent.Result.Content ?? JsonSerializer.Serialize(muxEvent.Result), 16000);
+                        EmitPlanningTool(sessionId, new { sessionId, messageId, phase = "completed", id = muxEvent.ToolCallId, name = muxEvent.ToolName, ok, elapsedMs = muxEvent.ElapsedMs, result = resultJson });
                     }
-                    EmitPlanningTool(sessionId, new { sessionId, messageId, phase = "completed", id = toolId, name = toolName, ok, elapsedMs, result = resultJson });
-                }
-            }
-            catch (JsonException)
-            {
+                    break;
+
+                default:
+                    break;
             }
 
             return null;

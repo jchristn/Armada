@@ -53,11 +53,19 @@ namespace Armada.Runtimes
         public event Action<int, int?>? OnProcessExited;
 
         /// <summary>
-        /// Sentinel prefix for structured tool-activity lines emitted on the stdout channel. Consumers that
-        /// render chat tool cards recognize a line beginning with this marker as a JSON tool event rather
-        /// than reply text.
+        /// Raised for each tool call phase (started, completed). This is the typed channel for tool activity:
+        /// tool events are never written in-band on <see cref="OnStdoutReceived"/>, so model text cannot spoof a
+        /// tool card. Arguments: synthetic process id, event.
         /// </summary>
-        public const string ToolEventMarker = "[ARMADA:TOOLEVENT] ";
+        public event Action<int, ApiRuntimeToolEvent>? OnToolEvent;
+
+        /// <summary>
+        /// Raised for each runtime diagnostic (MCP status, tool call/result echoes, warnings, errors, cancellation).
+        /// Diagnostics also go to the readable output log and <see cref="OnOutputReceived"/>, but never to
+        /// <see cref="OnStdoutReceived"/>, which carries only the model's reply text. Arguments: synthetic process id,
+        /// diagnostic.
+        /// </summary>
+        public event Action<int, ApiRuntimeDiagnostic>? OnDiagnostic;
 
         #endregion
 
@@ -73,6 +81,7 @@ namespace Armada.Runtimes
         private readonly LoggingModule _Logging;
         private readonly int _MaxIterations;
         private readonly Func<ModelEndpoint, LoggingModule, CompletionClientBase> _ClientFactory;
+        private readonly Func<string, string?, LoggingModule, McpToolClient> _McpClientFactory;
         private readonly string _Header = "[ApiAgentRuntime] ";
         private StreamWriter? _LogWriter;
         private readonly object _LogLock = new object();
@@ -89,12 +98,16 @@ namespace Armada.Runtimes
         /// <param name="maxIterations">Maximum tool-call iterations before the loop stops. Clamped to 1..1000.</param>
         /// <param name="clientFactory">Optional inference-client factory seam for testing; defaults to the
         /// production <see cref="ModelEndpointClientFactory"/>.</param>
+        /// <param name="mcpClientFactory">Optional MCP-client factory seam for testing (endpoint URL, session token,
+        /// logging); defaults to a network <see cref="McpToolClient"/>.</param>
         public ApiAgentRuntime(
             ModelEndpoint endpoint,
             LoggingModule logging,
             int maxIterations = 100,
-            Func<ModelEndpoint, LoggingModule, CompletionClientBase>? clientFactory = null)
+            Func<ModelEndpoint, LoggingModule, CompletionClientBase>? clientFactory = null,
+            Func<string, string?, LoggingModule, McpToolClient>? mcpClientFactory = null)
         {
+            _McpClientFactory = mcpClientFactory ?? ((url, sessionToken, log) => new McpToolClient(url, sessionToken, null, log));
             _Endpoint = endpoint ?? throw new ArgumentNullException(nameof(endpoint));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _MaxIterations = Math.Clamp(maxIterations, 1, 1000);
@@ -109,12 +122,16 @@ namespace Armada.Runtimes
         /// <param name="logging">Logging module.</param>
         /// <param name="maxIterations">Maximum tool-call iterations before the loop stops. Clamped to 1..1000.</param>
         /// <param name="clientFactory">Optional inference-client factory seam for testing.</param>
+        /// <param name="mcpClientFactory">Optional MCP-client factory seam for testing (endpoint URL, session token,
+        /// logging); defaults to a network <see cref="McpToolClient"/>.</param>
         public ApiAgentRuntime(
             Func<string, ModelEndpoint?> endpointResolver,
             LoggingModule logging,
             int maxIterations = 100,
-            Func<ModelEndpoint, LoggingModule, CompletionClientBase>? clientFactory = null)
+            Func<ModelEndpoint, LoggingModule, CompletionClientBase>? clientFactory = null,
+            Func<string, string?, LoggingModule, McpToolClient>? mcpClientFactory = null)
         {
+            _McpClientFactory = mcpClientFactory ?? ((url, sessionToken, log) => new McpToolClient(url, sessionToken, null, log));
             _EndpointResolver = endpointResolver ?? throw new ArgumentNullException(nameof(endpointResolver));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _MaxIterations = Math.Clamp(maxIterations, 1, 1000);
@@ -241,7 +258,7 @@ namespace Armada.Runtimes
 
                     try
                     {
-                        mcpClient = new McpToolClient(mcpUrl!, mcpToken, null, _Logging);
+                        mcpClient = _McpClientFactory(mcpUrl!, mcpToken, _Logging);
                         await mcpClient.InitializeAsync(token).ConfigureAwait(false);
                         List<McpRemoteTool> remoteTools = await mcpClient.ListToolsAsync(token).ConfigureAwait(false);
 
@@ -255,11 +272,11 @@ namespace Armada.Runtimes
                             added++;
                         }
 
-                        Emit(processId, "[mcp] connected to " + mcpUrl + "; " + added + " tool(s) available");
+                        EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.McpStatus, "[mcp] connected to " + mcpUrl + "; " + added + " tool(s) available");
                     }
                     catch (Exception ex)
                     {
-                        Emit(processId, "[mcp] tool access unavailable (" + ex.Message + "); continuing with built-in tools only");
+                        EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.McpStatus, "[mcp] tool access unavailable (" + ex.Message + "); continuing with built-in tools only");
                         try { mcpClient?.Dispose(); } catch { }
                         mcpClient = null;
                         mcpRouting.Clear();
@@ -285,9 +302,10 @@ namespace Armada.Runtimes
 
                     ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
 
-                    if (!response.Success && !String.IsNullOrEmpty(response.Error))
+                    if (!response.Success)
                     {
-                        Emit(processId, "[error] inference call failed: " + response.Error);
+                        string reason = String.IsNullOrEmpty(response.Error) ? "the inference endpoint reported failure without detail" : response.Error!;
+                        EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Error, "[error] inference call failed: " + reason);
                         exitCode = 1;
                         break;
                     }
@@ -315,7 +333,7 @@ namespace Armada.Runtimes
 
                     if (iteration == _MaxIterations - 1)
                     {
-                        Emit(processId, "[warning] reached the maximum of " + _MaxIterations + " tool iterations; stopping.");
+                        EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Warning, "[warning] reached the maximum of " + _MaxIterations + " tool iterations; stopping.");
                     }
                 }
 
@@ -324,13 +342,13 @@ namespace Armada.Runtimes
             catch (OperationCanceledException)
             {
                 exitCode = -1;
-                Emit(processId, "[cancelled] the captain run was stopped.");
+                EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Cancelled, "[cancelled] the captain run was stopped.");
             }
             catch (Exception e)
             {
                 exitCode = 1;
                 _Logging.Warn(_Header + "loop error for process " + processId + ": " + e.ToString());
-                Emit(processId, "[error] " + e.Message);
+                EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.Error, "[error] " + e.Message);
             }
             finally
             {
@@ -351,8 +369,8 @@ namespace Armada.Runtimes
             CancellationToken token)
         {
             string argsJson = String.IsNullOrWhiteSpace(call.ArgumentsJson) ? "{}" : call.ArgumentsJson;
-            Emit(processId, "[tool] " + call.Name + " " + Truncate(argsJson, 500));
-            EmitToolEvent(processId, new { phase = "started", id = call.Id, name = call.Name, arguments = Truncate(argsJson, 4000) });
+            EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.ToolCall, "[tool] " + call.Name + " " + Truncate(argsJson, 500));
+            EmitToolEvent(processId, new ApiRuntimeToolEvent { Phase = ApiRuntimeToolPhaseEnum.Started, Id = call.Id, Name = call.Name, Arguments = Truncate(argsJson, 4000) });
 
             long startTicks = Environment.TickCount64;
 
@@ -361,18 +379,21 @@ namespace Armada.Runtimes
             {
                 try
                 {
-                    string mcpResult = await mcpClient.CallToolAsync(call.Name, argsJson, token).ConfigureAwait(false);
+                    // Success comes from the protocol's isError flag, never from the result text.
+                    McpToolCallResult mcpResult = await mcpClient.CallToolResultAsync(call.Name, argsJson, token).ConfigureAwait(false);
+                    string mcpText = McpToolClient.RenderResultText(mcpResult);
+                    bool ok = !mcpResult.IsError;
                     long elapsed = Environment.TickCount64 - startTicks;
-                    Emit(processId, "[tool:result] " + call.Name + " ok " + Truncate(mcpResult, 500));
-                    EmitToolEvent(processId, new { phase = "completed", id = call.Id, name = call.Name, ok = true, elapsedMs = elapsed, result = Truncate(mcpResult, 16000) });
-                    return mcpResult;
+                    EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.ToolResult, "[tool:result] " + call.Name + " " + (ok ? "ok" : "failed") + " " + Truncate(mcpText, 500));
+                    EmitToolEvent(processId, new ApiRuntimeToolEvent { Phase = ApiRuntimeToolPhaseEnum.Completed, Id = call.Id, Name = call.Name, Ok = ok, ElapsedMs = elapsed, Result = Truncate(mcpText, 16000) });
+                    return mcpText;
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
                 {
                     long elapsed = Environment.TickCount64 - startTicks;
                     string message = "MCP tool call failed: " + ex.Message;
-                    Emit(processId, "[tool:result] " + call.Name + " failed " + message);
-                    EmitToolEvent(processId, new { phase = "completed", id = call.Id, name = call.Name, ok = false, elapsedMs = elapsed, result = message });
+                    EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.ToolResult, "[tool:result] " + call.Name + " failed " + message);
+                    EmitToolEvent(processId, new ApiRuntimeToolEvent { Phase = ApiRuntimeToolPhaseEnum.Completed, Id = call.Id, Name = call.Name, Ok = false, ElapsedMs = elapsed, Result = message });
                     return JsonSerializer.Serialize(new { error = "mcp_tool_failed", message });
                 }
             }
@@ -382,15 +403,15 @@ namespace Armada.Runtimes
                 using JsonDocument document = JsonDocument.Parse(argsJson);
                 ToolResult result = await registry.ExecuteAsync(call.Id ?? String.Empty, call.Name, document.RootElement, workingDirectory, token).ConfigureAwait(false);
                 long elapsed = Environment.TickCount64 - startTicks;
-                Emit(processId, "[tool:result] " + call.Name + " " + (result.Success ? "ok" : "failed") + " " + Truncate(result.Content, 500));
-                EmitToolEvent(processId, new { phase = "completed", id = call.Id, name = call.Name, ok = result.Success, elapsedMs = elapsed, result = Truncate(result.Content, 16000) });
+                EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.ToolResult, "[tool:result] " + call.Name + " " + (result.Success ? "ok" : "failed") + " " + Truncate(result.Content, 500));
+                EmitToolEvent(processId, new ApiRuntimeToolEvent { Phase = ApiRuntimeToolPhaseEnum.Completed, Id = call.Id, Name = call.Name, Ok = result.Success, ElapsedMs = elapsed, Result = Truncate(result.Content, 16000) });
                 return result.Content ?? String.Empty;
             }
             catch (JsonException)
             {
                 string message = "Tool arguments were not valid JSON: " + Truncate(argsJson, 200);
-                Emit(processId, "[tool:result] " + call.Name + " failed " + message);
-                EmitToolEvent(processId, new { phase = "completed", id = call.Id, name = call.Name, ok = false, result = message });
+                EmitDiagnostic(processId, ApiRuntimeDiagnosticKindEnum.ToolResult, "[tool:result] " + call.Name + " failed " + message);
+                EmitToolEvent(processId, new ApiRuntimeToolEvent { Phase = ApiRuntimeToolPhaseEnum.Completed, Id = call.Id, Name = call.Name, Ok = false, Result = message });
                 return JsonSerializer.Serialize(new { error = "invalid_arguments", message });
             }
         }
@@ -456,20 +477,23 @@ namespace Armada.Runtimes
         }
 
         /// <summary>
-        /// Emit a structured tool-activity event on the stdout channel, marked with a sentinel prefix so a
-        /// consumer (the chat service) can lift it out into a UI tool card instead of treating it as reply
-        /// text. The payload carries the tool name, phase (started/completed), and, on completion, success,
-        /// elapsed time, and a truncated result.
+        /// Emit a diagnostic: written to the log and the general output channel (mission logs, heartbeats) and raised on
+        /// the typed <see cref="OnDiagnostic"/> channel, but never on the stdout (reply text) channel.
         /// </summary>
-        private void EmitToolEvent(int processId, object payload)
+        private void EmitDiagnostic(int processId, ApiRuntimeDiagnosticKindEnum kind, string message)
         {
-            try
-            {
-                string line = ToolEventMarker + JsonSerializer.Serialize(payload);
-                WriteLog(line);
-                OnStdoutReceived?.Invoke(processId, line);
-            }
-            catch { }
+            if (String.IsNullOrEmpty(message)) return;
+            WriteLog(message);
+            try { OnOutputReceived?.Invoke(processId, message); } catch { }
+            try { OnDiagnostic?.Invoke(processId, new ApiRuntimeDiagnostic { Kind = kind, Message = message }); } catch { }
+        }
+
+        /// <summary>
+        /// Raise a tool-activity event on the typed <see cref="OnToolEvent"/> channel.
+        /// </summary>
+        private void EmitToolEvent(int processId, ApiRuntimeToolEvent toolEvent)
+        {
+            try { OnToolEvent?.Invoke(processId, toolEvent); } catch { }
         }
 
         private static string Truncate(string? value, int max)

@@ -1,4 +1,4 @@
-namespace Armada.Server.Ask
+namespace Armada.Core.Protocol
 {
     using System.Collections.Generic;
     using System.Text.Json.Serialization;
@@ -17,9 +17,10 @@ namespace Armada.Server.Ask
         public string? Model { get; set; } = null;
 
         /// <summary>
-        /// Content blocks, or null when the content is a plain string.
+        /// Content blocks; a plain string content is read as one text block. Null when absent.
         /// </summary>
         [JsonPropertyName("content")]
+        [JsonConverter(typeof(ClaudeContentListConverter))]
         public List<ClaudeStreamContentBlock>? Content { get; set; } = null;
 
         #endregion

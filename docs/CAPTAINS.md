@@ -105,9 +105,11 @@ events) have a native thinking channel. For every other runtime, when the user a
 instruction to wrap reasoning in a single `<thinking>...</thinking>` block and lifts that block out of the final reply.
 That is the model describing its reasoning on request, not the provider's reasoning trace.
 
-**Tool cards** come from parsing structured output: Claude Code `tool_use` and `tool_result` blocks, Mux
-`tool_call_proposed` and `tool_call_completed` events, OpenCode `tool_use` parts, and ApiEndpoint
-`[ARMADA:TOOLEVENT]` lines. Plain-text runtimes produce no cards.
+**Tool cards** come from structured output parsed into typed events (`Armada.Core.Protocol`): Claude Code
+`tool_use` and `tool_result` blocks, Mux `tool_call_proposed` and `tool_call_completed` events, OpenCode `tool_use`
+parts, and the ApiEndpoint runtime's typed `OnToolEvent` channel (its stdout carries only the model's reply text, so
+reply text cannot fake a tool card). A JSON line counts as a protocol event only when its discriminator (`type` or
+`eventType`) is one of the runtime's known event types. Plain-text runtimes produce no cards.
 
 **Reasoning effort** is a per-captain setting (`Off`, `Minimal`, `Low`, `Medium`, `High`) translated by
 `ReasoningEffortTranslator`:

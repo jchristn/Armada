@@ -67,6 +67,13 @@ namespace Armada.Core.Services.Health
             request.Arguments = arguments ?? new List<string>();
             request.TimeoutMs = Math.Max(1, timeoutSeconds) * 1000;
 
+            // dotnet prints its CLI messages in English so any text it prints is stable; decisions are made from exit
+            // codes, JSON output, and files on disk, never from the wording.
+            request.Environment = new Dictionary<string, string>
+            {
+                ["DOTNET_CLI_UI_LANGUAGE"] = "en"
+            };
+
             HostCommandResult result;
             try
             {

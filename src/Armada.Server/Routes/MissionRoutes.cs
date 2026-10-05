@@ -3,6 +3,7 @@ namespace Armada.Server.Routes
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
+    using System.Globalization;
     using System.IO;
     using System.Linq;
     using System.Text;
@@ -15,6 +16,7 @@ namespace Armada.Server.Routes
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Protocol;
     using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
@@ -1353,87 +1355,57 @@ namespace Armada.Server.Routes
 
             foreach (string raw in rawLines)
             {
-                string trimmed = raw.Trim();
-                if (trimmed.Length < 2 || trimmed[0] != '{' || trimmed[trimmed.Length - 1] != '}')
+                if (!MuxProtocolEvent.TryParse(raw, out MuxProtocolEvent? evt) || evt == null)
                 {
                     FlushAssistantText(output, assistantText);
                     output.Add(raw);
                     continue;
                 }
 
-                JsonDocument? doc = null;
-                try { doc = JsonDocument.Parse(trimmed); }
-                catch (JsonException) { }
-
-                if (doc == null
-                    || doc.RootElement.ValueKind != JsonValueKind.Object
-                    || !doc.RootElement.TryGetProperty("eventType", out JsonElement eventTypeElement)
-                    || eventTypeElement.ValueKind != JsonValueKind.String)
+                switch (evt.EventType)
                 {
-                    doc?.Dispose();
-                    FlushAssistantText(output, assistantText);
-                    output.Add(raw);
-                    continue;
-                }
+                    case MuxProtocolEvent.AssistantText:
+                        if (evt.Text != null) assistantText.Append(evt.Text);
+                        break;
 
-                using (doc)
-                {
-                    JsonElement root = doc.RootElement;
-                    string eventType = eventTypeElement.GetString() ?? String.Empty;
-                    switch (eventType)
-                    {
-                        case "assistant_text":
-                            if (root.TryGetProperty("text", out JsonElement textElement) && textElement.ValueKind == JsonValueKind.String)
-                                assistantText.Append(textElement.GetString());
-                            break;
+                    case MuxProtocolEvent.ToolCallProposed:
+                        FlushAssistantText(output, assistantText);
+                        if (evt.ToolCall != null)
+                        {
+                            string name = evt.ToolCall.Name ?? String.Empty;
+                            string args = TruncateForLog(evt.ToolCall.Arguments, 400);
+                            output.Add("> tool: " + name + (args.Length > 0 ? " " + args : String.Empty));
+                        }
+                        break;
 
-                        case "tool_call_proposed":
-                            FlushAssistantText(output, assistantText);
-                            if (root.TryGetProperty("toolCall", out JsonElement toolCall) && toolCall.ValueKind == JsonValueKind.Object)
-                            {
-                                string name = GetLogString(toolCall, "name");
-                                string args = toolCall.TryGetProperty("arguments", out JsonElement argsElement)
-                                    ? TruncateForLog(argsElement.GetRawText(), 400) : String.Empty;
-                                output.Add("> tool: " + name + (args.Length > 0 ? " " + args : String.Empty));
-                            }
-                            break;
+                    case MuxProtocolEvent.ToolCallCompleted:
+                        FlushAssistantText(output, assistantText);
+                        {
+                            string name = evt.ToolName ?? String.Empty;
+                            bool ok = evt.Result?.Success != false;
+                            string elapsed = evt.ElapsedMs.HasValue ? " (" + evt.ElapsedMs.Value.ToString("0", CultureInfo.InvariantCulture) + "ms)" : String.Empty;
+                            output.Add("  " + (name.Length > 0 ? name + " " : String.Empty) + "-> " + (ok ? "ok" : "failed") + elapsed);
+                        }
+                        break;
 
-                        case "tool_call_completed":
-                            FlushAssistantText(output, assistantText);
-                            {
-                                string name = GetLogString(root, "toolName");
-                                bool ok = !(root.TryGetProperty("result", out JsonElement result)
-                                    && result.ValueKind == JsonValueKind.Object
-                                    && result.TryGetProperty("success", out JsonElement success)
-                                    && success.ValueKind == JsonValueKind.False);
-                                string elapsed = root.TryGetProperty("elapsedMs", out JsonElement elapsedElement) && elapsedElement.ValueKind == JsonValueKind.Number
-                                    ? " (" + elapsedElement.GetDouble().ToString("0") + "ms)" : String.Empty;
-                                output.Add("  " + (name.Length > 0 ? name + " " : String.Empty) + "-> " + (ok ? "ok" : "failed") + elapsed);
-                            }
-                            break;
+                    case MuxProtocolEvent.RunStarted:
+                        FlushAssistantText(output, assistantText);
+                        output.Add("-- run started (" + (evt.Model ?? String.Empty) + ") --");
+                        break;
 
-                        case "run_started":
-                            FlushAssistantText(output, assistantText);
-                            output.Add("-- run started (" + GetLogString(root, "model") + ") --");
-                            break;
+                    case MuxProtocolEvent.RunCompleted:
+                        FlushAssistantText(output, assistantText);
+                        {
+                            string dur = evt.DurationMs.HasValue ? evt.DurationMs.Value.ToString("0", CultureInfo.InvariantCulture) : "?";
+                            string iters = evt.IterationsCompleted.HasValue ? evt.IterationsCompleted.Value.ToString(CultureInfo.InvariantCulture) : "?";
+                            string calls = evt.ToolCallCount.HasValue ? evt.ToolCallCount.Value.ToString(CultureInfo.InvariantCulture) : "?";
+                            output.Add("-- run completed: " + dur + "ms, " + iters + " iteration(s), " + calls + " tool call(s) --");
+                        }
+                        break;
 
-                        case "run_completed":
-                            FlushAssistantText(output, assistantText);
-                            {
-                                string dur = root.TryGetProperty("durationMs", out JsonElement d) && d.ValueKind == JsonValueKind.Number ? d.GetDouble().ToString("0") : "?";
-                                string iters = root.TryGetProperty("iterationsCompleted", out JsonElement it) && it.ValueKind == JsonValueKind.Number ? it.GetInt32().ToString() : "?";
-                                string calls = root.TryGetProperty("toolCallCount", out JsonElement cc) && cc.ValueKind == JsonValueKind.Number ? cc.GetInt32().ToString() : "?";
-                                output.Add("-- run completed: " + dur + "ms, " + iters + " iteration(s), " + calls + " tool call(s) --");
-                            }
-                            break;
-
-                        // Protocol noise that adds nothing to a human transcript.
-                        case "assistant_thinking":
-                        case "tool_call_approved":
-                        case "heartbeat":
-                        default:
-                            break;
-                    }
+                    // Protocol noise that adds nothing to a human transcript.
+                    default:
+                        break;
                 }
             }
 
@@ -1450,12 +1422,6 @@ namespace Armada.Server.Routes
             {
                 output.Add(line.TrimEnd('\r'));
             }
-        }
-
-        private static string GetLogString(JsonElement obj, string property)
-        {
-            return obj.TryGetProperty(property, out JsonElement element) && element.ValueKind == JsonValueKind.String
-                ? (element.GetString() ?? String.Empty) : String.Empty;
         }
 
         private static string TruncateForLog(string? value, int max)

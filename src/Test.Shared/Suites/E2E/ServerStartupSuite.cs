@@ -126,7 +126,9 @@ namespace Test.Shared.Suites.E2E
 
             LoggingModule logging = new LoggingModule();
             logging.Settings.EnableConsole = false;
-            return new ArmadaServer(logging, settings, quiet: true);
+            ArmadaServer server = new ArmadaServer(logging, settings, quiet: true);
+            server.RuntimeToolDiscoverySource = new RecordingRuntimeToolDiscoverySource();
+            return server;
         }
 
         private static int FreePort()

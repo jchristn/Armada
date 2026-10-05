@@ -95,7 +95,7 @@ namespace Test.Shared.Infrastructure
             RegisterStub("enumerate", _ => new { Objects = new List<object>() });
             RegisterStub("dispatch", _ => new { Id = "vyg_stub" + Guid.NewGuid().ToString("N").Substring(0, 8), Title = "stub voyage" });
             RegisterStub("cancel_voyage", _ => new { Status = "Cancelled" });
-            RegisterStub("delete_vessel", _ => new { Error = "Vessel not found" });
+            RegisterStub("delete_vessel", _ => McpToolError.NotFound("Vessel not found"));
             RegisterStub("explode", _ => throw new InvalidOperationException("boom"));
         }
 

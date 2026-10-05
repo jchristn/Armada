@@ -7,6 +7,7 @@ namespace Armada.Runtimes.Tools
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Runtimes.Tools;
+    using Armada.Runtimes.Tools.Arguments;
 
     /// <summary>
     /// Performs a single exact string replacement in a file.
@@ -68,11 +69,16 @@ namespace Armada.Runtimes.Tools
         /// <returns>A <see cref="ToolResult"/> containing the edit result or error details.</returns>
         public async Task<ToolResult> ExecuteAsync(string toolCallId, JsonElement arguments, string workingDirectory, CancellationToken cancellationToken)
         {
+            if (!ToolArgumentParser.TryParse(arguments, out EditFileToolArguments? args, out string? argumentError))
+            {
+                return ToolArgumentParser.InvalidParameter(toolCallId, argumentError);
+            }
+
             try
             {
-                string filePath = GetRequiredString(arguments, "file_path");
-                string oldString = GetRequiredString(arguments, "old_string");
-                string newString = GetRequiredString(arguments, "new_string");
+                string filePath = args.FilePath!;
+                string oldString = args.OldString!;
+                string newString = args.NewString!;
                 string resolvedPath = ResolvePath(filePath, workingDirectory);
 
                 if (!File.Exists(resolvedPath))
@@ -225,16 +231,6 @@ namespace Armada.Runtimes.Tools
             }
 
             return Environment.NewLine;
-        }
-
-        private string GetRequiredString(JsonElement arguments, string propertyName)
-        {
-            if (arguments.TryGetProperty(propertyName, out JsonElement value) && value.ValueKind == JsonValueKind.String)
-            {
-                return value.GetString()!;
-            }
-
-            throw new ArgumentException($"Required parameter '{propertyName}' is missing or not a string.");
         }
 
         private string ResolvePath(string filePath, string workingDirectory)

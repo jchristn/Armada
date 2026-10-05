@@ -38,6 +38,24 @@ namespace Armada.Core.Services.Health
         /// <exception cref="ArgumentNullException">Thrown when result is null.</exception>
         public static DependencyScanResult Interpret(DependencyToolResult result, DependencyScanModeEnum mode, string? repositoryRoot, int timeoutSeconds)
         {
+            return Interpret(result, mode, repositoryRoot, timeoutSeconds, null);
+        }
+
+        /// <summary>
+        /// Interpret one dotnet list package invocation. A failed run is classified as RestoreRequired only when a project
+        /// it covers has no <c>obj/project.assets.json</c> (the file restore writes); the tool's message text is never
+        /// read for that decision.
+        /// </summary>
+        /// <param name="result">Tool result.</param>
+        /// <param name="mode">Outdated or vulnerable.</param>
+        /// <param name="repositoryRoot">Repository root used to make project paths relative, or null.</param>
+        /// <param name="timeoutSeconds">Configured timeout, reported with a Timeout error.</param>
+        /// <param name="projectFiles">Absolute paths of the project files the invocation covers (used, with the projects
+        /// named in the report, for the restore check), or null.</param>
+        /// <returns>The scan result.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when result is null.</exception>
+        public static DependencyScanResult Interpret(DependencyToolResult result, DependencyScanModeEnum mode, string? repositoryRoot, int timeoutSeconds, IEnumerable<string>? projectFiles)
+        {
             if (result == null) throw new ArgumentNullException(nameof(result));
             if (result.Outcome == DependencyToolOutcomeEnum.ToolMissing) return DependencyScanResult.Failed(VesselHealthDetailCodes.ToolMissing);
             if (result.Outcome == DependencyToolOutcomeEnum.TimedOut) return DependencyScanResult.Failed(VesselHealthDetailCodes.Timeout, timeoutSeconds);
@@ -58,8 +76,7 @@ namespace Armada.Core.Services.Health
 
             if (report == null)
             {
-                string combined = result.StandardOutput + "\n" + result.StandardError;
-                if (DependencyJson.IndicatesRestore(combined)) return DependencyScanResult.Failed(VesselHealthDetailCodes.RestoreRequired);
+                if (result.ExitCode != 0 && AnyAssetsFileMissing(projectFiles, null)) return DependencyScanResult.Failed(VesselHealthDetailCodes.RestoreRequired);
                 if (result.ExitCode != 0) return DependencyScanResult.Failed(VesselHealthDetailCodes.ToolFailed, result.ExitCode);
                 return DependencyScanResult.Failed(VesselHealthDetailCodes.ParseError);
             }
@@ -70,13 +87,13 @@ namespace Armada.Core.Services.Health
             List<DotnetListProblem> errors = (report.Problems ?? new List<DotnetListProblem>())
                 .Where(p => p != null && String.Equals(p.Level, "error", StringComparison.OrdinalIgnoreCase))
                 .ToList();
-            if (errors.Any(p => DependencyJson.IndicatesRestore(p.Text)))
+            bool failed = errors.Count > 0 || result.ExitCode != 0;
+            if (failed && AnyAssetsFileMissing(projectFiles, report.Projects))
                 scan.AddFailure(VesselHealthDetailCodes.RestoreRequired, null);
             else if (errors.Count > 0)
                 scan.AddFailure(VesselHealthDetailCodes.ToolFailed, result.ExitCode != 0 ? result.ExitCode : 1);
             else if (result.ExitCode != 0)
-                scan.AddFailure(DependencyJson.IndicatesRestore(result.StandardError) ? VesselHealthDetailCodes.RestoreRequired : VesselHealthDetailCodes.ToolFailed,
-                    DependencyJson.IndicatesRestore(result.StandardError) ? null : (long?)result.ExitCode);
+                scan.AddFailure(VesselHealthDetailCodes.ToolFailed, (long?)result.ExitCode);
             else if (report.Projects == null)
                 scan.AddFailure(VesselHealthDetailCodes.ParseError, null);
 
@@ -174,6 +191,33 @@ namespace Armada.Core.Services.Health
 
             if (dependency.Severity == VulnerabilitySeverityEnum.None) dependency.Severity = VulnerabilitySeverityEnum.Moderate;
             return dependency;
+        }
+
+        /// <summary>
+        /// Whether any covered project lacks <c>obj/project.assets.json</c>. Projects come from the caller and from the
+        /// report; relative or empty paths are skipped. False when no project is known (the cause cannot be decided).
+        /// </summary>
+        private static bool AnyAssetsFileMissing(IEnumerable<string>? projectFiles, List<DotnetListProject>? reportProjects)
+        {
+            List<string> paths = new List<string>();
+            if (projectFiles != null) paths.AddRange(projectFiles);
+            if (reportProjects != null)
+            {
+                foreach (DotnetListProject project in reportProjects)
+                {
+                    if (project != null && !String.IsNullOrWhiteSpace(project.Path)) paths.Add(project.Path!);
+                }
+            }
+
+            foreach (string path in paths)
+            {
+                if (String.IsNullOrWhiteSpace(path) || !Path.IsPathRooted(path)) continue;
+                string? directory = Path.GetDirectoryName(path);
+                if (String.IsNullOrEmpty(directory)) continue;
+                if (!File.Exists(Path.Combine(directory, "obj", "project.assets.json"))) return true;
+            }
+
+            return false;
         }
 
         private static string? MakeRelative(string? path, string? root)

@@ -6,6 +6,7 @@ namespace Armada.Server
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Protocol;
     using Armada.Core.Services;
     using Armada.Core.Settings;
     using Armada.Runtimes;
@@ -1209,41 +1210,29 @@ namespace Armada.Server
         private static bool TryParseSummaryResponse(string content, out ObjectiveRefinementSummaryResponse? response)
         {
             response = null;
-            if (String.IsNullOrWhiteSpace(content))
+
+            // A fenced json block or a balanced object found by the string-aware scanner, deserialized into a typed
+            // document; an object with none of the summary fields is not the summary.
+            if (!EmbeddedJsonExtractor.TryExtract<ObjectiveRefinementSummaryDocument>(
+                    content,
+                    doc => !String.IsNullOrWhiteSpace(doc.Summary)
+                        || doc.AcceptanceCriteria != null
+                        || doc.NonGoals != null
+                        || doc.RolloutConstraints != null
+                        || !String.IsNullOrWhiteSpace(doc.SuggestedPipelineId),
+                    out ObjectiveRefinementSummaryDocument? document)
+                || document == null)
                 return false;
 
-            string candidate = content.Trim();
-            int firstBrace = candidate.IndexOf('{');
-            int lastBrace = candidate.LastIndexOf('}');
-            if (firstBrace >= 0 && lastBrace > firstBrace)
-                candidate = candidate.Substring(firstBrace, lastBrace - firstBrace + 1);
-
-            try
+            response = new ObjectiveRefinementSummaryResponse
             {
-                using JsonDocument doc = JsonDocument.Parse(candidate);
-                JsonElement root = doc.RootElement;
-                response = new ObjectiveRefinementSummaryResponse
-                {
-                    Summary = root.TryGetProperty("summary", out JsonElement summary) ? summary.GetString() ?? String.Empty : String.Empty,
-                    AcceptanceCriteria = root.TryGetProperty("acceptanceCriteria", out JsonElement acceptanceCriteria)
-                        ? ReadStringArray(acceptanceCriteria)
-                        : new List<string>(),
-                    NonGoals = root.TryGetProperty("nonGoals", out JsonElement nonGoals)
-                        ? ReadStringArray(nonGoals)
-                        : new List<string>(),
-                    RolloutConstraints = root.TryGetProperty("rolloutConstraints", out JsonElement rolloutConstraints)
-                        ? ReadStringArray(rolloutConstraints)
-                        : new List<string>(),
-                    SuggestedPipelineId = root.TryGetProperty("suggestedPipelineId", out JsonElement pipelineId)
-                        ? pipelineId.GetString()
-                        : null
-                };
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
+                Summary = document.Summary ?? String.Empty,
+                AcceptanceCriteria = CleanStringList(document.AcceptanceCriteria),
+                NonGoals = CleanStringList(document.NonGoals),
+                RolloutConstraints = CleanStringList(document.RolloutConstraints),
+                SuggestedPipelineId = document.SuggestedPipelineId
+            };
+            return true;
         }
 
         private bool IsStopRequested(string sessionId)
@@ -1251,16 +1240,14 @@ namespace Armada.Server
             return _ActiveTurns.TryGetValue(sessionId, out TurnState? turnState) && turnState.StopRequested;
         }
 
-        private static List<string> ReadStringArray(JsonElement element)
+        private static List<string> CleanStringList(List<string?>? values)
         {
-            if (element.ValueKind != JsonValueKind.Array)
+            if (values == null)
                 return new List<string>();
 
-            return element.EnumerateArray()
-                .Where(item => item.ValueKind == JsonValueKind.String)
-                .Select(item => item.GetString() ?? String.Empty)
+            return values
                 .Where(item => !String.IsNullOrWhiteSpace(item))
-                .Select(item => item.Trim())
+                .Select(item => item!.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }

@@ -6,6 +6,17 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Fragility remediation
+
+- R3 typed protocol parsing: `McpToolClient` reads JSON-RPC into typed envelopes (`JsonRpcResponse<T>`, `McpListToolsResult`), picks the SSE frame whose id matches the request (a progress or log notification sent first is no longer read as the result), joins multi-line SSE data per the spec, and raises `McpClientException` with `HttpStatusCode` and `JsonRpcCode`.
+- The ApiEndpoint runtime reports MCP tool failures from the server's `isError` flag (every MCP call used to show as ok), fails a run on any unsuccessful inference response, and delivers tool activity and diagnostics on typed `OnToolEvent` / `OnDiagnostic` channels. Stdout carries only model text, so reply text can no longer fake a tool card, and Ask Armada no longer drops reply lines that start with `[tool]` or `[error]`.
+- Shared typed stream events in `Armada.Core.Protocol` for Claude Code stream-json (including result and usage), Codex exec --json, Mux, and OpenCode replace the hand-walked parsers in chat, planning, the runtime log formatter, and the mission log view. A JSON line is a protocol event only when its `type`/`eventType` is a known event type; JSON a model prints passes through as text. Claude tool_result and message content accept the string and the array form.
+- Captain tool discovery (`claude mcp list`, `codex mcp`, host MCP config files, server probes) goes through `IRuntimeToolDiscoverySource`; tests use a recording fake and no longer touch the host user's CLIs, configs, or MCP servers. Its JSON-RPC probing is typed and SSE replies are selected by id; the Claude and Gemini built-in tool lists are isolated, display-only readers.
+- Planning and objective-refinement summaries, fleet recommendations, and dependency tool output use a shared string-aware JSON extractor (fenced block first) and typed documents instead of first-brace/last-brace slicing. Mux CLI stdout must be a single JSON object.
+- Ask Armada decides action success from the typed `McpToolError` result before serialization (a successful result with an `Error` field, or a long error that was truncated, was misclassified).
+- Vessel health: npm "restore required" comes from `error.code` (`ENOLOCK`), dotnet "restore required" from a missing `obj/project.assets.json`, and dotnet runs with `DOTNET_CLI_UI_LANGUAGE=en`; message wording is no longer read.
+- Built-in API-runtime tools parse arguments into typed classes and reject wrong types or missing values with `invalid_parameter`; `run_process` with `args` starts the command directly with an argument list instead of joining them into a `sh -c` string.
+
 ### Test runs no longer raise desktop notifications
 
 - `NotificationService` (used by `armada watch`) runs its platform command through `INotificationCommandRunner`; the test suite records the command instead of running it. Before, every full test run sent four real "Test Title" notifications through `osascript`, which macOS shows as coming from Script Editor. The tests now check the exact command and escaping for macOS, Linux, and Windows.

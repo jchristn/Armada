@@ -5,6 +5,7 @@ namespace Armada.Runtimes.Tools
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Runtimes.Tools.Arguments;
     using Armada.Runtimes.Tools.Tasks;
 
     /// <summary>
@@ -96,21 +97,19 @@ namespace Armada.Runtimes.Tools
                 return Task.FromResult(Error(toolCallId, "task_planning_disabled", "Task planning is not active for this run."));
             }
 
-            string id = GetString(arguments, "id");
-            if (string.IsNullOrWhiteSpace(id))
+            if (!ToolArgumentParser.TryParse(arguments, out UpdateTaskToolArguments? args, out string? argumentError))
             {
-                return Task.FromResult(Error(toolCallId, "invalid_argument", "The 'id' parameter is required."));
+                return Task.FromResult(ToolArgumentParser.InvalidParameter(toolCallId, argumentError));
             }
 
-            string statusText = GetString(arguments, "status");
+            string id = args.Id!;
+            string statusText = args.Status!;
             if (!TryParseStatus(statusText, out AgentTaskStatusEnum status))
             {
                 return Task.FromResult(Error(toolCallId, "invalid_status", $"Unknown status '{statusText}'. Valid values: pending, in_progress, completed, failed, skipped, blocked."));
             }
 
-            string? note = arguments.TryGetProperty("note", out JsonElement noteElement) && noteElement.ValueKind == JsonValueKind.String
-                ? noteElement.GetString()
-                : null;
+            string? note = args.Note;
 
             if (status == AgentTaskStatusEnum.Failed && string.IsNullOrWhiteSpace(note))
             {
@@ -158,16 +157,6 @@ namespace Armada.Runtimes.Tools
                 case "blocked": status = AgentTaskStatusEnum.Blocked; return true;
                 default: status = AgentTaskStatusEnum.Pending; return false;
             }
-        }
-
-        private static string GetString(JsonElement arguments, string propertyName)
-        {
-            if (arguments.TryGetProperty(propertyName, out JsonElement value) && value.ValueKind == JsonValueKind.String)
-            {
-                return value.GetString() ?? string.Empty;
-            }
-
-            return string.Empty;
         }
 
         private static ToolResult Error(string toolCallId, string code, string message)

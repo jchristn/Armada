@@ -4,6 +4,7 @@ namespace Armada.Core.Services.Health
     using System.Text.Json;
     using System.Text.Json.Serialization;
     using Armada.Core.Enums;
+    using Armada.Core.Protocol;
 
     /// <summary>
     /// Shared JSON helpers for dependency tool output: case-insensitive options and extraction of the JSON payload from
@@ -29,17 +30,31 @@ namespace Armada.Core.Services.Health
         #region Public-Methods
 
         /// <summary>
-        /// Extract the JSON object from tool output: everything from the first '{' to the last '}'.
+        /// Extract the JSON object from tool output that may carry leading or trailing log lines: the largest balanced
+        /// top-level object found by the shared string-aware scanner that is valid JSON. A brace inside a log line or a
+        /// string literal can no longer stretch the extracted range.
         /// </summary>
         /// <param name="output">Raw output.</param>
-        /// <returns>The JSON text, or null when the output contains no object.</returns>
+        /// <returns>The JSON text, or null when the output contains no valid object.</returns>
         public static string? ExtractObject(string? output)
         {
             if (String.IsNullOrWhiteSpace(output)) return null;
-            int start = output.IndexOf('{');
-            int end = output.LastIndexOf('}');
-            if (start < 0 || end <= start) return null;
-            return output.Substring(start, end - start + 1);
+
+            string? best = null;
+            foreach (string candidate in EmbeddedJsonExtractor.FindObjects(output))
+            {
+                if (best != null && candidate.Length <= best.Length) continue;
+                try
+                {
+                    using (JsonDocument.Parse(candidate, new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip })) { }
+                    best = candidate;
+                }
+                catch (JsonException)
+                {
+                }
+            }
+
+            return best;
         }
 
         /// <summary>
@@ -61,20 +76,6 @@ namespace Armada.Core.Services.Health
                 case "info": return VulnerabilitySeverityEnum.Low;
                 default: return VulnerabilitySeverityEnum.Moderate;
             }
-        }
-
-        /// <summary>
-        /// Whether tool text indicates that a package restore or install is required.
-        /// </summary>
-        /// <param name="text">Tool output or problem text.</param>
-        /// <returns>True when a restore is indicated.</returns>
-        public static bool IndicatesRestore(string? text)
-        {
-            if (String.IsNullOrEmpty(text)) return false;
-            return text.Contains("restore", StringComparison.OrdinalIgnoreCase)
-                || text.Contains("assets file", StringComparison.OrdinalIgnoreCase)
-                || text.Contains("ENOLOCK", StringComparison.OrdinalIgnoreCase)
-                || text.Contains("npm install", StringComparison.OrdinalIgnoreCase);
         }
 
         #endregion

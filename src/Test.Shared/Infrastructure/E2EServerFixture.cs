@@ -77,6 +77,12 @@ namespace Test.Shared.Infrastructure
         }
 
         /// <summary>
+        /// The fake runtime tool discovery source the server uses, so captain tool inventories never read the host
+        /// user's runtime config files, run its runtime CLIs, or probe its MCP servers.
+        /// </summary>
+        public RecordingRuntimeToolDiscoverySource RuntimeToolDiscovery { get; } = new RecordingRuntimeToolDiscoverySource();
+
+        /// <summary>
         /// Temp directory holding the server's database, logs, docks, and repos.
         /// </summary>
         public string TempDir { get; private set; } = "";
@@ -349,6 +355,7 @@ namespace Test.Shared.Infrastructure
 
             Stopwatch elapsed = Stopwatch.StartNew();
             _Server = new ArmadaServer(logging, settings, quiet: true);
+            _Server.RuntimeToolDiscoverySource = RuntimeToolDiscovery;
             try
             {
                 await _Server.StartAsync().ConfigureAwait(false);

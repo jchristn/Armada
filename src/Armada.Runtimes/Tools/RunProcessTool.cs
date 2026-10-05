@@ -1,6 +1,7 @@
 namespace Armada.Runtimes.Tools
 {
     using System;
+    using System.Collections.Generic;
     using System.Diagnostics;
     using System.IO;
     using System.Runtime.InteropServices;
@@ -8,10 +9,13 @@ namespace Armada.Runtimes.Tools
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Runtimes.Tools.Arguments;
 
     /// <summary>
     /// Spawns a process and captures its stdout, stderr, and exit code.
-    /// On Windows, uses cmd.exe /c; on other platforms, uses /bin/sh -c.
+    /// When an args array is supplied, the command is started directly as the executable with those
+    /// arguments and no shell. Otherwise the command line runs through cmd.exe /c on Windows or
+    /// /bin/sh -c on other platforms.
     /// </summary>
     public class RunProcessTool : IToolExecutor
     {
@@ -35,6 +39,7 @@ namespace Armada.Runtimes.Tools
         public string Description => "Runs a shell command and captures its output. "
             + $"Current runtime: {GetOperatingSystemLabel()} using shell {GetShellProgram()} {GetShellInvocationArgsHint()}. "
             + "Use commands that are valid for that shell and operating system. "
+            + "When args is supplied, command is run directly as the executable with args as its argument vector, without a shell. "
             + "Returns stdout, stderr, exit code, and whether the process timed out.";
 
         /// <summary>
@@ -64,7 +69,9 @@ namespace Armada.Runtimes.Tools
                 args = new
                 {
                     type = "array",
-                    description = "Optional array of command arguments.",
+                    description = "Optional argument vector for the command. When non-empty, command is started directly as the executable "
+                        + "and each element is passed verbatim as one argument, without a shell (no quoting, globbing, pipes, or variable expansion). "
+                        + "When omitted or empty, command is run as a command line through the runtime shell.",
                     items = new { type = "string" }
                 },
                 working_directory = new
@@ -95,46 +102,19 @@ namespace Armada.Runtimes.Tools
         /// <returns>A <see cref="ToolResult"/> containing the process execution result.</returns>
         public async Task<ToolResult> ExecuteAsync(string toolCallId, JsonElement arguments, string workingDirectory, CancellationToken cancellationToken)
         {
+            if (!ToolArgumentParser.TryParse(arguments, out RunProcessToolArguments? args, out string? argumentError))
+            {
+                return ToolArgumentParser.InvalidParameter(toolCallId, argumentError);
+            }
+
             try
             {
-                string command = GetRequiredString(arguments, "command");
-                string processWorkDir = GetOptionalString(arguments, "working_directory", workingDirectory);
-                int timeoutMs = GetOptionalInt(arguments, "timeout_ms", _DefaultTimeoutMs);
+                string command = args.Command!;
+                string processWorkDir = args.WorkingDirectory ?? workingDirectory;
+                int timeoutMs = args.TimeoutMs ?? _DefaultTimeoutMs;
                 string resolvedWorkDir = ResolvePath(processWorkDir, workingDirectory);
 
-                // Build the full command string with arguments
-                StringBuilder commandBuilder = new StringBuilder(command);
-                if (arguments.TryGetProperty("args", out JsonElement argsElement) && argsElement.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (JsonElement arg in argsElement.EnumerateArray())
-                    {
-                        if (arg.ValueKind == JsonValueKind.String)
-                        {
-                            commandBuilder.Append(' ');
-                            commandBuilder.Append(arg.GetString());
-                        }
-                    }
-                }
-
-                string fullCommand = commandBuilder.ToString();
-
-                ProcessStartInfo startInfo = new ProcessStartInfo();
-                startInfo.WorkingDirectory = resolvedWorkDir;
-                startInfo.RedirectStandardOutput = true;
-                startInfo.RedirectStandardError = true;
-                startInfo.UseShellExecute = false;
-                startInfo.CreateNoWindow = true;
-
-                if (_IsWindows)
-                {
-                    startInfo.FileName = "cmd.exe";
-                    startInfo.Arguments = $"/c {fullCommand}";
-                }
-                else
-                {
-                    startInfo.FileName = "/bin/sh";
-                    startInfo.Arguments = $"-c \"{fullCommand.Replace("\"", "\\\"")}\"";
-                }
+                ProcessStartInfo startInfo = BuildStartInfo(command, args.Args, resolvedWorkDir);
 
                 using (Process process = new Process())
                 {
@@ -207,12 +187,12 @@ namespace Armada.Runtimes.Tools
 
                     if (stdoutStr.Length > maxOutput)
                     {
-                        stdoutStr = stdoutStr.Substring(0, maxOutput) + "\n[truncated — output exceeded " + maxOutput + " bytes]";
+                        stdoutStr = stdoutStr.Substring(0, maxOutput) + "\n[truncated - output exceeded " + maxOutput + " bytes]";
                     }
 
                     if (stderrStr.Length > maxOutput)
                     {
-                        stderrStr = stderrStr.Substring(0, maxOutput) + "\n[truncated — output exceeded " + maxOutput + " bytes]";
+                        stderrStr = stderrStr.Substring(0, maxOutput) + "\n[truncated - output exceeded " + maxOutput + " bytes]";
                     }
 
                     return new ToolResult
@@ -244,34 +224,49 @@ namespace Armada.Runtimes.Tools
 
         #region Private-Methods
 
-        private string GetRequiredString(JsonElement arguments, string propertyName)
+        private static ProcessStartInfo BuildStartInfo(string command, List<string?>? argv, string resolvedWorkDir)
         {
-            if (arguments.TryGetProperty(propertyName, out JsonElement value) && value.ValueKind == JsonValueKind.String)
+            ProcessStartInfo startInfo = new ProcessStartInfo();
+            startInfo.WorkingDirectory = resolvedWorkDir;
+            startInfo.RedirectStandardOutput = true;
+            startInfo.RedirectStandardError = true;
+            startInfo.UseShellExecute = false;
+            startInfo.CreateNoWindow = true;
+
+            if (argv != null && argv.Count > 0)
             {
-                return value.GetString()!;
+                // An argument vector was supplied: run the executable directly, with no shell, so each
+                // argument reaches the process verbatim (no quoting, globbing, or expansion).
+                startInfo.FileName = ResolveExecutable(command, resolvedWorkDir);
+                foreach (string? arg in argv)
+                {
+                    startInfo.ArgumentList.Add(arg ?? string.Empty);
+                }
+            }
+            else if (_IsWindows)
+            {
+                startInfo.FileName = "cmd.exe";
+                startInfo.Arguments = "/c " + command;
+            }
+            else
+            {
+                startInfo.FileName = "/bin/sh";
+                startInfo.ArgumentList.Add("-c");
+                startInfo.ArgumentList.Add(command);
             }
 
-            throw new ArgumentException($"Required parameter '{propertyName}' is missing or not a string.");
+            return startInfo;
         }
 
-        private string GetOptionalString(JsonElement arguments, string propertyName, string defaultValue)
+        private static string ResolveExecutable(string command, string resolvedWorkDir)
         {
-            if (arguments.TryGetProperty(propertyName, out JsonElement value) && value.ValueKind == JsonValueKind.String)
+            bool hasDirectory = command.IndexOf('/') >= 0 || (_IsWindows && command.IndexOf('\\') >= 0);
+            if (hasDirectory && !Path.IsPathRooted(command))
             {
-                return value.GetString()!;
+                return Path.GetFullPath(Path.Combine(resolvedWorkDir, command));
             }
 
-            return defaultValue;
-        }
-
-        private int GetOptionalInt(JsonElement arguments, string propertyName, int defaultValue)
-        {
-            if (arguments.TryGetProperty(propertyName, out JsonElement value) && value.ValueKind == JsonValueKind.Number)
-            {
-                return value.GetInt32();
-            }
-
-            return defaultValue;
+            return command;
         }
 
         private string ResolvePath(string filePath, string workingDirectory)
@@ -301,7 +296,7 @@ namespace Armada.Runtimes.Tools
 
         private static string GetShellInvocation()
         {
-            return _IsWindows ? "cmd.exe /c <command>" : "/bin/sh -c \"<command>\"";
+            return _IsWindows ? "cmd.exe /c <command>" : "/bin/sh -c <command>";
         }
 
         private static string GetShellInvocationArgsHint()

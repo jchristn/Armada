@@ -128,8 +128,7 @@ namespace Armada.Core.Services.Health
             if (report == null) return DependencyScanResult.Failed(VesselHealthDetailCodes.ParseError);
             if (report.Error != null)
             {
-                string text = (report.Error.Code ?? "") + " " + (report.Error.Summary ?? "") + " " + (report.Error.Detail ?? "");
-                return DependencyJson.IndicatesRestore(text)
+                return IsRestoreErrorCode(report.Error.Code)
                     ? DependencyScanResult.Failed(VesselHealthDetailCodes.RestoreRequired)
                     : DependencyScanResult.Failed(VesselHealthDetailCodes.ToolFailed, result.ExitCode);
             }
@@ -180,16 +179,28 @@ namespace Armada.Core.Services.Health
             }
 
             if (envelope?.Error == null || String.IsNullOrWhiteSpace(envelope.Error.Code)) return null;
-            string text = envelope.Error.Code + " " + (envelope.Error.Summary ?? "") + " " + (envelope.Error.Detail ?? "");
-            return DependencyJson.IndicatesRestore(text)
+            return IsRestoreErrorCode(envelope.Error.Code)
                 ? DependencyScanResult.Failed(VesselHealthDetailCodes.RestoreRequired)
                 : DependencyScanResult.Failed(VesselHealthDetailCodes.ToolFailed);
         }
 
+        /// <summary>
+        /// Whether an npm error code means the package tree must be installed or locked first. Decided from npm's
+        /// machine-readable <c>error.code</c>, never from the summary or detail text.
+        /// </summary>
+        private static bool IsRestoreErrorCode(string? code)
+        {
+            switch (code)
+            {
+                case "ENOLOCK":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         private static DependencyScanResult Unparsable(DependencyToolResult result)
         {
-            string combined = result.StandardOutput + "\n" + result.StandardError;
-            if (DependencyJson.IndicatesRestore(combined)) return DependencyScanResult.Failed(VesselHealthDetailCodes.RestoreRequired);
             if (result.ExitCode != 0) return DependencyScanResult.Failed(VesselHealthDetailCodes.ToolFailed, result.ExitCode);
             return DependencyScanResult.Failed(VesselHealthDetailCodes.ParseError);
         }

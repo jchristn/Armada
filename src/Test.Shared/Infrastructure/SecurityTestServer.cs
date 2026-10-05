@@ -147,6 +147,7 @@ namespace Test.Shared.Infrastructure
             logging.Settings.MinimumSeverity = Severity.Debug;
 
             Server = new ArmadaServer(logging, Settings, quiet: true);
+            Server.RuntimeToolDiscoverySource = new RecordingRuntimeToolDiscoverySource();
             await Server.StartAsync().ConfigureAwait(false);
 
             using (HttpClient client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) })
