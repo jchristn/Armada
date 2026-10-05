@@ -106,7 +106,7 @@ namespace Armada.Server
                 throw new InvalidOperationException(captain.PlanningSessionSupportReason ?? "This captain runtime is not supported for planning sessions.");
 
             if (captain.State != CaptainStateEnum.Idle)
-                throw new InvalidOperationException("Captain " + captain.Name + " is not idle.");
+                throw new CaptainNotIdleException(captain.Id, captain.State, "Captain " + captain.Name + " is not idle.");
 
             List<PlanningSession> captainSessions = await _Database.PlanningSessions
                 .EnumerateByCaptainAsync(captain.Id, token)
@@ -141,7 +141,7 @@ namespace Armada.Server
                 string branchName = Constants.BranchPrefix + "planning/" + session.Id;
                 Dock? dock = await _Docks.ProvisionAsync(vessel, captain, branchName, session.Id, token).ConfigureAwait(false);
                 if (dock == null)
-                    throw new InvalidOperationException("Dock provisioning failed for planning session " + session.Id + ".");
+                    throw new DockProvisioningException(vessel.Id, branchName, "Dock provisioning failed for planning session " + session.Id + ".");
 
                 session.DockId = dock.Id;
                 session.BranchName = branchName;
