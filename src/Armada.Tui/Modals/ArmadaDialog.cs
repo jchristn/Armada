@@ -6,7 +6,6 @@ namespace Armada.Tui.Modals
     using Armada.Tui.Theming;
     using Armada.Tui.Widgets;
     using TUIKit;
-    using TUIKit.Layout;
     using TUIKit.Modals;
 
     /// <summary>
@@ -26,17 +25,6 @@ namespace Armada.Tui.Modals
         /// Localizer. Never null.
         /// </summary>
         public ITextLocalizer Localizer { get; }
-
-        /// <summary>
-        /// True while this dialog is the topmost modal (it holds keyboard focus), or null when it is not on a stack the
-        /// host tracks (treated as topmost). Set by the modal host when the dialog is shown.
-        /// </summary>
-        public Func<bool>? IsTopmost { get; set; } = null;
-
-        /// <summary>
-        /// The rectangle of the dialog's box (border included) as of the most recent render, or empty before it.
-        /// </summary>
-        public Rect LastBox { get; private set; } = Rect.Empty;
 
         #endregion
 
@@ -63,12 +51,12 @@ namespace Armada.Tui.Modals
         public override void Render(ISurface surface)
         {
             base.Render(surface);
-            Rect box = BoxFor(surface.Size);
-            LastBox = box;
+            Rect box = FrameBounds;
             if (box.Width < 3 || box.Height < 3) return;
-            // The dialog that holds focus wears the one focus treatment of the TUI (see FocusFrame): its whole box in
-            // the focus style with heavy lines. A dialog under another keeps its plain border.
-            if (IsTopmost != null && !IsTopmost()) return;
+            // The dialog that holds focus (TUIKit's Modal.IsTopmost) wears the one focus treatment of the TUI (see
+            // FocusFrame): its whole box in the focus style with heavy lines. A dialog under another keeps its plain
+            // border.
+            if (!IsTopmost) return;
             FocusFrame.Draw(surface, box, Theme, true);
             if (!String.IsNullOrEmpty(Title) && box.Width > 4)
             {
@@ -133,28 +121,6 @@ namespace Armada.Tui.Modals
         protected CellStyle On(CellStyle style)
         {
             return style.WithBackground(Theme.Dialog.Background);
-        }
-
-        #endregion
-
-        #region Private-Methods
-
-        /// <summary>
-        /// The box <see cref="DialogModal.Render"/> draws on a screen of this size (the same measuring, clamping, and
-        /// centering).
-        /// </summary>
-        private Rect BoxFor(Size screen)
-        {
-            Padding pad = ContentPadding;
-            int chromeWidth = 2 + pad.Horizontal;
-            int chromeHeight = 2 + pad.Vertical;
-            int availableWidth = Math.Max(1, screen.Width - chromeWidth);
-            int contentWidth = Math.Min(Math.Clamp(MeasureContentWidth(availableWidth), MinContentWidth, MaxContentWidth), availableWidth);
-            int availableHeight = Math.Max(1, screen.Height - chromeHeight);
-            int contentHeight = Math.Min(Math.Clamp(MeasureContentHeight(contentWidth), MinContentHeight, MaxContentHeight), availableHeight);
-            int boxWidth = contentWidth + chromeWidth;
-            int boxHeight = contentHeight + chromeHeight;
-            return new Rect(Math.Max(0, (screen.Width - boxWidth) / 2), Math.Max(0, (screen.Height - boxHeight) / 2), boxWidth, boxHeight);
         }
 
         #endregion

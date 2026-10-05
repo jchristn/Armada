@@ -243,7 +243,7 @@ namespace Test.Shared.Suites.Tui
                 return problems;
             }
 
-            Rect box = dialog.LastBox;
+            Rect box = dialog.FrameBounds;
             if (box.IsEmpty)
             {
                 problems.Add(label + ": dialog box not measured");
